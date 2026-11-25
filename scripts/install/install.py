@@ -18,10 +18,10 @@ plugin install``, which carries the one table of them. It does these things alon
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
    could not delete, a later run deletes (``tidy``). Before uv runs, a ``cad-*.dist-info`` of uv's cad that has no
    ``RECORD`` is deleted (``repair``): an uninstall that stopped midway (on Windows, a file of the old cad held as uv
-   removed it) leaves one, and every later uv run on the tool fails on it, cad's own update and this command's
-   reinstall alike, so this is what repairs a computer left so;
+   removed it) leaves one, and every later uv run on the tool fails on it, this command's reinstall too, so this
+   is what repairs a computer left so;
 3. brings a ``cad`` that was here already, and starts, up to date, only where a person ran this (``update``): that
-   tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's server begins an update only once
+   tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's update switches the server only once
    nothing is in flight, and the command waits for it). It stays inside cad's major version, as ``cad update`` does:
    a higher major is the person's to ask for. What it prints is captured, never shown: one line says the update
    begins, and one line what came of it, over the first in a terminal (after it on a pipe or in a file). Its exit
@@ -127,8 +127,8 @@ alone, ``cad setup`` or a server, and it takes ``CAD_INSTALL_ATTEMPT`` and ``CAD
 them inherits (``RUN_NAMES``), so no ``cad plugin install`` takes a run an older cad's server began for its own. ``cad
 plugin install`` (this release's, under either name) starts each agent app's own commands and git: no install command,
 no ``cad update``, no ``cad plugin``. ``cad plugin update auto on`` keeps a setting, by the running server or by itself,
-and starts nothing, on every release (0.11.13's included). ``cad update`` asks the server, whose helper upgrades cad
-with uv or pipx and starts the server again; on no release does it run this command or ``cad plugin``. The one way back
+and starts nothing, on every release (0.11.13's included). ``cad update`` asks the server, whose worker installs the
+newer cad and starts the server again; on no release does it run this command or ``cad plugin``. The one way back
 here is a server: an older one runs its ``cad plugin update``, so this command, at most three times for a release, an
 hour or more apart, and only once cad is newer than the release the plugin is up to date for; a newer one runs its ``cad
 plugin install``, which never comes here. Such a run is cad's, so it runs no ``cad update``, and whatever it reaches
@@ -171,8 +171,8 @@ UV_TOOL_ARGS = ("--managed-python", "--python", "3.14")
 # The mark in the first lines of the `cad` command 0.10.0-0.11.11 wrote in the bin folder, with its revision: `# ` in
 # the sh script and in the `__main__.py` of the zip behind cad.exe's launcher (Windows, 0.11), `rem ` in cad.cmd (0.10).
 OLD_LAUNCHER = re.compile(r"(#|rem) cad proxy: \d+")
-# A cad.exe of uv's tool set aside in uv's bin folder before uv installs cad (``set_aside``): the name cad's own update
-# gives one (``ASIDE`` in cad's ``auto_update_helper.py``), so either one's tidying removes the other's.
+# A cad.exe of uv's tool set aside in uv's bin folder before uv installs cad (``set_aside``): the name the update of
+# cad 0.11.12 to 0.11.17 gives one too, so this command's tidying removes what those releases left.
 ASIDE = ".cad.exe.{stamp}.{n}.old"
 # What a run sets aside or throws away in uv's bin folder and could not delete then (Windows keeps a file while it
 # runs): ``make_room``'s names, ``discard``'s trash folders, and ``ASIDE``. A later run deletes them (``tidy``).
@@ -196,8 +196,8 @@ RUN_NAMES = ("CAD_INSTALL_ATTEMPT", "CAD_PLUGIN_SERVER_RUN")
 # Set to ``1`` for ``cad plugin update auto on`` where the plugin's step did not end with every app it found gone well
 # (``switch_on``): cad then turns the switch on and takes nothing as up to date. Never the caller's.
 FAILED_ENV = "CAD_INSTALL_FAILED"
-# How long ``cad update`` may take: cad's own command waits ten minutes for a busy server, then says the update is
-# still underway.
+# How long ``cad update`` may take: a minute past the ten minutes cad's update gives a busy server before it switches;
+# past it, the update goes on by itself.
 UPDATE_SECONDS = 11 * 60
 # What ``cad plugin install`` reads: who began its run, and the file where it says what it did.
 PLUGIN_BY_ENV = "CAD_PLUGIN_BY"

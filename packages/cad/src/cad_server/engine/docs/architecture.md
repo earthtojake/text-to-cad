@@ -137,19 +137,19 @@ doctor` name a release of a higher major, which never installs itself).
 
 A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself
 to newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad
-update`: `Daemon.update`, the update begun once nothing is in flight, whatever the switch says; `cad update --major`
-to the newest of all): first thing as a server starts, before its door opens, and as it tends itself once nothing
-has run for a minute (or nothing since it started), where the version feed as last read names a newer release of
-its major, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's environment was made
-from) stops the server, runs the installer's upgrade bounded to that major (`uv tool install --upgrade
-"cad>=<installed>,<<next major>"`), tried again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
-`UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
-gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
-`cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which
+update`: `Daemon.update`, begun at once, whatever the switch says; `cad update --major` to the newest of all): as
+the server tends itself once nothing has run for a minute (or nothing since it started), where the version feed as
+last read names a newer release of its major. It runs beside the server, never before it: a detached worker
+(`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the state
+folder (`cad_server._internal.store`), drains the server, points the environment at that folder (the pointer, which
+`_cad_release` reads as each interpreter starts) and starts the new release's server, or goes back where it does not
+start. Meanwhile a command that finds no server waits for the next (`client.SWITCHING`); a `cad server start` that
+fails asks for the update before it gives up; a start never replaces a newer server, it joins it (`client.start`,
+`cad_mcp.shim.start_server`). With `cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which
 updates the plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is
 newer than the release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
-helper and `cad update` run none, and no update of cad begins while a run of it is going. Where no server runs, a typed `cad update` begins the update itself
-(`cli/update.py`), and its helper starts no server after it.
+worker and `cad update` run none. Where no server runs, a typed `cad update` begins the update itself
+(`cli/update.py`), and its worker starts no server after it.
 
 The updaters of 0.10.0 to 0.11.11 are frozen on computers, though, and update by running a newer release's hidden
 `cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge
@@ -185,8 +185,8 @@ the port is rolled from as above, or refused where the port is named, as below.
 A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
 `cad server` binds at its start, so the command fails at once with that line on stderr and exits
 1, no engine left. An engine a client starts binds on the first request that serves, but for one that replaces
-a server that served pages: a client that stops a server (`client.sweep`: `cad server stop`, which cad's own update
-and the bridge's move run before they start the next, and a start that replaces an older server) first asks it where
+a server that served pages: a client that stops a server (`client.sweep`: `cad server stop`, the bridge's move
+before it starts the next, and a start that replaces an older server; cad's own update's drain, `client.drain`) first asks it where
 it serves pages, any release's server alike, and notes the port (`places.pages_path`); the next server to start takes
 the note and serves pages there at once with the user's token (`daemon.resumed`, `Daemon.resume`), so a page open in a
 browser reconnects with nobody doing anything. A port named (`--port`, `CAD_ENGINE_PORT`) comes first; where the port noted is taken,

@@ -258,7 +258,7 @@ renumbers the list and every citation in the same change.
     - **Tier 3, a person's data**: documents, the state folder and its records, settings. A release
       reads what the previous shipped release wrote, writes the current form and migrates on first
       touch, once. Opening, viewing or exporting a saved document never needs its source or a rebuild
-      because cad was upgraded (the engine's **Build closure**).
+      because cad was updated (the engine's **Build closure**).
     - **Tier 4, protocols where two releases meet while both run**: the door, the HTTP API, the CAD
       app's server and page, the version feed, the installation records, the analytics schemas, the
       worker contract. Each is numbered or frozen in a golden, so a break is never silent: a change
