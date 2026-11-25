@@ -344,8 +344,11 @@ class CleanTest(StoreCase):
         other, _other_packages = environment(self.root / "other")
         gone, _gone_packages = environment(self.root / "gone")
         replaced, replaced_packages = environment(self.root / "replaced")
+        fresh, _fresh_packages = environment(self.root / "fresh")
         releases = {name: self.published(name) for name in
-                    ("1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6")}
+                    ("1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7", "1.0.8")}
+        now = time.time()
+        old = now - store.STALE_SECONDS - 60
         store.point(releases["1.0.1"], previous=str(releases["1.0.2"]), prefix=here)
         store.point(releases["1.0.3"], prefix=other)  # another environment's, which lasts
         store.point(releases["1.0.4"], prefix=gone)
@@ -353,26 +356,37 @@ class CleanTest(StoreCase):
         store.point(releases["1.0.5"], prefix=replaced)
         record = replaced_packages / "cad-1.0.0.dist-info" / "RECORD"
         os.utime(record, ns=(0, record.stat().st_mtime_ns + 1_000_000_000))  # cad installed there again since
-        write(store.root() / "pointer-00000000.json", "{not json")
-        unmarked = write(store.root() / "1.0.7-half" / "cad" / "__init__.py").parents[1]
-        trash = write(store.root() / ".trash-1.0.8-abcd" / "cad" / "__init__.py").parents[1]
+        for prefix in (here, other, gone, replaced):
+            os.utime(store.pointer_path(prefix), (old, old))  # written long ago
+        # A pointer that means nothing as yet, written a moment ago: an update may be writing it.
+        store.point(releases["1.0.7"], previous=str(releases["1.0.8"]), prefix=fresh)
+        shutil.rmtree(fresh)
+        unreadable = [write(store.root() / "pointer-00000000.json", "{not json"),
+                      write(store.root() / "pointer-00000001.json", "[1, 2]")]
+        for path in unreadable:
+            os.utime(path, (old, old))
+        unmarked = write(store.root() / "1.0.9-half" / "cad" / "__init__.py").parents[1]
+        trash = write(store.root() / ".trash-1.0.10-abcd" / "cad" / "__init__.py").parents[1]
         abandoned = write(store.root() / ".building-1-old" / "cad" / "__init__.py").parents[1]
         building = write(store.root() / ".building-2-new" / "cad" / "__init__.py").parents[1]
-        now = time.time()
         os.utime(abandoned, (now - store.ABANDONED_SECONDS - 60, now - store.ABANDONED_SECONDS - 60))
-        write(store.root() / "1.0.9-a-file", "a file where a release's folder would be")
+        write(store.root() / "1.0.11-a-file", "a file where a release's folder would be")
         removed = store.clean(keep=[releases["1.0.0"]], now=now)
         self.assertEqual(sorted(removed), sorted([
-            store.pointer_path(gone).name, store.pointer_path(replaced).name, "pointer-00000000.json",
-            releases["1.0.4"].name, releases["1.0.5"].name, releases["1.0.6"].name, unmarked.name, trash.name,
-            abandoned.name]))
-        for name in ("1.0.0", "1.0.1", "1.0.2", "1.0.3"):
+            store.pointer_path(gone).name, store.pointer_path(replaced).name, releases["1.0.4"].name,
+            releases["1.0.5"].name, releases["1.0.6"].name, unmarked.name, trash.name, abandoned.name]))
+        for name in ("1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.7", "1.0.8"):
             self.assertIsNotNone(store.marker(releases[name]), f"{name} is kept")
         self.assertTrue(building.is_dir(), "a build that may still run is left")
-        self.assertTrue((store.root() / "1.0.9-a-file").is_file())
-        self.assertEqual(sorted(path.name for path in store.root().glob("pointer-*.json")),
-                         sorted([store.pointer_path(here).name, store.pointer_path(other).name]))
+        self.assertTrue((store.root() / "1.0.11-a-file").is_file())
+        self.assertEqual(sorted(path.name for path in store.root().glob("pointer-*.json")), sorted([
+            store.pointer_path(here).name, store.pointer_path(other).name, store.pointer_path(fresh).name,
+            *(path.name for path in unreadable)]), "what cannot be read is left: an update may be writing it")
         self.assertEqual(store.clean(keep=[releases["1.0.0"]], now=now), [], "nothing more to take")
+        later = now + store.STALE_SECONDS + 1
+        self.assertEqual(sorted(store.clean(keep=[releases["1.0.0"]], now=later)), sorted([
+            store.pointer_path(fresh).name, releases["1.0.7"].name, releases["1.0.8"].name]),
+            "the same pointer, once old, and the releases it alone named")
 
     def test_clean_never_raises(self) -> None:
         self.assertEqual(store.clean(), [], "no store at all")

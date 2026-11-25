@@ -312,6 +312,55 @@ class Bootstrap(unittest.TestCase):
         self.assertEqual((found["cad"], found["stored"], found["held"]), ("stored", str(self.stored), True))
         self.assertTrue(found["prefix"].startswith(str(link)), "the environment as the link names it")
 
+    def test_a_pointer_that_will_not_open_is_tried_again_a_moment_later_then_left(self) -> None:
+        """On Windows a file cannot be opened for the moment another is renamed over it, so a pointer that exists but
+        will not open is read again a few milliseconds apart, then taken for none; one that is not there is none at
+        once. Counted by a ``.pth`` read before ``cad.pth`` that notes each ``time.sleep``: no clock is read."""
+        counter = write(self.env.packages / "sleeps.py", (
+            "import time\n\nwaits = []\nsleep = time.sleep\n\n\ndef noted(seconds):\n    waits.append(seconds)\n"
+            "    sleep(seconds)\n\n\ntime.sleep = noted\n"))
+        line = write(self.env.packages / "a-count-sleeps.pth", "import sleeps\n")
+        self.addCleanup(counter.unlink)
+        self.addCleanup(line.unlink)
+        code = "import json, sys; print(json.dumps(sys.modules['sleeps'].waits))"
+        self.env.pointer_path(self.state).mkdir(parents=True)  # there, and no file to open: an OSError of its own
+        found = self.env.run("-c", code, state=self.state)
+        self.assertEqual((found.returncode, found.stderr, json.loads(found.stdout)), (0, "", [0.0, 0.002, 0.01, 0.05]))
+        own = self.env.probe(state=self.state)
+        self.assertEqual((own["cad"], own["stored"], own["held"]), ("own", None, False))
+        self.assertSilent()
+        found = self.env.run("-c", code, state=self.folder / "no-pointer")
+        self.assertEqual((found.returncode, found.stderr, json.loads(found.stdout)), (0, "", []), "none: no wait")
+
+    def test_imported_from_a_folder_not_on_the_import_path_it_takes_nothing_and_holds_nothing(self) -> None:
+        """Its marker opened and closed again: the folder it would put in its own place is not on the path."""
+        said = self.env.run("-S", "-c", "import sys; print(sys.prefix)", state=self.state)
+        prefix = said.stdout.strip()
+        stamp = self.env.record.stat()
+        write(self.env.pointer_path(self.state, prefix), json.dumps({
+            "pointer": 1, "python": self.env.tag, "prefix": os.path.normcase(os.path.realpath(prefix)),
+            "record": RECORD, "stamp": [stamp.st_mtime_ns, stamp.st_size], "path": str(self.stored)}))
+        code = textwrap.dedent(f"""
+            import importlib.util, json, os, sys
+            spec = importlib.util.spec_from_file_location("_cad_release", {str(self.env.packages / "_cad_release.py")!r})
+            module = importlib.util.module_from_spec(spec)
+            sys.modules["_cad_release"] = module
+            before = list(sys.path)
+            spec.loader.exec_module(module)
+            stored = {str(self.stored)!r}
+            if os.name == "nt":
+                os.rename(stored, stored + "-aside")  # refused while a file in it is open
+                os.rename(stored + "-aside", stored)
+            else:
+                import fcntl
+                with open(os.path.join(stored, "cad-store.json"), "rb") as marker:
+                    fcntl.flock(marker, fcntl.LOCK_EX | fcntl.LOCK_NB)  # refused while it is held, here too
+            print(json.dumps([module.STORED, module.HELD, sys.path == before]))
+        """)
+        found = self.env.run("-S", "-c", code, state=self.state)
+        self.assertEqual((found.returncode, found.stderr), (0, ""))
+        self.assertEqual(json.loads(found.stdout), [None, None, True])
+
     def test_with_no_state_folder_named_the_pointer_is_in_the_platform_s_place(self) -> None:
         home = self.folder / "home"
         home.mkdir()

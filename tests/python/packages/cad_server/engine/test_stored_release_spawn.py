@@ -37,7 +37,8 @@ class StoredReleaseSpawnTest(unittest.TestCase):
                                                             ("1.0.1-tag", "src", "1.0.0-tag", "kept"))
         for folder in (self.release, self.source, self.other, self.kept):
             os.mkdir(folder)
-        self.enterContext(mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(root / "engine")}))
+        self.enterContext(mock.patch.dict(os.environ, {name: str(root / folder) for name, folder in (
+            ("CAD_ENGINE_DIR", "engine"), ("CAD_STATE_DIR", "state"), ("CAD_CACHE_DIR", "cache"))}))
         os.environ.pop("PYTHONPATH", None)
 
     def started(self, start: Callable[[], Any], root: str, stored: str | None) -> str | None:
