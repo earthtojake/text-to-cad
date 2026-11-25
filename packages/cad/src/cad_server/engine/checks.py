@@ -312,12 +312,6 @@ class Checks:
         with self.lock:
             self.waited += 1
 
-    def forget(self, document: str) -> None:
-        """Every result of ``document`` dropped from memory (it was deleted: its folder, and the results on
-        disk in it, went with it)."""
-        with self.lock:
-            self._drop(document)
-
     def status(self) -> dict[str, Any]:
         with self.lock:
             found = {"held": len(self.kept), "bytes": self.bytes, "measured": self.measured, "reused": self.reused,

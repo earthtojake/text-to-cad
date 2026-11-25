@@ -1168,9 +1168,8 @@ class Daemon:
 
     def _check_version(self, ident: str) -> str | None:
         """Model document ``ident``'s generation, as its row has it, else its ``.xbf``'s version (the file is the
-        document); None for neither."""
-        with self.models.lock:
-            record = self.models.records.get(ident)
+        document); None for neither. A row whose ``.xbf`` is gone is no one's (``Models.held``)."""
+        record = self.models.held(ident)
         if record is not None:
             return str(record["version"])
         found = self.models.locate(ident)

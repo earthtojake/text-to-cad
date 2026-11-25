@@ -29,7 +29,7 @@ while that server runs.
   message names a command that builds a document again.
 - **`cad delete` is removed.** It is answered as any unknown command is. cad has no copy of a
   document to delete: to be rid of one, delete its file. To take a file off the viewer's lists and
-  leave it on disk, use Remove on its card. The rule that keeps a command the skills used working for
+  leave it on disk, use Remove from Recents on its card. The rule that keeps a command the skills used working for
   30 days was waived for this one by the repository's owner.
 - **A run takes a model from its `.xbf` whenever the file holds the model's key**, whoever wrote
   the file last. 0.11 built again when the file was not the one the server had written.
@@ -53,3 +53,4 @@ while that server runs.
 | `GET /api/v1/documents` rows | `record` is always `file`; a model's row has `path` its `.xbf`, `name` the file's name, `size` the file's. `script`, `rebuild`, `shown` and `file` are gone. A file that is gone is not listed |
 | `GET /api/v1/documents/<id>` and every read by id | A 404 is `{"error", "hint"}`: no `state`, no `rebuild`. `entry.project` gains `folder` |
 | `DELETE /api/v1/documents/<id>` | 405. `PATCH /api/v1/documents` with `remove` forgets a file's entry; `delete` is refused as an unknown action |
+| `GET /api/v1/local/open-in`, `POST /api/v1/local/open` | A target offers the operating system's own handler only for the kinds listed for it (text, PDF, images, other CAD tools' files, cad's own formats but KiCad's), never for code, a model's script included (`default: false`), and on Linux only where `xdg-open` is installed. `POST` refuses what is not offered, and an app that cannot be started, with 400 (it was 500) |
