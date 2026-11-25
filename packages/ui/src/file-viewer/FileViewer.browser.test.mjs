@@ -159,10 +159,19 @@ test("the update button is the navbar's top-right corner, over a file and over t
           if (width > 600) assert.ok(Math.abs(end - column) <= 1, `the search and Open end on the column: ${where_} ${end} ${column}`);
           else assert.ok(end <= at.left - 8, `short of the button: ${where_}`);
         }
-        await page.mouse.move(1, 790);
-        await button.hover();
+        // Its hint under a resting pointer. A hover the hint did not take is tried again, as a person moves the pointer
+        // again: three hovers, each awaited, and the place and state said where none was taken.
         const hint = page.locator('[data-slot="tooltip-content"]');
-        await hint.waitFor();
+        for (let tries = 1; ; tries += 1) {
+          await page.mouse.move(1, 790);
+          await button.hover();
+          try {
+            await hint.waitFor({ timeout: 3000 });
+            break;
+          } catch (error) {
+            if (tries === 3) throw new Error(`no hint after three hovers: ${where_}`, { cause: error });
+          }
+        }
         assert.equal(await page.getByRole("tooltip").textContent(), tip, `its hint: ${where_}`);
         await page.mouse.move(1, 790);
         await hint.waitFor({ state: "detached" });
