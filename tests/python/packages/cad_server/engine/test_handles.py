@@ -339,11 +339,23 @@ class HandleTest(unittest.TestCase):
         record = Registry(self.state).get(ident)
         self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
         self.assertEqual(set(record) - {"cache"}, {"schema", "id", "kind", "root", "home", "entry", "program",
-                                                   "revision", "built", "created", "namespace", "name", "facts"},
-                         "a model's shape, and the program that showed it")
-        from cad_server.viewer.recents import RecentStore
+                                                   "revision", "built", "created", "namespace", "name", "facts",
+                                                   "saved"},
+                         "a model's shape, the program that showed it, and the .xbf it is saved as")
+        from cad.engine.ids import file_id
+        from cad_server.viewer.recents import RecentStore, fold
 
-        listed = {entry.path: entry.public() for entry in RecentStore(self.state).list()}
+        # The engine wrote its .xbf and recorded it as the shape's, as it does a build's: one card on the home.
+        self.assertEqual(record["saved"], "crate.xbf")
+        saved = Registry(self.state).get(file_id(str(project / "crate.xbf")))
+        self.assertEqual((saved["of"]["id"], saved["of"]["revision"], saved["facts"]["parts"]), (ident, record["revision"], 2))
+        store = RecentStore(self.state)
+        store.opened(str(project / "crate.xbf"))
+        rows = [{**entry.row(), "project": None} for entry in store.list()]
+        self.assertEqual([row["record"] for row in rows if row["path"] == str(project / "crate.xbf")], ["file"])
+        self.assertNotIn(str(project / "crate.xbf"), [row["path"] for row in fold(rows)],
+                         "its .xbf is the shape's card, not a card beside it")
+        listed = {entry.path: entry.public() for entry in store.list()}
         shown = listed[ident]
         # Its parts' occurrences, counted from the structure handed over: the crate and its lid; the tag is one part.
         self.assertEqual((record["facts"], shown["parts"], listed[found["tag"]]["parts"]), ({"parts": 2}, 2, 1))

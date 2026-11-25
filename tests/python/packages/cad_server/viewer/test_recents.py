@@ -266,6 +266,9 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual(model["saved"], str(arm).replace(os.sep, "/"), "where its declared .xbf is")
         self.assertEqual({row["name"]: row["of"] for row in rows() if row["record"] == "file"},
                          {"arm.xbf": ident, "out.xbf": ident})
+        # An .xbf's document is a model's, as the model's own is: its record, a file's, tells the two rows apart.
+        self.assertEqual({row["name"]: (row["kind"], row["record"], row["parts"]) for row in rows()},
+                         {"arm": ("model", "model", None), "arm.xbf": ("model", "file", 1), "out.xbf": ("model", "file", 1)})
         self.assertEqual(listed(), ["arm"], "the model's row stands for every .xbf written from it")
         # Only where the model's row is in the same list, in the same place, and is there to open.
         self.assertEqual(sorted(row["name"] for row in fold([row for row in rows() if row["record"] == "file"])),

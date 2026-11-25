@@ -23,13 +23,13 @@ engine wrote (a build's declared file, an export) from the document it wrote it 
 (``RecentStore.counted``) -- a file's only while the file is the version counted. A listing reads records alone:
 nothing is read to count them, a model's script never, a file's bytes never.
 
-An ``.xbf`` the engine wrote from a model's document -- the build's declared file, an export of the model's id, the
-viewer's export -- is that model, and a listing shows one card of them (``fold``): its record names the model, the
+An ``.xbf`` the engine wrote from a model's document -- the build's own (every model writes one), a shape's handed
+over from a script, an export of the model's id -- is that model, and a listing shows one card of them (``fold``): its record names the model, the
 file's version as written and the document's revision (``of``: ``Models.written``), and while the file is still
 that version and the model's record still that revision, the file's row says whose it is (``of``) and is left out of
 any list that holds the model's row (``fold``). A file edited or copied since, or one whose model was built into
 another revision since (an export the build did not write again: an older model now), is a file of its own. A
-model's row says where its declared ``.xbf`` is (``saved``) while that file is the model so.
+model's (or a shape's) row says where its own ``.xbf`` is (``saved``) while that file is the model so.
 
 The pictures are bounded however often a document is edited: a record names one, a new picture
 replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
@@ -344,7 +344,7 @@ class RecentStore:
                                       if record["kind"] == "shape" else None, updated=record.get("built"),
                                       opened=record.get("opened"), parts=_parts(record.get("facts")),
                                       saved=os.path.normpath(self.registry.root(record) / record["saved"])
-                                      if record["kind"] == "model" and isinstance(record.get("saved"), str) else None,
+                                      if isinstance(record.get("saved"), str) else None,
                                       revision=record.get("revision") if isinstance(record.get("revision"), str)
                                       else None, **common))
         return _linked(entries)

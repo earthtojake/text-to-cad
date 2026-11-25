@@ -12,7 +12,8 @@ import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS, PANEL_PEEK_LEAVE_MS } from '../../dist/file-viewer/panelPeek.js';
 import { testHost } from '../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../dist/file-viewer/responsive.js';
-import { DOCUMENT_KINDS, PLACE_ROWS, below, documentKind, formatLabel, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
+import { DOCUMENT_KINDS, PLACE_ROWS, below, deletes, documentKind, formatLabel, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
+import { libraryRow } from '@cad/core/client';
 import { DOCUMENT_TYPE_REGISTRY } from '@cad/core/lib/documentTypes.generated.js';
 import type { LibraryModel, LibraryNavigation, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
 
@@ -385,6 +386,31 @@ it('asks before Delete, in words that say what stays on disk, and the card leave
   await act(async () => { settle(); });
   expect(screen.queryByRole('button', { name: 'Open bracket' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Open bracket.step' })).toBeTruthy();
+});
+
+it('takes an .xbf the server lists as a model\'s document (kind model, record file) for the file it is: a Part or an Assembly among the 3D models, after those built from code, with a file\'s menu and a file\'s Delete', async () => {
+  // As the server lists them: a document's kind, and its record's (`libraryRow` hands the library the record's as `kind`).
+  const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f13', fileId = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f14';
+  const listed = (name: string, extra: Record<string, unknown>) => libraryRow({ ...model(name), ...extra }) as LibraryModel;
+  const built = listed('arm', { path: id, id, kind: 'model', record: 'model', script: '/work/parts/arm.py', parts: 1 });
+  const saved = listed('rig.xbf', { id: fileId, kind: 'model', record: 'file', parts: 3, size: 4_096 });
+  const step = listed('rig.step', { kind: 'step', record: 'file', parts: 3 });
+  expect([built, saved, step].map(item => [item.kind, item.documentKind, deletes(item), documentKind(item)]))
+    .toEqual([['model', 'model', true, 'models'], ['file', 'model', false, 'models'], ['file', 'step', false, 'models']]);
+  const labels = { model: 'Model', part: 'Part', assembly: 'Assembly' };
+  expect([built, saved, step].map(item => formatLabel(item, labels))).toEqual(['Part', 'Assembly', 'STEP']);
+  expect(sortDocuments([step, saved, built], 'kind').map(item => item.name)).toEqual(['arm', 'rig.xbf', 'rig.step']);
+  const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': () => {}, 'copy-link': () => {}, reveal: () => {} } };
+  const source = library([built, saved]);
+  render(<ModelLibrary library={source} fileActions={fileActions} />);
+  await screen.findByRole('button', { name: 'Open rig.xbf' });
+  const open = await menu('rig.xbf');
+  expect(items(open)).toEqual(['Open', 'Copy path', 'Copy link', 'Reveal in Finder', 'Pin', 'Delete']);
+  await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Delete' })); });
+  const dialog = await screen.findByRole('alertdialog');
+  expect(within(dialog).getByRole('heading').textContent).toBe('Delete rig.xbf from the viewer?');
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' })); });
+  expect(source.change).toHaveBeenCalledWith('remove', expect.objectContaining({ name: 'rig.xbf' }));
 });
 
 it('asks to delete a file from the viewer alone, and one model of a script alone', async () => {

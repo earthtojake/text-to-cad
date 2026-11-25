@@ -89,7 +89,7 @@ export interface CadRecent {
    * file's while the file is that version; null where it does not.
    */
   parts?: number | null;
-  /** A model's: the path of its declared `.xbf`, while that file is the model (unchanged, of its revision now). */
+  /** A model's (and a shape's): the path of its own `.xbf`, while that file is the model (unchanged, of its revision now). */
   saved?: string;
   /**
    * A file's: the id of the model whose document it is, an `.xbf` the engine wrote from it, while the file is unchanged

@@ -438,7 +438,7 @@ opened, Viewed when it was opened after it last changed). The list is a table: N
 Where), Kind, Size, Updated and Created
 over 44px rows, each a document's small picture and name, its format (as the badge: "Part", "Assembly" or "Model" for a model or an `.xbf` file), its size and those two ages with no verb. Every model is a tile and a row of
 its own: a model shows its
-name and its age, and stands for each `.xbf` the engine wrote from it (its declared one, one exported of it), which
+name and its age, and stands for each `.xbf` the engine wrote from it (its own, one exported of it), which
 the server leaves out of the list beside it while the file is unchanged and the model is the revision written (an
 `.xbf` copied or edited, an older model's, and every STEP or GLB export are files of their own). The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's end); a
 pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, a file's Copy path and Reveal (a model has
@@ -492,7 +492,7 @@ engine first made its record: a model's first run, a file's first open; null for
 it was kept), which the home orders by the person's Sort (by default the later of the first two, newest first), and
 `parts`, how many part occurrences its document holds where the server knows it (a model's or a shape's last build;
 an `.xbf` the engine wrote, from the document it wrote; another file the engine read for a page; a file's only while it
-is that version; null where it does not), which names a model's card Part or Assembly, and, of a model, its declared
+is that version; null where it does not), which names a model's card Part or Assembly, and, of a model, its own
 `.xbf` (`saved`, its path; an `.xbf` that is a model's document says whose it is, `of`, where a list has its row); it pins, unpins, removes a file's record (`remove`) and
 deletes a model's document (`delete`) over `PATCH /api/v1/documents`, and draws each card's picture
 from `GET /api/v1/documents/<id>/thumbnail`. A model's script is never read for any of it. The document on

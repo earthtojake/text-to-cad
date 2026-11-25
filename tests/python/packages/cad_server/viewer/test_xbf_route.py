@@ -81,10 +81,10 @@ if __name__ == "__main__":
 # A model whose build saves it as the .xbf beside its script.
 ARM = """
 import build123d as bd
-from cad.engine import xbf
+from cad import model
 
 
-@xbf("arm.xbf")
+@model("arm.xbf")
 def arm():
     return bd.Box(4, 4, 20)
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
 """
 
 
-# A model with no file of its own, which the person exports as an xbf.
+# A model whose .xbf is its default, hub.xbf beside its script, which the person exports as another xbf too.
 HUB = """
 import build123d as bd
 from cad import model
@@ -395,10 +395,11 @@ finally:
         for script in ("arm.py", "hub.py"):
             done = run(script)
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        arm, hub = folder / "arm.xbf", folder / "hub.xbf"
+        arm, hub, exported = folder / "arm.xbf", folder / "hub.xbf", folder / "share" / "hub-v1.xbf"
+        exported.parent.mkdir()
         [ident] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "hub"]
-        # The person's exports of a model, an .xbf and a STEP, and a copy of a model's declared .xbf.
-        for target in (hub, folder / "hub.step"):
+        # The person's exports of a model, an .xbf and a STEP, and a copy of a model's own .xbf.
+        for target in (exported, folder / "hub.step"):
             done = run("-m", "cad_server.cli", "model", "export", ident, str(target))
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         shutil.copyfile(arm, folder / "arm-copy.xbf")
@@ -409,23 +410,28 @@ finally:
         self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.step"],
                          "each model once: the .xbf its build wrote and the .xbf exported of it are the model")
         self.assertEqual((listed()["arm"]["saved"], listed()["arm"]["parts"]), (posix(arm), 1))
+        # Bare @model's default .xbf is the model's as a given path is: counted, linked, and kind model, record file.
+        self.assertEqual((listed()["hub"]["saved"], listed()["hub"]["parts"]), (posix(hub), 2))
         # Opened on a page, an .xbf is in Recents, where the model is too: one card there as well.
-        for path in (arm, hub):
+        for path in (arm, hub, exported):
             self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "open", "path": str(path)})[0], 200)
         recents = lambda: [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]]
         self.assertNotIn(posix(arm), recents())
         self.assertNotIn(posix(hub), recents())
-        # Rebuilt with a change: its build writes its declared .xbf again, which stays the model; the export it did
+        self.assertNotIn(posix(exported), recents())
+        # Rebuilt with a change: its build writes its own .xbf again, which stays the model; the export it did
         # not write again holds an older document, and is a card of its own.
         for name, before, after in (("arm.py", "bd.Box(4, 4, 20)", "bd.Box(4, 4, 24)"),
                                     ("hub.py", "bd.Box(6, 6, 2)", "bd.Box(8, 8, 2)")):
             script = folder / name
             script.write_text(script.read_text(encoding="utf-8").replace(before, after), encoding="utf-8")
             self.assertEqual(run(name).returncode, 0)
-        self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.step", "hub.xbf"])
-        self.assertNotIn("of", listed()["hub.xbf"])
-        self.assertIn(posix(hub), recents())
-        done = run("-m", "cad_server.cli", "model", "export", ident, str(hub))  # exported again: the model now
+        self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub-v1.xbf", "hub.step"])
+        self.assertEqual((listed()["hub-v1.xbf"]["kind"], listed()["hub-v1.xbf"]["record"]), ("model", "file"))
+        self.assertNotIn("of", listed()["hub-v1.xbf"])
+        self.assertIn(posix(exported), recents())
+        self.assertNotIn(posix(hub), recents())
+        done = run("-m", "cad_server.cli", "model", "export", ident, str(exported))  # exported again: the model now
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.step"])
         # Touched by hand: no longer the file the build wrote, so a card of its own; the next run keeps it as it is

@@ -98,6 +98,18 @@ def _given(given: list[str], header: dict[str, Any], script: Any) -> list[str]:
     return list(given) if same(theirs) == same(script) else sorted(set(given) | set(named))
 
 
+def _saving(path: Any) -> Path | None:
+    """The ``.xbf`` a shape handed over is saved as (``hand_over``'s ``saved``), canonical; None for none."""
+    if not isinstance(path, str) or not path.lower().endswith(".xbf") or not os.path.isabs(path):
+        return None
+    from cad.engine.ids import canonical
+
+    try:
+        return Path(canonical(path))
+    except (OSError, ValueError):
+        return None
+
+
 def _declared(report: dict[str, Any]) -> list[str]:
     """The ``.xbf`` files a model's build declares (its report's ``files``), as it wrote or kept them: the first is
     the model saved (its record's ``saved``, its file's ``of``)."""
@@ -395,8 +407,8 @@ class Models:
             from cad.engine.ids import canonical
 
             try:
-                # Its declared .xbf, the model saved (its file's record says so: ``of``): a build that declares none
-                # names none, and a listing then shows that file as any other.
+                # Its .xbf, the model saved (its file's record says so: ``of``): every model writes one, at @model's
+                # path or <name>.xbf beside its script (``Model.files``).
                 found["saved"] = registering.relative(canonical(saved[0]), root)
             except (OSError, ValueError):
                 pass
@@ -476,6 +488,9 @@ class Models:
                 found["created"] = previous["created"]
             if program:
                 found["program"] = registering.relative(program, root)  # what its words name (``shown``)
+            saving = _saving(request.get("saved"))
+            if saving is not None:
+                found["saved"] = registering.relative(saving, root)  # its .xbf, the shape saved (``_save``)
             for key in ("opened", "pinned", "preview", "cache"):
                 if key in previous:
                     found[key] = previous[key]
@@ -484,7 +499,28 @@ class Models:
         server.keep(ident, structure, shapes, version, data)
         self.cache.keep(ident, recorded, data)
         self.cache.touch(ident)
-        return {"done": {"id": ident, "url": self.url(server, ident)}}
+        done: dict[str, Any] = {"id": ident, "url": self.url(server, ident)}
+        if self._save(request.get("saved"), data, len(structure.get("instances") or []), (ident, recorded)):
+            done["saved"] = True
+        return {"done": done}
+
+    def _save(self, path: Any, data: bytes, parts: int, of: tuple[str, str]) -> bool:
+        """A shape handed over from a script is saved as ``<name>.xbf`` beside it (``api.hand_over``: law 10), which
+        the engine writes, as a build's own ``.xbf`` is, only where it differs or is missing, and records as it
+        records a build's (``written``: its parts' count and ``of``, the shape's id and revision), so a listing shows
+        the shape and its file as one card (``recents.fold``). Whether it was written or kept: a path that is none, or a
+        folder that refuses it, is the caller's to write, which says why (``hand_over``'s answer has no ``saved``)."""
+        found = _saving(path)
+        if found is None:
+            return False
+        from cad.engine.atomic_replace import put
+
+        try:
+            put(found, lambda temporary: temporary.write_bytes(data), compare=True)
+        except OSError:
+            return False
+        self.written([(str(found), parts)], of=of)
+        return True
 
     @staticmethod
     def shown(program: str | None) -> str:

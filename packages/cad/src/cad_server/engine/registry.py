@@ -10,9 +10,9 @@ or the folder it was handed over in; ``program``: that program, where there is o
 it again); or ``file``, an on-disk CAD file the person opened (``home`` and ``opened`` alone, and
 ``pinned``, ``preview`` and, where the engine wrote it from a document or read it for a page, ``facts``: its
 parts' occurrences and the file's version they are of, ``{parts, version}`` (``Registry.counted``); where the engine
-wrote it as an ``.xbf`` from a model's document (the build's declared file, an export of the model's id), ``of``:
+wrote it as an ``.xbf`` from a model's document (a build's own, a shape's handed over from a script, an export of the model's id), ``of``:
 that model's id, the file's version as written and the document's revision, ``{id, version, revision}``; never a
-``revision`` of its own, never bytes). A model's record names its declared ``.xbf`` (``saved``: its path). The registry POINTS: no geometry, no
+``revision`` of its own, never bytes). A model's or a shape's record names its own ``.xbf`` (``saved``: its path). The registry POINTS: no geometry, no
 mesh, no xbf and no memo is ever written here. A model's record may say that the engine's cache
 holds its document (``cache``: ``{revision, bytes, read}``), whose bytes live in the
 cache folder, not here (``Registry.cache``: ``<cache>/documents/<id>/document.xbf``, the engine's

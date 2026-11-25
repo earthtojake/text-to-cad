@@ -291,7 +291,8 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     run showed it: there is no command that builds it again. Its id is ``ids.derived_id`` of the
     calling script (``frame``'s file), or the working folder where there is none, and ``name``. The handle's ``shape`` is ``shape`` itself.
     A model always writes its ``.xbf`` (law 10): handed over from a script, ``<name>.xbf`` beside it, once the
-    engine holds it, only where it differs or is missing; from a REPL or a notebook, which has no script, none."""
+    engine holds it, only where it differs or is missing -- the engine writes it and records it as the shape's
+    (``Models._save``), so the home shows the two as one card; from a REPL or a notebook, which has no script, none."""
     from cad.engine import model as declaring
     from cad.engine.ids import canonical, check_name, derived_id
 
@@ -313,8 +314,11 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     ident = derived_id(scope, name)
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
-                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"), **_interpreter()})
-    if saved is not None:
+                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"),
+                   **({"saved": str(saved)} if saved is not None else {}), **_interpreter()})
+    # The engine writes it, as it writes a build's .xbf, and records it as the shape's (``Models._save``); where it
+    # did not (a folder that refuses it), it is written here, which says why.
+    if saved is not None and not (answer.get("done") or {}).get("saved"):
         from cad.engine.atomic_replace import put
 
         put(saved, lambda temporary: temporary.write_bytes(data), compare=True)

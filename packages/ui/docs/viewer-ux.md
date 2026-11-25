@@ -200,13 +200,13 @@ chrome that floats over the picture. The home is the navbar over the library: it
   or a GLB a model too; "built from code" against "a file on disk" was the implementation showing. A model and the
   files exported from it stay cards of their own.
 - **A model and its `.xbf` are one card.** An `.xbf` the engine wrote from a model's document is that model, saved:
-  the one it declares (`@xbf("arm.xbf")`), which every run writes or keeps, and one exported of it (`cad model export
-  ID x.xbf`). The model's card stands for them, and they have no card beside it in Recents, Pinned, a project's page,
+  its own (every model has one: `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it), which every
+  run writes or keeps, a shape's handed over from a script, and one exported of it (`cad model export ID x.xbf`). The model's card stands for them, and they have no card beside it in Recents, Pinned, a project's page,
   Standalone or the search. Why: one document, one identity, one "model" type; two Assembly cards of the same thing
   asked the person which to open. The server leaves a file's row out (its record says which model's document it is,
   the file's version and the model's revision as written) only where the model's own card is in the same place, its
   script there, the file still that version, the model still that revision, and the file unpinned; the model's row
-  says where its declared `.xbf` is (`saved`). Rebuilt into something else, a model's declared `.xbf` is written
+  says where its own `.xbf` is (`saved`). Rebuilt into something else, a model's own `.xbf` is written
   again and stays its card, while an export no one wrote again holds an older model and is a card of its own. An
   `.xbf` copied, got from elsewhere or edited since, or whose model is deleted or elsewhere, is a card of its own, as
   every other file is, and STEP, GLB and the other exports always are.
