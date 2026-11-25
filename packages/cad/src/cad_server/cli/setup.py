@@ -460,6 +460,7 @@ def move(name: str, told: Callable[[str], None]) -> bool:
         if os.path.normcase(os.path.realpath(command[0])).startswith(inside):
             told("no Python outside this environment to hand over with: this server runs on")
             return False
+        auto_update.write_helper(state_dir() / MOVE_RECORD)
         _start(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                env={**{key: value for key, value in os.environ.items() if key not in auto_update._UNSET},
                     **found.installer.environ(found.prefix)},

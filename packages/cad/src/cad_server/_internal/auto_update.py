@@ -142,6 +142,25 @@ LATEST = "latest"
 # (``cad.engine.client.UPDATING``).
 UPDATING = 75
 HELPER = Path(__file__).with_name("auto_update_helper.py")
+
+
+def helper_script(record: str | os.PathLike[str]) -> Path:
+    """Where the helper of the attempt kept at ``record`` runs from: a copy of its source beside the record, in the
+    state folder, never in cad's environment (which the installer replaces). Run as a file, not given whole on the
+    command line: Windows starts no process whose command line passes 32,767 characters."""
+    return Path(record).with_suffix(".helper.py")
+
+
+def write_helper(record: str | os.PathLike[str]) -> Path:
+    """The helper's source written where the attempt at ``record`` runs it (``helper_script``), whole or not at all."""
+    from cad._internal.atomic_replace import replace_atomic, temp_suffix
+
+    script = helper_script(record)
+    script.parent.mkdir(parents=True, exist_ok=True)
+    partial = script.with_name(script.name + temp_suffix())
+    partial.write_text(HELPER.read_text(encoding="utf-8"), encoding="utf-8")
+    replace_atomic(partial, script)
+    return script
 # One update begun at a time in a process: the check and the trigger together (``_begin_due``, ``begin``).
 _BEGIN = threading.Lock()
 # What the helper's environment leaves out: anything that would point its Python, uv or cad at this environment.
@@ -670,7 +689,8 @@ def helper_command(target: str | None, *, now: float, version: str, prefix: str 
                    major: bool = False, wanted: str | None = None, log: str | None = None,
                    floor: str | None = None) -> list[str]:
     """The helper's command line: the Python this environment was made from (``base``: ``sys._base_executable``,
-    never this environment's), isolated, running the helper's source, and its one argument: the commands of
+    never this environment's), isolated, running the helper's copy beside ``record`` (``helper_script``, which
+    ``write_helper`` writes before it starts), and its one argument: the commands of
     ``install``'s installer (by default uv's, its program ``uv``, for the environment ``prefix``), whose variables
     (``Installer.environ``) the trigger sets in the helper's environment, and its name (``installer``); ``target``, the
     release asked for (None: whatever the upgrade gets); ``wanted``, the release the attempt is for (``target`` or
@@ -689,7 +709,7 @@ def helper_command(target: str | None, *, now: float, version: str, prefix: str 
             "installer": installer.name, "wanted": wanted or target or LATEST, "asked": asked, "major": major,
             "start": start, **({"log": log} if log else {}), **({"uv_floor": floor} if floor else {})}
     python = base or getattr(sys, "_base_executable", None) or sys.executable
-    return [python, "-I", "-S", "-c", HELPER.read_text(encoding="utf-8"), json.dumps(told)]
+    return [python, "-I", "-S", str(helper_script(record)), json.dumps(told)]
 
 
 BEGUN, UNDERWAY, TRIED = "begun", "underway", "tried"  # what starting an update found (``_claim``)
@@ -757,6 +777,7 @@ def _start(target: str | None, *, automatic: bool, start: bool, major: bool,
         command = helper_command(target, now=kept["at"], version=version, record=str(record), tries=kept["tries"],
                                  asked=not automatic, install=found, start=start, major=major, wanted=kept["wanted"],
                                  log=str(record.with_name(LOG)), floor=uv_floor())
+        write_helper(record)
         env = {**{name: value for name, value in os.environ.items() if name not in _UNSET},
                **found.installer.environ(found.prefix)}
         subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

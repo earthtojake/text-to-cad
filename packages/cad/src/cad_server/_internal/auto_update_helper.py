@@ -1,5 +1,5 @@
 """cad's own update, carried out by a process that is not cad: ``auto_update.trigger`` runs this file's source with
-the Python cad's environment was made from (``-I -S -c``: never cad's environment, never a module of it), detached and
+the Python cad's environment was made from (``-I -S``, from its copy in the state folder: never cad's environment, never a module of it), detached and
 with no window, and hands it one JSON argument: ``cad`` (the environment's own ``cad`` command), ``target`` (the release
 asked for, or null: whatever the upgrade gets), ``prefix`` (the environment), ``record`` (the last attempt's file),
 ``from``, ``at`` and ``tries``; the installer's commands, ``upgrade`` (cad upgraded to the newest release of the major

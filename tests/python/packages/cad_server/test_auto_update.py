@@ -138,12 +138,12 @@ class GlobalInstallTest(Case):
             found = auto_update.global_install()
             self.assertEqual((found.installer.name, found.program), ("other", ["/o/other"]))
             line = auto_update.helper_command(None, now=1.0, version="0.1.0", base="/py", install=found)
-        self.assertEqual(json.loads(line[5])["cad"], str(auto_update.tool_command(self.tool)))
-        told = json.loads(line[5])
+        self.assertEqual(json.loads(line[-1])["cad"], str(auto_update.tool_command(self.tool)))
+        told = json.loads(line[-1])
         self.assertEqual((told["upgrade"], told["put_back"], told["launchers"]),
                          (["/o/other", "up", "0.1.0"], ["/o/other", "add", "cad==0.1.0"], ["/o/other", "bin"]))
         line = auto_update.helper_command(None, now=1.0, version="0.1.0", base="/py", install=found, major=True)
-        self.assertEqual(json.loads(line[5])["upgrade"], ["/o/other", "up", "--all"])
+        self.assertEqual(json.loads(line[-1])["upgrade"], ["/o/other", "up", "--all"])
 
 
 class SwitchesTest(Case):
@@ -399,7 +399,7 @@ class CarriedUvTest(Case):
                 mock.patch.object(auto_update.subprocess, "Popen") as popen:
             self.assertEqual(auto_update.global_install().program, [str(inside)])
             self.assertTrue(auto_update.trigger("0.2.0"))
-            told = json.loads(popen.call_args.args[0][5])
+            told = json.loads(popen.call_args.args[0][-1])
             copy = self.state / auto_update.UPDATE_UV / "uv"
             self.assertEqual((told["upgrade"][0], told["put_back"][0], told["launchers"][0]), (str(copy),) * 3)
             self.assertEqual(copy.read_bytes(), b"uv's binary")
@@ -508,14 +508,14 @@ class PipxTest(Case):
         self.assertEqual(pipx.upgrade(["/py", "-P", "-m", "pipx"], "0.1.0"),
                          ["/py", "-P", "-m", "pipx", "upgrade", "cad", "--pip-args=cad>=0.1.0,<1"])
         self.assertEqual(pipx.environ(self.env), {"PIPX_HOME": str(self.pipx_home)}, "the home that holds venvs/cad")
-        told = json.loads(auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", base="/py", install=found)[5])
+        told = json.loads(auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", base="/py", install=found)[-1])
         self.assertEqual((told["cad"], told["prefix"], told["upgrade"], told["put_back"], told["launchers"]),
                          (str(auto_update.tool_command(self.env)), str(self.env),
                           [*found.program, "upgrade", "cad", "--pip-args=cad>=0.1.0,<1"],
                           [*found.program, "install", "--force", "cad==0.1.0"],
                           [*found.program, "environment", "--value", "PIPX_BIN_DIR"]))
         told = json.loads(auto_update.helper_command("1.0.0", now=1.0, version="0.1.0", base="/py", install=found,
-                                                     major=True)[5])
+                                                     major=True)[-1])
         self.assertEqual((told["upgrade"], told["major"]),
                          ([*found.program, "upgrade", "cad", "--pip-args=cad>=0.1.0"], True))
         with self.feed("0.2.0"):
@@ -559,7 +559,7 @@ class PipxTest(Case):
             self.assertTrue(auto_update.trigger("0.2.0"))
         (line,), options = popen.call_args
         self.assertEqual(options["env"]["PIPX_HOME"], str(self.pipx_home), "the home of the cad that runs")
-        told = json.loads(line[5])
+        told = json.loads(line[-1])
         self.assertEqual(([os.path.normcase(part) for part in told["upgrade"][:1]], told["upgrade"][1:]),
                          ([os.path.normcase(str(self.pipx))], ["upgrade", "cad", "--pip-args=cad>=0.1.0,<1"]))
 
@@ -721,7 +721,7 @@ class DueTest(Case):
                     mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
                 (self.state / auto_update.RECORD).unlink(missing_ok=True)
                 self.assertTrue(auto_update.trigger(None, wanted="9.0.0"))
-                told = json.loads(popen.call_args.args[0][5])
+                told = json.loads(popen.call_args.args[0][-1])
                 self.assertEqual((told["upgrade"][-1], told["major"], told["target"]), (upgrade, False, None))
         with mock.patch.object(cad_server, "__version__", "0.1.0-dev.1"), \
                 mock.patch.object(auto_update.subprocess, "Popen") as popen:
@@ -905,9 +905,11 @@ class HelperCommandTest(Case):
             with self.subTest(windows=windows):
                 line = auto_update.helper_command("0.2.0", now=5.0, version="0.1.0", uv="/u/uv", base="/py/python",
                                                   record="/s/auto-update.json", windows=windows)
-                self.assertEqual(line[:4], ["/py/python", "-I", "-S", "-c"])
-                self.assertEqual(line[4], auto_update.HELPER.read_text(encoding="utf-8"))
-                self.assertEqual(json.loads(line[5]), {
+                # The helper runs from its copy beside the record, never given whole on the command line: Windows
+                # starts no process whose command line passes 32,767 characters.
+                self.assertEqual(line[:4], ["/py/python", "-I", "-S", str(Path("/s/auto-update.helper.py"))])
+                self.assertLess(len(subprocess.list2cmdline(line)), 4096)
+                self.assertEqual(json.loads(line[4]), {
                     "cad": str(cad), "target": "0.2.0", "prefix": str(self.tool), "record": "/s/auto-update.json",
                     "from": "0.1.0", "at": 5.0, "tries": 1,
                     "upgrade": ["/u/uv", "tool", "install", "--upgrade", "cad>=0.1.0,<1"],
@@ -915,7 +917,7 @@ class HelperCommandTest(Case):
                     "launchers": ["/u/uv", "tool", "dir", "--bin"], "installer": "uv", "wanted": "0.2.0",
                     "asked": False, "major": False, "start": True})
         told = json.loads(auto_update.helper_command("1.0.0", now=5.0, version="0.1.0", uv="/u/uv", base="/py",
-                                                     asked=True, major=True)[5])
+                                                     asked=True, major=True)[-1])
         self.assertEqual((told["upgrade"], told["major"], told["put_back"][-1]),
                          (["/u/uv", "tool", "install", "--upgrade", "cad>=0.1.0"], True, "cad==0.1.0"),
                          "`cad update --major`: the newest release of all; a failure puts back the release that ran")
@@ -934,7 +936,7 @@ class HelperCommandTest(Case):
 
     def test_the_trigger_starts_it_detached_with_nothing_of_this_environment_and_keeps_the_attempt(self) -> None:
         line, options = self.triggered()
-        told = json.loads(line[5])
+        told = json.loads(line[-1])
         self.assertEqual(os.path.normcase(told["upgrade"][0]), os.path.normcase(self.uv))
         self.assertEqual((told["log"], told["uv_floor"]), (str(self.state / auto_update.LOG), auto_update.uv_floor()),
                          "the log beside the record, and the oldest uv cad asks for")
@@ -963,7 +965,7 @@ class HelperCommandTest(Case):
         auto_update.change_plugin(True)  # the switch on: the helper runs no install command whatever it says
         for automatic, major in ((True, False), (False, False), (False, True)):
             with self.subTest(automatic=automatic, major=major):
-                told = json.loads(self.triggered(automatic=automatic, major=major)[0][5])
+                told = json.loads(self.triggered(automatic=automatic, major=major)[0][-1])
                 self.assertEqual((told["installer"], told["asked"], told["major"]), ("uv", not automatic, major))
                 self.assertNotIn("then_install", told)
                 kept = auto_update.last()
@@ -973,13 +975,13 @@ class HelperCommandTest(Case):
         with mock.patch.object(auto_update.subprocess, "Popen") as popen, \
                 mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
             found = auto_update.begin("1.0.0", major=True)
-        told = json.loads(popen.call_args.args[0][5])
+        told = json.loads(popen.call_args.args[0][-1])
         self.assertEqual((found["release"], found["asked"], found["major"], told["upgrade"][-1], told["start"]),
                          ("1.0.0", True, True, "cad>=0.1.0", True))
 
     def test_the_helper_is_told_whether_to_start_the_server_after_it(self) -> None:
-        self.assertTrue(json.loads(self.triggered()[0][5])["start"], "a server ran: it starts again")
-        self.assertFalse(json.loads(self.triggered(automatic=False, start=False)[0][5])["start"])
+        self.assertTrue(json.loads(self.triggered()[0][-1])["start"], "a server ran: it starts again")
+        self.assertFalse(json.loads(self.triggered(automatic=False, start=False)[0][-1])["start"])
 
 
 class HelperTest(unittest.TestCase):
@@ -1427,6 +1429,7 @@ class HelperTest(unittest.TestCase):
         line = auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", prefix=str(self.tmp),
                                           uv=str(self.tmp / "uv"), record=str(record), windows=False,
                                           log=str(self.tmp / auto_update.LOG))
+        auto_update.write_helper(record)
         env = {**os.environ, "PYTHONPATH": "/nowhere-at-all"}
         subprocess.run(line, check=True, env=env, cwd=self.tmp, timeout=60)
         self.assertEqual(log.read_text(encoding="utf-8").splitlines(),
@@ -1453,15 +1456,16 @@ class HelperTest(unittest.TestCase):
         line = auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", prefix=str(self.tmp),
                                           uv=str(self.tmp / "uv"), record=str(record), windows=False,
                                           log=str(self.tmp / auto_update.LOG))
-        told = json.loads(line[5])
+        auto_update.write_helper(record)
+        told = json.loads(line[-1])
         del told["upgrade"]
-        subprocess.run([*line[:5], json.dumps(told)], check=True, cwd=self.tmp, timeout=60)
+        subprocess.run([*line[:-1], json.dumps(told)], check=True, cwd=self.tmp, timeout=60)
         self.assertEqual(json.loads(record.read_text(encoding="utf-8")),
                          {**kept, "cause": "helper_crash", "detail": "KeyError: 'upgrade'"})
         self.assertIn("the helper stopped with an error:\nTraceback",
                       (self.tmp / auto_update.LOG).read_text(encoding="utf-8"))
         record.write_text(json.dumps({**kept, "at": 2.0}), encoding="utf-8")  # another attempt's record: left alone
-        subprocess.run([*line[:5], json.dumps(told)], check=True, cwd=self.tmp, timeout=60)
+        subprocess.run([*line[:-1], json.dumps(told)], check=True, cwd=self.tmp, timeout=60)
         self.assertEqual(json.loads(record.read_text(encoding="utf-8")), {**kept, "at": 2.0})
 
     @unittest.skipIf(os.name == "nt", "the stand-in uv and cad are shell scripts")
@@ -1491,6 +1495,7 @@ class HelperTest(unittest.TestCase):
         record = self.tmp / "auto-update.json"
         line = auto_update.helper_command("0.2.0", now=1.0, version="0.1.0", prefix=str(self.tmp),
                                           uv=str(self.tmp / "uv"), record=str(record), windows=False)
+        auto_update.write_helper(record)
         subprocess.run(line, check=True, env=env, cwd=self.tmp, timeout=180)
         kept = json.loads(record.read_text(encoding="utf-8"))
         self.assertEqual((kept["outcome"], kept["started"]), ("installed", f"started the cad server (cad {version()})"))
@@ -1861,7 +1866,7 @@ class AskedTest(Case):
             self.assertEqual(auto_update.begin("0.2.0")["tries"], 3, "an underway record past the hour: a dead helper")
             auto_update._keep(self.state / auto_update.RECORD, {**again, "outcome": "failed"})
             unknown = auto_update.begin(None)
-            self.assertEqual((unknown["release"], json.loads(popen.call_args.args[0][5])["target"]), ("latest", None),
+            self.assertEqual((unknown["release"], json.loads(popen.call_args.args[0][-1])["target"]), ("latest", None),
                              "PyPI out of reach: whatever the upgrade gets")
         with mock.patch.object(auto_update, "_start", side_effect=OSError("the state folder is read-only")):
             auto_update._keep(self.state / auto_update.RECORD, {**again, "outcome": "failed"})
@@ -2000,7 +2005,7 @@ class UpdateCommandTest(Case):
                 mock.patch.object(auto_update.subprocess, "Popen") as popen:
             self.assertEqual(self.typed(raises=none, looks=looks(), argv=["--major"])[:3],
                              (0, "cad 0.1.0 updated to 1.0.0\n", ""))
-        told = json.loads(popen.call_args.args[0][5])
+        told = json.loads(popen.call_args.args[0][-1])
         self.assertEqual((told["target"], told["major"], told["upgrade"][-1], told["start"]),
                          ("1.0.0", True, "cad>=0.1.0", False))
 
@@ -2081,7 +2086,7 @@ class UpdateCommandTest(Case):
             seen = looks()
             self.assertEqual(self.typed(raises=none, looks=seen)[:3],
                              (0, "cad 0.1.0 updated to 0.2.0\n", ""))
-        told = json.loads(popen.call_args.args[0][5])
+        told = json.loads(popen.call_args.args[0][-1])
         self.assertEqual((told["target"], told["start"], told["asked"]), ("0.2.0", False, True),
                          "no server started after it, a typed update")
         self.assertNotIn("then_install", told, "the helper never runs the install command")
