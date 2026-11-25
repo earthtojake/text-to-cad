@@ -20,10 +20,12 @@ from pathlib import Path
 
 from tests.python.support.paths import LIBRARY, REPO_ROOT
 
-# Each release's wheels, by distribution: its project, its packages, and what its wheel carries at its root: cad,
-# and cad-server, its alias, which the updaters of 0.10.0 to 0.11.11 install a release by.
-DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen", "cad_server", "cad_mcp"), ("cad-lazy-kernel.pth",)),
-                 "cad-server": (REPO_ROOT / "packages" / "aliases" / "cad-server", (), ())}
+# Each release's wheels, by distribution: its project, its packages, and what its wheel carries at its root (its name
+# there, and its path in the project): cad, and cad-server, its alias, which the updaters of 0.10.0 to 0.11.11 install
+# a release by.
+DISTRIBUTIONS = {"cad": (LIBRARY, ("cad", "cadgen", "cad_server", "cad_mcp"),
+                         {"cad.pth": "cad.pth", "_cad_release.py": "src/_cad_release.py"}),
+                 "cad-server": (REPO_ROOT / "packages" / "aliases" / "cad-server", (), {})}
 
 
 def _is_junction(path: Path) -> bool:
@@ -49,7 +51,7 @@ def wheel(distribution: str, version: str, folder: Path, replace: dict[str, byte
     project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     stem = distribution.replace("-", "_")
     info = f"{stem}-{version}.dist-info"
-    files: dict[str, bytes] = {name: (source / name).read_bytes() for name in roots}
+    files: dict[str, bytes] = {name: (source / path).read_bytes() for name, path in roots.items()}
     for top in packages:
         package = source / "src" / top
         for path in sorted(package.rglob("*")):

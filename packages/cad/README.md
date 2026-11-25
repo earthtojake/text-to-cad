@@ -493,7 +493,7 @@ src/cad/
                          #   runner `cad run` starts a program by (program: the program's
                          #   folder last on its path), the lazy kernel (lazy_kernel: `import
                          #   build123d` binds, the kernel loads on first use;
-                         #   cad-lazy-kernel.pth, at the root of site-packages, installs it
+                         #   cad.pth, at the root of site-packages, installs it
                          #   at interpreter start), the font guard (font_scan; check_fonts, the
                          #   font that breaks `import build123d`), what the library counts
                          #   (counts), the checks' findings and XML helpers, atomic replace,
@@ -502,6 +502,10 @@ src/cad/
                          #   study file, the mesh, the solve, the checks and the files it writes)
 src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 14's earlier name)
+src/_cad_release.py      # which release an environment runs, its own or the one cad's update keeps
+                         #   beside it: imported by cad.pth as each interpreter starts, the standard
+                         #   library alone, and never changed once shipped
+cad.pth                  # at the wheel's root: _cad_release, then the lazy kernel (setup.py puts it there)
 ```
 
 The server and the transport say their own shapes and commands in their own READMEs,
