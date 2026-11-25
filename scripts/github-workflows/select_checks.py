@@ -229,8 +229,12 @@ RULES: tuple[Rule, ...] = (
     Rule(tuple(f"packages/cad/src/cad_server/{path}" for path in (
         "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
         "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
+        "_internal/store.py", "_internal/selftest.py",
         "engine/daemon.py", "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/**")),
         select(flags=["installer"])),
+    # ...and what an installed cad reads as its Python starts, by which an update takes effect: the wheel's root
+    # module and the line that imports it.
+    Rule(("packages/cad/src/_cad_release.py", "packages/cad/cad.pth"), select(flags=["installer"])),
     # The one-line installer: the docs site serves copies of install.sh, install.ps1 and install.py. Its own
     # tests (tests/python/global/test_install_script.py) are a light contract: static runs them on every change.
     Rule(("scripts/install/install.sh", "scripts/install/install.ps1", "scripts/install/install.py"),

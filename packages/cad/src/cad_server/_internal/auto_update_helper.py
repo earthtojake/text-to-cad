@@ -21,9 +21,12 @@ In order (``update``):
    short. Then the environment pointed at the release (``store.point``) and the release run: ``cad server start`` where
    a server ran or ``start`` asks for one, which must end 0 with a server whose greeting names the release; else ``cad
    --version``, which must say it.
-3. **Way back.** Where that fails, the pointer put back exactly as it was read (``store.restore``) and the server of
-   the release before started where one is wanted: outcome ``failed``, cause ``start_failed`` (the server) or
-   ``broken`` (the command), ``restored`` whether the release before runs again.
+3. **Way back.** Where that fails, the pointer put back exactly as it was read (``store.restore``), a server of
+   another release that answers by then stopped (``clear``: the new release's, come up late), and the server of the
+   release before started where one is wanted: outcome ``failed``, cause ``start_failed`` (the server) or ``broken``
+   (the command), ``restored`` whether the release before runs again. Where it is the pointer that could not be
+   written, nothing was switched: the same way back, and the cause is the write's (``denied``, ``disk_full``), which
+   the schedule tries again.
 4. **Outcome**, kept in the record: ``installed``, ``current`` or ``failed``, with ``detail``, ``cause`` where it did
    not install what it was for (one of ``CAUSES``), ``restored``, and ``started`` (``"start": false`` where no server
    was wanted); then the store tidied (``store.clean``).
@@ -106,7 +109,7 @@ def update(told, run=run, mark=lambda phase: None):
     built = None
     if held is not None and before is not None and (held >= target if target is not None else held > before):
         found = {"release": named(held), "outcome": "current", "detail": f"cad {named(held)} is installed",
-                 **replace(told, run, named(held), log)}
+                 **replace(told, run, named(held), log, mark)}
     else:
         found = build(told, run, log)
         built = found.pop("path", None)
@@ -220,28 +223,52 @@ def switch(told, run, path, built, log):
     if server is not None:
         drain(server, log)
     wanted = server is not None or told.get("start") is True
+    unwritten = None  # the pointer's own failure: nothing was switched
     try:
         store.point(path, previous=previous)
-        ok, said = runs(told, run, built["release"], wanted)
     except OSError as error:
-        ok, said = False, f"{type(error).__name__}: {error}"
+        unwritten = f"{type(error).__name__}: {error}"
+    ok, said = (False, unwritten) if unwritten else runs(told, run, built["release"], wanted)
     if ok:
         return {**built, "outcome": "installed", "detail": f"cad {built['release']} runs from {path}",
                 **started(wanted, True, said)}
     try:
         store.restore(kept)
+        clear(told["from"], log)
         back, again = runs(told, run, told["from"], wanted)
     except OSError as error:
         back, again = False, f"the pointer could not be put back: {type(error).__name__}: {error}"
-    return {**built, "outcome": "failed", "cause": "start_failed" if wanted else "broken", "restored": back,
-            "detail": f"cad {built['release']} did not {'start' if wanted else 'run'}: {last_line(said) or 'no word'}",
+    if unwritten:
+        cause, detail = cause_of(None, unwritten, log), f"the pointer could not be written: {unwritten}"
+    else:
+        cause = "start_failed" if wanted else "broken"
+        detail = f"cad {built['release']} did not {'start' if wanted else 'run'}: {last_line(said) or 'no word'}"
+    return {**built, "outcome": "failed", "cause": cause, "restored": back, "detail": detail,
             **started(wanted, back, again)}
 
 
-def replace(told, run, held, log):
+def clear(before, log):
+    """On the way back: a server of another release than ``before`` that answers now -- the new release's, come up
+    after its start was given up on -- stopped at once. Left there, every command of ``before``, which the environment
+    runs again, would be refused as one of another release, and a start of ``before`` would join it and replace
+    nothing. Never raises."""
+    from cad.engine import client
+
+    try:
+        found = answering()
+        if found is None or found[0] == before:
+            return
+        client.sweep(stop=True, seconds=RUN_SECONDS)
+        log.write(f"the cad server {found[0] or ''} that answered after the switch failed was stopped")
+    except Exception as error:  # noqa: BLE001 - the way back goes on: the start of the release before says what is there
+        log.write(f"a server that answered after the switch failed could not be stopped: {type(error).__name__}: {error}")
+
+
+def replace(told, run, held, log, mark=lambda phase: None):
     """Where the environment runs release ``held`` already: a server of an older release, or one of ``held`` from
-    another environment (a copy the bridge hands over from), drained and replaced by this environment's; else, where
-    none answers and ``start`` asks for one, one started. The record's word for the server."""
+    another environment (a copy the bridge hands over from), drained and replaced by this environment's (the record's
+    phase ``switching`` kept first, ``mark``, so a command that finds no server meanwhile waits for the next); else,
+    where none answers and ``start`` asks for one, one started. The record's word for the server."""
     from cad.engine.client import newer
 
     server = answering()
@@ -252,6 +279,7 @@ def replace(told, run, held, log):
         return {}
     if server is None and told.get("start") is not True:
         return {"start": False}
+    mark("switching")
     if server is not None:
         drain(server, log)
     ok, said = runs(told, run, held, True)

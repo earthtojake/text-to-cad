@@ -1400,6 +1400,60 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual((found["outcome"], found["restored"], found["started"][:12]), ("failed", False, "not started:"))
         self.assertEqual(auto_update.event(found)["reason"], "put_back")
 
+    def test_a_server_of_the_new_release_come_up_late_is_stopped_on_the_way_back(self) -> None:
+        self.starts["0.2.0"] = False
+        ran = self.cad
+
+        def late(command, timeout):
+            code, said = ran(command, timeout)
+            if command[1:] == ["server", "start"] and code != 0:
+                self.serving = "0.2.0"  # its start was given up on, and its server answers all the same
+            return code, said
+
+        def sweep(*, stop, seconds=60.0, leave=None):
+            self.calls.append(("sweep", stop, leave))
+            self.serving = None
+            return {"stopped": ["door"], "running": [], "removed": []}
+
+        with mock.patch.object(client, "sweep", side_effect=sweep):
+            found = helper.update(self.told, run=late, mark=self.phases.append)
+        self.assertLess(self.calls.index(("restore", None)), self.calls.index(("sweep", True, None)),
+                        "the pointer put back first, then the server of the release that failed stopped at once")
+        self.assertEqual((found["outcome"], found["cause"], found["restored"], self.serving, self.pointer),
+                         ("failed", "start_failed", True, "0.1.0", None))
+        self.assertIn("the cad server 0.2.0 that answered after the switch failed was stopped",
+                      Path(self.told["log"]).read_text(encoding="utf-8"))
+        # The server of the release before, still there after the drain's bound: never stopped, and joined.
+        self.calls.clear()
+        self.pointer, self.serving, self.gone = None, "0.1.0", False
+        with mock.patch.object(client, "sweep", side_effect=AssertionError("never stopped")):
+            found = self.update()
+        self.assertEqual((found["restored"], self.serving), (True, "0.1.0"))
+        # A stop that fails never stops the way back.
+        self.pointer, self.serving, self.gone = None, "0.1.0", True
+        with mock.patch.object(client, "sweep", side_effect=ConnectionError("did not exit")):
+            found = helper.update(self.told, run=late, mark=self.phases.append)
+        self.assertEqual((found["outcome"], found["cause"]), ("failed", "start_failed"))
+        self.assertIn("could not be stopped: ConnectionError: did not exit",
+                      Path(self.told["log"]).read_text(encoding="utf-8"))
+
+    def test_a_pointer_that_cannot_be_written_switches_nothing_and_is_said_as_the_write_s_own_failure(self) -> None:
+        with mock.patch.object(store, "point", side_effect=PermissionError(13, "Permission denied")):
+            found = self.update()
+        self.assertEqual(self.commands(), ["uv build", "-I -S", "server start"], "the new release was never run")
+        self.assertEqual((found["outcome"], found["cause"], found["restored"], found["started"]),
+                         ("failed", "denied", True, "started the cad server (cad 0.1.0)"))
+        self.assertEqual(found["detail"],
+                         "the pointer could not be written: PermissionError: [Errno 13] Permission denied")
+        self.assertEqual((self.serving, self.pointer), ("0.1.0", None), "the server it drained runs again")
+        counted = auto_update.event(found)
+        self.assertEqual((counted["outcome"], counted["reason"], counted["cause"]), ("restored", "upgrade", "denied"))
+        self.serving = None
+        with mock.patch.object(store, "point", side_effect=OSError(28, "No space left on device")):
+            found = self.update(start=False)
+        self.assertEqual((found["cause"], found["restored"], found["start"]), ("disk_full", True, False),
+                         "tried again by the schedule, as a release whose server did not start is not")
+
     def test_with_no_server_wanted_the_command_confirms_the_release(self) -> None:
         self.serving = None
         found = self.update(start=False)
@@ -1434,13 +1488,15 @@ class WorkerTest(unittest.TestCase):
                          ("current", "0.2.0", "cad 0.2.0 is installed", "started the cad server (cad 0.2.0)"))
         self.assertEqual(self.commands(), ["server start"], "nothing built")
         self.assertEqual(self.calls, [("drain", helper.DRAIN_SECONDS), ("clean", [])])
+        self.assertEqual(self.phases, ["switching"], "kept before the server stops: a command meanwhile waits")
         self.assertEqual(auto_update.event(found)["cause"], "already")
         for serving, elsewhere, replaced in (("0.2.0", False, False), ("0.2.0", True, True), (None, False, True)):
             with self.subTest(serving=serving, elsewhere=elsewhere):
                 self.serving, self.elsewhere = serving, elsewhere
-                self.ran.clear()
+                self.ran.clear(), self.phases.clear()
                 self.update()
                 self.assertEqual(self.commands(), ["server start"] if replaced else [])
+                self.assertEqual(self.phases, ["switching"] if replaced else [])
         self.serving = None
         self.ran.clear()
         self.assertEqual(self.update(start=False)["start"], False)
@@ -1863,6 +1919,11 @@ class ButtonTest(Case):
             self.keep(outcome="underway", at=now)
             self.assertEqual(auto_update.button(now=now + 5),
                              {"version": "0.1.0", "latest": "0.2.0", "state": "working", "at": now, "asked": False})
+            for phase in auto_update.PHASES:  # the step it is at, which the button's ring shows
+                self.keep(outcome="underway", at=now, phase=phase)
+                self.assertEqual(auto_update.button(now=now + 5)["phase"], phase)
+            self.keep(outcome="underway", at=now, phase="polishing")
+            self.assertNotIn("phase", auto_update.button(now=now + 5), "a word no page knows is not passed on")
             self.keep(outcome="underway", at=now, **{"from": "0.0.9"})
             self.assertEqual(auto_update.button(now=now + 5)["state"], "idle",
                              "another release's attempt: the one that installed this cad, its end not written yet")

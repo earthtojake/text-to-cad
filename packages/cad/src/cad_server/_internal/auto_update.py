@@ -108,6 +108,9 @@ LONGEST_SECONDS = 6 * HOUR  # nor is one believed underway this long after it be
 RETRY_SECONDS = HOUR  # how long an attempt a release before the beat kept is believed underway
 # What the record names as the release of a typed update begun with no answer from PyPI: whatever the build gets.
 LATEST = "latest"
+# The steps of an attempt underway, as its record's ``phase`` names them: the release built beside the one that runs,
+# then the switch to it (the server drained, the pointer written, the next server started).
+PHASES = ("building", "switching")
 # Who makes a global install of cad (``global_install``), named in the record and its count.
 INSTALLERS = ("uv", "pipx")
 # The worker, run as a module by this environment's interpreter (``helper_command``).
@@ -989,7 +992,8 @@ def button(*, now: float | None = None) -> dict[str, Any] | None:
     whatever the switch says (a person can always click); else ``{"version", "latest", "state"}``: ``latest`` the
     newest release of this cad's major the feed names, where it is newer (``choose``; never a higher major's, which
     only ``cad update --major`` installs), else None; ``state`` ``working`` (an attempt of this release underway and
-    still believed, automatic or asked: ``underway``, whose ``asked`` says which), ``failed`` (the last attempt of this
+    still believed, automatic or asked: ``underway``, whose ``asked`` says which, with the step it is at, ``phase``:
+    one of ``PHASES``), ``failed`` (the last attempt of this
     release did not install what it was for -- ``lost`` too --, and this cad is still behind), with ``at`` the
     attempt's start, ``cause`` its word, ``said`` it in plain words (``in_words``), the ``installer`` that made the
     global install, ``log`` the worker's log of it (``LOG``, where there is one) and ``dismissed`` where the person put
@@ -1014,7 +1018,8 @@ def button(*, now: float | None = None) -> dict[str, Any] | None:
         word = cause(found, now) if mine else None
         attempt = {"at": found["at"], "asked": found.get("asked") is True} if mine else {}
         if mine and word is None and underway(now) is not None:
-            return {**out, **attempt, "state": "working"}
+            phase = found.get("phase")
+            return {**out, **attempt, "state": "working", **({"phase": phase} if phase in PHASES else {})}
         if word is not None and latest is not None and not stale(chosen.wanted):
             log = _data() / LOG
             return {**out, **attempt, "state": "failed", "cause": word, "said": in_words(word),

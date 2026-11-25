@@ -94,8 +94,8 @@ REQUIRED=(
   "cad_server/cli/server.py"
   "cad_server/cli/cache.py"
   "cad_server/_internal/engine_daemon.py"
-  # cad's own update: the switches and their command, and the helper, whose SOURCE the update reads and runs
-  # with another Python (auto_update.HELPER): without the file no cad ever updates itself.
+  # cad's own update: the switches and their command, and the worker the update runs as a module
+  # (auto_update.HELPER): without the file no cad ever updates itself.
   "cad_server/_internal/auto_update.py"
   "cad_server/_internal/auto_update_helper.py"
   "cad_server/cli/auto_update.py"
