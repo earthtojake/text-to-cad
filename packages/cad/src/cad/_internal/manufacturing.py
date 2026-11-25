@@ -1,6 +1,6 @@
 """The manufacturing check every 3D document type shares: ``cad.<type>.dfm(source, process=...)``.
 
-``model``, ``stl``, ``threemf``, ``glb``, ``step``, ``xbf`` and, as a sheet's cut file, ``dxf`` each answer
+``model`` (held, or its ``.xbf``), ``stl``, ``threemf``, ``glb``, ``step`` and, as a sheet's cut file, ``dxf`` each answer
 ``dfm`` with the same function, made for the type here (``dfm_for``): its signature takes a path (or, for a
 model, its document id or handle) and plain values alone, so it is the type's (the signature rule). Four processes, each a
 module of ``cad._internal.dfm`` (its options, rules, findings and summary):
@@ -16,7 +16,7 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
-finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
+finding at a ref ``cad model inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
 processes (``_held``, ``cad.engine.api.check``), a file by this caller only where no engine can be reached;
 an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), by this caller, each finding at
 ``x, y, z``. What a caller measures itself it measures in a process of its own that it holds to a check's
@@ -43,7 +43,7 @@ another process is refused by name before anything is read, as an option the che
 (law 15), and so is a value of another kind (``KINDS``: never coerced, law 16). Each type's ``dfm`` takes the
 processes it can be checked for (``processes_for``: a mesh printing, a DXF sheet) and their options alone;
 a mesh asked for another is refused with the reason and the fix (``_MESH_REFUSED``: check the STEP or the model). The standard library alone: the server's command resolves the options here before it starts
-an environment that holds the integration. An xbf or a model given no process is checked for the one its
+an environment that holds the integration. A model (held, or its .xbf) given no process is checked for the one its
 parts declare (``part.material = metals.aluminum(process=machined())``): the options every process shares
 are checked here, and the integration reads the document, takes the declared process and resolves the rest
 (``declared``) before it measures. A STEP keeps no process, so one given none is refused here.
@@ -75,7 +75,7 @@ Technology = Literal["fdm", "sls", "sla", "mjf", "pbf"]
 PROCESSES = dfm.PROCESSES
 #: The types measured on their B-rep (the build123d integration); the rest are meshes (trimesh), but a DXF,
 #: a sheet's cut file, checked by the build123d integration's DXF library (ezdxf).
-BREP_TYPES = ("model", "step", "xbf")
+BREP_TYPES = ("model", "step")
 CUT_TYPES = ("dxf",)
 #: Length units a file may carry, as a factor to millimetres. An STL is unitless, so the caller says which
 #: one (millimetres unless said); a DXF may declare none (``$INSUNITS`` unset: every R12 file), and is then
@@ -118,8 +118,7 @@ def processes_for(document_type: str) -> tuple[str, ...]:
 # The types that always declare their own units, read as millimetres: a units option is the STL's and the
 # DXF's.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
-             "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",
-             "model": "a model is in millimetres"}
+             "step": "a STEP declares its units", "model": "a model is in millimetres"}
 _UNITS_OF = "--units is an STL's or a DXF's, which may declare none"
 # Why a mesh is not checked for each process measured on exact geometry alone, and what to check instead.
 _MESH_REFUSED = {
@@ -778,6 +777,9 @@ def through_engine(document_type: str, source: Any, process: str | None, given: 
     """A B-rep's check asked of the engine by a command that holds no kernel: its result, or None where the
     engine measured nothing (none to reach, another release's), which the command runs in the environment of
     the integration (``cad_server.cli.document_types``), never here."""
+    from cad._internal.document_type import refuse_other
+
+    document_type = refuse_other(document_type, source)
     label = _label(source)
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
@@ -895,7 +897,7 @@ that does not read or holds no solid, a family that could not be measured, an en
 is no verdict and never a pass. Exit 2: the command line's mistake."""
 _ABOUT = {
     "brep": """A STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref
-(cad xbf inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
+(cad <type> inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
 from a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source
 and what to change. A rule's feasibility limit broken is an error; a recommendation is a warning. For a named
 shop, compare the measurements with its own published limits. --json carries every measurement, every rule's
@@ -924,7 +926,8 @@ def _kind_of(document_type: str) -> str:
 
 def _source_help(document_type: str) -> str:
     if document_type == "model":
-        return "a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call returns."
+        return ("a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call "
+                "returns; or the .xbf file a model is saved as, checked as the file it is.")
     from cad.registry import DOCUMENT_TYPES
 
     extensions = " or ".join(DOCUMENT_TYPES[document_type].extensions)
@@ -941,7 +944,7 @@ def _process_help(document_type: str, processes: tuple[str, ...]) -> str:
     declared = ("the process the parts declare (part.material = metals.aluminum(process=machined()): machined is "
                 "cnc, molded molding, fdm, sls, mjf, slm and vat printing with technology fdm, sls, mjf, pbf and "
                 "sla), when every part agrees")
-    return f"{named}; default, for a STEP, an xbf or a model, " + (
+    return f"{named}; default, for a STEP or a model, " + (
         "none: a STEP keeps no process." if document_type == "step" else f"{declared}.")
 
 
@@ -1018,7 +1021,7 @@ def called(document_type: str, signature: inspect.Signature, args: tuple[Any, ..
         process = processes_for(document_type)[0]
     from cad._internal.document_type import refuse_other
 
-    refuse_other(document_type, source)
+    document_type = refuse_other(document_type, source)
     try:
         return measure(document_type, source, process, resolved, candidates, given, strict)
     except ModuleNotFoundError as error:

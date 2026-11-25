@@ -32,13 +32,13 @@ from tests.python.support import opengl
 FINGER = """
 import build123d as bd
 from cad.build123d import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
-from cad.engine import xbf
+from cad.engine import model
 
 CURL = {{"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}}  # degrees at a full curl
 BONES = {{"base": 30, "proximal": 40, "middle": 25, "distal": 20}}  # lengths along +X
 
 
-@xbf("XBF/index_finger.xbf")
+@model("XBF/index_finger.xbf")
 def index_finger():
     bones, x = [], -BONES["base"]
     for name, length in BONES.items():
@@ -67,13 +67,13 @@ BARE = FINGER.format(coupling="return finger", extra="")
 HYPERCAR = """
 import build123d as bd
 from cad.build123d import gear_pair, mechanism_state, screw_pair
-from cad.engine import xbf
+from cad.engine import model
 
 SWEEP = {"left": -70, "right": 70}  # each door's turn when open, degrees
 TRAVEL = 40  # and its travel along the hinge, mm
 
 
-@xbf("XBF/hypercar.xbf")
+@model("XBF/hypercar.xbf")
 def hypercar():
     chassis = bd.Box(4400, 900, 400, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     chassis.label = "chassis"
@@ -97,12 +97,12 @@ def hypercar():
 TRAIN = """
 import build123d as bd
 from cad.build123d import configuration_sequence, gear_pair, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 RATIOS = {{"sun": 1.0, "idler": -2.0, "ring": 0.5}}
 
 
-@xbf("XBF/train.xbf")
+@model("XBF/train.xbf")
 def train():
     plate = bd.Box(200, 60, 5, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MAX))
     plate.label = "plate"
@@ -126,7 +126,7 @@ def train():
 HAND = """
 import build123d as bd
 from cad.build123d import gear_pair, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
 def finger(name):
@@ -145,7 +145,7 @@ def finger(name):
     return gear_pair(found, "curl", pip=100, dip=70)
 
 
-@xbf("XBF/hand.xbf")
+@model("XBF/hand.xbf")
 def hand():
     palm = bd.Box(10, 60, 12, align=(bd.Align.MAX, bd.Align.CENTER, bd.Align.CENTER))
     palm.label = "palm"
@@ -201,10 +201,10 @@ def _couplers(loaded: document.Loaded) -> dict[str, list[tuple]]:
 GRIPPER = """
 import build123d as bd
 from cad.build123d import mechanism_state, rack_and_pinion_pair
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/gripper.xbf")
+@model("XBF/gripper.xbf")
 def gripper():
     palm = bd.Box(80, 20, 20)
     palm.label = "palm"
@@ -225,11 +225,11 @@ def gripper():
 # The finger posed by a model of its own: a posed file is a function, never an export's option.
 POSED = """
 from cad.build123d import posed
-from cad.engine import xbf
+from cad.engine import model
 from index_finger import index_finger
 
 
-@xbf("XBF/posed_finger.xbf")
+@model("XBF/posed_finger.xbf")
 def posed_finger():
     return posed(index_finger().shape, {pose})
 """

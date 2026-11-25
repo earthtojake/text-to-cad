@@ -26,11 +26,11 @@ WIDTH = {width}
 
 LEFT = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 from shared import WIDTH
 
 
-@xbf("XBF/left.xbf")
+@model("XBF/left.xbf")
 def left():
     plate = bd.fillet(bd.Box(WIDTH, 8, 3).edges().filter_by(bd.Axis.Z), 1)
     plate = plate - bd.Cylinder(1.5, 10)
@@ -40,11 +40,11 @@ def left():
 
 RIGHT = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 from shared import WIDTH
 
 
-@xbf("XBF/right.xbf")
+@model("XBF/right.xbf")
 def right():
     return bd.Box(WIDTH, 4, 4) - bd.Pos(1, 0, 0) * bd.Box(2, 2, 10)
 """
@@ -53,17 +53,17 @@ BOUGHT = """
 from pathlib import Path
 
 import build123d as bd
-from cad.engine import xbf, read_step
+from cad.engine import model, read_step
 
 
-@xbf("XBF/bought.xbf")
+@model("XBF/bought.xbf")
 def bought():
     return read_step(Path(__file__).parent / "bought.step")
 """
 
 ROOT = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 from left import left
 from right import right
 from bought import bought
@@ -71,7 +71,7 @@ from bought import bought
 HOLE = {hole}
 
 
-@xbf("XBF/root.xbf")
+@model("XBF/root.xbf")
 def root():
     before = bd.Box(1, 1, 1)
     one = left().shape
@@ -247,48 +247,48 @@ def holed(width):
 """
 
 BRACKET = """
-from cad.engine import xbf
+from cad.engine import model
 from dimensions import WIDTH
 from helpers import holed
 
 
-@xbf("XBF/bracket.xbf")
+@model("XBF/bracket.xbf")
 def bracket():
     return holed(WIDTH)
 """
 
 SPACER = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 import dimensions
 
 
-@xbf("XBF/spacer.xbf")
+@model("XBF/spacer.xbf")
 def spacer():
     return bd.Box(dimensions.HEIGHT, 2, 2)
 """
 
 PROBE = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 import dimensions
 
 WHICH = "HEI" + "GHT"
 
 
-@xbf("XBF/probe.xbf")
+@model("XBF/probe.xbf")
 def probe():
     return bd.Box(getattr(dimensions, WHICH), 3, 3)
 """
 
 ASSEMBLY = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 from bracket import bracket
 from spacer import spacer
 
 
-@xbf("XBF/assembly.xbf")
+@model("XBF/assembly.xbf")
 def assembly():
     return bd.Compound(children=[bracket().shape, spacer().shape.moved(bd.Location((30, 0, 0)))], label="assembly")
 """
@@ -341,12 +341,12 @@ class SymbolsTest(SymbolsCase):
         text = text.replace('    """A plate."""', '    """A plate,\n    drilled by its callers."""\n    # flat')
         self.write("dimensions.py", text)
         self.write("helpers.py", "# helpers\n\n\n" + HELPERS.replace("def holed(width):", 'def holed(width):\n    """Holed."""'))
-        self.write("assembly.py", ASSEMBLY.replace("@xbf", "\n# the top\n@xbf"))
+        self.write("assembly.py", ASSEMBLY.replace("@model", "\n# the top\n@model"))
         self.assertEqual(self.assemble(), (0, 3))
 
     def test_a_document_type_a_body_reads_keeps_its_module_s_docstring_out_of_its_key(self) -> None:
-        reader = '"""Reads a file."""\nimport build123d as bd\nfrom cad import step, xbf\n\n\n' + (
-            '@xbf("XBF/reader.xbf")\ndef reader():\n    assert callable(step.read)\n    return bd.Box(2, 2, 2)\n')
+        reader = '"""Reads a file."""\nimport build123d as bd\nfrom cad import step, model\n\n\n' + (
+            '@model("XBF/reader.xbf")\ndef reader():\n    assert callable(step.read)\n    return bd.Box(2, 2, 2)\n')
         self.write("reader.py", reader)
         engine_build.build(self.folder / "reader.py", ["reader"], cwd=self.folder)
         self.write("reader.py", reader.replace("Reads a file.", "Reads a file, and says so."))
@@ -382,7 +382,7 @@ import os
 from pathlib import Path
 
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 HERE = Path(__file__).parent
 GAP = {gap}
@@ -396,24 +396,24 @@ def config():
         return {{"width": 2}}
 
 
-@xbf("XBF/reader.xbf")
+@model("XBF/reader.xbf")
 def reader():
     return bd.Box(config()["width"], 1, 1)
 
 
-@xbf("XBF/holder.xbf")
+@model("XBF/holder.xbf")
 def holder():
     return bd.Compound(children=[reader().shape, bd.Pos(GAP, 0, 0) * bd.Box(1, 1, 1)])
 
 
-@xbf("XBF/writer.xbf")
+@model("XBF/writer.xbf")
 def writer():
     with open(HERE / "note.txt", "w", encoding="utf-8") as handle:
         handle.write("built")
     return bd.Box(1, 1, 1)
 
 
-@xbf("XBF/piped.xbf")
+@model("XBF/piped.xbf")
 def piped():
     handle = os.open(HERE / "pipe", os.O_RDONLY | os.O_NONBLOCK)
     try:
@@ -429,10 +429,10 @@ import build123d as bd
 from build123d.topology.shape_core import downcast
 from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
 from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/raw.xbf")
+@model("XBF/raw.xbf")
 def raw():
     peg = BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 2.0, 5.0).Shape()
     return bd.Compound(children=[bd.Solid(downcast(peg)), bd.Box(3, 3, 3)])

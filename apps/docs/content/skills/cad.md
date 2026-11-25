@@ -3,7 +3,7 @@ title: cad
 description: The cad skill writes parts, assemblies, mechanisms and DXF profiles as build123d scripts, builds them live in the viewer, exports files on request and checks whether a part can be machined, cut and bent, molded or 3D printed.
 ---
 
-The `cad` skill turns a request for a part or an assembly into a Python script written with build123d, a Python library for B-rep CAD (solid models described by their faces and edges). The server builds it into a model you see live in the viewer, and writes files when you ask.
+The `cad` skill turns a request for a part or an assembly into a Python script written with build123d, a Python library for B-rep CAD (solid models described by their faces and edges). The server builds it into a model you see live in the viewer, saves it as an `.xbf` beside the script, and writes other files when you ask.
 
 ## What it makes
 
@@ -150,7 +150,7 @@ The rules are general practice from published design guides, plus text-to-cad's 
 | Injection molding | Draft, undercuts, wall thickness, ribs, bosses, projected area, clamp force |
 | 3D printing | Walls, overhangs, bridges, clearances, trapped volume, build-volume fit |
 
-It checks a model by its id, or a file: `cad step dfm`, `cad xbf dfm`, `cad stl dfm`, `cad threemf dfm` and `cad glb dfm`. A mesh is checked for printing only. A cut file is checked with `cad dxf dfm` ([DXF profiles](/docs/cad#dxf-profiles-and-flat-patterns)).
+It checks a model by its id or its `.xbf` (`cad model dfm`), or another file: `cad step dfm`, `cad stl dfm`, `cad threemf dfm` and `cad glb dfm`. A mesh is checked for printing only. A cut file is checked with `cad dxf dfm` ([DXF profiles](/docs/cad#dxf-profiles-and-flat-patterns)).
 
 ### How the check runs
 

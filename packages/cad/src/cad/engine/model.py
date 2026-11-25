@@ -1,18 +1,22 @@
 """Models: the decorators, a model's identity, and what calling one does.
 
 A model is a parameterless function that returns a build123d shape. It becomes a document
-through exactly one of two declarations: bare ``@model`` (a document with no file), or one or
-more file decorators -- ``@xbf``, ``@step``, ``@glb``, ``@stl``, ``@threemf`` and ``@dxf`` (the
-drawing of a planar result: a sketch, a face, wires or edges) -- a document with those files;
-``@model`` stacked with a file decorator is refused. By default its id uses ``script.py::function``.
-An explicit ``name=`` uses the script folder and that name instead, independent of the declaring file. Every file decorator
-requires its output path: ``@xbf("XBF/part.xbf")`` or ``@step(out="part.step")``. Relative paths
-are relative to the script. Everything else is the model's code: its material, colours, joints,
-the pose its joints are connected at (the pose every file shows), its mechanism states, couplings
-and configuration sequences (``mechanism_state``, ``gear_pair`` and its siblings,
+through its file declarations, which stack, each adding its file: ``@model``, the ``.xbf`` the
+model is saved as, and the file decorators ``@step``, ``@glb``, ``@stl``, ``@threemf`` and ``@dxf``
+(the drawing of a planar result: a sketch, a face, wires or edges); the same kind twice is refused.
+Whatever declares it, a model always writes its ``.xbf``: at ``@model``'s path, else ``<name>.xbf`` beside
+the script (``Model.files``). ``@xbf`` is an earlier spelling of ``@model``, an alias of it
+(``cad._internal.aliases``). By default its id
+uses ``script.py::function``. An explicit ``name=`` uses the script folder and that name instead,
+independent of the declaring file. A path is optional on every one, positional or ``out=``
+(``@model("XBF/part.xbf")``, ``@step(out="part.step")``), relative to the script; omitted
+(``@step``, ``@step()``, ``@glb(tolerance=0.1)``), it is the model's name and the kind's suffix beside
+the script (``Model.plan``): bare ``@model`` writes ``<name>.xbf``, as does ``@step`` alone. Two models of a run whose default
+files are one file are refused (``collisions``). Everything else is the model's code: its material,
+colours, joints, the pose its joints are connected at (the pose every file shows), its mechanism
+states, couplings and configuration sequences (``mechanism_state``, ``gear_pair`` and its siblings,
 ``configuration_sequence``). A picture is the ``snapshot`` verb's, never a declaration. The outputs
-are kept in the order the decorators are written, top to bottom, and the xbf, when declared, is
-always written first.
+are kept in the order the decorators are written, top to bottom, and the xbf is always written first.
 
 The decorated function is a ``Model``: the function, its id (``.id``: ``ids.model_id`` of its
 script and function, or its folder and explicit ``name=``) and the debug seam
@@ -32,7 +36,7 @@ document (``BuildContext.children``, ``build``). Called outside a build, a model
 worker to build it.
 
 ``model(shape, name=...)`` hands a shape over from a script or a REPL: no function, no body to
-run again (``api.hand_over``).
+run again (``api.hand_over``); from a script, it writes ``<name>.xbf`` beside it, from a REPL nothing.
 """
 
 from __future__ import annotations
@@ -49,15 +53,13 @@ from typing import Any, Callable
 from cad.engine.ids import canonical, check_name, model_id
 
 __all__ = ["KINDS", "Memo", "Model", "Output", "Target", "configuration_sequence", "dxf", "glb", "mechanism_state", "memo",
-           "model", "paint", "read_step", "read_xbf", "step", "stl", "threemf", "xbf", "models_in"]
+           "model", "paint", "read_step", "read_xbf", "step", "stl", "threemf", "models_in"]
 
 # The suffix each output kind writes, and the default file name's.
 SUFFIXES = {"xbf": ".xbf", "step": ".step", "glb": ".glb", "stl": ".stl", "threemf": ".3mf", "dxf": ".dxf"}
 _ACCEPTED = {"xbf": (".xbf",), "step": (".step", ".stp"), "glb": (".glb",), "stl": (".stl",), "threemf": (".3mf",),
              "dxf": (".dxf",)}
 KINDS = tuple(SUFFIXES)
-# The default folder for an xbf requested by a build flag without a path.
-XBF_FOLDER = "XBF"
 
 _CONTEXT = threading.local()
 # Every model defined since a build began, by its identity (``script::function``): a body
@@ -68,7 +70,7 @@ _MODELS: dict[str, "Model"] = {}
 
 @dataclass(frozen=True)
 class Output:
-    """One file a model declares: its kind and path (None requests the CLI default), and a GLB's,
+    """One file a model declares: its kind and path (None: its default, ``Model.plan``), and a GLB's,
     an STL's or a 3MF's own mesh tolerance in mm and angle in degrees (None: the engine's)."""
 
     kind: str
@@ -164,7 +166,6 @@ class Model:
         self.outputs: list[Output] = []
         # The name within the script folder; None keeps the script/function id.
         self.explicit_name: str | None = None
-        self._bare = False  # declared by ``@model``
         self.__xbf_model__ = True
         _MODELS[f"{self.script}::{self.name}"] = self
 
@@ -192,16 +193,14 @@ class Model:
                 "line": self.function.__code__.co_firstlineno, "explicit_name": self.explicit_name,
                 "fingerprint": self.fingerprint, "module": self.function.__module__}
 
-    def declared(self, by: str) -> "Model":
-        """One declaration more on this function: ``model`` (bare ``@model``) or a file kind. A
-        function becomes a document through ``@model`` or through its file decorators, never both."""
-        kinds = [output.kind for output in self.outputs] if by == "model" else [by] if self._bare else []
-        if kinds:
-            raise TypeError(f"model {self.name!r} is declared by @model and @{kinds[0]}: a function becomes a "
-                            "document through @model (a document with no file) or through its file decorators "
-                            f"(a document with those files), never both; drop @model")
-        if by == "model":
-            self._bare = True
+    def declare(self, output: Output) -> "Model":
+        """One file more on this function, its declaration's (``_declare``, bare ``@model``): declarations
+        stack, each adding its file, and one of a kind the function declares already is refused, as
+        nothing would say which of the two is the model's."""
+        if any(found.kind == output.kind for found in self.outputs):
+            what = "its .xbf" if output.kind == "xbf" else f"@{output.kind}"
+            raise TypeError(f"model {self.name!r} declares {what} twice: keep one {_said(output.kind)}")
+        self.outputs.insert(0, output)
         return self
 
     def named(self, name: str | None) -> "Model":
@@ -275,24 +274,35 @@ class Model:
 
     def _path(self, kind: str, out: Any) -> Path:
         if out is None:
-            out = Path(XBF_FOLDER) / f"{self.name}.xbf" if kind == "xbf" else Path(self.name + SUFFIXES[kind])
+            stem = self.explicit_name or self.name
+            if stem in (".", "..") or any(mark in stem for mark in "/\\"):
+                raise ValueError(f"model {self.name!r} is named {stem!r}, which names no file beside its script: "
+                                 f"give its {_said(kind)} a path")
+            out = stem + SUFFIXES[kind]
         path = Path(out)
         if not path.is_absolute():
             path = self.script.parent / path
         return Path(_normalized(path))
 
     def targets(self) -> list[tuple[str, Path]]:
-        """Each declared output as ``(kind, path)``, the xbf first, then the derived files
-        in the order the decorators are written; a relative path is relative to the
-        script's folder, and an output with no path is its default (``XBF/<function>.xbf``,
-        ``<function><suffix>``) beside the script."""
+        """Each file a build writes as ``(kind, path)``, the xbf first, then the derived files
+        in the order the decorators are written (``plan``)."""
         return [(target.kind, target.path) for target in self.plan()]
 
+    def files(self) -> list[Output]:
+        """What this model writes: the files its decorators declare, and its ``.xbf`` whether a decorator
+        declares it or not -- a model declared by ``@step`` alone writes ``<name>.xbf`` beside its script too,
+        as bare ``@model`` does: a model always writes its ``.xbf`` (law 10). The xbf first."""
+        found = sorted(self.outputs, key=lambda output: output.kind != "xbf")
+        return found if any(output.kind == "xbf" for output in found) else [Output("xbf", None), *found]
+
     def plan(self) -> list[Target]:
-        """The files a build of this model writes: what its decorators declare (law 10), the
-        xbf first, then the derived files in the order the decorators are written."""
+        """The files a build of this model writes (``files``): its ``.xbf``, then the derived files in the
+        order the decorators are written. A relative path is relative to the script's folder, and a file with
+        none is the model's name (``name=``, else its function's) and the kind's suffix beside the script:
+        ``arm.xbf``, ``arm.step``."""
         return [Target(output.kind, self._path(output.kind, output.out), output.tolerance, output.angle)
-                for output in sorted(self.outputs, key=lambda output: output.kind != "xbf")]
+                for output in self.files()]
 
     # --- the verbs, through the daemon (``cad.engine.api``) -----------------------------
 
@@ -399,17 +409,25 @@ def _no_animations(animations: Any) -> None:
                         "(animation(...)); animations= goes with a shape handed over, model(shape, name=...)")
 
 
-def model(target: Any = None, /, *, name: str | None = None, animations: Any = None) -> Any:
-    """Declare a model, optionally named within its script folder, or hand over a named shape."""
+def model(target: Any = None, /, *, name: str | None = None, out: Any = None, animations: Any = None) -> Any:
+    """Declare a model, optionally named within its script folder (``name=``), and the ``.xbf`` each run
+    saves it as: at its path, relative to the script (``@model("XBF/arm.xbf")``, or ``out=`` as every
+    file decorator takes it), else ``<name>.xbf`` beside the script (bare ``@model``); or hand over a named
+    shape (``model(shape, name=...)``, which declares no file)."""
+    if isinstance(target, (str, os.PathLike)):  # ``@model("arm.xbf")``: the path, as ``@step("arm.step")`` takes it
+        if out is not None:
+            raise TypeError("@model takes its path once: @model(\"arm.xbf\") or @model(out=\"arm.xbf\")")
+        target, out = None, target
     if target is None:
         _no_animations(animations)
-        if name is not None:
-            check_name(name)
-        return lambda function: model(function, name=name)
+        return _declare("xbf", _saved(out), name)
     if isinstance(target, Model) or inspect.isfunction(target):
         _no_animations(animations)
-        found = target if isinstance(target, Model) else Model(target)
-        return found.declared("model").named(name)
+        return _declare("xbf", _saved(out), name)(target)
+    if out is not None:
+        raise TypeError("model(shape, name=...) takes no path: a shape handed over is no function a run calls again, "
+                        "so no run writes its file; export the document it returns, "
+                        "model(shape, name=...).export(\"arm.xbf\")")
     from cad.engine import api
 
     caller = sys._getframe(1)
@@ -420,47 +438,75 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
     return api.hand_over(target, name, animations=animations, frame=caller)
 
 
+def _saved(out: Any) -> Any:
+    """``@model('….xbf')``'s path: the model's ``.xbf``. A path of another kind a decorator writes is refused with
+    that decorator (``@model("arm.step")``: ``@step("arm.step")``); any other is ``check_output``'s to refuse."""
+    if isinstance(out, (str, os.PathLike)) and os.fspath(out):
+        from cad.registry import by_extension
+
+        suffix = Path(out).suffix
+        found = by_extension(suffix) if suffix else None
+        if found is not None and found.id != "model" and found.decorator:
+            raise ValueError(f"@model('….xbf') writes the model's .xbf, not {os.fspath(out)!r}: declare that file "
+                             f"with @{found.id}({os.fspath(out)!r}), alone or beside @model('….xbf')")
+    return out
+
+
+def _said(kind: str) -> str:
+    """A file declaration as a script spells it: a model's own ``.xbf`` is ``@model``'s, every other file its
+    decorator's."""
+    return "@model" if kind == "xbf" else f"@{kind}"
+
+
+def _declare(kind: str, out: Any, name: str | None, tolerance: float | None = None, angle: float | None = None) -> Any:
+    """One file a model declares, of ``kind`` at ``out`` (None: its default, ``Model.plan``): the decorator a
+    file declaration is -- ``@step(out)``, and ``@model(out)`` for the ``.xbf`` -- which records the output on the function's ``Model`` (``Model.plan`` is what a build writes)."""
+    from cad.engine.export import angle_of, tolerance_of
+
+    check_output(kind, out, "@model('….xbf')" if kind == "xbf" else f"@{kind}(out=...)")
+    if name is not None:
+        check_name(name)
+    given = [] if out is None else [out]
+    tolerance, angle = tolerance_of(tolerance, given), angle_of(angle, given)
+
+    def apply(target: Any) -> Model:
+        model = target if isinstance(target, Model) else Model(target)
+        model.declare(Output(kind, None if out is None else os.fspath(out), tolerance, angle))
+        return model.named(name)
+
+    return apply
+
+
 def _decorator(kind: str) -> Callable[..., Any]:
-    from cad.engine.export import TOLERANT, angle_of, tolerance_of
+    from cad.engine.export import TOLERANT
 
-    def declare(out: Any, name: str | None, tolerance: float | None = None, angle: float | None = None) -> Any:
-        if out is None:
-            raise TypeError(f"@{kind} requires an output path")
-        check_output(kind, out, f"@{kind}(out=...)")
-        if name is not None:
-            check_name(name)
-        tolerance, angle = tolerance_of(tolerance, [out]), angle_of(angle, [out])
-
-        def apply(target: Any) -> Model:
-            model = target if isinstance(target, Model) else Model(target)
-            model.declared(kind)
-            if any(output.kind == kind for output in model.outputs):
-                raise TypeError(f"model {model.name!r} declares @{kind} twice")
-            model.outputs.insert(0, Output(kind, os.fspath(out), tolerance, angle))
-            return model.named(name)
-
-        return apply
+    def declared(out: Any, name: str | None, *options: Any) -> Any:
+        # Bare (``@step``): the function itself, its file the default.
+        if isinstance(out, Model) or inspect.isfunction(out):
+            return _declare(kind, None, name, *options)(out)
+        return _declare(kind, out, name, *options)
 
     # A GLB, an STL and a 3MF take their own mesh tolerance and angle (``export/__init__.py``); no other
     # kind is meshed.
     if kind in TOLERANT:
-        def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None,
+        def decorate(out: Any = None, *, name: str | None = None, tolerance: float | None = None,
                      angle: float | None = None) -> Any:
-            return declare(out, name, tolerance, angle)
+            return declared(out, name, tolerance, angle)
     else:
-        def decorate(out: Any, *, name: str | None = None) -> Any:
-            return declare(out, name)
+        def decorate(out: Any = None, *, name: str | None = None) -> Any:
+            return declared(out, name)
 
     decorate.__name__ = kind
     decorate.__qualname__ = kind
-    decorate.__doc__ = (f"Declare an explicit output: @{kind}(out='path{SUFFIXES[kind]}'), optionally named "
-                        "within the script folder by name=. The output path is required; decoration builds nothing."
+    decorate.__doc__ = (f"Declare a file a model writes: @{kind}('path{SUFFIXES[kind]}') or out=, relative to the "
+                        f"script; with none (@{kind}, @{kind}()), <name>{SUFFIXES[kind]} beside the script, the model's "
+                        "name= or its function's. name= optionally names the model within the script folder; "
+                        "decoration builds nothing."
                         + (" tolerance= and angle= mesh it to within an absolute tolerance in mm and an angle in "
-                           "degrees, as cad xbf export --tolerance and --angle do." if kind in TOLERANT else ""))
+                           "degrees, as cad model export --tolerance and --angle do." if kind in TOLERANT else ""))
     return decorate
 
 
-xbf = _decorator("xbf")
 step = _decorator("step")
 glb = _decorator("glb")
 stl = _decorator("stl")
@@ -534,6 +580,24 @@ def models_in(namespace: dict[str, Any], script: Path) -> list[Model]:
         if isinstance(value, Model) and value.script == script and value not in found:
             found.append(value)
     return found
+
+
+def collisions(models: Any) -> None:
+    """Refuse two of ``models`` whose files are one file where either is its default (``Model.plan``) --
+    two scripts of a folder each with a model ``part``, or a model whose ``name=`` is another's function's,
+    each writing ``part.xbf`` -- naming both, ``file:line``. A run asks it of every model its load defined
+    (``_MODELS``): its script's and those of the scripts it imports. Two given paths that are one file are
+    left as their author wrote them."""
+    seen: dict[Path, tuple[Model, bool]] = {}
+    for found in models:
+        for output in found.files():
+            path = found._path(output.kind, output.out)
+            other, given = seen.setdefault(path, (found, output.out is not None))
+            if other is not found and not (given and output.out is not None):
+                raise ValueError(
+                    f"model {other.name!r} of {other.script}:{other.function.__code__.co_firstlineno} and model "
+                    f"{found.name!r} of {found.script}:{found.function.__code__.co_firstlineno} both write {path}; "
+                    f"give one a path ({_said(output.kind)}('…')) or name=")
 
 
 # --- what a model's code may call --------------------------------------------------------
@@ -691,13 +755,14 @@ _READ_XBF: Callable[[Any], Any] | None = None
 
 
 def read_xbf(path: Any) -> Any:
-    """An engine document (``.xbf``) as a build123d shape: a copy of its geometry, as
-    ``read_step`` gives a STEP's -- a compound tree of its assembly, every part and group
+    """``model.read(path)``: a model saved as a file (``.xbf``) as a build123d shape: a copy of its
+    geometry, as ``read_step`` gives a STEP's -- a compound tree of its assembly, every part and group
     named, coloured and given its materials (painted faces too) as the document has them,
     each element named as the document names it. Its mechanism and configurations are not
     imported: a part is a part. Read once per worker and held, keyed by the file's bytes, as
-    ``read_step`` is. The fast way to bring a vendor STEP in: convert it once (``cadgen
-    export vendor.step vendor.xbf``) and read the xbf."""
+    ``read_step`` is. The fast way to bring a vendor STEP in: convert it once (``cad step
+    export vendor.step vendor.xbf``) and read the xbf. Any other file is refused by name, with
+    the reader that takes it (``step.read``, ``stl.read``)."""
     global _READ_XBF
     if _READ_XBF is None:
         from cad.engine.kernel.memo import wrap_function
@@ -705,9 +770,10 @@ def read_xbf(path: Any) -> Any:
         _READ_XBF = wrap_function("read_xbf", _read_xbf)
     import os
 
-    from cad.engine.reader import refuse_written
+    from cad.engine.reader import refuse_other_file, refuse_written
 
-    refuse_written(path, "xbf.read")  # before the memo, as read_step's
+    refuse_other_file(path, "model.read", ".xbf")  # before the memo too
+    refuse_written(path, "model.read")  # before the memo, as read_step's
     return _READ_XBF(os.fspath(path))
 
 
@@ -1053,6 +1119,14 @@ from types import ModuleType as _ModuleType
 class _ModelModule(_ModuleType):
     def __call__(self, function: Any = None, /, **options: Any) -> Any:
         return model(function, **options)
+
+    def __getattr__(self, name: str) -> Any:
+        # An earlier spelling (``xbf``, the model's own declaration: ``model``), after its warning.
+        if name.startswith("__"):
+            raise AttributeError(name)
+        from cad._internal.aliases import lookup
+
+        return lookup(self.__name__, name)
 
 
 _sys.modules[__name__].__class__ = _ModelModule

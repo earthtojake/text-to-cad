@@ -367,7 +367,9 @@ HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take
 def _file_kinds() -> dict[str, str]:
     from cad.registry import DOCUMENT_TYPES
 
-    return {extension: entry.wire for entry in DOCUMENT_TYPES.values() for extension in entry.extensions}
+    # A model's file, its .xbf, is the format the schemas name ``xbf``: ``model`` is a live model, counted apart.
+    return {extension: "xbf" if entry.held else entry.wire for entry in DOCUMENT_TYPES.values()
+            for extension in entry.extensions}
 
 
 UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})

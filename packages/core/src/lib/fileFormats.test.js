@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  documentKind,
   entrySourceFormat,
   fileExtensionFromPath,
   isMeshRenderFormat,
@@ -73,4 +74,11 @@ test("file extension parsing handles URLs, queries, and supported render formats
   assert.equal(renderFormatFromPath("/assets/bracket.stp"), RENDER_FORMAT.STEP);
   assert.equal(renderFormatFromPath("/assets/bracket.gltf"), RENDER_FORMAT.GLB);
   assert.equal(renderFormatFromPath("/assets/unknown"), "");
+});
+
+test("a model is one kind, held or its .xbf, and xbf, the kind a released server says, names it", () => {
+  assert.equal(RENDER_FORMAT.MODEL, "model");
+  assert.deepEqual(["xbf", "XBF", "model", "step", "3mf"].map(documentKind), ["model", "model", "model", "step", "3mf"]);
+  // A model's file is the engine's to serve: no client reads it by its extension.
+  assert.equal(renderFormatFromPath("/models/arm.xbf"), "");
 });

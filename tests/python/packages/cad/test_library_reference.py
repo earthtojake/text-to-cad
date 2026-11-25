@@ -33,11 +33,15 @@ class TheCopyIsTheLibrary(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
 
         docs = reference.as_docs()
-        self.assertEqual([entry["name"] for entry in docs["documentTypes"]], list(DOCUMENT_TYPES))
+        # Each type by its id; an earlier one (``xbf``, an alias of ``model``) is listed nowhere.
+        spelled = list(DOCUMENT_TYPES)
+        self.assertEqual([entry["name"] for entry in docs["documentTypes"]], spelled)
+        model = next(entry for entry in docs["documentTypes"] if entry["name"] == "model")
+        self.assertIn("read", [member["name"] for member in model["members"]])
         # A deprecated integration is left out, as `cad --help` leaves it out.
         self.assertEqual([entry["name"] for entry in docs["integrations"]],
                          [name for name, entry in INTEGRATIONS.items() if not entry.deprecated])
-        self.assertEqual({entry["name"] for entry in docs["names"]} | set(DOCUMENT_TYPES), set(cad.__all__))
+        self.assertEqual({entry["name"] for entry in docs["names"]} | set(spelled), set(cad.__all__))
         for entry in docs["documentTypes"]:
             with self.subTest(type=entry["name"]):
                 registry = DOCUMENT_TYPES[entry["name"]]

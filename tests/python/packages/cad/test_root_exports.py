@@ -18,10 +18,11 @@ import cad.engine.model
 HEAVY = ("OCP", "build123d")
 
 # The engine's own surface (``cad.engine``), which the library's namespaces are made of.
-ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
+ENGINE = ("model", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
-# The root: the version, the deprecation's class, and the document types (``model`` the one with no file).
-TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
+# The root: the version, the deprecation's class, and the document types as the library spells them (``model``:
+# a model the engine holds, or the ``.xbf`` it is saved as).
+TYPES = ("model", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
 ROOT = ("__version__", "CadDeprecationWarning", *TYPES)
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
@@ -51,21 +52,81 @@ class RootExports(unittest.TestCase):
         self.assertEqual(sorted(ROOT), sorted(cad.__all__))
         self.assertEqual(sorted(cad.engine.__all__), sorted(ENGINE))
         # ``model`` is a type with no file: its decorator is the engine's model, its operations a model's.
-        self.assertEqual(cad.model.__call__.__doc__.split(":")[0], "``@model`` or ``@model(name=...)``")
+        self.assertEqual(cad.model.__call__.__doc__.split(":")[0],
+                         '``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``')
         for name in ("Material", "materials"):
             self.assertFalse(hasattr(cad.engine, name), f"materials come from bd_materials: {name}")
         for name in TYPES:
             with self.subTest(name=name):
                 self.assertIsInstance(getattr(cad, name), DocumentType)
         self.assertIs(cad.step.read, cad.engine.model.read_step)
-        self.assertIs(cad.xbf.read, cad.engine.read_xbf)
+        self.assertIs(cad.model.read, cad.engine.read_xbf)
         self.assertIs(cad.stl.read, cad.engine.read_mesh)
         self.assertIs(cad.urdf.validate, cad.urdf.__dict__["validate"])
         self.assertIs(cad.kicad_pcb.read, cad.kicad_pcb.__dict__["read"])
         # An operation's docstring ends with its verb's, without the indentation Python strips by itself only from 3.13.
         import inspect
 
-        self.assertTrue(cad.xbf.export.__doc__.endswith(inspect.cleandoc(api.export.__doc__)))
+        self.assertTrue(cad.model.export.__doc__.endswith(inspect.cleandoc(api.export.__doc__)))
+
+    def test_a_types_operations_take_its_own_sources_alone(self):
+        """A source of another type is refused by name before anything runs (law 23): a file of another type, a
+        model's id given to a file's type, and any file given to ``cad.model`` but the one a model is saved as."""
+        ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
+        for call, said in (
+                (lambda: cad.model.export("arm.step", "arm.glb"), "arm.step is a step, not a model: use cad.step"),
+                (lambda: cad.model.inspect("arm"), "cad.model takes a model's handle, its document id (cad run "
+                                                   "SCRIPT.py prints it) or an .xbf file, not 'arm'"),
+                (lambda: cad.step.export("share/arm.xbf", "arm.glb"), "share/arm.xbf is a model, not a step: use cad.model"),
+                (lambda: cad.step.export(ident, "arm.glb"), f"{ident} is a model's document id, not a .step file: use "
+                                                            "cad.model"),
+                (lambda: cad.stl.export("part.glb", "part.3mf"), "part.glb is a glb, not a stl: use cad.glb")):
+            with self.subTest(said=said):
+                with self.assertRaises(ValueError) as refused:
+                    call()
+                self.assertEqual(str(refused.exception), said)
+
+    def test_cad_model_is_a_model_held_or_saved_and_its_operations_run_on_the_file_as_the_file_s(self):
+        """``cad.model``'s operations take the ``.xbf`` a model is saved as, as ``cad model`` does: the source
+        says which of the two it is, and the operation is the model's either way -- the engine's verb given the
+        path, a check asked of the engine as a model's, its source the file."""
+        from unittest import mock
+
+        from cad._internal.document_type import refuse_other
+        from cad.engine import api
+
+        ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
+        self.assertEqual([refuse_other("model", source) for source in (ident, "share/arm.xbf", "ARM.XBF", None)],
+                         ["model", "model", "model", "model"])
+        for name, rest in (("export", ("arm.glb",)), ("inspect", ()), ("snapshot", ("arm.png",))):
+            with self.subTest(operation=name), mock.patch.object(api, name, return_value="done") as verb:
+                # ``_operation`` binds the verb when the attribute is first read: a fresh one here.
+                from cad._internal.document_type import _operation
+
+                self.assertEqual(_operation("model", name)("share/arm.xbf", *rest), "done")
+                verb.assert_called_once_with("share/arm.xbf", *rest)
+        with mock.patch.object(api, "check", return_value={"unmeasured": {"message": "gone", "code": "stopped"}}) as check:
+            cad.model.interference("share/arm.xbf")
+            cad.model.interference(ident)
+        self.assertEqual([(call.args[0], call.args[1]["type"]) for call in check.call_args_list],
+                         [("share/arm.xbf", "model"), (ident, "model")])
+
+    def test_model_read_reads_the_file_a_model_is_saved_as_and_refuses_any_other_by_name(self):
+        """``model.read`` is the engine's one reader of an ``.xbf`` (``cad.engine.read_xbf``), the kernel's
+        memo and all; a file of another kind is refused with the reader that takes it."""
+        self.assertIs(cad.model.read, cad.engine.read_xbf)
+        self.assertIn("read", dir(cad.model))
+        for path, said in (("vendor/motor.step", "model.read reads an .xbf, not motor.step: read a STEP with step.read"),
+                           ("scan.STL", "model.read reads an .xbf, not scan.STL: read an STL with stl.read"),
+                           ("notes.txt", "model.read reads an .xbf, not notes.txt")):
+            with self.subTest(path=path):
+                with self.assertRaises(ValueError) as refused:
+                    cad.model.read(path)
+                self.assertEqual(str(refused.exception), said)
+        with self.assertRaises(ValueError) as refused:
+            cad.stl.read("vendor/motor.xbf")
+        self.assertEqual(str(refused.exception), "stl.read reads an .stl, not motor.xbf: read a model saved as a file "
+                                                 "with model.read")
 
     def test_what_the_root_says_of_its_types_is_what_it_has(self):
         """Every type is in the root's docstring and in the imports type checkers read, and no type that
@@ -151,8 +212,9 @@ class RootExports(unittest.TestCase):
                              ("bpy comes with cad's blender integration: add `cad[blender]` to the script's header", "bpy"))
 
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
-        """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``) and the
-        shape form (``model(shape, name=, animations=)``); a file decorator takes its path and its
+        """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``, ``@model('….xbf')``:
+        the ``.xbf`` each run saves it as) and the shape form (``model(shape, name=, animations=)``, which
+        declares no file); a file decorator takes its path and its
         name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is derived; no
         ``store=``: every document is kept alike."""
         import inspect
@@ -161,8 +223,11 @@ class RootExports(unittest.TestCase):
             parameters = inspect.signature(declare).parameters
             self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
                 ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
-                ("animations", inspect.Parameter.KEYWORD_ONLY)])
-        for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf"):
+                ("out", inspect.Parameter.KEYWORD_ONLY), ("animations", inspect.Parameter.KEYWORD_ONLY)])
+            with self.assertRaisesRegex(TypeError, r"model\(shape, name=\.\.\.\) takes no path: .* export the document "
+                                                   r"it returns"):
+                declare(object(), name="arm", out="arm.xbf")
+        for kind in ("step", "glb", "stl", "threemf", "dxf"):
             with self.subTest(kind=kind):
                 self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
                                  ["out", "name", *(["tolerance", "angle"] if kind in ("glb", "stl", "threemf") else [])])
@@ -173,8 +238,8 @@ class RootExports(unittest.TestCase):
 
     def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
         """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either
-        way and ``name=`` by keyword, exactly the 0.10 decorator's signature, and a path is required."""
-        from cad import step, xbf
+        way and ``name=`` by keyword, exactly the 0.10 decorator's signature; with no path its default."""
+        from cad import step, model
 
         def arm():
             return None
@@ -182,10 +247,12 @@ class RootExports(unittest.TestCase):
         def plate():
             return None
 
-        built = xbf(out="XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
+        built = model("XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
         self.assertEqual(sorted(output.kind for output in built.outputs), ["step", "xbf"])
         self.assertEqual("plate", step("plate.step")(plate).name)
-        for call in (lambda: step(), lambda: step("a.step", "b"), lambda: step(path="a.step")):
+        # A model always writes its .xbf: @step alone writes plate.xbf beside its STEP.
+        self.assertEqual([path.name for _kind, path in step()(plate).targets()], ["plate.xbf", "plate.step"])
+        for call in (lambda: step("a.step", "b"), lambda: step(path="a.step")):
             with self.subTest(call=call), self.assertRaises(TypeError):
                 call()
 

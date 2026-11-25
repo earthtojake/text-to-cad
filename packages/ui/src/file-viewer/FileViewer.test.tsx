@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { isMissingFileError } from '@cad/core/client';
 import { unavailablePromptContext } from '@cad/core/prompt';
-import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js';
+import { FileViewer, defineFileRenderer, validateRenderers } from '../../dist/file-viewer/index.js';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dist/primitives/dropdown-menu.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { usePanelToggles } from '../../dist/file-viewer/panelToggles.js';
@@ -945,4 +945,19 @@ it('takes the keyboard as its file is shown, so a tool key works with no press f
   await screen.findByText('shown');
   expect(document.activeElement).toBe(field);
   field.remove();
+});
+
+it('hands a renderer the view the tab saved under an id it had before (its alias): the model renderer opens one saved as xbf', async () => {
+  const shows = defineFileRenderer({ id: 'model', aliases: ['xbf'], priority: 1, matches: () => true, prepare: async () => ({ data: null }),
+    load: async () => ({ default: ({ state }: { state?: unknown }) => <p>{`state ${JSON.stringify((state as { zoom?: number } | undefined)?.zoom ?? null)}`}</p> }) });
+  const saved = (id: string, zoom: number) => ({ [JSON.stringify([FILE, id])]: { zoom } });
+  const view = render(<FileViewer file={FILE} host={host as any} renderers={[shows]} state={{ renderers: saved('xbf', 2) }} onStateChange={() => {}} />);
+  expect((await screen.findByText(/^state /)).textContent).toBe('state 2');
+  view.unmount();
+  // Its own id's view, where both are, is its own.
+  render(<FileViewer file={FILE} host={host as any} renderers={[shows]} state={{ renderers: { ...saved('xbf', 2), ...saved('model', 3) } }} onStateChange={() => {}} />);
+  expect((await screen.findByText(/^state /)).textContent).toBe('state 3');
+  // An alias is an id: no other renderer may take it.
+  expect(() => validateRenderers([shows, defineFileRenderer({ id: 'xbf', priority: 2, matches: () => false, prepare: async () => ({ data: null }),
+    load: async () => ({ default: () => null }) })])).toThrow('Duplicate or empty file renderer ID: "xbf".');
 });

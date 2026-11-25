@@ -49,7 +49,7 @@ Macs or Linux on ARM, where `cad run` refuses the script by name.
 cad model export "$ID" scene.glb --tolerance 0.02 --angle 5
 ```
 
-`$ID` is the model's id; a STEP or an xbf exports the same way (`cad step export part.step scene.glb
+`$ID` is the model's id, or an `.xbf`; a STEP exports the same way (`cad step export part.step scene.glb
 --tolerance 0.02 --angle 5`). The GLB is in metres, Z up once imported, with the assembly's tree as
 nested empties, a PBR material per look, and each motion and `animation()` as a clip. `--tolerance`
 (mm) and `--angle` (degrees) mesh it finer than the viewer's, so a close camera shows no facets, at the

@@ -186,7 +186,7 @@ ranked by how much they cost a CAD-to-simulation user:
    effort=, velocity=)` gives the drive's limits (`cad urdf validate` warns of a 0), and links and
    joints are named in their own kinds.
 8. **Fixed: no joint limits from geometry.** The STEP has no stops; a model script's own self-collision
-   sweep found them for SO-101 in 41 s. `cad model ranges` (also `cad xbf|step ranges`) now sweeps each
+   sweep found them for SO-101 in 41 s. `cad model ranges` (also `cad step ranges`) now sweeps each
    joint alone until its parts meet and prints a table of each joint's stops (0.3 mm by default;
    `--joint` names the joints to sweep).
 9. **Fixed: reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf

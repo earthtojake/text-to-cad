@@ -719,9 +719,9 @@ the loader asks which format it was.
 
 ## Engine document renderer
 
-`createXbfRenderer` (`@cad/ui/renderers/xbf`, id `xbf`, `src/renderers/xbf`) shows a
-engine document: an `.xbf`, and a `.step` or `.stp`, which the engine reads and serves as
-one. The strip is Select with its menu's chevron, Draw, Measure with its own, Explode for two or more
+`createModelRenderer` (`@cad/ui/renderers/xbf`, id `model`, and `xbf` its earlier id as an alias, so a view
+saved under it opens; `src/renderers/xbf`) shows a model's document, the engine's: one the engine holds by its
+id, a model's `.xbf` opened from disk, and a `.step` or `.stp`, which the engine reads and serves as one. The strip is Select with its menu's chevron, Draw, Measure with its own, Explode for two or more
 parts, and Clip; the panel its Model tab (a part file's one row, an assembly's tree), then Params where the
 document records any, then Joints where it carries a mechanism, each a tab; and selection, hover, the menus, isolation, Escape and Quick Edit's chips
 follow the rules of [Selection and inspection tools](#selection-and-inspection-tools).
@@ -816,7 +816,7 @@ a GLB Explode, its routine and Clip; a robot Position and Clip; an STL or a 3MF 
 ```tsx
 import { createCadClient } from '@cad/core/client';
 import { FileViewer } from '@cad/ui/file-viewer';
-import { createXbfRenderer } from '@cad/ui/renderers/xbf';
+import { createModelRenderer } from '@cad/ui/renderers/xbf';
 import { createCadPreferences } from '@cad/ui/renderers/workspace';
 import '@cad/ui/styles.css';
 
@@ -828,7 +828,7 @@ const preferences = createCadPreferences({
   initial: restoredPreferences,
   onChange: savePreferences
 });
-const renderers = [createXbfRenderer({ client, preferences })];
+const renderers = [createModelRenderer({ client, preferences })];
 
 // Keep client, preferences and registrations stable for this host.
 <FileViewer
@@ -848,7 +848,7 @@ says the file asked for is not there. The host owns source access, file selectio
 URL/history, title, navigation, browser storage and application color scheme. It calls
 `client.dispose()` when the connection is no longer owned.
 
-A registration (`createXbfRenderer`, and every other) accepts an existing client or an
+A registration (`createModelRenderer`, and every other) accepts an existing client or an
 async function receiving `PrepareContext`. The latter lets a host obtain the engine's connection only when
 opening a CAD file. The host owns the connection, authorization, and any
 runtime recovery actions. Construction does not fetch files or load Three.js.

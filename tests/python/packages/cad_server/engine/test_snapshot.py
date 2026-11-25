@@ -32,10 +32,10 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import paint, xbf
+from cad.engine import paint, model
 
 
-@xbf("XBF/stand.xbf")
+@model("XBF/stand.xbf")
 def stand():
     plate = bd.Box(40, 20, 4) - bd.Cylinder(4, 10)
     plate = paint(plate, plate.faces().sort_by(bd.Axis.Z)[-1], "#ffa500")
@@ -45,7 +45,7 @@ def stand():
     return bd.Compound(children=[plate, bd.Pos(12, 0, 8) * peg, bd.Pos(-12, 0, 8) * peg], label="stand")
 
 
-@xbf("XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     return bd.Cylinder(3, 12)
 """
@@ -221,19 +221,20 @@ class SnapshotTest(unittest.TestCase):
         self.assertNotEqual(pictures["pair"], pictures["iso"])
 
     def test_what_a_model_does_not_offer_is_refused_by_the_model_s_own_name(self) -> None:
-        # A model's document no file holds is drawn under a name made from OUT; its refusals name the document as
-        # its code labels it, never that stand-in (they once said "review.xbf places 1 part").
+        # A model's refusals name the document by its own .xbf, which every model writes, a model declared by its
+        # STEP alone too; never by the stand-in made from OUT (they once said "review.xbf places 1 part").
         from cad.engine import api
 
         folder = Path(tempfile.mkdtemp(prefix="engine-named-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         script = folder / "plate.py"
-        script.write_text("import build123d as bd\nfrom cad import model\n\n\n@model\ndef plate():\n"
+        # Declared by its STEP alone: its .xbf is plate.xbf beside the script, as bare @model's is.
+        script.write_text("import build123d as bd\nfrom cad import step\n\n\n@step\ndef plate():\n"
                           "    return bd.Box(10, 10, 2)\n", encoding="utf-8")
         with self.assertRaises(SnapshotRefused) as refused:
             api.snapshot(_model(script, "plate"), folder / "review.png", display="parts", daemon=False)
-        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate places 1 part. "
-                                                 "Use solid.")
+        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate.xbf places 1 "
+                                                 "part. Use solid.")
         self.assertFalse((folder / "review.png").exists())
 
     def test_a_snapshot_draws_a_whole_document_and_says_how_to_draw_a_part_alone(self) -> None:
@@ -640,10 +641,10 @@ class SnapshotTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="engine-drawn-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         script = folder / "stand.py"
-        # No @xbf: the picture is drawn from the document the worker holds. The build writes what the
+        # No .xbf declared: the picture is drawn from the document the worker holds. The build writes what the
         # model declares (law 10), its GLB; the snapshot, no file but the picture.
-        script.write_text(textwrap.dedent(MODEL).replace("@xbf(\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
-                          .replace("import paint, xbf", "import glb, paint, xbf"), encoding="utf-8")
+        script.write_text(textwrap.dedent(MODEL).replace("@model(\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
+                          .replace("import paint, model", "import glb, paint, model"), encoding="utf-8")
         drawn = api.snapshot(_model(script, "stand"), folder / "stand.png", display="xray", camera="iso", width=200,
                              height=150, daemon=False)
         self.assertEqual((drawn.width, drawn.height), (200, 150))

@@ -13,9 +13,10 @@ ordinary Python scripts call decorated models explicitly.
                                                   engine's copy; asked first, or --yes
     cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
 
-SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad xbf``, ``cad step``, ...), or a
-model's document id (``ids``), for ``cad model``: the id ``cad run SCRIPT.py`` prints for it. A script is never
-a source: no verb imports or builds one.
+SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad step``, ``cad stl``, ...), or, for
+``cad model``, a model's document id (``ids``), the id ``cad run SCRIPT.py`` prints for it, or the ``.xbf`` file
+a model is saved as (``cad_server.cli.document_types``). A script is never a source: no verb imports or builds
+one.
 
 The ``cad`` command runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
 ``python -m cad_server.engine VERB ...``, takes the same verbs as subcommands (``main``). A verb's failure
@@ -49,9 +50,10 @@ def _source_help(document_type: str | None, generic: str) -> str:
     from cad.registry import DOCUMENT_TYPES
 
     entry = DOCUMENT_TYPES[document_type]
-    if not entry.has_file:
+    if entry.held:
         return ("a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, "
-                "never built")
+                "never built; or the .xbf file a model is saved as, read as the file it is, never as the model "
+                "the engine holds")
     return f"the {' or '.join(entry.extensions)} file"
 
 
@@ -262,6 +264,7 @@ def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) 
 
     document = str(args.document) if is_id(str(args.document)) else str(Path(args.document).expanduser().resolve())
     entry = None if is_id(document) else type_of(document)
+    # The type whose function draws it: a model's, for its id and for its .xbf.
     document_type = "model" if is_id(document) else entry.id if entry is not None else None
     if document_type is None:
         return None
@@ -510,7 +513,7 @@ def inspect_parser(prog: str = "cad <type> inspect") -> argparse.ArgumentParser:
 
 
 def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect") -> int:
-    """``cad xbf inspect DOC``: the build closure the xbf holds; ``cad model inspect ID REF``: what the
+    """``cad model inspect FILE.xbf``: the build closure the xbf holds; ``cad model inspect ID REF``: what the
     kernel measures of the elements a ref names, and what made each (``made_by``, null for a model's
     document no live worker built; none of a file, which names no model)."""
     return run("inspect", argv, prog)
@@ -612,7 +615,7 @@ def parameter(row: dict[str, Any]) -> str:
 
 
 def summary_text(summary: dict[str, Any]) -> str:
-    """``cad xbf inspect DOC``'s first screen (``api._summary``): a line per fact the document
+    """``cad model inspect DOC``'s first screen (``api._summary``): a line per fact the document
     holds, its lists one item per line under it; a fact it has none of says so. A line naming parts
     names a few and counts the rest (``_parts``; the JSON names every one). A structure
     (``--query structure``) has no measured line: no bounds, volume or masses."""

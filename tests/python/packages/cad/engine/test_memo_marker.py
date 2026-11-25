@@ -86,13 +86,13 @@ def jitter():
 
 ROOT = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 from parts import faces, jitter, offset, plate, tagged, through
 
 HOLE = {hole}
 
 
-@xbf("XBF/root.xbf")
+@model("XBF/root.xbf")
 def root():
     a = plate({length})
     a.label = "a"
@@ -131,7 +131,7 @@ def stage_two(base, depth):
     return cut
 
 
-@xbf("XBF/staged.xbf")
+@model("XBF/staged.xbf")
 def staged():
     one = stage_one(12)
     two = stage_two(one, 4).moved(bd.Location((20, 0, 0)))
@@ -283,7 +283,7 @@ class MemoTest(MemoCase):
         import io
 
         from cad.engine import api
-        from cad.engine.model import xbf
+        from cad.engine.model import model
 
         self.build()
         self.write("size.bin", "xx")
@@ -293,15 +293,15 @@ class MemoTest(MemoCase):
         os.chdir(self.folder)
         self.addCleanup(os.chdir, here)
         # A model calling the model: a verifying build of it runs the called model's bodies again too.
-        self.write("caller.py", "from cad.engine import xbf\nfrom root import root\n\n\n"
-                                "@xbf(\"XBF/caller.xbf\")\ndef caller():\n    return root().shape\n")
+        self.write("caller.py", "from cad.engine import model\nfrom root import root\n\n\n"
+                                "@model(\"XBF/caller.xbf\")\ndef caller():\n    return root().shape\n")
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             report = api.build_script(self.folder / "caller.py", ["caller"], verify=True, daemon=False)
         self.assertTrue(report.ok, report.models)
         found = report.models[0]["verify"]
         self.assertEqual(found["mismatches"], ["parts.py::jitter"], found)
 
-        @xbf("XBF/probe.xbf")
+        @model("XBF/probe.xbf")
         def probe():
             return None
 
@@ -404,7 +404,7 @@ class MemoNativeTest(MemoCase):
 
 class MemoNamesTest(MemoCase):
     def stage(self, marker: str, spare: float = 1.0) -> None:
-        imports = "from cad.engine import memo, xbf" if marker else "from cad.engine import xbf"
+        imports = "from cad.engine import memo, model" if marker else "from cad.engine import model"
         self.write("staged.py", STAGES.format(import_line=imports, marker=marker, spare=spare))
 
     def names(self) -> dict:

@@ -42,14 +42,14 @@ FIXTURES = REPO_ROOT / "packages/core/src/lib/render/fixtures"
 CHANNELS = '''
 import math
 import build123d as bd
-from cad import glb, xbf
+from cad import glb, model
 from cad.build123d import mechanism_state
 from cad.build123d import animation
 
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@xbf("XBF/channels.xbf")
+@model("XBF/channels.xbf")
 @glb("channels.glb")
 def channels():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -83,13 +83,13 @@ def channels():
 # The same box with a motion alone: an AP242 configuration sequence, which every GLB of it carries.
 MOTION = '''
 import build123d as bd
-from cad import glb, xbf
+from cad import glb, model
 from cad.build123d import configuration_sequence, mechanism_state
 
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@xbf("XBF/motion.xbf")
+@model("XBF/motion.xbf")
 @glb("motion.glb")
 def motion_box():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -108,14 +108,14 @@ def motion_box():
 # explode, a stagger and a hide. What the GLB's keys are held to (``export/keys.py``).
 FIDELITY = '''
 import build123d as bd
-from cad import glb, xbf
+from cad import glb, model
 from cad.build123d import configuration_sequence, mechanism_state
 from cad.build123d import animation
 
 HINGE = bd.Axis((-40, 0, 30), (0, -1, 0))
 
 
-@xbf("XBF/fidelity.xbf")
+@model("XBF/fidelity.xbf")
 @glb("fidelity.glb")
 def fidelity():
     body = bd.Box(80, 50, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -145,11 +145,11 @@ def fidelity():
 # head and then one pin further, so the pins move apart.
 NESTED = '''
 import build123d as bd
-from cad import glb, xbf
+from cad import glb, model
 from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
-@xbf("XBF/nested.xbf")
+@model("XBF/nested.xbf")
 @glb("nested.glb")
 def nested():
     base = bd.Box(80, 40, 10, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MAX))
@@ -178,11 +178,11 @@ def nested():
 # as one; its animation turns and lifts ``inner`` and then turns one blade on, so the blades move apart.
 TURNED = '''
 import build123d as bd
-from cad import glb, xbf
+from cad import glb, model
 from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
-@xbf("XBF/turned.xbf")
+@model("XBF/turned.xbf")
 @glb("turned.glb")
 def turned():
     base = bd.Box(80, 40, 10)
@@ -387,10 +387,10 @@ class HarvestTest(_Folder):
         source = textwrap.dedent("""
             import build123d as bd
             from cad.build123d import animation
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf("XBF/bot.xbf")
+            @model("XBF/bot.xbf")
             def bot():
                 def part(label, x):
                     solid = bd.Pos(x, 0, 0) * bd.Box(10, 10, 10)
@@ -525,11 +525,11 @@ class GlbTest(_Folder):
 
         source = """
             import build123d as bd
-            from cad import glb, xbf
+            from cad import glb, model
             from cad.build123d import animation
 
 
-            @xbf("XBF/pair.xbf")
+            @model("XBF/pair.xbf")
             @glb("pair.glb")
             def pair():
                 base, arm = bd.Box(10, 10, 10), bd.Pos(20, 0, 0) * bd.Box(5, 5, 5)
@@ -752,13 +752,13 @@ class GlbTest(_Folder):
         self.assertEqual(sorted(document.Loaded(self.folder / "XBF/motion.xbf").animations), ["drop"])
         self.build(f"""
             import build123d as bd
-            from cad import glb, xbf
+            from cad import glb, model
             from cad.build123d import animation
 
 
             @glb("shelf.glb")
             def shelf():
-                box = xbf.read({str(self.folder / "XBF/motion.xbf")!r})
+                box = model.read({str(self.folder / "XBF/motion.xbf")!r})
                 box.label = "box"
                 board = bd.Box(200, 100, 5)
                 board.label = "board"

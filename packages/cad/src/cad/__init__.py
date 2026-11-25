@@ -2,11 +2,11 @@
 declare.
 
 The root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each
-(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,
+(``cad.registry``): ``model`` (a model built from code, held in the engine's memory or saved as its ``.xbf``),
 ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and
 ``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``), its edit where
 its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
-has one (``step.read``) and its
+has one (``step.read``, ``model.read``) and its
 operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,
 ``.inspect``, and those named for what they do (``.dfm``, ``.solve``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
@@ -18,7 +18,7 @@ GLB in Blender's scene, for a render). Process control (``cad serve``, ``status`
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,
-...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).
+``cad.xbf``, ...) are aliases of what they name now, each saying so once (``_internal/aliases.py``).
 """
 
 import time as _time
@@ -59,8 +59,9 @@ del _install_font_guard
 # cad.engine.api.observers, which the server's commands fill (``cad_server._internal.engine_telemetry``),
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
-# The document types (``cad.registry.DOCUMENT_TYPES``), each a subpackage that is a ``DocumentType``.
-_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
+# The document types (``cad.registry``), each a subpackage that is a ``DocumentType``. ``cad.xbf``, the earlier
+# spelling of ``cad.model``, is an alias of it (``_internal/aliases.py``).
+_TYPES = ("model", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
 _INTEGRATIONS = ("build123d", "kicad", "trimesh", "mujoco", "coacd", "netgen", "calculix", "blender", "orcaslicer")
@@ -93,14 +94,15 @@ def __getattr__(name: str):
 def __dir__() -> list[str]:
     """Its public names (``__all__``) and the submodules imported so far: what ``dir()`` and
     completion offer, without loading any of them, nor the kernel."""
+    # A submodule by its own name: a module alias imported (``cad.xbf``, which is ``cad.model``) is none.
     return sorted({*__all__, *(name for name, value in globals().items() if name.startswith("__")
-                               or getattr(value, "__name__", "").startswith(__name__ + "."))})
+                               or getattr(value, "__name__", "") == f"{__name__}.{name}")})
 
 
 if _TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root without importing
     # OCP. Every name here must have a branch there.
-    from cad import dxf, glb, kicad_pcb, kicad_sch, model, srdf, step, stl, threemf, urdf, xbf
+    from cad import dxf, glb, kicad_pcb, kicad_sch, model, srdf, step, stl, threemf, urdf
 
 
 @_cache

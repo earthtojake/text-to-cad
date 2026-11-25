@@ -1,10 +1,10 @@
-"""cadgen's engine: ``@xbf`` models built in a warm worker, kept as XCAF documents.
+"""cadgen's engine: models built in a warm worker, kept as XCAF documents.
 
 A model is a parameterless function returning a build123d shape::
 
-    from cad.engine import xbf, step
+    from cad.engine import model, step
 
-    @xbf("XBF/arm.xbf")
+    @model("XBF/arm.xbf")
     @step("arm.step")
     def arm():
         ...
@@ -40,7 +40,7 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = ["dxf", "glb", "memo", "model", "paint", "read_mesh", "read_step", "read_xbf", "step",
-           "stl", "threemf", "xbf"]
+           "stl", "threemf"]
 
 
 def _main_in_a_package() -> None:
@@ -73,7 +73,12 @@ def __getattr__(name: str) -> Any:
 
         declarations = importlib.import_module("cad.engine.model")
         return declarations if name == "model" else getattr(declarations, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if name.startswith("__"):
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    # An earlier spelling (``@xbf``, the model's: ``cad.engine.model``), after its warning; else AttributeError.
+    from cad._internal.aliases import lookup
+
+    return lookup(__name__, name)
 
 
 def __dir__() -> list[str]:

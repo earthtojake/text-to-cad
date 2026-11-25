@@ -135,7 +135,7 @@ export function cliPage(libraryIds: Set<string>) {
   );
   out.push(
     "## Operations by document type",
-    "A document type is a kind of file text-to-cad builds, shows or checks. Each has the operations that make sense for it, with one pattern: `cad <document_type> <operation> <file>`. A `model` is a model the server holds, named by its id; every other type takes a file.",
+    "A document type is a kind of file text-to-cad builds, shows or checks. Each has the operations that make sense for it, with one pattern: `cad <document_type> <operation> <file>`. A `model` is a model the server holds, named by its id, or its `.xbf`, the same model saved as a file; every other type takes a file.",
     table(
       ["Type", ...operations.map((op) => codeSpan(op, true))],
       cli.documentTypes.map((type) => [

@@ -25,8 +25,8 @@ from cad_server.cli.document_types import build_parser as _build_parser  # noqa:
 
 
 def build_parser():
-    """``cad xbf export``'s parser: the engine's export verb, which every type's export takes."""
-    return _build_parser("xbf", "export")
+    """``cad model export``'s parser: the engine's export verb, which every type's export takes."""
+    return _build_parser("model", "export")
 from cad.engine.api import Document  # noqa: E402
 from cad.engine.model import Model  # noqa: E402
 

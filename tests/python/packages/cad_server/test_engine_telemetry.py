@@ -542,9 +542,9 @@ class ThroughTheDaemonTest(unittest.TestCase):
             (self.folder / f"{name}.py").write_text(textwrap.dedent(f"""
                 import os
                 import build123d as bd
-                from cad.engine import stl, xbf
+                from cad.engine import stl, model
 
-                @xbf("XBF/{name}.xbf")
+                @model("XBF/{name}.xbf")
                 @stl("{name}.stl")
                 def {name}():
                     {{body}}
@@ -558,7 +558,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(script.returncode, 0, script.stderr)
         self.assertEqual(self.run_in("plate.py").returncode, 0)  # unchanged: its xbf taken whole
         # A command exports the xbf the script built: counted by the command, its warm worker no health of its.
-        command = self.run_in("-m", "cad_server.cli", "xbf", "export", "XBF/plate.xbf", "plate.step")
+        command = self.run_in("-m", "cad_server.cli", "model", "export", "XBF/plate.xbf", "plate.step")
         self.assertEqual(command.returncode, 0, command.stderr)
         self.assertEqual(self.run_in("raises.py").returncode, 1)  # the person's script: count alone
         self.assertEqual(self.run_in("dies.py").returncode, 1)  # its worker died under it: crashed

@@ -80,7 +80,7 @@ The agent edits the numbers and runs `cad run src/bracket.py` again. The page yo
 
 ## Export a file
 
-A run writes no files. A model is a document the server holds, and files are made when you ask:
+A run writes one file, `src/bracket.xbf` beside the script: the model's own document, which the server holds too. Other formats are made when you ask:
 
 ```text
 Export the bracket as a STEP file and an STL.

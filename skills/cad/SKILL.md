@@ -22,7 +22,7 @@ Files are exports, written when asked.
 | Organize a project | Its existing layout | [Project layout](references/project-layout.md) |
 | Export STEP, STL, 3MF, GLB or xbf | `cad model export <id> <file>` | [Exports](references/exports.md) |
 | A 2D profile, flat pattern or DXF | A model that returns 2D geometry on z=0, exported as `.dxf` | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
-| Use a vendor STEP, an xbf or a scan | `step.read`, `xbf.read` or `stl.read` in the body | [Inputs](references/model-contract.md#inputs) |
+| Use a vendor STEP, an xbf or a scan | `step.read`, `model.read` or `stl.read` in the body | [Inputs](references/model-contract.md#inputs) |
 | Resolve a reference or a Quick Edit prompt | `cad model inspect <id> '<ref>'` | [References](references/inspection-and-validation.md#references) |
 | Measure or check geometry | A check script that calls the model | [Inspection](references/inspection-and-validation.md) |
 | See a model, a view or a pose | `cad model snapshot <id> out.png` | [Snapshots](references/snapshot-review.md) |
@@ -99,8 +99,8 @@ every command, and give the person the page once ([Show the model](#show-the-mod
 
 - **A model function takes no arguments.** Dimensions are arguments of a plain helper, and each
   configuration is a `@model` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
-- **Running the script is the rebuild**, and it writes no file. The server replays whatever an edit
-  did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
+- **Running the script is the rebuild**, and it saves each model as `<name>.xbf` beside it. The
+  server replays whatever an edit did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Keep the calls under
   `if __name__ == "__main__":` so other scripts can import the models.
 - **An assembly calls its parts**: its body takes each part's shape (`plate().shape`), places and
@@ -112,15 +112,15 @@ every command, and give the person the page once ([Show the model](#show-the-mod
   (`part.color = "#4a6fa5"`); a material gives a part density and a look
   (`from bd_materials import metals`, `part.material = metals.aluminum()`:
   [colour and materials](references/build123d-modeling.md#colour-and-materials)).
-- **A body is a function of its code and its inputs**: `step.read`, `xbf.read`, `stl.read` and any
+- **A body is a function of its code and its inputs**: `step.read`, `model.read`, `stl.read` and any
   file it opens are tracked; the clock, environment variables and randomness are not. Compose project
   models by calling them, never by reading a file the project exported.
 - Units are millimetres, +Z up.
 
 ## Commands
 
-Each acts on the document as the last run left it. `$ID` is a model's id; a file takes the
-operations its own type lists (`cad step|xbf|stl|threemf|glb|dxf --help`).
+Each acts on the document as the last run left it. `$ID` is a model's id, or an `.xbf` file; any other
+file takes the operations its own type lists (`cad step|stl|threemf|glb|dxf --help`).
 
 | Command | Gives |
 | --- | --- |
@@ -130,7 +130,7 @@ operations its own type lists (`cad step|xbf|stl|threemf|glb|dxf --help`).
 | `cad model interference "$ID" [--pose P]` | Every pair of parts that shares volume, exactly, as built and at each pose |
 | `cad model dfm "$ID" --process ...` | A manufacturing check ([Can it be made?](#can-it-be-made)) |
 | `cad model ranges "$ID"` | Each joint's stops, swept from the parts ([joint stops](references/kinematics.md#joint-stops)) |
-| `cad step export vendor.step vendor.xbf` | A vendor STEP as an xbf, which `xbf.read` loads many times faster |
+| `cad step export vendor.step vendor.xbf` | A vendor STEP as an xbf, which `model.read` loads many times faster |
 
 `--tolerance MM` and `--angle DEG` mesh an STL, a 3MF or a GLB finer (a print with fits, a close
 render) and apply to nothing else: an export that takes them names only mesh files, and a STEP, xbf or

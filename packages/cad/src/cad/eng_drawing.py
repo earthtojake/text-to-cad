@@ -19,12 +19,12 @@ decorator for a DXF: a cut layout is a toolpath, and a drawing is not.
 Usage::
 
     from pathlib import Path
-    from cad import xbf
+    from cad import model
     from cad.eng_drawing import eng_drawing, Sheet
 
     @eng_drawing(out="../PDF/bracket_drawing.pdf")
     def bracket_drawing():
-        part = xbf.read(Path(__file__).parent / "XBF/bracket.xbf")
+        part = model.read(Path(__file__).parent / "XBF/bracket.xbf")
         sheet = Sheet("A3", title="BRACKET", part_number="BRK-001", revision="A")
         top = sheet.view(part, "top", at=(110, 190))
         front = sheet.view(part, "front", at=(110, 90))
@@ -38,7 +38,7 @@ Usage::
 
 Running the script writes one PDF at ``out`` with a page per sheet. There is no
 default location: ``out`` is the path the caller passes. The part is the engine's
-document of it, read in this process (``cad.xbf.read`` of a model's xbf, or
+document of it, read in this process (``cad.model.read`` of a model's xbf, or
 ``cad.step.read`` of a vendor STEP); a live build123d shape works in its place: the
 part is whatever geometry the function has.
 

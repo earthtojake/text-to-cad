@@ -34,9 +34,12 @@ carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it).
 | `GET /api/v1/local/open-in?id=<id>` | Open in: `{"targets": [{"target", "kind", "name", "present", "apps": [{"id", "name", "refuses"}], "default"}], "fileManager"}` -- a model's `source` (its script, kind `script`) then one `export:<kind>` for each kind of file its last build wrote, a file's `source` alone; each with whether it is there now and the apps found on this computer that take its kind (`_internal/apps.py`: looked for in the background, never on a request). A KiCad's `name` says its version (`KiCad 9.0.6`, `KiCad 10.99 nightly`), and `refuses: "newer"` marks one that cannot read this file's format, listed rather than hidden; `default: false` on a `.kicad_*` file, whose operating-system handler is never started; `fileManager` `finder`, `explorer` or `files`; 404 for an unknown id |
 | `POST /api/v1/local/open` | `{"id", "target", "app"}`: one of those targets in one of its apps, or `"default"` (the system's own handler), started detached and never through a shell (a KiCad by its board or schematic editor, as the file's extension says; Blender, which opens only a `.blend` from its command line, with the package's import script, `--python`, and the file as the one argument after `--`): 204; 400 for a target the document lacks, an app not found for its kind, a KiCad that `refuses` the file or `"default"` on a `.kicad_*` file, 404 for a document or a file not there. Only the server's own paths and apps are opened |
 
-A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
-`faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
-`POST mesh`, a model's `POST parameters` (**Parameters**) and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
+A kind's routes: `model` (a model the engine holds, or its `.xbf` opened from disk) and `step` --
+`structure`, `parts/<key>` (and its `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`,
+`kinematics`, `POST pose`, `POST mesh`, a model built from code's `POST parameters` and `POST preview`
+(**Parameters**) and a file's `source`; `xbf`, the kind an `.xbf` had while it was a type of its own, answers
+as `model`'s, the same routes and bodies, and is still listed in `GET /api/v1/server`'s `reads` and `exports`
+(what an `.xbf` opened exports, the file itself as `original`), and `?kind=xbf` lists every model; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
 `source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
 `?sheet=<path>` that sheet's page alone, `index=0` without the index; the hierarchy parsed once per

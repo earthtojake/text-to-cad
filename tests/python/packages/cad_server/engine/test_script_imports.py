@@ -31,7 +31,7 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 import helper                       # beside the script, by its own name
 import proj.common.dims as dims     # the package, by its name
@@ -39,7 +39,7 @@ from .lib import WIDTH              # one level: its own package
 from ..common.dims import HEIGHT    # two levels: its package's parent
 
 
-@xbf("XBF/bracket.xbf")
+@model("XBF/bracket.xbf")
 def bracket():
     return bd.Box(WIDTH, 10, HEIGHT) - bd.Cylinder(helper.RADIUS, dims.HEIGHT * 2)
 
@@ -98,12 +98,12 @@ class PackageScriptTest(unittest.TestCase):
         # process, and the closure keys them by their paths.
         write(self.root, {"craft/lib/empennage.py": "SPAN = 4\n", "craft/f14.py": """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
             from lib import empennage
 
 
-            @xbf("XBF/f14.xbf")
+            @model("XBF/f14.xbf")
             def f14():
                 return bd.Box(10, empennage.SPAN, 2)
         """})
@@ -122,12 +122,12 @@ class PackageScriptTest(unittest.TestCase):
         # In the package's tree, but its own folder holds no __init__.py.
         write(self.root, {"proj/tools/holes.py": "RADIUS = 1\n", "proj/tools/plate.py": """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
             import holes
 
 
-            @xbf("XBF/plate.xbf")
+            @model("XBF/plate.xbf")
             def plate():
                 return bd.Box(10, 10, 2) - bd.Cylinder(holes.RADIUS, 4)
         """})
@@ -161,10 +161,10 @@ class PackageScriptTest(unittest.TestCase):
         # A loose script is compiled from its source too.
         write(self.root, {"proj/tools/plate.py": """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf("XBF/plate.xbf")
+            @model("XBF/plate.xbf")
             def plate():
                 return bd.Box(10, 10, 2)
         """})
@@ -183,7 +183,7 @@ class PackageScriptTest(unittest.TestCase):
         helper.write_text("WIDTH=1\n", encoding="utf-8")
         editable.write_text("HEIGHT=1\n", encoding="utf-8")
         script, xbf = self.root / "body.py", self.root / "XBF" / "body.xbf"
-        script.write_text("import build123d as bd\nfrom cad import xbf\n@xbf('XBF/body.xbf')\n"
+        script.write_text("import build123d as bd\nfrom cad import model\n@model('XBF/body.xbf')\n"
                           "def body():\n    from body_helper import WIDTH\n    from body_editable import HEIGHT\n"
                           "    return bd.Box(WIDTH,HEIGHT,1)\n", encoding="utf-8")
 
@@ -449,18 +449,23 @@ class LibraryRootsTest(unittest.TestCase):
         forget()
         self.addCleanup(forget)
         script, lines = prefix / "work" / "block.py", []
+
+        def heard(line: str) -> None:  # what a build says beyond the .xbf each bare @model writes
+            if not line.startswith("wrote "):
+                lines.append(line)
+
         with mock.patch.object(sys, "prefix", str(prefix)), mock.patch.object(sys, "exec_prefix", str(prefix)), \
                 mock.patch.object(sys, "path", [*sys.path, str(site)]):
             self.assertEqual([trace.first_party_file(str(path)) for path in (script, prefix / "work" / "helpers.py",
                                                                              site / "installed.py")], [True, True, False])
-            [cold] = engine_build.build(script, cwd=script.parent, log=lines.append)
+            [cold] = engine_build.build(script, cwd=script.parent, log=heard)
             self.assertTrue(cold["ok"], cold.get("error"))
             write(root, {"proj/work/helpers.py": "WIDTH = 5\n"})
-            [edited] = engine_build.build(script, cwd=script.parent, log=lines.append)
+            [edited] = engine_build.build(script, cwd=script.parent, log=heard)
             self.assertEqual(edited["bodies"], {"block.py::block": "run"})
             self.assertIn("helpers.py: WIDTH changed", edited["cache"]["changed"])
             self.assertEqual(lines, [], "the project's own script is no library's")
-            [shipped] = engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
+            [shipped] = engine_build.build(site / "shipped.py", cwd=site, log=heard)
         self.assertTrue(shipped["ok"], shipped.get("error"))
         said = (f"cad: shipped.py lies in a library folder, {site}: edits to it and to what it "
                 "imports rebuild nothing; keep the project outside the interpreter's library folders")
@@ -470,7 +475,7 @@ class LibraryRootsTest(unittest.TestCase):
         for roots in ((prefix / "lib", site), (site, prefix / "lib")):
             lines.clear()
             with mock.patch.object(trace, "_library_roots", lambda roots=roots: roots):
-                engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
+                engine_build.build(site / "shipped.py", cwd=site, log=heard)
             self.assertEqual(lines, [said], roots)
 
 

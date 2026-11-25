@@ -9,7 +9,7 @@ measurements, which every result carries. A rule never changes a measurement and
 one: the report carries both.
 
 A rule reads ``report[family]``: a family's ``items`` (one record per feature, each with its ``location`` --
-a ref in ``cad xbf inspect``'s grammar -- and ``xyz``), or the family itself where it has none (one figure
+a ref in ``cad model inspect``'s grammar -- and ``xyz``), or the family itself where it has none (one figure
 for the whole part). The limit is a number, or one number per value of a ``context`` key (``by``: the
 material's class, a printing technology), times another (``scale_by``: a sheet's thickness -- the item's own
 figure of that name where it carries one, a part's own thickness among several, else the context's), and the
@@ -207,7 +207,7 @@ def _items(report: Mapping[str, Any], rule: Rule) -> tuple[list[tuple[int | None
     return [(None, family)], True
 
 
-#: A ref in ``cad xbf inspect``'s grammar, as an item names a face, an edge or a vertex: ``plate/edge 17``.
+#: A ref in ``cad model inspect``'s grammar, as an item names a face, an edge or a vertex: ``plate/edge 17``.
 _REF = re.compile(r"(?:^|/)(vertex|edge|face) \d+$")
 #: An element named in a text, wherever: one ref names one (``_ref``).
 _ELEMENT = re.compile(r"\b(?:vertex|edge|face) \d+")

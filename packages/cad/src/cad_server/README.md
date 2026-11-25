@@ -73,8 +73,9 @@ cad_server/
 `cad --help` lists them all.
 
 - **Document types**: `cad <document_type> <operation> <file>`, one id per type as the library's registry
-  names it: `cad model export <id>`, `cad xbf export`, `cad step snapshot`, `cad glb inspect`,
-  `cad urdf validate`. `model` is a model the engine holds, by its document id, with no file. `export`,
+  names it: `cad model export <id>`, `cad step snapshot`, `cad glb inspect`,
+  `cad urdf validate`. `model` is a model the engine holds, by its document id, or the `.xbf` file a model
+  is saved as, read as the file it is (`cad model export arm.xbf arm.glb`). `export`,
   `snapshot` and `inspect` are shared by every type that has them; every other operation is named for
   what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check whose
   findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
@@ -163,7 +164,11 @@ Run, and never listed by `cad --help`, because programs rather than people use t
 serves a document over HTTP and prints its URL, and `cad requirement [INTEGRATION ...]`, which prints the
 exact requirement a Python of a program's own installs this release's cad by (`cad[build123d]==<release>`).
 
-A command the skills used keeps working for at least 30 days after the skills stop using it.
+A command the skills used keeps working for at least 30 days after the skills stop using it. One is kept so
+now, run and never listed: `cad xbf <operation> FILE`, which the skill text of releases up to 0.11.17 says and
+`cad model <operation> FILE.xbf` replaces. It runs `cad model` (`cli/xbf.py`) after one line on stderr saying it
+is deprecated (none under `--json`), and goes, with that module and its `cad.registry.ALIASES` entry, 30 days
+after the release whose skills stop saying it.
 
 On Windows, what a command writes to a pipe or a file is UTF-8, and so is what the program `cad run` runs
 writes (a console is left as it is, as is every stream elsewhere); Windows PowerShell 5.1 decodes a

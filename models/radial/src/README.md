@@ -9,7 +9,7 @@ script, `radial.py`, holds one model:
 | --- | --- | --- |
 | `radial` | `XBF/radial.xbf` | The engine: eighteen systems, their mechanism, the `drive` coupling, two configurations, the `running` motion and the `explode` and `exploded-running` GLB animations |
 
-Build from this folder: `python radial.py`. The model declares its xbf (`@xbf`), this
+Build from this folder: `python radial.py`. The model declares its xbf (`@model("….xbf")`), this
 corpus's example of a slow model's result kept across runs and engine restarts: a cold
 build takes most of an hour (52 min on 2026-10-24). Every body replays (20: the root, the
 18 systems and the propeller's blade, `lib/propeller.py`'s `blade_proto`), so a no-op

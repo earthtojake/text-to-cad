@@ -150,7 +150,7 @@ function XbfSurface({ view, data }) {
     modelComplete: Boolean(scene) && !loaded.busy });
   // An assembly's view is a STEP assembly's: the Model tree, Parts in the filter, Explode.
   const assembly = (scene?.partCount || 0) > 1;
-  const features = useMemo(() => viewFeaturesForKind("xbf", { parts: scene?.partCount || 0 }), [scene]);
+  const features = useMemo(() => viewFeaturesForKind("model", { parts: scene?.partCount || 0 }), [scene]);
 
   const shellRef = useRef(null);
   const usage = useControlUsage();

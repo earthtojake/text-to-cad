@@ -31,12 +31,12 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 DRAWINGS = """
 import build123d as bd
-from cad.engine import dxf, xbf
+from cad.engine import dxf, model
 
 HOLE = {hole}
 
 
-@xbf("XBF/plate.xbf")
+@model("XBF/plate.xbf")
 @dxf("plate.dxf")
 def plate():
     with bd.BuildSketch() as cut:
@@ -78,10 +78,10 @@ def backward():
 
 REFUSED = """
 import build123d as bd
-from cad.engine import dxf, xbf
+from cad.engine import dxf, model
 
 
-@xbf("XBF/solid.xbf")
+@model("XBF/solid.xbf")
 @dxf("solid.dxf")
 def solid():
     return bd.Box(1, 2, 3)
@@ -113,10 +113,10 @@ def slashed():
 
 BRACKET = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/bracket.xbf")
+@model("XBF/bracket.xbf")
 def bracket():
     return bd.Box(40, 20, 3, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)) - bd.Cylinder(3, 10)
 """
@@ -208,7 +208,7 @@ class DrawingTest(unittest.TestCase):
         warm = _built(self.script, "plate")["plate"]
         self.assertEqual(warm["bodies"], {"drawings.py::plate": "loaded"})
         self.assertEqual(self.plate.read_bytes(), self.bytes)
-        # And an export of the xbf, read from the file, writes them: `cad xbf export plate.xbf
+        # And an export of the xbf, read from the file, writes them: `cad model export plate.xbf
         # plate.dxf` in a process that never built it.
         again = self.folder / "again.dxf"
         translate(self.folder / "XBF/plate.xbf", None, again)
@@ -265,7 +265,7 @@ class DrawingEditTest(unittest.TestCase):
         self.assertEqual([Path(path).name for path in report["child_models"]["bracket.py::bracket"]["files"]],
                          ["bracket.xbf"])
         self.assertEqual(sorted(path.relative_to(self.folder).as_posix() for path in self.folder.rglob("*")
-                                if path.is_file()), ["XBF/bracket.xbf", "bracket.py", "flat.dxf", "flat.py"])
+                                if path.is_file()), ["XBF/bracket.xbf", "bracket.py", "flat.dxf", "flat.py", "flat.xbf"])
         self.assertEqual(_entities(self.folder / "flat.dxf"), Counter({("LINE", "CUT"): 4, ("CIRCLE", "CUT"): 1}))
 
 

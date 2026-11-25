@@ -40,16 +40,16 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import step, xbf
+from cad.engine import step, model
 from bd_materials import metals
 
 
-@xbf("XBF/block.xbf")
+@model("XBF/block.xbf")
 def block():
     return bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
 
 
-@xbf("XBF/pair.xbf")
+@model("XBF/pair.xbf")
 @step(out="pair.step")
 def pair():
     plate = bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
@@ -243,13 +243,41 @@ finally:
         self.assertEqual(status, 200, answer)
         return answer["documents"][0]["held"]
 
-    def test_an_xbf_is_served_by_the_engine_and_read_through_the_viewer(self) -> None:
+    def test_an_xbf_is_a_model_served_by_the_engine_and_read_through_the_viewer(self) -> None:
+        # The row's format is its file's; the document is a model's, opened from its .xbf.
         self.assertEqual(catalog_entry(str(self.document))["kind"], "xbf")
         served = self.open(self.document)
-        self.assertEqual(served, {"id": served["id"], "kind": "xbf", "api": f"/api/v1/documents/xbf/{served['id']}"})
-        # Its envelope says what it is and where its reads are.
+        self.assertEqual(served, {"id": served["id"], "kind": "model", "api": f"/api/v1/documents/model/{served['id']}"})
+        # Its envelope says what it is and where its reads are: a model's file, which exports itself as its original.
         status, envelope = self.get(f"/api/v1/documents/{served['id']}")
-        self.assertEqual((status, envelope["kind"], envelope["api"], envelope["held"]), (200, "xbf", served["api"], True))
+        self.assertEqual((status, envelope["kind"], envelope["api"], envelope["held"]), (200, "model", served["api"], True))
+        self.assertEqual((envelope["source"]["type"], envelope["producers"], envelope["exports"][-1]),
+                         ("file", [], "original"))
+        # Its row in Recents, and the list of one kind, say model; the kind an .xbf had answers as model's.
+        status, listed = self.get(f"/api/v1/documents?path={quote(str(self.document), safe='')}")
+        self.assertEqual((status, [row["kind"] for row in listed["documents"]]), (200, ["model"]))
+        for kind in ("model", "xbf"):
+            status, listed = self.get(f"/api/v1/documents/{kind}?path={quote(str(self.document), safe='')}")
+            self.assertEqual((status, [row["id"] for row in listed["documents"]]), (200, [served["id"]]))
+        status, server = self.get("/api/v1/server")
+        self.assertEqual((status, "model" in server["kinds"]["reads"], "xbf" in server["kinds"]["reads"],
+                          server["kinds"]["exports"]["xbf"][-1]), (200, True, True, "original"))
+        # The released route, documents/xbf/<id>, still answers: the same bodies as the model's (what the meshing
+        # still running says of each part aside, which either read may meet).
+        older = f"/api/v1/documents/xbf/{served['id']}"
+
+        def settled(route: str) -> tuple[int, dict]:
+            status, found = self.get(route)
+            for prototype in found.get("prototypes", ()):
+                for said in ("unmeshed", "unmeshedCheck"):
+                    prototype.pop(said, None)
+            return status, found
+
+        self.assertEqual(settled(older + "/structure"), settled(served["api"] + "/structure"))
+        self.assertEqual(self.request(older + "/source")[::2], (200, self.document.read_bytes()))
+        self.assertEqual(self.request(older + "/measure")[0], 200)
+        # A file has no script: its parameters are neither set nor previewed.
+        self.assertEqual(self.post(served["api"] + "/parameters", {"values": {}})[0], 404)
         # The structure, a part and the look, all under the viewer's origin: a page from it reads
         # them as its own (the engine's loopback-only answer is never relayed to it).
         status, headers, body = self.request(served["api"] + "/structure", {"Origin": "http://example.test"})
@@ -265,7 +293,7 @@ finally:
         self.assertEqual((status, image[:10]), (200, b"#?RADIANCE"))
         # Under another kind, the same id is a 404 naming its own.
         status, refused = self.get(f"/api/v1/documents/step/{served['id']}/structure")
-        self.assertEqual((status, refused["error"]), (404, f"{served['id']} is a xbf"))
+        self.assertEqual((status, refused["error"]), (404, f"{served['id']} is a model"))
         # Asked again, the same document.
         self.assertEqual(self.open(self.document), served)
 

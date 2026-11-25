@@ -45,18 +45,18 @@ of this grammar (`cadRefs` in the bundled runtime) are held to this module's, ca
 fixture both suites assert.
 
 A ref resolves inside the engine, for `inspect` and the viewer, never in a model:
-`cad xbf inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
+`cad model inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
 occurrence stands -- an element's kind, ordinal, name and canonical ref, the kernel's facts of it,
 and, of a model's document, `made_by`, the feature and the function, file and line of the call that made it; a part's or
 an assembly's volume and mass, and its world `bounds` (each part's measured box placed where it
 stands), with a part's `placement`: the origin and the x, y and z axes of its instance's matrix.
 Nothing is built or measured again for them. A model that changes what a person picked reads that answer and
 edits the code `made_by` names, or selects the element from the live shape with build123d
-(`base.faces().sort_by(bd.Axis.Z)[-1]`); a check reads the document with `xbf.read` and walks its
+(`base.faces().sort_by(bd.Axis.Z)[-1]`); a check reads the document with `model.read` and walks its
 tree by labels.
 
 **A model never reads a file its own build writes**: its own xbf or export, a child's, a
-sibling's (`reader.refuse_written`: `xbf.read` and `step.read` ask as they read the file). Read,
+sibling's (`reader.refuse_written`: `model.read` and `step.read` ask as they read the file). Read,
 the file would be an input the build rewrites -- its key moving on every build, so the model would
 never be taken by its key -- or, kept out of the key, a model depending on its own past. A
 model takes what it makes from the live shape instead: so its own output never invalidates it.

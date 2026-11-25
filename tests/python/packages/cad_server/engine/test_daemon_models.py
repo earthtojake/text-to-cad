@@ -72,7 +72,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
 
         address = self._bare()
         first = self.built("bracket")
-        self.assertEqual(first["files"], {})
+        self.assertEqual(list(first["files"]), [str(self.folder / "bracket.xbf")], "bare @model: its .xbf beside the script")
         self.assertEqual(first["id"], address)
         self.assertNotIn("address", first, "a report names its document by its id alone")
         url = urlparse(first["url"])
@@ -94,8 +94,8 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         self.assertEqual(json.loads(measured.stdout)["kind"], "face")
         models = json.loads(self.cli("status", "--json").stdout)["models"]
         self.assertEqual([row["id"] for row in models], [address])
-        self.assertEqual([path.name for path in self.folder.iterdir()], ["bracket.py"],
-                         "no cache, document, or thumbnail on disk")
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.py", "bracket.xbf"],
+                         "its .xbf, and no cache, document, or thumbnail on disk")
         self._restart_daemon()
         missing = self.cli("inspect", f"{address}#face 1")
         self.assertEqual(missing.returncode, 2)
@@ -150,13 +150,13 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
 
     def test_main_calls_bare_and_file_models_in_order_and_keeps_its_arguments(self) -> None:
         self.script.write_text("""import sys
-from cad import model, step, xbf
+from cad import model, step
 import build123d as bd
 @model
 def bare(): return bd.Box(1, 2, 3)
 @step('saved.step')
 def saved(): return bd.Box(2, 2, 3)
-@xbf("XBF/document.xbf")
+@model("XBF/document.xbf")
 def document(): return bd.Box(3, 2, 3)
 if __name__ == '__main__':
     print('before', sys.argv[1:])
@@ -176,10 +176,8 @@ if __name__ == '__main__':
         self.assertFalse((self.folder / 'XBF/bare.xbf').exists())
 
     def where(self, ref: str, doc: str = "XBF/block.xbf") -> dict:
-        from cad.engine.ids import is_id
-
-        kind = "model" if is_id(doc) else "xbf"
-        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", kind, "inspect", doc, ref], cwd=self.folder,
+        # ``cad model inspect``: of a model's id, or of the .xbf it is saved as.
+        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "inspect", doc, ref], cwd=self.folder,
                                   env=self.env)
         self.assertEqual(found.returncode, 0, found.stderr)
         return json.loads(found.stdout)
@@ -214,7 +212,7 @@ if __name__ == '__main__':
                          ["XBF/block.xbf", "block.py"])
 
     def test_a_failing_body_answers_with_its_error(self) -> None:
-        self.script.write_text("from cad.engine import xbf\n\n@xbf('XBF/block.xbf')\ndef block():\n    raise RuntimeError('no')\nif __name__ == '__main__':\n    block()\n", encoding="utf-8")
+        self.script.write_text("from cad.engine import model\n\n@model('XBF/block.xbf')\ndef block():\n    raise RuntimeError('no')\nif __name__ == '__main__':\n    block()\n", encoding="utf-8")
         done = self.run_script("block.py")
         self.assertEqual(done.returncode, 1)
         self.assertIn("RuntimeError: no", done.stderr)
@@ -224,7 +222,7 @@ if __name__ == '__main__':
         # what it declares, whatever its argv holds.
         self.script.write_text(textwrap.dedent(MODEL.format(size=3)) + "\n\n@stl('peg.stl')\ndef peg():\n"
                                "    return bd.Cylinder(1, 3)\nif __name__ == '__main__':\n    peg()\n", encoding="utf-8")
-        self.script.write_text(self.script.read_text(encoding="utf-8").replace("import xbf", "import stl, xbf"),
+        self.script.write_text(self.script.read_text(encoding="utf-8").replace("import model", "import model, stl"),
                                encoding="utf-8")
         done = self.run_script("block.py")
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -250,18 +248,18 @@ if __name__ == '__main__':
                                  env=self.env)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(sorted(path.relative_to(self.folder).as_posix() for path in self.folder.rglob("*") if path.is_file()),
-                         ["XBF/block.xbf", "block.py", "peg.stl"])
+                         ["XBF/block.xbf", "block.py", "peg.stl", "peg.xbf"])
 
     def test_decoration_only_declares_and_main_calls_only_its_selected_model(self) -> None:
         self.own()
         self.script.write_text(textwrap.dedent("""
-            from cad import model, xbf
+            from cad import model
 
             @model
             def unused():
                 raise AssertionError("uncalled model ran")
 
-            @xbf("XBF/block.xbf")
+            @model("XBF/block.xbf")
             def block():
                 import build123d as bd
                 return bd.Box(1, 2, 3)

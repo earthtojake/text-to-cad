@@ -39,7 +39,7 @@ class CadDeprecationWarning(FutureWarning):
 NAME_ALIASES: dict[str, dict[str, str]] = {
     "cad": {
         "read_step": "cad.step.read",
-        "read_xbf": "cad.xbf.read",
+        "read_xbf": "cad.model.read",
         "read_mesh": "cad.stl.read",
         "memo": "cad.build123d.memo",
         "paint": "cad.build123d.paint",
@@ -63,6 +63,9 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
     # MuJoCo's own compile under names of ours: a script compiles with MuJoCo, and ``check`` is the check.
     "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
                    "compile_findings": "cad.mujoco._compile.compile_findings"},
+    # The engine's @xbf, the model's declaration of its .xbf under the file's name: the model itself.
+    "cad.engine": {"xbf": "cad.engine.model"},
+    "cad.engine.model": {"xbf": "cad.engine.model.model"},
 }
 
 #: What the deprecation says to use instead, where the new path is not one object: the root's
@@ -85,6 +88,7 @@ _ADVICE = {
     "cad.build123d.offset_profile": "bd.offset(profile, amount=...), build123d's own",
     "cad.mujoco.compile_model": "mujoco.MjModel.from_xml_path, MuJoCo's own",
     "cad.mujoco.compile_findings": "cad.mujoco.check, whose result holds the compile's findings",
+    "cad.engine.model.xbf": "cad.engine.model",
 }
 
 #: ``old module -> new module``: a module the library had, answered by the module that holds its names now.
@@ -99,6 +103,9 @@ MODULE_ALIASES: dict[str, str] = {
     "cad.urdf_source": "cad.urdf._source",
     "cad.srdf_source": "cad.srdf._source",
     "cad.srdf_validation": "cad.srdf._validation",
+    # The file a model is saved as, once a document type of its own: the model's, its decorator (@xbf is @model),
+    # its reader (xbf.read is model.read) and its operations (cad.xbf.export is cad.model.export).
+    "cad.xbf": "cad.model",
 }
 
 _WARNED: set[str] = set()
@@ -109,7 +116,9 @@ _OWN_SPECS: dict[str, Any] = {}
 # The frames a warning never points at: the library's own and the import system's, so it names the
 # line of the program that spelled the old name.
 _LIBRARY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_SKIPPED = (_LIBRARY + os.sep, os.path.join(os.path.dirname(_LIBRARY), "cadgen") + os.sep, "<frozen importlib")
+# ``importlib``'s own (``import_module``, which ``from cad import xbf`` reaches through the root's lookup) as well.
+_SKIPPED = (_LIBRARY + os.sep, os.path.join(os.path.dirname(_LIBRARY), "cadgen") + os.sep, "<frozen importlib",
+            os.path.dirname(os.path.abspath(importlib.__file__)) + os.sep)
 
 
 def warn(old: str, new: str) -> None:

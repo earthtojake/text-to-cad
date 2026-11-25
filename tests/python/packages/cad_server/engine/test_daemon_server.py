@@ -41,12 +41,12 @@ if __name__ == "__main__":
 
 PAIR = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SIZE = {size}
 
 
-@xbf("XBF/pair.xbf")
+@model("XBF/pair.xbf")
 def pair():
     block = bd.Box(SIZE, 4, 2)
     block.label = "block"
@@ -1265,8 +1265,8 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
                 given = export.KINDS["stl"]
                 export.KINDS["stl"] = Slow(given.name, given.suffixes, given.writer, given.atomic)
                 export.slow = True
-        """).replace("GATE_PATH", repr(str(gate))) + textwrap.dedent(PAIR).replace('@xbf("XBF/pair.xbf")', '@xbf("XBF/pair.xbf")\n@stl("pair.stl")').replace(
-            "import xbf", "import stl, xbf")
+        """).replace("GATE_PATH", repr(str(gate))) + textwrap.dedent(PAIR).replace('@model("XBF/pair.xbf")', '@model("XBF/pair.xbf")\n@stl("pair.stl")').replace(
+            "import model", "import model, stl")
         self.script = self.folder / "pair.py"
         self.script.write_text(slow.format(size=10), encoding="utf-8")
         self.assertEqual(self.run_script("pair.py").returncode, 0)

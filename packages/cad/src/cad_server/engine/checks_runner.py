@@ -214,6 +214,10 @@ class Runner:
             told({"failed": refusal, "kind": "builtins:ValueError"})
             return
         spec, check = request["source"], request["check"]
+        # A model's file, the type an earlier library names ``xbf``, is a model's (``cad.registry.ALIASES``).
+        from cad.registry import resolve
+
+        check = {**check, "type": resolve(check["type"])}
         measures = request.get("measures")
         nobody = {"done": {"reports": [], "files": [], "release": release()}}
         if not isinstance(measures, dict) or request.get("caller") != release():
@@ -529,9 +533,10 @@ def _refusal(request: dict[str, Any]) -> str | None:
 
     spec, check = request.get("source"), request.get("check")
     if not isinstance(spec, dict) or not ("id" in spec or "path" in spec):
-        return "a check reads a document the engine holds, or a STEP's or an xbf's file"
+        return "a check reads a document the engine holds, or a STEP's or a model's .xbf file"
+    # ``xbf``: a model's file, as an earlier library names its type (``cad.registry.ALIASES``).
     if not isinstance(check, dict) or check.get("type") not in ("model", "step", "xbf"):
-        return "the engine measures a manufacturing check of a model, a STEP or an xbf"
+        return "the engine measures a manufacturing check of a model, its .xbf or a STEP"
     process = check.get("process")
     if process is None:
         return None if isinstance(check.get("given", {}), dict) else "a check's given options are a table"

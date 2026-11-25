@@ -179,7 +179,10 @@ class PreviewTest(PreviewCase):
         self.assertEqual(self.call("POST", route, {"values": {"wall": 3}, "page": "../x"})[0], 400)
         self.assertEqual(self.call("POST", route, {"values": {"wall": 3}, "page": "p", "path": "x"})[0], 400)
         self.assertEqual(self.call("GET", route)[0], 405)
-        self.assertEqual(self.call("POST", f"xbf/{self.ident}/preview", {"values": {}, "page": "p"})[0], 404)
+        self.assertEqual(self.call("POST", f"step/{self.ident}/preview", {"values": {}, "page": "p"})[0], 404)
+        # ``xbf``, the kind a model's file had, answers as the model's.
+        self.assertEqual(self.call("POST", f"xbf/{self.ident}/preview", {"values": {}, "page": "p"}),
+                         self.call("POST", route, {"values": {}, "page": "p"}))
 
     def test_a_document_no_live_worker_built_is_not_previewed(self) -> None:
         self.assertTrue(api.stop())

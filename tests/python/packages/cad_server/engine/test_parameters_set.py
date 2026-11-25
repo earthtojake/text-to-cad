@@ -23,14 +23,14 @@ from tests.python.support.paths import add_sources
 
 add_sources()
 
-import cad.xbf  # noqa: E402
+import cad.model  # noqa: E402
 from cad.engine import api, client  # noqa: E402
 from cad.engine.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 SCRIPT = """\
 import build123d as bd
-from cad import model, xbf
+from cad import model
 
 from spec import PITCH
 
@@ -39,7 +39,7 @@ HOLES = model.param("holes", 6, min=3, max=12)
 TWICE = model.param("twice", WALL * 2)
 
 
-@xbf("XBF/bracket.xbf")
+@model("XBF/bracket.xbf")
 def bracket():
     if WALL > 4.5:
         raise ValueError(f"a wall of {WALL} leaves no room for the holes")
@@ -102,7 +102,7 @@ class SetTest(SetCase):
         self.assertEqual({name: row["value"] for name, row in self.served().items()},
                          {"pitch": 30.0, "wall": 2.5, "holes": 8, "twice": 5.0})
         # The declared xbf is the document's: its record read from the file alone, every parameter read-only.
-        listed = cad.xbf.inspect(self.folder / "XBF" / "bracket.xbf", query="structure")["summary"]["parameters"]
+        listed = cad.model.inspect(self.folder / "XBF" / "bracket.xbf", query="structure")["summary"]["parameters"]
         self.assertEqual({(row["name"], row["value"], row["writable"], row["reason"], row["source"]) for row in listed},
                          {("pitch", 30.0, False, "file", None), ("wall", 2.5, False, "file", None),
                           ("holes", 8, False, "file", None), ("twice", 5.0, False, "file", None)})
@@ -155,7 +155,7 @@ class SetTest(SetCase):
         status, said = post("model", {"values": {"pitch": 3}})
         self.assertEqual((status, said["code"], said["reason"]), (409, "not_writable", "shared"))
         self.assertEqual(post("model", {"path": str(self.script)})[0], 400, "a request names values alone")
-        self.assertEqual(post("xbf", {"values": {"wall": 3}})[0], 404, "a model's route alone")
+        self.assertEqual(post("step", {"values": {"wall": 3}})[0], 404, "a model's route alone")
         self.assertEqual(self.script.read_bytes(), before)
         status, said = post("model", {"values": {"wall": 3}})
         self.assertEqual((status, said["written"][0]["to"], said["rebuilt"]), (200, 3.0, [self.ident]))
@@ -222,7 +222,7 @@ class SiblingsTest(unittest.TestCase):
         out = Path(tempfile.mkdtemp(prefix="parameters-export-")).resolve()
         self.addCleanup(shutil.rmtree, out, True)
         api.export(self.a, out / "a.xbf", progress=False)
-        listed = cad.xbf.inspect(out / "a.xbf", query="structure")["summary"]["parameters"]
+        listed = cad.model.inspect(out / "a.xbf", query="structure")["summary"]["parameters"]
         self.assertEqual([(row["name"], row["value"], row["kind"], row["min"], row["max"], row["writable"], row["reason"])
                           for row in listed], [("wall", 2.0, "float", 1, 5, False, "file")])
 

@@ -2,7 +2,8 @@
 
 Three kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
-(``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). An
+(``cad_server.cli.document_types``: ``cad step export``, ``cad stl snapshot``, ``cad urdf validate``; ``cad model``
+takes a model's document id, or the ``.xbf`` file a model is saved as). An
 integration's, for its tool's own files, which are no document type, which cad checks or writes and never
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
 ``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
@@ -30,7 +31,7 @@ import importlib
 import os
 import sys
 
-from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
+from cad.registry import ALIASES, DOCUMENT_TYPES, INTEGRATIONS
 
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
 # exit code. Keep this list grouped as below and the help text under ~60 chars so
@@ -68,11 +69,14 @@ _COMMANDS: dict[str, tuple[str, str]] = {
 }
 # Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their
 # updaters (`cad setup`) -- and gone with the bridge. And commands for programs, not people: `serve` (a document served
-# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs).
-_UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement"})
+# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs). And a
+# type's earlier id (``cad.registry.ALIASES``): `cad xbf`, which runs `cad model` and says so (``cad_server.cli.xbf``).
+_UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement", *ALIASES})
 
-# Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
-TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
+# Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``); and a
+# type's earlier id, which runs its type's command saying it is deprecated, unlisted.
+TYPE_COMMANDS: dict[str, str] = {**{document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES},
+                                 **{alias: f"cad_server.cli.{alias}" for alias in ALIASES}}
 
 # Each integration's command, by its name, for those with operations of their own on their tool's files:
 # ``cad <integration> <operation>`` (``cad_server.cli.integrations``). A name is a type's or an integration's,
@@ -95,15 +99,20 @@ def _command_lines(names) -> str:
 
 
 def _type_lines() -> str:
-    """The document types, grouped: each with its operations and what it is (``cad.registry``)."""
+    """The document types, grouped: each with its operations and what it is (``cad.registry``); ``model`` a
+    document id the engine holds, or its file."""
     from cad_server.cli.document_types import operations_of
 
-    width = max(len(name) for name in DOCUMENT_TYPES)
-    ops = {name: ", ".join(operations_of(name)) for name in DOCUMENT_TYPES}
+    listed = dict(DOCUMENT_TYPES.items())
+    width = max(len(name) for name in listed)
+    ops = {name: ", ".join(operations_of(name)) for name in listed}
     ops_width = max(len(text) for text in ops.values())
-    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {entry.title}: "
-                     f"{', '.join(entry.extensions) or 'a document id, held in memory'}"
-                     for name, entry in DOCUMENT_TYPES.items()) + "\n"
+
+    def takes(entry) -> str:
+        return f"a document id, held in memory, or an {entry.suffix} file" if entry.held else ", ".join(entry.extensions)
+
+    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {entry.title}: {takes(entry)}"
+                     for name, entry in listed.items()) + "\n"
 
 
 def _integration_lines() -> str:
@@ -131,13 +140,14 @@ def _usage() -> str:
 
 
 def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The command a command line names, as ``main`` dispatches it, and its arguments: ``("xbf export",
+    """The command a command line names, as ``main`` dispatches it, and its arguments: ``("step export",
     [...])`` for a document type's operation, ``("status", [...])`` for a command; None for neither."""
     if argv[:1] and argv[0] in TYPE_COMMANDS:
         from cad_server.cli.document_types import OPERATIONS
 
-        if len(argv) > 1 and (argv[0], argv[1]) in OPERATIONS:
-            return f"{argv[0]} {argv[1]}", argv[2:]
+        named = ALIASES.get(argv[0], argv[0])  # an earlier id as the command it runs
+        if len(argv) > 1 and (named, argv[1]) in OPERATIONS:
+            return f"{named} {argv[1]}", argv[2:]
         return None
     if argv[:1] and argv[0] in INTEGRATION_COMMANDS:
         from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
@@ -152,7 +162,7 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
 
 def build_parser_for(name: str):
     """The parser a resolved command (``resolve``) parses with, or None for one that builds its own."""
-    if name not in _COMMANDS:  # a document type's operation (``xbf export``), or an integration's (``mujoco check``)
+    if name not in _COMMANDS:  # a document type's operation (``step export``), or an integration's (``mujoco check``)
         document_type, operation = name.split(" ", 1)
         if document_type in INTEGRATION_COMMANDS:
             from cad_server.cli.integrations import build_parser as integration_parser

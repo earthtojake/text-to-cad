@@ -33,7 +33,7 @@ from cad_server.engine.registry import Registry  # noqa: E402
 
 PARTS = """
 import build123d as bd
-from cad import model, xbf
+from cad import model
 
 
 @model
@@ -41,7 +41,7 @@ def peg():
     return bd.Cylinder(2, 10)
 
 
-@xbf("XBF/base.xbf")
+@model("XBF/base.xbf")
 def base():
     first, second = peg(), peg()
     # A child's call is its handle, inside the body too: its id, no page yet, its result here.
@@ -331,6 +331,11 @@ class HandleTest(unittest.TestCase):
         self.assertEqual([clip["name"] for clip in _glb_json(project / "crate.glb").get("animations") or []],
                          ["lift"], "the animations passed are baked into its GLB")
         self.assertTrue((project / "crate.step").is_file())
+        # A model always writes its .xbf: handed over from a script, <name>.xbf beside it, the document the engine holds.
+        from cad.engine import document
+
+        self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "tag.xbf"])
+        self.assertEqual(document.Loaded(project / "crate.xbf").structure()["name"], "crate")
         record = Registry(self.state).get(ident)
         self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
         self.assertEqual(set(record) - {"cache"}, {"schema", "id", "kind", "root", "home", "entry", "program",
@@ -348,6 +353,8 @@ class HandleTest(unittest.TestCase):
         repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
                                "h = model(bd.Box(2, 2, 2), name='scratch')\nprint('RESULT ' + json.dumps(h.id))\n")
         self.assertEqual(repl, derived_id(project, "scratch"))
+        self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "tag.xbf"],
+                         "from a REPL, which has no script, nothing is written")
         # Exported by its id, as any document the engine holds; after a restart, from the cache.
         self.assertEqual(self.cli("export", ident, str(project / "again.stl")).returncode, 0)
         self.restart()

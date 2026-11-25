@@ -56,9 +56,9 @@ __all__ = [
 CAD_CATALOG_SCHEMA_VERSION = 5
 
 # The CAD files whose bytes the asset route sends, and the document type of each (``cad.registry``):
-# every type's extensions but the engine's own document's, which the engine serves to the page as
-# it serves a STEP (``documents.py``), never as bytes.
-SOURCE_KINDS = {extension: entry.id for entry in DOCUMENT_TYPES.values() if entry.id != "xbf"
+# every type's extensions but a model's, its .xbf, which the engine serves to the page as it serves a
+# STEP (``documents.py``), never as bytes.
+SOURCE_KINDS = {extension: entry.id for entry in DOCUMENT_TYPES.values() if entry.id != "model"
                 for extension in entry.extensions}
 SOURCE_EXTENSIONS = frozenset(SOURCE_KINDS)
 # What every CAD view lists and opens: every document type's files.

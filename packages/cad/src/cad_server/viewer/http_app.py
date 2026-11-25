@@ -41,7 +41,8 @@ from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entr
 from .documents import EngineDocuments
 from cad.registry import DOCUMENT_TYPES
 
-from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, document_api, file_kind
+from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, MODEL, ROBOT_KINDS, document_api, exports_of, file_format, file_kind
+from .kinds import kind as current_kind
 from .projects import Projects, Refused, public
 
 __all__ = [
@@ -222,8 +223,9 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
 _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
-# A model's own: its parameters set in its script, and a look at other values of them (a preview).
-_MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters, POST preview"
+# A model's own: its parameters set in its script, and a look at other values of them (a preview), for one built
+# from code; its source, for its .xbf opened from disk.
+_MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters, POST preview (built from code), source (its .xbf)"
 # What a preview (``<id>~preview-<token>``, the engine's ``parameters.Previewing``) is read at: what a page draws
 # and measures of it, nothing else.
 _PREVIEW_ROUTES = "structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure"
@@ -238,9 +240,9 @@ _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, so
 # run, a build of it running, a build at the new values that failed (the script put back as it was).
 PARAMETER_STATUS = {"unknown_parameter": 400, "not_a_number": 400, "out_of_range": 400, "no_worker": 409,
                     "not_writable": 409, "script_changed": 409, "busy": 409, "build_failed": 409}
-# A model's document has no file, so no source.
-_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _MODEL_ROUTES
-                for entry in DOCUMENT_TYPES.values()}
+# A model's: a held one's and its file's (``_MODEL_ROUTES``); an earlier kind (``xbf``) its kind's.
+_KIND_ROUTES = {entry.wire: _MODEL_ROUTES if entry.held else _VIEW_ROUTES[entry.view] for entry in DOCUMENT_TYPES.values()}
+_KIND_ROUTES.update({named: _KIND_ROUTES[current_kind(named)] for named in KINDS if named not in _KIND_ROUTES})
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
 INSTANCE = secrets.token_hex(8)
@@ -725,6 +727,8 @@ class CadApp:
         kind = kind or query.get("kind") or None
         if kind is not None and kind not in KINDS:
             raise ApiError(404, f"no kind {kind}", f"the kinds are {', '.join(KINDS)}")
+        if kind is not None:
+            kind = current_kind(kind)  # ``xbf``: a model's, its file and every other
         if query.get("path") is not None:
             catalog, model = self._catalog(query.get("path"), None)
             found = [self._envelope(catalog, model)] if catalog["entries"] else []
@@ -775,7 +779,9 @@ class CadApp:
         where its kind's reads are (``api``), the formats it exports (``exports``) -- and its catalog
         row as the page shows it (``entry``) with that row's digest (``revision``, which a page that
         only watches for change compares). A document the engine serves (a model's, an ``.xbf``'s,
-        a STEP's) says whether the engine holds its read now (``held``), asked without starting one."""
+        a STEP's) says whether the engine holds its read now (``held``), asked without starting one. An
+        ``.xbf`` is a model's document opened from disk (kind ``model``): its ``source`` the file, no producer,
+        and what that file exports (``kinds.exports_of``)."""
         from cad_server import __version__
 
         row = catalog["entries"][0]
@@ -800,7 +806,8 @@ class CadApp:
             # file only known by its id is not.
             server = self.engine_documents.server
             found["held"] = server is not None and (ident in server.served or ident in server.model_loaders)
-        return {"id": ident, "kind": kind, **found, "api": document_api(kind, ident), "exports": list(EXPORTS[kind]),
+        return {"id": ident, "kind": kind, **found, "api": document_api(kind, ident),
+                "exports": exports_of(kind, model is None),
                 "schemaVersion": catalog["schemaVersion"], "entry": row, "revision": catalog["revision"]}
 
     def _open(self, request, response) -> None:
@@ -868,7 +875,7 @@ class CadApp:
         if kind is None:
             self.envelope(ident)  # its 404, the engine's reason
             raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
-        if kind == "model":
+        if kind == MODEL and self._file_of(ident) is None:  # built from code; its .xbf is a file's record
             self.delete_document(ident)
         else:
             self.recents.registry.delete(ident)
@@ -903,14 +910,15 @@ class CadApp:
 
     def kind_of(self, ident) -> str | None:
         """The kind of the document ``ident`` names (a pose's id, ``<id>~<digest>``, its document's):
-        a file's by its extension, a model's ``model``; None for no document."""
+        a file's by its extension (a model's ``.xbf``, ``model``), a model's the engine holds ``model``; None for
+        no document."""
         base = str(ident or "").split("~", 1)[0]
         if not is_id(base):
             return None
         kind = self._kinds.get(base)
         if kind is None:
             path = self._file_of(base)
-            kind = file_kind(path) if path is not None else "model" if self._holds_model(base) else None
+            kind = file_kind(path) if path is not None else MODEL if self._holds_model(base) else None
             if kind is not None:
                 self._kinds[base] = kind
         return kind
@@ -926,14 +934,15 @@ class CadApp:
         if actual is None:
             self.envelope(ident.split("~", 1)[0])  # its 404, the engine's reason
             raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
-        if actual != kind:
+        if actual != current_kind(kind):
             raise ApiError(404, f"{ident} is a {actual}", f"read it at {document_api(actual, ident)}")
-        # A pose's id (``<id>~<digest>``) reads its document's file.
-        path = None if kind == "model" else self._file_of(ident.split("~", 1)[0])
+        kind = actual  # an earlier kind (``xbf``) answers as the one it names now: the same bodies
+        # A pose's id (``<id>~<digest>``) reads its document's file; a model built from code has none.
+        path = self._file_of(ident.split("~", 1)[0])
         if rest == ["source"] and path is not None:
             return self._methods(request, {"GET": lambda: self._stream(response, path)})
         if kind in ENGINE_KINDS:
-            return self._engine_route(request, response, kind, ident, rest)
+            return self._engine_route(request, response, kind, ident, rest, path is None)
         if kind == "dxf" and rest == ["drawing"]:
             return self._methods(request, {"GET": lambda: self._handle_drawing(request, response, path)})
         if kind == "kicad_pcb" and rest in (["plot"], ["drc"]):
@@ -948,9 +957,10 @@ class CadApp:
                                                                              document_api(kind, ident))})
         raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
 
-    def _engine_route(self, request, response, kind, ident, rest) -> None:
-        """A model's, an ``.xbf``'s or a STEP's read, answered by the engine that serves it
-        (``cad/engine/serve.py``'s routes, in process: ``_relay``)."""
+    def _engine_route(self, request, response, kind, ident, rest, built=False) -> None:
+        """A model's (built from code, or its ``.xbf``) or a STEP's read, answered by the engine that serves it
+        (``cad/engine/serve.py``'s routes, in process: ``_relay``); a model ``built`` from code alone has its
+        parameters set and previewed."""
         doc = f"/api/doc/{ident}"
         query = request.query
         if PREVIEW_MARK in ident and not (rest in (["structure"], ["measure"]) or (len(rest) >= 2 and rest[0] == "parts")):
@@ -965,9 +975,9 @@ class CadApp:
             return self._methods(request, {"POST": lambda: self._pose(request, response, kind, doc)})
         if rest == ["mesh"]:
             return self._methods(request, {"POST": lambda: self._relay(request, response, f"{doc}/mesh", query)})
-        if rest == ["parameters"] and kind == "model":
+        if rest == ["parameters"] and kind == MODEL and built:
             return self._methods(request, {"POST": lambda: self._parameters(request, response, ident)})
-        if rest == ["preview"] and kind == "model":
+        if rest == ["preview"] and kind == MODEL and built:
             return self._methods(request, {"POST": lambda: self._preview(request, response, ident)})
         if len(rest) >= 2 and rest[0] == "parts" and rest[1]:
             part = f"{doc}/part/{rest[1]}"
@@ -1233,10 +1243,11 @@ class CadApp:
         catalog, model = self._known(ident)
         envelope = self._envelope(catalog, model)
         path = envelope["source"].get("path")
-        targets = [{"target": "source", "kind": "script" if model is not None else envelope["kind"],
+        # Each by its file's format: a model's .xbf is an ``xbf`` (``kinds.file_format``).
+        targets = [{"target": "source", "kind": "script" if model is not None else file_format(path) or envelope["kind"],
                     "path": path if isinstance(path, str) and path else None}]
         for written in (model or {}).get("files") or ():
-            kind = file_kind(written)
+            kind = file_format(written)
             if kind is not None and all(target["kind"] != kind for target in targets[1:]):
                 targets.append({"target": f"export:{kind}", "kind": kind, "path": str(written)})
         return targets

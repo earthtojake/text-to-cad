@@ -21,7 +21,7 @@ repaired is in the report's ``mesh``.
 
 Injection molding is judged on exact geometry alone (a mesh's chords misread its draft, undercuts and walls):
 check the part's STEP or model. A file is measured by its document type's check -- ``cad.stl.dfm("part.stl")``,
-``cad.xbf.dfm(model_handle, process="printing")`` -- which answers a ``CheckResult`` whose
+``cad.model.dfm(model_handle, process="printing")`` -- which answers a ``CheckResult`` whose
 ``measurements`` is this report and whose findings say what it shows (``cad <type> dfm --process``).
 Everything loads on first use: ``import cad.trimesh`` imports no trimesh.
 """

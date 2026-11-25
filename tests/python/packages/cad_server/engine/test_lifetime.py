@@ -110,10 +110,10 @@ class BudgetTest(unittest.TestCase):
         script = self.folder / "plate.py"
         script.write_text(textwrap.dedent("""
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf("XBF/plate.xbf")
+            @model("XBF/plate.xbf")
             def plate():
                 return bd.Box(4, 3, 1)
         """), encoding="utf-8")

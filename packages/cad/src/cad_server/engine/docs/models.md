@@ -2,20 +2,22 @@
 
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
-A model is a parameterless function that returns a build123d shape, declared
-with `@model` (a document with no file) or one or more file decorators (a document with those
-files) -- never both: `@model` stacked with a file decorator is refused. The engine runs it in a warm
-worker, holds the result as an XCAF document in memory (`@xbf` explicitly writes its BinXCAF file),
+A model is a parameterless function that returns a build123d shape, declared by the files it
+declares, which stack, each adding its file: `@model`, the `.xbf` it is saved as, and a file decorator
+for any other; one kind twice is refused. A path is optional on each: omitted, it is the model's name
+(`name=`, else the function's) and the format's extension beside the script. The engine runs it in a warm
+worker, holds the result as an XCAF document in memory, writes it as its BinXCAF file, its `.xbf` (at
+`@model`'s path, else beside the script: every model writes one, a model declared by a file decorator alone too),
 and writes the derived files the model declares, each a translation of that document. A drawing is
 a model like any other: its body returns 2D geometry (a sketch, a face, wires or edges), and `@dxf`
 declares its DXF.
 
 ```python
-from cad import step, xbf
+from cad import step, model
 import build123d as bd
 
-@xbf("XBF/arm.xbf")                      # XBF/arm.xbf beside the script; @xbf(out="path.xbf") to choose
-@step("arm.step")         # also @glb, @stl, @threemf, @dxf; stacked or alone; out= is required; name= optionally names the model
+@model                    # each run saves it as arm.xbf beside the script; @model("XBF/arm.xbf") elsewhere
+@step("STEP/arm.step")    # also @glb, @stl, @threemf, @dxf; stacked or alone; bare, arm.step; name= optionally names the model
 def arm():
     return bd.Box(10, 20, 30)
 
@@ -42,7 +44,7 @@ node's placement in its parent (`export.Source.locals`), never pushed down into 
 def peg():
     return bd.Cylinder(2, 10)
 
-@xbf("XBF/base.xbf")
+@model("XBF/base.xbf")
 def base():
     return bd.Compound(children=[bd.Box(20, 20, 3), peg().shape.moved(bd.Pos(5, 0, 6))])
 
@@ -68,14 +70,14 @@ assembly's parts, a stage of a long derivation. It writes no file; the model tha
 it does.
 
 ```python
-from cad import xbf
+from cad import model
 from cad.build123d import memo
 
 @memo
 def wheel(radius, spokes=5):     # replayed, not run, while what it is made of is unchanged
     ...
 
-@xbf("XBF/bike.xbf")
+@model("XBF/bike.xbf")
 def bike():
     return bd.Compound(children=[wheel(300), wheel(300).moved(bd.Pos(1200, 0, 0))], label="bike")
 ```
@@ -106,9 +108,9 @@ where the parts stand.
 
 ```python
 from cad.build123d import mechanism_state
-from cad import xbf
+from cad import model
 
-@xbf("XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base, arm = bd.Box(100, 60, 20), bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"

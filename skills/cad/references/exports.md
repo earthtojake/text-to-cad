@@ -25,13 +25,13 @@ downloads.
 cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
-A file the server reads as a document (an `.xbf`, a `.step`) is a source by its own type, and a
-mesh file (`.stl`, `.glb`, `.3mf`) converts to either of the other two mesh formats, keeping what
-the target can hold:
+A file the server reads as a document is a source too (an `.xbf` by `cad model`, a `.step` by its
+own type), and a mesh file (`.stl`, `.glb`, `.3mf`) converts to either of the other two mesh
+formats, keeping what the target can hold:
 
 ```bash
-cad step export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which xbf.read loads many times faster
-cad xbf export share/arm.xbf GLB/arm.glb
+cad step export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which model.read loads many times faster
+cad model export share/arm.xbf GLB/arm.glb
 cad stl export scan.stl scan.3mf
 ```
 
@@ -61,14 +61,14 @@ A mesh never becomes an `.xbf`, `.step` or `.dxf`: it has no B-rep, so model it 
 The model's page is the default. A project can instead revolve around its exported files, where
 the person asks to iterate on the file or the project already works that way (an `exports.py`, a
 consumer reading the files, a 0.7-era layout). Each run then writes the file too, by a file
-decorator in place of `@model` (`@step("../STEP/bracket.step")`, relative to the script; `@xbf`,
-`@glb`, `@stl`, `@threemf` and `@dxf` alike), by `exports.py` or by `cad <type> export` after the
-run; the person looks at the file's page; and checks read the file (`cad <type> snapshot` or
-`inspect` with its path, or `step.read` in a check).
+decorator beside `@model` (`@step("../STEP/bracket.step")`, relative to the script; `@glb`,
+`@stl`, `@threemf` and `@dxf` alike; an `.xbf` by `@model("...")`), by `exports.py` or by
+`cad <type> export` after the run; the person looks at the file's page; and checks read the file
+(`cad <type> snapshot` or `inspect` with its path, or `step.read` in a check).
 
 | | Model page | File page |
 | --- | --- | --- |
-| Each run | The page updates; nothing is written. | The file is written too and the page re-reads it, a STEP parsed again. |
+| Each run | The page updates; only the model's `.xbf` is written, beside the script. | The file is written too and the page re-reads it, a STEP parsed again. |
 | A picked ref | `made_by` names the function, file and line. | No `made_by`, a file names no model: a Quick Edit has no way back into the code. |
 | A failed run | The page says so. | The file keeps its last write and the page says nothing. |
 
@@ -79,7 +79,7 @@ supplier) keeps one script beside its models that imports them and exports each;
 is a `cad <type> export`. `model.export(x, path, ...)` takes what a model call returns (the
 document's handle, whose own `.export(path, ...)` is the same), a document id, or the model
 function itself, called as the script's own call is, so an unchanged model is replayed. A file
-exports through its own type (`xbf.export("share/arm.xbf", ...)`).
+exports through its own type, an `.xbf` through `model` (`model.export("share/arm.xbf", ...)`).
 
 ```python
 # src/exports.py
@@ -129,7 +129,7 @@ model.
 The `.xbf` is text-to-cad's own document: the parts and placements, names, colours,
 materials, element names and mechanism, read back losslessly, and the compiled tracks of
 the model's animations, which only a GLB exported from it reads. Export one only to share a model
-without its code, or to compose it in another project, where `xbf.read` reads it as an input. A
+without its code, or to compose it in another project, where `model.read` reads it as an input. A
 server restart needs none: the server keeps each document it built.
 
 ## Formats

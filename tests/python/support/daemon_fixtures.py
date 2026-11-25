@@ -24,12 +24,12 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SIZE = {size}
 
 
-@xbf("XBF/block.xbf")
+@model("XBF/block.xbf")
 def block():
     return bd.fillet(bd.Box(SIZE, 4, 2).edges().filter_by(bd.Axis.Z), 0.5)
 
@@ -130,7 +130,7 @@ class DaemonCase(unittest.TestCase):
         return self.built("block")
 
     def _bare(self) -> str:
-        """``bracket.py``: one bare ``@model``, a document of memory alone, and its id."""
+        """``bracket.py``: one bare ``@model``, saved as ``bracket.xbf`` beside it, and its id."""
         from cad.engine.ids import model_id
 
         script = self.folder / "bracket.py"

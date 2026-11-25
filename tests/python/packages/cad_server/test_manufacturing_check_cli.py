@@ -399,7 +399,7 @@ class ModelTest(unittest.TestCase):
             code, out, _ = _run("model", ident, "--process", "cnc", "--json")
             self.assertEqual(code, 1)
             self.assertIn("cnc.internal_corner_sharp", {f["code"] for f in json.loads(out)["findings"]})
-            refused, said, _ = _run("xbf", ident, "--process", "cnc", "--json")
+            refused, said, _ = _run("step", ident, "--process", "cnc", "--json")
             self.assertEqual((refused, json.loads(said)["reason"]), (2, "wrong_type"))
             self.assertIn("use cad model dfm", json.loads(said)["error"])
 

@@ -12,7 +12,7 @@ XBF/macropad.xbf`. Export both again after a board change.
 from pathlib import Path
 
 import build123d as bd
-from cad import model, xbf
+from cad import model
 from cad.build123d import animation
 
 from lib import board_geometry
@@ -25,7 +25,7 @@ BOARD_XBF = Path(__file__).resolve().parent.parent / "XBF" / "macropad.xbf"
 @model
 def nine():
     g = board_geometry.read()
-    pcb = xbf.read(BOARD_XBF)
+    pcb = model.read(BOARD_XBF)
     pcb.label = "board"
     sw, cap = mx_switch().shape, keycap().shape
     switches, caps = [], []

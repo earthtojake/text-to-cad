@@ -122,7 +122,7 @@ if __name__ == "__main__":
 - **A jointed child brings its mechanism.** An assembly that places a child model's
   `.shape` holds the child's joints, states and sequences in its own document too, a
   joint two placements share named by its path as above. A part read from a file
-  (`xbf.read`, `step.read`) brings none.
+  (`model.read`, `step.read`) brings none.
 
 ## Mechanism states
 
@@ -245,7 +245,7 @@ the joint out. The export's log says each.
 
 ## Joint stops
 
-Where a joint's travel is limited by its parts meeting, `cad <type> ranges` (`model`, `xbf`, `step`)
+Where a joint's travel is limited by its parts meeting, `cad <type> ranges` (`model`, `step`)
 finds the stops from the geometry: it moves each joint alone from the as-built pose, the others as
 built, a degree or a millimetre at a time each way, until the parts meet. It writes nothing: write
 the stops into the joint's `angular_range` or `linear_range` in the body, rounded towards zero, and

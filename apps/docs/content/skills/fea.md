@@ -42,7 +42,7 @@ The solve writes into a folder:
 cad step solve part.step --study study.json --out /tmp/bracket-load --json
 ```
 
-`cad model solve` takes a model's id, and `cad xbf solve` an `.xbf`. The first study installs netgen for the mesh and CalculiX for the solve. If the safety factor comes out under 3, the run meshes again at half the element size and the finer result is the one written.
+`cad model solve` takes a model's id, or its `.xbf`. The first study installs netgen for the mesh and CalculiX for the solve. If the safety factor comes out under 3, the run meshes again at half the element size and the finer result is the one written.
 
 | File | What it holds |
 | --- | --- |

@@ -6,7 +6,8 @@ the site's copy to it, so the reference cannot drift from the code. What is publ
 declares, never a guess:
 
 * the root's ``__all__`` (``__version__``, ``CadDeprecationWarning``) and its document types, one object each
-  (``cad.registry.DOCUMENT_TYPES``);
+  (``cad.registry.DOCUMENT_TYPES``; an earlier spelling, an alias, is left out as the root's ``__all__``
+  leaves it out);
 * of each document type, what its registry entry gives it -- its decorator, its reader, its operations and its
   edit -- and whatever else its package's own ``__all__`` names (``cad._internal.document_type``);
 * each integration's namespace (``cad.registry.INTEGRATIONS``, in its order, a deprecated one left out as

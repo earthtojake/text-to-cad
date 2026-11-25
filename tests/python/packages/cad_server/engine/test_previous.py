@@ -39,14 +39,14 @@ import json
 from pathlib import Path
 
 import build123d as bd
-from cad.engine import read_step, xbf
+from cad.engine import read_step, model
 
 HERE = Path(__file__).resolve().parent
 # A set of strings: its order is another in every process.
 NAMES = {{"peg", "pin", "dowel", "stud", "post", "spigot"}}
 
 
-@xbf("XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     size = json.loads((HERE / "peg.json").read_text())["size"]
     peg = bd.Box(size, size, {peg})
@@ -54,14 +54,14 @@ def peg():
     return peg
 
 
-@xbf("XBF/cap.xbf")
+@model("XBF/cap.xbf")
 def cap():
     cap = read_step(HERE / "inputs" / "cap.step")
     cap.label = "cap"
     return cap
 
 
-@xbf("XBF/kit.xbf")
+@model("XBF/kit.xbf")
 def kit():
     left = peg().shape.moved(bd.Location((10, 0, 0)))
     right = peg().shape.moved(bd.Location((-10, 0, 0)))
@@ -441,14 +441,14 @@ import json
 from pathlib import Path
 
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 import dims
 
 HERE = Path(__file__).resolve().parent
 
 
-@xbf("XBF/plate.xbf")
+@model("XBF/plate.xbf")
 def plate():
     try:
         depth = json.loads((HERE / "depth.json").read_text())["depth"]
@@ -758,7 +758,8 @@ class WarmModelTest(unittest.TestCase):
                              ({"used": True, "from": "memory"}, {"plate.py::plate": "loaded"}, []))
             self.assertEqual((report["memo"]["bodies_run"], report["memo"]["bodies_skipped"],
                               report["memo"]["bodies_loaded"]), (0, 0, 2))
-            self.assertEqual(report["files"], {})
+            # Its .xbf, compared and kept: a take writes nothing.
+            self.assertEqual([row["written"] for row in report["files"].values()], [False])
         # The child, built in the plate's run, is taken alike.
         self.assertEqual((self.build("peg")["cache"], self.ran()), ({"used": True, "from": "memory"}, []))
 
@@ -799,12 +800,12 @@ ENVIRONED = """
 import os
 
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 WIDTH = float(os.environ.get("ENGINE_TEST_WIDTH", "10"))
 
 
-@xbf("XBF/strip.xbf")
+@model("XBF/strip.xbf")
 def strip():
     return bd.Box(WIDTH, 4, 1)
 """

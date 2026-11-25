@@ -118,7 +118,7 @@ class BodiesTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         (folder / "hand.py").write_text(textwrap.dedent("""
             import build123d as bd
-            from cad.engine import memo, model, xbf
+            from cad.engine import memo, model
 
             @memo
             def finger(at):
@@ -128,7 +128,7 @@ class BodiesTest(unittest.TestCase):
             def palm():
                 return bd.Box(12, 8, 2)
 
-            @xbf("XBF/hand.xbf")
+            @model("XBF/hand.xbf")
             def hand():
                 return bd.Compound(children=[palm().shape, finger(0), finger(1)], label="hand")
         """), encoding="utf-8")
@@ -155,13 +155,13 @@ class StagesTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         (folder / "kit.py").write_text(textwrap.dedent("""
             import build123d as bd
-            from cad.engine import step, xbf
+            from cad.engine import step, model
 
-            @xbf("XBF/peg.xbf")
+            @model("XBF/peg.xbf")
             def peg():
                 return bd.Cylinder(1, 4)
 
-            @xbf("XBF/kit.xbf")
+            @model("XBF/kit.xbf")
             @step("kit.step")
             def kit():
                 return bd.Compound(children=[bd.Box(4, 4, 1), bd.Pos(0, 0, 2) * peg().shape], label="kit")
@@ -329,7 +329,7 @@ class BarTest(unittest.TestCase):
 SLOW = """
 import pathlib, time
 import build123d as bd
-from cad.engine import memo, xbf
+from cad.engine import memo, model
 
 FOLDER = pathlib.Path(__file__).parent
 
@@ -363,7 +363,7 @@ def {last}(size):
     return bd.Pos(9, 0, 0) * bd.Box(1, 1, size)
 
 
-@xbf("XBF/slow.xbf")
+@model("XBF/slow.xbf")
 def slow():
     parts = [one({size}), two({size}), three({size}), {last}({size})]
     return bd.Compound(children=parts, label="slow")

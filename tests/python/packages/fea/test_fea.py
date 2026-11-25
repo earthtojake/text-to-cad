@@ -1342,10 +1342,10 @@ class ModelMaterial(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import build123d as bd
             from bd_materials import metals
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf(out="XBF/bar.xbf")
+            @model("XBF/bar.xbf")
             def bar():
                 part = bd.Box(40, 10, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
                 part.material = metals.aluminum()

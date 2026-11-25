@@ -49,8 +49,8 @@ const SCHEMATIC: ExportChoice[] = [
 
 /**
  * What the file on screen saves as, from its kind and what the view already holds, so the menu has
- * nothing to wait for: an engine document (a STEP, an xbf, a model held by its id) as STEP, STL,
- * 3MF, GLB and XBF, and DXF where the view draws it flat (`planar`); a mesh file as the other two
+ * nothing to wait for: an engine document (a STEP, a model held by its id, a model's .xbf) as STEP, STL,
+ * 3MF, GLB and XBF (a model's .xbf: the file itself), and DXF where the view draws it flat (`planar`); a mesh file as the other two
  * mesh kinds; a KiCad board as each of KiCad's fabrication, assembly and 3D files; a KiCad schematic as
  * KiCad's PDF, SVGs, netlist and BOM. A format a document
  * cannot be written in is its job's to refuse, saying why. Any other file has none.

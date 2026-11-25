@@ -103,12 +103,12 @@ joint's does. A robot description has no link for it (below).
 ```python
 import build123d as bd
 from cad.build123d import configuration_sequence, gear_pair, mechanism_state, screw_pair
-from cad import xbf
+from cad import model
 
 CURL = {"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}  # degrees at a full curl
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X
 
-@xbf("XBF/index_finger.xbf")
+@model("XBF/index_finger.xbf")
 def index_finger():
     bones, x = [], -BONES["base"]
     for name, length in BONES.items():
@@ -127,7 +127,7 @@ def index_finger():
 
 SWEEP, TRAVEL = {"left": -70, "right": 70}, 40                       # a door's turn and travel when open
 
-@xbf("XBF/hypercar.xbf")
+@model("XBF/hypercar.xbf")
 def hypercar():
     chassis = bd.Box(4400, 900, 400, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     chassis.label = "chassis"
@@ -147,7 +147,7 @@ def hypercar():
     return mechanism_state(car, "open", **SWEEP)                      # shut is as built
 ```
 
-`cad xbf snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
+`cad model snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
 knuckles at 54, 60 and 42 degrees: the picture of the same finger with no coupling at
 `--pose '{"index_mcp_flexion": 54, "index_pip": 60, "index_dip": 42}'`; its range, `[0, 1]`, is
 where every knuckle stays within its own. A model returning `posed(car().shape, {"left": -35,

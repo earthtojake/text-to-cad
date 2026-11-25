@@ -61,8 +61,10 @@ command: str | None = None
 SERVERS = frozenset({"viewer", "mcp", "server"})
 API = "cad.engine.api"
 # An engine kind as telemetry names it (``analytics.KINDS``): models are distinct from file formats.
-# A document type's id to its analytics spelling (``cad.registry``'s ``wire``), and a live model's.
-KINDS = {**{entry.id: entry.wire for entry in _types().values()}, "model": "model"}
+# A document type's id to its analytics spelling (``cad.registry``'s ``wire``), and a live model's; a file a
+# verb read or wrote as an .xbf (``cad.engine.api``'s ``xbf``, the export's kind) keeps the schemas' own word for
+# that format, ``xbf``, as ``analytics.FILE_KINDS`` does.
+KINDS = {**{entry.id: entry.wire for entry in _types().values()}, "model": "model", "xbf": "xbf"}
 MESHES = frozenset(entry.id for entry in _types().values() if entry.view == "mesh")
 
 

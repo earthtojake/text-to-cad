@@ -55,7 +55,7 @@ placements of one shape labelled apart name their occurrences and pin none of th
 labels on the shape they share, where one placement's label would rename what is made of
 every other.
 
-An element of a shape read from a file (`step.read`, `xbf.read`) is named within its own product,
+An element of a shape read from a file (`step.read`, `model.read`) is named within its own product,
 the part of the file it belongs to, however often the file places it: by the name the
 file gives it (`read.stepcaf.subshapes.name`; a STEP this engine wrote names every face,
 and those names come back as they were; `NONE`, the schema's empty name, is none),
