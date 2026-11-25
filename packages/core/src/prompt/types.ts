@@ -3,6 +3,7 @@ export type ResourceRef =
   | { kind: 'workspace-file'; path: string; revision?: string }
   /** A document the engine holds by its id alone (a model's): `path` is the id, never a filesystem path. */
   | { kind: 'cad-model'; path: string; revision?: string }
+  /** A document by its link (a shared model's page): whole, or what is picked in it, in either selector grammar. */
   | { kind: 'url'; url: string; revision?: string };
 /** Zero-based UTF-16 coordinates; text ranges have an exclusive end. */
 export interface TextPosition { line: number; character: number }

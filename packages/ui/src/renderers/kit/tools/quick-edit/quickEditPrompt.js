@@ -1,5 +1,6 @@
 import { DOCUMENT_TYPE_REGISTRY } from "@cad/core/lib/documentTypes.generated.js";
 import { createPromptContext, displayPath, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@cad/core/prompt";
+import { subjectReference } from "../../shell/promptContext.js";
 
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
 const pathOf = resource => resource.kind === "url" ? new URL(resource.url).pathname : resource.path;
@@ -60,19 +61,22 @@ export const quickEditSelection = references => references.filter(reference => r
  * the workspace, else `~/` — the inline packet's `input` too, so no message carries the person's home.
  * `notes`: what the view itself has to tell the agent with this message, each a line or two of plain
  * text (what a person changed from the view since the last message), said after what the person wrote
- * and before the file.
+ * and before the file. `subject` (the host's `promptSubject`): what the host's prompts name the file by,
+ * in place of `resource` for it and for each reference into it, and its note, after the view's.
  *
  * @param {{ resource: object, references?: object[], text: string, views?: { label: string }[],
  *   files?: Promise<{ snapshot?: string, inline?: string }> | null, notes?: readonly string[],
- *   read?: (path: string) => Promise<Blob>, folders?: Promise<{ start?: string, home?: string }> | null }} quickEdit
+ *   read?: (path: string) => Promise<Blob>, folders?: Promise<{ start?: string, home?: string }> | null,
+ *   subject?: import("../../../../host/types.js").PromptSubject | null }} quickEdit
  */
-export function createQuickEditContext({ resource, references = [], text, views = [], files = null, read = null, viewUnavailable = "", folders = null, notes = [] }) {
+export function createQuickEditContext({ resource, references = [], text, views = [], files = null, read = null, viewUnavailable = "", folders = null, notes = [], subject = null }) {
+  const named = reference => subjectReference(reference, resource, subject);
   const parts = [
     textPart(String(text || "").trim(), "text"),
-    ...notes.map(note => String(note || "").trim()).filter(Boolean).map((note, index) => textPart(note, `note-${index}`)),
+    ...[...notes, subject?.note].map(note => String(note || "").trim()).filter(Boolean).map((note, index) => textPart(note, `note-${index}`)),
     ...(viewUnavailable ? [textPart(`View replay unavailable: ${viewUnavailable}`, "view-unavailable")] : []),
-    referencePart({ resource: { ...resource }, target: { kind: "whole-resource" } }, "file"),
-    ...quickEditSelection(references).map((reference, index) => referencePart({ ...reference, resource: { ...reference.resource } }, `reference-${index}`)),
+    referencePart(named({ resource: { ...resource }, target: { kind: "whole-resource" } }), "file"),
+    ...quickEditSelection(references).map((reference, index) => referencePart(named({ ...reference, resource: { ...reference.resource } }), `reference-${index}`)),
   ];
   if (files && views.length) {
     const name = stemOf(resource);

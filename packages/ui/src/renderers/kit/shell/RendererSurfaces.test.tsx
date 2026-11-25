@@ -43,6 +43,7 @@ import { ViewerElementContext, ViewerHostContext } from '../../../../dist/host/c
 import { testHost } from '../../../../dist/host/testing/host.js';
 import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { NavbarViewSlotContext } from '../../../../dist/file-viewer/navbarSlots.js';
+import { formatPromptMessage } from '@cad/core/prompt';
 
 // The navbar's view slot, as a file viewer gives it, where the view's Display and Preview stand.
 function NavbarSlot({ children }: { children: React.ReactNode }) {
@@ -57,7 +58,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; viewport.preview = null; });
 
 
-function mount(host = testHost(), state?: unknown, name = 'one.harness', element: { current: HTMLElement | null } | null = null) {
+function mount(host = testHost(), state?: unknown, name = 'one.harness', element: { current: HTMLElement | null } | null = null, commands: unknown = null) {
   const save = vi.fn();
   const navigation = vi.fn();
   let settings: any = { toolStack: { panels: {}, collapsed: {} } };
@@ -66,7 +67,7 @@ function mount(host = testHost(), state?: unknown, name = 'one.harness', element
     update: (patch: any) => { settings = { ...settings, ...patch }; listeners.forEach(listener => listener()); } };
   const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null,
     onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
-    state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
+    state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences, ...(commands ? { commands } : {}) } } };
   // `element`: the viewer the keyboard reaches (its Escape and Delete), as a file viewer provides.
   const view = render(<ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={element as any}><NavbarSlot>
     <HarnessRenderer {...(props as any)} />
@@ -149,6 +150,21 @@ it('Quick Edit is always there, one row with nothing picked, its attachments ove
   // Quick Edit stands in the layer over the panels, which Preview puts away with the rest of the chrome.
   const top = container.querySelector<HTMLElement>('[data-view-top-layer]')!;
   expect([top.hidden, top.hasAttribute('inert'), top.contains(container.querySelector('[data-quick-edit]'))]).toEqual([true, true, true]);
+});
+
+it("a screenshot the host asks for goes to its composer naming the file as the host's prompts do, with their note first", async () => {
+  const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+  const note = `This model is shared at ${link}: run \`cad fork ${link}\` to get its files, then work on them.`;
+  const destination = { kind: 'composer', available: true } as const;
+  const deliver = vi.fn(async (_context: unknown) => ({ status: 'added' as const, partIds: [] }));
+  // The host's request for the view, as its command store holds it (one snapshot, as a store keeps).
+  const requested = { captureRequest: { key: 1 } };
+  const commands = { subscribe: () => () => {}, getSnapshot: () => requested, acknowledge: vi.fn() };
+  mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
+    promptSubject: { resource: { kind: 'url', url: link }, note } }), undefined, 'one.harness', null, commands);
+  await waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
+  const message = formatPromptMessage(deliver.mock.calls[0][0] as any);
+  expect([message.startsWith(`${note}\n\n`), message.endsWith(`File: ${link}`)]).toEqual([true, true]);
 });
 
 // A stroke as the drawing tools put one into the model.

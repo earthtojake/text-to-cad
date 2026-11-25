@@ -204,12 +204,10 @@ test("a share's files are read from the packs that hold them, one split over two
   const ticket = await client.resources.workerTicket('source.stl');
   structuredClone(ticket.bytes, { transfer: [ticket.bytes] });
   assert.deepEqual(new Uint8Array(await client.resources.readBytes('source.stl')), files['source.stl']);
-  // A file document's share told as it is: its name, no script, nothing of what built it, no files that made it.
-  assert.deepEqual(client.share, { name: 'part.stl', entry: null, made: null, files: [] });
   client.dispose();
 });
 
-test("a model's share holds the files that made it beside its view: the page fetches no pack only they name, and is told what they are", async () => {
+test("a model's share holds the files that made it beside its view: the page fetches no pack only they name", async () => {
   // The view's files, then the files that made it in the same packs after them, as the command packs a model: the
   // last pack of the view's goes on with the first of the files, and the rest of the files have packs of their own.
   // The bundle's own listing names one of those files too, as though the view held it; the share's view does not.
@@ -230,9 +228,6 @@ test("a model's share holds the files that made it beside its view: the page fet
   await assert.rejects(client.resources.readBytes('lib/head.py'), error => error.status === 404 && /holds no lib\/head\.py/.test(error.message));
   await settled();
   assert.deepEqual([...asked].sort(), [...viewed].sort(), 'every pack of the view once, and none of the files alone');
-  // What the share holds beside its view, as its manifest says it.
-  assert.deepEqual(client.share, { name: 'part', entry: 'part.py', made, files: ['part.py', 'lib/head.py', 'source.stl'] });
-  assert.ok([client.share, client.share.made, client.share.files].every(Object.isFrozen));
   client.dispose();
 });
 
@@ -363,7 +358,7 @@ test('a manifest that does not open or is not one, and a file not as it says, ar
   const made = Object.fromEntries(Array.from({ length: 32 }, (_, index) => [String(index).padStart(100, 'x'), 'é'.repeat(100)]));
   const limits = { ...share.manifest, name: '🧩'.repeat(200), entry: 'part.py', made, files: { 'part.py': entry } };
   const opened = await opening(await sealedAs(limits));
-  assert.deepEqual(opened.share, { name: limits.name, entry: 'part.py', made, files: ['part.py'] });
+  assert.deepEqual(opened.manifest.document, DOCUMENT);
   opened.dispose();
 
   // A file whose bytes are not the manifest's: another digest, another size, a range past its pack, a pack that does

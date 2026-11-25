@@ -1,4 +1,4 @@
-import type { PromptContextPort } from '@cad/core/prompt';
+import type { PromptContextPort, ResourceRef } from '@cad/core/prompt';
 import type { FileActions, FileSource } from '../file-viewer/types.js';
 import type { ControlCount } from '../usage/controls.js';
 
@@ -30,6 +30,16 @@ export interface PromptFiles {
   read(path: string): Promise<Blob>;
   /** The folders a Quick Edit's message names its files by (`displayPath`): the workspace and the home. */
   folders?(): Promise<{ start?: string; home?: string }>;
+}
+/**
+ * What this host's prompts name the document on screen by, where an agent reading them could not reach it as the
+ * view names it (a shared model, whose page is on another computer than the agent): `resource` stands for it in a
+ * Quick Edit's and a screenshot's prompt, as its file and in each reference into it, which keeps its target; `note`
+ * is one line those prompts say, with the view's own notes, after what the person wrote and before the file.
+ */
+export interface PromptSubject {
+  resource?: ResourceRef;
+  note?: string;
 }
 /**
  * What the app menu links to — the running version (its release notes), the source and the
@@ -79,6 +89,8 @@ export interface ViewerHost {
   promptContext: PromptContextPort;
   /** Makes a Quick Edit's views and annotation as one snapshot JSON file. Absent: a prompt carries none of them. */
   promptFiles?: PromptFiles;
+  /** What a prompt names the document on screen by, and a line it says of it. Absent: as the view names it. */
+  promptSubject?: PromptSubject;
   /**
    * Show a file, by its absolute path, in this view: a pick in the explorer, a renderer's link.
    * `home` shows the host's home in this view: its recent models, what it shows with no file. A

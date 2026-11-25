@@ -5,6 +5,7 @@ import { createSurfaceLook } from "@cad/core/lib/viewer/surfaceLook.js";
 import { releaseGeometry, shareGeometry } from "@cad/core/lib/render/sharedGeometry.js";
 import { createPromptContext, referencePart, textPart } from "@cad/core/prompt";
 import RendererShell from "../kit/shell/RendererShell.jsx";
+import { subjectReference } from "../kit/shell/promptContext.js";
 import { SHELL_TOOL, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { createToolModes } from "../kit/tools/toolModes.js";
@@ -171,9 +172,11 @@ function HarnessSurface({ view, data }) {
     live, onCameraSettled, runtimeLifecycle,
     // A test's stand-in animation runtime, when it brings one.
     animation: data.animation ?? null,
-    // A renderer whose references are its own vocabulary assembles its own snapshot.
-    promptContext: ({ resource: shown, references, capture }) => createPromptContext([
-      referencePart({ resource: { ...shown }, target: { kind: "whole-resource" } }, "source"),
+    // A renderer whose references are its own vocabulary assembles its own snapshot, naming the file as the host's
+    // prompts do (`subject`).
+    promptContext: ({ resource: shown, references, capture, subject }) => createPromptContext([
+      ...(subject?.note ? [textPart(subject.note, "subject")] : []),
+      referencePart(subjectReference({ resource: { ...shown }, target: { kind: "whole-resource" } }, shown, subject), "source"),
       ...references.map((reference, index) => textPart(`harness:${reference.note}`, `note-${index}`)),
       { id: "capture", kind: "attachment", name: "harness-view.png", mimeType: "image/png", content: capture, about: ["source"] }
     ]),

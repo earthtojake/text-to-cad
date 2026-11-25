@@ -15,6 +15,21 @@ export function shareApiUrl(id, origin = window.location.origin) {
   return new URL(`/v1/shares/${encodeURIComponent(id)}`, origin).href;
 }
 
+/**
+ * What a prompt from share `id`'s view names the model by, on `origin` (the page's own), as the viewer host's
+ * `promptSubject`: the share's link (`<origin>/<id>`), which an agent on any computer can reach, never the page's own
+ * name for the model; and a line telling that agent how to get the files that made it (`cad fork`), in English, as
+ * `File:` and `References:` are, for it is the agent's.
+ * @param {string} id
+ * @param {string} [origin]
+ * @returns {import("@cad/ui/host").PromptSubject}
+ */
+export function sharePromptSubject(id, origin = window.location.origin) {
+  const link = new URL(`/${encodeURIComponent(id)}`, origin).href;
+  return { resource: { kind: "url", url: link },
+    note: `This model is shared at ${link}: run \`cad fork ${link}\` to get its files, then work on them.` };
+}
+
 // Every request: no cookie, no referrer (the page's address is no one else's to read).
 const QUIET = { credentials: "omit", referrerPolicy: "no-referrer" };
 

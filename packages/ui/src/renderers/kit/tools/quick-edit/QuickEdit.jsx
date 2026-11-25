@@ -209,7 +209,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
       const folders = host.promptFiles?.folders?.() ?? null;
       void folders?.catch(() => {});
       const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable, folders,
-        notes: note?.text ? [note.text] : [] });
+        notes: note?.text ? [note.text] : [], subject: host.promptSubject });
       if (action === "send") outcome = host.promptContext.send(context);
       else if (action === "queue") outcome = host.promptContext.deliver(context);
       else outcome = host.clipboard.writeText(copiedQuickEdit(context)).then(() => ({ status: "copied" }));

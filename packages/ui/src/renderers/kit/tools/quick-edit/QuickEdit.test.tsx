@@ -150,6 +150,27 @@ it('copies the note with its references by their files\' absolute paths, and its
   expect(prompt.read).not.toHaveBeenCalled();
 });
 
+it("names the file as the host's prompts do where the host says how (a shared model's link), with its note after what the person wrote", async () => {
+  let copied: Promise<string> | string = '';
+  const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+  const note = `This model is shared at ${link}: run \`cad fork ${link}\` to get its files, then work on them.`;
+  const host = testHost({ clipboard: { writeText: async text => { copied = text; }, writeImage: async () => {} },
+    promptSubject: { resource: { kind: 'url', url: link }, note } });
+  const { update } = mount(host);
+  const copy = async () => {
+    copied = '';
+    fireEvent.click(box()!.querySelector('[data-quick-edit-action="copy"]')!);
+    await waitFor(() => expect(copied).not.toBe(''));
+    return copied;
+  };
+  write('Make it thicker.');
+  // The whole file, where nothing is picked: its link, and how the agent gets its files.
+  expect(await copy()).toBe(`Make it thicker.\n\n${note}\n\nFile: ${link}`);
+  // What is picked in it, by its link too, as it was picked.
+  update({ references: [face] });
+  expect(await copy()).toBe(`Make it thicker.\n\n${note}\n\nFile: ${link}\nReferences:\n${link}#base/f:base.extrude1.2`);
+});
+
 it.each(['Copy Prompt', 'Queue', 'Send'])('%s creates the snapshot only at the press', async action => {
   const composer = { kind: 'composer', available: true } as const;
   const delivered: any[] = [];

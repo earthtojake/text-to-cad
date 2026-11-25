@@ -134,11 +134,12 @@ const EMPTY = Object.freeze({});
  *   never what is on its way in. Omitted: the resource the renderer was handed.
  * @param {() => import("@cad/core/prompt").PromptReference[]} [options.promptReferences]  What a snapshot
  *   depicts, when that is narrower than the whole file (a selection). Default: the file.
- * @param {(input: { resource: object, references: object[], capture: Promise<Blob> }) => object} [options.promptContext]
+ * @param {(input: { resource: object, references: object[], capture: Promise<Blob>, subject: object | null }) => object} [options.promptContext]
  *   How this renderer assembles a snapshot's prompt context. Default `createViewPromptContext`, which takes
  *   references already in the prompt grammar; a renderer with a reference vocabulary of its own supplies the
  *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
- *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
+ *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`. `subject` is the
+ *   host's `promptSubject`: what its prompts name the file by, and a line they say (`subjectReference`).
  * @param {{ active?: boolean, handle?: (options: { toolInHand: boolean }) => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key. `toolInHand`: a tool other than the file's default, or an effect, is in hand; the
  *   renderer then spends the key only on what is under way (a measurement being drawn) and leaves what is picked, and
@@ -468,10 +469,11 @@ export function useRendererShell({
         return;
       }
       void deliverPrompt(promptContextRef.current({
-        resource: liveResourceRef.current?.() || resource, references: referencesRef.current?.() || [], capture: pixels
+        resource: liveResourceRef.current?.() || resource, references: referencesRef.current?.() || [], capture: pixels,
+        subject: host.promptSubject ?? null
       }));
     } catch (error) { reportActionError(error); }
-  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard, reportActionError]);
+  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard, host.promptSubject, reportActionError]);
   const copyActionRef = useRef(null);
   // Annotate's Copy: the view with its ink, or the view alone before there is any, to the clipboard;
   // true once it is there.

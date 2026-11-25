@@ -1,16 +1,31 @@
-import { createPromptContext, referencePart } from "@cad/core/prompt";
+import { createPromptContext, referencePart, textPart } from "@cad/core/prompt";
+
+const sameResource = (one, other) => one?.kind === other?.kind && (one.kind === "url" ? one.url === other.url : one.path === other.path);
+
+/**
+ * A reference as the host's prompts name the document on screen (`subject`, the host's `promptSubject`): one into
+ * that document (`shown`, as the view names it) names the host's resource for it, its target kept; any other, and
+ * every reference where the host names none, is as it is.
+ */
+export function subjectReference(reference, shown, subject) {
+  return subject?.resource && sameResource(reference.resource, shown) ? { ...reference, resource: { ...subject.resource } } : reference;
+}
 
 /**
  * One prompt context for a view: the file as a whole-resource reference (or the
- * references the renderer resolved itself), and the PNG that depicts them. Built
+ * references the renderer resolved itself), and the PNG that depicts them, as the host's
+ * prompts name the file (`subject`: its resource for it, and its note first). Built
  * once, before asynchronous image encoding or host routing.
  */
-export function createViewPromptContext({ resource, references = [], capture, operationId }) {
-  const parts = references.map((reference, index) => referencePart(reference, `reference-${index}`));
+export function createViewPromptContext({ resource, references = [], capture, operationId, subject = null }) {
+  const named = references.map((reference, index) => referencePart(subjectReference(reference, resource, subject), `reference-${index}`));
+  if (capture && !named.length) {
+    named.push(referencePart(subjectReference({ resource: { ...resource }, target: { kind: "whole-resource" } }, resource, subject), "source"));
+  }
+  const parts = [...(subject?.note ? [textPart(subject.note, "note")] : []), ...named];
   if (capture) {
-    if (!parts.length) parts.push(referencePart({ resource: { ...resource }, target: { kind: "whole-resource" } }, "source"));
     const name = `${String(resource.path || "view").split("/").pop().replace(/\.[^.]+$/, "")}-view.png`;
-    parts.push({ id: "capture", kind: "attachment", name, mimeType: "image/png", content: capture, about: parts.map(part => part.id) });
+    parts.push({ id: "capture", kind: "attachment", name, mimeType: "image/png", content: capture, about: named.map(part => part.id) });
   }
   return createPromptContext(parts, operationId);
 }

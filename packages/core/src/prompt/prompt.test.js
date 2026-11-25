@@ -59,6 +59,20 @@ test('an .xbf and a STEP are referenced in the engine\'s grammar: one line per r
   assert.equal(formatPromptReference({ resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } }), '/work/out/plate.3mf#o2.1');
   assert.deepEqual(parsePromptReference('/work/out/plate.3mf#o2.1'), { resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } });
 });
+test("a document named by its link (a shared model's page) is the link, whole or with what is picked in it in either grammar", () => {
+  const link = { kind: 'url', url: 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-' };
+  const picked = selectors => referencePart({ resource: link, target: { kind: 'cad-selector', selectors } }).reference;
+  // The engine's grammar (a model's, a STEP's) and a renderer's labels (a mesh's, a robot's) alike, each as the engine
+  // spells it, which leaves a label as it is and a comma inside a quoted label in it.
+  for (const selector of ['kit/hand/finger.2/face 7', '"M3, M4 screw"/e:screw.body.2', 'f:base.make_box1.6', 'upper_arm', 'glb:3', 'o2.1']) {
+    assert.equal(formatPromptReference(picked([selector])), `${link.url}#${selector}`);
+  }
+  const context = createPromptContext([textPart('Thicker.'), referencePart({ resource: link, target: { kind: 'whole-resource' } }, 'file'),
+    referencePart(picked([FACE, EDGE]), 'picked')]);
+  assert.equal(formatPromptMessage(context), `Thicker.\n\nFile: ${link.url}\nReferences:\n${link.url}#${FACE},${EDGE}`);
+  // What neither grammar reads is no reference.
+  assert.throws(() => picked(['kit//face 1']), /invalid CAD/);
+});
 test('code targets preserve explicit ranges rather than borrowing the CAD fragment grammar', () => {
   const code = { resource: { kind: 'workspace-file', path: '/work/src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };
   assert.equal(formatPromptReference(code), '/work/src/bracket.py:5:3-7:1');

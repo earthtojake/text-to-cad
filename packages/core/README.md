@@ -260,9 +260,7 @@ names once, kept while the share is open, opens it, joins the ranges, gunzips th
 and checks the size and the SHA-256. Every pack of the view is fetched ahead as soon as the manifest is
 read, the ones holding `manifest.json` and `structure.json` first, `SHARE_PREFETCH` (6) at a time, and a
 read's packs go ahead of the rest; a pack only `files` names is never fetched. Then the bundle opens with
-`openViewBundle`, and its service also says what the share holds beside its view (`share`: `name`,
-`entry`, `made` and the paths of the `files`, for the host to offer the zip where there are any);
-disposing it stops what the share still fetches. It fails with one of three codes:
+`openViewBundle`, and disposing its service stops what the share still fetches. It fails with one of three codes:
 `SHARE_DAMAGED`, a manifest that does not open or is not one, or a file not as it says;
 `SHARE_UNAVAILABLE`, a pack the service did not give (the next read asks again); and
 `SHARE_UNSUPPORTED`, a bundle this viewer does not open. A failure of `manifest()` (a share the service
@@ -314,7 +312,9 @@ operation ID; attachment relationships name reference parts, and an attachment's
 optional `label` ("Annotation") names it in that message. Text ranges use
 zero-based UTF-16 coordinates with an exclusive end. CAD targets retain the
 existing selector grammar and document revision, without interpreting a code
-range as a CAD fragment. Apps own clipboard/draft delivery, MIME/size limits and
+range as a CAD fragment; a document named by its link (`url`, a shared model's page), whose kind the link does not
+say, takes selectors of either grammar, written as the engine writes them (`<url>#<selectors>`), which leaves a
+label as it is. Apps own clipboard/draft delivery, MIME/size limits and
 acknowledged outcomes: `PromptContextPort.deliver` hands a context to its destination
 (`added`, `copied`) and `send`, where a host has a chat to post to, posts it as the
 person's message (`sent`); this package never submits a prompt or knows a session.

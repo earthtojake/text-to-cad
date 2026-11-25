@@ -19,7 +19,8 @@ the folder of the script that built it. A file's Files (the explorer its name me
 and no folder lists one.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
-`promptContext`, the optional `promptFiles`, `navigation` (the optional `openFile(path)` and
+`promptContext`, the optional `promptFiles`, the optional `promptSubject` (what a prompt names the document on
+screen by, and a line it says: [Prompt handoff](#prompt-handoff)), `navigation` (the optional `openFile(path)` and
 `home()`), the optional `links` (the app menu's), the optional `usage`
 (`used(feature)`: what the person used, for the host's telemetry to count, never what
 they made; absent, nothing is counted; and `controls(counts)`: which of the view's controls a
@@ -129,7 +130,7 @@ selection or a pose, and the formats follow from the file's kind (`export/format
 has nothing to load; it says too whether its scene lies flat on z=0 (`planar`), which adds DXF. The GLB and mesh renderers publish the file shown: its path as the
 document and the catalog hash of the bytes on screen as the revision, which the server checks
 before it converts the file to the other mesh kinds. `FileViewer.navbarActions`, `fileMenuItems` and `overlay` are named
-composition slots: the first is the navbar's right group, outermost (the CAD app's Full size, and a shared model's Download files); the second is the end of the file's ⋯ menu,
+composition slots: the first is the navbar's right group, outermost (the CAD app's Full size, its one control now; kept as the host's slot); the second is the end of the file's ⋯ menu,
 after Copy path and Open in (`CadViewer` puts Export's submenu there); the third is in the
 relative viewport below it. The generic FileViewer knows nothing about export jobs.
 
@@ -270,17 +271,18 @@ tool the document cannot use is absent, never drawn disabled:
 
 A shared view bundle is a view bundle a share service keeps, sealed, for anyone with its link, which is the
 share's address alone, beside the files that made it (a model's code and the files its build read; a file
-document's file), which the service serves as a zip (`/<id>.zip`). Its host is the view bundle's host above,
-unchanged: the web's share mode (`/<id>`, [apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens
-it with `openShare(id, service)` (`@cad/core/client`), which reads the share's manifest from the page's own
-origin, then each file of the view from the packs it lies in, fetched once each and kept by the browser (never
-a pack only the files that made it lie in), and hands them to `openViewBundle` as a lazy source; it shows that
-service as `?bundle=` does. Everything a bundle's view keeps and leaves out stays as it is. What the share adds
-lives in the host alone: where the share carries files, **Download files**, the host's action at the navbar's
-right end (`CadViewerProps.navbarActions`), a plain link to the zip with `download`, never a file menu (the
-view still has none); the share's status screens (gone, damaged, a format it does not read, a failure with
-Retry) and its delete page (`/<id>#delete=<secret>`). The delete secret never reaches the viewer: no port,
-URL, storage or log carries it.
+document's file), which `cad fork <link>` gets. Its host is the view bundle's host above, unchanged: the web's
+share mode (`/<id>`, [apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens it with
+`openShare(id, service)` (`@cad/core/client`), which reads the share's manifest from the page's own origin, then
+each file of the view from the packs it lies in, fetched once each and kept by the browser (never a pack only the
+files that made it lie in), and hands them to `openViewBundle` as a lazy source; it shows that service as `?bundle=`
+does. Everything a bundle's view keeps and leaves out stays as it is. What the share adds lives in the host alone:
+its prompts' subject (`promptSubject`): the share's link, `<origin>/<id>`, for the model, so a prompt says
+`File: <origin>/<id>` and each reference `<origin>/<id>#<selectors>`, and the line
+``This model is shared at <origin>/<id>: run `cad fork <origin>/<id>` to get its files, then work on them.``, in
+English as `File:` is, for the agent; the share's status screens (gone, damaged, a format it does not read, a
+failure with Retry) and its delete page (`/<id>#delete=<secret>`). The delete secret never reaches the viewer: no
+port, URL, storage or log carries it.
 
 ## Adding a shared feature
 
@@ -331,11 +333,18 @@ asynchronous capture. Blob URLs are delivery leases, never portable identity.
 A reference contains a workspace-file identity (the file's absolute path,
 `/`-separated: `/a/b.step`, `C:/a/b.step`; validation rejects any other spelling), a
 `cad-model` identity (a document the engine holds by its id alone: `path` is the id), or an
-HTTP(S) URL plus a tagged
+HTTP(S) URL (a document by its link, a shared model's page) plus a tagged
 selection: `whole-resource`, `text-range`, or `cad-selector`. Text positions are
 zero-based UTF-16 with an exclusive end. CAD selectors use the engine's
-grammar, validated by core, not STEP entity numbers. Preserve a revision when available;
-references do not promise to survive edits. Shared serialization handles quoting.
+grammar, validated by core, not STEP entity numbers; a link's are either the engine's or a renderer's labels (its
+file's kind is not in it), written as the engine writes them, which leaves a label as it is. Preserve a revision when
+available; references do not promise to survive edits. Shared serialization handles quoting.
+
+Where an agent reading a prompt could not reach the document as the view names it, the host says what its prompts
+name it by (`promptSubject`): `resource` stands for the document on screen in a Quick Edit's and a screenshot's
+prompt, as their file and in each reference into it, whose target it keeps; `note` is one line they say, with the
+view's own notes, after what the person wrote and before `File:`. Without it a prompt names the document as the view
+does. The web's share mode names a shared model by its link ([below](#a-shared-view-bundles-host)).
 
 `formatPromptMessage(context, { attachmentPath, folders })` is the one
 message a Quick Edit is, whether sent, queued or copied: what the person wrote;
@@ -608,7 +617,7 @@ manager, each where `fileActions` can do it, and is absent where it can do none 
 right-click on the name). Right, only what a host or a file adds: the renderer's navigation
 actions first, then the view's own Display and Preview, which the view portals into the navbar's view slot (below),
 then the host's actions (`navbarActions`: `CadViewer` hands it the host's
-`fullSize`, the CAD app's Full size, then the host's own `navbarActions`, a shared model's Download files), outermost.
+`fullSize`, the CAD app's Full size), outermost.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`

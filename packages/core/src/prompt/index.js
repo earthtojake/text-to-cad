@@ -30,11 +30,13 @@ export function validatePromptReference(reference) {
     requireValue(position(target.start) && position(target.end), 'invalid text range');
     requireValue(target.end.line > target.start.line || (target.end.line === target.start.line && target.end.character >= target.start.character), 'range end precedes its start');
   } else if (target.kind === 'cad-selector') {
-    requireValue(resource.kind === 'workspace-file' || resource.kind === 'cad-model', 'CAD selectors require a file or a model');
     // A document the engine draws (an .xbf, a STEP, a model) is named in the engine's grammar; any
     // other file by its renderer's labels (cadRefs.js).
     // A KiCad board or schematic in its references' grammar (`boardRefs.js`, `schematicRefs.js`).
-    const valid = isBoardRefPath(resource.path) ? selector => typeof selector === "string" && selector === selector.trim() && Boolean(parseBoardRefSelector(selector))
+    // A document named by its link (a shared model's page) has no file name to tell its grammar by: it is
+    // either of the first two kinds, so its selectors are either's.
+    const valid = resource.kind === 'url' ? selector => isEngineSelector(selector) || isLabelSelector(selector)
+      : isBoardRefPath(resource.path) ? selector => typeof selector === "string" && selector === selector.trim() && Boolean(parseBoardRefSelector(selector))
       : isSchematicRefPath(resource.path) ? selector => typeof selector === "string" && selector === selector.trim() && Boolean(parseSchematicRefSelector(selector))
       : isEngineRefFile(resource.path) ? isEngineSelector : isLabelSelector;
     requireValue(Array.isArray(target.selectors) && target.selectors.length > 0 && target.selectors.every(selector => valid(selector)),
@@ -175,6 +177,8 @@ export function formatPromptReference(reference, folders = null) {
   requireValue(path.length > 0, 'a reference names its file or URL');
   if (reference.target.kind === 'cad-selector') {
     const selectors = [...reference.target.selectors];
+    // A link's selectors are spelled as the engine spells them, which leaves a renderer's label as it is.
+    if (reference.resource.kind === 'url') return buildCadRefToken({ cadPath: path, selectors, engine: true });
     return isBoardRefPath(path) ? buildBoardRefToken({ path, selectors })
       : isSchematicRefPath(path) ? buildSchematicRefToken({ path, selectors }) : buildCadRefToken({ cadPath: path, selectors });
   }

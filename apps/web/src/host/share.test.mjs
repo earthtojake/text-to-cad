@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deleteShare, SHARE_GONE, shareApiUrl, shareService } from "./share.js";
+import { deleteShare, SHARE_GONE, shareApiUrl, sharePromptSubject, shareService } from "./share.js";
 
 const ID = "AbCdEfGhIjKlMnOpQrSt_-";
 const PACK = "d61037e21c7e5fc5318069739439f61ccea49f6b11a1dad1ecf15cb0d831e680";
@@ -45,6 +45,15 @@ test("a share's pack is read beside its manifest, as the browser's cache keeps i
   // A pack the service has none of is no share gone: the share may have been shared again since its manifest was read.
   await assert.rejects(shareService(ID, { fetch: service(404, JSON.stringify({ error: "No such pack." })).fetch, origin: ORIGIN }).pack(PACK),
     error => error.status === 404 && error.code === undefined && /No such pack/.test(error.message));
+});
+
+test("a prompt from a share's view names the model by the share's link, and tells the agent how to get its files", () => {
+  assert.deepEqual(sharePromptSubject(ID, ORIGIN), {
+    resource: { kind: "url", url: `${ORIGIN}/${ID}` },
+    note: `This model is shared at ${ORIGIN}/${ID}: run \`cad fork ${ORIGIN}/${ID}\` to get its files, then work on them.`,
+  });
+  // Any origin the page is served from, a local one's port included.
+  assert.equal(sharePromptSubject(ID, "http://127.0.0.1:8787").resource.url, `http://127.0.0.1:8787/${ID}`);
 });
 
 test("a deletion sends the secret as its Authorization alone, and reads 204, 404 and 403 as their outcomes", async () => {

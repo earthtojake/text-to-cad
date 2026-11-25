@@ -34,7 +34,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   BundleApp.tsx         the host of one view bundle: its document alone, with no engine
-  SharePage.tsx         a shared view bundle's own: its view's Download files, why it did not open, and its delete page
+  SharePage.tsx         a shared view bundle's pages that are no view: why it did not open, and its delete page
   main.tsx              host/client bootstrap and cleanup, and the choice between the three (`?bundle=`, `/<share>`)
   StartingView.tsx      the page while it asks its server what it is: the app's own frame, inert
   host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
@@ -193,10 +193,10 @@ cannot open (none named, another origin's, no manifest, another format) says why
 ## A shared view bundle
 
 A share service keeps a view bundle sealed, as a manifest and the packs its files lie in, with the files that
-made it (a model's code and the files its build read; a file document's file) in the same packs, which it serves
-as a zip beside the view (`/<id>.zip`). It serves this same built client, its `index.html` at `/<id>` and its
-files beside it (the build's asset URLs are relative, so `./assets/…` resolves to `/assets/…` from `/<id>`).
-`main.tsx` chooses the share mode first, at start-up, from the address alone (`readShareAddress`,
+made it in the same packs (a model's code and the files its build read; a file document's file), which it serves
+as a zip (`/<id>.zip`, what `cad fork` downloads), and serves this same built client, its `index.html` at `/<id>`
+and its files beside it (the build's asset URLs are relative, so `./assets/…` resolves to `/assets/…` from
+`/<id>`). `main.tsx` chooses the share mode first, at start-up, from the address alone (`readShareAddress`,
 `@cad/core/client`): a path that is exactly one share id (22 base64url characters). Any other address is the
 bundle's or the engine's page, as above; the engine's ids never have a share id's form.
 
@@ -205,10 +205,11 @@ bundle's or the engine's page, as above; the engine's ids never have a share id'
   (`/v1/shares/<id>/packs/<pack id>`, as the browser's cache keeps them: a pack never changes) from its own
   origin (`src/host/share.js`), opens them with the key the id gives (`openShare`), fetching every pack of the
   view ahead and none that only the files that made it lie in, and shows the bundle exactly as `?bundle=` does
-  (`BundleApp`, titled by the document's name). Where the share carries files, the navbar's right end, after
-  Display and Preview, offers **Download files** (`ShareDownload`, the page's own action, drawn as the CAD app's
-  Full size is: an icon tile, its hint its name): a plain link to `/<id>.zip` with `download`, which the browser
-  fetches only when it is pressed, by no script of the page's. A 404 says
+  (`BundleApp`, titled by the document's name). A prompt from it (Quick Edit's, a screenshot's) names the model by
+  the share's link, not by the model's id on the computer it was shared from, which means nothing to an agent on
+  another: `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>`, with one line for the agent after what
+  the person wrote, ``This model is shared at <origin>/<id>: run `cad fork <origin>/<id>` to get its files, then work
+  on them.`` (`sharePromptSubject`, the host's `promptSubject`). A 404 says
   "This shared model has expired or was deleted.", and that a share lasts 7 days after it was last shared, so
   whoever shared it can share it again; a manifest that does not open or is not one, or a file not as it
   says, says the link is damaged; a bundle it does not read says so; anything else (no network, a refusal, a
@@ -363,8 +364,7 @@ temporary fixtures and a private server/cache, then, with that engine stopped, a
 bundle it exported, opened from a plain static file server (the model on screen, a face's
 facts, read-only parameters, and no request for `/api/`), and the model `cad share` shared, then shared
 again unchanged (the same link, no file sent again), opened from the share service's own Worker under its
-content security policy (viewed, its packs served immutable, the files that made it a link to their zip; an
-unknown id gone; deleted, then gone; with
+content security policy (viewed, its packs served immutable; an unknown id gone; deleted, then gone; with
 no request off the origin and the secret in the DELETE's header alone); it runs exactly what CI runs
 (picking and kinematics run on every PR in the `packages/ui` browser specs).
 `--only format|camera|bundle|share` runs one gate, and `--out /tmp/viewer-review` retains

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { CadViewer, createCadFileSource } from '@cad/ui/cad-viewer';
-import { createLiveRegistry, type ViewerHost } from '@cad/ui/host';
+import { createLiveRegistry, type PromptSubject, type ViewerHost } from '@cad/ui/host';
 import type { Appearance, TabStore } from '@cad/ui/tab-store';
 import type { CadViewBundleClient } from '@cad/core/client';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
@@ -22,9 +22,12 @@ const NOWHERE = () => {};
  * ports that need no engine: the clipboard (Quick Edit's Copy), this build's links, the tab's appearance and
  * the person's language, kept in this browser (`host/browserLanguage.js`). Everything the engine answered
  * is left out where the viewer reads it: the client has no exports, no parameters to save or preview and no
- * next version, and the host no file actions, no prompt files, no Telemetry and no What's new.
+ * next version, and the host no file actions, no prompt files, no Telemetry and no What's new. Where a prompt
+ * from the page must name the document otherwise than the view does (a share's, by its link), `promptSubject`
+ * says how: the host's.
  */
-export default function BundleApp({ client, tabStore, language: chosenLanguage = null }: { client: CadViewBundleClient; tabStore: TabStore; language?: string | null }) {
+export default function BundleApp({ client, tabStore, language: chosenLanguage = null, promptSubject }: { client: CadViewBundleClient; tabStore: TabStore;
+  language?: string | null; promptSubject?: PromptSubject }) {
   const files = useMemo(() => createCadFileSource(client, { id: 'view-bundle' }), [client]);
   const sayRef = useRef<(key: string, params?: Record<string, unknown>) => string>(english);
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
@@ -42,9 +45,9 @@ export default function BundleApp({ client, tabStore, language: chosenLanguage =
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   sayRef.current = translator(locale);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files, clipboard: browserClipboard, promptContext, links,
+    files, clipboard: browserClipboard, promptContext, links, ...(promptSubject ? { promptSubject } : {}),
     environment: { colorScheme: appearance.colorScheme, locale, platform: keyboardPlatform() },
-  }), [files, promptContext, links, appearance.colorScheme, locale]);
+  }), [files, promptContext, links, promptSubject, appearance.colorScheme, locale]);
   return <div className="fixed inset-0 flex flex-col overflow-hidden">
     <div className="isolate min-h-0 flex-1">
       <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={client.file} name={name} onShow={NOWHERE}

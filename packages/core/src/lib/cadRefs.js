@@ -84,12 +84,16 @@ export function parseCadRefToken(copyText) {
   };
 }
 
-export function buildCadRefToken({ cadPath = "", selector = "", selectors } = {}) {
+/**
+ * `<prefix>#<selectors>`. `engine`: whether the selectors are spelled in the engine's grammar; by default, where
+ * the prefix names a document the engine draws (`isEngineRefFile`).
+ */
+export function buildCadRefToken({ cadPath = "", selector = "", selectors, engine } = {}) {
   const prefix = String(cadPath || "").trim();
   const given = selectors !== undefined ? selectors : selector ? [selector] : [];
   // An engine document's selectors keep their order (`select` answers one shape per selector, in
   // order), and a comma inside a quoted label never splits one.
-  const selectorList = isEngineRefFile(prefix) ? engineSelectorList(given) : labelSelectorList(given);
+  const selectorList = (engine ?? isEngineRefFile(prefix)) ? engineSelectorList(given) : labelSelectorList(given);
   // `<prefix>#` with no selectors is meaningful -- it names a whole file.
   const encodedPrefix = /[\s#"\\]/.test(prefix) ? JSON.stringify(prefix) : prefix;
   return `${encodedPrefix}#${selectorList.join(",")}`;
