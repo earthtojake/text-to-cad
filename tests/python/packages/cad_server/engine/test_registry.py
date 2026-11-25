@@ -265,7 +265,8 @@ class RegistryDaemonTest(unittest.TestCase):
         self.assertEqual((record["kind"], record["home"], Path(record["root"])), ("model", "parts.py", project))
         # What a restart needs and no more: no closure (the document's own), no versions, no stamps,
         # no command (always `cad run` of its home), no record of the files it declared.
-        self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "revision", "built", "created", "facts", "namespace", "name", "fingerprint", "module", "declares"})
+        # Every model writes its .xbf, which its record names (``saved``).
+        self.assertEqual(set(record), {"schema", "id", "kind", "root", "home", "entry", "revision", "built", "created", "facts", "namespace", "name", "fingerprint", "module", "declares", "saved"})
         self.assertEqual(record["declares"], [], "the explicit names its script declares: none")
         self.assertEqual((record["namespace"], record["name"]), (str(project), "cube"))
         self.assertEqual(record["created"], record["built"], "a first build is when the model was created")

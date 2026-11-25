@@ -73,7 +73,6 @@ people who print or order the parts). A `.gitignore` beside `src/`:
 /3MF/
 /DXF/
 /tmp/
-/src/**/*.xbf
 __pycache__/
 ```
 

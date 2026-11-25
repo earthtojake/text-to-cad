@@ -3,7 +3,7 @@
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
 `@model` declares a model and its `.xbf`, `<name>.xbf` beside the script unless given a path
-(`@model("….xbf")`); the file decorators (`@step` and the others) declare its other files, and stack
+(`@model("….xbf")`); the file decorators (`@step` and the others) declare its other files, alone or
 with it (**A file decorator's path is optional**); declared by `@step` alone, a model still writes
 `<name>.xbf`. A declaration does no work. Call the
 function explicitly to build it:

@@ -213,20 +213,24 @@ class RootExports(unittest.TestCase):
 
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
         """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``, ``@model('….xbf')``:
-        the ``.xbf`` each run saves it as) and the shape form (``model(shape, name=, animations=)``, which
-        declares no file); a file decorator takes its path and its
-        name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is derived; no
-        ``store=``: every document is kept alike."""
+        the ``.xbf`` each run saves it as) and the shape form (``model(shape, name=, animations=)``, or
+        ``model('….xbf', shape=, name=)`` with a path: saved as its ``.xbf`` there or as ``<name>.xbf``); its first
+        positional is ``out``, as every file decorator's is, so a path given twice is Python's own refusal; a file
+        decorator takes its path and its name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is
+        derived; no ``store=``: every document is kept alike."""
         import inspect
 
         for declare in (cad.engine.model.model, cad.model.__call__):
             parameters = inspect.signature(declare).parameters
             self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
-                ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
-                ("out", inspect.Parameter.KEYWORD_ONLY), ("animations", inspect.Parameter.KEYWORD_ONLY)])
-            with self.assertRaisesRegex(TypeError, r"model\(shape, name=\.\.\.\) takes no path: .* export the document "
-                                                   r"it returns"):
-                declare(object(), name="arm", out="arm.xbf")
+                ("out", inspect.Parameter.POSITIONAL_OR_KEYWORD), ("name", inspect.Parameter.KEYWORD_ONLY),
+                ("shape", inspect.Parameter.KEYWORD_ONLY), ("animations", inspect.Parameter.KEYWORD_ONLY)])
+            with self.assertRaisesRegex(TypeError, r"got multiple values for argument 'out'"):
+                declare("a.xbf", out="b.xbf")
+            # A shape handed over takes its .xbf's path as a declaration does, checked as every one is.
+            with self.assertRaisesRegex(ValueError, r"model\(out, shape=\.\.\., name=\.\.\.\): the file must end in "
+                                                    r"\.xbf, not 'arm\.step'"):
+                declare("arm.step", shape=object(), name="arm")
         for kind in ("step", "glb", "stl", "threemf", "dxf"):
             with self.subTest(kind=kind):
                 self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),

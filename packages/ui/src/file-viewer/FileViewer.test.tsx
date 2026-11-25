@@ -102,7 +102,7 @@ it("ends the stand-in panel in the panel's foot from a document page's first fra
   const frame = document.querySelector<HTMLElement>('aside[data-panel-loading]')!;
   expect([foot()!.parentElement === frame, frame.lastElementChild === foot(), foot()!.previousElementSibling!.className.includes('flex-1'),
     [...foot()!.querySelectorAll('[data-app-foot-links] a')].map(link => link.getAttribute('aria-label')), within(foot()!).getByRole('button', { name: 'Settings' }) !== null,
-    screen.queryByRole('button', { name: 'Menu' })]).toEqual([true, true, true, ['GitHub', 'Discord', 'X', 'Send feedback'], true, null]);
+    screen.queryByRole('button', { name: 'Menu' })]).toEqual([true, true, true, ['GitHub', 'Discord', 'Send feedback'], true, null]);
   cleanup();
   // No home: the same links are the logo's menu's, so the panel has no foot.
   render(<FileViewer file={ID} host={pending as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);

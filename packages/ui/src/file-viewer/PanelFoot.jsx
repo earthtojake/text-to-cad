@@ -28,7 +28,7 @@ const FOOT_STYLE = Object.freeze({ padding: "8px calc(var(--panel-inset) - (var(
 /**
  * The foot, for a panel's surface (`PanelSurface`'s `foot`): one row under a hairline rule that runs the panel's full
  * width, pinned under the panel's content while it scrolls. At its left, the host's links out, each an icon tile with
- * its name in a hint: GitHub, Discord and X (each only where the host gives that link), then Send feedback; a press
+ * its name in a hint: GitHub and Discord (each only where the host gives that link), then Send feedback; a press
  * follows the link as the app menu's item does (`useOutwardLinks`: the host's `links.open` where it has one, Send
  * feedback counted). At its right corner, the cog, Settings, which opens the app's menu upward with what is left of it
  * (`AppMenu`, `outward: false`): Language, the host's switches, Theme, and the version and who made it. In a panel
@@ -43,7 +43,7 @@ export function PanelFoot() {
 function Foot({ menu }) {
   const { t } = useI18n();
   const out = useOutwardLinks(menu.links, menu.platform);
-  const links = [out.github, out.discord, out.x, out.feedback].filter(Boolean);
+  const links = [out.github, out.discord, out.feedback].filter(Boolean);
   const settings = t("menu.settings");
   return <div className="flex shrink-0 items-end gap-1 border-t border-border" style={FOOT_STYLE} data-app-foot="">
     <div className="flex min-w-0 flex-1 flex-wrap-reverse gap-0.5" data-app-foot-links="">

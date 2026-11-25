@@ -2,12 +2,12 @@ import { MessageCircle } from "lucide-react";
 import { useI18n } from "@cad/ui/i18n";
 
 import { useControlUsage } from "../../usage/controls.js";
-import { DiscordMark, GitHubMark, XMark } from "./brandMarks.jsx";
+import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
 import { issueUrl } from "./links.js";
 
 /**
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
- * them: Send feedback (`feedbackUrl`), GitHub, Discord and X (`useOutwardLinks`), which are icons in the panel's foot
+ * them: Send feedback (`feedbackUrl`), GitHub and Discord (`useOutwardLinks`), which are icons in the panel's foot
  * (`../PanelFoot.jsx`: the bottom of the sidebar, on the home and over a document) and, in a host with no home, items
  * of the app menu the logo opens (`AppMenu.jsx`); and in the app menu's footer the version (its release notes). Every link opens the host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser).
@@ -46,7 +46,7 @@ export function feedbackUrl(links, platform) {
  * such link.
  * @param {import("../../host/types.js").ViewerLinks | undefined} links
  * @param {string} [platform] The host's `environment.platform`, which Send feedback names.
- * @returns {Record<"github" | "discord" | "x" | "feedback", { id: string, label: string, href: string,
+ * @returns {Record<"github" | "discord" | "feedback", { id: string, label: string, href: string,
  *   Icon: import("react").ComponentType<any>, onClick(event: import("react").MouseEvent): void } | null>}
  */
 export function useOutwardLinks(links, platform) {
@@ -58,7 +58,6 @@ export function useOutwardLinks(links, platform) {
   return {
     github: link("github", "GitHub", links?.github, GitHubMark),
     discord: link("discord", "Discord", links?.discord, DiscordMark),
-    x: link("x", "X", links?.x, XMark),
     feedback: link("feedback", t("menu.feedback"), links ? feedbackUrl(links, platform) : "", MessageCircle),
   };
 }

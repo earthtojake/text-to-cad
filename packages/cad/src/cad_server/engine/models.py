@@ -505,7 +505,7 @@ class Models:
         return {"done": done}
 
     def _save(self, path: Any, data: bytes, parts: int, of: tuple[str, str]) -> bool:
-        """A shape handed over from a script is saved as ``<name>.xbf`` beside it (``api.hand_over``: law 10), which
+        """A shape handed over is saved as its ``.xbf`` (``api.hand_over``: law 10; ``saved``, the path it names), which
         the engine writes, as a build's own ``.xbf`` is, only where it differs or is missing, and records as it
         records a build's (``written``: its parts' count and ``of``, the shape's id and revision), so a listing shows
         the shape and its file as one card (``recents.fold``). Whether it was written or kept: a path that is none, or a
@@ -516,6 +516,7 @@ class Models:
         from cad.engine.atomic_replace import put
 
         try:
+            found.parent.mkdir(parents=True, exist_ok=True)
             put(found, lambda temporary: temporary.write_bytes(data), compare=True)
         except OSError:
             return False

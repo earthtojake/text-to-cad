@@ -266,7 +266,7 @@ it("ends in the panel's foot where the host has a home, pinned, peeking or a pho
       cog: within(foot()!).getByRole('button', { name: 'Settings' }).getAttribute('aria-haspopup'),
     };
   };
-  const whole = { after: 'scroll-area', scrolled: false, ruled: true, padded: false, sticky: [true, true, true], links: ['GitHub', 'Discord', 'X', 'Send feedback'], cog: 'menu' };
+  const whole = { after: 'scroll-area', scrolled: false, ruled: true, padded: false, sticky: [true, true, true], links: ['GitHub', 'Discord', 'Send feedback'], cog: 'menu' };
   expect(placed()).toEqual(whole);
   // Docked, it is the panel's last block before its grip; in a peek, inside the card's clipped content, with no grip.
   expect(foot()!.nextElementSibling?.hasAttribute('data-panel-grip')).toBe(true);

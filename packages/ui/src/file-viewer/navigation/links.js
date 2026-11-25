@@ -11,7 +11,6 @@
  */
 
 export const TEXT_TO_CAD_LINKS = Object.freeze({
-  x: "https://x.com/earthtojake",
   github: "https://github.com/earthtojake/text-to-cad",
   discord: "https://discord.gg/5FGB9DwJYU",
   issues: "https://github.com/earthtojake/text-to-cad/issues/new"
@@ -98,19 +97,18 @@ function cut(text, length) {
  * @param {object} options
  * @param {string} options.version The version this host runs.
  * @param {string} [options.build] The id of a custom build of it; "" (the release's own build) for none.
- * @param {string} [options.x]
  * @param {string} [options.github]
  * @param {string} [options.discord]
  * @param {string} [options.issues] Where a new issue is opened; "" offers none.
  * @param {string} [options.release] This version's release notes; by default its tag on `github`.
  * @param {(url: string) => Promise<void>} [options.open]
  */
-export function viewerLinks({ version, build = "", x = TEXT_TO_CAD_LINKS.x, github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
+export function viewerLinks({ version, build = "", github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
   issues = TEXT_TO_CAD_LINKS.issues, release, open } = {}) {
   const bare = releaseVersion(version);
   const custom = String(build ?? "").trim();
   return {
-    version: bare && custom ? `${bare}-dev.${custom}` : bare, x, github, discord, issues,
+    version: bare && custom ? `${bare}-dev.${custom}` : bare, github, discord, issues,
     release: release || releaseNotesUrl(github, bare),
     ...(open ? { open } : {})
   };

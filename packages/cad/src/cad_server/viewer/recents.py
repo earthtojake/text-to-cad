@@ -24,19 +24,17 @@ engine wrote (a build's declared file, an export) from the document it wrote it 
 nothing is read to count them, a model's script never, a file's bytes never.
 
 An ``.xbf`` the engine wrote from a model's document -- the build's own (every model writes one), a shape's handed
-over from a script, an export of the model's id -- is that model, and a listing shows one card of them (``fold``): its record names the model, the
+over, an export of the model's id -- is that model, and a listing shows one card of them (``fold``): its record names the model, the
 file's version as written and the document's revision (``of``: ``Models.written``), and while the file is still
 that version and the model's record still that revision, the file's row says whose it is (``of``) and is left out of
 any list that holds the model's row (``fold``). A file edited or copied since, or one whose model was built into
 another revision since (an export the build did not write again: an older model now), is a file of its own. A
 model's (or a shape's) row says where its own ``.xbf`` is (``saved``) while that file is the model so.
 
-The pictures are bounded however often a document is edited: a record names one, a new picture
-replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
-the ``LIMIT`` records the home lists first keep theirs, within ``THUMBNAIL_BYTES`` in all (the rest,
-least recently used first, lose theirs, which a page takes again when it shows them), a forgotten
-record's go with it (``Registry.delete``), and a PNG no record names goes once no writer can still be
-about to name it (``THUMBNAIL_GRACE_SECONDS``: a crash's, or an earlier release's). Removing a file's entry forgets its record, the file
+A record keeps its picture until the record is removed or the picture replaced, however many records there are and
+however often a document is edited: a record names one, a new picture replaces it at once (``RecentStore.thumbnail``:
+the old one goes as the new is named), a forgotten record's go with it (``Registry.delete``), and a PNG no record names
+goes once no writer can still be about to name it (``THUMBNAIL_GRACE_SECONDS``: a crash's, or an earlier release's). Removing a file's entry forgets its record, the file
 untouched; a model's entry is deleted with its document (``cad_server.engine.models.delete``: its record
 and its document in the engine's cache). Nothing goes on its own: a model whose script is gone stays
 listed, ``missing``, until the person deletes it.
@@ -64,11 +62,9 @@ from cad.engine.places import cache_dir, state_dir
 from cad_server.engine.registry import PICTURES as THUMBNAILS
 from cad_server.engine.registry import file_record, pictures
 
+# The most rows Recents lists.
 LIMIT = 200
 MAX_THUMBNAIL_BYTES = 512 * 1024
-# Every picture kept, in all: the ``LIMIT`` records' first, until this is reached (a board's pair is
-# about 250 KB, a part's one picture a few tens).
-THUMBNAIL_BYTES = 64 * 1024 * 1024
 THUMBNAIL_GRACE_SECONDS = 600
 
 
@@ -125,6 +121,9 @@ class Recent:
     written: str | None = None
     revision: str | None = None
     saved: str | None = None
+    # A file's: the path a page last reached it by, where that is not its canonical path (a file in a linked folder):
+    # the project it is in is the one it was reached in (``projects.Projects.holding``).
+    reached: str | None = None
 
     @property
     def activity(self) -> float:
@@ -228,7 +227,7 @@ class RecentStore:
 
     # -- writes ----------------------------------------------------------------
 
-    def opened(self, path: str) -> dict | None:
+    def opened(self, path: str, reached: str | None = None) -> dict | None:
         """A CAD file opened on a page: its record, opened now, and made now (``created``) when it had
         none. A model's id: its record (the engine's, written by its run) says when a page opened it,
         and nothing else of it changes. The record as it is now: None for an id no document has."""
@@ -243,10 +242,13 @@ class RecentStore:
             # Where it is now, as its record says it (``root``, ``home``): one an earlier release wrote is
             # said again as this one says it. Made now (``created``) where no page opened it before: a new
             # record, or one the home's picture made. A record from before ``created`` was kept stays without.
-            made = file_record(found)
+            # The path it was reached by, where that is not where it is (``reached``: a linked folder's): the page's,
+            # else the one the caller knows (a project's walk), else the one its record keeps.
+            made = _reached(_reached(file_record(found), reached) if reached else file_record(found), path)
             first = record is None or not record.get("opened")
             return {**made, **({"created": now} if first else {}), **(record or {}),
-                    **{key: made[key] for key in ("root", "home", "namespace", "name")}, "opened": now}
+                    **{key: made[key] for key in ("root", "home", "namespace", "name")},
+                    **({"reached": made["reached"]} if "reached" in made else {}), "opened": now}
 
         return self.registry.update(file_id(found), change)
 
@@ -280,7 +282,9 @@ class RecentStore:
             if record is None:
                 if not make or is_id(path) or not _cad_file(path):
                     return None
-                record = file_record(path)
+                from cad.engine.ids import canonical
+
+                record = _reached(file_record(canonical(path)), path)
             before.update(pictures(record))
             if not (self.thumbnails / name).exists():
                 self.state.write(f"{THUMBNAILS}/{name}", png)
@@ -333,6 +337,7 @@ class RecentStore:
                                       of=of.get("id") if version and of.get("version") == version
                                       and isinstance(of.get("id"), str) else None,
                                       written=of.get("revision") if isinstance(of.get("revision"), str) else None,
+                                      reached=_still(record.get("reached"), path),
                                       **common))
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
@@ -350,44 +355,19 @@ class RecentStore:
         return _linked(entries)
 
     def _sweep_thumbnails(self, replaced: set[str] | frozenset[str] = frozenset()) -> None:
-        """The pictures held to their bound (the module): the pictures of the ``LIMIT`` records used
-        most recently (pinned first, then by when they were last opened, built or pictured) are kept
-        while they fit in ``THUMBNAIL_BYTES``, and every other record's are taken off it and removed;
-        ``replaced`` (a record's pictures a new one replaced) go now; any other picture no record
-        names goes once it is old enough that no writer can still be about to name it (a writer saves
-        the PNG, then writes its record)."""
-        ranked = sorted((record for record in self.registry.list() if pictures(record)),
-                        key=lambda record: (not record.get("pinned"), -_used(record)))
-        kept: set[str] = set()
-        gone = set(replaced)
-        total = 0
-        for rank, record in enumerate(ranked):
-            names = pictures(record)
-            size = sum(self._size(name) for name in names - kept)
-            if rank < LIMIT and total + size <= THUMBNAIL_BYTES:
-                kept |= names
-                total += size
-                continue
-            preview = record.get("preview")
-            self.registry.update(record["id"], lambda found, preview=preview: (
-                {key: value for key, value in found.items() if key != "preview"}
-                if found is not None and found.get("preview") == preview else None))
-            gone |= names
+        """The pictures no record names any more removed (the module): ``replaced`` (a record's pictures a new one
+        replaced) now, and any other picture no record names once it is old enough that no writer can still be about
+        to name it (a writer saves the PNG, then writes its record). Every picture a record names is kept."""
+        kept = {name for record in self.registry.list() for name in pictures(record)}
         cutoff = time.time() - THUMBNAIL_GRACE_SECONDS
         for name in self.state.names(THUMBNAILS):
             if not name.endswith(".png") or name in kept:
                 continue
             try:
-                if name in gone or (self.thumbnails / name).stat().st_mtime < cutoff:
+                if name in replaced or (self.thumbnails / name).stat().st_mtime < cutoff:
                     self.state.remove(f"{THUMBNAILS}/{name}")
             except OSError:
                 continue
-
-    def _size(self, name: str) -> int:
-        try:
-            return (self.thumbnails / name).stat().st_size
-        except OSError:
-            return 0
 
 
 def _linked(entries: list[Recent]) -> list[Recent]:
@@ -431,6 +411,26 @@ def fold(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [row for row in rows if not folded(row)]
 
 
+def _reached(record: dict[str, Any], path: str) -> dict[str, Any]:
+    """A file's ``record`` with the path a page named it by (``reached``: absolute, as spelled, not resolved), where
+    that is not the canonical path the record is of: a file reached through a linked folder."""
+    given = os.path.normpath(os.path.abspath(path))
+    where = os.path.join(record["root"], record["home"])
+    return {**record, "reached": given} if os.path.normcase(given) != os.path.normcase(where) else record
+
+
+def _still(reached: Any, path: str) -> str | None:
+    """A record's ``reached`` while it still reaches the file at canonical ``path`` (the link is there); else None."""
+    from cad.engine.ids import canonical
+
+    if not isinstance(reached, str):
+        return None
+    try:
+        return reached if os.path.normcase(canonical(reached)) == os.path.normcase(path) else None
+    except (OSError, ValueError):
+        return None
+
+
 def _cad_file(path: str) -> bool:
     """Whether ``path`` is a CAD file there now, of a type every view opens."""
     from .scanner import VIEWER_EXTENSIONS, extension_of
@@ -444,10 +444,3 @@ def _picture_name(ident: str, png: bytes) -> str:
     digest = hashlib.sha256(f"{ident}\0".encode("utf-8"))
     digest.update(png)
     return digest.hexdigest()[:32] + ".png"
-
-
-def _used(record: dict) -> float:
-    """When a record was last used, as far as its record says: opened, built or pictured."""
-    preview = record.get("preview") if isinstance(record.get("preview"), dict) else {}
-    times = (record.get("opened"), record.get("built"), preview.get("pictured"))
-    return max((float(value) for value in times if isinstance(value, (int, float)) and not isinstance(value, bool)), default=0.0)

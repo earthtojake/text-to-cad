@@ -60,33 +60,29 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual([path.name for path in store.thumbnails.iterdir()], [kept.thumbnail])
         self.assertEqual(store.read_thumbnail(kept.thumbnail), b"\x89PNG light 20")
 
-    def test_only_the_most_recently_used_entries_keep_pictures_and_an_orphan_goes_once_old(self) -> None:
-        from unittest import mock
-
+    def test_every_record_keeps_its_picture_however_many_and_an_orphan_goes_once_old(self) -> None:
         from cad_server.viewer import recents
 
         store = RecentStore(self.tmp)
-        paths = [str(self.tmp / f"{index}.step") for index in range(4)]
+        paths = [str(self.tmp / f"{index}.step") for index in range(recents.LIMIT + 5)]
         for index, path in enumerate(paths):
             store.opened(path)
             store.registry.update(store._ident(path), lambda record, at=index: {**record, "opened": 1_700_000_000.0 + at})
-        store.pin(paths[0], True)  # the oldest, pinned: kept first
         # A crash's picture no record names: kept while a writer could still name it, then gone.
         orphan = store.thumbnails / ("f" * 32 + ".png")
-        with mock.patch.object(recents, "LIMIT", 2):
-            for path in paths:
-                store.thumbnail(path, b"\x89PNG " + path.encode())
-                orphan.parent.mkdir(parents=True, exist_ok=True)
-                orphan.write_bytes(b"\x89PNG orphan")
-            self.assertTrue(orphan.exists())
-            old = time.time() - 3600
-            os.utime(orphan, (old, old))
-            store.thumbnail(paths[3], b"\x89PNG again")
-        shown = {os.path.basename(entry.path): entry.thumbnail for entry in store.list()}
-        # Pinned 0, then 3 (pictured last); 1 and 2 lose theirs, which a page takes again.
-        self.assertEqual({name for name, picture in shown.items() if picture}, {"0.step", "3.step"})
-        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()),
-                         sorted([shown["0.step"], shown["3.step"]]))
+        for path in paths:
+            store.thumbnail(path, b"\x89PNG " + path.encode() + b" " + b"\0" * 4096)
+            orphan.parent.mkdir(parents=True, exist_ok=True)
+            orphan.write_bytes(b"\x89PNG orphan")
+        self.assertTrue(orphan.exists())
+        old = time.time() - 3600
+        os.utime(orphan, (old, old))
+        store.thumbnail(paths[3], b"\x89PNG again")
+        # No count and no total bound: every record, listed in Recents or past its rows, keeps its picture.
+        named = {store.registry.get(store._ident(path))["preview"]["thumbnail"] for path in paths}
+        self.assertEqual(len(named), len(paths))
+        self.assertEqual(sorted(path.name for path in store.thumbnails.iterdir()), sorted(named))
+        self.assertEqual(len(store.list()), recents.LIMIT, "Recents lists its rows, its pictures aside")
 
     def test_an_earlier_release_s_dark_picture_is_not_listed_and_goes_once_old(self) -> None:
         # An earlier release kept a board's dark theme's picture beside its light one. The light one is

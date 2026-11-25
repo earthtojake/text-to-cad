@@ -85,9 +85,9 @@ choice belongs in the tab record.
 The home's card pictures are not browser storage: the page draws one when a file's view settles
 (`useModelThumbnail`, once per revision) and hands it to the server, which keeps it in the state
 folder (`cad_server/viewer/recents.py`). They are bounded however often a file is edited: an entry
-keeps at most one picture, and a board one per theme, each replaced in place by the next; only the
-200 entries the home lists first keep theirs, within 64 MiB in all, least recently used out first;
-an entry removed or deleted takes its pictures with it. The page asks for a picture by its name
+keeps at most one picture, and a board one per theme, each replaced in place by the next; every
+entry keeps its picture, with no count or total bound, until it is removed or deleted, which takes its pictures
+with it. The page asks for a picture by its name
 (`?v=`), so a new picture is never hidden by an older one in a cache.
 
 ## Projects

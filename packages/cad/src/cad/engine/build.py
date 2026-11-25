@@ -490,7 +490,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     differs runs on every call for the worker's life (``memo.always``)."""
     from cad.engine import parameters, previous
     from cad.engine.kernel import determinism, memo
-    from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, collisions, models_in
+    from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, models_in
 
     script = Path(script).resolve()
     if not script.is_file():
@@ -571,11 +571,6 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
         context.base = script.parent
         context.script = script
         models = models_in(vars(module), script)
-        try:
-            # Two models of this load whose default files are one file: neither is written.
-            collisions(_MODELS.values())
-        except ValueError as error:
-            return [{"ok": False, "model": f"{shown}", **_failed(error)}]
         # The explicit names the script declares now, what its run tells the engine (``identity.released``).
         own, declared = set(models), sorted({model.explicit_name for model in models if model.explicit_name is not None})
         if functions:

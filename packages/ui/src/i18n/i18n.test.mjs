@@ -108,12 +108,12 @@ test("the words the viewer's tools once spelled in English are the dictionaries'
   }
 });
 
-test("every key is said in every language: a value left as English is a language's own name, or no words", () => {
+test("every key is said in every language: a value left as English is a language's own name, a format's, or no words", () => {
   // The guard that no view spells English itself is `scripts/test/check-ui-strings.mjs`, run with
   // every JS suite; this half holds the dictionaries to it, so a key copied across untranslated fails.
   for (const [locale, table] of Object.entries(TABLES)) {
     if (locale === DEFAULT_LOCALE) continue;
-    const untranslated = Object.keys(en).filter(key => table[key] === en[key] && !key.startsWith("language.")
+    const untranslated = Object.keys(en).filter(key => table[key] === en[key] && !key.startsWith("language.") && !key.startsWith("format.")
       && /[A-Za-z]{2,}/.test(String(en[key]).replace(/\{\w+\}/g, "").replace(/\bID\b/g, "")));
     assert.deepEqual(untranslated, [], `${locale} leaves these in English`);
   }

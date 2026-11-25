@@ -3,8 +3,8 @@
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
 A model is a parameterless function that returns a build123d shape, declared by the files it
-declares, which stack, each adding its file: `@model`, the `.xbf` it is saved as, and a file decorator
-for any other; one kind twice is refused. A path is optional on each: omitted, it is the model's name
+declares: `@model`, the `.xbf` it is saved as, or a file decorator for any other, alone or combined, one
+kind once. A path is optional on each: omitted, it is the model's name
 (`name=`, else the function's) and the format's extension beside the script. The engine runs it in a warm
 worker, holds the result as an XCAF document in memory, writes it as its BinXCAF file, its `.xbf` (at
 `@model`'s path, else beside the script: every model writes one, a model declared by a file decorator alone too),
@@ -17,7 +17,7 @@ from cad import step, model
 import build123d as bd
 
 @model                    # each run saves it as arm.xbf beside the script; @model("XBF/arm.xbf") elsewhere
-@step("STEP/arm.step")    # also @glb, @stl, @threemf, @dxf; stacked or alone; bare, arm.step; name= optionally names the model
+@step("STEP/arm.step")    # also @glb, @stl, @threemf, @dxf; alone or combined; bare, arm.step; name= optionally names the model
 def arm():
     return bd.Box(10, 20, 30)
 

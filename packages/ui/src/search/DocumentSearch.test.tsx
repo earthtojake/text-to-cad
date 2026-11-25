@@ -76,11 +76,11 @@ it("opens as a dialog with the keyboard in its input, reads the library as it op
   expect([source.thumbnail.mock.calls.length, options()[1].querySelector('[data-search-picture] img')]).toEqual([1, null]);
 });
 
-it("says a document built from code is a Model where its parts are not known, and a file its format, in the project on screen", async () => {
+it("says a document built from code is an XBF where its parts are not known, and a file its format, in the project on screen", async () => {
   const user = userEvent.setup();
   render(<Page source={library()} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive' } }} />);
   await openSearch(user);
-  expect(groups()).toEqual([['In drive', [['actuator', 'Model'], ['gear.step', 'On screen'], ['shaft.stl', 'STL']]]]);
+  expect(groups()).toEqual([['In drive', [['actuator', 'XBF'], ['gear.step', 'On screen'], ['shaft.stl', 'STL']]]]);
 });
 
 it("says a model is a Part when its document holds one part and an Assembly when it holds more, an xbf too; a file of another format keeps its format", async () => {
@@ -91,7 +91,7 @@ it("says a model is a Part when its document holds one part and an Assembly when
   render(<Page source={library({ projects: vi.fn(async () => projects) })} current={{ id: GEAR.id, path: GEAR.path, project: { id: 'p1', name: 'drive' } }} />);
   await openSearch(user);
   expect(groups()).toEqual([['In drive', [['bracket', 'Part'], ['gearbox', 'Assembly'], ['hinge.xbf', 'Assembly'], ['pin.xbf', 'Part'],
-    ['unread.xbf', 'Model'], ['gear.step', 'On screen'], ['pair.step', 'STEP']]]]);
+    ['unread.xbf', 'XBF'], ['gear.step', 'On screen'], ['pair.step', 'STEP']]]]);
 });
 
 it("finds as the home does, the project on screen's first; elsewhere a row says its project, or Standalone, and the words found are lit", async () => {

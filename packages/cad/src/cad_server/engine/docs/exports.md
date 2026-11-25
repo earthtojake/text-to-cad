@@ -213,19 +213,18 @@ samplers shared, above). A sparsely keyed eased bake (a small model's) can take 
 than it had CUBICSPLINE ones, each a third the bytes.
 
 **A file decorator's path is optional.** `@model` declares the native document, the `.xbf`
-the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations. They stack,
-each adding its file, and one kind twice on a model is refused. A model always writes its `.xbf`, whatever
-declares it (`Model.files`). A path given, positionally or `out=`
+the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations, and each declares a
+model on its own. Any may be combined, each adding its file, one kind once. A model always writes its `.xbf`,
+whatever declares it (`Model.files`). A path given, positionally or `out=`
 (`@model("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
 `@step()`, `@glb(tolerance=0.1)`) the file is the model's name -- `name=`, else its function's -- and
 the format's extension beside the script (`Model.plan`): bare `@model` on `arm` writes `arm.xbf`, a
-model declared by `@step` alone writes `arm.step` and `arm.xbf`. A shape handed over (`model(shape,
-name=...)`) from a script writes `<name>.xbf` beside it once the engine holds it, only where it differs or is
-missing; from a REPL or a notebook, none (`api.hand_over`). Two models of a run whose files are one
-file, where either is a default -- two scripts of a folder each with a model `part`, one importing
-the other, or one model's `name=` another's function -- are refused before either builds, naming both
-(`model.collisions`, over every model the run's load defined); two paths given are their author's. Two
-scripts run apart are not compared: no record says what another declares (**Document lifetime**).
+model declared by `@step` alone writes `arm.step` and `arm.xbf`; a `name=` with a folder in it
+(`arms/left`) writes `arms/left.xbf`. A shape handed over (`model(shape, name=...)`) writes its `.xbf` at the path given
+(`model("crate.xbf", shape=shape, name=...)`), relative to the calling script, else `<name>.xbf` beside the
+script, or in a REPL's or a notebook's working folder, once the engine holds it, only where it differs or is missing
+(`api.hand_over`).
+Nothing compares the files two models write: two that write one file are their author's to tell apart.
 Beyond its path, an optional `name=` and a mesh's `tolerance=` and `angle=`, no file decorator
 takes anything else: a model's material, colours, joints, the pose its joints connect its parts at, its
 configurations, its motions and its animations are written in its body. Every declared file shows the model as

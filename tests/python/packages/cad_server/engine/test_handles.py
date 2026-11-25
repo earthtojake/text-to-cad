@@ -122,6 +122,8 @@ lift = animation(crate, "lift", duration=2).translation("lid", by=(0, 0, 10), en
 handle = model(crate, name="crate", animations=[lift])
 handle.export("crate.glb", "crate.step")
 tag = model(bd.Box(1, 1, 1), name="tag")
+model(bd.Box(2, 2, 2), name="spare/pin")  # its .xbf is <name>.xbf joined to the script's folder, whatever the name
+model("pegs/peg-v1.xbf", shape=bd.Box(1, 1, 3), name="peg")  # a path given: there, relative to the script
 print("RESULT " + json.dumps({"id": handle.id, "url": handle.url, "same": handle.shape is crate, "tag": tag.id}))
 """
 
@@ -336,6 +338,8 @@ class HandleTest(unittest.TestCase):
 
         self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "tag.xbf"])
         self.assertEqual(document.Loaded(project / "crate.xbf").structure()["name"], "crate")
+        self.assertTrue((project / "spare" / "pin.xbf").is_file())
+        self.assertEqual(((project / "pegs" / "peg-v1.xbf").is_file(), (project / "peg.xbf").exists()), (True, False))
         record = Registry(self.state).get(ident)
         self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
         self.assertEqual(set(record) - {"cache"}, {"schema", "id", "kind", "root", "home", "entry", "program",
@@ -363,10 +367,12 @@ class HandleTest(unittest.TestCase):
                       "its words, from its program")
         # From a REPL: the working folder is its scope.
         repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
-                               "h = model(bd.Box(2, 2, 2), name='scratch')\nprint('RESULT ' + json.dumps(h.id))\n")
+                               "h = model(bd.Box(2, 2, 2), name='scratch')\nmodel('kept/kept.xbf', shape=bd.Box(1, 1, 1), name='kept')\n"
+                               "print('RESULT ' + json.dumps(h.id))\n")
         self.assertEqual(repl, derived_id(project, "scratch"))
-        self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "tag.xbf"],
-                         "from a REPL, which has no script, nothing is written")
+        self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "scratch.xbf", "tag.xbf"],
+                         "from a REPL, which has no script, <name>.xbf in its working folder: no document without its file")
+        self.assertTrue((project / "kept" / "kept.xbf").is_file(), "and where a path is given, relative to that folder")
         # Exported by its id, as any document the engine holds; after a restart, from the cache.
         self.assertEqual(self.cli("export", ident, str(project / "again.stl")).returncode, 0)
         self.restart()

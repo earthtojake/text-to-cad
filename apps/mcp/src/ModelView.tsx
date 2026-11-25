@@ -33,7 +33,7 @@ export interface ViewReporter {
  * or with none, the home (the library, and Open) — under the navbar: its logo (the way home: a
  * button, as a page in an app's frame has no address), the panel's toggle, Back and Forward, the file's name and menus
  * (its ⋯: Copy path, and Open in › Browser and the file manager), and at the right the host's Full size. The links
- * (GitHub, Discord, X, Send feedback) and Settings (Language, Telemetry, Theme) are the foot of the sidebar, on the home
+ * (GitHub, Discord, Send feedback) and Settings (Language, Telemetry, Theme) are the foot of the sidebar, on the home
  * and over a document. A view shows what is opened in place, and adds what it
  * shows to the library. A page in an app's frame has no address of its own: a place on the home (Recents, Pinned, a
  * project's page, Standalone) is a step of the view's history, and a document's Open in browser is its page in the web

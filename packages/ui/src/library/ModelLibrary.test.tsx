@@ -198,10 +198,10 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
   expect(cells('plate.step')).toEqual([true, 'plate.step', ['kind', 'STEP'], ['size', '87 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
   // A model built from code is a Model with no size; its Created is its first run's; a record from before the time was kept
   // has an empty Created, and a file that is gone says so where its time on disk was.
-  expect(cells('arm')).toEqual([true, 'arm', ['kind', 'Model'], ['size', '—'], ['updated', '2h ago'], ['created', '2h ago']]);
+  expect(cells('arm')).toEqual([true, 'arm', ['kind', 'XBF'], ['size', '—'], ['updated', '2h ago'], ['created', '2h ago']]);
   expect(cells('gone.step')).toEqual([true, 'gone.step', ['kind', 'STEP'], ['size', '—'], ['updated', 'File unavailable'], ['created', '']]);
   // An xbf is the engine's own document saved as a file: a Model too, and still a file, with its size.
-  expect(cells('kit.xbf')).toEqual([true, 'kit.xbf', ['kind', 'Model'], ['size', '2 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
+  expect(cells('kit.xbf')).toEqual([true, 'kit.xbf', ['kind', 'XBF'], ['size', '2 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
   // A row's picture has no badge: its Kind says it. Its pin and ⋯ follow its button, at its end.
   expect(list.querySelector('.cad-library-format')).toBeNull();
   const row = screen.getByRole('button', { name: 'Open plate.step' }).closest('li')!;
@@ -397,7 +397,7 @@ it('takes an .xbf the server lists as a model\'s document (kind model, record fi
   const step = listed('rig.step', { kind: 'step', record: 'file', parts: 3 });
   expect([built, saved, step].map(item => [item.kind, item.documentKind, deletes(item), documentKind(item)]))
     .toEqual([['model', 'model', true, 'models'], ['file', 'model', false, 'models'], ['file', 'step', false, 'models']]);
-  const labels = { model: 'Model', part: 'Part', assembly: 'Assembly' };
+  const labels = { xbf: 'XBF', part: 'Part', assembly: 'Assembly' };
   expect([built, saved, step].map(item => formatLabel(item, labels))).toEqual(['Part', 'Assembly', 'STEP']);
   expect(sortDocuments([step, saved, built], 'kind').map(item => item.name)).toEqual(['arm', 'rig.xbf', 'rig.step']);
   const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': () => {}, 'copy-link': () => {}, reveal: () => {} } };
@@ -474,7 +474,7 @@ it('shows a model by its run and a file by its opening, whichever came last, eac
     model('arm', { path: id, kind: 'model', opened: null, updated: now - 2 * hour }),
     model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour }),
   ])} />);
-  expect((await screen.findByRole('button', { name: 'Open arm' })).textContent).toBe('ModelarmEdited 2h ago');
+  expect((await screen.findByRole('button', { name: 'Open arm' })).textContent).toBe('XBFarmEdited 2h ago');
   expect(screen.getByRole('button', { name: 'Open plate.step' }).textContent).toBe('STEPplate.stepViewed 5h ago');
 });
 
@@ -626,12 +626,12 @@ it("shows every card's light picture in both themes, never turned, and badges it
   expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png');
   expect(thumbnail.mock.calls.every(call => call.length === 1)).toBe(true);
   expect(['video.kicad_pcb', 'plate.dxf'].map(name => [picture(name).hasAttribute('data-drawing'), picture(name).hasAttribute('data-thumbnail-variant')])).toEqual([[false, false], [false, false]]);
-  expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'Model']);
+  expect(['video.kicad_pcb', 'plate.dxf', 'arm'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'XBF']);
 });
 
 // A model is named as desktop CAD names its own documents: a Part when its document holds one part, an Assembly when it
-// holds more, and a Model where the host does not know how many. A file of another format keeps its format's name.
-it('calls a model a Part or an Assembly by its parts, a Model where they are not known, and every other file by its format', async () => {
+// holds more, and by its format, XBF, where the host does not know how many. A file of another format keeps its format's name.
+it('calls a model a Part or an Assembly by its parts, XBF where they are not known, and every other file by its format', async () => {
   const id = (at: number) => `8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f1${at}`;
   const documents = [model('bracket', { path: id(1), kind: 'model', parts: 1 }), model('gearbox', { path: id(2), kind: 'model', parts: 12 }),
     model('sketch', { path: id(3), kind: 'model' }), model('crate', { path: id(4), kind: 'shape', parts: 2 }),
@@ -639,7 +639,7 @@ it('calls a model a Part or an Assembly by its parts, a Model where they are not
     model('hinge.xbf', { parts: 1 }), model('rig.xbf', { parts: 3 }), model('unread.xbf', { parts: null }),
     model('pair.step', { parts: 2 }), model('plate.stl', { parts: 1 })];
   const names = documents.map(item => item.name);
-  const said = ['Part', 'Assembly', 'Model', 'Assembly', 'Model', 'Part', 'Assembly', 'Model', 'STEP', 'STL'];
+  const said = ['Part', 'Assembly', 'XBF', 'Assembly', 'XBF', 'Part', 'Assembly', 'XBF', 'STEP', 'STL'];
   // On a card, its badge.
   render(<ModelLibrary library={library(documents)} />);
   await screen.findByRole('button', { name: 'Open bracket' });
@@ -651,9 +651,9 @@ it('calls a model a Part or an Assembly by its parts, a Model where they are not
   await screen.findByRole('button', { name: 'Open bracket' });
   expect(names.map(name => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column="kind"]')?.textContent)).toEqual(said);
   // Sorted by Kind, the models stay first, those built from code before the xbf files, each by what it is called.
-  const labels = { model: 'Model', part: 'Part', assembly: 'Assembly' };
+  const labels = { xbf: 'XBF', part: 'Part', assembly: 'Assembly' };
   expect(sortDocuments(documents, 'kind', item => formatLabel(item, labels)).map(item => item.name))
-    .toEqual(['crate', 'gearbox', 'empty', 'sketch', 'bracket', 'rig.xbf', 'unread.xbf', 'hinge.xbf', 'pair.step', 'plate.stl']);
+    .toEqual(['crate', 'gearbox', 'bracket', 'empty', 'sketch', 'rig.xbf', 'hinge.xbf', 'unread.xbf', 'pair.step', 'plate.stl']);
 });
 
 // A card's line is the age alone, a file's as a model's: a file's size, the server's, is the list's column.
@@ -1447,7 +1447,7 @@ async function settings(surface: HTMLElement) {
 }
 const menuRows = (menu: HTMLElement) => [...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent || item.getAttribute('aria-label'));
 
-it("ends its sidebar in a row of icons, pinned: the host's links at the left (GitHub, Discord, X, then Send feedback), each followed the host's way, and Settings' cog at the right, whose menu holds the settings alone", async () => {
+it("ends its sidebar in a row of icons, pinned: the host's links at the left (GitHub, Discord, then Send feedback), each followed the host's way, and Settings' cog at the right, whose menu holds the settings alone", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const opened: string[] = [];
   const home = page({ width: 1200, report: counts => reports.push(counts),
@@ -1459,16 +1459,16 @@ it("ends its sidebar in a row of icons, pinned: the host's links at the left (Gi
     expect([foot(side).parentElement === side, foot(side).previousElementSibling?.getAttribute('data-slot'), foot(side).closest('nav')]).toEqual([true, 'scroll-area', null]);
     // The links, in order, each an icon named for assistive technology and in a hint; then, apart, the cog.
     expect(footLinks(side).map(link => [link.getAttribute('aria-label'), link.getAttribute('data-link'), link.getAttribute('target'), link.querySelectorAll('svg').length, link.textContent]))
-      .toEqual([['GitHub', 'github', '_blank', 1, ''], ['Discord', 'discord', '_blank', 1, ''], ['X', 'x', '_blank', 1, ''], ['Send feedback', 'feedback', '_blank', 1, '']]);
+      .toEqual([['GitHub', 'github', '_blank', 1, ''], ['Discord', 'discord', '_blank', 1, ''], ['Send feedback', 'feedback', '_blank', 1, '']]);
     expect(footLinks(side).map(link => link.getAttribute('href')!.replace(/\?.*/, '')))
-      .toEqual(['https://github.com/earthtojake/text-to-cad', 'https://discord.gg/x', 'https://x.com/earthtojake', 'https://github.com/earthtojake/text-to-cad/issues/new']);
+      .toEqual(['https://github.com/earthtojake/text-to-cad', 'https://discord.gg/x', 'https://github.com/earthtojake/text-to-cad/issues/new']);
     expect([foot(side).lastElementChild === cog(side), cog(side).closest('[data-app-foot-links]'), cog(side).getAttribute('aria-haspopup'), cog(side).querySelectorAll('svg').length,
       [...footLinks(side), cog(side)].every(tile => tile.className.split(' ').includes('size-control'))]).toEqual([true, null, 'menu', 1, true]);
     await userEvent.setup().hover(footLinks(side)[1]);
     expect((await screen.findByRole('tooltip')).textContent).toBe('Discord');
     // A press follows the link as the app menu's item did: through the host where it opens links itself; Send feedback is counted.
     expect(fireEvent.click(footLinks(side)[0])).toBe(false);
-    expect(fireEvent.click(footLinks(side)[3])).toBe(false);
+    expect(fireEvent.click(footLinks(side)[2])).toBe(false);
     await waitFor(() => expect(opened.map(url => url.replace(/\?.*/, ''))).toEqual(['https://github.com/earthtojake/text-to-cad', 'https://github.com/earthtojake/text-to-cad/issues/new']));
     expect(new URL(opened[1]).searchParams.get('title')).toBe('Feedback: ');
     // The cog opens the app's menu with what is left: the person's settings and the version; no links, no way home, no search.
@@ -1484,7 +1484,7 @@ it("ends its sidebar in a row of icons, pinned: the host's links at the left (Gi
     expect(reported(reports)).toEqual({ feedback: 1, theme_dark: 1 });
   } finally { home.restore(); cleanup(); }
   // Only the links the host gives; with none of them, the cog alone.
-  const some = page({ width: 1200, links: { version: '0.7.4', release: '', x: '', github: 'https://github.com/a/b', discord: '', issues: '' } });
+  const some = page({ width: 1200, links: { version: '0.7.4', release: '', github: 'https://github.com/a/b', discord: '', issues: '' } });
   try {
     await screen.findByRole('button', { name: 'Open loose.step' });
     expect([footLinks(some.sidebar()!).map(link => link.getAttribute('aria-label')), cog(some.sidebar()!) !== null]).toEqual([['GitHub'], true]);
@@ -1499,7 +1499,7 @@ it("has the same foot in the peek and in a phone's sheet; a peek stays up while 
     fireEvent.pointerEnter(home.toggle(), mouse);
     act(() => { vi.advanceTimersByTime(PANEL_PEEK_DELAY_MS); });
     expect([where(home)[0], footLinks(home.sidebar()!).map(link => link.getAttribute('aria-label')), cog(home.sidebar()!).getAttribute('aria-label')])
-      .toEqual(['peek', ['GitHub', 'Discord', 'X', 'Send feedback'], 'Settings']);
+      .toEqual(['peek', ['GitHub', 'Discord', 'Send feedback'], 'Settings']);
     act(() => { fireEvent.pointerDown(cog(home.sidebar()!), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
     fireEvent.pointerLeave(home.toggle(), mouse);
     act(() => { vi.advanceTimersByTime(PANEL_PEEK_LEAVE_MS * 4); });
@@ -1516,7 +1516,7 @@ it("has the same foot in the peek and in a phone's sheet; a peek stays up while 
     fireEvent.click(phone.toggle());
     const sheet = await waitFor(() => { const found = document.querySelector<HTMLElement>('[data-panel-sheet]'); expect(found).not.toBeNull(); return found!; });
     expect([foot(sheet).previousElementSibling?.getAttribute('data-slot'), footLinks(sheet).map(link => link.getAttribute('aria-label'))])
-      .toEqual(['scroll-area', ['GitHub', 'Discord', 'X', 'Send feedback']]);
+      .toEqual(['scroll-area', ['GitHub', 'Discord', 'Send feedback']]);
     expect(menuRows(await settings(sheet))).toEqual(['Telemetry', 'System', 'Light', 'Dark']);
   } finally { phone.restore(); cleanup(); }
 });

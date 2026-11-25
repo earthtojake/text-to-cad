@@ -241,7 +241,7 @@ the launch's `_meta` first (`host/capability.ts`).
   sidebar (Recents, Pinned, each project, Standalone), which is the viewer's panel over the home: pinned it pushes
   the place, in a card or a narrow tab it is collapsed until its toggle (or ⌘\) opens it or a mouse resting there
   peeks it, at a phone's width it is a sheet, and the person's choice and width are kept in the tab's own store. It
-  ends in the panel's foot, as a file's panel does: GitHub, Discord, X and Send feedback as icons, and **Settings**, a
+  ends in the panel's foot, as a file's panel does: GitHub, Discord and Send feedback as icons, and **Settings**, a
   cog whose menu holds Language, Telemetry, Theme and the version,
   as the
   web viewer's does ([the home](../../packages/ui/docs/viewer-ux.md#the-home)). A page in an app's frame has no

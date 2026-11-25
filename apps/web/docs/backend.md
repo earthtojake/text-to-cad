@@ -131,7 +131,8 @@ its folder as a project), or `cad viewer <folder>` -- kept as one record in the 
 (`<state>/projects/<id>.json`, its id derived from the folder's canonical path); nothing is written to the folder. A
 folder inside a project is that project (`made: false`): projects do not nest by accident. The home folder, a folder
 above it and a disk's root are no project (a 400 saying what to open instead); a path that is not a folder is a 404,
-one that is not absolute a 400. A document is in the nearest project above it: a file by its path, a model by its
+one that is not absolute a 400. A document is in the nearest project above it: a file by its path as reached (one in a
+linked folder inside a project's is that project's, as one stored there is), a model by its
 script, a shape by where it was handed over. A project's documents are its models (the registry's, whose script is
 in it), by name, then its CAD files, by folder then name: a breadth-first walk of its folder that skips hidden and
 build folders and the folders of the projects inside it, walks no folder twice, and stops at 1000 files, depth 24 or

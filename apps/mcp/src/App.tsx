@@ -288,7 +288,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // never in a card, whose few hundred pixels in a chat are no place for a dialog, nor while the
   // card says its server is gone.
   const whatsNew = useWhatsNew(presentation === 'tabs' ? client.whatsNew : NO_WHATS_NEW);
-  // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
+  // The navbar's links: the same as every app's (Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);

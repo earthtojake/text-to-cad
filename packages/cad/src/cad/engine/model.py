@@ -1,7 +1,7 @@
 """Models: the decorators, a model's identity, and what calling one does.
 
 A model is a parameterless function that returns a build123d shape. It becomes a document
-through its file declarations, which stack, each adding its file: ``@model``, the ``.xbf`` the
+through its file declarations, alone or combined, each adding its file: ``@model``, the ``.xbf`` the
 model is saved as, and the file decorators ``@step``, ``@glb``, ``@stl``, ``@threemf`` and ``@dxf``
 (the drawing of a planar result: a sketch, a face, wires or edges); the same kind twice is refused.
 Whatever declares it, a model always writes its ``.xbf``: at ``@model``'s path, else ``<name>.xbf`` beside
@@ -11,8 +11,8 @@ uses ``script.py::function``. An explicit ``name=`` uses the script folder and t
 independent of the declaring file. A path is optional on every one, positional or ``out=``
 (``@model("XBF/part.xbf")``, ``@step(out="part.step")``), relative to the script; omitted
 (``@step``, ``@step()``, ``@glb(tolerance=0.1)``), it is the model's name and the kind's suffix beside
-the script (``Model.plan``): bare ``@model`` writes ``<name>.xbf``, as does ``@step`` alone. Two models of a run whose default
-files are one file are refused (``collisions``). Everything else is the model's code: its material,
+the script (``Model.plan``): bare ``@model`` writes ``<name>.xbf``, as does ``@step`` alone. Everything else is the
+model's code: its material,
 colours, joints, the pose its joints are connected at (the pose every file shows), its mechanism
 states, couplings and configuration sequences (``mechanism_state``, ``gear_pair`` and its siblings,
 ``configuration_sequence``). A picture is the ``snapshot`` verb's, never a declaration. The outputs
@@ -36,7 +36,8 @@ document (``BuildContext.children``, ``build``). Called outside a build, a model
 worker to build it.
 
 ``model(shape, name=...)`` hands a shape over from a script or a REPL: no function, no body to
-run again (``api.hand_over``); from a script, it writes ``<name>.xbf`` beside it, from a REPL nothing.
+run again (``api.hand_over``); it writes its ``.xbf`` at the path given (``model(out, shape=shape, name=...)``),
+relative to the calling script, else ``<name>.xbf`` beside the script, or in the working folder from a REPL.
 """
 
 from __future__ import annotations
@@ -274,11 +275,7 @@ class Model:
 
     def _path(self, kind: str, out: Any) -> Path:
         if out is None:
-            stem = self.explicit_name or self.name
-            if stem in (".", "..") or any(mark in stem for mark in "/\\"):
-                raise ValueError(f"model {self.name!r} is named {stem!r}, which names no file beside its script: "
-                                 f"give its {_said(kind)} a path")
-            out = stem + SUFFIXES[kind]
+            out = (self.explicit_name or self.name) + SUFFIXES[kind]
         path = Path(out)
         if not path.is_absolute():
             path = self.script.parent / path
@@ -409,25 +406,21 @@ def _no_animations(animations: Any) -> None:
                         "(animation(...)); animations= goes with a shape handed over, model(shape, name=...)")
 
 
-def model(target: Any = None, /, *, name: str | None = None, out: Any = None, animations: Any = None) -> Any:
+def model(out: Any = None, *, name: str | None = None, shape: Any = None, animations: Any = None) -> Any:
     """Declare a model, optionally named within its script folder (``name=``), and the ``.xbf`` each run
-    saves it as: at its path, relative to the script (``@model("XBF/arm.xbf")``, or ``out=`` as every
-    file decorator takes it), else ``<name>.xbf`` beside the script (bare ``@model``); or hand over a named
-    shape (``model(shape, name=...)``, which declares no file)."""
-    if isinstance(target, (str, os.PathLike)):  # ``@model("arm.xbf")``: the path, as ``@step("arm.step")`` takes it
-        if out is not None:
-            raise TypeError("@model takes its path once: @model(\"arm.xbf\") or @model(out=\"arm.xbf\")")
-        target, out = None, target
-    if target is None:
+    saves it as: at its path, relative to the script (``@model("XBF/arm.xbf")``, or ``out=``, as every file
+    decorator takes it: given both ways, Python's own "multiple values"), else ``<name>.xbf`` beside the script
+    (bare ``@model``); or hand over a named shape (``model(shape, name=...)``, or ``model(out, shape=shape,
+    name=...)`` to give its ``.xbf`` a path: ``api.hand_over``). The first positional is the path, or the function
+    a bare decorator is given, or the shape handed over."""
+    if shape is None and not (out is None or isinstance(out, (str, os.PathLike, Model)) or inspect.isfunction(out)):
+        shape, out = out, None  # ``model(shape, name=...)``: the shape, as it was always given
+    if shape is None:
         _no_animations(animations)
-        return _declare("xbf", _saved(out), name)
-    if isinstance(target, Model) or inspect.isfunction(target):
-        _no_animations(animations)
-        return _declare("xbf", _saved(out), name)(target)
-    if out is not None:
-        raise TypeError("model(shape, name=...) takes no path: a shape handed over is no function a run calls again, "
-                        "so no run writes its file; export the document it returns, "
-                        "model(shape, name=...).export(\"arm.xbf\")")
+        if isinstance(out, Model) or inspect.isfunction(out):
+            return _declare("xbf", None, name)(out)  # bare ``@model``: the function itself
+        return _declare("xbf", out, name)
+    check_output("xbf", out, "model(out, shape=..., name=...)")
     from cad.engine import api
 
     caller = sys._getframe(1)
@@ -435,21 +428,7 @@ def model(target: Any = None, /, *, name: str | None = None, out: Any = None, an
     while caller.f_back is not None and (caller.f_code.co_filename == __file__
                                          or caller.f_globals.get("__name__") == "cad._internal.document_type"):
         caller = caller.f_back
-    return api.hand_over(target, name, animations=animations, frame=caller)
-
-
-def _saved(out: Any) -> Any:
-    """``@model('….xbf')``'s path: the model's ``.xbf``. A path of another kind a decorator writes is refused with
-    that decorator (``@model("arm.step")``: ``@step("arm.step")``); any other is ``check_output``'s to refuse."""
-    if isinstance(out, (str, os.PathLike)) and os.fspath(out):
-        from cad.registry import by_extension
-
-        suffix = Path(out).suffix
-        found = by_extension(suffix) if suffix else None
-        if found is not None and found.id != "model" and found.decorator:
-            raise ValueError(f"@model('….xbf') writes the model's .xbf, not {os.fspath(out)!r}: declare that file "
-                             f"with @{found.id}({os.fspath(out)!r}), alone or beside @model('….xbf')")
-    return out
+    return api.hand_over(shape, name, animations=animations, frame=caller, out=out)
 
 
 def _said(kind: str) -> str:
@@ -580,24 +559,6 @@ def models_in(namespace: dict[str, Any], script: Path) -> list[Model]:
         if isinstance(value, Model) and value.script == script and value not in found:
             found.append(value)
     return found
-
-
-def collisions(models: Any) -> None:
-    """Refuse two of ``models`` whose files are one file where either is its default (``Model.plan``) --
-    two scripts of a folder each with a model ``part``, or a model whose ``name=`` is another's function's,
-    each writing ``part.xbf`` -- naming both, ``file:line``. A run asks it of every model its load defined
-    (``_MODELS``): its script's and those of the scripts it imports. Two given paths that are one file are
-    left as their author wrote them."""
-    seen: dict[Path, tuple[Model, bool]] = {}
-    for found in models:
-        for output in found.files():
-            path = found._path(output.kind, output.out)
-            other, given = seen.setdefault(path, (found, output.out is not None))
-            if other is not found and not (given and output.out is not None):
-                raise ValueError(
-                    f"model {other.name!r} of {other.script}:{other.function.__code__.co_firstlineno} and model "
-                    f"{found.name!r} of {found.script}:{found.function.__code__.co_firstlineno} both write {path}; "
-                    f"give one a path ({_said(output.kind)}('…')) or name=")
 
 
 # --- what a model's code may call --------------------------------------------------------
@@ -1117,8 +1078,8 @@ from types import ModuleType as _ModuleType
 
 
 class _ModelModule(_ModuleType):
-    def __call__(self, function: Any = None, /, **options: Any) -> Any:
-        return model(function, **options)
+    def __call__(self, *args: Any, **options: Any) -> Any:
+        return model(*args, **options)  # ``model``'s own signature, and its own words for a call it refuses
 
     def __getattr__(self, name: str) -> Any:
         # An earlier spelling (``xbf``, the model's own declaration: ``model``), after its warning.

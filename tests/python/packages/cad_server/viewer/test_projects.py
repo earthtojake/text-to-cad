@@ -308,6 +308,42 @@ class ProjectRoutesTest(unittest.TestCase):
         self.assertIsNone(envelope["entry"]["project"])
         self.assertNotEqual(envelope["revision"], before)
 
+    def test_a_file_reached_through_a_linked_folder_inside_a_project_is_that_projects(self) -> None:
+        shared = self.tmp / "shared"
+        shared.mkdir()
+        (shared / "bolt.stl").write_bytes(STL)
+        try:
+            os.symlink(shared, self.work / "vendor", target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("no symbolic links here")
+        reached = self.work / "vendor" / "bolt.stl"
+        ident = self.request("POST", "/api/v1/projects", {"path": str(self.work)})[1]["project"]["id"]
+        listed = lambda: {row["name"]: row for row in self.request("GET", f"/api/v1/projects/{ident}")[1]["documents"]}
+        # Walked through the link: listed where it was reached, the project's, as a file stored in the folder is.
+        self.assertEqual((listed()["bolt.stl"]["path"], listed()["bolt.stl"]["project"]), (slashed(reached), ident))
+        # Its page, by its id (as the home opens a row) and by the path it was reached by, says the project too.
+        bolt = listed()["bolt.stl"]["id"]
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{bolt}")[1]["entry"]["project"]["id"], ident)
+        status, found = self.request("GET", f"/api/v1/documents?path={slashed(reached)}")
+        self.assertEqual((status, [row["entry"]["project"]["id"] for row in found["documents"]]), (200, [ident]))
+        # Opened by the page, which names it where it is: its record keeps the path it was reached by, and its Recents
+        # row says the project.
+        self.assertEqual(self.request("PATCH", "/api/v1/documents", {"action": "open",
+                                                                      "path": str(shared / "bolt.stl")})[0], 200)
+        self.assertEqual(Registry(self.tmp / "state").get(bolt)["reached"], str(reached))
+        [row] = [row for row in self.request("GET", "/api/v1/documents")[1]["documents"] if row["name"] == "bolt.stl"]
+        self.assertEqual(row["project"], ident)
+        self.assertEqual(self.request("GET", f"/api/v1/documents/{row['id']}")[1]["entry"]["project"]["id"], ident)
+        # Opened, it is still one row of the project's, its record's, where it was reached.
+        rows = [row for row in self.request("GET", f"/api/v1/projects/{ident}")[1]["documents"] if row["name"] == "bolt.stl"]
+        self.assertEqual([(row["path"], row["opened"] is not None) for row in rows], [(slashed(reached), True)])
+        # Named where it is, outside the folder, it is still the file the project reaches: the project's.
+        status, found = self.request("GET", f"/api/v1/documents?path={slashed(shared / 'bolt.stl')}")
+        self.assertEqual([row["entry"]["project"]["id"] for row in found["documents"]], [ident])
+        # Its link gone, it is where it is: standalone.
+        os.unlink(self.work / "vendor")
+        self.assertIsNone(self.request("GET", f"/api/v1/documents/{bolt}")[1]["entry"]["project"])
+
     def test_the_home_pictures_a_projects_file_before_a_page_opens_it_and_recents_still_lists_opened_files(self) -> None:
         self.request("POST", "/api/v1/projects", {"path": str(self.work)})
         tag = self.work / "STL" / "tag.stl"

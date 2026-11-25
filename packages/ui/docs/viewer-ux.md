@@ -139,7 +139,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   documents on the home or for a standalone one); typing finds as the home's search does, every word in a name or a
   file's path, "In <project>" first, then "Other projects", at most 50 rows and a line saying how many more there are.
 - A row: the document's picture (the kind's glyph until it loads), its name, and at its right its format in the project
-  on screen ("Part" or "Assembly" for one built from code or an `.xbf` file, "Model" where its parts are not known, as
+  on screen ("Part" or "Assembly" for one built from code or an `.xbf` file, "XBF", its format, where its parts are not known, as
   on a card), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
   nothing. While it reads, placeholder rows; a read that fails or finds nothing says so.
 - Up and Down move, Home and End go to the ends, Enter opens the row here and ⌘Enter (Ctrl+Enter) in a new tab; typing
@@ -153,7 +153,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   Import, or the "+" by Projects in the sidebar), a standalone document's Import its folder as a project, or
   `cad viewer <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
   forgets it, and nothing on disk changes.
-- A document is in the nearest project above it: a file by its path, a model by its script. A folder opened inside a
+- A document is in the nearest project above it: a file by its path as reached (a file in a linked folder inside a
+  project's is that project's, as one stored there is), a model by its script. A folder opened inside a
   project is that project (they do not nest by accident). Every other document is standalone.
 - Nothing browses the disk outside a project: a document is picked up by a `cad` command or by Import.
 - **A project has a page of its own on the home**, and a row in its sidebar. Why: a project is a place a person goes
@@ -187,7 +188,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   place's name, the page's one larger text (a project's after its folder glyph, with its folder from `~` and its ⋯:
   Open in new tab, Copy path, Reveal, Remove from CAD, which says nothing on disk changed and goes to Recents); at the
   right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then the
-  models (those built from code, then `.xbf` files), then format (a model's Part, Assembly or Model among them), then
+  models (those built from code, then `.xbf` files), then format (a model's Part, Assembly or XBF among them), then
   name) and grid or list, one segmented control. Sort and the layout are the tab's
   ([Settings memory](#settings-memory)).
 - **The kinds**, a row of chips of its own under the heading row: All, then 3D models, Drawings, Boards, Schematics and
@@ -201,7 +202,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   files exported from it stay cards of their own.
 - **A model and its `.xbf` are one card.** An `.xbf` the engine wrote from a model's document is that model, saved:
   its own (every model has one: `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it), which every
-  run writes or keeps, a shape's handed over from a script, and one exported of it (`cad model export ID x.xbf`). The model's card stands for them, and they have no card beside it in Recents, Pinned, a project's page,
+  run writes or keeps, a shape's handed over, and one exported of it (`cad model export ID x.xbf`). The model's card stands for them, and they have no card beside it in Recents, Pinned, a project's page,
   Standalone or the search. Why: one document, one identity, one "model" type; two Assembly cards of the same thing
   asked the person which to open. The server leaves a file's row out (its record says which model's document it is,
   the file's version and the model's revision as written) only where the model's own card is in the same place, its
@@ -213,7 +214,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
   on the light gradient with its format's badge, then the name and one line), or 44px rows. A document built from
   code or an `.xbf` file is badged "Part" when its document holds one part and "Assembly" when it holds more (the
-  row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the Model tree shows them), and "Model"
+  row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the Model tree shows them), and "XBF", its format,
   where the engine does not know (an `.xbf` it neither wrote nor read for a page since it changed, a model last built
   before the count was kept): never a guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and a person
   reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's page
@@ -293,7 +294,7 @@ rule below holds on both pages; "the view" is the page it stands beside, "the mo
   component), in the pinned panel, the peek and the phone's sheet alike. A hairline rule, the panel's full width,
   parts it from what is above; under the rule, 8px, the row of control-sized icon tiles, 8px. It is pinned: the
   panel's content scrolls above it.
-- **At its left, the app's links**, each an icon with its name in a hint above it: GitHub, Discord and X (each only
+- **At its left, the app's links**, each an icon with its name in a hint above it: GitHub and Discord (each only
   where the host gives that link), then Send feedback (the round chat bubble: a new issue on the host's tracker).
   A press opens the link the host's way. Muted at rest, the foreground under the pointer.
 - **At its right corner, Settings**, a cog, which opens the app menu upward: Language, the host's switches

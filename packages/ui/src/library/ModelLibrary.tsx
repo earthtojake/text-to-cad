@@ -119,14 +119,15 @@ const extensionOf = (path: string) => {
 const isModel = (item: LibraryModel) => deletes(item) || extensionOf(item.path) === "xbf";
 /**
  * What a model (`isModel`) is called, as desktop CAD calls its own documents: a `part` when its document holds one part
- * occurrence, an `assembly` when it holds more, and `model` where the host does not know how many (`parts`).
+ * occurrence, an `assembly` when it holds more, and where the host does not know how many (`parts`) its format, `xbf`
+ * ("XBF", a format's name in every language): never a guess.
  */
-export interface ModelLabels { model: string; part: string; assembly: string }
+export interface ModelLabels { xbf: string; part: string; assembly: string }
 /** What a card's badge and a row's Kind say: a model's `labels` (`ModelLabels`), else a file's format ("STEP", "KiCad PCB"). */
 export function formatLabel(item: LibraryModel, labels: ModelLabels): string {
   if (isModel(item)) {
     const parts = item.parts;
-    return typeof parts !== "number" || !Number.isInteger(parts) || parts < 1 ? labels.model : parts === 1 ? labels.part : labels.assembly;
+    return typeof parts !== "number" || !Number.isInteger(parts) || parts < 1 ? labels.xbf : parts === 1 ? labels.part : labels.assembly;
   }
   const extension = extensionOf(item.path);
   return FORMATS[extension] ?? extension.toUpperCase();
@@ -195,11 +196,11 @@ export const RECENTS: HomeLocation = Object.freeze({ view: "recents" });
 /** A place as one word: what marks its row, and what a setting kept for it is kept by. */
 export const placeKey = (place: HomeLocation) => (place.view === "project" ? `project:${place.project}` : place.view);
 
-const NO_LABELS: ModelLabels = Object.freeze({ model: "", part: "", assembly: "" });
+const NO_LABELS: ModelLabels = Object.freeze({ xbf: "", part: "", assembly: "" });
 /**
  * A place's documents in the order the person chose: by last activity (when each was last opened or changed), newest
  * first; by name; or by kind, in the kinds' order (`DOCUMENT_KINDS`, one of none last), then the models (`isModel`:
- * those built from code, then `.xbf` files), then by format (`format`: a model's Part, Assembly or Model, a
+ * those built from code, then `.xbf` files), then by format (`format`: a model's Part, Assembly or XBF, a
  * file's format), then by name. The host's order where two tie. A pinned document is not first: Pinned is a
  * place of its own.
  */
@@ -388,7 +389,7 @@ export interface LibraryOrigin {
  * chips (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds, with its count under the
  * search), where it holds more than one. Then the place's documents, every one of them (`PLACE_ROWS` until Show more),
  * each a card (a picture badged with its format -- for one built from code or an `.xbf` file "Part" or "Assembly", by its
- * `parts`, "Model" where that is not known -- over the name and a
+ * `parts`, "XBF" (its format) where that is not known -- over the name and a
  * line: its project's name in Recents and Pinned, then its last activity with its verb; no glyph, script or size, which
  * the list has) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created).
  * A card's or a row's main press is a link where the host gives the document an address
@@ -606,7 +607,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const shownName = useRef(onPlaceShown);
   shownName.current = onPlaceShown;
   useEffect(() => { shownName.current?.(placeName); }, [placeName]);
-  const labels: ModelLabels = { model: t("home.formatModel"), part: t("home.formatPart"), assembly: t("home.formatAssembly") };
+  const labels: ModelLabels = { xbf: t("format.xbf"), part: t("home.formatPart"), assembly: t("home.formatAssembly") };
   const format = (item: Model) => formatLabel(item, labels);
   const inPlace = place.view === "project" ? listed.find(entry => entry.project.id === place.project)?.documents ?? []
     : place.view === "pinned" ? pinned : place.view === "standalone" ? standalone : all;

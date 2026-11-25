@@ -259,7 +259,7 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     return () => observer.disconnect();
   }, [mobile, open, viewerElement]);
 
-  const labels: ModelLabels = { model: t("search.kindModel"), part: t("search.kindPart"), assembly: t("search.kindAssembly") };
+  const labels: ModelLabels = { xbf: t("format.xbf"), part: t("search.kindPart"), assembly: t("search.kindAssembly") };
   const heading = (group: SearchGroup<Model>) => group.id === "here" ? t("search.inProject", { name: project?.name ?? "" })
     : group.id === "other" ? t("search.otherProjects") : group.id === "recent" ? t("search.recent") : null;
   const detail = (row: SearchRow<Model>, group: SearchGroup<Model>["id"]) => onScreen(row) ? t("search.current")

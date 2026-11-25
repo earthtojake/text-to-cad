@@ -463,7 +463,7 @@ test('a document\'s panel ends in the panel\'s foot: under a full-width rule, on
   // cog's on the panel's two lines (16px in), as in the home's sidebar.
   const tiles = await tilesOf(foot);
   assert.deepEqual(tiles.map(({ name, width, height, y, bottom }) => [name, width, height, y, bottom]),
-    ['GitHub', 'Discord', 'X', 'Send feedback', 'Settings'].map(name => [name, 28, 28, at.y + 9, side.bottom - 8]));
+    ['GitHub', 'Discord', 'Send feedback', 'Settings'].map(name => [name, 28, 28, at.y + 9, side.bottom - 8]));
   const glyphs = await foot.locator('svg').evaluateAll(nodes => nodes.map(node => { const { x, right } = node.getBoundingClientRect(); return { x, right }; }));
   assert.deepEqual([glyphs[0].x - side.x, glyphs.at(-1).right - side.x], [INSET, 231 - INSET]);
   // The navbar's first glyph over the panel, the logo's drawn mark (its artwork 2px inside its image), on the same line;
@@ -503,7 +503,7 @@ test('a document\'s panel ends in the panel\'s foot: under a full-width rule, on
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] aside[data-panel-peek]').getAnimations().every(animation => animation.playState === 'finished'));
   const card = await rect(pane.locator('[data-panel-peek-card]'));
   const peeked = await tilesOf(foot);
-  assert.deepEqual(peeked.map(({ name }) => name), ['GitHub', 'Discord', 'X', 'Send feedback', 'Settings']);
+  assert.deepEqual(peeked.map(({ name }) => name), ['GitHub', 'Discord', 'Send feedback', 'Settings']);
   assert.ok(peeked.every(tile => tile.x >= card.x && tile.right <= card.right && tile.bottom <= card.bottom && tile.y === tiles[0].y), `the foot's tiles in the card, where the pinned panel's stand: ${JSON.stringify(peeked)}`);
   assert.deepEqual(errors, []);
   // A phone's sheet: the foot at its bottom, its tiles a finger's 36px.
@@ -515,6 +515,6 @@ test('a document\'s panel ends in the panel\'s foot: under a full-width rule, on
   const place = await rect(sheet), low = await rect(sheetFoot);
   assert.deepEqual([low.x, Math.round(low.bottom), Math.round(place.bottom)], [0, 700, 700]);
   assert.deepEqual((await tilesOf(sheetFoot)).map(({ name, height, bottom }) => [name, height, Math.round(bottom)]),
-    ['GitHub', 'Discord', 'X', 'Send feedback', 'Settings'].map(name => [name, 36, 700 - 8]));
+    ['GitHub', 'Discord', 'Send feedback', 'Settings'].map(name => [name, 36, 700 - 8]));
   assert.deepEqual(phone.errors, []);
 });

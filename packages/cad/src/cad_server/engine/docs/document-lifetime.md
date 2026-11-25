@@ -207,8 +207,9 @@ failure among them.
 
 **A model's xbf.** An `.xbf` the engine writes from a model's (or a shape's) document is that document saved: a
 build's own (every model has one, `<name>.xbf` beside its script or `@model("arm.xbf")`'s path), which every run that
-reaches it writes or keeps where it holds the document's bytes already, a shape's handed over from a script
-(`<name>.xbf` beside it, which the engine writes as it holds the shape: `Models._save`), and one exported of the
+reaches it writes or keeps where it holds the document's bytes already, a shape's handed over
+(at the path given, else `<name>.xbf` beside its script or in a REPL's working folder, which the engine writes as it
+holds the shape: `Models._save`), and one exported of the
 model's id (`cad model export ID x.xbf`, a handle's `.export`). As it is written, its file's record gains `of`, `{id, version, revision}` -- the model's id, the
 file's version (`mtime_ns-size`, `registry.file_version`) as written or kept, and the revision of the document it was
 written from, the one the model's record carries -- with its parts' count (a file with no record is given one, with
@@ -221,10 +222,10 @@ home and its search, which read them -- shows the model and its `.xbf` files as 
 (`cad_server.viewer.recents.fold`): it leaves a file's row out where its `of` is of the version on disk now and of the
 revision the model's record has now, the model's own row is in that list, in the same project, its script there, and
 the file is not pinned. Anything else, and the file is listed as any file is: edited or touched since, a copy, the
-model deleted, or built into another revision since -- its declared `.xbf` is written or kept by that build, at that
+model deleted, or built into another revision since -- its own `.xbf` is written or kept by that build, at that
 revision, and stays its card; an export no one wrote again holds an older document, and is a file of its own. A STEP,
 a GLB and every other export are files of their own. Records alone are read, no file's bytes and no script, and
-nothing is deleted: the files, their records and the model's stay as they are. While its declared `.xbf` is the model
+nothing is deleted: the files, their records and the model's stay as they are. While its own `.xbf` is the model
 so, the model's row says where it is (`saved`) and the file's row, in a list that has it, whose it is (`of`).
 
 **The last run.** A document is what its model's last run made, and that is all the engine knows

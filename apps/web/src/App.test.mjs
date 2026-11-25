@@ -27,7 +27,7 @@ await build({
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/cad-viewer')) return { contents: `let current; export function CadViewer(props){current=props; return null;} export const snapshot=()=>current; export const createCadFileSource=client=>({id:'local',client}); export const normalizePath=path=>String(path||'').trim().replace(/\\\\/g,'/').replace(/(.)\\/+$/,'$1');`, loader: 'js' };
       if (args.path.endsWith('useViewerAutoReload.js')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};', loader: 'js' };
-      return { contents: `const links={version:'0.7.4',release:'r',x:'x',github:'g',discord:'d',issues:'i'}; export const useViewerLinks=()=>links;`, loader: 'js' };
+      return { contents: `const links={version:'0.7.4',release:'r',github:'g',discord:'d',issues:'i'}; export const useViewerLinks=()=>links;`, loader: 'js' };
     });
   } }],
 });

@@ -1,4 +1,4 @@
-/** The GitHub, Discord and X marks, as the app menu and the home's sidebar's foot draw them: one colour, the text's. */
+/** The GitHub and Discord marks, as the app menu and the home's sidebar's foot draw them: one colour, the text's. */
 
 export function GitHubMark(props) {
   return (
@@ -16,10 +16,3 @@ export function DiscordMark(props) {
   );
 }
 
-export function XMark(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
-      <path d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.47l8.6-9.83L0 1.15h7.6l5.24 6.93ZM17.61 20.64h2.04L6.49 3.24H4.3Z" />
-    </svg>
-  );
-}

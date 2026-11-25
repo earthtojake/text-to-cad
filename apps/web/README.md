@@ -418,7 +418,7 @@ a mouse resting on the toggle peeks it, its grip sets its width (232px at first,
 sheet. Until the person opens or closes it, the home's width decides. Their choice and their width are kept with this
 tab's settings (`settings.library.panel` in the tab's record, in sessionStorage), so a reload brings them back and a
 new tab starts without them. It ends in the panel's foot, the row a document's panel ends in too: under a rule,
-GitHub, Discord, X and Send feedback as icons, and at the right **Settings**, a cog whose menu holds Language,
+GitHub, Discord and Send feedback as icons, and at the right **Settings**, a cog whose menu holds Language,
 Telemetry, Theme and the version.
 
 A sidebar at the left lists the places: Recents (every document opened lately, across projects), Pinned, each project
@@ -431,12 +431,12 @@ then its documents, all of them. The grid's tiles are framed cards, at least 232
 picture (the light viewport's, on the model area's light gradient in both themes, its format's badge at its
 top-left: for a model built from code and for an `.xbf` file, the engine's own document saved as a file, so a
 model too, though still a file in everything else, "Part" when its document holds one part and "Assembly" when it holds
-more, as desktop CAD names its documents (the row's `parts`), and "Model" where the server does not know the count yet;
+more, as desktop CAD names its documents (the row's `parts`), and "XBF", its format, where the server does not know the count yet;
 every other file its format, "STEP", "KiCad PCB"), then, in a compact caption, its name over one line: its project's name in Recents and Pinned, then its last activity with its verb ("Edited now",
 "Viewed 5m ago", "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last
 opened, Viewed when it was opened after it last changed). The list is a table: Name, Project (or, in a project's page,
 Where), Kind, Size, Updated and Created
-over 44px rows, each a document's small picture and name, its format (as the badge: "Part", "Assembly" or "Model" for a model or an `.xbf` file), its size and those two ages with no verb. Every model is a tile and a row of
+over 44px rows, each a document's small picture and name, its format (as the badge: "Part", "Assembly" or "XBF" for a model or an `.xbf` file), its size and those two ages with no verb. Every model is a tile and a row of
 its own: a model shows its
 name and its age, and stands for each `.xbf` the engine wrote from it (its own, one exported of it), which
 the server leaves out of the list beside it while the file is unchanged and the model is the revision written (an
@@ -482,8 +482,8 @@ server for the file's envelope (`GET /api/v1/documents?path=<abs>`), whose row c
 and moves to `/<id>`. Rows join by that id (`client.entryOf`), so a symlinked or case-variant
 spelling of one file is one row. A model (a document with no file of its own): its ⋯ menu
 acts on the document and on the script that builds it ([Export and job status](#export-and-job-status)), and it is
-in the project its script is in. A document's row says its project (`project`: the nearest project above its file,
-a model's script), which the navbar follows as the row is read again.
+in the project its script is in. A document's row says its project (`project`: the nearest project above its file as
+reached, a linked folder's inside a project's too, or a model's script), which the navbar follows as the row is read again.
 
 The home reads the projects over `GET /api/v1/projects` and the library over `GET /api/v1/documents`, each row
 with the project it is in (`project`) and three times, `updated` (a
@@ -557,7 +557,7 @@ The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the logo (the C mark, on the home and over a file alike), which is the link home, then, for a document in a
 project, the project's name and a slash (to that project's page on the home), then the open file's name (no glyph),
-with its ⋯ (Export, over a file that writes formats; Search documents, ⌘K; Import its folder as a project, for a document in no project). The foot of the sidebar, on the home and over a file, holds GitHub, Discord, X and Send feedback (a new issue titled "Feedback: ") as icons, and Settings, a cog whose menu (the app menu) holds the
+with its ⋯ (Export, over a file that writes formats; Search documents, ⌘K; Import its folder as a project, for a document in no project). The foot of the sidebar, on the home and over a file, holds GitHub, Discord and Send feedback (a new issue titled "Feedback: ") as icons, and Settings, a cog whose menu (the app menu) holds the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme)
 and, in gray, the version (a link to its release notes), as in the CAD app.
 Its first control is the logo, the way home in one place on every page, then the panel's toggle, over a file and over the home; at its right end the view portals its own Display (the

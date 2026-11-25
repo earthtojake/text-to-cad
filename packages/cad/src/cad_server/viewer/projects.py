@@ -9,7 +9,9 @@ canonical path, its id derived from it, ``ids.derived_id``). Remove forgets that
 folder and everything in it stay as they are, and its documents are standalone again.
 
 A document belongs to the nearest project above it (``Projects.of``): a file by its path, a model by
-its script, a shape by where it was handed over. So a folder opened inside a project is that
+its script, a shape by where it was handed over. A file is in the project it is reached in: one in a linked folder
+inside a project's is that project's, as one stored there is (``Projects.holding``: the path the walk or a page
+reached it by, before its canonical path). So a folder opened inside a project is that
 project (``Projects.add`` answers it and makes no record: projects do not nest by accident), and a
 project opened around another leaves the inner one its own, with its documents.
 
@@ -36,6 +38,7 @@ import os
 import threading
 import time
 from collections import deque
+from dataclasses import replace
 from typing import Any, Callable
 
 from cad.engine.ids import canonical, derived_id, is_id
@@ -183,6 +186,12 @@ class Projects:
                 found = record
         return found
 
+    def holding(self, reached: str | None, path: str | None, records: list[dict[str, Any]] | None = None
+                ) -> dict[str, Any] | None:
+        """The project a file is in: the one the path it was reached by is in (``reached``, as spelled: a file in a
+        linked folder inside a project's folder is that project's), else the one its canonical ``path`` is in."""
+        return (self.of(reached, records) if reached else None) or self.of(path, records)
+
     # -- documents ---------------------------------------------------------------
 
     def documents(self, record: dict[str, Any], entries, records: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -195,29 +204,43 @@ class Projects:
         records = self.list() if records is None else records
         ident = record["id"]
 
-        def mine(path: str | None) -> bool:
-            found = self.of(path, records) if path else None
+        def mine(path: str | None, reached: str | None = None) -> bool:
+            found = self.holding(reached, path, records) if path else None
             return found is not None and found["id"] == ident
 
         models, recorded = [], {}
         for entry in entries:
             if entry.kind == "file":
                 recorded[_key(entry.path)] = entry
+                if entry.reached:
+                    recorded.setdefault(_key(entry.reached), entry)
             elif mine(entry.script):
                 models.append(entry)
         models.sort(key=lambda entry: collation_key(entry.name or ""))
         nested = tuple(sorted(other["root"] for other in records
                               if other["id"] != ident and inside(other["root"], record["root"])))
         paths, truncated = self._walk(record["root"], nested)
-        files = []
+        # A record of a file outside the folder may be one the walk reached through a linked folder in it: such a walked
+        # path is looked up by where it is too (its canonical path), and listed as reached.
+        linked = any(not inside(key, record["root"]) for key in recorded)
+        files, taken = [], set()
         for path in paths:
-            entry = recorded.pop(_key(path), None)
+            entry = recorded.get(_key(path))
+            if entry is None and linked:
+                entry = recorded.get(_key(canonical(path)))
+            if entry is not None and id(entry) in taken:
+                entry = None  # one file the walk reached twice (a link and its target both in the folder): its record once
+            if entry is not None:
+                taken.add(id(entry))
             if entry is None:
                 updated, size, _version = _on_disk(path)
                 entry = Recent(path=path, opened=None, updated=updated, size=size)
+            elif _key(entry.path) != _key(path):
+                entry = replace(entry, path=path)  # its row says where it was reached, in this folder
             files.append(entry)
         # Opened by a page, so listed: no document a person opened goes missing for its folder being a project.
-        files += sorted((entry for entry in recorded.values() if entry.opened is not None and mine(entry.path)),
+        files += sorted({id(entry): entry for entry in recorded.values() if id(entry) not in taken
+                         and entry.opened is not None and mine(entry.path, entry.reached)}.values(),
                         key=lambda entry: collation_key(_key(entry.path)))
         rows = [{**row, "project": ident} for row in (entry.row() for entry in [*models, *files]) if row is not None]
         # An .xbf the engine wrote from one of these models, unchanged since, is that model's card (``recents.fold``).

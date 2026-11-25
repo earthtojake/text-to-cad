@@ -196,14 +196,15 @@ class ModelType(DocumentType):
             return param
         return super().__getattr__(name)
 
-    def __call__(self, target: Any = None, /, *, name: str | None = None, out: Any = None,  # type: ignore[override]
+    def __call__(self, out: Any = None, *, name: str | None = None, shape: Any = None,  # type: ignore[override]
                  animations: Any = None) -> Any:
         """``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``: declare a model and the ``.xbf`` each
         run saves it as, at its path relative to the script, else ``<name>.xbf`` beside it; ``model(shape,
-        name=...)``: hand a shape over as a named model (``cad.engine.model.model``)."""
+        name=...)`` (``model(out, shape=shape, name=...)`` with a path): hand a shape over as a named model
+        (``cad.engine.model.model``)."""
         from cad.engine import model
 
-        return model.model(target, name=name, out=out, animations=animations)
+        return model.model(out, name=name, shape=shape, animations=animations)
 
 
 def _operation(document_type: str, name: str) -> Any:

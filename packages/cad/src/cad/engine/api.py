@@ -284,15 +284,16 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
     return document.to_bytes(doc, [part.shape for part in tree.parts])
 
 
-def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = None) -> Document:
+def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = None, out: Any = None) -> Document:
     """``model(shape, name=...)``: a document made of a shape this program holds -- from a script or a
     REPL, no function, no body -- handed to the engine, which holds it as a drained document is (in
     memory, and in its cache), serves its page and exports it, and records that a program it did not
     run showed it: there is no command that builds it again. Its id is ``ids.derived_id`` of the
     calling script (``frame``'s file), or the working folder where there is none, and ``name``. The handle's ``shape`` is ``shape`` itself.
-    A model always writes its ``.xbf`` (law 10): handed over from a script, ``<name>.xbf`` beside it, once the
-    engine holds it, only where it differs or is missing -- the engine writes it and records it as the shape's
-    (``Models._save``), so the home shows the two as one card; from a REPL or a notebook, which has no script, none."""
+    A model always writes its ``.xbf`` (law 10): at ``out`` where given, else ``<name>.xbf``, relative to the calling
+    script's folder, or a REPL's or a notebook's working folder, once the engine holds it, only where it differs or is
+    missing -- the engine writes it and records it as the shape's (``Models._save``), so the home shows the two as one
+    card."""
     from cad.engine import model as declaring
     from cad.engine.ids import canonical, check_name, derived_id
 
@@ -305,12 +306,10 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     filename = frame.f_code.co_filename if frame is not None else ""
     script = filename if filename and os.path.isfile(filename) else None
     scope = canonical(script or os.getcwd())
-    saved = None
-    if script is not None:
-        if name in (".", "..") or any(mark in name for mark in "/\\"):
-            raise ValueError(f"model(shape, name={name!r}) names no file beside its script, where a shape handed over "
-                             "writes its .xbf: give it a name that is a file's")
-        saved = Path(scope).parent / f"{name}.xbf"
+    # Its .xbf: at ``out`` where given, else ``<name>.xbf``, relative to the calling script's folder, or from a REPL or a
+    # notebook the working folder: no document is left without its file.
+    base = Path(scope).parent if script is not None else Path(scope)
+    saved = Path(os.path.abspath(base / (os.fspath(out) if out is not None else f"{name}.xbf")))
     ident = derived_id(scope, name)
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
@@ -321,6 +320,7 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     if saved is not None and not (answer.get("done") or {}).get("saved"):
         from cad.engine.atomic_replace import put
 
+        saved.parent.mkdir(parents=True, exist_ok=True)
         put(saved, lambda temporary: temporary.write_bytes(data), compare=True)
     report = {"ok": True, "model": name, "id": ident, "url": (answer.get("done") or {}).get("url"),
               "source": {"script": scope, "name": name}, "kind": "shape", "bytes": len(data)}

@@ -308,7 +308,7 @@ phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`). How
 (`file-viewer/panelFrame.jsx`, on `file-viewer/PanelSurface.jsx`), which the home's sidebar mounts too: the same
 panel over the home, holding its places (`library/LibrarySidebar.jsx`). Both end in one foot
 (`file-viewer/PanelFoot.jsx`), where the host has a home: under a full-width rule, the host's links as icons (GitHub,
-Discord, X, Send feedback) and Settings, a cog.
+Discord, Send feedback) and Settings, a cog.
 Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model's rows and search box; see
@@ -350,7 +350,7 @@ is no Materials editor or persisted material override. See [View styles](docs/re
 
 The navbar leads, on every page, with the logo (the C mark, over the home and over a document alike), which is the
 way home wherever the host has a home: a link to it where the host gives it an address, a button otherwise, with a
-hint saying so. The panel's toggle follows it, over a file with a panel and over the home, so the logo never moves. The app's links — GitHub, Discord, X and Send
+hint saying so. The panel's toggle follows it, over a file with a panel and over the home, so the logo never moves. The app's links — GitHub, Discord and Send
 feedback (a new issue titled "Feedback: " where the host has a tracker) — are icons in the panel's foot, the row at
 the bottom of the sidebar on the home and over a document, beside Settings, a cog whose menu holds the person's
 settings (Language, Telemetry, Theme) and, in gray, the version and who made it. A host with no home (a view

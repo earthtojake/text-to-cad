@@ -327,6 +327,9 @@ class CadApp:
         self._picker = None
         # The files this app knows by id (``remember``); the engine's app keeps them in its server.
         self._files: dict[str, str] = {}
+        # A file a project's walk reached through a linked folder in it, by its id: the path it was reached by
+        # (``projects.Projects.holding``), which its page and its record say it is in.
+        self._reached_by: dict[str, str] = {}
         # Each document's kind, by its id, once known (``kind_of``): an id never changes kind.
         self._kinds: dict[str, str] = {}
         # The engine shares one recorder across its page and MCP sessions.
@@ -398,6 +401,29 @@ class CadApp:
             return self.file_of(self.remember(home(self.recents.registry, record)))
         return None
 
+    def _reached(self, file, entry) -> str | None:
+        """The path the file of catalog row ``entry`` was reached by: the one a page names (``file``) where it is not
+        where the file is (a linked folder's), else the one a project's walk reached it by or its record keeps, either
+        while it still reaches the file (``recents._still``); None for none."""
+        if file:
+            given = os.path.normpath(absolute_path(file))
+            if os.path.normcase(given) != os.path.normcase(canonical(given)):
+                return given
+        ident = entry.get("id") or file_id(entry["file"])
+        from .recents import _still
+
+        return _still(self._reached_by.get(ident), self._file_of(ident) or "") or self._kept_reached(ident)
+
+    def _kept_reached(self, ident) -> str | None:
+        """The path the record of file ``ident`` says it was reached by, while it still reaches it; else None."""
+        from .recents import _still
+
+        try:
+            record = self.recents.registry.get(ident)
+        except (OSError, ValueError):
+            return None
+        return _still((record or {}).get("reached"), self._file_of(ident) or "") if record else None
+
     def read_catalog(self, file=None, ident=None) -> dict:
         """The catalog of one document -- ``file``, an absolute path, registered by its id
         (``remember``), or ``ident``, a document's id: a file's or a model's the engine holds -- its
@@ -438,10 +464,12 @@ class CadApp:
         if entry is not None and "id" not in entry:
             entry["id"] = file_id(entry["file"])
         if entry is not None:
-            # The project it is in (``projects.py``): a file's by its path, a model's by its script, each as the
-            # projects spell a path (a link to a file is in its target's project, however the page named it).
+            # The project it is in (``projects.py``): a model's by its script; a file's by the path it was reached by (the
+            # page's, else the one its record keeps: a file in a linked folder inside a project's is that project's),
+            # else by where it is.
             source = entry["file"] if model is None else (model.get("source") or {}).get("script")
-            found = self.projects.of(canonical(source) if source else None)
+            reached = self._reached(file, entry) if model is None else None
+            found = self.projects.holding(reached, canonical(source) if source else None)
             entry["project"] = {key: value for key, value in public(found).items() if key in ("id", "name", "root")} if found else None
         entries = [entry] if entry else []
         answer = {"schemaVersion": CAD_CATALOG_SCHEMA_VERSION, "entries": entries, "revision": catalog_revision(entries)}
@@ -745,7 +773,8 @@ class CadApp:
                 continue
             if needle and needle not in f"{row['name']}\n{row['path']}".lower():
                 continue
-            found = self.projects.of(entry.path if entry.kind == "file" else entry.script, projects)
+            found = self.projects.holding(entry.reached, entry.path, projects) if entry.kind == "file" \
+                else self.projects.of(entry.script, projects)
             rows.append({**row, "project": found["id"] if found else None})
         from .recents import fold
 
@@ -1152,8 +1181,12 @@ class CadApp:
         """``project`` as a route answers it, each of its files known by its id from now on (``remember``): a row's
         ``id`` opens its page and reads its envelope whether a page opened the file before or not."""
         for row in project["documents"]:
-            if row.get("record") == "file" and self.file_of(row["id"]) is None:
-                self.remember(row["path"])
+            if row.get("record") == "file":
+                if self.file_of(row["id"]) is None:
+                    self.remember(row["path"])
+                reached = os.path.normpath(row["path"])
+                if os.path.normcase(reached) != os.path.normcase(self.file_of(row["id"]) or reached):
+                    self._reached_by[row["id"]] = reached
         return project
 
     def _open_project(self, request, response) -> None:
@@ -1399,7 +1432,8 @@ class CadApp:
         if action == "open":
             if extension_of(path) not in VIEWER_EXTENSIONS or not os.path.isfile(path):
                 raise ValueError(f"no CAD file at {path}")
-            self.recents.opened(key)
+            # Its record is its canonical path's, and says the path it was reached by: the page's, or a project's walk's.
+            self.recents.opened(path, reached=self._reached_by.get(file_id(key)))
             self._counted(file_id(key))  # a file the engine read before its record was made
             if self.analytics is not None:
                 self.analytics.opened(path)
@@ -1409,7 +1443,8 @@ class CadApp:
             self.recents.remove(key)
         elif action == "thumbnail":
             # A project's file is pictured before any page opens it; any other file only once it has a record.
-            self.recents.thumbnail(key, thumbnail_png(payload.get("png")), make=self.projects.of(key) is not None)
+            self.recents.thumbnail(path, thumbnail_png(payload.get("png")),
+                                   make=self.projects.holding(os.path.normpath(path), key) is not None)
             self._counted(file_id(key))  # the read it was pictured from, on the record the picture may have made
         else:
             raise ValueError(f"unknown recents action {action!r}")

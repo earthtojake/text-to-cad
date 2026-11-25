@@ -476,7 +476,7 @@ the pinned panel, the peek and the phone's sheet. What it holds and why it is th
 - **Icon tiles**, the head's icon button: the control square, a 14px glyph, muted at rest, the foreground on a faint
   fill under the pointer, 2px apart. The row pads by the inset less a tile's own padding, so the first glyph and the
   cog's stand on the panel's two lines. Each has a hint above it and an accessible name.
-- **The links at the left**, a link each (`<a>`, opened the host's way): GitHub, Discord and X as their marks
+- **The links at the left**, a link each (`<a>`, opened the host's way): GitHub and Discord as their marks
   (`navigation/brandMarks.jsx`, one colour, the text's), then Send feedback, lucide's `MessageCircle`. Links that do
   not fit wrap upward.
 - **The cog at the right corner**, lucide's `Settings`, is the app menu's trigger: on the accent fill while the menu

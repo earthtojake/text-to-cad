@@ -310,13 +310,13 @@ test("the sidebar ends in the panel's foot under a full-width rule: the host's l
     assert.deepEqual(await style(foot, "borderTopWidth", "borderTopColor"), ["1px", await token(page, "--border")]);
     // The tiles: the links in their order, then the cog; each the control's 28px, 8px under the rule and over the bottom.
     const tiles = foot.locator("a, button");
-    assert.deepEqual(await tiles.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label"))), ["GitHub", "Discord", "X", "Send feedback", "Settings"]);
+    assert.deepEqual(await tiles.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label"))), ["GitHub", "Discord", "Send feedback", "Settings"]);
     const boxes = await tiles.evaluateAll((nodes) => nodes.map((node) => { const { x, y, width, height, right, bottom } = node.getBoundingClientRect(); return { x, y, width, height, right, bottom }; }));
     assert.deepEqual(boxes.map(({ width, height, y, bottom }) => [width, height, y, bottom]), boxes.map(() => [28, 28, at.y + 1 + 8, side.bottom - 8]));
     // The first glyph and the cog's stand on the panel's two lines, 16px in; the cog at the right corner, apart.
     const glyphs = await foot.locator("svg").evaluateAll((nodes) => nodes.map((node) => { const { x, right, width } = node.getBoundingClientRect(); return { x, right, width }; }));
     assert.deepEqual([glyphs[0].x, glyphs.at(-1).right, glyphs.every(({ width }) => width === 14)], [16, 232 - 1 - 16, true]);
-    assert.ok(boxes[4].x - boxes[3].right > 28, "the cog stands apart, at the right");
+    assert.ok(boxes[3].x - boxes[2].right > 28, "the cog stands apart, at the right");
     // Muted at rest, the foreground under the pointer, its name in a hint over it.
     const github = foot.getByRole("link", { name: "GitHub" });
     assert.equal((await style(github, "color"))[0], await token(page, "--muted-foreground"));
@@ -339,7 +339,7 @@ test("the sidebar ends in the panel's foot under a full-width rule: the host's l
     await menu.waitFor();
     await still(page);
     const shown = await box(menu);
-    assert.ok(shown.bottom <= boxes[4].y && shown.y >= 0 && shown.x >= 0, `the menu stands over the cog: ${JSON.stringify(shown)}`);
+    assert.ok(shown.bottom <= boxes[3].y && shown.y >= 0 && shown.x >= 0, `the menu stands over the cog: ${JSON.stringify(shown)}`);
     assert.deepEqual([await menu.getAttribute("data-side"), await cog.getAttribute("aria-expanded"), (await style(cog, "backgroundColor"))[0]], ["top", "true", await token(page, "--accent")]);
     assert.deepEqual(await menu.locator('[role^="menuitem"]').evaluateAll((items) => items.map((item) => item.textContent || item.getAttribute("aria-label"))),
       ["Telemetry", "System", "Light", "Dark"]);
@@ -382,7 +382,7 @@ test("on a phone the sidebar is the panel's sheet under the navbar, ending in th
     const foot = sheet.locator("[data-app-foot]");
     assert.deepEqual([(await box(foot)).x, (await box(foot)).right, (await box(foot)).bottom, (await style(foot, "borderTopWidth"))[0]], [0, 320 - 1, 844, "1px"]);
     assert.deepEqual(await foot.locator("a, button").evaluateAll((nodes) => nodes.map((node) => [node.getAttribute("aria-label"), node.getBoundingClientRect().height])),
-      [["GitHub", 36], ["Discord", 36], ["X", 36], ["Send feedback", 36], ["Settings", 36]]);
+      [["GitHub", 36], ["Discord", 36], ["Send feedback", 36], ["Settings", 36]]);
     const row = foot.getByRole("button", { name: "Settings" });
     assert.deepEqual([(await box(row)).height, (await box(row)).bottom], [36, 844 - 8]);
     await row.tap();

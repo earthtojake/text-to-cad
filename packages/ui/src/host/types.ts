@@ -44,7 +44,6 @@ export interface ViewerLinks {
   version: string;
   /** The release notes of the release it is, or a custom build was built on. */
   release: string;
-  x: string;
   github: string;
   discord: string;
   /**
@@ -113,7 +112,7 @@ export interface ViewerHost {
      */
     openBeside?: { kind: 'tab' | 'browser'; places?: boolean; open(target: NavigationTarget): void | Promise<void> };
   };
-  /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */
+  /** The navbar's links: the version, Discord, GitHub and new issues. A host with none gets none. */
   links?: ViewerLinks;
   /**
    * What the person used, for the host to count: its telemetry, never what they made. Absent, nothing is
