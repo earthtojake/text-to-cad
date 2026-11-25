@@ -118,6 +118,41 @@ export interface FileNavigationAction {
   active?: boolean;
   onInvoke: () => void | Promise<void>;
 }
+/**
+ * An alert as the viewer's alert card reads it (`renderers/kit/status/ViewerAlertCard.jsx`): its colour (`severity`),
+ * its title and short name (`summary`), the words under it, the whole diagnostic (`details`, English, as it is
+ * reported), whether it has Retry (`reload`, and `retryLabel` where that is said otherwise), whether Report Issue is
+ * offered (`reportable: false`: no issue of the project's) and whether the person can work on under it (`blocking:
+ * false`: it can be put away).
+ */
+export interface ViewerAlert {
+  severity: "error" | "warning";
+  kind?: string;
+  title: string;
+  summary?: string;
+  message?: string;
+  reason?: string;
+  recovery?: string;
+  details?: string;
+  reload?: boolean;
+  retryLabel?: string;
+  reportable?: boolean;
+  blocking?: boolean;
+}
+
+/**
+ * A host's own alert (`CadViewer`'s `alert`: a failed update of cad), which the viewer shows in its alert card, with
+ * the X, the navbar's icon and Retry a file's has. Its dismissal is the host's (`dismissed`: put away; `onDismiss`, by
+ * the X or Escape; `onReopen`, by the navbar's icon), so it can outlast a page; `onRetry`, the card's Retry.
+ */
+export interface HostAlert {
+  alert: ViewerAlert;
+  dismissed: boolean;
+  onDismiss(): void;
+  onReopen(): void;
+  onRetry?(): void;
+}
+
 /** An on/off setting of the host's own, in a Settings section it names (the CAD apps' Telemetry). */
 export interface AppSetting {
   id: string;
@@ -197,9 +232,16 @@ export interface FileViewerProps {
   navbarActions?: ReactNode;
   /**
    * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind or an update is
-   * underway or failed: the navbar's last control, outermost, over every file and over the home.
+   * underway: the navbar's last control, outermost, over every file and over the home.
    */
   update?: ReactNode;
+  /**
+   * The host's own alert (`CadViewer`'s `alert`: a failed update of cad), wherever the navbar is -- over every file and
+   * over the home: its card (`card`, the viewer's alert card), centred over what is under the navbar, held back while
+   * a file's own card is up or the file would not open; and, put away, its icon (`action`), drawn among the navbar's
+   * right-hand controls first, after a file's own put-away card's.
+   */
+  alert?: { card?: ReactNode; action?: FileNavigationAction | null } | null;
   /**
    * The host's own items at the end of the file's ⋯ menu, after Copy path and Open in: menu items or
    * submenus (`DropdownMenuItem`, `DropdownMenuSub`), the viewer's Export. Over a document only.

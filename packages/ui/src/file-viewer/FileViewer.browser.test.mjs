@@ -91,7 +91,7 @@ test("the renderer is not re-rendered by the frame's own chrome: a navbar action
 
 // A library card's picture is drawn by a viewer of its own, out of sight at 480 × 360 (`OffscreenPicture.tsx`). That viewer
 // is under the phone breakpoint, and the page's type once followed it: Home's text grew a step while its cards got pictures.
-test("the update button is the navbar's outermost control, and a failure says why under it, inside the page, until its X", async () => {
+test("the update button is the navbar's outermost control, and a failed update is the viewer's alert card, centred over the view, until its X or Escape", async () => {
   await reset();
   await waitPayload("root-a notes");
   await page.evaluate(() => window.harness.update("failed"));
@@ -102,18 +102,30 @@ test("the update button is the navbar's outermost control, and a failure says wh
   const [row, box] = await Promise.all([navbar.boundingBox(), button.boundingBox()]);
   assert.equal(Math.max(...controls), box.x + box.width, "the last of the row's controls, outermost");
   assert.ok(row.x + row.width - (box.x + box.width) <= 16, `at the row's right end: ${JSON.stringify([row, box])}`);
-  const card = page.locator("[data-update-failure]");
+  // The one alert card, centred over what is under the navbar, as a view's card is over the view.
+  const card = pane().locator("[data-host-alert] [role=alert]");
   await card.waitFor();
-  await card.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)));
-  const at = await card.boundingBox();
-  assert.ok(at.y >= box.y + box.height && at.x + at.width <= page.viewportSize().width, `under the button, inside the page: ${JSON.stringify([box, at])}`);
-  assert.match(await card.textContent(), /cad is in use by another program: close the apps using cad, then try again\.Or update in a terminal:cad update/);
+  const [at, body] = await Promise.all([card.boundingBox(), payload().evaluate((element) => element.closest(".overflow-hidden").parentElement.getBoundingClientRect().toJSON())]);
+  assert.ok(Math.abs(at.x + at.width / 2 - (body.x + body.width / 2)) <= 1 && Math.abs(at.y + at.height / 2 - (body.y + body.height / 2)) <= 1,
+    `centred over the view: ${JSON.stringify([body, at])}`);
+  assert.ok(at.y >= row.y + row.height, "under the navbar");
+  assert.equal(await card.getByRole("heading").textContent(), "Couldn’t update to 0.9.1");
+  assert.deepEqual((await card.innerText()).split("\n").filter(Boolean), ["Couldn’t update to 0.9.1",
+    "cad is in use by another program: close the apps using cad, then try again.", "Details", "Try again"]);
   await payload().click();
   await settle();
   assert.ok(await card.isVisible(), "a press elsewhere leaves it");
+  await page.keyboard.press("Escape");
+  await card.waitFor({ state: "detached" });
+  // Put away: its icon, first of the right-hand controls, brings it back; its X puts it away again.
+  const icon = navbar.getByRole("button", { name: "Couldn’t update to 0.9.1" });
+  const right = await navbar.evaluate((row) => [...row.lastElementChild.querySelectorAll("button")].map((node) => node.getAttribute("aria-label")));
+  assert.equal(right[0], "Couldn’t update to 0.9.1", `the first of them: ${right}`);
+  await icon.click();
+  await card.waitFor();
   await card.getByRole("button", { name: "Dismiss" }).click();
   await card.waitFor({ state: "detached" });
-  assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => event === "dismiss" || event === "update")), ["dismiss"]);
+  assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => ["dismiss", "reopen", "update"].includes(event))), ["dismiss", "reopen", "dismiss"]);
   await page.evaluate(() => window.harness.update("none"));
 });
 

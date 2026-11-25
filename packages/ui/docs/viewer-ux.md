@@ -70,18 +70,18 @@ chrome that floats over the picture. The home is the navbar over the library.
   Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); the file's
   name (no glyph; a chevron where it opens the name menu); its ⋯. Past the toggle they have no fill at rest, the
   accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
-- **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
-  the host's actions (the CAD app's Full size), then, outermost, the update button.
+- **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning; a file's first,
+  then a failed update's), Display, Preview, the host's actions (the CAD app's Full size), then, outermost, the update
+  button. Over the home: a failed update's put-away icon, then the update button.
 - **The update button** (`@cad/ui/update`), over every file and over the home, as 0.11.1 had it: a 24px brand-blue icon
   (a download arrow) and nothing else, shown while a global install of cad is behind a newer release of its own major,
   automatic updates on or off; none where cad cannot update itself. Its tooltip says "Update". A click updates: the
   icon becomes a ring that fills a stage at a time (asked, begun, installing while the server is away), each step
   eased, then a spinner while the server restarts, and the page reloads into the new release once nothing on it is
-  unsaved. An automatic update underway shows the same. A failed update, automatic or not, says why under the button
-  in a card shaped as an alert's (the red icon, "Couldn't update to 0.12.3", the cause in plain words and what to do,
-  then "Or update in a terminal:" with `cad update` and its copy icon, then Try again), which a press elsewhere leaves
-  open: its X (or Escape) puts it away, for every page, as does another attempt. Why: automatic updates fail on some
-  computers, and this is where the person learns why and what to do; the button blocks nothing.
+  unsaved. An automatic update underway shows the same. A failed update, automatic or not, is the viewer's alert
+  card, the one every error is said in ([the alert card](#loading-and-status-screens)), and the button shows as it
+  is offered. Why: automatic updates fail on some computers, and this is where the person learns why and what to do;
+  nothing is blocked, and an error looks like every other error.
 - The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
   logo's drawn mark (the row's 8px, the tile's 6px and the artwork's 2px).
 - The panel toggle is a 28px tile with the sidebar glyph, the same neutral button open or shut (`aria-expanded` says
@@ -456,6 +456,18 @@ model…"), or "Couldn't update view" with Retry. It never blocks anything. On a
 a tracker, and Details with a copy button. A card the model survives (a failed update, a warning) has an X; it then
 stays away while that alert stands, and its icon, first of the navbar's right-hand controls, brings it back.
 
+- **A failed update of cad** is the same card wherever the update button is: over a file, and over the home, centred
+  under the navbar as a view's card is over the view. Red, "Couldn't update to 0.12.3", the cause in plain words and
+  what to do; "Try again" in Retry's place, which is the button's click; Details holds `cad update`, the way on in a
+  terminal, and the path of the update's log as a comment line, so the copy pastes and runs. Report Issue only where
+  the cause is cad's own fault (the update's helper could not start, raised, went silent, or met an installer failure
+  cad does not recognize); a cause that is the person's to fix (a file in use, the network, the disk, an installer's
+  settings) says what to do instead. It blocks nothing: its X, or Escape, puts it away behind its icon, for every page
+  and through a reload, until another attempt begins or fails anew. Why: the cause is said where every error is, and
+  an issue is asked for only where we must fix something.
+- **One card at a time.** A file's own card wins: a failed update's waits behind it, shown once the file's is put
+  away, and not over a file that would not open, whose page says why.
+
 **Status screens** (`EmptyState.jsx`) cover every state with nothing to show: a file that is not there, one that will
 not open, CAD not running, a replaced link, a server that does not answer.
 
@@ -663,7 +675,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   **Delete** or Backspace deletes picked ink and measurements.
 - **A board**, while it has the keyboard: ⌘H (Ctrl+H) cycles Others, 3 switches 2D and 3D, ⇧F flips the board.
 - **Escape** undoes the innermost thing first: an open menu or dropdown, the Display card, the explorer, the panel's
-  search or its peek; then Preview; then the view's own steps, one a press and in the same order in every view: picked
+  search or its peek, a failed update's card; then Preview; then the view's own steps, one a press and in the same order in every view: picked
   ink, a box being drawn or a measurement under way, the tool in hand going back to Select (its effect kept), the
   measurements picked, then the selection, then (in a view that isolates) the isolation. Why: Escape leaves the tool first, as in design tools, and the
   selection, which feeds Quick Edit's chips, survives it. The pinned panel never closes on Escape. Quick Edit's note has its own Enter and Escape ([Quick Edit](#quick-edit)).

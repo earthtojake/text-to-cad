@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useI18n } from "../i18n/index.js";
+import type { HostAlert } from "../file-viewer/types.js";
+import { updateAlert } from "./updateAlert.js";
 
 /**
  * What the update button shows, as the server says it (`GET /api/v1/server`'s `cadUpdate`:
@@ -23,6 +25,10 @@ export interface UpdateState {
   said?: string;
   /** The installer the update ran: `uv` or `pipx`. */
   installer?: string;
+  /** The helper's log of the attempt, where it kept one: its path on this computer. */
+  log?: string;
+  /** The person put the failure away (`dismiss`): every page keeps it behind its icon. */
+  dismissed?: boolean;
 }
 
 /** `GET /api/v1/server`, and `POST /api/v1/local/update`'s answer: who the server is, and the update. */
@@ -49,13 +55,17 @@ export type UpdatePhase =
   | { phase: "working"; done: number; total: number }
   | { phase: "restarting" };
 
-/** Why an update did not install, as the button's failure says it. */
+/** Why an update did not install, as its alert says it (`updateAlert`). */
 export interface UpdateFailure {
   cause: string;
   said?: string;
   installer?: string;
   /** The attempt it is of: put away on the server by it. None for a refusal no attempt began from. */
   at?: number;
+  /** The helper's log of the attempt. */
+  log?: string;
+  /** Put away: its card behind its icon in the navbar. */
+  dismissed?: boolean;
 }
 
 /** How often a page asks where an update it follows is. */
@@ -81,12 +91,13 @@ const refusalOf = (error: unknown): UpdateFailure => {
  * server gone while the release installs, still asking -- and once another start of the server answers
  * (`instance`), the server restarted: `restarting`, and the host's `onRestarted` (a page reloads into
  * it, once nothing it holds is unsaved). An automatic update the page finds underway is followed the
- * same way. A failure stays, from the server's record and so through a reload, until the person puts it
- * away (`dismiss`, for every page) or another attempt begins; a refusal with no attempt (cad cannot
- * update itself) stays until the page is reloaded or put away. A page loaded after it followed an update
- * through the restart (`followed`: the release it was followed from, which the host keeps across the
- * reload) shows the spinner while the
- * update's end is still being written, then its failure -- or, on another release, that it is updated, once,
+ * same way. A failure is the viewer's alert (`alert`, `CadViewer`'s: `updateAlert`'s card, its Try again the
+ * click), from the server's record and so through a reload, until another attempt begins; put away (`dismiss`:
+ * its X or Escape) it stays behind its icon in the navbar, on every page and through a reload (the server
+ * keeps it put away), and the icon brings it back on this page (`reopen`). A refusal with no attempt (cad
+ * cannot update itself) is said the same way, on this page alone, until it is reloaded. A page loaded after
+ * it followed an update through the restart (`followed`: the release it was followed from, which the host
+ * keeps across the reload) shows the spinner while the update's end is still being written, then its failure -- or, on another release, that it is updated, once,
  * as a toast (`restartForSkills`: a host app that reads a release's skills only in a new session
  * suggests restarting it). A read that fails changes nothing, but while an update is followed it is the
  * server gone for the install.
@@ -107,6 +118,9 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
   // The start of the server the page follows, and the release it ran: a restart onto the same release is the update
   // failed and the release before started again, which the page goes on following.
   const server = useRef({ instance, version: initial?.release ?? initial?.cadUpdate?.version ?? "" });
+  // The person's own choice on the failure on screen, by its attempt: put away, or brought back from the navbar's icon
+  // (on this page alone: the server keeps a failure put away for every page).
+  const chosen = useRef<{ at?: number; dismissed: boolean } | null>(null);
   const { t } = useI18n();
   const latest = useRef({ calls, onRestarted, restartForSkills, t });
   latest.current = { calls, onRestarted, restartForSkills, t };
@@ -145,7 +159,9 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
     }
     following.current = false;
     if (update?.state === "failed") {
-      setFailure({ cause: update.cause ?? "", said: update.said, installer: update.installer, at: update.at });
+      const mine = chosen.current && chosen.current.at === update.at ? chosen.current.dismissed : undefined;
+      setFailure({ cause: update.cause ?? "", said: update.said, installer: update.installer, at: update.at,
+        ...(update.log ? { log: update.log } : {}), dismissed: mine ?? update.dismissed === true });
     } else {
       setFailure(current => (current && current.at === undefined ? current : null));
       if (after.current && reply.release && reply.release !== followed) {
@@ -175,6 +191,7 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
   const update = useCallback(() => {
     following.current = true;
     after.current = false;
+    chosen.current = null;
     setFailure(null);
     setPhase({ phase: "working", done: 0, total: UPDATE_STAGES });
     void latest.current.calls.start().then(reply => { if (apply(reply)) follow(); else following.current = false; }, error => {
@@ -186,10 +203,19 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
   }, [apply, follow]);
   const dismiss = useCallback(() => {
     setFailure(current => {
-      if (current?.at !== undefined) void latest.current.calls.dismiss(current.at).then(apply, () => {});
-      return null;
+      if (!current) return current;
+      chosen.current = { at: current.at, dismissed: true };
+      if (current.at !== undefined) void latest.current.calls.dismiss(current.at).then(apply, () => {});
+      return { ...current, dismissed: true };
     });
   }, [apply]);
+  const reopen = useCallback(() => {
+    setFailure(current => {
+      if (!current) return current;
+      chosen.current = { at: current.at, dismissed: false };
+      return { ...current, dismissed: false };
+    });
+  }, []);
   // Where the page starts: what the host read, else read now; an update underway is followed from the start (and
   // again where React's strict mode mounts the page a second time).
   const begun = useRef(false);
@@ -204,6 +230,10 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
     window.addEventListener("focus", back);
     return () => { alive.current = false; window.removeEventListener("focus", back); stopPolling(); };
   }, [read]);
-  const shown = Boolean(state?.latest) || phase.phase !== "idle" || failure !== null;
-  return { state, phase, failure, shown, update, dismiss };
+  const shown = Boolean(state?.latest) || phase.phase !== "idle";
+  const version = state?.latest ?? "";
+  const alert = useMemo<HostAlert | null>(() => failure ? { alert: updateAlert(failure, version, t),
+    dismissed: Boolean(failure.dismissed), onDismiss: dismiss, onReopen: reopen, ...(version ? { onRetry: update } : {}) } : null,
+  [failure, version, t, dismiss, reopen, update]);
+  return { state, phase, failure, alert, shown, update, dismiss, reopen };
 }

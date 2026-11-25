@@ -164,6 +164,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // A server that says nothing of cad's update (cad cannot update itself here): no update button, and nothing is
     // read for one.
     assert.equal(viewer().update, null);
+    assert.equal(viewer().alert, null);
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/server' || url.startsWith('/api/v1/local/update')), []);
     assert.deepEqual(guards, ['1', '1']);
 
@@ -370,7 +371,7 @@ test('the update button: from the server\'s description, a click begins the upda
   }
 });
 
-test('a failed update says why from the server\'s description, and is put away on the server', async () => {
+test('a failed update is the viewer\'s alert, from the server\'s description, and is put away on the server', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'http://cad.local/' });
   const { window } = dom;
   const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
@@ -380,7 +381,8 @@ test('a failed update says why from the server\'s description, and is put away o
   const posted = [];
   globalThis.fetch = async (url, init = {}) => {
     if (url === '/api/v1/local/update') posted.push(JSON.parse(init.body));
-    const reply = url === '/api/v1/local/update' ? { release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'idle' } }
+    const reply = url === '/api/v1/local/update' ? { release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'failed',
+      at: 42, cause: 'in_use', installer: 'uv', said: 'in use', dismissed: true } }
       : url === '/api/v1/documents' ? { documents: [] }
       : url === '/api/v1/settings' ? { language: { locale: null }, telemetry: { share: false, reason: 'untold', policy: 'p' } } : { ok: true };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
@@ -391,11 +393,19 @@ test('a failed update says why from the server\'s description, and is put away o
     const server = { start: '/m', release: '0.9.0', instance: 'first',
       cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'failed', at: 42, cause: 'in_use', installer: 'uv', said: 'in use' } };
     await act(() => root.render(createElement(App, { client, server, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
-    assert.deepEqual(snapshot().update.props.failure, { cause: 'in_use', said: 'in use', installer: 'uv', at: 42 });
-    await act(() => snapshot().update.props.onDismiss());
+    // The shared viewer's alert card says it (`CadViewer`'s `alert`); the button stays as it is offered.
+    const { alert } = snapshot();
+    assert.deepEqual([alert.alert.title, alert.alert.message, alert.alert.details, alert.alert.retryLabel, alert.alert.reportable, alert.dismissed],
+      ['Couldn’t update to 0.9.1', 'cad is in use by another program: close the apps using cad, then try again.', 'cad update', 'Try again', false, false]);
+    assert.equal(snapshot().update.props.state.latest, '0.9.1');
+    await act(() => alert.onDismiss());
     await until(() => posted.length > 0);
     assert.deepEqual(posted, [{ dismiss: 42 }]);
-    assert.equal(snapshot().update.props.failure, null);
+    assert.equal(snapshot().alert.dismissed, true, 'put away, behind its icon: the server keeps it so for every page');
+    await act(() => snapshot().alert.onReopen());
+    assert.equal(snapshot().alert.dismissed, false);
+    await act(() => snapshot().alert.onRetry());
+    assert.deepEqual(posted, [{ dismiss: 42 }, {}], 'Try again: a person\'s update');
   } finally {
     globalThis.fetch = fetchBefore;
     await act(() => root.unmount());

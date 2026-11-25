@@ -110,10 +110,12 @@ class UpdateRouteTest(unittest.TestCase):
     def test_a_failure_is_put_away_for_every_page(self) -> None:
         at = time.time() - 60
         self.keep(outcome="failed", ended=time.time(), cause="disk_full", at=at)
+        self.assertNotIn("dismissed", self.ask("GET", "/api/v1/server")[1]["cadUpdate"])
         status, answer = self.ask("POST", "/api/v1/local/update", {"dismiss": at})
-        self.assertEqual((status, answer["cadUpdate"]["state"]), (200, "idle"))
-        self.assertEqual(self.asked, [False], "nothing begun")
-        self.assertEqual(self.ask("GET", "/api/v1/server")[1]["cadUpdate"]["state"], "idle")
+        self.assertEqual((status, answer["cadUpdate"]["state"], answer["cadUpdate"]["dismissed"]), (200, "failed", True))
+        self.assertEqual(self.asked, [False, False], "nothing begun: asked only whether one waits")
+        update = self.ask("GET", "/api/v1/server")[1]["cadUpdate"]
+        self.assertEqual((update["state"], update["dismissed"]), ("failed", True), "put away for every page, and a reload")
         for body in ({"dismiss": "now"}, {"dismiss": True}, {"target": "1.0.0"}, ["x"]):
             with self.subTest(body=body):
                 self.assertEqual(self.ask("POST", "/api/v1/local/update", body)[0], 400)

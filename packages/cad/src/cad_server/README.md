@@ -247,8 +247,9 @@ switch says, the viewer and the CAD app show a button while the feed as last rea
 cad's major (never a higher major's, which only `cad update --major` installs), with where an attempt of this
 release is (underway while its helper beats, automatic or asked, or waiting for the work in flight) and, where the
 last one did not install what it was for (`lost` too, once its helper stopped beating) and this cad is still
-behind, its `cause`, until the person puts it away (`dismissed` in
-the record, `auto_update.dismiss`) or another attempt takes the record's place. A click asks the server what `cad
+behind, its `cause` and the helper's log, which the viewer says in its alert card until another attempt takes the
+record's place; once the person puts it away (`dismissed` in the record, `auto_update.dismiss`), every page keeps it
+put away. A click asks the server what `cad
 update` asks it (`Daemon.update`, through the engine's `Server.update`): PyPI asked now, the attempt underway
 joined, else one begun once nothing is in flight, bounded to the major. The route is refused where cad cannot update
 itself, saying why (`blocked`'s cause where it is that), and sits behind the credentials and the guard header of

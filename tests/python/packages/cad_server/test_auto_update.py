@@ -2309,6 +2309,9 @@ class ButtonTest(Case):
                     self.assertEqual(auto_update.button(now=now + 5),
                                      {"version": "0.1.0", "latest": "0.2.0", "state": "failed", "at": now,
                                       "asked": False, "cause": word, "said": said, "installer": "uv"})
+            (self.state / auto_update.LOG).write_text("$ uv tool install --upgrade cad\n", encoding="utf-8")
+            self.assertEqual(auto_update.button(now=now + 5)["log"], str(self.state / auto_update.LOG),
+                             "the helper's log, where there is one")
             self.keep(outcome="current", ended=now, cause="kept", at=now, asked=True)
             self.assertEqual(auto_update.button(now=now + 5)["cause"], "kept", "the release that ran, kept")
             self.keep(outcome="underway", at=now - auto_update.RETRY_SECONDS)
@@ -2337,13 +2340,17 @@ class ButtonTest(Case):
             self.keep(outcome="failed", ended=now, cause="disk_full", at=now)
             self.assertFalse(auto_update.dismiss(now - 1), "another attempt's: nothing put away")
             self.assertEqual(auto_update.button(now=now + 5)["state"], "failed")
+            self.assertNotIn("dismissed", auto_update.button(now=now + 5))
             self.assertTrue(auto_update.dismiss(now))
             self.assertTrue(auto_update.last()["dismissed"])
-            self.assertEqual(auto_update.button(now=now + 5)["state"], "idle")
+            put = auto_update.button(now=now + 5)
+            self.assertEqual((put["state"], put["cause"], put["dismissed"]), ("failed", "disk_full", True),
+                             "still said, put away: behind its icon on every page")
             self.keep(outcome="underway", at=now + 10)
             self.assertFalse(auto_update.dismiss(now + 10), "an attempt underway has nothing to put away")
             self.keep(outcome="failed", ended=now + 20, cause="network", at=now + 10)
             self.assertEqual(auto_update.button(now=now + 30)["cause"], "network", "a new attempt's failure shows")
+            self.assertNotIn("dismissed", auto_update.button(now=now + 30))
 
 
 class ServerUpdateTest(Case):

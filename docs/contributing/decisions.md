@@ -172,8 +172,8 @@ inside its major (`--major`: the newest of all), with or without a server runnin
 updates off too, and touches nothing else. The viewer and the CAD app show an update button while a
 global install is behind a newer release of its own major, automatic updates on or off: a click is
 the same request as `cad update` (never across a major), and an update that failed, automatic or
-not, says why there, in plain words, and what to do, with `cad update` to copy, until the person puts
-it away or another attempt begins. A person's own update (the button, `cad update`) spends none of the
+not, says why in the viewer's alert card, in plain words, and what to do, with `cad update` to copy,
+until another attempt begins; put away, it waits behind its icon in the navbar. A person's own update (the button, `cad update`) spends none of the
 tries the automatic update has for a release. A cad that is not a global install, such as one installed
 with pip into a project's own Python, never updates itself, and shows no button.
 
@@ -247,7 +247,7 @@ that never passes to a run a day.
 
 **What it costs.** The plugin's install is only as new as the cad that runs it (the first decision).
 The button is a standing blue icon on every page of a computer that is behind, which a person may
-ignore as they would any prompt; a failure it says stays on every page until it is put away.
+ignore as they would any prompt; a failure it says stays on every page, put away behind its icon once closed.
 Released 0.11.12 and 0.11.13 still download the hosted install command and run it unattended, as their
 `cad plugin update` and after their own update, and so does the bridge:
 [SECURITY.md](../../SECURITY.md) says so, and nothing shipped later can change them. A typed `cad

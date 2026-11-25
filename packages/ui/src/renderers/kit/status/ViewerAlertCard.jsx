@@ -5,15 +5,19 @@ import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { cn } from "@cad/ui/utils";
 import { english, useI18n } from "@cad/ui/i18n";
+import { useViewerAlertSlot } from "../../../file-viewer/alertSlot.js";
 import { useFollow } from "../../../file-viewer/navigation/NavbarLinks.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
+import { hasOpenPopup, ownsEscape } from "../../../lib/popups.js";
+import { isEditableTarget } from "../viewport/dom.js";
 import { ViewerHostContext } from "../../../host/context.js";
 import { alertIssueUrl } from "./reportIssue.js";
 
 /**
  * Whether the card can be put away. The viewport is the one place a file's problem is said, so
- * it shows every alert; one the model survives can be dismissed: a failed update
- * (`blocking: false` — the previous version is still on screen) and a warning beside the model.
+ * it shows every alert; one the model survives can be dismissed: a failed update of the model
+ * (`blocking: false` — the previous version is still on screen), a host's own alert that blocks
+ * nothing (a failed update of cad, `@cad/ui/update`) and a warning beside the model.
  */
 export function alertDismissible(alert, hasContent) {
   return alert.blocking === false || (hasContent && alert.severity === "warning");
@@ -31,6 +35,18 @@ const alertTone = alert => alert.severity === "warning" ? "text-warning" : "text
 const NavbarErrorIcon = ({ className, ...props }) => <CircleAlert {...props} className={cn(className, "text-destructive")} />;
 const NavbarWarningIcon = ({ className, ...props }) => <CircleAlert {...props} className={cn(className, "text-warning")} />;
 const NO_ACTIONS = Object.freeze([]);
+
+/**
+ * A put-away card's way back, as the navbar draws it (a `FileNavigationAction`): the card's own icon, in its colour,
+ * named after the alert. The file's card publishes it as its renderer's action (`useAlertDismissal`); a host's card,
+ * the file viewer draws after it (`CadViewer.tsx`'s `alert`).
+ * @param {object} alert
+ * @param {() => void} onInvoke  Brings the card back.
+ * @param {(key: string, params?: Record<string, unknown>) => string} [t]
+ */
+export function alertNavigationAction(alert, onInvoke, t = english, id = "viewer-alert") {
+  return { id, label: alertTitle(alert, t), icon: alert.severity === "warning" ? NavbarWarningIcon : NavbarErrorIcon, onInvoke };
+}
 
 /**
  * The card's dismissal, held by the frame that shows it (`RendererShell.jsx`, or a renderer that draws the card itself) so
@@ -61,16 +77,20 @@ export function useAlertDismissal(alert, { hasContent = false, scope = "", onNav
   const title = alert ? alertTitle(alert, t) : "";
   const warning = alert?.severity === "warning";
   const published = useRef(false);
+  // The file viewer holds a host's card back while this one is on screen (`file-viewer/alertSlot.js`).
+  const slot = useViewerAlertSlot();
+  const onScreen = Boolean(alert) && !dismissed;
+  useEffect(() => (onScreen && slot ? slot() : undefined), [onScreen, slot]);
   useEffect(() => {
     if (!onNavigationActionsChange) return;
     if (dismissed) {
-      onNavigationActionsChange([{ id: "viewer-alert", label: title, icon: warning ? NavbarWarningIcon : NavbarErrorIcon, onInvoke: reopen }]);
+      onNavigationActionsChange([alertNavigationAction({ severity: warning ? "warning" : "error", title }, reopen, t)]);
       published.current = true;
     } else if (published.current) {
       onNavigationActionsChange(NO_ACTIONS);
       published.current = false;
     }
-  }, [dismissed, title, warning, reopen, onNavigationActionsChange]);
+  }, [dismissed, title, warning, reopen, onNavigationActionsChange, t]);
   // Gone with the view: nothing of it is left in the navbar.
   useEffect(() => () => { if (published.current) onNavigationActionsChange?.(NO_ACTIONS); }, [onNavigationActionsChange]);
   return { dismissed, dismiss };
@@ -133,18 +153,39 @@ function AlertDetails({ details, clipboard }) {
  * away (`onDismiss`, while it stands: `useAlertDismissal`) — the previous version is there to
  * inspect and to pick from — and is brought back from its icon in the navbar. Long compiler
  * output stays complete in a scrollable diagnostic, never clipped, and its copy icon copies all
- * of it (`AlertDetails`). Retry reloads the file; where
+ * of it (`AlertDetails`). Retry reloads the file (an alert's `retryLabel` says it in words of its own,
+ * where its retry is no reload: a failed update's "Try again"); where
  * the host has a tracker (`links.issues`), Report Issue beside it opens a new issue saying what the
  * card says, about `file` (its path as the alert names it, absolute: the issue names only the file,
- * and carries no path of this machine).
+ * and carries no path of this machine). `closeOnEscape`: Escape puts a card that can be put away
+ * away too, before the view's own steps and after whatever spends it first (a popup, a field, a card of the view's
+ * own): a host's card, which stands over every view.
+ *
+ * @param {{ alert: object | null, hasContent?: boolean, onReload?: (() => void) | null, file?: string,
+ *   dismissed?: boolean, onDismiss?: (() => void) | null, closeOnEscape?: boolean }} props
  */
-export default function ViewerAlertCard({ alert: shown, hasContent, onReload, file = "", dismissed = false, onDismiss = null }) {
+export default function ViewerAlertCard({ alert: shown, hasContent, onReload, file = "", dismissed = false, onDismiss = null, closeOnEscape = false }) {
   const mobile = useViewerMobile();
   const host = useContext(ViewerHostContext);
   const { t } = useI18n();
   const follow = useFollow(host?.links);
+  const dismissible = Boolean(shown) && !dismissed && Boolean(onDismiss) && alertDismissible(shown, hasContent);
+  const escape = useRef(onDismiss);
+  escape.current = onDismiss;
+  useEffect(() => {
+    if (!closeOnEscape || !dismissible) return undefined;
+    // Before the view's own steps (the tool in hand, the selection: it is the innermost thing on screen), after a
+    // popup, a field or a card that spends its own Escape.
+    const onKeyDown = event => {
+      if (event.key !== "Escape" || event.defaultPrevented || isEditableTarget(event.target) || ownsEscape(event.target)
+        || hasOpenPopup(document.body)) return;
+      event.preventDefault();
+      escape.current?.();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [closeOnEscape, dismissible]);
   if (!shown || dismissed) return null;
-  const dismissible = Boolean(onDismiss) && alertDismissible(shown, hasContent);
   const reason = String(shown.reason || "");
   const shortReason = reason.split("\n").find((line) => line.trim()) || "";
   const readableReason = shortReason.length > 360 ? `${shortReason.slice(0, 360)}…` : shortReason;
@@ -186,7 +227,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
               <div className="flex flex-wrap gap-2 pt-0.5">
                 {shown.reload ? (
                   <Button type="button" variant="outline" size="xs" onClick={onReload} disabled={!onReload}>
-                    {t("alert.retry")}
+                    {shown.retryLabel || t("alert.retry")}
                   </Button>
                 ) : null}
                 {report ? (

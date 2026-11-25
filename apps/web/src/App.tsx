@@ -163,7 +163,8 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   // going while the release installs, and reloads into the server that comes back on the new release, once nothing
   // on it is unsaved. The tab notes the release it followed the update from (`followedUpdate`), so the page loaded
   // after the restart says it is updated, or, the update failed and the release before started again, why. A
-  // failure says why until it is put away, from the server's record, through a reload too.
+  // failure is the viewer's alert (`updater.alert`, the card every error is said in), from the server's record, so
+  // through a reload too; put away, it stays behind its icon in the navbar, for every page.
   const [followed] = useState(() => followedUpdate());
   useEffect(() => { forgetFollowedUpdate(); }, []);
   const reloading = useRef(false);
@@ -222,8 +223,8 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} name={name} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
       colorScheme={colorScheme} language={language}
-      update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} failure={updater.failure}
-        onUpdate={updater.update} onDismiss={updater.dismiss} /> : null}
+      update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} onUpdate={updater.update} /> : null}
+      alert={updater.alert}
       whatsNew={engineGone || updating ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />
   </div></div>;
 }

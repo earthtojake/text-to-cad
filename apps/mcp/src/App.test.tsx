@@ -542,4 +542,18 @@ it('a launch that carries no update (cad cannot update itself) shows no button',
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar' }} />);
   expect(viewer.props!.update).toBeNull();
+  expect(viewer.props!.alert).toBeNull();
+});
+
+it('a failed update the launch carries is the viewer\'s alert, put away through the host for every page', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const failed = { version, latest: '99.0.0', state: 'failed', at: 7, cause: 'helper_crash', installer: 'uv', log: '/s/auto-update.log' };
+  server.answers['/api/v1/local/update'] = () => new Status(200, { release: version, instance: 'first', cadUpdate: { ...failed, dismissed: true } });
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar', cadUpdate: failed }} />);
+  const alert = () => viewer.props!.alert!;
+  expect([alert().alert.title, alert().alert.details, alert().alert.reportable, alert().dismissed]).toEqual(
+    ['Couldn’t update to 99.0.0', 'cad update\n# The update\'s log: /s/auto-update.log', undefined, false]);  // cad's own: Report Issue
+  await act(async () => { alert().onDismiss(); });
+  expect(server.asked('/api/v1/local/update')).toEqual([{ dismiss: 7 }]);
+  await waitFor(() => expect(alert().dismissed).toBe(true));
 });

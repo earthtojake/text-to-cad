@@ -1210,9 +1210,10 @@ def button(*, queued: bool = False, now: float | None = None) -> dict[str, Any] 
     only ``cad update --major`` installs), else None; ``state`` ``waiting`` (``queued``: a person's update waits for
     the work in flight to end), ``working`` (an attempt of this release underway and still believed, automatic or
     asked: ``underway``, whose ``asked`` says which), ``failed`` (the last attempt of this release did not install what
-    it was for -- ``lost`` too, where its helper stopped beating, ``believed`` --, this cad is still behind, and the
-    person has not put it away: ``dismiss``), with ``at`` the attempt's start, ``cause`` its word, ``said`` it in plain
-    words (``in_words``) and the ``installer`` it ran, else ``idle``. An attempt underway from another release is the
+    it was for -- ``lost`` too, where its helper stopped beating, ``believed`` --, and this cad is still behind), with
+    ``at`` the attempt's start, ``cause`` its word, ``said`` it in plain words (``in_words``), the ``installer`` it ran,
+    ``log`` the helper's log of it (``LOG``, where there is one) and ``dismissed`` where the person put it away
+    (``dismiss``: every page then keeps it behind its icon), else ``idle``. An attempt underway from another release is the
     one that installed this one (its helper writes its end once this server has started): ``idle``; and so is a server
     older than its own environment (``stale``): the release is there already, and the click's update only restarts
     the server on it. Never raises."""
@@ -1237,21 +1238,22 @@ def button(*, queued: bool = False, now: float | None = None) -> dict[str, Any] 
             return {**out, **attempt, "state": "working"}
         if queued:
             return {**out, "state": "waiting"}
-        if word is not None and latest is not None and not found.get("dismissed") \
-                and not stale(install, chosen.wanted):
+        if word is not None and latest is not None and not stale(install, chosen.wanted):
+            log = _data() / LOG
             return {**out, **attempt, "state": "failed", "cause": word, "said": in_words(word, found.get("installer")),
                     **({"installer": found["installer"]} if found.get("installer") in {each.name for each in INSTALLERS}
-                       else {})}
+                       else {}), **({"log": str(log)} if log.is_file() else {}),
+                    **({"dismissed": True} if found.get("dismissed") is True else {})}
         return out
     except Exception:  # noqa: BLE001 - a button that cannot say shows nothing
         return None
 
 
 def dismiss(at: float) -> bool:
-    """The failure of the attempt begun at ``at`` put away by the person (the button's failure closed): marked
+    """The failure of the attempt begun at ``at`` put away by the person (the viewer's alert of it closed): marked
     ``dismissed`` in the record, under the state folder's lock, where the record is still that attempt's and it has
-    ended; the button shows it no more, here or in any page, until another attempt takes the record's place. Whether
-    it was. Never raises."""
+    ended; every page, here or after a reload, keeps it put away (``button``'s ``dismissed``) until another attempt
+    takes the record's place. Whether it was. Never raises."""
     try:
         from cad_server._internal.file_lock import state
 

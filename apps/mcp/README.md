@@ -483,8 +483,9 @@ asks where it is; the server stops for the install, and the four failed syncs th
 nothing then (the shim opens a new session with the server that comes back). Once a server of another release
 answers, the card loads that release's app in its own place (`host/release.ts`, the shell's `reload`), which says it
 is updated, once, and suggests restarting the host app, which reads a release's skills only as a session starts; a
-card whose shell is from before `reload` says CAD was updated instead. A failed update says why under the button,
-from the server's record, until it is put away.
+card whose shell is from before `reload` says CAD was updated instead. A failed update is the viewer's alert card,
+as in the browser (`CadViewer`'s `alert`), from the server's record; its X puts it away on the server, through
+`cad_http`, behind its icon in the navbar.
 
 ## Protocol migration
 

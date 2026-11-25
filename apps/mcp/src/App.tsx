@@ -298,8 +298,8 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // comes back); once a server of another release answers, the card loads that release's app in its own place (the
   // shell a host keeps: `host/shell.ts`'s `reload`), which says it is updated, once, and suggests restarting the
   // host app: it reads a release's skills only as a session starts. A card whose shell cannot load another app says
-  // CAD was updated, as a card from another build does. A failure says why until it is put away, from the server's
-  // record.
+  // CAD was updated, as a card from another build does. A failure is the viewer's alert (`updater.alert`), from the
+  // server's record; put away, it stays behind its icon in the navbar.
   const [followed] = useState(followedUpdate);
   useEffect(() => { forgetFollowedUpdate(); }, []);
   const [stale, setStale] = useState(false);
@@ -333,8 +333,8 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     <ModelView launch={launch} sequence={showing.sequence} alone={alone} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
       whatsNew={presentation === 'tabs' && !lost && !updating ? { entry: whatsNew.entry, onDismiss: whatsNew.dismiss } : undefined}
-      update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} failure={updater.failure}
-        onUpdate={updater.update} onDismiss={updater.dismiss} /> : null}
+      update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} onUpdate={updater.update} /> : null}
+      alert={updater.alert}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       openInBrowser={openInBrowser} engineOrigin={engineOrigin ?? undefined}
       colorScheme={colorScheme} theme={theme} locale={locale} language={language} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />

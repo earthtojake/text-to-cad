@@ -529,8 +529,11 @@ back to it). A click is a person's update (`POST /api/v1/local/update`): a ring 
 server's going for it no notice of the page's, then a spinner, and the page reloads into the server that comes back
 on the new release once nothing on it is unsaved (`reloadWhenClean`), where it says it is updated, once; the tab keeps
 the release it followed the update from across the reload (`host/followedUpdate.js`). An automatic update the page
-finds underway is followed the same way. A failed one, automatic or not, says why and what to do under the button,
-from the server's record (so through a reload too), until it is put away, for every page.
+finds underway is followed the same way. A failed one, automatic or not, is the viewer's alert card, the one every
+error is said in (`CadViewer`'s `alert`, `useUpdate`'s), over a file and on the home, from the server's record (so
+through a reload too): why and what to do, Try again, Details with `cad update` and the update's log, Report Issue
+where the cause is cad's own. Its X puts it away on the server (`POST /api/v1/local/update {dismiss}`), so every page
+keeps it behind its icon in the navbar until another attempt begins.
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 A document's id is never its name, in the navbar or the title: the page asks for the document its URL names
 beside the server's description (`main.tsx`), into the client's catalog, so its first frame has its name where the
