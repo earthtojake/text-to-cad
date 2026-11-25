@@ -114,12 +114,17 @@ class Environment:
         builder.create(folder)
         self.python: str = builder.python
         # Asked with ``site`` (``-I``, never ``-S``): it is what makes ``sys.prefix`` the environment's.
-        found = subprocess.run([self.python, "-I", "-c", "import json, sys, sysconfig; print(json.dumps("
-                                "[sys.prefix, sysconfig.get_paths()['purelib'], sys.implementation.cache_tag]))"],
+        found = subprocess.run([self.python, "-I", "-c", "import importlib.machinery, json, os, sys, sysconfig\n"
+                                "suffix = importlib.machinery.EXTENSION_SUFFIXES[0].strip('.').rsplit('.', 1)[0]\n"
+                                "machine = os.uname().machine if hasattr(os, 'uname') else ''\n"
+                                "print(json.dumps([sys.prefix, sysconfig.get_paths()['purelib'], "
+                                "sys.implementation.cache_tag, "
+                                "suffix if not machine or machine in suffix else suffix + '-' + machine]))"],
                                capture_output=True, text=True, timeout=SECONDS, env=child_environment(None))
         if found.returncode != 0:
             raise RuntimeError(f"the environment's interpreter did not run: {found.stderr}")
-        prefix, packages, self.tag = json.loads(found.stdout)
+        # ``tag``: what a pointer names its interpreter by; ``built_for``: what a stored release's marker names it by.
+        prefix, packages, self.tag, self.built_for = json.loads(found.stdout)
         self.prefix, self.packages = Path(prefix), Path(packages)
         if not (os.path.samefile(self.prefix, folder) and self.packages.is_relative_to(self.prefix)):
             raise RuntimeError(f"{self.python} is not the environment at {folder}: it says {prefix}, {packages}")
@@ -143,7 +148,8 @@ class Environment:
         write(folder / "zz-stored.pth",
               "import sys, types; sys.modules['stored_pth_ran'] = types.ModuleType('stored_pth_ran')\n")
         if marker:
-            write(folder / MARKER, json.dumps({"store": 1, "release": STORED, "python": self.tag, "built": 0}))
+            write(folder / MARKER, json.dumps({"store": 1, "release": STORED, "python": self.tag,
+                                               "for": self.built_for, "built": 0}))
         return folder
 
     def pointer_path(self, state: str | os.PathLike[str], prefix: str | os.PathLike[str] | None = None) -> Path:

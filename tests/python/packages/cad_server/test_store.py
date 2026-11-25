@@ -177,14 +177,44 @@ class PublishTest(StoreCase):
         before = time.time()
         final = store.publish(staged, "1.0.1")
         self.assertEqual(final, store.folder("1.0.1"))
-        self.assertEqual(final.name, f"1.0.1-{sys.implementation.cache_tag}")
+        self.assertEqual(final.name, f"1.0.1-{store.built_for()}")
         self.assertFalse(staged.exists())
         found = json.loads((final / "cad-store.json").read_text(encoding="utf-8"))
-        self.assertEqual({key: found[key] for key in ("store", "release", "python")},
-                         {"store": 1, "release": "1.0.1", "python": sys.implementation.cache_tag})
+        self.assertEqual({key: found[key] for key in ("store", "release", "python", "for")},
+                         {"store": 1, "release": "1.0.1", "python": sys.implementation.cache_tag,
+                          "for": store.built_for()})
         self.assertGreaterEqual(found["built"], before - 1)
         self.assertEqual(store.marker(final), found)
         self.assertTrue((final / "cad" / "__init__.py").is_file())
+
+    def test_a_stored_release_is_named_for_the_interpreter_that_can_load_it(self) -> None:
+        """Two interpreters of one Python version that cannot load each other's compiled files never share one."""
+        import importlib.machinery
+
+        mine = store.built_for()
+        suffix = importlib.machinery.EXTENSION_SUFFIXES[0]
+        self.assertTrue(suffix.startswith("." + mine.split("-")[0]) and mine.split("-")[0] in suffix, (mine, suffix))
+        self.assertIn(f"{sys.version_info.major}{sys.version_info.minor}", mine)
+        if hasattr(os, "uname"):
+            self.assertIn(os.uname().machine, mine, "the processor, which macOS's suffix does not name")
+        for theirs, name in ((".cpython-312-x86_64-linux-gnu.so", "cpython-312-x86_64-linux-gnu"),
+                             (".cpython-312-x86_64-linux-musl.so", "cpython-312-x86_64-linux-musl"),
+                             (".cpython-313t-aarch64-linux-gnu.so", "cpython-313t-aarch64-linux-gnu"),
+                             (".cpython-312-darwin.so", "cpython-312-darwin-arm64"),
+                             (".cp312-win_amd64.pyd", "cp312-win_amd64")):
+            machine = {"cpython-312-darwin-arm64": "arm64", "cpython-313t-aarch64-linux-gnu": "aarch64"}.get(name, "x86_64")
+            uname = None if theirs.endswith(".pyd") else mock.Mock(return_value=mock.Mock(machine=machine))
+            with self.subTest(suffix=theirs), mock.patch.object(importlib.machinery, "EXTENSION_SUFFIXES", [theirs, ".so"]), \
+                    mock.patch.object(store, "os", types.SimpleNamespace(**({"uname": uname} if uname else {}))):
+                self.assertEqual(store.built_for(), name)
+        final = self.published()
+        kept = json.loads((final / "cad-store.json").read_text(encoding="utf-8"))
+        for changes in ({"for": "cpython-312-x86_64-linux-musl"}, {"python": "cpython-27"}, {"store": 2}):
+            with self.subTest(changes=changes):
+                write(final / "cad-store.json", json.dumps({**kept, **changes}))
+                self.assertIsNone(store.marker(final), "not this interpreter's: no release to it")
+        write(final / "cad-store.json", json.dumps(kept))
+        self.assertEqual(store.marker(final), kept)
 
     def test_a_release_already_stored_stays_and_the_new_build_goes(self) -> None:
         final = self.published()

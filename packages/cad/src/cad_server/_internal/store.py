@@ -9,10 +9,11 @@ runs it once before it counts (``verify``; a release stored earlier is run again
 environment runs it (``point``). A process that started before that keeps the release it
 started with, to its end. What reads the pointer is ``_cad_release``, as each interpreter of the environment starts.
 
-**A stored release** is a folder ``<state folder>/store/<release>-<python>`` (``folder``): what ``uv pip install
---target`` makes for the environment's own interpreter -- cad and every package it needs, nothing shared with the
-environment's own packages -- and, written last, its marker (``MARKER``: ``{"store": 1, "release", "python",
-"built"}``). Without its marker a folder is no release. Nothing writes into one after that but Python's own bytecode.
+**A stored release** is a folder ``<state folder>/store/<release>-<what it is built for>`` (``folder``,
+``built_for``): what ``uv pip install --target`` makes for the environment's own interpreter -- cad and every package
+it needs, nothing shared with the environment's own packages -- and, written last, its marker (``MARKER``:
+``{"store": 1, "release", "python", "for", "built"}``). Without its marker a folder is no release, and neither is one
+made for another interpreter. Nothing writes into one after that but Python's own bytecode.
 The files are linked from uv's cache where the file system allows (``LINK``), so a release costs little room.
 
 **The pointer** (``pointer_path``: a file of the store named for the environment, ``pointer-<checksum of its
@@ -45,9 +46,9 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-__all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "TRASH", "active", "build", "clean", "environment",
-           "folder", "held", "marker", "own", "packages", "point", "pointed", "pointer", "pointer_path", "publish",
-           "remove", "restore", "root", "running", "sound", "switches", "tag", "verify"]
+__all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "TRASH", "active", "build", "built_for", "clean",
+           "environment", "folder", "held", "marker", "own", "packages", "point", "pointed", "pointer", "pointer_path",
+           "publish", "remove", "restore", "root", "running", "sound", "switches", "tag", "verify"]
 
 # ``_cad_release``'s names and rules, which never change: the store's folder in the state folder, a stored release's
 # marker, and where an environment's pointer is (``environment``, ``pointer_path``). Kept here too, since nothing
@@ -96,13 +97,26 @@ def root() -> Path:
 
 
 def tag() -> str:
-    """The interpreter a stored release is made for and a pointer is read by: ``sys.implementation.cache_tag``."""
+    """The interpreter a pointer is read by, as ``_cad_release`` asks it: ``sys.implementation.cache_tag``."""
     return sys.implementation.cache_tag
 
 
+def built_for() -> str:
+    """What a stored release's compiled files are made for, which is more than ``tag`` says: this interpreter's own
+    suffix for an extension module (its version and build, and but on macOS its processor and C library), with the
+    processor it runs on where the suffix names none. ``cpython-312-x86_64-linux-gnu``, ``cpython-312-darwin-arm64``,
+    ``cp312-win_amd64``. Two interpreters of one Python version that cannot load each other's files never share a
+    stored release."""
+    import importlib.machinery
+
+    suffix = importlib.machinery.EXTENSION_SUFFIXES[0].strip(".").rsplit(".", 1)[0]
+    machine = os.uname().machine if hasattr(os, "uname") else ""
+    return suffix if not machine or machine in suffix else f"{suffix}-{machine}"
+
+
 def folder(release: str) -> Path:
-    """Where release ``release`` is stored for this interpreter."""
-    return root() / f"{release}-{tag()}"
+    """Where release ``release`` is stored for this interpreter (``built_for``)."""
+    return root() / f"{release}-{built_for()}"
 
 
 def environment(prefix: str | os.PathLike[str] | None = None) -> str:
@@ -128,7 +142,7 @@ def marker(path: str | os.PathLike[str]) -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     whole = isinstance(found, dict) and found.get("store") == 1 and isinstance(found.get("release"), str)
-    return found if whole and found.get("python") == tag() else None
+    return found if whole and found.get("python") == tag() and found.get("for") == built_for() else None
 
 
 def _bootstrap() -> Any:
@@ -396,7 +410,8 @@ def publish(staged: str | os.PathLike[str], release: str, *, run: Run | None = N
     if final.exists():
         _aside(final)
     write_bytes_atomic(staged / MARKER, json.dumps(
-        {"store": 1, "release": release, "python": tag(), "built": time.time()}, sort_keys=True).encode("utf-8"))
+        {"store": 1, "release": release, "python": tag(), "for": built_for(), "built": time.time()},
+        sort_keys=True).encode("utf-8"))
     try:
         _rename(staged, final)
     except OSError:
