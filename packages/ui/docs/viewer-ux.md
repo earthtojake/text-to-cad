@@ -199,6 +199,14 @@ chrome that floats over the picture. The home is the navbar over the library: it
   robot (`DOCUMENT_KINDS`: by the row's document type, else its file's extension). Why: a person calls a STEP, an STL
   or a GLB a model too; "built from code" against "a file on disk" was the implementation showing. A model and the
   files exported from it stay cards of their own.
+- **A model and its saved `.xbf` are one card.** The `.xbf` a model declares (`@xbf("arm.xbf")`), which every run
+  writes or keeps, is the model itself saved: the model's card stands for both, and the file has no card beside it
+  in Recents, Pinned, a project's page, Standalone or the search. Why: one thing, one identity; two cards of the same
+  document, both a Part, asked the person which to open. The server leaves the file's row out (its record says which
+  model it is the saved file of, at the version the build wrote) only where the model's own card is in the same place,
+  its script there, and the file is still that version and unpinned; the model's row says where the file is (`saved`).
+  An `.xbf` the person exported (`cad model export ID x.xbf`), copied, got from elsewhere or edited since, or whose
+  model is deleted or elsewhere, is a card of its own, as every other file, and STEP, GLB and the other exports, are.
 - **Its documents**, all of them: the first 120, then "Show N more". Cards in columns at least 232px wide (the picture
   on the light gradient with its format's badge, then the name and one line), or 44px rows. A document built from
   code or an `.xbf` file is badged "Part" when its document holds one part and "Assembly" when it holds more (the

@@ -78,6 +78,36 @@ if __name__ == "__main__":
 """
 
 
+# A model whose build saves it as the .xbf beside its script.
+ARM = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("arm.xbf")
+def arm():
+    return bd.Box(4, 4, 20)
+
+if __name__ == "__main__":
+    arm()
+"""
+
+
+# A model with no file of its own, which the person exports as an xbf.
+HUB = """
+import build123d as bd
+from cad import model
+
+
+@model
+def hub():
+    return bd.Compound(children=[bd.Box(6, 6, 2), bd.Pos(0, 0, 4) * bd.Cylinder(2, 6)], label="hub")
+
+if __name__ == "__main__":
+    hub()
+"""
+
+
 class XbfRouteTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -327,6 +357,59 @@ finally:
         later = time.time_ns() + 5_000_000_000
         os.utime(pictured, ns=(later, later))
         self.assertIsNone(listed()["pictured.xbf"]["parts"])
+
+    def test_a_model_and_the_xbf_its_build_saves_it_as_are_one_card(self) -> None:
+        folder = self.base / "fold"
+        folder.mkdir()
+        (folder / "arm.py").write_text(textwrap.dedent(ARM), encoding="utf-8")
+        (folder / "hub.py").write_text(textwrap.dedent(HUB), encoding="utf-8")
+        run = lambda *words: engine_daemon.run([sys.executable, *words], cwd=folder, env=self.env)
+        for script in ("arm.py", "hub.py"):
+            done = run(script)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        arm = folder / "arm.xbf"
+        # A copy of the model's .xbf, and an .xbf the person exports of a model (one with no file of its own: a model
+        # saved as an .xbf already is one, and is not exported as another): files of their own, whatever they hold.
+        shutil.copyfile(arm, folder / "arm-copy.xbf")
+        [hub] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "hub"]
+        done = run("-m", "cad_server.cli", "model", "export", hub, str(folder / "hub.xbf"))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})
+        self.assertEqual(status, 201, project)
+        listed = lambda: {row["name"]: row for row in self.get(f"/api/v1/projects/{project['project']['id']}")[1]["documents"]}
+        posix = lambda path: str(path).replace(os.sep, "/")
+        self.assertEqual(sorted(listed()), ["arm", "arm-copy.xbf", "hub", "hub.xbf"],
+                         "the model once, its saved .xbf not beside it")
+        model = listed()["arm"]
+        self.assertEqual((model["saved"], model["parts"]), (posix(arm), 1))
+        self.assertEqual(listed()["hub.xbf"]["parts"], 2, "counted as it was written, and no model's saved file")
+        self.assertNotIn("of", listed()["hub.xbf"])
+        self.assertNotIn("saved", listed()["hub"])
+        # Opened on a page, the file is in Recents, where the model is too: one card there as well.
+        self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "open", "path": str(arm)})[0], 200)
+        recents = lambda: [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]]
+        self.assertIn(model["id"], recents())
+        self.assertNotIn(posix(arm), recents())
+        # Touched by hand: no longer the file the build wrote, so a card of its own; the next run keeps it as it is
+        # (the same bytes), and it is the model saved again.
+        later = time.time_ns() + 5_000_000_000
+        os.utime(arm, ns=(later, later))
+        self.assertIn("arm.xbf", listed())
+        self.assertNotIn("of", listed()["arm.xbf"])
+        self.assertIn(posix(arm), recents())
+        self.assertEqual(run("arm.py").returncode, 0)
+        self.assertNotIn("arm.xbf", listed())
+        # Rewritten by hand: its own card, until a run writes the model over it again.
+        shutil.copyfile(self.base / "XBF" / "pair.xbf", arm)
+        self.assertIn("arm.xbf", listed())
+        self.assertEqual(run("arm.py").returncode, 0)
+        self.assertNotIn("arm.xbf", listed())
+        # The model deleted: its saved file stays on disk and is listed as any file is.
+        done = run("-m", "cad_server.cli", "delete", model["id"], "--yes")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(sorted(listed()), ["arm-copy.xbf", "arm.xbf", "hub", "hub.xbf"])
+        self.assertTrue(arm.is_file())
+        self.assertIn(posix(arm), recents())
 
     def row(self, path: Path) -> dict:
         """Recents' row of the file at ``path``."""

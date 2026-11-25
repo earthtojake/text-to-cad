@@ -23,6 +23,12 @@ engine wrote (a build's declared file, an export) from the document it wrote it 
 (``RecentStore.counted``) -- a file's only while the file is the version counted. A listing reads records alone:
 nothing is read to count them, a model's script never, a file's bytes never.
 
+A model and the ``.xbf`` its build saves it as are one document, and a listing shows one card of them (``fold``):
+the build names the file on the model's record (``saved``) and the model on the file's (``of``, with the file's
+version as written: ``Models.written``), and while both say so and the file is still that version, a model's row
+says where the file is (``saved``), the file's row says whose it is (``of``), and the file's row is left out of any
+list that holds the model's (``fold``). An ``.xbf`` exported, copied or written since is a file of its own.
+
 The pictures are bounded however often a document is edited: a record names one, a new picture
 replaces it at once (``RecentStore.thumbnail``: the old one goes as the new is named), only
 the ``LIMIT`` records the home lists first keep theirs, within ``THUMBNAIL_BYTES`` in all (the rest,
@@ -110,6 +116,10 @@ class Recent:
     shown: str | None = None
     # How many part occurrences its document holds, where its record says (the module): None where it does not.
     parts: int | None = None
+    # A model and the .xbf its build saved it as (the module): a model's, that file's path (``saved``); the file's,
+    # that model's id (``of``). Each only while both records say so and the file is the version the build wrote.
+    saved: str | None = None
+    of: str | None = None
 
     @property
     def activity(self) -> float:
@@ -165,8 +175,12 @@ class Recent:
             "parts": self.parts,
         }
         found["kind"] = self.kind
+        if self.kind == "file" and self.of is not None:
+            found["of"] = self.of
         if self.kind != "file":
             found.update(id=self.path, script=self.script, rebuild=self.rebuild)
+            if self.saved is not None:
+                found["saved"] = self.saved.replace(os.sep, "/")
         if self.kind == "shape":
             found.update(shown=self.shown or "a shape handed over: no script to rerun")
         return found
@@ -307,9 +321,12 @@ class RecentStore:
                 path = str(registering.home(self.registry, record))
                 updated, size, version = _on_disk(path)
                 opened = record.get("opened")
+                of = record.get("of") if isinstance(record.get("of"), dict) else {}
                 entries.append(Recent(path=path, opened=float(opened) if isinstance(opened, (int, float)) and opened else None,
                                       updated=updated, size=size, parts=_parts(record.get("facts"), version)
-                                      if version else None, **common))
+                                      if version else None,
+                                      of=of.get("id") if version and of.get("version") == version
+                                      and isinstance(of.get("id"), str) else None, **common))
             elif record.get("kind") in ("model", "shape"):
                 program = registering.program(self.registry, record)
                 entries.append(Recent(path=record["id"], kind=record["kind"], name=record.get("name") or record.get("entry"),
@@ -318,8 +335,11 @@ class RecentStore:
                                       rebuild=registering.command(self.registry, record),
                                       shown=Models.shown(str(program) if program else None)
                                       if record["kind"] == "shape" else None, updated=record.get("built"),
-                                      opened=record.get("opened"), parts=_parts(record.get("facts")), **common))
-        return entries
+                                      opened=record.get("opened"), parts=_parts(record.get("facts")),
+                                      saved=os.path.normpath(self.registry.root(record) / record["saved"])
+                                      if record["kind"] == "model" and isinstance(record.get("saved"), str) else None,
+                                      **common))
+        return _linked(entries)
 
     def _sweep_thumbnails(self, replaced: set[str] | frozenset[str] = frozenset()) -> None:
         """The pictures held to their bound (the module): the pictures of the ``LIMIT`` records used
@@ -360,6 +380,41 @@ class RecentStore:
             return (self.thumbnails / name).stat().st_size
         except OSError:
             return 0
+
+
+def _linked(entries: list[Recent]) -> list[Recent]:
+    """``entries`` with each model and the ``.xbf`` its build saved it as linked (``Recent.saved``, ``Recent.of``)
+    only where both records say so -- the model's names the file, the file's names the model at the version on disk
+    now -- and unlinked anywhere else: a file written since, a model deleted, or one built since with no ``.xbf``."""
+    def key(path: str) -> str:
+        return os.path.normcase(os.path.normpath(path))
+
+    models = {entry.path: entry for entry in entries if entry.kind == "model" and entry.saved}
+    files = {key(entry.path): entry for entry in entries if entry.kind == "file" and entry.of}
+    for entry in models.values():
+        found = files.get(key(entry.saved or ""))
+        if found is None or found.of != entry.path:
+            entry.saved = None
+    for entry in files.values():
+        if entry.of not in models or models[entry.of].saved is None:
+            entry.of = None
+    return entries
+
+
+def fold(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A listing's ``rows`` (Recents', a project's) with each model's saved ``.xbf`` left out where the model's
+    own row stands for it: a file row the person has not pinned whose ``of`` (``Recent.of``: unchanged since its
+    model's build wrote it) names a model row of the same list, in the same project, whose script is there. Anything
+    else is listed as any file is: a file written since, a model deleted or not in this list, an
+    ``.xbf`` exported or copied. Records alone are read: no file's bytes, no script."""
+    models = {row["id"]: row for row in rows
+              if row.get("record") == "model" and row.get("saved") and not row.get("missing")}
+
+    def folded(row: dict[str, Any]) -> bool:
+        model = models.get(row.get("of")) if row.get("record") == "file" else None
+        return model is not None and not row.get("pinned") and model.get("project") == row.get("project")
+
+    return [row for row in rows if not folded(row)]
 
 
 def _cad_file(path: str) -> bool:

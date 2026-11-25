@@ -98,6 +98,13 @@ def _given(given: list[str], header: dict[str, Any], script: Any) -> list[str]:
     return list(given) if same(theirs) == same(script) else sorted(set(given) | set(named))
 
 
+def _declared(report: dict[str, Any]) -> list[str]:
+    """The ``.xbf`` files a model's build declares (its report's ``files``), as it wrote or kept them: the first is
+    the model saved (its record's ``saved``, its file's ``of``)."""
+    return [path for path, row in (report.get("files") or {}).items()
+            if isinstance(path, str) and isinstance(row, dict) and row.get("kind") == "xbf"]
+
+
 def revision(report: dict[str, Any], parameters: Any = None) -> str:
     """A model document's recorded revision: its closure's key (the same code, the same revision, in
     any process), else a token of this build's own (``durable``: false). A document that records parameters
@@ -206,9 +213,11 @@ class Models:
                     from cad.engine.delta import delta
 
                     report["delta"] = delta(facts, before)
-                    # Its declared .xbf files, written (or kept, the same bytes) from this very document.
-                    self.written([(path, facts.get("parts")) for path, row in (report.get("files") or {}).items()
-                                  if isinstance(row, dict) and row.get("kind") == "xbf"])
+                # Its declared .xbf, written (or kept, the same bytes) from this very document: the model saved, which
+                # its record names (``saved``) and whose record says so (``of``), so a listing shows the two as one.
+                parts, xbf = (facts or {}).get("parts"), _declared(report)
+                self.written([(path, parts) for path in xbf[:1]], of=ident)
+                self.written([(path, parts) for path in xbf[1:]])
                 self.daemon.builders[ident] = worker
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
@@ -282,21 +291,22 @@ class Models:
             now = kept
         return now, kept
 
-    def written(self, files: list[tuple[Any, Any]]) -> None:
+    def written(self, files: list[tuple[Any, Any]], of: str | None = None) -> None:
         """Each ``.xbf`` file the engine wrote from a document (``files``: its path and the part occurrences of
         the document it was written from, which the engine had in hand), counted on the file's record
         (``Registry.counted``) with the file's version as it now is: its row says Part or Assembly without the file
-        ever being read. A file with no record is given one, which no list shows until a page opens it
-        (``file_record``: no ``opened``). Nothing with no registry; a file gone, or a count that is none, is
-        skipped."""
-        held = self.registry()
+        ever being read. With ``of``, the id of the model a build wrote it for (its declared ``.xbf``, never an
+        export): the file is that model saved, as of that version (the record's ``of``). A file with no record is
+        given one, which no list shows until a page opens it (``file_record``: no ``opened``). Nothing with no
+        registry; a file gone is skipped, and so is one with neither a count nor ``of``."""
+        held = self.registry() if files else None
         if held is None:
             return
         from cad.engine.ids import canonical, file_id
         from cad_server.engine.registry import file_version
 
         for path, parts in files:
-            if not isinstance(path, str) or type(parts) is not int:
+            if not isinstance(path, str) or (type(parts) is not int and of is None):
                 continue
             try:
                 found = canonical(path)
@@ -304,7 +314,7 @@ class Models:
                 continue
             version = file_version(found)
             if version is not None:
-                held.counted(file_id(found), parts, version, make=found)
+                held.counted(file_id(found), parts if type(parts) is int else None, version, make=found, of=of)
 
     # --- the registry ------------------------------------------------------------------------
 
@@ -335,7 +345,8 @@ class Models:
         # revision the cache and the delta compare, when it was built (the
         # home's order) and when it was first built (``created``, the home's Created: kept from the
         # record it had; a record from before the time was kept stays without one). The closure is
-        # its document's own (``previous``); which files it declared is no one's: they are exports.
+        # its document's own (``previous``); of the files it declared only its .xbf is named (``saved``), the
+        # model saved: the rest are exports.
         found: dict[str, Any] = {
             "id": ident, "kind": "model", "root": root, "home": registering.relative(script, root),
             "entry": source["name"], "namespace": root, "name": source.get("explicit_name") or source["name"],
@@ -355,6 +366,16 @@ class Models:
             found["declares"] = source["declares"]  # the explicit names its script declared at this run
         if facts is not None:
             found["facts"] = facts
+        saved = _declared(report)[:1]
+        if saved:
+            from cad.engine.ids import canonical
+
+            try:
+                # Its declared .xbf, the model saved (its file's record says so: ``of``): a build that declares none
+                # names none, and a listing then shows that file as any other.
+                found["saved"] = registering.relative(canonical(saved[0]), root)
+            except (OSError, ValueError):
+                pass
         for key in ("opened", "pinned", "preview", "cache", "relocated"):  # the home's and the cache's, kept across builds
             if key in old:
                 found[key] = old[key]
