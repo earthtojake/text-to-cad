@@ -428,6 +428,7 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
     calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
     if (parsed.pathname === '/api/v1/local/open-in') return Response.json(answer);
     if (options.body?.includes('refused')) return Response.json({ error: 'cad does not open .sh files.', hint: 'Show it in the file manager instead.' }, { status: 400 });
+    if (options.body?.includes('unstarted')) return Response.json({ error: 'the app could not be started: xdg-open is not installed', hint: 'open the file from the file manager instead' }, { status: 500 });
     return options.body?.includes('gone') ? Response.json({ error: 'That file is not there.' }, { status: 404 }) : new Response(null, { status: 204 });
   } });
   t.after(() => client.dispose());
@@ -437,12 +438,14 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
   await assert.rejects(client.openIn('gone', 'source', 'default'), /not there/);
   // A refusal says what the server says, and what it says to do about it.
   await assert.rejects(client.openIn('refused', 'source', 'default'), { message: 'cad does not open .sh files. Show it in the file manager instead.' });
+  await assert.rejects(client.openIn('unstarted', 'source', 'default'), { message: 'the app could not be started: xdg-open is not installed; open the file from the file manager instead' });
   assert.deepEqual(calls, [
     ['/api/v1/local/open-in?id=d1', 'GET', null, null],
     ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'source', app: 'vscode' }],
     ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'export:step', app: 'default' }],
     ['/api/v1/local/open', 'POST', '1', { id: 'gone', target: 'source', app: 'default' }],
     ['/api/v1/local/open', 'POST', '1', { id: 'refused', target: 'source', app: 'default' }],
+    ['/api/v1/local/open', 'POST', '1', { id: 'unstarted', target: 'source', app: 'default' }],
   ]);
 });
 

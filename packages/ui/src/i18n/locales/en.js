@@ -337,7 +337,7 @@ export default {
   "format.xbf": "XBF",
   "home.formatPart": "Part",
   "home.formatAssembly": "Assembly",
-  "home.noMatchingModels": "No matching models.",
+  "home.noMatchingModels": "No matches.",
   "home.filesAria": "Files",
   "home.foldersAria": "Folders",
   "home.loadingFiles": "Loading files",

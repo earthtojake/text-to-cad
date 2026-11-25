@@ -409,7 +409,7 @@ export default {
   "format.xbf": "XBF",
   "home.formatPart": "零件",
   "home.formatAssembly": "装配体",
-  "home.noMatchingModels": "没有匹配的模型。",
+  "home.noMatchingModels": "没有匹配项。",
   "home.filesAria": "文件",
   "home.foldersAria": "文件夹",
   "home.loadingFiles": "正在加载文件",

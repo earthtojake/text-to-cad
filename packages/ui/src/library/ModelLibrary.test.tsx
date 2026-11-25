@@ -261,7 +261,7 @@ it('gives a card no glyph, and narrows the place to one kind with a chip: All fi
   // A search and the chip narrow together, and the counts follow the search: of the place before the chip.
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'arm' } });
   expect(chips()).toEqual([['All, 2', 'false'], ['3D models, 2', 'false'], ['Drawings, 0', 'false'], ['Boards, 0', 'true']]);
-  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matching models.');
+  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matches.');
   fireEvent.click(screen.getByRole('button', { name: '3D models, 2' }));
   expect(names()).toEqual(['Open arm.xbf', 'Open arm.stl']);
   fireEvent.click(screen.getByRole('button', { name: 'All, 2' }));
@@ -821,7 +821,7 @@ it("a search on a project's page asks the host and lists what is below, flat, ea
   expect(header()).toEqual(['Name', 'Where', 'Kind', 'Size', 'Updated', 'Created']);
   expect([where('housing.xbf'), where('housing-plan.dxf')]).toEqual(['v3', 'v3/drawings']);
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'nothing' } });
-  expect(await screen.findByText('No matching models.')).toBeTruthy();
+  expect(await screen.findByText('No matches.')).toBeTruthy();
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: '' } });
   view.rerender(home({ view: 'recents' }));
   expect(header()).toEqual(['Name', 'Project', 'Kind', 'Size', 'Updated', 'Created']);
@@ -896,7 +896,7 @@ it('narrows Recents, Pinned and Standalone with a search of the rows in hand, an
   // The sidebar's counts are the places', not the search's.
   expect(place('pinned').textContent).toBe('Pinned2');
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'nothing' } });
-  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matching models.');
+  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matches.');
 });
 
 it("gives a project's page a menu: the folder on screen's Copy path and Reveal, and Remove from CAD, which forgets the project alone, goes to Recents and says so", async () => {

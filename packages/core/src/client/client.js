@@ -425,7 +425,9 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       if (!response.ok) {
         // The server's refusal, and what it says to do about it (`hint`) where it says so.
         const detail = await response.json().catch(() => null);
-        throw new Error([detail?.error, detail?.hint].filter((part) => typeof part === 'string' && part).join(' ') || 'Could not open this file.');
+        // The engine's sentences rarely end in a stop: one that does not is parted from its hint by a semicolon.
+        const said = [detail?.error, detail?.hint].filter((part) => typeof part === 'string' && part);
+        throw new Error(said.reduce((whole, part) => `${whole}${/[.!?:;]$/.test(whole) ? ' ' : '; '}${part}`, said.shift() ?? '') || 'Could not open this file.');
       }
     },
     // The person's settings (`/api/v1/settings`): whether usage stats are shared, and the language.

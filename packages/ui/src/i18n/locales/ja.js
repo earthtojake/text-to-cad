@@ -408,7 +408,7 @@ export default {
   "format.xbf": "XBF",
   "home.formatPart": "部品",
   "home.formatAssembly": "アセンブリ",
-  "home.noMatchingModels": "一致するモデルはありません。",
+  "home.noMatchingModels": "一致するものはありません。",
   "home.filesAria": "ファイル",
   "home.foldersAria": "フォルダー",
   "home.loadingFiles": "ファイルを読み込み中",

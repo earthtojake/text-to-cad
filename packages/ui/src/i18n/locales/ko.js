@@ -408,7 +408,7 @@ export default {
   "format.xbf": "XBF",
   "home.formatPart": "부품",
   "home.formatAssembly": "어셈블리",
-  "home.noMatchingModels": "일치하는 모델이 없습니다.",
+  "home.noMatchingModels": "일치하는 항목이 없습니다.",
   "home.filesAria": "파일",
   "home.foldersAria": "폴더",
   "home.loadingFiles": "파일 불러오는 중",
