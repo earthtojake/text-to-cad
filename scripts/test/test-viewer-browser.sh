@@ -176,7 +176,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model(xbf="smoke.xbf")
+@model("smoke.xbf")
 def smoke():
     plate = bd.Box(30, 20, 4) - bd.Cylinder(3, 10)
     plate.label = "plate"

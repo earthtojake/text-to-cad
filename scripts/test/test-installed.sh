@@ -389,7 +389,7 @@ from cad.engine import step, stl, model
 import build123d as bd
 
 
-@model(xbf="XBF/probe.xbf")
+@model("XBF/probe.xbf")
 @step("probe.step")
 @stl("probe.stl")
 def probe():
