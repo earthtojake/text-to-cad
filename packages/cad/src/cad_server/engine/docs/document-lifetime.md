@@ -40,8 +40,8 @@ on the shape or a part of it), since there is no body to declare them in. The da
 "shape"}`, `Models.hand_over`) reads the bytes through the documents worker, writes them as its `.xbf` (at
 the path given second, `model(shape, "crate.xbf", name=...)`, else `<name>.xbf`, relative to the calling script's
 folder or, where there is none, the working folder; the caller writes it
-where the engine could not) and serves its page from that file, a file like any model's from then on. `name=` is
-required; its id is its `.xbf`'s. The handle's `.shape` is the shape passed. Called inside a model's body it is
+where the engine could not) and serves its page from that file, a file like any model's from then on. Its name is
+`name=`, else its path's stem (`model(shape, "crate.xbf")` is `crate`); its id is its `.xbf`'s. The handle's `.shape` is the shape passed. Called inside a model's body it is
 refused: a body returns its shape.
 
 **The library.** One file in the state folder, `library.json` ([library.py](../library.py); the distribution

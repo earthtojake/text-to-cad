@@ -262,6 +262,11 @@ class RootExports(unittest.TestCase):
         # A file of a shape is named by its path, else name=: with neither, nothing names it.
         with self.assertRaisesRegex(TypeError, r"step\(shape, 'path\.step'\): a file of a shape takes its path, or name="):
             step(object())
+        # A shape handed over as a model is named the same way: its path, else name=, and its name from its path.
+        with self.assertRaisesRegex(TypeError, r"model\(shape, 'path\.xbf'\): a shape handed over takes its path, or name="):
+            model(object())
+        with self.assertRaisesRegex(TypeError, r"model\(\) takes a function to declare, or a build123d shape"):
+            model(object(), "crate.xbf")  # past the name: the path named it
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.

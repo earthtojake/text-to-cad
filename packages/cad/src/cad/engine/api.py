@@ -260,7 +260,7 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
     from cad.engine.animations import ANIMATIONS, Animation
 
     if not isinstance(shape, bd.Shape):
-        raise TypeError(f"model() takes a function to declare, or a build123d shape and its name=; "
+        raise TypeError(f"model() takes a function to declare, or a build123d shape and its path or name=; "
                         f"not {type(shape).__name__}")
     if shape.__dict__.get("_wrapped") is None:
         raise ValueError(f"model(shape, name={name!r}): the shape is empty")
@@ -327,8 +327,10 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     if getattr(declaring._CONTEXT, "build", None) is not None:
         raise TypeError("model(shape, name=...) hands a shape over from a script or a REPL; a model's body returns "
                         "its shape, and calls its children")
-    if name is None:
-        raise TypeError("model(shape, name=...): a shape handed over takes its document's name")
+    if name is None and out is None:
+        raise TypeError("model(shape, 'path.xbf'): a shape handed over takes its path, or name=")
+    if name is None:  # named by its file, as a file of a shape is (``write_shape``)
+        name = Path(os.fspath(out)).stem
     check_name(name)
     filename = frame.f_code.co_filename if frame is not None else ""
     scope = canonical(filename if filename and os.path.isfile(filename) else os.getcwd())
