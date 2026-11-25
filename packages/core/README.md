@@ -149,7 +149,9 @@ src/
                    #   fit/pan/zoom maths, batched Path2D, screen-width strokes),
                    #   cadRefs (the ref grammars: the engine's, for an .xbf
                    #   and a STEP, parity-tested against engine/refs.py;
-                   #   a label, for any other file)
+                   #   a label, for any other file), documentPages (a
+                   #   document's page in the viewer's origin, `/<id>`: the
+                   #   one place a document's address is spelt and read)
 scripts/           # chunk-ids.mjs (the pages' builds: a chunk's debug id) and
                    #   source-maps.mjs (the pages' builds: maps into the packages'
                    #   src/), beside the package's own build and test runners

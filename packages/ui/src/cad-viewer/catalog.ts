@@ -1,5 +1,6 @@
 import type { CadEntry, CadWorkspaceService } from '@cad/core/client';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
+import { documentPage } from '@cad/core/lib/documentPages.js';
 import type { ClipboardPort } from '../host/types.js';
 import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
 
@@ -100,7 +101,7 @@ export function createCadFileActions({ platform, clipboard, reveal, openIn, link
         // The address still on its way: a host's clipboard starts the write inside the press that
         // asked for it (a browser refuses one begun after the link's request), then fills it in.
         await clipboard.writeText(link.client.link().then(({ link: fresh }) =>
-          `${origin}/${encodeURIComponent(id)}?token=${encodeURIComponent(fresh)}`));
+          `${origin}${documentPage(id)}?token=${encodeURIComponent(fresh)}`));
       } } : {}),
     },
     ...(openIn ? {

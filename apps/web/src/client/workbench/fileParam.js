@@ -5,7 +5,8 @@
  * `/?project=<id>` a project's page at its top, `&path=<folder>` at a folder of it (below its root, `/`-separated). A
  * path that names no id is the home, and a query that names no place is Recents.
  */
-const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+import { documentOfPage, documentPage } from "@cad/core/lib/documentPages.js";
+
 /** The places of the home the query's `view` names; Recents is the home with none. */
 const VIEWS = new Set(["pinned", "standalone"]);
 /** The query's parameters that name a place: a document's page carries none of them. */
@@ -13,8 +14,7 @@ const PLACE_PARAMETERS = ["view", "project", "path"];
 
 /** The id the URL's path names, or null: the home. */
 export function readDocumentId(pathname = window.location.pathname) {
-  const value = String(pathname || "").replace(/^\/+|\/+$/g, "");
-  return ID.test(value) ? value : null;
+  return documentOfPage(pathname);
 }
 
 /**
@@ -57,7 +57,7 @@ export function pageAddress({ id = "", place = null } = {}, { search = window.lo
   } else if (!id && place && VIEWS.has(place.view)) query.set("view", place.view);
   for (const [name, value] of new URLSearchParams(search)) if (!PLACE_PARAMETERS.includes(name)) query.append(name, value);
   const rest = query.toString();
-  return `/${id || ""}${rest ? `?${rest}` : ""}${hash}`;
+  return `${id ? documentPage(id) : "/"}${rest ? `?${rest}` : ""}${hash}`;
 }
 
 /**

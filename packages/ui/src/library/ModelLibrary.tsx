@@ -17,6 +17,7 @@ import type { EntryAction } from "../file-viewer/navigation/index.js";
 import type { FileActions } from "../file-viewer/types.js";
 import { useViewerMobile } from "../file-viewer/responsive.js";
 import type { HomeLocation, NavigationTarget, ViewerHost } from "../host/types.js";
+import { documentTarget, folderPlace as projectFolder } from "../host/addresses.js";
 import { useControlUsage } from "../usage/controls.js";
 import { useNavbarSlots } from "../file-viewer/navbarSlots.js";
 import { activityLabel, ageLabel, lastActivity } from "../lib/age.js";
@@ -557,7 +558,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       if (!imported) return;
       const { project, made, folder } = imported;
       const inside = below(folder, project.root);
-      const next: HomeLocation = { view: "project", project: project.id, ...(inside && inside !== slashed(folder) ? { path: inside } : {}) };
+      const next = projectFolder(project.id, inside && inside !== slashed(folder) ? inside : "");
       setArriving(project.id);
       setNote({ at: placeKey(next), text: made ? t("home.projectMade", { name: project.name })
         : !inside ? t("home.projectAgain", { name: project.name })
@@ -669,7 +670,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // The host's addresses and its way to open a target beside this view. A document is named by its id (a CAD host
   // knows each file it lists by its id); a row with no id, by its path, which the host resolves as it opens it.
   const hrefOf = navigation?.hrefOf, beside = navigation?.openBeside;
-  const targetOf = (item: Model): NavigationTarget => ({ document: item.id ?? item.path });
+  const targetOf = (item: Model): NavigationTarget => documentTarget(item);
   const besideLabel = beside ? t(beside.kind === "browser" ? "home.openBrowser" : "home.openNewTab") : "";
   const openBeside = (target: NavigationTarget, control: "home_open_new_tab" | "home_project_open_new_tab") => {
     usage.used(control);
@@ -770,7 +771,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   </li>;
   // A subfolder of the folder on screen: its glyph and its name, a way into it (a real link where the host gives places
   // an address), and nothing else.
-  const folderPlace = (folder: LibraryFolderRef): HomeLocation => ({ view: "project", project: place.view === "project" ? place.project : "", path: folder.path });
+  const folderPlace = (folder: LibraryFolderRef): HomeLocation => projectFolder(place.view === "project" ? place.project : "", folder.path);
   const folderEntry = (folder: LibraryFolderRef, className: string, body: ReactNode) => <li key={folder.path} className={className} data-folder="">
     <div className="cad-library-main">
       <PressTarget className="cad-library-open" href={hrefOf?.({ home: folderPlace(folder) }) ?? null} aria-label={t("home.openAria", { name: folder.name })}
@@ -864,8 +865,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // The place's name; on a project's page, the folder's path: each part but the last a way back up to its folder.
   const title = crumbs.length > 1 ? <div className="cad-library-crumbs">
     {crumbs.slice(0, -1).map(crumb => <Fragment key={crumb.path}>
-      <PressTarget className="cad-library-crumb" href={hrefOf?.({ home: { view: "project", project: shownProject?.id ?? "", path: crumb.path } }) ?? null}
-        onPress={() => visit(place.view === "project" ? { view: "project", project: place.project, path: crumb.path } : place)}>{crumb.name}</PressTarget>
+      <PressTarget className="cad-library-crumb" href={hrefOf?.({ home: projectFolder(shownProject?.id ?? "", crumb.path) }) ?? null}
+        onPress={() => visit(place.view === "project" ? projectFolder(place.project, crumb.path) : place)}>{crumb.name}</PressTarget>
       <span className="cad-library-crumb-slash" aria-hidden="true">/</span>
     </Fragment>)}
     <h2 className="cad-library-title">{shownAs}</h2>

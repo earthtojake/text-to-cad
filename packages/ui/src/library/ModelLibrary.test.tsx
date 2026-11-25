@@ -648,7 +648,7 @@ it("a project's page lists its folders first, then its files, and its heading le
     .toEqual([['heart-tag', 'housing'], 'v3', '~/cad/heart-tag/housing/v3']);
   places.length = 0;
   for (const crumb of ['heart-tag', 'housing']) await act(async () => { fireEvent.click(within(heading() as HTMLElement).getByRole('button', { name: crumb })); });
-  expect(places).toEqual([{ view: 'project', project: 'p1', path: '' }, { view: 'project', project: 'p1', path: 'housing' }]);
+  expect(places).toEqual([{ view: 'project', project: 'p1' }, { view: 'project', project: 'p1', path: 'housing' }]);
   // A file of the folder has its pin and its menu, but no Remove from Recents: it is here for being in the folder.
   expect(within(screen.getByRole('button', { name: 'Open lid.step' }).closest('li')!).getByRole('button', { name: 'Pin' })).toBeTruthy();
   expect(items(await menu('lid.step'))).toEqual(['Open', 'Pin']);

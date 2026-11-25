@@ -8,6 +8,7 @@ import { DocumentGlyph } from "../file-viewer/navigation/DocumentGlyph.jsx";
 import { useViewerMobile } from "../file-viewer/responsive.js";
 import { ViewerElementContext, ViewerHostContext } from "../host/context.js";
 import type { NavigationTarget, ViewerHost } from "../host/types.js";
+import { documentTarget } from "../host/addresses.js";
 import { useI18n } from "../i18n/index.js";
 import { FLOATING_SURFACE_CLASS } from "../lib/floatingSurface.js";
 import { cn } from "../lib/utils.js";
@@ -224,7 +225,7 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     document.getElementById(optionId(active))?.scrollIntoView?.({ block: "nearest" });
   }, [active]);
 
-  const target = (row: SearchRow<Model>): NavigationTarget => ({ document: row.key });
+  const target = (row: SearchRow<Model>): NavigationTarget => documentTarget(row.model);
   const beside = navigation.openBeside ?? null;
   const besideLabel = beside?.kind === "browser" ? t("search.openBrowser") : t("search.openNewTab");
   const pick = (row: SearchRow<Model>) => {

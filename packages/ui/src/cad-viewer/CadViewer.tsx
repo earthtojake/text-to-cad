@@ -7,6 +7,7 @@ import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
 import type { AppSetting, ColorSchemeSetting, FileProject, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
 import { I18nProvider, translator } from '../i18n/index.js';
 import type { HomeLocation, ViewerHost } from '../host/types.js';
+import { folderPlace } from '../host/addresses.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
 import { ModelLibrary, RECENTS, formatLabel, sortDocuments, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
@@ -271,7 +272,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const project = useMemo<FileProject | null>(() => {
     if (!projectRef) return null;
     const folder = projectRef.folder ?? '';
-    const place: HomeLocation = { view: 'project', project: projectRef.id, ...(folder ? { path: folder } : {}) };
+    const place = folderPlace(projectRef.id, folder);
     const labels = { xbf: t('format.xbf'), part: t('home.formatPart'), assembly: t('home.formatAssembly') };
     const read = folderRead?.folder ?? null;
     return {
