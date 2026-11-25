@@ -3,6 +3,7 @@ import { mock, test } from 'node:test';
 import { idOf, uuidV5 } from './events.mjs';
 import { handle } from './handler.mjs';
 import { INSTALL_LIMIT, rateLimiter } from './limit.mjs';
+import { noticesOf, pypiFeeds } from './versions.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -1212,5 +1213,40 @@ test('the version feed is the same for everyone, kept at the edge, and answers w
   for (const path of ['/v1/releases', '/v1/versions']) {
     const none = await handle(new Request(`https://api.texttocad.dev${path}`), down, { releases: async () => null, versions: async () => null });
     assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
+  }
+});
+
+test("/v1/releases carries the project's notices from CAD_NOTICES, and with none answers byte for byte as before", async () => {
+  // PyPI's index for cadgen with one release an hour old, as the function reads it.
+  const page = { files: [{ filename: 'cadgen-0.12.3-py3-none-any.whl', yanked: false, 'upload-time': '2026-11-17T10:00:00Z' }] };
+  const at = () => Date.parse('2026-11-17T12:00:00Z');
+  const notice = { id: 'install-moved', below: '0.12.4', text: 'cad now installs another way.', url: 'https://texttocad.dev/docs/install' };
+  const answer = async env => {
+    const logged = [];
+    const { releases, versions } = pypiFeeds({ fetch: async () => new Response(JSON.stringify(page), { status: 200 }), now: at,
+      log: () => {}, notices: noticesOf(env, (...line) => logged.push(line.join(' '))) });
+    const options = { releases, versions };
+    const [both, old] = await Promise.all(['/v1/releases', '/v1/versions'].map(path => handle(new Request(`https://api.texttocad.dev${path}`), memory(), options)));
+    return { releases: await both.text(), versions: await old.text(), logged };
+  };
+  // Today's answers: the frozen address names nothing at or above 0.12.0, so its 503.
+  const today = { releases: '{"latest":"0.12.3","lines":{"0":"0.12.3"}}', versions: '{"error":"no version feed"}' };
+  for (const env of [{}, { CAD_NOTICES: '' }, { CAD_NOTICES: '[]' }]) {
+    const { releases, versions, logged } = await answer(env);
+    assert.deepEqual([releases, versions, logged], [today.releases, today.versions, []], JSON.stringify(env));
+  }
+  const valid = await answer({ CAD_NOTICES: JSON.stringify([notice]) });
+  assert.deepEqual(JSON.parse(valid.releases), { latest: '0.12.3', lines: { 0: '0.12.3' }, notices: [notice] });
+  assert.equal(valid.versions, today.versions);
+  // Every kind of mistake: the entry dropped and logged, the good one kept; a variable that is no list, none at all.
+  const broken = [{ ...notice, id: 'Bad Id' }, { ...notice, id: 'b', below: '0.12' }, { ...notice, id: 'c', text: 'x'.repeat(241) },
+    { ...notice, id: 'd', text: 'one\ntwo' }, { ...notice, id: 'e', url: 'https://example.com/' }, { ...notice, id: 'f', url: 'http://texttocad.dev/' }];
+  const mixed = await answer({ CAD_NOTICES: JSON.stringify([...broken, notice]) });
+  assert.deepEqual(JSON.parse(mixed.releases).notices, [notice]);
+  assert.deepEqual(mixed.logged, [...['id', 'below', 'text', 'text', 'url', 'url'].map((rule, at) => `version feed: CAD_NOTICES entry ${at} dropped: ${rule}`),
+    'version feed: notices install-moved (below 0.12.4)']);
+  for (const [value, said] of [['not json', 'not JSON'], [JSON.stringify(notice), 'not a list']]) {
+    const { releases, logged } = await answer({ CAD_NOTICES: value });
+    assert.deepEqual([releases, logged], [today.releases, [`version feed: CAD_NOTICES is ${said}`]]);
   }
 });
