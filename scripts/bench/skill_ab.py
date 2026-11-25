@@ -29,7 +29,6 @@ import argparse
 import os
 import shutil
 import subprocess
-import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -96,9 +95,12 @@ def exported(model: Path, scratch: Path) -> Path:
         return out
     env = {**os.environ, **environment(scratch), "PATH": f"{BIN}{os.pathsep}{os.environ.get('PATH', '')}"}
     cad = str(BIN / "cad")
+    # Built from a copy in the scratch folder: a run saves a model's .xbf beside its script, and nothing is
+    # written into the tree.
+    script = Path(shutil.copy(model, scratch / model.name))
     subprocess.run([cad, "server", "start"], env=env, check=True, capture_output=True)
     try:
-        built = subprocess.run([cad, "run", str(model)], env=env, check=True, capture_output=True, text=True)
+        built = subprocess.run([cad, "run", str(script)], env=env, check=True, capture_output=True, text=True)
         ids = [line.split("id:", 1)[1].strip() for line in built.stdout.splitlines() if line.strip().startswith("id:")]
         subprocess.run([cad, "model", "export", ids[0], str(out)], env=env, check=True, capture_output=True)
     finally:
@@ -140,20 +142,22 @@ def prepare(run: Path, task: dict, ref: str | None, scratch: Path) -> None:
                                 encoding="utf-8")
     request = task["request"]
     if task["id"]:
-        sys.path.insert(0, str(REPO / "packages/cad/src"))
-        from cad.engine import ids
-
         script, function = task["id"].split("::")
-        request = request.replace("{ID}", ids.model_id(work / script, function))
+        module = Path(script).stem
         # A request that names a document's id speaks of one the person has built: build it on the run's own
-        # server, which keeps it, so the id resolves as it would on their computer.
+        # server, which keeps it, so the id resolves as it would on their computer. The id is the model's own
+        # (`Model.id`, its .xbf's), asked of it as a script beside it would.
         env = {**os.environ, **variables, "PATH": f"{BIN}{os.pathsep}{os.environ.get('PATH', '')}"}
         cad = str(BIN / "cad")
         subprocess.run([cad, "server", "start"], env=env, check=True, capture_output=True)
         try:
             subprocess.run([cad, "run", script], env=env, cwd=work, check=True, capture_output=True)
+            asked = subprocess.run([cad, "run", "-c", f"import {module}; print({module}.{function}.id)"],
+                                   env={**env, "PYTHONDONTWRITEBYTECODE": "1"}, cwd=(work / script).parent,
+                                   check=True, capture_output=True, text=True)
         finally:
             subprocess.run([cad, "server", "stop"], env=env, check=False, capture_output=True)
+        request = request.replace("{ID}", asked.stdout.split()[-1])
     (run / "BRIEF.md").write_text(BRIEF.format(run=run, skill=task["skill"], request=request), encoding="utf-8")
 
 
