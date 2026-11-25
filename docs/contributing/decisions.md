@@ -356,8 +356,9 @@ A page must ask the server nothing while it is hidden, or the server never count
 timer of the viewer's that asks the server stops while its page is hidden. The CAD app's views are the
 exception: each asks once a second, seen or not, which is how an agent reaches them, so while one is
 open the server is never left alone, and there the restart waits for the button, the server's next
-start or the day. A `cad server start` that becomes the switch answers a few seconds later than one
-that does not. The record of the last attempt has one more outcome, `ready`, which is not counted:
+start or the day. A `cad server start` that becomes the switch answers a second or two later than one
+that does not (2.9 s against 1.7 s on a Windows test machine, 1.1 s against 1.0 s on Linux). The
+record of the last attempt has one more outcome, `ready`, which is not counted:
 the update is counted when its restart ends.
 
 ## Forward only
