@@ -10,7 +10,7 @@ The `print3d` skill slices a part into printer-ready G-code with OrcaSlicer and 
 OrcaSlicer's command line reads `.stl`, `.3mf`, `.obj` and `.amf`, so a model or a STEP is exported to a mesh first:
 
 ```bash
-cad model export "$ID" part.3mf
+cad model export part.xbf part.3mf
 cad step export part.step part.3mf
 ```
 

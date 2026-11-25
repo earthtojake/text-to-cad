@@ -34,7 +34,7 @@ https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 `cad` is needed only to write the mesh a slicer takes from a text-to-cad model or a STEP:
 
 ```bash
-cad model export "$ID" part.3mf
+cad model export part.xbf part.3mf
 cad step export part.step part.3mf
 ```
 
