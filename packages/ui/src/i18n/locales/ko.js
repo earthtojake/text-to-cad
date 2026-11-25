@@ -310,7 +310,7 @@ export default {
   "home.projectInside": "{name}은(는) 이미 프로젝트인 {project} 안에 있습니다.",
 
 
-  "home.projectEmpty": "아직 모델이나 CAD 파일이 없습니다.",
+  "home.projectEmpty": "이 폴더는 비어 있습니다.",
   "home.folderFailed": "이 폴더를 읽을 수 없습니다. 이동되었거나 이름이 바뀌었을 수 있습니다.",
 
 
@@ -404,6 +404,7 @@ export default {
   "home.grid": "그리드",
   "home.list": "목록",
   "home.openAria": "{name} 열기",
+  "home.noAppOpens": "이 컴퓨터에는 {name}을(를) 열 수 있는 앱이 없습니다.",
   "format.xbf": "XBF",
   "home.formatPart": "부품",
   "home.formatAssembly": "어셈블리",
@@ -842,7 +843,6 @@ export default {
   "parameters.error.build_failed": "이 값으로는 빌드되지 않습니다.",
   "parameters.error.preview_build_failed": "이 값으로는 빌드되지 않습니다.",
   "parameters.error.preview_failed": "이 값을 표시하지 못했습니다.",
-  "parameters.reason.file": "스크립트에서 편집하세요.",
   "parameters.reason.no_worker": "편집하려면 스크립트를 다시 실행하세요.",
   "parameters.reason.shared": "다른 파일에서 설정됩니다.",
   "parameters.reason.sharedIn": "{source}에서 설정됩니다.",

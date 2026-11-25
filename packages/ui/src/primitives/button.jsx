@@ -23,6 +23,9 @@ const buttonVariants = cva(
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
         xs: "h-icon-button gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        // THE scale's text button (`docs/design-system.md`, "Buttons"): the control tall, the control's padding at each
+        // side, `text-ui` at regular weight, its icon the glyph token 8px before its words.
+        control: "h-control gap-2 rounded-md px-pad text-ui font-normal [&_svg:not([class*='size-'])]:size-glyph",
         sm: "h-[max(2rem,var(--cad-control))] gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
         icon: "size-9",

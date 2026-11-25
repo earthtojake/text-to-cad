@@ -311,7 +311,7 @@ export default {
   "home.projectInside": "{name} 位於已經是專案的 {project} 中。",
 
 
-  "home.projectEmpty": "這裡還沒有模型或 CAD 檔案。",
+  "home.projectEmpty": "此資料夾是空的。",
   "home.folderFailed": "無法讀取此資料夾。它可能已被移動或重新命名。",
 
 
@@ -405,6 +405,7 @@ export default {
   "home.grid": "格狀",
   "home.list": "清單",
   "home.openAria": "開啟 {name}",
+  "home.noAppOpens": "這台電腦上沒有可開啟 {name} 的應用程式。",
   "format.xbf": "XBF",
   "home.formatPart": "零件",
   "home.formatAssembly": "組合件",
@@ -843,7 +844,6 @@ export default {
   "parameters.error.build_failed": "這些值無法建置。",
   "parameters.error.preview_build_failed": "這些值無法建置。",
   "parameters.error.preview_failed": "無法顯示這些值。",
-  "parameters.reason.file": "請在腳本中編輯。",
   "parameters.reason.no_worker": "請重新執行腳本後再編輯。",
   "parameters.reason.shared": "在另一個檔案中設定。",
   "parameters.reason.sharedIn": "在 {source} 中設定。",

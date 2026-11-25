@@ -9,7 +9,7 @@ import { I18nProvider, translator } from '../i18n/index.js';
 import type { HomeLocation, ViewerHost } from '../host/types.js';
 import { folderPlace } from '../host/addresses.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, RECENTS, formatLabel, sortDocuments, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
+import { ModelLibrary, RECENTS, formatLabel, isDocument, sortDocuments, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { cadRenderers } from './renderers.js';
 import type { LibraryLayout, LibrarySort } from '../tab-store/tabRecord.js';
@@ -277,7 +277,8 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     const read = folderRead?.folder ?? null;
     return {
       id: projectRef.id, name: projectRef.name, root: projectRef.root,
-      documents: read ? sortDocuments(read.documents, sort, item => formatLabel(item, labels), locale) : null,
+      // The documents of the folder: a file in it that no page opens is no step of `[` and `]`.
+      documents: read ? sortDocuments(read.documents.filter(isDocument), sort, item => formatLabel(item, labels), locale) : null,
       missing: Boolean(read?.project?.missing), error: read ? null : folderRead?.error ?? null,
       href: hrefOf?.({ home: place }) ?? null,
       onShow: () => {

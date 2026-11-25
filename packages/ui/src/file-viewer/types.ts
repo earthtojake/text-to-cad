@@ -84,10 +84,11 @@ export interface FileActions {
    * Open in's apps, where the host can open a document's files in this computer's apps: the files
    * and their apps for the document on screen (asked as its file menu opens, never before; null or a
    * failure, and the menu is as without), and one opened in one of them -- `app` an app's id, or
-   * `"default"`, the OS's own handler. Both or neither.
+   * `"default"`, the OS's own handler. Both or neither. A file the host listed is named by the id it listed it with
+   * (`id`): a folder's file that is no document has no other name.
    */
-  apps?: (entry: Pick<FileEntry, "path" | "kind">, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
-  openApp?: (entry: Pick<FileEntry, "path" | "kind">, target: string, app: string) => void | Promise<void>;
+  apps?: (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
+  openApp?: (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }, target: string, app: string) => void | Promise<void>;
 }
 /** The files a view reads, by absolute path (`/`-separated): one file's metadata. */
 export interface FileSource {

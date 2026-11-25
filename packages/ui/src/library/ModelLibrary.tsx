@@ -1,32 +1,43 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Box, ChevronDown, Clock, Ellipsis, Files, Folder, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
+import { ChevronDown, Clock, Ellipsis, Files, Folder, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
+import { Badge } from "../primitives/badge.jsx";
 import { Button } from "../primitives/button.jsx";
 import { ValueDropdown } from "../primitives/value-dropdown.jsx";
-import { Pill } from "../primitives/pill.jsx";
+import { Pill, PillGroup } from "../primitives/pill.jsx";
 import { SegmentedControl } from "../primitives/segmented-control.jsx";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
 import { FieldLabel } from "../primitives/field-label.jsx";
 import { Input } from "../primitives/input.jsx";
+import { Kbd } from "../primitives/kbd.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
+import { TREE_GLYPH_STROKE } from "../primitives/tree-row.jsx";
 import { useI18n } from "../i18n/index.js";
 import type { LibraryLayout, LibrarySort } from "../tab-store/tabRecord.js";
-import { entryMenu } from "../file-viewer/navigation/entry-menu.js";
-import type { EntryAction } from "../file-viewer/navigation/index.js";
-import type { FileActions } from "../file-viewer/types.js";
-import { useViewerMobile } from "../file-viewer/responsive.js";
+import { DocumentGlyph } from "../file-viewer/navigation/DocumentGlyph.jsx";
+import { entryMenu, fileOpenMenu, fileOpener, openInMenu } from "../file-viewer/navigation/entry-menu.js";
+import type { EntryAction, OpenInEntry } from "../file-viewer/navigation/index.js";
+import { OpenInItems, useOpenInApps } from "../file-viewer/navigation/OpenInItems.jsx";
+import { PANEL_ROW_VARIABLES } from "../file-viewer/panelToggles.js";
+import type { FileActions, OpenInFiles } from "../file-viewer/types.js";
 import type { HomeLocation, NavigationTarget, ViewerHost } from "../host/types.js";
 import { documentTarget, folderPlace as projectFolder } from "../host/addresses.js";
 import { useControlUsage } from "../usage/controls.js";
 import { useNavbarSlots } from "../file-viewer/navbarSlots.js";
 import { activityLabel, ageLabel, lastActivity } from "../lib/age.js";
+import { NAVBAR_CONTROL_CLASS, NAVBAR_ROW_CLASS } from "../lib/navbarRow.js";
 import { hasOpenPopup, ownsEscape } from "../lib/popups.js";
-import { plainClick } from "./LibraryPlaces.jsx";
+import { cn } from "../lib/utils.js";
+import { PlaceLink, plainClick } from "./LibraryPlaces.jsx";
 import { LibraryFrame } from "./LibrarySidebar.jsx";
+import { PICTURE_CLASS, ROW_PICTURE_CLASS } from "./thumbnails.js";
 import logo from "../assets/logo-c.svg";
 
-/** A document: a CAD file the host lists, in its library or in a project's folder. */
+/**
+ * A file the host lists: a document (a CAD file a page opens) in its library or in a project's folder, or, in a folder
+ * alone, a file that is none (`documentKind: null`: a PDF, a script, another tool's native file).
+ */
 export interface LibraryModel {
   /** The file, by its absolute path. */
   path: string;
@@ -60,10 +71,14 @@ export interface LibraryModel {
   project?: string | null;
   /**
    * Its document's type, where the host names it: `cad.registry`'s spelling (`model`, `step`, `3mf`, `kicad_pcb`...).
-   * The home's kinds read it (`documentKind`); a row without it is known by its file's extension.
+   * The home's kinds read it (`documentKind`); a row without it is known by its file's extension. Null: the host says
+   * the file is no document (`isDocument`): it has no page, picture or pin, and is opened in an app of the computer's.
    */
-  documentKind?: string;
+  documentKind?: string | null;
 }
+
+/** Whether a row is a document, a file a page opens: every row but one its host says is none (`documentKind: null`). */
+export const isDocument = (item: Pick<LibraryModel, "documentKind">) => item.documentKind !== null;
 
 /** A folder a person opened as a project, as the host lists it (a CAD host's `CadProject`). */
 export interface LibraryProject {
@@ -124,7 +139,10 @@ const isModel = (item: LibraryModel) => String(item.documentKind ?? "").toLowerC
  * ("XBF", a format's name in every language): never a guess.
  */
 export interface ModelLabels { xbf: string; part: string; assembly: string }
-/** What a card's badge and a row's Kind say: a model's `labels` (`ModelLabels`), else a file's format ("STEP", "KiCad PCB"). */
+/**
+ * What a card's badge and a row's Kind say: a model's `labels` (`ModelLabels`), else a file's format ("STEP", "KiCad
+ * PCB"); a file that is no document, its extension as its name writes it, upper case ("PDF", "PY"), and nothing with none.
+ */
 export function formatLabel(item: LibraryModel, labels: ModelLabels): string {
   if (isModel(item)) {
     const parts = item.parts;
@@ -273,10 +291,11 @@ const LIST_MS = 2_000;
 /** How long typing rests before a project's page asks its host to search below the folder on screen. */
 const SEARCH_WAIT_MS = 150;
 
-// A card's or a row's picture, read once it is on screen: the one its row names, else its format's tile. Every picture
-// is the light viewport's, on the model area's light gradient in both themes. A card's carries its format's badge
-// (`badge`).
-function Thumbnail<Model extends LibraryModel>({ item, load, opening = false, badge = null }: { item: Model; load(item: Model): Promise<string | null>; opening?: boolean; badge?: string | null }) {
+// A card's or a row's picture (`thumbnails.ts`'s one picture), read once it is on screen: the one its row names, else its
+// kind's glyph. A card's is its full width and carries its format's badge (`badge`: the system's chip, 8px in from the
+// picture's corner); a row's (`row`) is the search's row picture.
+function Picture<Model extends LibraryModel>({ item, load, opening = false, badge = null, row = false }: {
+  item: Model; load(item: Model): Promise<string | null>; opening?: boolean; badge?: string | null; row?: boolean }) {
   const { t } = useI18n();
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
@@ -297,12 +316,26 @@ function Thumbnail<Model extends LibraryModel>({ item, load, opening = false, ba
     observer.observe(element.current);
     return () => { active = false; observer.disconnect(); };
   }, [item.path, item.thumbnail, item.missing, load]);
-  return <span className="cad-library-thumbnail" ref={element}>
-    {image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}
-    {badge ? <span className="cad-library-format" aria-hidden="true">{badge}</span> : null}
-    {opening ? <span className="cad-library-opening"><Spinner aria-label={t("home.openingAria", { name: item.name })} /></span> : null}
+  return <span className={cn(row ? ROW_PICTURE_CLASS : cn(PICTURE_CLASS, "w-full border-b border-border"), "group-data-missing/entry:opacity-50")} data-library-picture="" ref={element}>
+    {image ? <img src={image} alt="" className={cn("absolute inset-0 size-full object-contain", row && "p-0.5")} draggable={false} />
+      : <DocumentGlyph path={item.path} className="size-glyph" strokeWidth={TREE_GLYPH_STROKE} />}
+    {badge ? <Badge variant="secondary" className="absolute top-2 left-2 h-chip border-border font-medium" aria-hidden="true" data-library-format="">{badge}</Badge> : null}
+    {opening ? <span className="absolute inset-0 grid place-items-center bg-background/50 text-foreground" data-library-opening="">
+      <Spinner className="size-glyph" aria-label={t("home.openingAria", { name: item.name })} /></span> : null}
   </span>;
 }
+
+// The list: a header of muted labels the control tall (`TreeRowHeading`'s line) over rows the control + 16 tall (the
+// search's row, as tall as its picture needs), each its picture and name, then its facts in columns of fixed widths,
+// 16px apart. A row's fill hangs 8px past the place's line, as a panel's row does past the inset, so the header's
+// labels, the pictures and the folders' glyphs stand on the line; its two actions float over its right end, in the room
+// its padding keeps. A narrower place drops Created, then Where, then Kind, then Size.
+const COLUMNS_CLASS = `flex min-w-0 items-center gap-4`;
+const NAME_COLUMN_CLASS = "flex min-w-0 flex-[3_1_0] items-center gap-2";
+const COLUMN_CLASS: Readonly<Record<string, string>> = {
+  where: "min-w-0 flex-[2_1_0] truncate @max-[680px]:hidden", kind: "w-20 flex-none truncate @max-[560px]:hidden", size: "w-18 flex-none truncate @max-[440px]:hidden",
+  updated: "w-26 flex-none truncate", created: "w-26 flex-none truncate @max-[820px]:hidden",
+};
 
 /**
  * The list's header row: Name, then where each is (a search on a project's page: Where; Recents and Pinned: Project;
@@ -310,27 +343,45 @@ function Thumbnail<Model extends LibraryModel>({ item, load, opening = false, ba
  */
 function Columns({ where = null }: { where?: string | null }) {
   const { t } = useI18n();
-  return <div className="cad-library-columns" aria-hidden="true">
-    <span>{t("home.columnName")}</span>{where ? <span data-column="where">{where}</span> : null}
-    <span data-column="kind">{t("home.columnKind")}</span><span data-column="size">{t("home.columnSize")}</span>
-    <span data-column="updated">{t("home.columnUpdated")}</span><span data-column="created">{t("home.columnCreated")}</span>
+  return <div className={cn(COLUMNS_CLASS, "h-control pr-[calc(var(--cad-icon-button)*2+8px)] text-muted-foreground select-none")} aria-hidden="true" data-library-columns="">
+    <span className={cn(NAME_COLUMN_CLASS, "truncate")}>{t("home.columnName")}</span>
+    {where ? <span className={COLUMN_CLASS.where} data-column="where">{where}</span> : null}
+    {(["kind", "size", "updated", "created"] as const).map(column => <span key={column} className={COLUMN_CLASS[column]} data-column={column}>
+      {t(`home.column${column[0].toUpperCase()}${column.slice(1)}`)}</span>)}
   </div>;
 }
+
+// A card: one box on the card's colour with a card's corners, the picture edge to edge over its caption, padded by a
+// card's inset. A row: the search's row, its fill the row's (`primitives/tree-row.jsx`).
+const GRID_CLASS = "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(232px,1fr))] items-start gap-4 p-0";
+const LIST_CLASS = "-mx-2 my-0 flex list-none flex-col p-0";
+const CARD_OPEN_CLASS = "cad-library-open flex w-full min-w-0 cursor-pointer flex-col text-left text-inherit no-underline outline-none disabled:cursor-default";
+const CARD_CLASS = "cad-library-card group/entry relative min-w-0 scroll-m-4 overflow-hidden rounded-lg border border-border bg-card transition-colors";
+const ROW_CLASS = "cad-library-row group/entry relative min-w-0 scroll-m-4";
+// A row's press: under the pointer the row's fill (`bg-accent/50`); in keyboard focus, or being opened, a selected row's
+// (`bg-brand-subtle`) with the chrome's ring; the document just left, ringed 2px in the brand.
+const ROW_OPEN_CLASS = cn("cad-library-open w-full cursor-pointer rounded-md px-2 text-left text-inherit no-underline outline-none transition-colors disabled:cursor-default", COLUMNS_CLASS,
+  "h-[calc(var(--cad-control)+16px)] pr-[calc(var(--cad-icon-button)*2+16px)] not-disabled:hover:bg-accent/50",
+  "focus-visible:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset group-data-opening/entry:bg-brand-subtle",
+  "group-data-from/entry:ring-2 group-data-from/entry:ring-brand group-data-from/entry:ring-inset");
+const CAPTION_CLASS = "flex min-w-0 flex-col p-3 group-data-missing/entry:opacity-50";
+/** A placeholder's bar on the line its text will stand on (`TreeRowsLoading`'s bar). */
+const bar = (line: string, width: string) => <span className={cn("flex items-center", line)}><span className={cn("block h-2 rounded-full bg-muted-foreground/20", width)} /></span>;
 
 /** Where the models will be while the list is read: cards (or rows, under their header) in their own places, pulsing. */
 function Placeholders({ layout }: { layout: LibraryLayout }) {
   const { t } = useI18n();
   const status = <li className="sr-only" role="status">{t("home.loadingFiles")}</li>;
   return layout === "list"
-    ? <div className="cad-library-table"><Columns /><ul className="cad-library-list" aria-label={t("home.filesAria")} aria-busy="true" data-loading="">{status}{[0, 1, 2].map(index => <li key={index} className="cad-library-row" aria-hidden="true">
-      <span className="cad-library-open"><span className="cad-library-placeholder" /></span>
-    </li>)}</ul></div>
-    : <ul className="cad-library-grid" aria-label={t("home.filesAria")} aria-busy="true" data-loading="">{status}{[0, 1, 2, 3].map(index => <li key={index} className="cad-library-card" aria-hidden="true">
-      <span className="cad-library-open">
-        <span className="cad-library-thumbnail" />
-        <span className="cad-library-body"><span className="cad-library-text"><span className="cad-library-placeholder" /><span className="cad-library-placeholder" data-short="" /></span></span>
-      </span>
-    </li>)}</ul>;
+    ? <div className="cad-library-table"><Columns /><ul className={cn(LIST_CLASS, "motion-safe:animate-pulse")} aria-label={t("home.filesAria")} aria-busy="true" data-loading="">{status}{[0, 1, 2].map(index =>
+      <li key={index} className={ROW_CLASS} aria-hidden="true"><span className={ROW_OPEN_CLASS}>
+        <span className={NAME_COLUMN_CLASS}><span className={ROW_PICTURE_CLASS} />{bar("h-(--cad-leading-ui) flex-1", "w-2/5")}</span></span>
+      </li>)}</ul></div>
+    : <ul className={cn(GRID_CLASS, "motion-safe:animate-pulse")} aria-label={t("home.filesAria")} aria-busy="true" data-loading="">{status}{[0, 1, 2, 3].map(index =>
+      <li key={index} className={CARD_CLASS} aria-hidden="true"><span className={CARD_OPEN_CLASS}>
+        <span className={cn(PICTURE_CLASS, "w-full border-b border-border")} />
+        <span className={CAPTION_CLASS}>{bar("h-(--cad-leading-ui)", "w-3/5")}{bar("h-(--cad-leading-tiny)", "w-1/3")}</span>
+      </span></li>)}</ul>;
 }
 
 /**
@@ -340,16 +391,62 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
  */
 function PressTarget({ href = null, disabled = false, onPress, children, ...props }: {
   href?: string | null; disabled?: boolean; onPress(): void; children: ReactNode; className?: string;
-  "aria-label"?: string; "aria-busy"?: boolean;
+  "aria-label"?: string; "aria-busy"?: boolean; "data-library-crumb"?: string; "data-library-file"?: string;
 }) {
   if (href && !disabled) return <a href={href} onClick={event => { if (!plainClick(event)) return; event.preventDefault(); onPress(); }} {...props}>{children}</a>;
   return <button type="button" disabled={disabled} onClick={onPress} {...props}>{children}</button>;
 }
 
+/** A file as the host's actions name it: its path, and its id where the host listed one (a folder's file has no other name). */
+const fileEntry = (item: LibraryModel) => ({ path: item.path, kind: "file" as const, ...(item.id ? { id: item.id } : {}) });
+const NO_PLACES: ReadonlySet<EntryAction> = new Set();
+
+/**
+ * A card's or a row's ⋯: one menu for every file. What leads it is the caller's (`lead`: a document's Open and Open in
+ * new tab), then Open in, a submenu of the apps the host lists for the file and Default app (`OpenInItems`, the rows the
+ * navbar's Open in draws), looked up as the menu opens and there only once the host has listed something; then what
+ * the host can do with a file on disk (`items`: Copy path, Copy link, the file manager); then the caller's last items
+ * (`tail`: a document's Pin and Remove from Recents). Nothing at all where there would be no item.
+ */
+function FileMenu<Model extends LibraryModel>({ item, fileActions, items, lead = null, tail = null, label, className, variant, onPerform, onFail }: {
+  item: Model; fileActions?: FileActions; items: readonly { action: EntryAction; label: string }[]; lead?: ReactNode; tail?: ReactNode; label: string;
+  className?: string; variant: "ghost" | "outline"; onPerform(action: EntryAction, item: Model): void; onFail(failure: unknown): void }) {
+  const { t } = useI18n();
+  const usage = useControlUsage();
+  const [open, setOpen] = useState(false);
+  const asks = fileActions?.apps, opens = fileActions?.openApp;
+  const file = useMemo(() => fileEntry(item), [item.path, item.id]);
+  const apps = useMemo(() => (asks && opens && !item.missing ? (options: { signal: AbortSignal }) => asks(file, options) : null), [asks, opens, file, item.missing]);
+  const files = useOpenInApps(open, apps) as OpenInFiles | null;
+  if (!lead && !tail && !apps && !items.length) return null;
+  const platform = fileActions?.platform ?? "linux";
+  const entries = !files ? [] : isDocument(item) ? openInMenu(platform, NO_PLACES, t, { files }) : fileOpenMenu(platform, NO_PLACES, t, { files });
+  const choose = (entry: OpenInEntry) => { usage.used("file_open_app"); void Promise.resolve(opens?.(file, entry.target ?? "", entry.app ?? "")).catch(onFail); };
+  const openIn = t("file.openIn");
+  return <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
+    <DropdownMenuTrigger asChild>
+      <Button variant={variant} size="icon-xs" className={className} aria-label={label}><Ellipsis aria-hidden="true" /></Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="min-w-40">
+      {lead}
+      {entries.length ? <DropdownMenuSub>
+        <DropdownMenuSubTrigger data-open-in-menu="">{openIn}</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent aria-label={openIn}><OpenInItems entries={entries} onChoose={choose} /></DropdownMenuSubContent>
+      </DropdownMenuSub> : null}
+      {items.map(entry => <DropdownMenuItem key={entry.action} onSelect={() => onPerform(entry.action, item)}>{entry.label}</DropdownMenuItem>)}
+      {tail}
+    </DropdownMenuContent>
+  </DropdownMenu>;
+}
+
 /** Escape's key, as a keyboard prints it: a key's name, the same in every language. */
 const ESCAPE_KEY = "Esc";
-/** The home narrower than this is on the narrow page's gutters (16px), as a phone's is. */
-const NARROW_PX = 720;
+// A small icon button that opens a menu (a card's, a row's and a project's ⋯): muted, on the accent fill while it is open.
+const MENU_BUTTON_CLASS = "text-muted-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
+// A card's and a row's pin and ⋯: there under the pointer or the keyboard, while its menu is open, always where nothing
+// hovers, and the pin always while it is on.
+const ACTION_CLASS = "opacity-0 transition-opacity group-hover/entry:opacity-100 group-focus-within/entry:opacity-100 data-[state=open]:opacity-100 "
+  + "aria-pressed:opacity-100 [@media(hover:none)]:opacity-100 motion-reduce:transition-none";
 /** What the home keeps of its sidebar (`LibrarySidebar.jsx`): the person's choice of open or closed, and its width. */
 export interface LibraryPanel { open?: boolean; width?: number }
 /** One place of the home as its row draws it: a project's row has no count (its folder is not walked to count it). */
@@ -385,29 +482,32 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  *
  * The main area shows the place on screen. Its heading row: the place's name; on a project's page, the folder glyph
  * and the folder's path, the project's name first and each part a way back up to it (the last, the folder on screen,
- * the heading), that folder from `~` and its ⋯ (Open in new tab, Copy path, Reveal, then Remove from CAD, which forgets
- * the project and nothing on disk); then Sort (Last activity, Name, Kind) and grid or list, one segmented control.
+ * the heading), at the project's top that folder from `~` (below it the heading is the path already), and its ⋯ (Open
+ * in new tab, Copy path, Reveal, then Remove from CAD, which forgets the project and nothing on disk); then Sort (Last activity, Name, Kind) and grid or list, one segmented control.
  * Under it the kinds' chips (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds,
  * with its count under the search), where it holds more than one.
  *
  * A project's page is one folder of it (`library.folder`, read again every `LIST_MS`): its subfolders first, each its
- * glyph and its name and a way into it, then the CAD files directly in it. Recents, Pinned and Standalone are the
+ * glyph and its name and a way into it (a row, `PlaceLink`), then every file directly in it, the documents and the
+ * files no page opens together (`isDocument`: one of those is a card or a row like the rest, opened in an app of the
+ * computer's by a press, `openFile`, with Open in in its ⋯ and no pin). Recents, Pinned and Standalone are the
  * library's rows. Each document is a card (a picture badged with its format -- for an `.xbf` file "Part" or
  * "Assembly", by its `parts`, "XBF" (its format) where that is not known -- over the name and a line: its project's
  * name in Recents and Pinned, then its last activity with its verb; no glyph or size, which the list has) or a row
  * (Name, Where or Project, Kind: its format, Size, Updated, Created). A card's picture is the one its row names, else its
  * format's tile: the home draws none. A card's or a row's main press is a link where the host gives the document an
- * address (it is named by its `id`; a row with none by its `path`), a button otherwise. Each has a pin and one ⋯ menu:
- * Open, Open in new tab (or Open in browser: `navigation.openBeside`), Copy path, Copy link and Reveal where the host
- * can, Pin or Unpin, then, but on a project's page (where a file is listed for being in the folder), Remove from Recents,
+ * address (it is named by its `id`; a row with none by its `path`), a button otherwise. Each has a pin and one ⋯ menu
+ * (`FileMenu`): Open, Open in new tab (or Open in browser: `navigation.openBeside`), Open in (the host's apps for its
+ * files, looked up as the menu opens), Copy path, Copy link and Reveal where the host can, Pin or Unpin, then, but on a project's page (where a file is listed for being in the folder), Remove from Recents,
  * which forgets the library's entry of it (no question: its file is untouched, and opening it again brings it back) and
  * takes the card off the list at once. Nothing on the home deletes a file.
  *
  * The search narrows the place on screen: Recents, Pinned and Standalone by the rows in hand; a project's page asks the
- * host for every CAD file below the folder on screen (`library.folder` with `q`), the one place its levels are
+ * host for every file below the folder on screen (`library.folder` with `q`), the one place its levels are
  * flattened, each row saying where it is below that folder.
  *
- * Narrower than `NARROW_PX`, and at the phone's scale, the place is on 16px gutters, 12px under the navbar.
+ * The place is padded by the panel's inset (16px) on every side, at every width and on a phone: its heading, its
+ * chips' words, its folders' glyphs and its cards stand on that one line.
  *
  * `from` (the document the navbar's project name was pressed over) rings that document's card in the brand's colour,
  * brought into view, and puts "Back to <name>" in the heading row; Escape, while no menu, dialog or field has the
@@ -537,6 +637,27 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     setOpening(item.path);
     void current.current.open(item).catch(fail).finally(() => setOpening(null));
   };
+  // A press on a file that is no document (`isDocument`) opens it too: there is no page for it, so it is handed to an app
+  // of this computer's, chosen from the host's answer for the file as it is pressed (`fileOpener`): the OS's own handler
+  // where the host offers it, else the first app it lists; where it lists neither, or the open fails, the place's line
+  // says so (the host's own words where it has them), and the file's ⋯ still shows it in the file manager. A host that
+  // cannot open apps shows the file in its file manager where it can do that; where it can do neither, the file has
+  // no press at all (`pressable`).
+  const canOpenApps = Boolean(fileActions?.apps && fileActions.openApp);
+  const pressable = (item: Model) => isDocument(item) || canOpenApps || Boolean(fileActions?.perform?.reveal);
+  const openFile = (item: Model) => {
+    if (opening) return;
+    const file = fileEntry(item);
+    setError("");
+    if (!canOpenApps) { usage.used("home_reveal"); void Promise.resolve(fileActions?.perform?.reveal?.(file)).catch(fail); return; }
+    setOpening(item.path);
+    void Promise.resolve(fileActions?.apps?.(file)).then(files => {
+      const opener = fileOpener(files);
+      if (!opener) throw new Error(t("home.noAppOpens", { name: item.name }));
+      usage.used("file_open_app");
+      return fileActions?.openApp?.(file, opener.target, opener.app);
+    }).catch(fail).finally(() => setOpening(null));
+  };
   // The person's own move to a place: a row of the sidebar, a folder of a project, or a part of its path.
   const PLACE_CONTROLS = { recents: "home_place_recents", pinned: "home_place_pinned", standalone: "home_place_standalone", project: "home_place_project" } as const;
   const visit = (next: HomeLocation) => {
@@ -586,21 +707,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const slots = useNavbarSlots();
   // A narrow navbar (under 700px: `styles/globals.css`) shows the search as its icon until it is pressed.
   const [searchOpen, setSearchOpen] = useState(false);
-  // The narrow page's gutters at the phone's scale, and in a home narrower than `NARROW_PX` (measured on the home,
-  // never the window).
-  const mobile = useViewerMobile();
-  const [element, setElement] = useState<HTMLDivElement | null>(null);
-  const [tight, setTight] = useState(false);
-  useLayoutEffect(() => {
-    if (!element) return undefined;
-    const measure = () => { const width = element.getBoundingClientRect().width; setTight(width > 0 && width < NARROW_PX); };
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [element]);
-  const narrow = mobile || tight;
   // The places. Pinned and Standalone, from the library's rows; a project's page, from its folder.
   const known = new Map((projects ?? []).map(project => [project.id, project]));
   const inProject = (item: Model) => Boolean(item.project && known.has(item.project));
@@ -677,32 +783,35 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     setError("");
     void Promise.resolve().then(() => beside?.open(target)).catch(fail);
   };
-  // A card's pin and its one menu (Open, Open in new tab, what the host can do with a file on disk, Pin or Unpin, then
-  // Remove from Recents), there while the pointer is on the card (Figma's star): the pin toggles, and a pinned card
-  // shows it, filled, whatever the pointer does. On a project's page there is no Remove from Recents: a file is there
+  // A card's pin and its one menu (`FileMenu`: Open, Open in new tab, Open in, what the host can do with a file on disk,
+  // Pin or Unpin, then Remove from Recents), there while the pointer is on the card (Figma's star): the pin toggles, and a
+  // pinned card shows it, filled, whatever the pointer does. A file that is no document has the menu alone, with Open in
+  // and what the host can do with a file: it has no page to open and is in no library to pin it in. On a project's page there is no Remove from Recents: a file is there
   // because it is in the folder. Nothing here deletes a file: that is the person's own act, in their file manager.
   // Pin or Unpin, from the card's pin or its menu: counted alike.
   const pin = (item: Model) => { usage.used(item.pinned ? "home_unpin" : "home_pin"); void change(item.pinned ? "unpin" : "pin", item); };
   const removable = place.view !== "project";
-  const actions = (item: Model) => <div className="cad-library-actions" data-pinned={item.pinned || undefined}>
-    <Button variant="ghost" size="icon-xs" className="cad-library-pin" aria-label={t(item.pinned ? "home.unpin" : "home.pin")} aria-pressed={item.pinned}
-      onClick={() => pin(item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button>
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={t("home.actionsAria", { name: item.name })}><Ellipsis aria-hidden="true" /></Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-40">
-        <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
-        {beside ? <DropdownMenuItem disabled={item.missing} onSelect={() => openBeside(targetOf(item), "home_open_new_tab")}>{besideLabel}</DropdownMenuItem> : null}
-        {fileItems.map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>)}
-        <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem>
-        {removable ? <>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => remove(item)}>{t("home.removeFromRecents")}</DropdownMenuItem>
+  const actions = (item: Model, row: boolean) => {
+    const document = isDocument(item);
+    const variant = row ? "ghost" : "outline";
+    return <div className={cn("absolute flex items-center gap-1", row ? "top-1/2 right-2 -translate-y-1/2" : "light top-2 right-2")} data-library-actions="">
+      {document ? <Button variant={variant} size="icon-xs" className={cn(ACTION_CLASS, "text-muted-foreground aria-pressed:text-foreground")} aria-label={t(item.pinned ? "home.unpin" : "home.pin")} aria-pressed={item.pinned}
+        data-library-pin="" onClick={() => pin(item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button> : null}
+      <FileMenu item={item} fileActions={fileActions} variant={variant} className={cn(ACTION_CLASS, MENU_BUTTON_CLASS)} label={t("home.actionsAria", { name: item.name })}
+        items={document ? fileItems : fileItems.filter(entry => entry.action !== "copy-link")} onPerform={perform} onFail={fail}
+        lead={document ? <>
+          <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
+          {beside ? <DropdownMenuItem disabled={item.missing} onSelect={() => openBeside(targetOf(item), "home_open_new_tab")}>{besideLabel}</DropdownMenuItem> : null}
         </> : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  </div>;
+        tail={document ? <>
+          <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem>
+          {removable ? <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => remove(item)}>{t("home.removeFromRecents")}</DropdownMenuItem>
+          </> : null}
+        </> : null} />
+    </div>;
+  };
   // The ⋯ of a project's page: Open in new tab first, where the host opens a place beside this view; the folder on
   // screen's Copy path and Reveal where the host can; then Remove from CAD, which forgets the project alone (no
   // question: nothing on disk changes, and opening the folder again brings it back) and goes to Recents, saying so.
@@ -718,10 +827,9 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   } : null;
   const besidePlaces = beside && beside.places !== false;
   const folderOnScreen = shownProject ? (folderPath ? `${slashed(shownProject.root)}/${folderPath}` : shownProject.root) : "";
-  const projectMenu = (project: LibraryProject) => besidePlaces || folderItems.length || removeProject ? <div className="cad-library-place-actions">
-    <DropdownMenu modal={false}>
+  const projectMenu = (project: LibraryProject) => besidePlaces || folderItems.length || removeProject ? <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={t("home.projectActionsAria", { name: project.name })}><Ellipsis aria-hidden="true" /></Button>
+        <Button variant="ghost" size="icon-xs" className={cn("flex-none", MENU_BUTTON_CLASS)} aria-label={t("home.projectActionsAria", { name: project.name })}><Ellipsis aria-hidden="true" /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-40">
         {besidePlaces ? <DropdownMenuItem onSelect={() => openBeside({ home: place }, "home_project_open_new_tab")}>{besideLabel}</DropdownMenuItem> : null}
@@ -734,8 +842,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
           <DropdownMenuItem variant="destructive" onSelect={() => removeProject(project)}>{t("home.projectRemove")}</DropdownMenuItem>
         </> : null}
       </DropdownMenuContent>
-    </DropdownMenu>
-  </div> : null;
+    </DropdownMenu> : null;
   const age = (seconds: number | null) => ageLabel(seconds, now, t, locale);
   // Where a document is, said where it is not plain: in a search on a project's page, its folder below the folder on
   // screen; in Recents and Pinned, where projects are listed, its project's name (Standalone for one in none).
@@ -747,67 +854,89 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // then its last activity with its verb, Edited or Viewed, whichever came last. Its size is the list's column.
   const status = (item: Model) => [where(item), item.missing ? t("home.fileUnavailable") : activityLabel(item, now, t, locale)]
     .filter(Boolean).join(" · ");
-  // A row's picture is small, 40 by 28, its spinner over it while it is being opened.
-  const name = (item: Model) => <span className="cad-library-name">
-    <Thumbnail item={item} load={load} opening={opening === item.path} />
-    <span className="cad-library-label">{item.name}</span>
+  // A row's name: its picture (the search's row picture, its spinner over it while it is being opened), then its name in
+  // the foreground at regular weight: a list's emphasis is colour.
+  const name = (item: Model) => <span className={cn(NAME_COLUMN_CLASS, "group-data-missing/entry:opacity-50")} data-library-name="">
+    <Picture item={item} load={load} opening={opening === item.path} row />
+    <span className="truncate text-foreground" data-library-label="">{item.name}</span>
   </span>;
-  // A row's columns: where it is, its kind and size, then its two times with no verb: when it last changed, and when the library first knew it.
+  // A row's columns, muted: where it is, its kind and size, then its two times with no verb: when it last changed, and when the library first knew it.
+  const cell = (column: string, value: ReactNode) => <span key={column} className={cn(COLUMN_CLASS[column], "text-muted-foreground")} data-column={column}>{value}</span>;
   const columns = (item: Model) => <>
-    {whereColumn ? <span className="cad-library-status" data-column="where">{where(item)}</span> : null}
-    <span className="cad-library-status" data-column="kind">{format(item)}</span>
-    <span className="cad-library-status" data-column="size">{sizeLabel(item.size, locale) || "—"}</span>
-    <span className="cad-library-status" data-column="updated">{item.missing ? t("home.fileUnavailable") : age(item.updated)}</span>
-    <span className="cad-library-status" data-column="created">{age(item.created)}</span>
+    {whereColumn ? cell("where", where(item)) : null}
+    {cell("kind", format(item) || "—")}
+    {cell("size", sizeLabel(item.size, locale) || "—")}
+    {cell("updated", item.missing ? t("home.fileUnavailable") : age(item.updated))}
+    {cell("created", age(item.created))}
   </>;
-  // A document's entry: its main press, a link where the host gives it an address, then its pin and ⋯.
-  const entry = (item: Model, className: string, body: ReactNode) => <li key={item.path} className={className} data-missing={item.missing || undefined}
-    data-opening={opening === item.path || undefined} data-from={left(item) || undefined} ref={left(item) ? ringed : undefined}>
-    <div className="cad-library-main">
-      <PressTarget className="cad-library-open" href={item.missing ? null : hrefOf?.(targetOf(item)) ?? null} disabled={item.missing}
-        aria-label={t("home.openAria", { name: item.name })} aria-busy={opening === item.path || undefined} onPress={() => open(item)}>{body}</PressTarget>
-      {actions(item)}
-    </div>
-  </li>;
+  // A file's entry, a card or a row (`row`): its main press, then its pin and ⋯. A document's press is a link where the
+  // host gives it an address. A file that is no document has no page: its press is a button that opens it in an app
+  // (`openFile`), drawn and worked as a document's is; it is never ringed, being no document to come back from.
+  const entry = (item: Model, row: boolean, body: ReactNode) => {
+    const document = isDocument(item);
+    const from = document && left(item);
+    const className = row ? ROW_OPEN_CLASS : CARD_OPEN_CLASS;
+    const label = t("home.openAria", { name: item.name });
+    return <li key={item.path} className={row ? ROW_CLASS : CARD_CLASS} data-missing={item.missing || undefined}
+      data-opening={opening === item.path || undefined} data-from={from || undefined} ref={from ? ringed : undefined}>
+      {document ? <PressTarget className={className} href={item.missing ? null : hrefOf?.(targetOf(item)) ?? null} disabled={item.missing}
+        aria-label={label} aria-busy={opening === item.path || undefined} onPress={() => open(item)}>{body}</PressTarget>
+        : pressable(item) ? <PressTarget className={className} aria-label={label} aria-busy={opening === item.path || undefined} onPress={() => openFile(item)} data-library-file="">{body}</PressTarget>
+          : <div className={cn(className, "cursor-auto")} data-library-file="">{body}</div>}
+      {actions(item, row)}
+    </li>;
+  };
   // A subfolder of the folder on screen: its glyph and its name, a way into it (a real link where the host gives places
-  // an address), and nothing else.
+  // an address), and nothing else. Among cards it is a row of the list primitive (`primitives/tree-row.jsx`): the row
+  // tall, its fill hanging past the place's line so its glyph stands on it. In the list it is a row of the list, its
+  // glyph where a file's picture stands and a dash in each column.
   const folderPlace = (folder: LibraryFolderRef): HomeLocation => projectFolder(place.view === "project" ? place.project : "", folder.path);
-  const folderEntry = (folder: LibraryFolderRef, className: string, body: ReactNode) => <li key={folder.path} className={className} data-folder="">
-    <div className="cad-library-main">
-      <PressTarget className="cad-library-open" href={hrefOf?.({ home: folderPlace(folder) }) ?? null} aria-label={t("home.openAria", { name: folder.name })}
-        onPress={() => visit(folderPlace(folder))}>{body}</PressTarget>
-    </div>
-  </li>;
-  const folderName = (folder: LibraryFolderRef) => <span className="cad-library-name">
-    <span className="cad-library-folder-glyph"><Folder aria-hidden="true" /></span>
-    <span className="cad-library-label">{folder.name}</span>
-  </span>;
-  // The place's folders and documents, as cards or as rows under their header: the folders first, then the documents.
+  const folderLink = (folder: LibraryFolderRef) => {
+    const href = hrefOf?.({ home: folderPlace(folder) }) ?? null;
+    return { href, label: t("home.openAria", { name: folder.name }), onPress: () => visit(folderPlace(folder)) };
+  };
+  const folderTile = (folder: LibraryFolderRef) => {
+    const { href, label, onPress } = folderLink(folder);
+    return <li key={folder.path} className="min-w-0" data-folder="">
+      <PlaceLink href={href} label={folder.name} Icon={Folder} onPress={onPress} aria-label={label} className="cad-library-open cursor-pointer" /></li>;
+  };
+  const folderRow = (folder: LibraryFolderRef) => {
+    const { href, label, onPress } = folderLink(folder);
+    return <li key={folder.path} className={ROW_CLASS} data-folder="">
+      <PressTarget className={ROW_OPEN_CLASS} href={href} aria-label={label} onPress={onPress}>
+        <span className={NAME_COLUMN_CLASS} data-library-name="">
+          <span className="grid aspect-[3/2] h-[calc(var(--cad-control)+4px)] flex-none place-items-center text-muted-foreground"><Folder className="size-glyph" strokeWidth={TREE_GLYPH_STROKE} aria-hidden="true" /></span>
+          <span className="truncate text-foreground" data-library-label="">{folder.name}</span>
+        </span>
+        {whereColumn ? cell("where", "") : null}
+        {["kind", "size", "updated", "created"].map(column => cell(column, "—"))}
+      </PressTarget>
+    </li>;
+  };
+  // The place's folders and files: in the list, rows under their header, the folders first; else the folders, rows in
+  // the cards' columns, over the cards.
   const documents = (list: readonly Model[]) => layout === "list"
-    ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className="cad-library-list" aria-label={t("home.filesAria")}>
-      {folders.map(folder => folderEntry(folder, "cad-library-row", <>{folderName(folder)}
-        {whereColumn ? <span className="cad-library-status" data-column="where" /> : null}
-        {["kind", "size", "updated", "created"].map(column => <span key={column} className="cad-library-status" data-column={column}>—</span>)}</>))}
-      {list.map(item => entry(item, "cad-library-row", <>{name(item)}{columns(item)}</>))}</ul></div>
+    ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className={LIST_CLASS} aria-label={t("home.filesAria")}>
+      {folders.map(folderRow)}
+      {list.map(item => entry(item, true, <>{name(item)}{columns(item)}</>))}</ul></div>
     : <>
-      {folders.length ? <ul className="cad-library-folders" aria-label={t("home.foldersAria")}>
-        {folders.map(folder => folderEntry(folder, "cad-library-folder", folderName(folder)))}</ul> : null}
-      {list.length ? <ul className="cad-library-grid" aria-label={t("home.filesAria")}>{list.map(item => entry(item, "cad-library-card", <>
-        <Thumbnail item={item} load={load} opening={opening === item.path} badge={format(item)} />
-        {/* The caption: the name over its one line. No glyph: the picture and its badge say what it is. */}
-        <span className="cad-library-body">
-          <span className="cad-library-text">
-            <span className="cad-library-label">{item.name}</span>
-            <span className="cad-library-status">{status(item)}</span>
-          </span>
+      {folders.length ? <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(232px,1fr))] gap-x-4 p-0" aria-label={t("home.foldersAria")} data-library-folders="">
+        {folders.map(folderTile)}</ul> : null}
+      {list.length ? <ul className={GRID_CLASS} aria-label={t("home.filesAria")}>{list.map(item => entry(item, false, <>
+        <Picture item={item} load={load} opening={opening === item.path} badge={format(item) || null} />
+        {/* The caption: the name, a card's title, over its one line. No glyph: the picture and its badge say what it is. */}
+        <span className={CAPTION_CLASS}>
+          <span className="truncate font-medium text-foreground" data-library-label="">{item.name}</span>
+          <span className="truncate text-tiny text-muted-foreground" data-library-status="">{status(item)}</span>
         </span>
       </>))}</ul> : null}
     </>;
-  // Import, the host's chooser of a file or a folder: neutral, as every control of the row is (never a filled primary).
+  // Import, the host's chooser of a file or a folder: the scale's outline button, neutral as every control of the row is
+  // (never a filled primary), its chevron a dropdown's.
   const importMenu = importFile || importFolder ? <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
-      <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" aria-label={t("home.import")}>
-        <FolderOpen className="size-4" aria-hidden="true" /><span className="cad-library-pick-label">{t("home.import")}</span><ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" /></Button>
+      <Button variant="outline" size="control" className="cad-library-pick" aria-label={t("home.import")}>
+        <FolderOpen aria-hidden="true" /><span>{t("home.import")}</span><ChevronDown className="size-3 opacity-60" aria-hidden="true" /></Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="min-w-40">
       {importFile ? <DropdownMenuItem onSelect={importFile}>{t("home.importFile")}</DropdownMenuItem> : null}
@@ -827,105 +956,118 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     note: projects === null ? (projectsFailed ? t("home.projectsFailed") : null) : projects.length ? null : t("home.projectsEmpty"),
     hrefOf: hrefOf ? (target: HomeLocation) => hrefOf({ home: target }) : null,
   };
-  // The page's heading: "Home", in the navbar where there is one.
-  const heading = <h1 className="cad-library-heading" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
-  // Sort: a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), drawn as the row's ghost control.
-  const CHOICE_CLASS = "cad-library-choice min-w-0 w-auto gap-1 border-0 bg-transparent px-2 shadow-none hover:bg-accent dark:bg-transparent";
+  // The page's heading: "Home", in the navbar where there is one, drawn as a file's name is there.
+  const heading = <h1 className="m-0 flex h-control min-w-0 items-center whitespace-nowrap text-ui font-normal text-foreground" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
   // The kinds: a row of pills (`primitives/pill.jsx`) under the heading row, All then each kind the place holds, with its
   // count; one on at a time.
-  const kindRow: ReactNode = chips.length ? <div className="cad-library-kinds" role="group" aria-label={t("home.kindsAria")} data-library-kinds="">
+  const kindRow: ReactNode = chips.length ? <PillGroup label={t("home.kindsAria")} data-library-kinds="">
     {chips.map(chip => <Pill key={chip.kind} pressed={chip.kind === shownKind} count={chip.count} data-kind={chip.kind}
       aria-label={t("home.kindCount", { kind: t(`home.kind.${chip.kind}`), count: chip.count })}
       onClick={() => { if (chip.kind !== shownKind) usage.used(`home_kind_${chip.kind}`); setKind(chip.kind); }}>{t(`home.kind.${chip.kind}`)}</Pill>)}
-  </div> : null;
-  const sortMenu: ReactNode = onSortChange ? <span className="cad-library-field"><FieldLabel className="cad-library-field-label">{t("home.sortAria")}</FieldLabel>
-    <ValueDropdown value={sort} label={t("home.sortAria")} align="end"
+  </PillGroup> : null;
+  // Sort: a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), set to fit beside it.
+  const sortMenu: ReactNode = onSortChange ? <span className="flex min-w-0 items-center"><FieldLabel className="flex-none">{t("home.sortAria")}</FieldLabel>
+    <ValueDropdown value={sort} label={t("home.sortAria")} align="end" ghost
       options={(["activity", "name", "kind"] as const).map(value => ({ value, label: t(`home.sort.${value}`) }))}
       onChange={value => { usage.used(`home_sort_${value as LibrarySort}`); onSortChange(value as LibrarySort); }}
-      className={`cad-library-sort ${CHOICE_CLASS}`}
       triggerProps={{ "aria-label": t("home.sortByAria", { sort: t(`home.sort.${sort}`) }) }} /></span> : null;
   // The search: in a narrow navbar its icon alone until it is pressed (it opens with the keyboard in it), and it goes
-  // back to its icon when it is left empty.
-  const search = <div className="cad-home-search" data-open={searchOpen || query ? "" : undefined}>
-    {slots ? <Button variant="ghost" size="icon-xs" className="cad-home-search-button size-control" aria-label={t("home.searchAria")} aria-expanded={false}
-      onClick={event => { const box = event.currentTarget.parentElement; setSearchOpen(true); requestAnimationFrame(() => box?.querySelector("input")?.focus()); }}><Search className="size-4" aria-hidden="true" /></Button> : null}
-    <div className="cad-library-search">
-      <Search aria-hidden="true" />
-      <Input className="h-control text-ui" type="search" aria-label={t("home.searchAria")} placeholder={t("home.searchPlaceholder")} value={query}
+  // back to its icon when it is left empty. A field the control tall, its glyph a control's padding in.
+  const search = <div className="cad-home-search flex items-center" data-open={searchOpen || query ? "" : undefined}>
+    {slots ? <Button variant="ghost" size="icon-xs" className={cn("cad-home-search-button", NAVBAR_CONTROL_CLASS)} aria-label={t("home.searchAria")} aria-expanded={false}
+      onClick={event => { const box = event.currentTarget.parentElement; setSearchOpen(true); requestAnimationFrame(() => box?.querySelector("input")?.focus()); }}><Search className="size-glyph" aria-hidden="true" /></Button> : null}
+    <div className="cad-library-search relative w-60">
+      <Search className="pointer-events-none absolute top-1/2 left-pad size-glyph -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+      <Input className="h-control pr-pad pl-[calc(var(--cad-pad)*2+var(--cad-glyph))] text-ui" type="search" aria-label={t("home.searchAria")} placeholder={t("home.searchPlaceholder")} value={query}
         onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} onBlur={() => { if (!query) setSearchOpen(false); }} />
     </div>
   </div>;
   // Grid or list: one segmented control (`primitives/segmented-control.jsx`).
-  const layoutSwitch = onLayoutChange ? <SegmentedControl className="cad-library-layout" label={t("home.layout")} value={layout}
+  const layoutSwitch = onLayoutChange ? <SegmentedControl label={t("home.layout")} value={layout}
     options={[{ value: "grid", label: t("home.grid"), Icon: LayoutGrid }, { value: "list", label: t("home.list"), Icon: List }]}
     onChange={value => { usage.used(`home_layout_${value as LibraryLayout}`); onLayoutChange(value as LibraryLayout); }} /> : null;
-  // The way back to the document just left: its name, and the key that does the same (left out where nothing hovers).
-  const backControl = back && from ? <Button variant="outline" size="xs" className="cad-library-back" aria-keyshortcuts="Escape" onClick={back}>
-    <span className="cad-library-label">{t("home.backTo", { name: from.name })}</span><kbd className="cad-library-key" aria-hidden="true">{ESCAPE_KEY}</kbd></Button> : null;
-  // The place's name; on a project's page, the folder's path: each part but the last a way back up to its folder.
-  const title = crumbs.length > 1 ? <div className="cad-library-crumbs">
+  // The way back to the document just left: the scale's outline button, its name the first to give way, and the key
+  // that does the same after it (left out where nothing hovers: a finger has no Escape).
+  const backControl = back && from ? <Button variant="outline" size="control" className="min-w-0 shrink" aria-keyshortcuts="Escape" onClick={back} data-library-back="">
+    <span className="truncate">{t("home.backTo", { name: from.name })}</span><Kbd className="[@media(hover:none)]:hidden" aria-hidden="true">{ESCAPE_KEY}</Kbd></Button> : null;
+  // The place's name, the page's one heading; on a project's page, the folder's path: each part but the last a way back
+  // up to its folder, muted and the first to give way (down to its first letters), the last the folder on screen.
+  const TITLE_CLASS = "m-0 min-w-0 truncate text-heading text-foreground";
+  const title = crumbs.length > 1 ? <div className="flex min-w-0 flex-initial items-baseline justify-end gap-1 overflow-hidden" data-library-crumbs="">
     {crumbs.slice(0, -1).map(crumb => <Fragment key={crumb.path}>
-      <PressTarget className="cad-library-crumb" href={hrefOf?.({ home: projectFolder(shownProject?.id ?? "", crumb.path) }) ?? null}
+      <PressTarget className="max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate rounded-control text-heading text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset"
+        href={hrefOf?.({ home: projectFolder(shownProject?.id ?? "", crumb.path) }) ?? null} data-library-crumb=""
         onPress={() => visit(place.view === "project" ? projectFolder(place.project, crumb.path) : place)}>{crumb.name}</PressTarget>
-      <span className="cad-library-crumb-slash" aria-hidden="true">/</span>
+      <span className="flex-none text-heading font-normal text-muted-foreground" aria-hidden="true">/</span>
     </Fragment>)}
-    <h2 className="cad-library-title">{shownAs}</h2>
-  </div> : <h2 className="cad-library-title">{placeName}</h2>;
+    <h2 className={cn(TITLE_CLASS, "flex-initial")} data-library-title="">{shownAs}</h2>
+  </div> : <h2 className={TITLE_CLASS} data-library-title="">{placeName}</h2>;
   // Nothing at all yet: no project, no document.
   const empty = !all.length && !(projects ?? []).length;
   // The place with nothing to list says why, in a line.
   const nothing = place.view === "project" ? t("home.projectEmpty") : place.view === "pinned" ? t("home.pinnedEmpty")
     : place.view === "standalone" ? t("home.standaloneEmpty") : t("home.recentsEmpty");
-  const welcome = <div className="cad-library-welcome" data-library-empty="">
-    <span className="cad-library-welcome-stage"><img src={logo} alt="" draggable={false} /></span>
-    <h2 className="cad-library-welcome-title">{t("home.emptyTitle")}</h2>
-    <p className="cad-library-welcome-body">{t("home.emptyBody")}</p>
-    {importFile || importFolder ? <div className="cad-library-welcome-actions">
-      {importFile ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFile}>
-        <FolderOpen className="size-4" aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
-      {importFolder ? <Button variant="outline" size="xs" className="cad-library-pick h-control gap-1.5 px-2.5 text-ui" onClick={importFolder}>
-        <Folder className="size-4" aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
+  // Nothing at all yet: the C mark, two controls tall, the welcome's title in the heading step, one muted line 4px
+  // under it, then 16px apart the two ways in and the formats the viewer opens; a column centred in the place.
+  const welcome = <div className="flex flex-col items-center gap-4 p-4 text-center" data-library-empty="">
+    <img src={logo} alt="" draggable={false} className="block size-[calc(var(--cad-control)*2)] select-none" />
+    <div className="flex flex-col gap-1">
+      <h2 className="m-0 text-heading text-foreground">{t("home.emptyTitle")}</h2>
+      <p className="m-0 text-muted-foreground">{t("home.emptyBody")}</p>
+    </div>
+    {importFile || importFolder ? <div className="flex flex-wrap justify-center gap-2">
+      {importFile ? <Button variant="outline" size="control" onClick={importFile}><FolderOpen aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
+      {importFolder ? <Button variant="outline" size="control" onClick={importFolder}><Folder aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
     </div> : null}
-    <p className="cad-library-welcome-formats" aria-hidden="true">{WELCOME_FORMATS}</p>
+    <p className="m-0 text-tiny text-muted-foreground" aria-hidden="true">{WELCOME_FORMATS}</p>
   </div>;
+  // A place with nothing to list, or nothing that matches, says so in one muted line, where its first row would stand.
+  const line = (state: string, text: string, status = false) => <p className="m-0 text-muted-foreground" role={status ? "status" : undefined} data-library-state={state}>{text}</p>;
   const reading = place.view === "project" ? !listing && !folderRead?.failed && Boolean(library.folder) : items === null;
   const body = items === null || awaited ? <Placeholders layout={layout} />
-    : place.view === "project" && !shownProject ? <p className="cad-library-empty" data-library-state="gone">{projectsFailed ? t("home.projectsFailed") : t("home.projectGone")}</p>
-      : shownProject?.missing ? <p className="cad-library-empty" data-library-state="missing">{t("home.projectMissing")}</p>
+    : place.view === "project" && !shownProject ? line("gone", projectsFailed ? t("home.projectsFailed") : t("home.projectGone"))
+      : shownProject?.missing ? line("missing", t("home.projectMissing"))
         : reading ? <Placeholders layout={layout} />
-          : place.view === "project" && !listing && folderRead?.failed ? <p className="cad-library-empty" data-library-state="failed">{t("home.folderFailed")}</p>
+          : place.view === "project" && !listing && folderRead?.failed ? line("failed", t("home.folderFailed"))
             : empty && place.view === "recents" ? welcome
-              : !inPlace.length && !folders.length ? <p className="cad-library-empty" data-library-state="empty">{searching ? t("home.noMatchingModels") : nothing}</p>
-                : !matching.length && !folders.length ? <p className="cad-library-empty" role="status">{t("home.noMatchingModels")}</p>
+              : !inPlace.length && !folders.length ? line("empty", searching ? t("home.noMatchingModels") : nothing)
+                : !matching.length && !folders.length ? line("unmatched", t("home.noMatchingModels"), true)
                   : <>
                     {documents(matching)}
-                    {listing?.truncated ? <p className="cad-library-truncated">{t("home.projectTruncated")}</p> : null}
+                    {listing?.truncated ? <p className="m-0 text-muted-foreground" data-library-truncated="">{t("home.projectTruncated")}</p> : null}
                   </>;
-  return <div className="cad-library h-full text-ui" data-library-layout={layout} data-library-narrow={narrow ? "" : undefined} data-library-place={here} ref={setElement}>
-    {/* Home's own controls: in the navbar where there is one (`slots`), else in a bar of the page's own. */}
+  return <div className="cad-library flex size-full flex-col bg-background text-ui" data-library-layout={layout} data-library-place={here}>
+    {/* Home's own controls: in the navbar where there is one (`slots`), else in a bar of the page's own, the navbar's row
+        on the panel's inset. */}
     {slots ? <>
       {slots.left ? createPortal(heading, slots.left) : null}
       {slots.right ? createPortal(<>{search}{importMenu}</>, slots.right) : null}
-    </> : <div className="cad-library-bar">{heading}<div className="cad-library-controls">{search}{importMenu}</div></div>}
+    </> : <div className={cn(NAVBAR_ROW_CLASS, "justify-between border-border bg-sidebar px-(--panel-inset)")} data-library-bar="">{heading}<div className="flex items-center gap-2">{search}{importMenu}</div></div>}
     <LibraryFrame places={places} panel={panel} onPanelChange={onPanelChange}>
-      {/* A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits. */}
-      <main className="cad-library-content overflow-y-auto" aria-label={t("home.modelsAria")}>
+      {/* A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits. Padded by the
+          panel's inset on every side (more below, clear of a host's composer floating over the bottom), its blocks 16px
+          apart; its rows hang past that line as the panel's do (`PANEL_ROW_VARIABLES`). */}
+      <main className="@container grid min-w-0 flex-1 auto-rows-max grid-cols-1 content-start gap-4 overflow-y-auto p-(--panel-inset) pb-[calc(var(--cad-host-bottom-inset,0px)+var(--panel-inset))]"
+        aria-label={t("home.modelsAria")} style={PANEL_ROW_VARIABLES as React.CSSProperties} data-library-content="">
         {/* The place's heading row, every control the scale's: its name (a project's folder's path, with its glyph, its
-            folder and its ⋯) and the way back at the left; Sort and the layout at the right. It keeps its shape from
-            place to place. Under it, the kinds' chips, where the place holds more than one kind. */}
-        <div className="cad-library-toolbar" data-library-toolbar="filters">
-          <div className="cad-library-place">
-            {shownProject ? <Folder className="cad-library-glyph" aria-hidden="true" /> : null}
-            {title}
-            {shownProject ? <TooltipHint content={folderOnScreen} overflowOnly><span className="cad-library-path truncate">{tildePath(folderOnScreen, home)}</span></TooltipHint> : null}
-            {shownProject ? projectMenu(shownProject) : null}
-            {backControl}
+            folder from `~` at the project's top and its ⋯) and the way back at the left; Sort and the layout at the right.
+            It keeps its shape from place to place. 8px under it, the kinds' chips, where the place holds more than one kind. */}
+        <div className="grid grid-cols-1 gap-2">
+          <div className="flex min-h-control flex-wrap items-center justify-between gap-x-4 gap-y-2" data-library-toolbar="filters">
+            <div className="flex min-w-0 flex-auto items-center gap-2">
+              {shownProject ? <Folder className="size-glyph flex-none text-muted-foreground" aria-hidden="true" /> : null}
+              {title}
+              {shownProject && !folderPath ? <TooltipHint content={folderOnScreen} overflowOnly>
+                <span className="min-w-0 flex-[0_100000_auto] truncate text-muted-foreground" data-library-path="">{tildePath(folderOnScreen, home)}</span></TooltipHint> : null}
+              {shownProject ? projectMenu(shownProject) : null}
+              {backControl}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">{sortMenu}{layoutSwitch}</div>
           </div>
-          <div className="cad-library-controls">{sortMenu}{layoutSwitch}</div>
+          {kindRow}
         </div>
-        {kindRow}
-        {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
-        {note && note.at === here ? <p className="cad-library-note" role="status">{note.text}</p> : null}
+        {error ? <p className="m-0 text-destructive" role="alert" data-library-error="">{error}</p> : null}
+        {note && note.at === here ? <p className="m-0 text-foreground" role="status" data-library-note="">{note.text}</p> : null}
         {body}
       </main>
     </LibraryFrame>

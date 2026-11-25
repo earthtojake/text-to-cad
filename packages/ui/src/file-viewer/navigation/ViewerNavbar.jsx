@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Ellipsis, Folder, Search } from "lucide-react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -13,7 +13,7 @@ import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js"
 import { useViewerMobile } from "../responsive.js";
 
 import { AppMenu } from "./AppMenu.jsx";
-import { OpenInMark } from "./appMarks.jsx";
+import { OpenInItems, WhyDisabled, useOpenInApps } from "./OpenInItems.jsx";
 import { openInMenu } from "./entry-menu.js";
 import { useControlUsage } from "../../usage/controls.js";
 import { prefersCoarsePointer } from "../../lib/coarsePointer.js";
@@ -124,33 +124,6 @@ function HistoryButtons({ viewHistory }) {
 const DISABLED_ROW_CLASS = "data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
 
 /**
- * A disabled row with its reason as a hint. A disabled Radix item takes no pointer, so the hint is
- * on a wrapper that does, as shadcn hints a disabled button.
- */
-function WhyDisabled({ reason, children }) {
-  return <TooltipHint content={reason} side="right"><span className="block" data-disabled-reason="">{children}</span></TooltipHint>;
-}
-
-/**
- * The host's apps for the document's files (`fileMenu.apps`), asked each time the menu opens and never
- * before: null until they come, and null for good where the host has none, or fails or never answers
- * (the menu is then as without them). An answer to an opening since closed is dropped.
- */
-function useOpenInApps(open, apps) {
-  const [files, setFiles] = useState(null);
-  useEffect(() => {
-    if (!open || !apps) return undefined;
-    const controller = new AbortController();
-    setFiles(null);
-    Promise.resolve().then(() => apps({ signal: controller.signal })).then(answer => {
-      if (!controller.signal.aborted) setFiles(answer && Array.isArray(answer.targets) ? answer : null);
-    }, () => {});
-    return () => controller.abort();
-  }, [open, apps]);
-  return open ? files : null;
-}
-
-/**
  * The ⋯ after the file's name: what can be done with the document, from the document itself outwards. Copy path (where
  * its source is, or was); Copy link (its page, with a fresh link: every document, its source there or not); then where
  * it opens: Open in new tab (`beside`: its page beside this view, "Open in browser" from an app's frame; none where it
@@ -194,15 +167,7 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
       {openIn.length ? <DropdownMenuSub>
         {openable ? trigger : <WhyDisabled reason={openIn.find(item => item.reason)?.reason}>{trigger}</WhyDisabled>}
         <DropdownMenuSubContent aria-label={label}>
-          {openIn.map((item, index) => {
-            const key = `${item.action}:${item.target ?? ""}:${item.app ?? ""}`;
-            const choose = () => perform(item.action, item.action === "app" ? { target: item.target, app: item.app } : undefined);
-            const row = <DropdownMenuItem data-open-in={item.action} data-open-in-app={item.app} disabled={!item.enabled} onSelect={choose}><OpenInMark action={item.action} app={item.app} className="size-3.5" />{item.label}</DropdownMenuItem>;
-            return <Fragment key={key}>
-              {index && openIn[index - 1].group !== item.group ? <DropdownMenuSeparator /> : null}
-              {item.enabled ? row : <WhyDisabled reason={item.reason}>{row}</WhyDisabled>}
-            </Fragment>;
-          })}
+          <OpenInItems entries={openIn} onChoose={item => perform(item.action, item.action === "app" ? { target: item.target, app: item.app } : undefined)} />
         </DropdownMenuSubContent>
       </DropdownMenuSub> : null}
       {hostItems}

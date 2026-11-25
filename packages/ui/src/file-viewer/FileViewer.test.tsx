@@ -263,8 +263,8 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   expect([lead.lastElementChild!.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded'), lead.firstElementChild!.getAttribute('data-navbar-logo'),
     navbar()!.querySelector('[data-testid="file-actions"]'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['true', 'home', null, null]);
   // The page's own row: Sort and the layout control at its right, no heading, no search; one kind of document, so no chips.
-  const row = document.querySelector<HTMLElement>('.cad-library-toolbar')!;
-  expect([row.getAttribute('data-library-toolbar'), row.querySelector('h1'), row.querySelector('input'), document.querySelector('.cad-library-kinds'),
+  const row = document.querySelector<HTMLElement>('[data-library-toolbar]')!;
+  expect([row.getAttribute('data-library-toolbar'), row.querySelector('h1'), row.querySelector('input'), document.querySelector('[data-library-kinds]'),
     within(row).getByRole('group', { name: 'Layout' }) !== null]).toEqual(['filters', null, null, null, true]);
   // Under 700px of navbar the search is its icon until pressed, then the field with the keyboard in it.
   const css = readFileSync(`${process.cwd()}/src/styles/globals.css`, 'utf8');

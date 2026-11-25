@@ -53,45 +53,26 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
   for (const file of SCROLL_REGIONS) assert.match(readFileSync(join(root, file), "utf8"), /<ScrollArea\b/, `${file} scrolls in a ScrollArea`);
 });
 
-// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls and Home
-// text-ui (13/20), the place's name the one larger text (15/20 semibold), a name, a project's folder and the way back
-// 12/16 (text-xs), a card's facts, a format's badge, a key and the table's header 11/16 (text-tiny); a tile's glyph
-// 16px. Its sidebar is the panel's own surface (`file-viewer/PanelSurface.jsx`), which sets the panel's one size itself.
-test("the Home is the chrome's type scale: the place's name 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
+// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"), taken as every other
+// surface takes it, from the scale's utilities where the text is written: `text-ui` on the page, `text-heading` for its
+// one heading (the place's name, a project's path's parts, the welcome's title) and `text-tiny` for its small metadata
+// (a card's line, the formats). No other step, and no size in its stylesheet rules, which hold only a card's marks and
+// the navbar's search. What each text is drawn at, on a desktop and a phone, is the browser spec's
+// (`library/ModelLibrary.browser.test.mjs`). Its sidebar is the panel's own surface, which sets the panel's one size.
+test("the Home's type is the scale's: text-ui, the one heading step and the ages' text-tiny, with no size of its stylesheet's own", () => {
   // Its rules, without the comments that stand before them.
   const css = readFileSync(join(root, "styles/globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const sizes = [...css.matchAll(/([^{}]*\.cad-library[^{}]*)\{([^}]*)\}/g)].flatMap(([, selector, body]) => {
-    const size = body.match(/font-size:\s*([^;]+);/)?.[1].trim();
-    return size ? [[selector.trim().replace(/\s+/g, " "), size]] : [];
-  });
-  assert.deepEqual(sizes, [
-    [".cad-library-title", "var(--cad-text-heading)"],
-    // A project's page: each part of its folder's path is the place's name too, the way back up in its size.
-    [".cad-library-crumb", "var(--cad-text-heading)"],
-    [".cad-library-crumb-slash", "var(--cad-text-heading)"],
-    [".cad-library-path", "var(--cad-text-xs)"],
-    [".cad-library-back", "var(--cad-text-xs)"],
-    [".cad-library-key", "var(--cad-text-tiny)"],
-    // Home, in the navbar and in the page's own bar, is the navbar's 13/20.
-    [".cad-library-heading", "var(--cad-text-ui)"],
-    // A folder's name, as a card's.
-    [".cad-library-folder .cad-library-label", "var(--cad-text-xs)"],
-    [".cad-library-format", "var(--cad-text-tiny)"],
-    [".cad-library-card .cad-library-label", "var(--cad-text-xs)"],
-    [".cad-library-status", "var(--cad-text-tiny)"],
-    [".cad-library-columns", "var(--cad-text-tiny)"],
-    [".cad-library-row .cad-library-label", "var(--cad-text-xs)"],
-    [".cad-library-welcome-title", "var(--cad-text-heading)"],
-    [".cad-library-welcome-formats", "var(--cad-text-tiny)"],
-  ]);
-  assert.match(css, /\.cad-library-glyph \{[^}]*width: 16px; height: 16px;/);
-  for (const file of ["library/ModelLibrary.tsx", "library/LibraryPlaces.jsx"]) {
-    assert.deepEqual([...readFileSync(join(root, file), "utf8").matchAll(/\btext-(tiny|xs)\b/g)].map(([name]) => name), [], `${file} takes its type from the stylesheet`);
+  const sized = [...css.matchAll(/([^{}]*\.cad-(?:library|home)[^{}]*)\{([^}]*)\}/g)].filter(([, , body]) => /font(?:-size|-weight)?:|line-height:/.test(body))
+    .map(([, selector]) => selector.trim());
+  assert.deepEqual(sized, [], "no Home rule sets a font");
+  for (const file of ["library/ModelLibrary.tsx", "library/LibraryPlaces.jsx", "library/LibrarySidebar.jsx"]) {
+    const steps = new Set([...readFileSync(join(root, file), "utf8").matchAll(/(?<![\w-])text-(tiny|xs|ui|sm|base|lg|xl|heading)(?![\w-])/g)].map(([name]) => name));
+    for (const step of steps) assert.ok(["text-ui", "text-tiny", "text-heading"].includes(step), `${file}: ${step} is not a step of the Home's`);
   }
   const page = readFileSync(join(root, "library/ModelLibrary.tsx"), "utf8");
-  assert.match(page, /className="cad-library h-full text-ui"/);
+  assert.match(page, /className="cad-library flex size-full flex-col bg-background text-ui"/);
   // The place on screen is the page: it alone scrolls with the platform's scrollbar.
-  assert.match(page, /<main className="cad-library-content overflow-y-auto"/);
+  assert.match(page, /<main className="@container [^"]*\boverflow-y-auto\b/);
   assert.equal(page.match(/\boverflow(?:-[xy])?-(?:auto|scroll)\b/g).length, 1);
 });
 
@@ -154,8 +135,8 @@ test("a menu stands 6px from its trigger, padded 6px, from the primitives alone"
 // the logo centred in its 28px tile (6px) and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page,
 // with a panel's toggle after it or none. The Home itself is full width:
 // its sidebar the viewer's panel (its surface, its 232px default width) with its content on the panel's 16px inset and
-// Settings pinned at its foot, and the place on screen on 24px gutters, 20px under the navbar (12px by 16px in a narrow
-// home), its tiles 232px at least.
+// Settings pinned at its foot, and the place on screen padded by that same inset on every side, at every width (no
+// narrow home's gutters), its cards' columns 232px at least.
 test("the navbar's logo's drawn mark stands 16px in, and the Home is the panel's sidebar beside the place on its own gutters", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8");
   // The sidebar is the panel's surface, never a rule of the Home's own: its width, rule and colour are the panel's.
@@ -167,11 +148,13 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is the panel's
   // It ends in the panel's foot, the one a document's panel ends in: its rule the panel's full width, its tiles on the inset.
   assert.match(sidebar, /const foot = <PanelFoot \/>;/);
   assert.match(readFileSync(join(root, "file-viewer/PanelFoot.jsx"), "utf8"), /border-t border-border" style=\{FOOT_STYLE\} data-app-foot=""/);
-  assert.match(css, /\.cad-library-places \{[^}]*padding: 8px var\(--panel-inset\) /);
-  assert.match(css, /\.cad-library-content \{[^}]*flex: 1 1 0; min-width: 0; padding: 20px 24px /);
-  assert.doesNotMatch(css, /\.cad-library-content \{[^}]*max-width/);
-  assert.match(css, /\[data-library-narrow\] \.cad-library-content \{ padding: 12px 16px /);
-  assert.match(css, /\.cad-library-grid \{[^}]*minmax\(232px, 1fr\)/);
+  assert.match(readFileSync(join(root, "library/LibraryPlaces.jsx"), "utf8"), /"flex flex-col gap-4 px-\(--panel-inset\) pt-2"/);
+  const page = readFileSync(join(root, "library/ModelLibrary.tsx"), "utf8");
+  const place = page.match(/<main className="([^"]*)"/)[1];
+  assert.match(place, /(?:^| )p-\(--panel-inset\)(?: |$)/);
+  assert.doesNotMatch(place, /max-w-/);
+  assert.doesNotMatch(css + page, /data-library-narrow/);
+  assert.match(page, /const GRID_CLASS = "[^"]*grid-cols-\[repeat\(auto-fill,minmax\(232px,1fr\)\)\]/);
   const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
   // The row the control and 12px (40px), the tool strip's height, its icon buttons the strip's tile (the control, 28px):
   // THE scale's (a phone's from the same tokens).

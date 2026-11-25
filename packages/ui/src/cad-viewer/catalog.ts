@@ -105,12 +105,12 @@ export function createCadFileActions({ platform, clipboard, reveal, openIn, link
       } } : {}),
     },
     ...(openIn ? {
-      apps: async (entry: { path: string }, options: { signal?: AbortSignal } = {}) => {
-        const id = idOf(entry.path);
+      apps: async (entry: { path: string; id?: string }, options: { signal?: AbortSignal } = {}) => {
+        const id = idOf(entry.path, entry.id);
         return id ? openIn.openInApps(id, options) : null;
       },
-      openApp: async (entry: { path: string }, target: string, app: string) => {
-        const id = idOf(entry.path);
+      openApp: async (entry: { path: string; id?: string }, target: string, app: string) => {
+        const id = idOf(entry.path, entry.id);
         if (!id) throw new Error('This document has no id to open it by.');
         await openIn.openIn(id, target, app);
       },

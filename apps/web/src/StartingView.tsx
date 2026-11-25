@@ -47,7 +47,7 @@ export function StartingView({ error, tabStore }: { error?: Error; tabStore: Tab
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={record.settings.viewportBackground} /></div>,
     // The home's: its frame as the library draws it (the sidebar's stand-in, which says its toggle to the navbar), on
     // the page's own background, and the one indicator in the app's theme where the place will be.
-    home: <div className="cad-library h-full text-ui" data-starting-home="">
+    home: <div className="cad-library flex size-full flex-col bg-background text-ui" data-starting-home="">
       <LibraryFrame places={null} panel={record.settings.library.panel ?? null}>
         <div className="flex min-w-0 flex-1 items-center justify-center px-4"><LoadingStep label={translateIn(locale, 'loading.preparingView')} /></div>
       </LibraryFrame></div>,

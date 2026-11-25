@@ -311,7 +311,7 @@ export default {
   "home.projectInside": "{name} 位于已经是项目的 {project} 中。",
 
 
-  "home.projectEmpty": "这里还没有模型或 CAD 文件。",
+  "home.projectEmpty": "此文件夹为空。",
   "home.folderFailed": "无法读取此文件夹。它可能已被移动或重命名。",
 
 
@@ -405,6 +405,7 @@ export default {
   "home.grid": "网格",
   "home.list": "列表",
   "home.openAria": "打开 {name}",
+  "home.noAppOpens": "这台电脑上没有可打开 {name} 的应用。",
   "format.xbf": "XBF",
   "home.formatPart": "零件",
   "home.formatAssembly": "装配体",
@@ -843,7 +844,6 @@ export default {
   "parameters.error.build_failed": "这些值无法构建。",
   "parameters.error.preview_build_failed": "这些值无法构建。",
   "parameters.error.preview_failed": "无法显示这些值。",
-  "parameters.reason.file": "请在脚本中编辑。",
   "parameters.reason.no_worker": "请重新运行脚本后再编辑。",
   "parameters.reason.shared": "在另一个文件中设置。",
   "parameters.reason.sharedIn": "在 {source} 中设置。",

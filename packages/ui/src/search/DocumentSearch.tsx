@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, us
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { ExternalLink, Search } from "lucide-react";
 import { ScrollArea as ScrollAreaPrimitive } from "../primitives/scroll-area.jsx";
+import { Kbd } from "../primitives/kbd.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
 import { TreeFilterHighlight, matchIndices } from "../primitives/tree-filter.jsx";
 import { DocumentGlyph } from "../file-viewer/navigation/DocumentGlyph.jsx";
@@ -12,7 +13,8 @@ import { documentTarget } from "../host/addresses.js";
 import { useI18n } from "../i18n/index.js";
 import { FLOATING_SURFACE_CLASS } from "../lib/floatingSurface.js";
 import { cn } from "../lib/utils.js";
-import { formatLabel, type LibraryModel, type ModelLabels, type ModelLibrarySource } from "../library/ModelLibrary.js";
+import { formatLabel, isDocument, type LibraryModel, type ModelLabels, type ModelLibrarySource } from "../library/ModelLibrary.js";
+import { ROW_PICTURE_CLASS } from "../library/thumbnails.js";
 import { useControlUsage } from "../usage/controls.js";
 import { searchShortcut, isSearchKey } from "./searchKey.js";
 import { searchGroups, type SearchGroup, type SearchRow } from "./searchRows.js";
@@ -61,8 +63,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
 // A row: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall at 3:2 (32px), on the light
 // model area a library picture is taken on, in both themes.
 const ROW_CLASS = "relative flex min-h-[calc(var(--cad-control)+16px)] items-center gap-3 rounded-md px-2 text-foreground outline-none";
-const PICTURE_CLASS = "relative grid h-[calc(var(--cad-control)+4px)] aspect-[3/2] shrink-0 place-items-center overflow-hidden rounded-control "
-  + "bg-[linear-gradient(to_bottom,#f4f5f6,#dfe2e5)] text-[#9aa0a6] shadow-[inset_0_0_0_1px_rgba(0,0,0,.07)]";
+const PICTURE_CLASS = ROW_PICTURE_CLASS;
 
 /**
  * A document's picture: the library's (`thumbnail()`), read once its row comes on screen in the list (`root`) and
@@ -94,7 +95,7 @@ function Picture<Model extends LibraryModel>({ model, load, root }: { model: Mod
 /** A key as the footer writes it: a small bordered key, then what it does. */
 function KeyHint({ keys, children }: { keys: string; children: string }) {
   return <span className="flex items-center gap-1">
-    <kbd className="inline-flex h-[calc(var(--cad-chip)-2px)] items-center rounded-[4px] border border-border bg-background px-1 font-sans text-tiny font-medium text-muted-foreground">{keys}</kbd>
+    <Kbd>{keys}</Kbd>
     {children}
   </span>;
 }
@@ -185,7 +186,8 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
     if (!reader) { setHere({ project: project.id, rows: [] }); return undefined; }
     const turn = ++asked.current;
     const ask = () => reader(project.id, words ? { q: words } : { path: project.folder ?? "" })
-      .then(folder => folder.documents, () => [] as readonly Model[])
+      // A folder lists every file in it; the search is of documents, the files a page opens.
+      .then(folder => folder.documents.filter(isDocument), () => [] as readonly Model[])
       .then(rows => { if (turn === asked.current) setHere({ project: project.id, rows }); });
     if (!words) { void ask(); return undefined; }
     const timer = setTimeout(() => { void ask(); }, SEARCH_WAIT_MS);
@@ -327,8 +329,7 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
             placeholder={t("search.placeholder")} spellCheck={false} autoComplete="off" value={query}
             onChange={event => setQuery(event.target.value)} onKeyDown={onKeyDown}
             className="h-full min-w-0 flex-1 bg-transparent text-ui text-foreground outline-none placeholder:text-muted-foreground" />
-          {mobile ? null : <kbd className="inline-flex h-[calc(var(--cad-chip)-2px)] shrink-0 items-center rounded-[4px] border border-border bg-background px-1 font-sans text-tiny font-medium text-muted-foreground">
-            {searchShortcut(platform)}</kbd>}
+          {mobile ? null : <Kbd>{searchShortcut(platform)}</Kbd>}
         </div>
         <ScrollArea viewportRef={viewport} className={mobile ? "flex-1" : "max-h-[min(28rem,calc(100vh-14rem))]"}>
           <div role="listbox" id={listId} aria-label={t("search.results")} aria-busy={reading || undefined} className="flex flex-col p-1" data-search-list="">

@@ -57,19 +57,20 @@ export interface CadServerInfo {
   [key: string]: unknown;
 }
 /**
- * A document in the library every CAD view shares (`GET /api/v1/documents`), or in a project's folder
- * (`GET /api/v1/projects/<id>`): a CAD file, times in seconds. The API names a row's document kind `kind` and
+ * A document in the library every CAD view shares (`GET /api/v1/documents`), or a file of a project's folder
+ * (`GET /api/v1/projects/<id>`): a CAD file, or in a folder a file that is no document (`documentKind` and `api` null:
+ * no page, picture or pin; opened in an app, `openInApps` and `openIn`), times in seconds. The API names a row's document kind `kind` and
  * its record's (always `file`) `record`; the client hands the library the record's as `kind`, the document's
  * as `documentKind`.
  */
 export interface CadRecent {
   /** The document's id: its page is `/<id>`, its picture `thumbnail()`'s. */
   id: string;
-  /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`). */
-  api?: string;
+  /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`); null for a file that is no document. */
+  api?: string | null;
   /** The document's kind (`model` for an `.xbf`, `step`, `stl`, ...); a released server's `xbf` is an `.xbf` too
-   * (`documentKind`, `lib/fileFormats.js`). */
-  documentKind?: string;
+   * (`documentKind`, `lib/fileFormats.js`). Null: a folder's file that is no document. */
+  documentKind?: string | null;
   /** The file, absolute: Recents' by its canonical path, a folder's as reached in it, `/`-separated. */
   path: string;
   /** The file's name, with its extension. */
@@ -112,8 +113,8 @@ export interface CadProject extends CadProjectRef {
 }
 /**
  * One folder of a project (`GET /api/v1/projects/<id>?path=`): the folder (`path`, below the project's root, `""` its
- * root), its subfolders that hold a CAD file somewhere below, then its CAD files; or, asked with words, every CAD file
- * below it that holds them, and no folders. `truncated`: not all of it is listed.
+ * root), its subfolders, then every file in it, CAD files and the rest together; or, asked with words, every file below
+ * it that holds them, and no folders. `truncated`: not all of it is listed.
  */
 export interface CadProjectFolder {
   project: CadProject;

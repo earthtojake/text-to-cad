@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { entryMenu, fileManagerName, openInMenu, revealLabel } from "./entry-menu.js";
+import { entryMenu, fileManagerName, fileOpenMenu, fileOpener, openInMenu, revealLabel } from "./entry-menu.js";
 
 test("a home card's file menu offers what the host can do, copy before reveal, named the platform's way", () => {
   const all = new Set(["copy-path", "reveal", "browser"]);
@@ -79,4 +79,36 @@ test("a KiCad that refuses a file is drawn disabled with the reason, the source'
   const t = (key, params) => `<${key}:${params?.app ?? ""}>`;
   const files = { targets: [{ target: "source", kind: "kicad_sch", name: "a.kicad_sch", present: true, apps: [stable], default: false }] };
   assert.equal(openInMenu("darwin", new Set(), t, { files })[0].reason, "<file.kicadSchematicTooNew:KiCad 9.0.6>");
+});
+
+test("Default app is offered unless the host says the OS's handler is not: a model's script says so, as a KiCad file does", () => {
+  const labels = (target) => openInMenu("darwin", new Set(), undefined, { files: { targets: [target] } }).map(({ group, label }) => [group, label]);
+  const script = { target: "source", kind: "script", name: "bracket.py", present: true, apps: [{ id: "vscode", name: "Visual Studio Code" }] };
+  // Absent: offered.
+  assert.deepEqual(labels(script), [["source", "Visual Studio Code"], ["default", "Default app"]]);
+  // A script is no file to hand to the OS's handler: the editor alone.
+  assert.deepEqual(labels({ ...script, default: false }), [["source", "Visual Studio Code"]]);
+  assert.deepEqual(labels({ ...script, apps: [], default: false }), []);
+});
+
+test("a file that is no document: its ⋯ lists the host's apps then Default app, and a press opens it with the handler, else the first app, else nothing", () => {
+  const file = (extra) => ({ targets: [{ target: "source", kind: "pdf", name: "datasheet.pdf", present: true, apps: [], ...extra }], fileManager: "finder" });
+  const rows = (files, capabilities = new Set()) => fileOpenMenu("darwin", capabilities, undefined, { files }).map(({ group, label, enabled, target, app }) => [group, label, enabled, target, app]);
+  const preview = { id: "preview", name: "Preview" }, code = { id: "vscode", name: "Visual Studio Code" }, cursor = { id: "cursor", name: "Cursor" };
+  // The host's apps in its order, then Default app; the file manager only where the menu asks for it there.
+  assert.deepEqual(rows(file({ apps: [preview] })), [["source", "Preview", true, "source", "preview"], ["default", "Default app", true, "source", "default"]]);
+  assert.deepEqual(rows(file({ apps: [preview] }), new Set(["reveal"])).at(-1), ["places", "Finder", true, undefined, undefined]);
+  // Code, with an editor: its editors, and no Default app (the host does not hand a script to the OS's handler).
+  assert.deepEqual(rows(file({ kind: "code", apps: [code, cursor], default: false })).map(([, label]) => label), ["Visual Studio Code", "Cursor"]);
+  // No app and no handler, and no answer: nothing to list.
+  assert.deepEqual(rows(file({ kind: "file", default: false })), []);
+  assert.deepEqual(rows(null), []);
+  // A press: the OS's handler where it is offered, whatever apps are listed...
+  assert.deepEqual(fileOpener(file({ apps: [preview] })), { target: "source", app: "default" });
+  assert.deepEqual(fileOpener(file({})), { target: "source", app: "default" });
+  // ...else the first app listed that reads the file (code with an editor installed)...
+  assert.deepEqual(fileOpener(file({ kind: "code", apps: [code, cursor], default: false })), { target: "source", app: "vscode" });
+  assert.deepEqual(fileOpener(file({ apps: [{ ...preview, refuses: "newer" }, cursor], default: false })), { target: "source", app: "cursor" });
+  // ...else nothing here opens it: code with no editor, a file of no kind the host opens, a file gone, no answer.
+  for (const files of [file({ kind: "code", default: false }), file({ kind: "file", default: false }), file({ present: false }), { targets: [] }, null]) assert.equal(fileOpener(files), null);
 });

@@ -46,7 +46,7 @@ it('starts with its bar (Home at the left, the search at the right), its places 
   render(<ModelLibrary library={library([])} onLayoutChange={() => {}} onSortChange={() => {}} />);
   await screen.findByText('Nothing here yet');
   // With no navbar over it, the page's own bar: Home, the page's heading, and the search.
-  const bar = document.querySelector('.cad-library-bar')!;
+  const bar = document.querySelector('[data-library-bar]')!;
   expect(bar.querySelector('h1')?.textContent).toBe('Home');
   expect([...bar.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Search models']);
   // The search keeps its placeholder; every control is the scale's control (28px), its icons 16px.
@@ -61,7 +61,7 @@ it('starts with its bar (Home at the left, the search at the right), its places 
   expect(screen.getByRole('group', { name: 'Layout' }).hasAttribute('data-segmented-control')).toBe(true);
   expect(['Grid', 'List'].map(name => screen.getByRole('button', { name }).className.includes('h-control'))).toEqual([true, true]);
   // No count; the one picture is the welcome's C mark.
-  expect(row.querySelector('.cad-library-count')).toBeNull();
+  expect(main.querySelector('[data-pill-count]')).toBeNull();
   expect([...main.querySelectorAll('img')].map(image => Boolean(image.closest('[data-library-empty]')))).toEqual([true]);
   // Its one navigation is its places; a host with no addresses has no link anywhere.
   expect(screen.getAllByRole('navigation').map(node => node.getAttribute('aria-label'))).toEqual(['Places']);
@@ -74,7 +74,7 @@ it('ends its bar in Import where the host has a chooser -- a file, or a folder o
   const importFolder = vi.fn(async () => null);
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={library([], { pick, importFolder })} onLayoutChange={() => {}} /></ControlUsageProvider>);
   await screen.findByText('Nothing here yet');
-  const row = document.querySelector('.cad-library-bar')!;
+  const row = document.querySelector('[data-library-bar]')!;
   // Last of the bar, after the search: the folder icon, "Import", 28px as its neighbours, neutral (never a filled primary).
   expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Search models', 'Import']);
   const trigger = screen.getByRole('button', { name: 'Import', exact: true });
@@ -171,7 +171,7 @@ it('names a card by its file and how long ago it was last active, and switches b
   expect(layouts).toEqual(['list']);
   rerender(<ModelLibrary library={library([model('bracket.step')])} layout="list" onLayoutChange={layout => layouts.push(layout)} />);
   expect(screen.getByRole('button', { name: 'List' }).getAttribute('aria-pressed')).toBe('true');
-  expect(screen.getByRole('list', { name: 'Files' }).className).toContain('cad-library-list');
+  expect(screen.getByRole('list', { name: 'Files' }).closest('.cad-library-table')).not.toBeNull();
   // A row has the card's one menu.
   expect(screen.getByRole('button', { name: 'Actions for bracket.step' })).toBeTruthy();
 });
@@ -189,7 +189,7 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
   expect([header.getAttribute('aria-hidden'), [...header.children].map(cell => cell.textContent)]).toEqual(['true', ['Name', 'Kind', 'Size', 'Updated', 'Created']]);
   const cells = (name: string) => {
     const row = screen.getByRole('button', { name: `Open ${name}` });
-    return [Boolean(row.querySelector('.cad-library-name > .cad-library-thumbnail')), row.querySelector('.cad-library-label')?.textContent,
+    return [Boolean(row.querySelector('[data-library-name] > [data-library-picture]')), row.querySelector('[data-library-label]')?.textContent,
       ...[...row.querySelectorAll('[data-column]')].map(cell => [cell.getAttribute('data-column'), cell.textContent])];
   };
   expect(cells('plate.step')).toEqual([true, 'plate.step', ['kind', 'STEP'], ['size', '87 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
@@ -197,7 +197,7 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
   // does not know yet (a folder's) has an empty Created.
   expect(cells('arm.xbf')).toEqual([true, 'arm.xbf', ['kind', 'XBF'], ['size', '2 KB'], ['updated', '2h ago'], ['created', '']]);
   // A row's picture has no badge: its Kind says it. Its pin and ⋯ follow its button, at its end.
-  expect(list.querySelector('.cad-library-format')).toBeNull();
+  expect(list.querySelector('[data-library-format]')).toBeNull();
   const row = screen.getByRole('button', { name: 'Open plate.step' }).closest('li')!;
   expect(within(row).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Open plate.step', 'Pin', 'Actions for plate.step']);
 });
@@ -245,10 +245,11 @@ it('gives a card no glyph, and narrows the place to one kind with a chip: All fi
   render(<ModelLibrary library={source} onSortChange={() => {}} />);
   const arm = await screen.findByRole('button', { name: 'Open arm.xbf' });
   // The picture and its badge say what a card is: no glyph beside its name.
-  expect([arm.querySelector('[data-glyph]'), screen.getByRole('button', { name: 'Open bracket.step' }).querySelector('[data-glyph]')]).toEqual([null, null]);
+  const caption = (card: HTMLElement) => card.querySelector('[data-library-label]')!.parentElement!;
+  expect([caption(arm).querySelector('svg'), caption(screen.getByRole('button', { name: 'Open bracket.step' })).querySelector('svg')]).toEqual([null, null]);
   // A row of pills of its own, under the heading row: a model and the files exported from it are 3D models alike.
   const row = screen.getByRole('group', { name: 'Show' });
-  expect([row.previousElementSibling?.classList.contains('cad-library-toolbar'), row.closest('.cad-library-toolbar')]).toEqual([true, null]);
+  expect([row.previousElementSibling?.hasAttribute('data-library-toolbar'), row.closest('[data-library-toolbar]')]).toEqual([true, null]);
   expect(chips()).toEqual([['All, 5', 'true'], ['3D models, 3', 'false'], ['Drawings, 1', 'false'], ['Boards, 1', 'false']]);
   expect(within(row).getAllByRole('button').map(chip => [chip.textContent, chip.className.includes('h-control')]))
     .toEqual([['AllAll5', true], ['3D models3D models3', true], ['DrawingsDrawings1', true], ['BoardsBoards1', true]]);
@@ -260,7 +261,7 @@ it('gives a card no glyph, and narrows the place to one kind with a chip: All fi
   // A search and the chip narrow together, and the counts follow the search: of the place before the chip.
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'arm' } });
   expect(chips()).toEqual([['All, 2', 'false'], ['3D models, 2', 'false'], ['Drawings, 0', 'false'], ['Boards, 0', 'true']]);
-  expect(screen.getByRole('main').querySelector('.cad-library-empty')?.textContent).toBe('No matching models.');
+  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matching models.');
   fireEvent.click(screen.getByRole('button', { name: '3D models, 2' }));
   expect(names()).toEqual(['Open arm.xbf', 'Open arm.stl']);
   fireEvent.click(screen.getByRole('button', { name: 'All, 2' }));
@@ -473,7 +474,7 @@ it("shows every card's light picture in both themes, never turned, and badges it
     model('plate.dxf', { thumbnail: 'plate.png', pictured: Date.now() / 1000 }), model('arm.xbf')], { thumbnail });
   const home = (colorScheme: 'light' | 'dark') => <ViewerHostContext.Provider value={{ environment: { colorScheme } } as any}><ModelLibrary library={source} /></ViewerHostContext.Provider>;
   const view = render(home('dark'));
-  const picture = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('.cad-library-thumbnail')!;
+  const picture = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('[data-library-picture]')!;
   await waitFor(() => expect(picture('video.kicad_pcb').querySelector('img')?.getAttribute('src')).toBe('data:video.kicad_pcb:light.png'));
   await waitFor(() => expect(picture('plate.dxf').querySelector('img')?.getAttribute('src')).toBe('data:plate.dxf:plate.png'));
   view.rerender(home('light'));
@@ -483,7 +484,7 @@ it("shows every card's light picture in both themes, never turned, and badges it
   expect([...new Set(thumbnail.mock.calls.map(([item]) => item.name))].sort()).toEqual(['plate.dxf', 'video.kicad_pcb']);
   expect(picture('arm.xbf').querySelector('img')).toBeNull();
   expect(['video.kicad_pcb', 'plate.dxf'].map(name => [picture(name).hasAttribute('data-drawing'), picture(name).hasAttribute('data-thumbnail-variant')])).toEqual([[false, false], [false, false]]);
-  expect(['video.kicad_pcb', 'plate.dxf', 'arm.xbf'].map(name => picture(name).querySelector('.cad-library-format')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'XBF']);
+  expect(['video.kicad_pcb', 'plate.dxf', 'arm.xbf'].map(name => picture(name).querySelector('[data-library-format]')?.textContent)).toEqual(['KiCad PCB', 'DXF', 'XBF']);
 });
 
 it('calls a model a Part or an Assembly by its parts, XBF where they are not known, and every other file by its format', async () => {
@@ -494,7 +495,7 @@ it('calls a model a Part or an Assembly by its parts, XBF where they are not kno
   // On a card, its badge.
   render(<ModelLibrary library={library(documents)} />);
   await screen.findByRole('button', { name: 'Open hinge.xbf' });
-  const badge = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('.cad-library-format')?.textContent;
+  const badge = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('[data-library-format]')?.textContent;
   expect(names.map(badge)).toEqual(said);
   cleanup();
   // In the list, its Kind.
@@ -512,7 +513,7 @@ it("says a card's age alone, a file's size being the list's", async () => {
   const now = Date.now() / 1000;
   render(<ModelLibrary library={library([model('plate.step', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 1_700_000 }),
     model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 900 }), model('arm.xbf', { opened: null, updated: now - 2 * 3600 })])} />);
-  const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('.cad-library-status')!.textContent;
+  const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('[data-library-status]')!.textContent;
   expect([await status('plate.step'), await status('tiny.stl'), await status('arm.xbf')]).toEqual(['Viewed 5h ago', 'Viewed 5h ago', 'Edited 2h ago']);
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home');
 });
@@ -628,24 +629,25 @@ it("a project's page lists its folders first, then its files, and its heading le
   const view = render(page());
   await screen.findByRole('button', { name: 'Open top.step' });
   const heading = () => screen.getByRole('main').firstElementChild!;
-  expect([heading().querySelector('h2')?.textContent, heading().querySelector('.cad-library-path')?.textContent, Boolean(heading().querySelector('svg.lucide-folder'))])
+  expect([heading().querySelector('h2')?.textContent, heading().querySelector('[data-library-path]')?.textContent, Boolean(heading().querySelector('svg.lucide-folder'))])
     .toEqual(['heart-tag', '~/cad/heart-tag', true]);
   // Its folders first, in the host's order, then the files directly in it: nothing below is flattened here.
   expect(opens()).toEqual(['Open housing', 'Open dxf', 'Open top.step']);
   // A folder is its glyph and its name in a list of its own, with no picture, count, pin or menu: a way into it.
   const folders = screen.getByRole('list', { name: 'Folders' });
   const housing = within(folders).getByRole('button', { name: 'Open housing' });
-  expect([housing.textContent, Boolean(housing.querySelector('svg.lucide-folder')), housing.querySelector('.cad-library-thumbnail'),
+  expect([housing.textContent, Boolean(housing.querySelector('svg.lucide-folder')), housing.querySelector('[data-library-picture]'),
     within(housing.closest('li')!).getAllByRole('button').length]).toEqual(['housing', true, null, 1]);
   await act(async () => { fireEvent.click(housing); });
   expect(places).toEqual([{ view: 'project', project: 'p1', path: 'housing' }]);
-  // Two levels down: the path in the heading, each part but the last a way back up; the folder from `~`.
+  // Two levels down: the path in the heading, each part but the last a way back up. The folder from `~` is said at the
+  // project's top alone: below it, it would say the heading's path a second time.
   view.rerender(page('housing/v3'));
   await screen.findByRole('button', { name: 'Open lid.step' });
   expect(opens()).toEqual(['Open drawings', 'Open housing.xbf', 'Open lid.step']);
-  const crumbs = [...heading().querySelectorAll('.cad-library-crumb')].map(crumb => crumb.textContent);
-  expect([crumbs, heading().querySelector('h2')?.textContent, heading().querySelector('.cad-library-path')?.textContent])
-    .toEqual([['heart-tag', 'housing'], 'v3', '~/cad/heart-tag/housing/v3']);
+  const crumbs = [...heading().querySelectorAll('[data-library-crumb]')].map(crumb => crumb.textContent);
+  expect([crumbs, heading().querySelector('h2')?.textContent, heading().querySelector('[data-library-path]')])
+    .toEqual([['heart-tag', 'housing'], 'v3', null]);
   places.length = 0;
   for (const crumb of ['heart-tag', 'housing']) await act(async () => { fireEvent.click(within(heading() as HTMLElement).getByRole('button', { name: crumb })); });
   expect(places).toEqual([{ view: 'project', project: 'p1' }, { view: 'project', project: 'p1', path: 'housing' }]);
@@ -656,6 +658,149 @@ it("a project's page lists its folders first, then its files, and its heading le
   view.rerender(page('housing/v3', 'list'));
   const row = within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem')[0];
   expect([row.textContent, [...row.querySelectorAll('[data-column]')].map(cell => cell.textContent)]).toEqual(['drawings————', ['—', '—', '—', '—']]);
+});
+
+// A folder's page lists every file in it. A file the viewer does not open (`documentKind: null`, as a CAD host's row of it
+// says) is a card or a row like the rest, and a press on it opens it, as a press on a document does: in an app of the
+// computer's, there being no page for it.
+it("lists every file of a folder; a press on one that is no document opens it with the default handler, else the host's first app, and says so where nothing opens it", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  // A submenu's list scrolls in the chrome's scroll region, which measures itself.
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  const tag = project('p1', 'heart-tag');
+  const other = (below: string) => file(tag, below, { documentKind: null, thumbnail: null, size: 2048 });
+  const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), other('datasheet.pdf'), other('build.py'), other('Makefile'), other('run.sh'), other('locked.pdf'), file(tag, 'lid.step', { documentKind: 'step' })];
+  const asked: string[] = [], opened: unknown[] = [], done: string[] = [];
+  // Open in's answer for each, as a CAD host gives it: one target, the file; `default` there only as false.
+  const answers: Record<string, object> = {
+    'datasheet.pdf': { target: 'source', kind: 'pdf', name: 'datasheet.pdf', present: true, apps: [{ id: 'preview', name: 'Preview' }] },
+    'build.py': { target: 'source', kind: 'code', name: 'build.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }, { id: 'cursor', name: 'Cursor' }], default: false },
+    Makefile: { target: 'source', kind: 'file', name: 'Makefile', present: true, apps: [] },
+    'run.sh': { target: 'source', kind: 'file', name: 'run.sh', present: true, apps: [], default: false },
+    'locked.pdf': { target: 'source', kind: 'pdf', name: 'locked.pdf', present: true, apps: [] },
+  };
+  const fileActions = { platform: 'darwin' as const,
+    perform: { 'copy-path': ({ path }: { path: string }) => { done.push(`copy ${path}`); }, reveal: ({ path }: { path: string }) => { done.push(`reveal ${path}`); }, 'copy-link': () => {} },
+    apps: async (entry: { path: string; id?: string }) => { asked.push(entry.id ?? ''); return { targets: [answers[entry.path.split('/').pop()!]], fileManager: 'finder' } as never; },
+    openApp: async (entry: { path: string; id?: string }, target: string, app: string) => {
+      if (entry.path.endsWith('locked.pdf')) throw new Error('This file cannot be opened. Check its permissions.');
+      opened.push([entry.id, target, app]);
+    } };
+  const navigation: LibraryNavigation = { hrefOf: target => 'document' in target ? `/${target.document}` : null, openBeside: { kind: 'tab', open() {} } };
+  const reports: { control: string; count: number; seconds: number }[][] = [];
+  const page = (layout: 'grid' | 'list') => <ControlUsageProvider report={counts => reports.push(counts)}>
+    <ModelLibrary library={library([], hosted([tag], files))} fileActions={fileActions} navigation={navigation} layout={layout} place={{ view: 'project', project: 'p1' }} /></ControlUsageProvider>;
+  const entryOf = (name: string) => document.querySelector<HTMLElement>(`[aria-label="Open ${name}"]`)!.closest('li')!;
+  const press = async (name: string) => { await act(async () => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })); }); };
+  for (const layout of ['grid', 'list'] as const) {
+    asked.length = 0;
+    const view = render(page(layout));
+    await screen.findByRole('link', { name: 'Open arm.xbf' });
+    // Every file, in the host's order, documents and the rest together.
+    expect(opens()).toEqual(['Open arm.xbf', 'Open datasheet.pdf', 'Open build.py', 'Open Makefile', 'Open run.sh', 'Open locked.pdf', 'Open lid.step']);
+    // A document is a link with its pin and ⋯. A file that is none has no page, so it is a button, with its ⋯ and no
+    // pin; it is neither dimmed nor disabled, and never the ringed one.
+    expect([entryOf('arm.xbf').querySelector('a')?.getAttribute('href'), within(entryOf('arm.xbf')).getAllByRole('button').map(button => button.getAttribute('aria-label'))])
+      .toEqual(['/file-p1-arm.xbf', ['Pin', 'Actions for arm.xbf']]);
+    for (const name of ['datasheet.pdf', 'build.py', 'Makefile', 'run.sh']) {
+      const entry = entryOf(name), button = within(entry).getByRole('button', { name: `Open ${name}` });
+      expect([entry.querySelector('a'), within(entry).getAllByRole('button').map(each => each.getAttribute('aria-label')), button.hasAttribute('disabled'), button.getAttribute('aria-haspopup'),
+        entry.hasAttribute('data-missing'), entry.hasAttribute('data-from')]).toEqual([null, [`Open ${name}`, `Actions for ${name}`], false, null, false, false]);
+    }
+    // Its badge (a card's) or Kind (a row's) is its extension as its name writes it, upper case; with none, nothing.
+    const kind = (name: string) => layout === 'grid' ? entryOf(name).querySelector('[data-library-format]')?.textContent ?? null : entryOf(name).querySelector('[data-column="kind"]')?.textContent;
+    expect(['datasheet.pdf', 'build.py', 'Makefile'].map(kind)).toEqual(layout === 'grid' ? ['PDF', 'PY', null] : ['PDF', 'PY', '—']);
+    if (layout === 'grid') expect(entryOf('build.py').querySelector('[data-library-status]')?.textContent).toMatch(/^Edited /);
+    // Nothing is asked of the host until a press. Then the file is opened: by the OS's own handler where it is offered...
+    expect(asked).toEqual([]);
+    await press('datasheet.pdf');
+    await waitFor(() => expect(opened).toEqual([['file-p1-datasheet.pdf', 'source', 'default']]));
+    expect([asked, screen.queryByRole('menu'), screen.queryByRole('alert')]).toEqual([['file-p1-datasheet.pdf'], null, null]);
+    // ...a file with no app listed too...
+    await press('Makefile');
+    await waitFor(() => expect(opened.at(-1)).toEqual(['file-p1-Makefile', 'source', 'default']));
+    // ...else by the first app the host lists (code, with an editor installed)...
+    await press('build.py');
+    await waitFor(() => expect(opened.at(-1)).toEqual(['file-p1-build.py', 'source', 'vscode']));
+    expect(opened.length).toBe(3);
+    // ...and where it lists neither, nothing opens it here: said in the place's line, by the file's name.
+    await press('run.sh');
+    expect((await screen.findByRole('alert')).textContent).toBe('No app on this computer opens run.sh.');
+    expect(opened.length).toBe(3);
+    // An open the host refuses is said in its own words; the next press clears the line.
+    await press('locked.pdf');
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('This file cannot be opened. Check its permissions.'));
+    await press('datasheet.pdf');
+    await waitFor(() => expect(opened.length).toBe(4));
+    expect(screen.queryByRole('alert')).toBeNull();
+    opened.length = 0;
+    view.unmount();
+  }
+  // Its ⋯: Open in, a submenu of the host's apps and Default app (the rows the navbar's Open in draws), looked up as the
+  // menu opens; then Copy path and the file manager. No Open, Open in new tab, Copy link, Pin or Remove from Recents.
+  const menuOf = async (name: string) => {
+    const open = await menu(name);
+    await waitFor(() => expect(asked.at(-1)).toBe(`file-p1-${name}`));
+    return open;
+  };
+  let view = render(page('grid'));
+  await screen.findByRole('link', { name: 'Open arm.xbf' });
+  let open = await menuOf('build.py');
+  await within(open).findByRole('menuitem', { name: 'Open in' });
+  expect(items(open)).toEqual(['Open in', 'Copy path', 'Reveal in Finder']);
+  await user.click(within(open).getByRole('menuitem', { name: 'Open in' }));
+  const openIn = await screen.findByRole('menu', { name: 'Open in' });
+  // No Default app where the host says the OS's handler is not offered.
+  expect(items(openIn)).toEqual(['Visual Studio Code', 'Cursor']);
+  await act(async () => { fireEvent.click(within(openIn).getByRole('menuitem', { name: 'Cursor' })); });
+  expect(opened).toEqual([['file-p1-build.py', 'source', 'cursor']]);
+  view.unmount();
+  // No app and no handler: Copy path and the file manager alone, both working.
+  view = render(page('list'));
+  await screen.findByRole('link', { name: 'Open arm.xbf' });
+  open = await menuOf('run.sh');
+  expect(items(open)).toEqual(['Copy path', 'Reveal in Finder']);
+  await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Reveal in Finder' })); });
+  expect(done).toEqual(['reveal /Users/sam/cad/heart-tag/run.sh']);
+  view.unmount();
+  // A document's ⋯ has Open in too, after its Open and Open in new tab.
+  view = render(page('grid'));
+  await screen.findByRole('link', { name: 'Open arm.xbf' });
+  answers['arm.xbf'] = { target: 'source', kind: 'model', name: 'arm.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }], default: false };
+  open = await menuOf('arm.xbf');
+  await within(open).findByRole('menuitem', { name: 'Open in' });
+  expect(items(open)).toEqual(['Open', 'Open in new tab', 'Open in', 'Copy path', 'Copy link', 'Reveal in Finder', 'Pin']);
+  view.unmount();
+  // Each open handed to an app is counted, a refused one too; never which app.
+  expect(reported(reports)).toMatchObject({ file_open_app: 11, home_reveal: 1 });
+});
+
+it('a file that is no document does what its host can: shown in the file manager where the host opens no apps, and no control at all where it can do neither', async () => {
+  const tag = project('p1', 'heart-tag');
+  const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), file(tag, 'notes.md', { documentKind: null })];
+  const done: string[] = [];
+  const page = (fileActions?: object) => <ModelLibrary library={library([], hosted([tag], files))} fileActions={fileActions as never} place={{ view: 'project', project: 'p1' }} />;
+  // A host that opens no apps: a press shows the file in its file manager, and the ⋯ has what the host can do.
+  let view = render(page({ platform: 'linux', perform: { 'copy-path': () => {}, reveal: ({ path }: { path: string }) => { done.push(path); } } }));
+  const notes = await screen.findByRole('button', { name: 'Open notes.md' });
+  await act(async () => { fireEvent.click(notes); });
+  expect(done).toEqual(['/Users/sam/cad/heart-tag/notes.md']);
+  expect(items(await menu('notes.md'))).toEqual(['Copy path', 'Show in file manager']);
+  view.unmount();
+  // A host that can only copy a path: the card is there, named and badged, and is no control; its ⋯ offers Copy path.
+  view = render(page({ platform: 'linux', perform: { 'copy-path': () => {} } }));
+  await screen.findByRole('button', { name: 'Open arm.xbf' });
+  let card = screen.getByText('notes.md').closest('li')!;
+  expect([within(card).queryByRole('link'), within(card).getAllByRole('button').map(button => button.getAttribute('aria-label')), card.querySelector('[data-library-format]')?.textContent])
+    .toEqual([null, ['Actions for notes.md'], 'MD']);
+  expect(items(await menu('notes.md'))).toEqual(['Copy path']);
+  view.unmount();
+  // A host that can do nothing with a file: no control at all.
+  view = render(page());
+  await screen.findByRole('button', { name: 'Open arm.xbf' });
+  card = screen.getByText('notes.md').closest('li')!;
+  expect([within(card).queryByRole('button'), within(card).queryByRole('link')]).toEqual([null, null]);
+  view.unmount();
 });
 
 it("a search on a project's page asks the host and lists what is below, flat, each saying where it is; Recents and Pinned say each one's project", async () => {
@@ -694,7 +839,7 @@ it("leads a card's second line with its project's name in Recents and Pinned, wh
   const home = (at: Parameters<typeof ModelLibrary>[0]['place']) => <ModelLibrary library={source} place={at} />;
   const view = render(home({ view: 'recents' }));
   await waitFor(() => expect(place('project:p1')).toBeTruthy());
-  const second = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('.cad-library-status')?.textContent;
+  const second = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-library-status]')?.textContent;
   expect([second('arm.xbf'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
   view.rerender(home({ view: 'pinned' }));
   expect([second('arm.xbf'), second('loose.step')]).toEqual(['heart-tag · Edited 16h ago', 'Standalone · Edited 16h ago']);
@@ -751,7 +896,7 @@ it('narrows Recents, Pinned and Standalone with a search of the rows in hand, an
   // The sidebar's counts are the places', not the search's.
   expect(place('pinned').textContent).toBe('Pinned2');
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'nothing' } });
-  expect(screen.getByRole('main').querySelector('.cad-library-empty')?.textContent).toBe('No matching models.');
+  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matching models.');
 });
 
 it("gives a project's page a menu: the folder on screen's Copy path and Reveal, and Remove from CAD, which forgets the project alone, goes to Recents and says so", async () => {
@@ -834,10 +979,10 @@ it('says what each place lacks: an empty project, one whose folder is gone, one 
   const source = library([model('loose.step', { project: 'p1' })], hosted([tag, lamp], [file(lamp, 'part_0.stl')]));
   const home = (at: Parameters<typeof ModelLibrary>[0]['place'], from = source) => <ModelLibrary library={from} place={at} />;
   const view = render(home({ view: 'project', project: 'p1' }));
-  expect(await screen.findByText('No models or CAD files here yet.')).toBeTruthy();
+  expect(await screen.findByText('This folder is empty.')).toBeTruthy();
   view.rerender(home({ view: 'project', project: 'p1', path: 'renamed' }));
   expect(await screen.findByText("Couldn't read this folder. It may have been moved or renamed.")).toBeTruthy();
-  expect([...document.querySelectorAll('.cad-library-crumb')].map(crumb => crumb.textContent)).toEqual(['heart-tag']);
+  expect([...document.querySelectorAll('[data-library-crumb]')].map(crumb => crumb.textContent)).toEqual(['heart-tag']);
   view.rerender(home({ view: 'project', project: 'p2' }));
   expect(screen.getByText("This project's folder is gone. Remove it, or put the folder back.")).toBeTruthy();
   expect(opens()).toEqual([]);
@@ -868,7 +1013,7 @@ it("makes a card's and a row's main press a real link where the host gives the d
   for (const layout of ['grid', 'list'] as const) {
     const view = render(<ModelLibrary library={source} layout={layout} navigation={addresses} />);
     const card = await screen.findByRole('link', { name: 'Open bracket.step' });
-    expect([card.tagName, card.getAttribute('href'), card.className]).toEqual(['A', '/id-bracket?token=t', 'cad-library-open']);
+    expect([card.tagName, card.getAttribute('href'), card.classList.contains('cad-library-open')]).toEqual(['A', '/id-bracket?token=t', true]);
     // A plain click opens it in this view, and the browser follows nothing.
     const click = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
     await act(async () => { card.dispatchEvent(click); });
@@ -1002,7 +1147,7 @@ it("rings the document just left, brings it into view, and goes back to it from 
   expect([scrolled.mock.contexts[0], scrolled.mock.calls[0]]).toEqual([document.querySelector('[data-from]'), [{ block: 'nearest' }]]);
   // The way back stands in the heading row, with its key.
   const button = screen.getByRole('button', { name: 'Back to part_1.stl' });
-  expect([button.closest('.cad-library-toolbar') !== null, button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')]).toEqual([true, 'Esc', 'Escape']);
+  expect([button.closest('[data-library-toolbar]') !== null, button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')]).toEqual([true, 'Esc', 'Escape']);
   fireEvent.click(button);
   expect(back).toHaveBeenCalledTimes(1);
   // Escape goes back too...
@@ -1028,28 +1173,6 @@ it("rings the document just left, brings it into view, and goes back to it from 
 });
 
 
-// A narrow home keeps its sidebar's ways (`LibrarySidebar.jsx`): what narrows is the place's own gutters.
-it('puts the place on the narrow gutters in a home narrower than 720px, measured on the home and never the window; its heading stays Home and the place keeps its name', async () => {
-  let width = 719;
-  const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    const wide = this.classList.contains('cad-library') ? width : 0;
-    return { x: 0, y: 0, left: 0, top: 0, right: wide, bottom: 0, width: wide, height: 0, toJSON() {} } as DOMRect;
-  });
-  const resized: (() => void)[] = [];
-  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized.push(callback); } observe() {} disconnect() {} });
-  try {
-    render(<ModelLibrary library={library([model('a.step')])} />);
-    await screen.findByRole('button', { name: 'Open a.step' });
-    const narrow = () => document.querySelector('[data-library-narrow]') !== null;
-    // No menu of places on the heading: Home, and the place's name in its own row, at any width.
-    expect([narrow(), screen.getByRole('heading', { level: 1 }).textContent, screen.getByRole('main').querySelector('h2')?.textContent, screen.queryByRole('button', { name: /^Places/ })])
-      .toEqual([true, 'Home', 'Recents', null]);
-    width = 720;
-    await act(async () => { resized.forEach(callback => callback()); });
-    expect([narrow(), screen.getByRole('heading', { level: 1 }).textContent]).toEqual([false, 'Home']);
-  } finally { boxes.mockRestore(); }
-});
-
 // The home under the viewer's navbar, as a host shows it (`FileViewer`): the sidebar is the viewer's panel over this
 // page (`LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx`), so its toggle is the navbar's, after the logo. The page
 // is `width` wide: the home's frame, the home and the viewer all measure it.
@@ -1065,7 +1188,7 @@ function page({ width = 1200, panel, onPanelChange, onPlaceChange, links = true,
     unobserve() {}
     disconnect() { this.entry.targets = []; }
   });
-  const MEASURED = '.cad-library-frame, .cad-library, .text-to-cad-file-viewer';
+  const MEASURED = '[data-library-frame], .cad-library, .text-to-cad-file-viewer';
   const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     const own = this.matches(MEASURED) ? wide : 0;
     return { x: 0, y: 0, left: 0, top: 0, right: own, bottom: 0, width: own, height: 0, toJSON() {} } as DOMRect;
@@ -1086,7 +1209,7 @@ function page({ width = 1200, panel, onPanelChange, onPlaceChange, links = true,
     restore: () => boxes.mockRestore(),
     toggle: () => document.querySelector<HTMLElement>('[data-viewer-navbar] [data-navbar-panel="left"]')!,
     sidebar: () => document.querySelector<HTMLElement>('aside[data-library-sidebar]'),
-    frame: () => document.querySelector<HTMLElement>('.cad-library-frame')!,
+    frame: () => document.querySelector<HTMLElement>('[data-library-frame]')!,
   };
 }
 // Where the sidebar is: pinned beside the place, peeking over it, or gone; and what its toggle says.

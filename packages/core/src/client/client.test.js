@@ -402,6 +402,24 @@ test('a drawing refused by the server raises the classified failure an alert is 
   client.dispose();
 });
 
+test('a change to a document the engine holds no more is the library as it now is, never a failure; any other refusal is told', async (t) => {
+  const calls = [];
+  const row = { id: 'd2', path: '/models/kept.step', kind: 'step', record: 'file' };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push([options.method || 'GET', body?.action ?? null]);
+    if (options.method !== 'PATCH') return Response.json({ documents: [row] });
+    // The file is gone: the engine holds no document by that name.
+    if (body.path === '/models/gone.step') return Response.json({ error: 'no document 4f0c is held' }, { status: 400 });
+    return Response.json({ error: 'unknown action' }, { status: 400 });
+  } });
+  t.after(() => client.dispose());
+  const listed = [{ ...row, kind: 'file', documentKind: 'step' }];
+  for (const action of ['pin', 'open', 'thumbnail']) assert.deepEqual(await client.changeRecents({ action, path: '/models/gone.step' }), listed, action);
+  assert.deepEqual(calls, [['PATCH', 'pin'], ['GET', null], ['PATCH', 'open'], ['GET', null], ['PATCH', 'thumbnail'], ['GET', null]]);
+  await assert.rejects(client.changeRecents({ action: 'spin', path: '/models/kept.step' }), /unknown action/);
+});
+
 test('Open in reads a document\'s files and their apps by its id, and opens one with the guarded POST', async (t) => {
   const calls = [];
   const answer = { targets: [{ target: 'source', kind: 'script', name: 'bracket.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }] }], fileManager: 'finder' };
@@ -409,6 +427,7 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
     const parsed = new URL(url);
     calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
     if (parsed.pathname === '/api/v1/local/open-in') return Response.json(answer);
+    if (options.body?.includes('refused')) return Response.json({ error: 'cad does not open .sh files.', hint: 'Show it in the file manager instead.' }, { status: 400 });
     return options.body?.includes('gone') ? Response.json({ error: 'That file is not there.' }, { status: 404 }) : new Response(null, { status: 204 });
   } });
   t.after(() => client.dispose());
@@ -416,11 +435,14 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
   await client.openIn('d1', 'source', 'vscode');
   await client.openIn('d1', 'export:step', 'default');
   await assert.rejects(client.openIn('gone', 'source', 'default'), /not there/);
+  // A refusal says what the server says, and what it says to do about it.
+  await assert.rejects(client.openIn('refused', 'source', 'default'), { message: 'cad does not open .sh files. Show it in the file manager instead.' });
   assert.deepEqual(calls, [
     ['/api/v1/local/open-in?id=d1', 'GET', null, null],
     ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'source', app: 'vscode' }],
     ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'export:step', app: 'default' }],
     ['/api/v1/local/open', 'POST', '1', { id: 'gone', target: 'source', app: 'default' }],
+    ['/api/v1/local/open', 'POST', '1', { id: 'refused', target: 'source', app: 'default' }],
   ]);
 });
 

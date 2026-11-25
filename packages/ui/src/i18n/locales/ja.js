@@ -310,7 +310,7 @@ export default {
   "home.projectInside": "{name} は、すでにプロジェクトである {project} の中にあります。",
 
 
-  "home.projectEmpty": "まだモデルも CAD ファイルもありません。",
+  "home.projectEmpty": "このフォルダーは空です。",
   "home.folderFailed": "このフォルダーを読み込めませんでした。移動または名前が変更された可能性があります。",
 
 
@@ -404,6 +404,7 @@ export default {
   "home.grid": "グリッド",
   "home.list": "リスト",
   "home.openAria": "{name} を開く",
+  "home.noAppOpens": "このコンピューターには {name} を開けるアプリがありません。",
   "format.xbf": "XBF",
   "home.formatPart": "部品",
   "home.formatAssembly": "アセンブリ",
@@ -842,7 +843,6 @@ export default {
   "parameters.error.build_failed": "この値ではビルドできません。",
   "parameters.error.preview_build_failed": "この値ではビルドできません。",
   "parameters.error.preview_failed": "この値を表示できませんでした。",
-  "parameters.reason.file": "スクリプトで編集してください。",
   "parameters.reason.no_worker": "編集するにはスクリプトを再実行してください。",
   "parameters.reason.shared": "別のファイルで設定されています。",
   "parameters.reason.sharedIn": "{source} で設定されています。",

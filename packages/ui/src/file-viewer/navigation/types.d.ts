@@ -28,6 +28,14 @@ export type OpenInEntry = { action: EntryAction | "app"; label: string; enabled:
 export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string, params?: Record<string, unknown>) => string,
   state?: { sourceMissing?: boolean; files?: import("../types.js").OpenInFiles | null }): OpenInEntry[];
 export function fileManagerName(platform: Platform, t?: (key: string) => string): string;
+/**
+ * Open in's entries for a file that is no document: the apps the host lists for it (`files`' one target), Default app
+ * unless the host says it is not offered, then the file manager by its name where `capabilities` asks for it.
+ */
+export function fileOpenMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string, params?: Record<string, unknown>) => string,
+  state?: { files?: import("../types.js").OpenInFiles | null }): OpenInEntry[];
+/** What a press on a file that is no document opens it with: the OS's handler where offered, else the host's first app; null for neither. */
+export function fileOpener(files: import("../types.js").OpenInFiles | null | undefined): { target: string; app: string } | null;
 
 /** The one status screen, used by every full-area state in both apps: quiet, a 22rem column centred in the area. */
 export const EmptyState: ComponentType<{

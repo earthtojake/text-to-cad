@@ -7,6 +7,15 @@ import type { LiveRegistry } from "../host/liveRegistry.js";
  */
 export const THUMBNAIL_SIZE = Object.freeze({ width: 480, height: 360 });
 
+/**
+ * A document's picture as the chrome draws it, wherever it does (a home's card, a row of its list, a row of the search):
+ * 3:2, on the light viewport's gradient a picture is taken on, in both themes, so its own tokens are the light theme's
+ * (`light`: what stands on it, a format's badge or a card's pin, is light too); the kind's glyph, muted, where there is
+ * no picture. A row's is the control + 4 tall, with a tile's corners and a hairline edge.
+ */
+export const PICTURE_CLASS = "light relative grid shrink-0 place-items-center overflow-hidden bg-[linear-gradient(to_bottom,#f4f5f6,#dfe2e5)] aspect-[3/2] text-muted-foreground";
+export const ROW_PICTURE_CLASS = `${PICTURE_CLASS} h-[calc(var(--cad-control)+4px)] rounded-control ring-1 ring-inset ring-border`;
+
 // What a view shows that the library keeps: a file, or a model's document the engine holds by its id.
 const SHOWN_KINDS: ReadonlySet<string> = new Set(["workspace-file", "cad-model"]);
 
