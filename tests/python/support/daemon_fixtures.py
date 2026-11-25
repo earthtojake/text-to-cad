@@ -130,7 +130,7 @@ class DaemonCase(unittest.TestCase):
         return self.built("block")
 
     def _bare(self) -> str:
-        """``bracket.py``: one bare ``@model``, a document of memory alone, and its id."""
+        """``bracket.py``: one bare ``@model``, saved as ``bracket.xbf`` beside it, and its id."""
         from cad.engine.ids import model_id
 
         script = self.folder / "bracket.py"

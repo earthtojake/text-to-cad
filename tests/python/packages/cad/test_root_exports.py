@@ -237,7 +237,7 @@ class RootExports(unittest.TestCase):
 
     def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
         """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either
-        way and ``name=`` by keyword, exactly the 0.10 decorator's signature, and a path is required."""
+        way and ``name=`` by keyword, exactly the 0.10 decorator's signature; with no path its default."""
         from cad import step, model
 
         def arm():
@@ -249,7 +249,8 @@ class RootExports(unittest.TestCase):
         built = model("XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
         self.assertEqual(sorted(output.kind for output in built.outputs), ["step", "xbf"])
         self.assertEqual("plate", step("plate.step")(plate).name)
-        for call in (lambda: step(), lambda: step("a.step", "b"), lambda: step(path="a.step")):
+        self.assertEqual([path.name for _kind, path in step()(plate).targets()], ["plate.step"])
+        for call in (lambda: step("a.step", "b"), lambda: step(path="a.step")):
             with self.subTest(call=call), self.assertRaises(TypeError):
                 call()
 

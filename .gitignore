@@ -72,10 +72,11 @@ models/**/*.mov
 models/**/*.webm
 models/**/*.mkv
 
-# models/ holds sources only. A run writes nothing; each project's own .gitignore keeps out
-# the files written on request (STEP/ STL/ GLB/ 3MF/ DXF/, and the PDF/ of an @eng_drawing).
-# An xbf saved by hand lands where it was asked to.
+# models/ holds sources only. A run writes each model's .xbf (bare @model: <name>.xbf beside its
+# script); each project's own .gitignore keeps out the files written on request (STEP/ STL/ GLB/
+# 3MF/ DXF/, and the PDF/ of an @eng_drawing). An xbf saved by hand lands where it was asked to.
 models/**/XBF/
+models/**/*.xbf
 # The unported models' frozen inputs and generated validation output (tendon_hand's
 # palm and native hand, 8.5 MB and 250 MB), wherever someone restores them.
 models/*/unported/STEP/

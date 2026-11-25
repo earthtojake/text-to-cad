@@ -61,14 +61,14 @@ A mesh never becomes an `.xbf`, `.step` or `.dxf`: it has no B-rep, so model it 
 The model's page is the default. A project can instead revolve around its exported files, where
 the person asks to iterate on the file or the project already works that way (an `exports.py`, a
 consumer reading the files, a 0.7-era layout). Each run then writes the file too, by a file
-decorator in place of `@model` (`@step("../STEP/bracket.step")`, relative to the script; `@glb`,
+decorator beside `@model` (`@step("../STEP/bracket.step")`, relative to the script; `@glb`,
 `@stl`, `@threemf` and `@dxf` alike; an `.xbf` by `@model("...")`), by `exports.py` or by
 `cad <type> export` after the run; the person looks at the file's page; and checks read the file
 (`cad <type> snapshot` or `inspect` with its path, or `step.read` in a check).
 
 | | Model page | File page |
 | --- | --- | --- |
-| Each run | The page updates; nothing is written. | The file is written too and the page re-reads it, a STEP parsed again. |
+| Each run | The page updates; only the model's `.xbf` is written, beside the script. | The file is written too and the page re-reads it, a STEP parsed again. |
 | A picked ref | `made_by` names the function, file and line. | No `made_by`, a file names no model: a Quick Edit has no way back into the code. |
 | A failed run | The page says so. | The file keeps its last write and the page says nothing. |
 

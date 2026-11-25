@@ -758,7 +758,8 @@ class WarmModelTest(unittest.TestCase):
                              ({"used": True, "from": "memory"}, {"plate.py::plate": "loaded"}, []))
             self.assertEqual((report["memo"]["bodies_run"], report["memo"]["bodies_skipped"],
                               report["memo"]["bodies_loaded"]), (0, 0, 2))
-            self.assertEqual(report["files"], {})
+            # Its .xbf, compared and kept: a take writes nothing.
+            self.assertEqual([row["written"] for row in report["files"].values()], [False])
         # The child, built in the plate's run, is taken alike.
         self.assertEqual((self.build("peg")["cache"], self.ran()), ({"used": True, "from": "memory"}, []))
 

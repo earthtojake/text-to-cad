@@ -4,8 +4,8 @@ Each document type's package (``cad/step/``, ``cad/urdf/``, ...) is an instance 
 its entry in the registry (``cad.registry``) as its last line runs (``bind``). So ``from cad import
 step`` is one object that is
 
-* the type's decorator, where it has one: ``@step("out.step")`` declares a model's file, and ``@model``
-  the model itself, with no file;
+* the type's decorator, where it has one: ``@step("out.step")`` declares a model's file (bare ``@step``,
+  ``<name>.step`` beside the script), and ``@model`` the model's ``.xbf``;
 * its reader, where it has one: ``step.read(path)``;
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
@@ -59,10 +59,11 @@ class DocumentType(types.ModuleType):
 
         return DOCUMENT_TYPES[self.__name__.rpartition(".")[2]]
 
-    def __call__(self, out: Any, *, name: str | None = None, tolerance: float | None = None,
+    def __call__(self, out: Any = None, *, name: str | None = None, tolerance: float | None = None,
                  angle: float | None = None) -> Any:
         """``@<type>("out.<ext>", name=...)`` (or ``@<type>(out="out.<ext>")``, the decorator's 0.10 signature):
-        declare the file a model writes, of this type."""
+        declare the file a model writes, of this type; with no path (``@<type>``, ``@<type>()``), ``<name>.<ext>``
+        beside the script, the model's ``name=`` or its function's."""
         entry = self.entry
         if not entry.decorator:
             how = (f"; a file of it is changed in place with `with cad.{entry.id}.edit(path) as {entry.edit.noun}:`"
@@ -197,9 +198,9 @@ class ModelType(DocumentType):
 
     def __call__(self, target: Any = None, /, *, name: str | None = None, out: Any = None,  # type: ignore[override]
                  animations: Any = None) -> Any:
-        """``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``: declare a model, and with a path
-        the ``.xbf`` each run saves it as, relative to the script; ``model(shape, name=...)``: hand a shape over
-        as a named model (``cad.engine.model.model``)."""
+        """``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``: declare a model and the ``.xbf`` each
+        run saves it as, at its path relative to the script, else ``<name>.xbf`` beside it; ``model(shape,
+        name=...)``: hand a shape over as a named model (``cad.engine.model.model``)."""
         from cad.engine import model
 
         return model.model(target, name=name, out=out, animations=animations)

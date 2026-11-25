@@ -29,8 +29,8 @@ The laws below say how they are made, named, kept and served.
 from cad import model, step
 import build123d as bd
 
-@model("XBF/arm.xbf")     # each run saves it as XBF/arm.xbf beside the script
-@step("arm.step")         # and its STEP, a translation of that document
+@model                    # each run saves it as arm.xbf beside the script (@model("XBF/arm.xbf") elsewhere)
+@step("STEP/arm.step")    # and its STEP, a translation of that document (bare @step: arm.step)
 def arm():
     return bd.Box(10, 20, 30)
 
@@ -42,13 +42,13 @@ if __name__ == "__main__":
 ```bash
 cad run arm.py                                 # builds it in the engine's warm worker, printing its id
 cad model export <id> arm.3mf --tolerance 0.01 # the model as the engine holds it, by that id
-cad model export XBF/arm.xbf arm.glb arm.stl   # more translations of the document it wrote, read from the file
-cad model snapshot XBF/arm.xbf arm.png         # a still of it, drawn by OCCT
-cad viewer XBF/arm.xbf                         # the document on the running server's page
-cad model inspect XBF/arm.xbf                  # what it holds, then its build closure
+cad model export arm.xbf arm.glb arm.stl       # more translations of the document it wrote, read from the file
+cad model snapshot arm.xbf arm.png             # a still of it, drawn by OCCT
+cad viewer arm.xbf                             # the document on the running server's page
+cad model inspect arm.xbf                      # what it holds, then its build closure
 ```
 
-The same operations are functions of each type: `model.export("XBF/arm.xbf", "arm.glb")`,
+The same operations are functions of each type: `model.export("arm.xbf", "arm.glb")`,
 `model.snapshot(...)`, `model.inspect(...)`; `model.export(arm(), "arm.glb")` exports the model a call returns,
 and `step.read("vendor.step")` and `model.read("vendor.xbf")` read a file into a model.
 
@@ -62,7 +62,7 @@ These words mean one thing each, in the code, the commands and every document.
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
   and `.stp` are `step`). `model` is a model built from code: held in the engine's memory, addressed by its
   document id or the handle its call returns (`@model` declares one), or saved as a file, its `.xbf`
-  (`@model("arm.xbf")` has each run write it; `model.read` reads one). `xbf` is that file's kind in the
+  (`@model` has each run write it, `arm.xbf` beside the script unless given a path; `model.read` reads one). `xbf` is that file's kind in the
   registry, the server and the viewer, which open it; in Python and the CLI it is `model`'s, with no name of
   its own (law 26). A document type is a file cad shows: each has a view. A file cad writes or checks and never
   shows is none, whatever cad does with it: an MJCF, MuJoCo's own model file, is an export's destination and
@@ -206,9 +206,9 @@ renumbers the list and every citation in the same change.
 6. **One document per model, with one id.** *Every document.* A called model makes one document and
    returns its handle, never a bare shape. Every id is one formula over a scope and a name
    (`ids.derived_id`): a model's script and function, an opened file's path, a handed-over shape's
-   calling script and name; the same in every process, worked out without asking the engine. A function
-   is declared by `@model` alone, with no file, or by the files it declares (`@model("….xbf")`, its `.xbf`;
-   a file decorator, any other), never both. A document lives until a person
+   calling script and name; the same in every process, worked out without asking the engine. A function's
+   declarations stack, each adding its file (`@model` its `.xbf`, a file decorator any other); one kind
+   twice is refused. A document lives until a person
    deletes it: neither its worker retiring nor memory ends it, and one that is not held names the
    command that builds it again (the engine's **Document lifetime**).
 7. **Provenance is served live, never written.** *Models.* What made an element (the feature, its
@@ -221,11 +221,11 @@ renumbers the list and every citation in the same change.
 9. **Names are the durable tie to code.** *Models.* An element's name is spelled from the function
    that made its feature and the author's name for that feature, never from a line or a file: moving
    code renames nothing, and the file holds no line to go stale.
-10. **A file decorator requires an explicit output path.** *Models.* `out` is required; an omitted
-    path or `None` is refused, and `@model("….xbf")` names the `.xbf` a model is saved as the same way.
-    Whenever its model runs in a build, or is taken from its key, the file
-    is written once, from the model's own document, exactly as an export writes it, and only where it
-    differs or is missing. A model that declares no file writes nothing.
+10. **A file decorator's path is optional.** *Models.* Given, it is relative to the script; omitted, it
+    is the model's name and the format's extension beside the script (`@model`: `arm.xbf`), and two
+    models whose default files are one file are refused. Whenever its model runs in a build, or is taken
+    from its key, the file is written once, from the model's own document, exactly as an export writes
+    it, and only where it differs or is missing.
 11. **A model script is Python, and decoration only declares.** *Models.* Decorated functions declare
     models, explicit calls build them, and `python script.py` or `cad run script.py` runs the program.
     Importing the library or defining a decorated function builds nothing, writes nothing and starts

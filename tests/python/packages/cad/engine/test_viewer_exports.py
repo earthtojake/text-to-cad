@@ -89,12 +89,12 @@ class ViewerExportHttpTest(unittest.TestCase):
 
         with contextlib.chdir(self.root):
             root = self.root
-            # A bare model: its document is the worker's memory alone.
+            # A bare model: its run writes its .xbf beside the script, and the export is the worker's.
             script = root / 'export_http.py'
             script.write_text('import build123d as bd\nfrom cad import model\n\n\n@model\n'
                               'def export_http():\n    return bd.Box(2, 3, 4)\n', encoding='utf-8')
             built = api.build_script(script, ['export_http'])
-            self.assertEqual(built.files, {})
+            self.assertEqual(list(built.files), [str(root / 'export_http.xbf')])
             url = urlparse(built.models[0]['url'])
             doc = url.path.strip('/')
             session = request({'op': 'viewer', 'start': str(root), 'api_only': True})
@@ -174,7 +174,8 @@ class ViewerExportHttpTest(unittest.TestCase):
             self.assertIn('source changed', job['error'])
             _, _, data = http('/api/v1/documents/' + doc + '/version')
             self.assertIsNone(json.loads(data)['failed'], 'an export failure is not a model build failure')
-            self.assertEqual(list(root.iterdir()), [script], 'no implicit source or intermediate artifact')
+            self.assertEqual(sorted(root.iterdir()), [script, root / 'export_http.xbf'],
+                             'its declared .xbf and no implicit source or intermediate artifact')
 
 
 def setUpModule() -> None:

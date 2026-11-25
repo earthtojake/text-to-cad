@@ -99,8 +99,8 @@ every command, and give the person the page once ([Show the model](#show-the-mod
 
 - **A model function takes no arguments.** Dimensions are arguments of a plain helper, and each
   configuration is a `@model` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
-- **Running the script is the rebuild**, and it writes no file. The server replays whatever an edit
-  did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
+- **Running the script is the rebuild**, and it saves each model as `<name>.xbf` beside it. The
+  server replays whatever an edit did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Keep the calls under
   `if __name__ == "__main__":` so other scripts can import the models.
 - **An assembly calls its parts**: its body takes each part's shape (`plate().shape`), places and

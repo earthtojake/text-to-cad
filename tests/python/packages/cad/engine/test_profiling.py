@@ -115,7 +115,8 @@ class ProfilingTest(unittest.TestCase):
         self.assertIn("broken", {row["function"] for row in failed["profile"]["project_cumulative"]})
         ordinary = build_script(script, ["pin"], daemon=False, progress=False).models[0]
         self.assertNotIn("profile", ordinary)
-        self.assertEqual([path.name for path in self.folder.iterdir()], ["pin.py"])
+        # Beside the script its declared .xbf alone: no profile, no record of the build.
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["pin.py", "pin.xbf"])
 
 
 class QuietTest(unittest.TestCase):

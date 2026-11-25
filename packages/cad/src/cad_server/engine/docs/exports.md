@@ -55,8 +55,9 @@ changed or new one fails in one line naming the folder and its mode.
   what it would write however the script has changed since, and nothing is built); from Python, a
   `Model` (called first, as the program's own call of it is: taken from its key or the engine's
   cache, or replayed, when nothing changed; then exported by its handle) too. An xbf is written from a
-  STEP. An ordinary current-format xbf is not written from another xbf, which already is the
-  document. A loaded `xbf/8` converted in memory is the exception: export to a different XBF
+  STEP. An ordinary current-format xbf file is not written from another xbf, which already is the
+  document; a model's own document, by its id or handle, is, to any path but the `.xbf` its model
+  saves it as (`export.prepare`: a build's source is `live`). A loaded `xbf/8` converted in memory is the exception: export to a different XBF
   path serializes the complete upgraded XCAF document atomically; the source path is refused
   (**Document compatibility**). Several destinations read the document
   once, and every destination is checked before any is written (`export.prepare`, then
@@ -211,15 +212,22 @@ the bake's: juno 108.7 MB to 6.9, tom 98.5 to 18.7, w16 83.2 to 38.5, radial 78.
 samplers shared, above). A sparsely keyed eased bake (a small model's) can take more LINEAR keys
 than it had CUBICSPLINE ones, each a third the bytes.
 
-**File decorators require `out`.** `@model("XBF/arm.xbf")` declares the native document, the `.xbf`
-the model is saved as; `@step("arm.step")`, `@glb("arm.glb")`, `@stl("arm.stl")`, `@threemf("arm.3mf")`
-and `@dxf("arm.dxf")` declare translations. Relative paths are relative to the script.
-There is no default decorator path. Beyond its path and optional `name=`, no file decorator
+**A file decorator's path is optional.** `@model` declares the native document, the `.xbf`
+the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations. They stack,
+each adding its file, and one kind twice on a model is refused. A path given, positionally or `out=`
+(`@model("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
+`@step()`, `@glb(tolerance=0.1)`) the file is the model's name -- `name=`, else its function's -- and
+the format's extension beside the script (`Model.plan`): bare `@model` on `arm` writes `arm.xbf`, a
+model declared by `@step` alone writes `arm.step` and no `.xbf`. Two models of a run whose files are one
+file, where either is a default -- two scripts of a folder each with a model `part`, one importing
+the other, or one model's `name=` another's function -- are refused before either builds, naming both
+(`model.collisions`, over every model the run's load defined); two paths given are their author's. Two
+scripts run apart are not compared: no record says what another declares (**Document lifetime**).
+Beyond its path, an optional `name=` and a mesh's `tolerance=` and `angle=`, no file decorator
 takes anything else: a model's material, colours, joints, the pose its joints connect its parts at, its
 configurations, its motions and its animations are written in its body. Every declared file shows the model as
 built: where its joints' `connect_to` placed the parts. A model that wants a second pose on
-every build is a second model function with other joint values. A model that names no `.xbf` writes
-its derived files and nothing else.
+every build is a second model function with other joint values.
 
 **Every model that runs writes its files** (law 10). A child model -- one another model's body
 calls, in its file or another -- writes the files it declares after its target's are written,

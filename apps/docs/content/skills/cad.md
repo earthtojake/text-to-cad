@@ -3,7 +3,7 @@ title: cad
 description: The cad skill writes parts, assemblies, mechanisms and DXF profiles as build123d scripts, builds them live in the viewer, exports files on request and checks whether a part can be machined, cut and bent, molded or 3D printed.
 ---
 
-The `cad` skill turns a request for a part or an assembly into a Python script written with build123d, a Python library for B-rep CAD (solid models described by their faces and edges). The server builds it into a model you see live in the viewer, and writes files when you ask.
+The `cad` skill turns a request for a part or an assembly into a Python script written with build123d, a Python library for B-rep CAD (solid models described by their faces and edges). The server builds it into a model you see live in the viewer, saves it as an `.xbf` beside the script, and writes other files when you ask.
 
 ## What it makes
 

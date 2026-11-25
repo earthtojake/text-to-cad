@@ -30,7 +30,8 @@ default; a one-off part can be one script in a flat folder.
   tmp/                    # ignored scratch: checks, snapshots
 ```
 
-Runs write nothing, so the output folders exist only once someone asks for files.
+Runs write only each model's `<name>.xbf` beside its script, so the output folders exist
+only once someone asks for files.
 `exports.py` ([standing deliverables](exports.md#standing-deliverables-exportspy)) is the
 one script in a project that writes files.
 
@@ -72,6 +73,7 @@ people who print or order the parts). A `.gitignore` beside `src/`:
 /3MF/
 /DXF/
 /tmp/
+/src/**/*.xbf
 __pycache__/
 ```
 

@@ -18,7 +18,7 @@ from cad.engine import build as engine_build
 from cad.engine import document
 from bd_materials import metals
 from cad.engine.colors import linear
-from cad.engine.model import Model, step, stl, model
+from cad.engine.model import SUFFIXES, Model, collisions, step, stl, model
 
 MODEL = """
 import build123d as bd
@@ -93,18 +93,30 @@ class DecoratorTest(unittest.TestCase):
             def takes(value):
                 return value
 
-    def test_every_file_decorator_requires_an_explicit_path(self) -> None:
-        from cad import dxf, glb, threemf
-        for decorator in (step, glb, stl, threemf, dxf):
+    def test_a_path_is_optional_and_its_default_is_the_model_name_beside_the_script(self) -> None:
+        from cad import dxf, glb, threemf, xbf
+        here = Path(__file__).resolve().parent
+        for decorator, suffix in ((step, ".step"), (glb, ".glb"), (stl, ".stl"), (threemf, ".3mf"), (dxf, ".dxf"),
+                                  (model, ".xbf"), (xbf, ".xbf")):
             with self.subTest(kind=decorator.__name__):
-                with self.assertRaises(TypeError):
-                    decorator()
-                with self.assertRaises(TypeError):
-                    decorator(None)
-                with self.assertRaises(TypeError):
-                    decorator(lambda: None)
+                def arm():
+                    return None
+
+                kind = "xbf" if suffix == ".xbf" else [k for k, s in SUFFIXES.items() if s == suffix][0]
+                # Bare, with empty parentheses, and with None: each the model's name and the kind's suffix.
+                for declared in (decorator(arm), decorator()(arm), decorator(None)(arm)):
+                    self.assertEqual(declared.targets(), [(kind, here / f"arm{suffix}")])
+                # name= is the default's name; a path given is the file, as ever.
+                self.assertEqual(decorator(name="named")(arm).targets(), [(kind, here / f"named{suffix}")])
+                self.assertEqual(decorator(f"out/given{suffix}")(arm).targets(), [(kind, here / f"out/given{suffix}")])
+                self.assertEqual(decorator(out=f"given{suffix}")(arm).targets(), [(kind, here / f"given{suffix}")])
+        # A GLB's options take no path to need one.
+        self.assertEqual(glb(tolerance=0.1)(lambda: None).plan()[0].tolerance, 0.1)
+        for decorator in (step, glb, stl, threemf, dxf):
+            with self.subTest(kind=decorator.__name__), self.assertRaises(TypeError):
+                decorator(7)
         # A model's own .xbf is @model's to name: a path, ending in .xbf.
-        for path in (7, "", lambda: None):
+        for path in (7, ""):
             with self.subTest(out=path), self.assertRaisesRegex(TypeError, r"@model\('…\.xbf'\) takes a path"):
                 model(out=path)
         # Another file a decorator writes is that decorator's, said by name.
@@ -115,8 +127,12 @@ class DecoratorTest(unittest.TestCase):
         self.assertEqual([output.kind for output in model("XBF/a.xbf")(lambda: None).outputs], ["xbf"])
         with self.assertRaisesRegex(TypeError, r"@model takes its path once"):
             model("a.xbf", out="b.xbf")
+        # A name that names no file beside the script gives its file a path.
+        with self.assertRaisesRegex(ValueError, r"named 'arms/left', which names no file beside its script: give its "
+                                                r"@step a path"):
+            step(name="arms/left")(lambda: None).targets()
 
-    def test_model_only_declares_and_file_decorators_imply_it(self) -> None:
+    def test_declarations_stack_each_adding_its_file_and_one_kind_twice_is_refused(self) -> None:
         from cad import model
 
         @model
@@ -124,17 +140,52 @@ class DecoratorTest(unittest.TestCase):
             raise AssertionError("decoration must not execute the body")
 
         self.assertIsInstance(plain, Model)
-        self.assertEqual(plain.targets(), [])
-        self.assertIs(model(plain), plain)
-        with self.assertRaisesRegex(TypeError, "declared by @model and @step: .* drop @model"):
-            step("plain.step")(plain)
+        here = Path(__file__).resolve().parent
+        self.assertEqual(plain.targets(), [("xbf", here / "plain.xbf")])
+        # Over a file decorator, @model adds its .xbf; a model declared by a file decorator alone writes that file.
+        both = model(step("STEP/plain.step")(lambda: None))
+        self.assertEqual([kind for kind, _path in both.targets()], ["xbf", "step"])
 
         @step("filed.step")
         def filed():
             raise AssertionError("decoration must not execute the body")
 
         self.assertIsInstance(filed, Model)
-        self.assertEqual([kind for kind, _path in filed.targets()], ["step"])
+        self.assertEqual(filed.targets(), [("step", here / "filed.step")])
+        # One kind twice: nothing says which file is the model's.
+        with self.assertRaisesRegex(TypeError, r"model 'plain' declares its \.xbf twice: keep one @model$"):
+            model(plain)
+        with self.assertRaisesRegex(TypeError, r"model 'plain' declares its \.xbf twice: keep one @model$"):
+            model("other.xbf")(plain)
+        with self.assertRaisesRegex(TypeError, r"model 'filed' declares @step twice: keep one @step$"):
+            step()(filed)
+
+    def test_two_models_whose_default_files_are_one_file_are_refused(self) -> None:
+        @model
+        def part():
+            return None
+
+        @model(name="part")
+        def other():
+            return None
+
+        @step("part.step")
+        def given():
+            return None
+
+        @step("part.step")
+        def given_too():
+            return None
+
+        with self.assertRaisesRegex(ValueError, r"model 'part' of .*test_build\.py:\d+ and model 'other' of "
+                                                r".*test_build\.py:\d+ both write .*part\.xbf; give one a path "
+                                                r"\(@model\('…'\)\) or name="):
+            collisions([part, other])
+        # A path given and a default that are one file: the same refusal.
+        with self.assertRaisesRegex(ValueError, r"model 'given' .* and model 'part' .* both write .*part\.step"):
+            collisions([given, step(part.function)])
+        # Two paths given are their author's: one file, as written.
+        collisions([given, given_too])
 
 
 class BuildTest(EngineCase):
@@ -347,6 +398,78 @@ class BuildTest(EngineCase):
         # The declared outputs and nothing else: no sidecar, no record of the build.
         self.assertEqual(_files(self.folder), {"frame.py", "helper.py", "XBF/bracket.xbf", "out/frame.xbf", "out/frame.step"})
         self.assertFalse([name for name in _files(self.folder) if name.endswith(".json")])
+
+    def test_a_declaration_with_no_path_writes_the_model_name_beside_the_script(self) -> None:
+        self.write(text=DEFAULTS)
+        reports = self.build()
+        self.assertTrue(all(report["ok"] for report in reports.values()), reports)
+        # Bare @model its .xbf; @step alone its STEP and no .xbf; name= the default's name; @model over a
+        # given path both files.
+        self.assertEqual(_files(self.folder), {"frame.py", "plate.xbf", "peg.step", "pin.xbf", "pin.stl",
+                                               "arm.xbf", "STEP/arm.step"})
+        self.assertEqual(document.Loaded(self.folder / "plate.xbf").structure()["name"], "plate")
+        # A run that changes nothing keeps every file and its time.
+        before = {name: (self.folder / name).stat().st_mtime_ns for name in _files(self.folder)}
+        reports = self.build()
+        self.assertTrue(all(report["ok"] for report in reports.values()), reports)
+        self.assertEqual({name: (self.folder / name).stat().st_mtime_ns for name in _files(self.folder)}, before)
+        self.assertFalse(any(row["written"] for report in reports.values() for row in report["files"].values()))
+
+    def test_two_models_of_a_run_whose_default_files_are_one_file_write_neither(self) -> None:
+        # A script and one it imports, in one folder, each with a model ``part``: both part.xbf.
+        (self.folder / "other.py").write_text(textwrap.dedent("""
+            import build123d as bd
+            from cad.engine import model
+
+
+            @model
+            def part():
+                return bd.Box(1, 1, 1)
+        """), encoding="utf-8")
+        self.write(text="""
+import build123d as bd
+from cad.engine import model
+import other
+
+
+@model
+def part():
+    return other.part().shape.moved(bd.Location((2, 0, 0)))
+""")
+        reports = engine_build.build(self.script, None, cwd=self.folder)
+        self.assertEqual(len(reports), 1)
+        self.assertFalse(reports[0]["ok"])
+        self.assertRegex(reports[0]["error"], r"model 'part' of .*/(other|frame)\.py:\d+ and model 'part' of "
+                                              r".*/(other|frame)\.py:\d+ both write .*/part\.xbf; give one a path")
+        self.assertEqual(_files(self.folder), {"frame.py", "other.py"})
+
+
+DEFAULTS = """
+import build123d as bd
+from cad.engine import model, step, stl
+
+
+@model
+def plate():
+    return bd.Box(4, 4, 1)
+
+
+@step
+def peg():
+    return bd.Cylinder(1, 3)
+
+
+@model(name="pin")
+@stl()
+def pin_body():
+    return bd.Cylinder(0.5, 4)
+
+
+@model
+@step("STEP/arm.step")
+def arm():
+    return bd.Box(1, 1, 6)
+"""
 
 
 BRACKET = """

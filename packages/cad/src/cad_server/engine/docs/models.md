@@ -2,11 +2,11 @@
 
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
-A model is a parameterless function that returns a build123d shape, declared
-with `@model` (a document with no file) or by the files it declares (a document with those
-files: `@model("….xbf")`, the `.xbf` it is saved as, and a file decorator for any other) -- never both:
-bare `@model` stacked with a file declaration is refused. The engine runs it in a warm
-worker, holds the result as an XCAF document in memory (`@model("….xbf")` explicitly writes its BinXCAF file),
+A model is a parameterless function that returns a build123d shape, declared by the files it
+declares, which stack, each adding its file: `@model`, the `.xbf` it is saved as, and a file decorator
+for any other; one kind twice is refused. A path is optional on each: omitted, it is the model's name
+(`name=`, else the function's) and the format's extension beside the script. The engine runs it in a warm
+worker, holds the result as an XCAF document in memory (`@model` writes its BinXCAF file),
 and writes the derived files the model declares, each a translation of that document. A drawing is
 a model like any other: its body returns 2D geometry (a sketch, a face, wires or edges), and `@dxf`
 declares its DXF.
@@ -15,8 +15,8 @@ declares its DXF.
 from cad import step, model
 import build123d as bd
 
-@model("XBF/arm.xbf")  # each run saves it as XBF/arm.xbf beside the script; alone or with file decorators
-@step("arm.step")         # also @glb, @stl, @threemf, @dxf; stacked or alone; out= is required; name= optionally names the model
+@model                    # each run saves it as arm.xbf beside the script; @model("XBF/arm.xbf") elsewhere
+@step("STEP/arm.step")    # also @glb, @stl, @threemf, @dxf; stacked or alone; bare, arm.step; name= optionally names the model
 def arm():
     return bd.Box(10, 20, 30)
 

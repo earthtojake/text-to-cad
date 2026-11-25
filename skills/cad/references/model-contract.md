@@ -25,9 +25,9 @@ files into a model, or working out why a run ran what it ran.
   pays nothing for it. In a plain script (a check, a drawing) it is the tree a calling
   body reads, every part placed, named, coloured and given its material, without its
   joints. Verbs take the handle (`model.export(handle, ...)`, `posed(handle, state)`).
-- **A file decorator takes bare `@model`'s place, never beside it**: `@step("part.step")`,
-  and `@glb`, `@stl`, `@threemf` and `@dxf` likewise with a path, declare a model
-  whose run also writes those files; its `.xbf` is `@model("part.xbf")`'s, alone or with them
+- **File decorators stack with `@model`**: `@step("part.step")`, and `@glb`, `@stl`,
+  `@threemf` and `@dxf` likewise, declare files each run also writes; with no path,
+  `<name>.<ext>` beside the script, as bare `@model` writes `<name>.xbf`
   ([model page or file page](exports.md#model-page-or-file-page)).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module

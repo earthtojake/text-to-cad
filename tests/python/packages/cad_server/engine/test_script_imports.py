@@ -449,18 +449,23 @@ class LibraryRootsTest(unittest.TestCase):
         forget()
         self.addCleanup(forget)
         script, lines = prefix / "work" / "block.py", []
+
+        def heard(line: str) -> None:  # what a build says beyond the .xbf each bare @model writes
+            if not line.startswith("wrote "):
+                lines.append(line)
+
         with mock.patch.object(sys, "prefix", str(prefix)), mock.patch.object(sys, "exec_prefix", str(prefix)), \
                 mock.patch.object(sys, "path", [*sys.path, str(site)]):
             self.assertEqual([trace.first_party_file(str(path)) for path in (script, prefix / "work" / "helpers.py",
                                                                              site / "installed.py")], [True, True, False])
-            [cold] = engine_build.build(script, cwd=script.parent, log=lines.append)
+            [cold] = engine_build.build(script, cwd=script.parent, log=heard)
             self.assertTrue(cold["ok"], cold.get("error"))
             write(root, {"proj/work/helpers.py": "WIDTH = 5\n"})
-            [edited] = engine_build.build(script, cwd=script.parent, log=lines.append)
+            [edited] = engine_build.build(script, cwd=script.parent, log=heard)
             self.assertEqual(edited["bodies"], {"block.py::block": "run"})
             self.assertIn("helpers.py: WIDTH changed", edited["cache"]["changed"])
             self.assertEqual(lines, [], "the project's own script is no library's")
-            [shipped] = engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
+            [shipped] = engine_build.build(site / "shipped.py", cwd=site, log=heard)
         self.assertTrue(shipped["ok"], shipped.get("error"))
         said = (f"cad: shipped.py lies in a library folder, {site}: edits to it and to what it "
                 "imports rebuild nothing; keep the project outside the interpreter's library folders")
@@ -470,7 +475,7 @@ class LibraryRootsTest(unittest.TestCase):
         for roots in ((prefix / "lib", site), (site, prefix / "lib")):
             lines.clear()
             with mock.patch.object(trace, "_library_roots", lambda roots=roots: roots):
-                engine_build.build(site / "shipped.py", cwd=site, log=lines.append)
+                engine_build.build(site / "shipped.py", cwd=site, log=heard)
             self.assertEqual(lines, [said], roots)
 
 

@@ -228,7 +228,8 @@ class SnapshotTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="engine-named-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         script = folder / "plate.py"
-        script.write_text("import build123d as bd\nfrom cad import model\n\n\n@model\ndef plate():\n"
+        # Declared by its STEP alone: no .xbf holds its document (bare @model's is plate.xbf, which it is then named by).
+        script.write_text("import build123d as bd\nfrom cad import step\n\n\n@step\ndef plate():\n"
                           "    return bd.Box(10, 10, 2)\n", encoding="utf-8")
         with self.assertRaises(SnapshotRefused) as refused:
             api.snapshot(_model(script, "plate"), folder / "review.png", display="parts", daemon=False)

@@ -72,7 +72,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
 
         address = self._bare()
         first = self.built("bracket")
-        self.assertEqual(first["files"], {})
+        self.assertEqual(list(first["files"]), [str(self.folder / "bracket.xbf")], "bare @model: its .xbf beside the script")
         self.assertEqual(first["id"], address)
         self.assertNotIn("address", first, "a report names its document by its id alone")
         url = urlparse(first["url"])
@@ -94,8 +94,8 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         self.assertEqual(json.loads(measured.stdout)["kind"], "face")
         models = json.loads(self.cli("status", "--json").stdout)["models"]
         self.assertEqual([row["id"] for row in models], [address])
-        self.assertEqual([path.name for path in self.folder.iterdir()], ["bracket.py"],
-                         "no cache, document, or thumbnail on disk")
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.py", "bracket.xbf"],
+                         "its .xbf, and no cache, document, or thumbnail on disk")
         self._restart_daemon()
         missing = self.cli("inspect", f"{address}#face 1")
         self.assertEqual(missing.returncode, 2)

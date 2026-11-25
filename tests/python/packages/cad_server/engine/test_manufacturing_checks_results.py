@@ -89,7 +89,7 @@ class SameResultTest(unittest.TestCase):
 
         fixture = Fixture(self, DECLARED)
         (block,) = fixture.ids
-        exported = fixture.folder / "block.xbf"
+        exported = fixture.folder / "exported.xbf"  # not block.xbf: the file its model writes
         api.export(block, exported, progress=False)
         self.assertEqual(api.check(block, {"type": "model", "process": None, "resolved": None, "candidates": False,
                                            "given": {}})["measured_in"], api.IN_ENGINE)
