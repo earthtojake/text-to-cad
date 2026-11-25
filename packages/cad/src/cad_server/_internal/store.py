@@ -4,8 +4,9 @@
 be replaced, so an update met by a running ``cad`` stopped halfway and left a cad that no longer ran; anywhere, a
 process that started before an update and imported a module after it ran two releases at once. So cad's own update
 changes no file of a cad that is installed. It installs the newer release whole into a new folder here (``build``),
-runs it once before it counts (``verify``), gives it its name (``publish``), and only then says, in one small file
-written whole, that the environment runs it (``point``). A process that started before that keeps the release it
+runs it once before it counts (``verify``; a release stored earlier is run again before it is switched to,
+``sound``), gives it its name (``publish``), and only then says, in one small file written whole, that the
+environment runs it (``point``). A process that started before that keeps the release it
 started with, to its end. What reads the pointer is ``_cad_release``, as each interpreter of the environment starts.
 
 **A stored release** is a folder ``<state folder>/store/<release>-<python>`` (``folder``): what ``uv pip install
@@ -46,7 +47,7 @@ from typing import Any
 
 __all__ = ["BUILDING", "FOLDER", "Failed", "LINK", "MARKER", "TRASH", "active", "build", "clean", "environment",
            "folder", "held", "marker", "own", "packages", "point", "pointed", "pointer", "pointer_path", "publish",
-           "remove", "restore", "root", "running", "switches", "tag", "verify"]
+           "remove", "restore", "root", "running", "sound", "switches", "tag", "verify"]
 
 # ``_cad_release``'s names and rules, which never change: the store's folder in the state folder, a stored release's
 # marker, and where an environment's pointer is (``environment``, ``pointer_path``). Kept here too, since nothing
@@ -344,27 +345,54 @@ def verify(staged: str | os.PathLike[str], *, run: Run, timeout: float = VERIFY_
     (``cad_server._internal.selftest``: it imports what its command and its server import, and says ``cad
     <release>`` last). The release it says. ``Failed`` where it does not end well or says none: the folder is
     gone."""
-    code, said = run([sys.executable, "-I", "-S", "-c", VERIFY, str(staged)], timeout)
-    lines = [line.strip() for line in (said or "").splitlines() if line.strip()]
-    release = lines[-1][len("cad "):] if lines and lines[-1].startswith("cad ") else ""
-    built = own(staged)
-    if code != 0 or not release or built is None or built[0] != release:
+    ran, code, said, release = _run_once(staged, run, timeout)
+    if not ran:
         _delete(Path(staged))
         raise Failed("verify", code, said)
     return release
 
 
-def publish(staged: str | os.PathLike[str], release: str) -> Path:
+def _run_once(path: str | os.PathLike[str], run: Run, timeout: float) -> tuple[bool, int | None, str, str]:
+    """The release in the folder ``path`` run once (``VERIFY``): whether it ended well and said the release its own
+    dist-info names, the command's exit status, all it printed, and the release it said."""
+    code, said = run([sys.executable, "-I", "-S", "-c", VERIFY, str(path)], timeout)
+    lines = [line.strip() for line in (said or "").splitlines() if line.strip()]
+    release = lines[-1][len("cad "):] if lines and lines[-1].startswith("cad ") else ""
+    built = own(path)
+    return code == 0 and bool(release) and built is not None and built[0] == release, code, said, release
+
+
+def sound(path: str | os.PathLike[str], *, run: Run, timeout: float = VERIFY_SECONDS) -> bool:
+    """Whether the stored release at ``path`` runs now, by its own check, as ``verify`` asks of a build. Asked before
+    an update switches to a release that was stored earlier: another Python of this version may have built it (one for
+    another processor, say, where cad was installed again), or a file of it may be gone since. A folder that is no
+    stored release is not sound, and nothing is run for it. Changes nothing."""
+    kept = marker(path)
+    if kept is None:
+        return False
+    ran, _code, _said, release = _run_once(path, run, timeout)
+    return ran and release == kept["release"]
+
+
+def publish(staged: str | os.PathLike[str], release: str, *, run: Run | None = None) -> Path:
     """The verified build at ``staged`` made the stored release ``release``: its marker written, then the folder
-    renamed to its name (``folder``). Where that release is stored already, whole, it stays and ``staged`` goes; a
-    folder of that name with no marker is moved out of the way first. The stored release. ``OSError`` where the
-    rename is refused for good."""
+    renamed to its name (``folder``). Where that release is stored already it stays and ``staged`` goes -- unless,
+    asked with ``run``, the one stored no longer runs (``sound``): then it is removed first, and the build takes its
+    name. A folder of that name with no marker is moved out of the way first. The stored release. ``OSError`` where
+    the rename is refused for good, or a stored release that no longer runs is still run by a process (``remove``)."""
+    import errno
+
     from cad._internal.atomic_replace import write_bytes_atomic
 
     staged, final = Path(staged), folder(release)
     if marker(final) is not None:
-        _delete(staged)
-        return final
+        if run is None or sound(final, run=run):
+            _delete(staged)
+            return final
+        if not remove(final):
+            _delete(staged)
+            raise OSError(errno.EBUSY, "resource busy: the stored release does not run, and a process still runs it",
+                          str(final))
     if final.exists():
         _aside(final)
     write_bytes_atomic(staged / MARKER, json.dumps(

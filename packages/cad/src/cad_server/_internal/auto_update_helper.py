@@ -11,10 +11,11 @@ In order (``update``):
 1. **Build** (the record's ``phase``: ``building``). Where the environment runs ``target`` or newer already
    (``store.active``: another update got there first), nothing is built: outcome ``current``, and a server of an older
    release, or of another environment, is replaced by this one's (``replace``). Else the stored release ``target``
-   where it is there whole, or the requirement built and run once in a folder of the store (``store.build``,
-   ``store.verify``) and judged: never older than ``from`` and, but for ``major``, of ``from``'s major
-   (``accepted``); ``from`` itself is ``current``, nothing newer; then named (``store.publish``). Nothing that runs is
-   touched, so a failure here leaves cad as it was.
+   where it is there and runs (``store.sound``: run once now, since another Python may have built it, or a file of it
+   be gone), or the requirement built and run once in a folder of the store (``store.build``, ``store.verify``) and
+   judged: never older than ``from`` and, but for ``major``, of ``from``'s major (``accepted``); ``from`` itself is
+   ``current``, nothing newer; then named (``store.publish``, which removes a stored release of that name that no
+   longer runs). Nothing that runs is touched, so a failure here leaves cad as it was.
 2. **Switch** (``phase``: ``switching``, kept before anything stops). The pointer read as it is, for the way back.
    Where a server answers, it is asked to stop once nothing is in flight, and waited for (``client.drain``,
    ``DRAIN_SECONDS``); one still there after them is replaced by the new release's start all the same, its work cut
@@ -129,7 +130,7 @@ def build(told, run, log):
 
     before, major, target = release(told["from"]), told.get("major") is True, told.get("target")
     path = store.folder(target) if release(target) is not None else None
-    if path is not None and store.marker(path) is not None:
+    if path is not None and store.sound(path, run=run):
         return {"path": path, "release": target}
     wanted = target or "latest"
     try:
@@ -150,7 +151,7 @@ def build(told, run, log):
         store.remove(staged)
         return {"release": got, "outcome": "current", "detail": f"cad {got} is the newest release it may take"}
     try:
-        return {"path": store.publish(staged, got), "release": got}
+        return {"path": store.publish(staged, got, run=run), "release": got}
     except OSError as error:
         store.remove(staged)
         said = f"{type(error).__name__}: {error}"

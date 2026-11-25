@@ -203,6 +203,52 @@ class PublishTest(StoreCase):
         self.assertFalse((final / "left-by-a-crash").exists())
         self.assertEqual(sorted(entry.name for entry in store.root().iterdir()), [final.name], "nothing left aside")
 
+    def test_a_release_stored_earlier_is_sound_only_while_it_runs_and_says_its_own_release(self) -> None:
+        final = self.published()
+        before = listing(final)
+        run = Run((0, "cad 1.0.1\n"))
+        self.assertTrue(store.sound(final, run=run))
+        [(command, timeout)] = run.asked
+        self.assertEqual(command, [sys.executable, "-I", "-S", "-c", store.VERIFY, str(final)], "as a build is run")
+        self.assertEqual(timeout, store.VERIFY_SECONDS)
+        for name, answer in {"exit 1": (1, "ImportError: DLL load failed"), "no end": (None, "TimeoutExpired"),
+                             "another release": (0, "cad 1.0.2\n"), "nothing": (0, "")}.items():
+            with self.subTest(case=name):
+                self.assertFalse(store.sound(final, run=Run(answer)))
+        self.assertEqual(listing(final), before, "asking changes nothing, sound or not")
+        never = Run(lambda command: self.fail("nothing is run for a folder that is no stored release"))
+        self.assertFalse(store.sound(self.staged(name="unpublished"), run=never))
+        self.assertFalse(store.sound(self.root / "nothing", run=never))
+
+    def test_a_stored_release_that_no_longer_runs_gives_way_to_the_new_build(self) -> None:
+        final = self.published()
+        write(final / "only-in-the-first-build")
+        again = self.staged(name="again")
+        write(again / "only-in-the-second-build")
+        self.assertEqual(store.publish(again, "1.0.1", run=Run((1, "ImportError: DLL load failed"))), final)
+        self.assertTrue((final / "only-in-the-second-build").is_file())
+        self.assertFalse((final / "only-in-the-first-build").exists())
+        self.assertIsNotNone(store.marker(final))
+        self.assertEqual(sorted(entry.name for entry in store.root().iterdir()), [final.name], "nothing left aside")
+        # One that runs stays, as with no ``run``.
+        third = self.staged(name="third")
+        write(third / "only-in-the-third-build")
+        self.assertEqual(store.publish(third, "1.0.1", run=Run((0, "cad 1.0.1\n"))), final)
+        self.assertFalse((final / "only-in-the-third-build").exists())
+        self.assertFalse(third.exists())
+
+    def test_a_stored_release_that_no_longer_runs_and_is_still_run_by_a_process_stops_the_build(self) -> None:
+        final = self.published()
+        child = holding(final / "cad-store.json")
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+        again = self.staged(name="again")
+        with self.assertRaises(OSError) as refused:
+            store.publish(again, "1.0.1", run=Run((1, "ImportError: DLL load failed")))
+        self.assertIn("resource busy", str(refused.exception), "a cause the update's worker tells: in use")
+        self.assertFalse(again.exists(), "the build is gone")
+        self.assertIsNotNone(store.marker(final), "what a process runs is never taken from it")
+        release(child)
+
 
 class OwnTest(StoreCase):
     def test_the_dist_info_with_its_record_and_metadata_written_last(self) -> None:

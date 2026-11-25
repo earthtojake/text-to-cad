@@ -1174,6 +1174,7 @@ class WorkerTest(unittest.TestCase):
         self.serving: str | None = "0.1.0"  # the release of the server that answers
         self.elsewhere = False  # that server runs from another environment
         self.stored: dict[str, Path] = {}
+        self.unsound: set[Path] = set()  # stored releases that no longer run
         self.build = (0, "Installed 40 packages in 1.2s\n")  # uv's exit status and words
         self.verifies = "0.2.0"  # the release the build says it is, or None: it does not run
         self.starts = {"0.1.0": True, "0.2.0": True}  # whether a release's server starts
@@ -1181,7 +1182,7 @@ class WorkerTest(unittest.TestCase):
         self.ran: list[list[str]] = []
         self.calls: list[tuple] = []
         self.phases: list[str] = []
-        for name in ("active", "folder", "marker", "build", "verify", "publish", "remove", "pointer", "pointed",
+        for name in ("active", "folder", "marker", "sound", "build", "verify", "publish", "remove", "pointer", "pointed",
                      "point", "restore", "clean"):
             patch = mock.patch.object(store, name, side_effect=getattr(self, f"_{name}"))
             patch.start()
@@ -1207,6 +1208,12 @@ class WorkerTest(unittest.TestCase):
     def _marker(self, path):
         return next(({"release": release} for release, kept in self.stored.items() if kept == Path(path)), None)
 
+    def _sound(self, path, *, run, timeout=180.0):
+        if self._marker(path) is None:
+            return False
+        code, _said = run([sys.executable, "-I", "-S", "-c", "selftest", str(path)], timeout)
+        return code == 0
+
     def _build(self, requirement, *, uv, run, timeout=900.0):
         code, said = run([uv, "pip", "install", "--target", str(self.tmp / "store" / ".building-1"), requirement],
                          timeout)
@@ -1220,8 +1227,9 @@ class WorkerTest(unittest.TestCase):
             raise store.Failed("verify", code, said)
         return self.verifies
 
-    def _publish(self, staged, release):
+    def _publish(self, staged, release, *, run=None):
         self.stored[release] = self._folder(release)
+        self.unsound.discard(self.stored[release])
         self.calls.append(("publish", release))
         return self.stored[release]
 
@@ -1262,6 +1270,8 @@ class WorkerTest(unittest.TestCase):
         if command[0] == "uv":
             return self.build
         if command[1:3] == ["-I", "-S"]:
+            if Path(command[-1]) in self.unsound:
+                return 1, "ImportError: DLL load failed while importing _multiarray_umath"
             return (0, f"cad {self.verifies}\n") if self.verifies else (1, "ModuleNotFoundError: No module named 'ezdxf'")
         release = self._active()
         if command[1:] == ["--version"]:
@@ -1306,10 +1316,29 @@ class WorkerTest(unittest.TestCase):
                          "installed")
         self.assertIn(("point", "0.2.1-cp314", str(self._folder("0.2.0"))), self.calls)
 
-    def test_a_release_stored_already_is_switched_to_unbuilt(self) -> None:
+    def test_a_release_stored_already_is_run_once_and_switched_to_unbuilt(self) -> None:
         self.stored["0.2.0"] = self._folder("0.2.0")
         self.assertEqual(self.update()["outcome"], "installed")
-        self.assertEqual(self.commands(), ["server start"], "no build, no run of it before")
+        self.assertEqual(self.commands(), ["-I -S", "server start"], "run once, as a build is, and never built")
+        self.assertEqual(self.ran[0][-1], str(self._folder("0.2.0")))
+
+    def test_a_release_stored_already_that_no_longer_runs_is_built_again(self) -> None:
+        """Another Python of this version built it, or a file of it is gone: never switched to as it is."""
+        self.pointer, self.serving = None, "0.1.0"
+        self.stored["0.2.0"] = self._folder("0.2.0")
+        self.unsound.add(self._folder("0.2.0"))
+        found = self.update()
+        self.assertEqual(self.commands(), ["-I -S", "uv build", "-I -S", "server start"])
+        self.assertEqual((found["outcome"], self.calls[0]), ("installed", ("publish", "0.2.0")))
+        # Where a process still runs the one that does not: the build ends there, in use, and nothing is switched.
+        self.pointer, self.serving = None, "0.1.0"
+        self.unsound.add(self._folder("0.2.0"))
+        self.calls.clear()
+        busy = OSError(16, "resource busy: the stored release does not run, and a process still runs it", "store")
+        with mock.patch.object(store, "publish", side_effect=busy):
+            found = self.update()
+        self.assertEqual((found["outcome"], found["cause"], self.pointer, self.serving), ("failed", "in_use", None, "0.1.0"))
+        self.assertNotIn("point", [call[0] for call in self.calls])
 
     def test_nothing_newer_ends_current_and_nothing_stops(self) -> None:
         self.verifies = "0.1.0"
