@@ -388,8 +388,9 @@ cad update
 ```
 
 That updates cad alone; the install command, run again, does the same and then updates the plugin.
-The viewer and the CAD app show a blue update button while a newer release of your major is out;
-clicking it does what `cad update` does. Where an update fails, the viewer says why and what to do.
+The viewer and the CAD app show a blue update button while a newer release of your major is out, or
+installed and waiting for its restart; clicking it asks first, then does what `cad update` does.
+Where an update fails, the viewer says why and what to do.
 With automatic updates on, a `cad` command also says once a day when cad has stayed behind for three
 days, and what to do. Where it keeps failing, or cad no longer runs: run `cad update`, which says why and
 what to do; then `cad doctor`, which ends with the one thing to do next; then install cad again, which

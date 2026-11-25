@@ -13,7 +13,7 @@ The decisions, by what they govern:
   installs cad; the install command gets cad and hands the apps to it; no Skills CLI route; inside a
   Windows app's package
 - **Updating**: the feed says when; a major version never installs itself; who updates which copy;
-  forward only; the 30-day rule
+  the restart waits until nobody would notice; forward only; the 30-day rule
 - **Past releases**: the bridge for 0.10.0 to 0.11.11; old releases are carried through the newest
   0.11; no version left behind
 - **The plugin**: browser first; no hooks, no pre-approved tools
@@ -88,7 +88,8 @@ runs the installer on the installed cad. It installs the newer release whole int
 in cad's state folder (the store), with uv (`uv pip install --target`, for the installed cad's own
 Python), runs it once, and then names that folder in one small file, the pointer. Every `cad` reads
 the pointer as its Python starts and runs that release in place of the installed files: in the same
-process, with no second program started. The server restarts onto it once nothing is in flight. A
+process, with no second program started. The server restarts onto it later, once nothing is in
+flight ([when](#the-restart-waits-until-nobody-would-notice)). A
 release no process runs any more is removed, but the current one and the one before it. Installing
 cad again with uv always runs what uv installed: a pointer holds only for the install it was written
 for.
@@ -209,8 +210,10 @@ there ([what that costs](#uv-installs-cad-and-cads-update-changes-none-of-it)).
 its major version, on by default (`cad update auto off` stops it). `cad update` updates cad now,
 inside its major (`--major`: the newest of all), with or without a server running and with automatic
 updates off too, and touches nothing else. The viewer and the CAD app show an update button while a
-global install is behind a newer release of its own major, automatic updates on or off: a click is
-the same request as `cad update` (never across a major), and an update that failed, automatic or
+global install is behind a newer release of its own major, automatic updates on or off: a click
+asks first, in a small prompt that names the release (Update, or Restart where the release is
+installed already, beside Later), and its yes is the same request as `cad update` (never across a
+major); an update that failed, automatic or
 not, says why in the viewer's alert card, in plain words, and what to do, with `cad update` to copy,
 until another attempt begins; put away, it waits behind its icon in the navbar. A person's own update (the button, `cad update`) spends none of the
 tries the automatic update has for a release. A cad that is not a global install, such as one installed
@@ -313,6 +316,49 @@ hard stop cannot end a process none of whose threads runs (one a signal stopped)
 fails for good builds the release beside itself once a day for as long as it stays behind; nothing
 that runs is touched by it, and the server is not stopped for it. A store's copy of the skills lags
 cad by however long its store takes.
+
+## The restart waits until nobody would notice
+
+**Decision.** cad's automatic update is two steps with a wait between them. First it gets the release
+ready: built beside the release that runs and run once there, in the first minute with no command, in
+the background; nothing that runs is touched and nothing restarts. Then the server restarts onto it.
+By itself it does that only where nobody would notice: as the server next starts (the start becomes
+the switch, and no server of the release before serves anything; not a start in the foreground or one
+that names its port, which are the person's own); once nothing at all has been asked of the server
+for an hour, a viewer page's requests included; or, once the release has been ready for a day, in the
+first minute with no command, as every automatic update did before. Until then the update button's
+prompt offers the restart, and its yes restarts now, as a typed `cad update` does. A person's update
+is never left halfway: one asked for while the release is being got ready goes on to the restart, and
+one asked for with a release ready has only the restart left, whether PyPI answers or not. A release
+the feed has stopped naming since it got ready is never switched to by itself. With automatic updates
+off nothing is got ready, and a release that was ready waits for the person.
+
+The button is a small icon and nothing else, the same while a release is out and while one is ready.
+Nothing opens by itself: the prompt comes on the click, with Later beside its yes.
+
+**Why.** The restart is the one part of an update a person can feel: a page they are looking at loses
+its server, says so, and reloads. A minute with no command says nothing about a person looking at a
+model, since looking runs no command. Waiting costs nothing in safety: the release before runs on,
+whole, and the way back at the switch is the same. The three moments are the ones with nobody there:
+no server yet, nobody asking, or a day gone by; the day is there so a page always shown, or a
+computer always busy, is never left behind for good. The button and its prompt are what the apps
+people use every day do: a quiet mark that an update is there (Slack's badge, Spotify's dot, Chrome's
+notice), and a small prompt that asks before the restart, with a way to say not now (the Restart and
+Later of Electron's own guide). A wide button that reads "Restart to update" was built first and
+taken out: it shouted from the navbar, and its one click restarted with no question, which is what
+people report as a fault where an app does it. A prompt that opens by itself over a model someone is
+looking at interrupts them, so none does.
+
+**What it costs.** On a computer that is never left alone a release runs up to a day later than
+before. For that time a second copy of cad's packages is in the store. A page that is shown a day
+after the release got ready still loses its server once. Every update from the button is two clicks.
+A page must ask the server nothing while it is hidden, or the server never counts as left alone: every
+timer of the viewer's that asks the server stops while its page is hidden. The CAD app's views are the
+exception: each asks once a second, seen or not, which is how an agent reaches them, so while one is
+open the server is never left alone, and there the restart waits for the button, the server's next
+start or the day. A `cad server start` that becomes the switch answers a few seconds later than one
+that does not. The record of the last attempt has one more outcome, `ready`, which is not counted:
+the update is counted when its restart ends.
 
 ## Forward only
 
