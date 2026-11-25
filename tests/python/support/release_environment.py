@@ -59,10 +59,11 @@ print(json.dumps(found))
 
 
 def child_environment(state: str | os.PathLike[str] | None, **extra: str) -> dict[str, str]:
-    """This process's environment variables less every ``PYTHON*`` one and the state folder's, with ``state`` as
-    ``CAD_STATE_DIR`` (None: unset) and ``extra`` on top."""
+    """This process's environment variables less every ``PYTHON*`` one (but one that writes no bytecode) and the
+    state folder's, with ``state`` as ``CAD_STATE_DIR`` (None: unset) and ``extra`` on top."""
     dropped = ("CAD_STATE_DIR", "XDG_STATE_HOME", "__PYVENV_LAUNCHER__")
     env = {name: value for name, value in os.environ.items() if not name.startswith("PYTHON") and name not in dropped}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"  # what a process imports leaves the folders as they were made
     if state is not None:
         env["CAD_STATE_DIR"] = str(state)
     env.update(extra)
