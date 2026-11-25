@@ -268,8 +268,13 @@ cad's own update is not due, and a typed `cad update` is refused in one line.
 
 **Each attempt is counted once** (`auto_update.report`), where telemetry is on, as every count is: the server
 that runs after it, at its start or a quiet tending, sends one `update` event from the record (the release
-before, how it ended, which step failed, the tries, the installer, whether it was typed, and how the server's
-run of `cad plugin install` for a newer cad went: a run begun since the attempt began) and marks the record `reported`. A
+before, how it ended, which step failed, where it did not install a newer cad why in the record's one word (`cause`:
+`already` where the environment held the release already, `none` where the record names none), the tries, the
+installer, whether it was typed, and how the server's run of `cad plugin install` for a newer cad went: a run begun
+since the attempt began) and marks the record `reported`. An attempt still underway past its hour, whose helper died,
+is counted `lost`. An automatic update that is due and cannot begin (its installer not found, no Python outside cad's
+environment) is counted `blocked`, with which, once for each release the feed calls for (`auto-update-blocked.json` in
+the data folder). Never the installer's words, a path or a setting's value. A
 failed update is counted by the next server of the old cad that runs, a successful one by the new cad's
 server; a new attempt counts the one before it first, whatever begins it (a server, or a typed `cad update`
 with no server running, in its own process), and counts it as it stands where the `cad plugin install` run for

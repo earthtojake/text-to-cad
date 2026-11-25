@@ -808,24 +808,29 @@ class CauseOfARecordTest(Case):
     def test_a_record_s_cause_is_its_own_and_an_older_record_s_is_read_as_it_was_kept(self) -> None:
         """``cause`` is read where the record keeps one of the words; a record a release before it kept (no
         ``cause``) reads as it did -- its outcome and detail, and ``kept`` where the detail says the release that ran
-        stayed --; an attempt still underway past its hour is ``lost``. Older releases read ``outcome`` as ever."""
+        stayed --; an attempt still underway past its hour is ``lost``. Older releases read ``outcome`` as ever. Its
+        event says the cause (``already`` where the environment held the release already, ``none`` where the record
+        names none), and counts an attempt underway past its hour ``lost``."""
         base = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1000.0, "tries": 1, "ended": 1010.0}
-        for record, cause in (({**base, "outcome": "failed", "detail": "uv said no", "cause": "network"}, "network"),
-                              ({**base, "outcome": "failed", "detail": "uv said no"}, None),
-                              ({**base, "outcome": "failed", "cause": "a word of a later release"}, None),
-                              ({**base, "outcome": "current", "detail": "it installed 0.1.0, not 0.2.0"}, "kept"),
-                              ({**base, "outcome": "current", "detail": "cad 0.2.0 is installed"}, None),
-                              ({**base, "outcome": "installed"}, None),
-                              ({**base, "outcome": "underway"}, None),
-                              ({**base, "outcome": "underway", "at": 1000.0 - auto_update.RETRY_SECONDS}, "lost"),
-                              ({**base, "outcome": "underway", "cause": "helper_crash"}, "helper_crash")):
+        for record, cause, sent in (
+                ({**base, "outcome": "failed", "detail": "uv said no", "cause": "network"}, "network", ("failed", "network")),
+                ({**base, "outcome": "failed", "detail": "uv said no"}, None, ("failed", "none")),
+                ({**base, "outcome": "failed", "cause": "a word of a later release"}, None, ("failed", "none")),
+                ({**base, "outcome": "current", "detail": "it installed 0.1.0, not 0.2.0"}, "kept", ("current", "kept")),
+                ({**base, "outcome": "current", "detail": "cad 0.2.0 is installed"}, None, ("current", "already")),
+                ({**base, "outcome": "current", "detail": "uv said"}, None, ("current", "none")),
+                ({**base, "outcome": "installed"}, None, ("installed", None)),
+                ({**base, "outcome": "underway"}, None, ("lost", "lost")),  # its hour long gone by the clock
+                ({**base, "outcome": "underway", "at": 1000.0 - auto_update.RETRY_SECONDS}, "lost", ("lost", "lost")),
+                ({**base, "outcome": "underway", "cause": "helper_crash"}, "helper_crash", ("lost", "helper_crash")),
+                ({**base, "outcome": "underway", "at": time.time()}, None, None)):  # underway: nothing to count yet
             with self.subTest(record=record):
                 auto_update._keep(self.state / auto_update.RECORD, record)
                 found = auto_update.last()
                 self.assertEqual(found, record, "read whole, a field it does not know included")
-                self.assertEqual(auto_update.cause(found, now=1020.0), cause)
-                self.assertEqual(auto_update.event(found) is None, record["outcome"] == "underway",
-                                 "counted as before: the cause is not sent")
+                self.assertEqual(auto_update.cause(found, now=1020.0 if record["at"] < 2000 else record["at"]), cause)
+                counted = auto_update.event(found)
+                self.assertEqual(None if counted is None else (counted["outcome"], counted["cause"]), sent)
 
 
 class SecondProcessTest(Case):
@@ -2848,25 +2853,37 @@ class UpdateCountTest(Case):
         return record
 
     def test_each_kind_of_record_is_the_event_it_makes(self) -> None:
-        base = {"earlier": "0.1.0", "reason": None, "tries": 1, "installer": "uv", "asked": False, "plugin": "none"}
+        base = {"earlier": "0.1.0", "reason": None, "tries": 1, "installer": "uv", "asked": False, "plugin": "none",
+                "cause": None}
         for fields, made in (
                 ({}, {"outcome": "installed"}),
-                ({"outcome": "current"}, {"outcome": "current"}),
-                ({"outcome": "failed", "detail": "uv said no", "tries": 2}, {"outcome": "failed", "reason": "upgrade",
-                                                                             "tries": 2}),
+                ({"outcome": "current"}, {"outcome": "current", "cause": "none"}),
+                ({"outcome": "current", "cause": "kept"}, {"outcome": "current", "cause": "kept"}),
+                ({"outcome": "current", "detail": "cad 0.2.0 is installed"}, {"outcome": "current", "cause": "already"}),
+                ({"outcome": "failed", "detail": "uv said no", "tries": 2, "cause": "disk_full"},
+                 {"outcome": "failed", "reason": "upgrade", "tries": 2, "cause": "disk_full"}),
                 ({"outcome": "failed", "detail": "it installed 0.0.9, which it may not end on"},
-                 {"outcome": "failed", "reason": "older"}),
+                 {"outcome": "failed", "reason": "older", "cause": "none"}),
                 # `--major` that did not cross: a newer release than the one that ran, never `older`
                 ({"outcome": "failed", "detail": "it installed 0.1.5, not 1.0.0", "major": True},
-                 {"outcome": "failed", "reason": "upgrade"}),
-                ({"outcome": "failed", "restored": True}, {"outcome": "restored", "reason": "upgrade"}),
-                ({"outcome": "failed", "restored": False}, {"outcome": "failed", "reason": "put_back"}),
+                 {"outcome": "failed", "reason": "upgrade", "cause": "none"}),
+                ({"outcome": "failed", "restored": True, "cause": "network"},
+                 {"outcome": "restored", "reason": "upgrade", "cause": "network"}),
+                ({"outcome": "failed", "restored": False}, {"outcome": "failed", "reason": "put_back", "cause": "none"}),
+                ({"outcome": "failed", "cause": "helper_start"}, {"outcome": "failed", "reason": "upgrade",
+                                                                  "cause": "helper_start"}),
                 ({"asked": True, "installer": "pipx"}, {"outcome": "installed", "asked": True, "installer": "pipx"}),
                 ({"installer": None, "asked": None}, {"outcome": "installed"}),  # kept before it named them: this cad's
+                # Still underway past its hour: its helper died, with a word or without one.
+                ({"outcome": "underway", "tries": 2, "asked": True}, {"outcome": "lost", "tries": 2, "asked": True,
+                                                                      "cause": "lost"}),
+                ({"outcome": "underway", "cause": "helper_crash"}, {"outcome": "lost", "cause": "helper_crash"}),
         ):
             with self.subTest(fields=fields):
                 self.assertEqual(auto_update.event(self.ended(**fields)), {**base, **made})
-        self.assertIsNone(auto_update.event({"release": "0.2.0", "at": 5.0, "outcome": "underway"}), "not ended")
+        self.assertIsNone(auto_update.event({"release": "0.2.0", "at": time.time(), "outcome": "underway"}), "not ended")
+        self.assertIsNone(auto_update.event({"release": "0.2.0", "at": time.time(), "outcome": "underway",
+                                             "cause": "helper_crash"}), "held for its hour as any attempt underway")
 
     def test_a_newer_cad_s_count_says_how_the_install_command_s_run_for_it_went_and_waits_while_it_runs(self) -> None:
         record = self.ended()
@@ -2904,12 +2921,37 @@ class UpdateCountTest(Case):
             counted.assert_not_called()
             self.assertTrue(auto_update.trigger("0.2.1", automatic=False))
         counted.assert_called_once_with(earlier="0.1.0", outcome="installed", reason=None, tries=1, installer="uv",
-                                        asked=False, plugin="underway")
+                                        asked=False, plugin="underway", cause=None)
         from cad_server import analytics
 
         self.assertEqual(analytics._update_event("0.1.0", "installed", None, 1, "uv", False, "underway")["plugin"],
                          "underway", "a word the sender keeps and sends")
         self.assertIsNone(analytics._update_event("0.1.0", "current", None, 1, "uv", False, "underway"))
+
+    def test_the_sender_keeps_every_cause_of_each_outcome_and_no_other_word(self) -> None:
+        """``cause`` (schema 13's) on every outcome but ``installed``, a word of that outcome's (``UPDATE_CAUSES``);
+        none given, ``none`` (an update a release before it kept). Every word an attempt's record keeps is sent for
+        one outcome or another."""
+        from cad_server import analytics
+
+        def made(outcome: str, cause: object) -> dict | None:
+            return analytics._update_event("0.1.0", outcome, "upgrade" if outcome in ("failed", "restored") else None,
+                                           0 if outcome == "blocked" else 1, "uv", False, "none", cause)
+
+        for outcome in sorted(analytics.UPDATE_OUTCOMES - {"installed"}):
+            for cause in sorted(set().union(*analytics.UPDATE_CAUSES.values())):
+                with self.subTest(outcome=outcome, cause=cause):
+                    found = made(outcome, cause)
+                    self.assertEqual(found is not None, cause in analytics.UPDATE_CAUSES[outcome])
+                    if found is not None:
+                        self.assertEqual(found["cause"], cause)
+            for word in ("eaccess", "Failed to fetch: https://pypi.org/simple/cad/", "", 7, True, "NETWORK"):
+                self.assertIsNone(made(outcome, word), (outcome, word))
+        self.assertEqual(made("failed", None)["cause"], "none")
+        self.assertIsNone(made("lost", None), "a lost attempt always says which")
+        self.assertNotIn("cause", made("installed", None))
+        self.assertIsNone(made("installed", "network"), "an update that installed a newer cad names none")
+        self.assertEqual(set().union(*analytics.UPDATE_CAUSES.values()) - {"already", "none"}, set(helper.CAUSES))
 
     def test_counted_once_and_marked_so(self) -> None:
         self.ended(outcome="failed", detail="uv said no", restored=True)
@@ -2917,9 +2959,9 @@ class UpdateCountTest(Case):
             self.assertTrue(auto_update.report())
             self.assertFalse(auto_update.report(), "once")
         counted.assert_called_once_with(earlier="0.1.0", outcome="restored", reason="upgrade", tries=1,
-                                        installer="uv", asked=False, plugin="none")
+                                        installer="uv", asked=False, plugin="none", cause="none")
         self.assertTrue(auto_update.last()["reported"])
-        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "at": 7.0, "outcome": "underway"})
+        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "at": time.time(), "outcome": "underway"})
         with mock.patch("cad_server.analytics.update") as counted:
             self.assertFalse(auto_update.report(), "underway: nothing ended yet")
         counted.assert_not_called()
@@ -2933,8 +2975,80 @@ class UpdateCountTest(Case):
                 mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
             self.assertTrue(auto_update.trigger("0.2.1", automatic=False))
         counted.assert_called_once_with(earlier="0.1.0", outcome="failed", reason="upgrade", tries=1,
-                                        installer="uv", asked=False, plugin="none")
+                                        installer="uv", asked=False, plugin="none", cause="none")
         self.assertEqual((auto_update.last()["release"], auto_update.last()["outcome"]), ("0.2.1", "underway"))
+
+    def test_an_attempt_that_never_said_how_it_ended_is_counted_lost_once_past_its_hour(self) -> None:
+        """Its helper died: the record stays underway. Held for its hour as any attempt underway, then counted once,
+        ``lost``, by the server or by the attempt that takes its place."""
+        now = time.time()
+        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0",
+                                                            "at": now, "tries": 1, "outcome": "underway",
+                                                            "installer": "uv", "asked": False})
+        with mock.patch("cad_server.analytics.update") as counted:
+            self.assertFalse(auto_update.report(), "underway")
+            with mock.patch.object(auto_update.time, "time", return_value=now + auto_update.RETRY_SECONDS):
+                self.assertTrue(auto_update.report())
+                self.assertFalse(auto_update.report(), "once")
+        counted.assert_called_once_with(earlier="0.1.0", outcome="lost", reason=None, tries=1, installer="uv",
+                                        asked=False, plugin="none", cause="lost")
+        self.assertEqual(auto_update.last()["outcome"], "underway", "the record kept as it was, marked counted")
+        auto_update._keep(self.state / auto_update.RECORD, {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0",
+                                                            "at": now - auto_update.RETRY_SECONDS, "tries": 1,
+                                                            "outcome": "underway", "cause": "helper_crash",
+                                                            "installer": "uv"})
+        with mock.patch("cad_server.analytics.update") as counted, \
+                mock.patch.object(auto_update.subprocess, "Popen"), \
+                mock.patch.object(sys, "_base_executable", str(self.tmp / "python3"), create=True):
+            self.assertTrue(auto_update.trigger("0.2.1", automatic=False))
+        counted.assert_called_once_with(earlier="0.1.0", outcome="lost", reason=None, tries=1, installer="uv",
+                                        asked=False, plugin="none", cause="helper_crash")
+
+
+class BlockedCountTest(Case):
+    """An automatic update that is due and cannot begin (``auto_update.blocked``) counted once for each release the
+    feed calls for, from the release that runs (``auto_update._blocked``): ``blocked``, its cause, no try made."""
+
+    def test_counted_once_for_each_release_and_never_where_none_is_due(self) -> None:
+        missing = (mock.patch.object(auto_update, "find_uv", return_value=None),
+                   mock.patch.object(auto_update, "carried_uv", return_value=None))
+        with missing[0], missing[1], mock.patch("cad_server.analytics.update") as counted:
+            with self.feed("0.1.0"):
+                self.assertIsNone(auto_update.due(), "nothing newer: none due, none counted")
+            counted.assert_not_called()
+            with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)}):
+                auto_update.change(False)
+                with self.feed("0.2.0"):
+                    self.assertIsNone(auto_update.due(), "off: no update is due, so none is blocked")
+                auto_update.change(True)
+            counted.assert_not_called()
+            with self.feed("0.2.0"):
+                for _ in range(3):
+                    self.assertIsNone(auto_update.due())
+                    self.assertIsNone(auto_update.due(fetch=True))
+            counted.assert_called_once_with(earlier="0.1.0", outcome="blocked", tries=0, installer="uv", asked=False,
+                                            cause="no_installer")
+            kept = json.loads((self.state / auto_update.BLOCKED).read_text(encoding="utf-8"))
+            self.assertEqual((kept["from"], kept["wanted"], kept["cause"]), ("0.1.0", "0.2.0", "no_installer"))
+            with self.feed("0.2.1"):
+                self.assertIsNone(auto_update.due())
+                self.assertIsNone(auto_update.due())
+            self.assertEqual(counted.call_count, 2, "once more for a newer release")
+        self.assertFalse((self.state / auto_update.RECORD).exists(), "no attempt: nothing kept of one")
+        with mock.patch("cad_server.analytics.update") as counted, self.feed("0.2.2"), \
+                mock.patch.object(sys, "_base_executable", str(self.tool / "bin" / "python"), create=True):
+            self.assertIsNone(auto_update.due())
+        counted.assert_called_once_with(earlier="0.1.0", outcome="blocked", tries=0, installer="uv", asked=False,
+                                        cause="no_python")
+        with mock.patch("cad_server.analytics.update") as counted, self.feed("0.2.3"):
+            self.assertEqual(auto_update.due(), auto_update.Due("0.2.3", "0.2.3"), "one that can begin is due")
+        counted.assert_not_called()
+
+    def test_the_count_is_one_the_sender_keeps(self) -> None:
+        from cad_server import analytics
+
+        self.assertIsNotNone(analytics._update_event("0.1.0", "blocked", None, 0, "uv", False, "none", "no_python"))
+        self.assertIsNone(analytics._update_event("0.1.0", "blocked", None, 1, "uv", False, "none", "no_python"))
 
 
 def _end(pid: int) -> None:

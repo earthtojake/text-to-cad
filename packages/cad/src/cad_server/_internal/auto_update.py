@@ -76,23 +76,29 @@ there at that moment (the helper's own start at the end then meets it as any sta
 is joined, an older one replaced); and uv run beside the helper by the install command or by an app's server line
 (``tool_install``), which uv's own lock on its tool folder puts one after the other, the last to run deciding what is
 installed. A known gap: the helper's tries (``auto_update_helper.WAITS``, each up to ``INSTALL_SECONDS``) can last
-longer than ``RETRY_SECONDS``, after which the attempt is no longer ``underway`` and a second can begin beside it.
+longer than ``RETRY_SECONDS``, after which the attempt is no longer ``underway`` and a second can begin beside it; it
+is then counted ``lost``, and counted again as it ended, where its helper ends it after all.
 
 **Counted** (``report``), once per attempt that ended, by the server that runs after it, at its start and as it tends
 itself, once nothing is in flight (and by a trigger, before a new attempt takes the record's place): one ``update``
-event (``analytics.update``) -- the release before, how it ended (``installed``, ``current``, ``failed``, or
-``restored`` where the helper put the release before back), which step failed (``upgrade``: the installer's upgrade
-never ended well, or, for ``--major``, ended well without crossing to the higher major asked for; ``older``: it ended
+event (``analytics.update``) -- the release before, how it ended (``installed``, ``current``, ``failed``,
+``restored`` where the helper put the release before back, or ``lost`` where it is still underway past
+``RETRY_SECONDS``: its helper died, without a word or marked ``helper_crash``), which step failed (``upgrade``: the
+installer's upgrade never ended well, or, for ``--major``, ended well without crossing to the higher major asked for; ``older``: it ended
 well on a release it may not end on, older than the one that ran or, but for ``--major``, of another major -- a
 ``--major`` that crossed is ``installed``, whatever release of the higher major it got; ``put_back``: the release
 before could
-not be put back either), the tries, the installer, whether it was typed, and, for a newer cad installed, how the
+not be put back either), where it did not install a newer cad why (``cause``: the record's word, ``already`` where the
+environment held the release already, ``none`` where the record names none; ``_sent``), the tries, the installer,
+whether it was typed, and, for a newer cad installed, how the
 install command's run for it ended, a run begun since the attempt began (``plugin_catch_up.last``: ``none``, ``ok``,
 ``failed``; the event waits while that run is underway, but where a new attempt begins first, it is counted as it
 stands, ``underway``). The record is marked ``reported`` as it is counted. A failed update leaves the old cad, and is
 counted by the next server of it that runs; one that installed a newer cad, by the new cad's server; either, where a new
 attempt begins before such a server ran, by whatever begins that attempt (a server, or a typed ``cad update`` with no
-server running, in its own process). The helper counts nothing.
+server running, in its own process). The helper counts nothing. Where an automatic update is due and none can begin
+(``blocked``: its installer not found, or no Python outside cad's environment), the check counts it, once for each
+release the feed calls for from the release that runs (``BLOCKED``): ``blocked``, its cause, no try made.
 
 **Asked for** (``cad update``, which the server it asks judges, ``asked``, and begins, ``begin``; with no server
 running, the command itself, whose helper then starts none): PyPI asked now (``updates.pypi``) for the newest release of
@@ -133,6 +139,7 @@ PLUGIN_SECTION = "plugin"
 RECORD = "auto-update.json"  # the last attempt, in the state folder
 INSTALL_LOG = "install-command.log"  # the output of the last `cad plugin install` the server ran (``plugin_catch_up``)
 LOG, LOG_BEFORE = "auto-update.log", "auto-update.1.log"  # the helper's log of the last attempt and the one before
+BLOCKED = "auto-update-blocked.json"  # the last release no update could begin for, counted once (``_blocked``)
 IDLE_SECONDS = 60.0
 TRIES = 2  # how many times one release is tried: once, and once more at a later check
 RETRY_SECONDS = 60 * 60.0  # how long after an attempt (underway, or ended) its release may be tried again
@@ -631,23 +638,58 @@ def _tried(wanted: str, now: float) -> bool:
 
 
 def due(*, fetch: bool = False, now: float | None = None) -> Due | None:
-    """The update to make now (``Due``), or None (see the module). ``fetch``: the feed read first where an hour has
-    passed (``updates.feed``); else the feed as last read. Never raises."""
+    """The update to make now (``Due``), or None (see the module); one due that cannot begin (``blocked``) counted
+    once for its release (``_blocked``). ``fetch``: the feed read first where an hour has passed (``updates.feed``;
+    never for an update that cannot begin); else the feed as last read. Never raises."""
     try:
         found = global_install()
-        if not switches()["on"] or found is None or found.program is None:
+        if not switches()["on"] or found is None:
             return None
         from cad_server import updates
 
         if not updates.checking():
             return None
-        chosen = choose(updates.feed(fetch=fetch), _version())
+        stuck = blocked(found)
+        chosen = choose(updates.feed(fetch=fetch and stuck is None), _version())
         now = time.time() if now is None else now
         if chosen is None or underway(now) is not None or _tried(chosen.wanted, now) or _installing():
+            return None
+        if stuck is not None:
+            _blocked(found, chosen.wanted, stuck, now)
             return None
         return chosen
     except Exception:  # noqa: BLE001 - a check that cannot be made is no update
         return None
+
+
+def _blocked(found: Global, wanted: str, word: str, now: float) -> None:
+    """An update to ``wanted`` due, that cannot begin for the global install ``found`` (``word``: ``blocked``'s cause),
+    counted once for that release and the one that runs (``BLOCKED`` names the last such pair, kept under the state
+    folder's lock before it is counted): the ``update`` event ``blocked``, no try made."""
+    from cad_server._internal.file_lock import state
+
+    folder, version = _data(), _version()
+    path = folder / BLOCKED
+    said = {"from": version, "wanted": wanted}
+
+    def counted() -> bool:
+        try:
+            kept = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return isinstance(kept, dict) and {name: kept.get(name) for name in said} == said
+
+    if counted():
+        return
+    folder.mkdir(parents=True, exist_ok=True)
+    with state(folder):
+        if counted():
+            return
+        _keep(path, {**said, "cause": word, "at": now})
+    from cad_server import analytics
+
+    analytics.update(earlier=version, outcome="blocked", tries=0, installer=found.installer.name, asked=False,
+                     cause=word)
 
 
 def _installing() -> bool:
@@ -987,6 +1029,7 @@ def begin(target: str | None, *, start: bool = True, major: bool = False) -> dic
 # --- an attempt counted -----------------------------------------------------------------------------------------------
 
 ENDED = frozenset({"installed", "current", "failed"})  # the helper's outcomes: the attempt ended
+ALREADY = re.compile(r"cad \S+ is installed")  # the helper's detail where the environment held the release already
 WAIT = object()  # ``event``: not yet, the install command's run for the new cad still underway
 
 
@@ -994,9 +1037,16 @@ def event(found: dict[str, Any], *, wait: bool = True) -> dict[str, Any] | objec
     """The ``update`` event an ended attempt (``found``, the record) is counted as (``analytics.update``'s arguments),
     ``WAIT`` while the install command's run for the cad it installed is underway (``wait`` false: the event as it
     stands, that run ``underway``), or None for a record that is none of an ended attempt. That run is one begun since
-    the attempt began (``plugin_catch_up.last``, ``since``): a run begun before it is another's."""
+    the attempt began (``plugin_catch_up.last``, ``since``): a run begun before it is another's. An attempt still
+    underway past ``RETRY_SECONDS`` (``underway`` no longer holds it) never ends: it is counted ``lost``. Every outcome
+    but ``installed`` says why (``cause``, ``_sent``)."""
     outcome = found.get("outcome")
-    if outcome not in ENDED:
+    if outcome == "underway":
+        at = found.get("at")
+        if not isinstance(at, (int, float)) or 0 <= time.time() - at < RETRY_SECONDS:
+            return None  # still underway (``underway``)
+        outcome = "lost"
+    elif outcome not in ENDED:
         return None
     reason = None
     if outcome == "failed":
@@ -1024,7 +1074,20 @@ def event(found: dict[str, Any], *, wait: bool = True) -> dict[str, Any] | objec
     tries = found.get("tries", 1)
     return {"earlier": found.get("from"), "outcome": outcome, "reason": reason,
             "tries": tries if type(tries) is int else 1, "installer": installer, "asked": found.get("asked") is True,
-            "plugin": plugin}
+            "plugin": plugin, "cause": None if outcome == "installed" else _sent(found, outcome)}
+
+
+def _sent(found: dict[str, Any], outcome: str) -> str:
+    """Why the attempt ``found``, counted as ``outcome``, did not install a newer cad, as its event says it
+    (``analytics.UPDATE_CAUSES``): a ``lost`` one's helper stopped with an error (``helper_crash``) or without a word
+    (``lost``); else the record's cause (``cause``), ``already`` for a ``current`` one whose environment held the
+    release already (its helper's detail), and ``none`` where the record names none."""
+    if outcome == "lost":
+        return "helper_crash" if found.get("cause") == "helper_crash" else "lost"
+    word, detail = cause(found), found.get("detail")
+    if word is None and outcome == "current" and isinstance(detail, str) and ALREADY.fullmatch(detail):
+        return "already"
+    return word or "none"
 
 
 def report() -> bool:
