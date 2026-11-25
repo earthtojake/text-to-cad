@@ -33,10 +33,13 @@ cad model|xbf|step|glb|stl|threemf|dxf|urdf|srdf export SRC DST.view [--json]
                                              ahead so a page shows it with no engine (View bundle); in a
                                              command of its own, with none of the options above
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
-                [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE]
+                [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE|JSON|-] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
-cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
-                                             every picture a Quick Edit packet (or a job file) names
+cad TYPE snapshot --job PACKET|JSON|- [SRC] [--out DIR] [the same flags, each over every job]
+                                             every picture a Quick Edit packet (or a job file) names, one
+                                             that names no path in DIR as <input's stem>-<label>.png; SRC,
+                                             a packet's input and inspect's DOC or a ref's FILE may be a
+                                             share's link: this computer's copy of it (Sharing)
 cad serve DOC [--port N]
 cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF] [...]
                                              what the document holds, then its build closure; with REF

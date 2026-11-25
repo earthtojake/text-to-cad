@@ -55,7 +55,8 @@ export function quickEditReferenceIds(selection) {
  * host can carry out, the rightmost primary and pressed by Enter (Shift+Enter is a new line): Copy
  * Prompt always — the note as text to paste into an agent's prompt box, its references by their
  * files' paths from the workspace the host names (`host.promptFiles.folders`; else from `~/`), and the
- * files the host makes for it (`prompt`, `host.promptFiles`) by theirs: one .snapshot.json containing the drawn views and the shared inline annotation, written only when Copy, Queue or Send is pressed, without rendering. Every way
+ * snapshot packet of the views it carries (`prompt.snapshot`: the view on screen and the views with ink, the ink
+ * among them), made in the page at the press and pasted inline, without rendering. Every way
  * it goes carries the same. A displayed unsaved or retained revision instead carries explicit
  * context that the saved file may differ, preserving text and references without replay jobs; Queue where the destination is a composer (the host's context for the next
  * message); Send where the host can post a message now (`promptContext.send`). Queue and Send
@@ -67,13 +68,15 @@ export function quickEditReferenceIds(selection) {
  *   references?: readonly import("@cad/core/prompt").PromptReference[],
  *   chips?: readonly import("./ReferenceChips.jsx").ReferenceChip[] | null,
  *   annotation?: { present: boolean, clear?: () => void } | null,
- *   prompt?: { views(): { label: string }[], files(views: { label: string }[], references?: object[]): Promise<object> | null,
- *     read(path: string): Promise<Blob>, annotation(): object | null, unavailable?(): string } | null,
+ *   prompt?: { snapshot(references: readonly object[]): { views: { label: string }[], annotation?: object | null,
+ *     references?: string[] } | null, unavailable?(): string } | null,
  *   nameReference?: ((reference: import("@cad/core/prompt").PromptReference) => string | import("../../inspector/pickGlyph.jsx").CompactName) | null,
  *   notes?: { take(): { text: string, done(): void, cancel?(): void } | null } | null,
  *   onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
  *   hidden?: boolean, docked?: boolean, className?: string, style?: import("react").CSSProperties }} props
  *   `docked`: a phone's: the same bar across the view (its sizes the scale's, `globals.css`), the keyboard left down.
+ *   `prompt.snapshot(references)`: what the packet is made of, read as the press finds the view, the selection
+ *   given (a board's packet names what is picked in it, which a snapshot lights), or null where there is no view.
  *   `nameReference`: what the renderer calls a reference into the file on screen, for its chip in
  *   the note ("cam"); "" where it has no name for it, which then reads as its file and ids.
  *   `notes`: what the renderer has to tell the agent with the next message, asked at the press
@@ -190,8 +193,8 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     setCopied(true);
     copiedTimer.current = setTimeout(() => setCopied(false), 1600);
   };
-  // Everything happens inside the press: the views are read as they are, and the host binds its
-  // destination (and the clipboard its write) before their files are made.
+  // Everything happens inside the press: the views are read as they are and their packet made, and the host binds
+  // its destination (and the clipboard its write) before the folders its files are named by are known.
   const run = action => {
     if (!actionReady(action)) return;
     setError("");
@@ -201,14 +204,12 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     try {
       note = notes?.take?.() ?? null;
       const unavailable = prompt?.unavailable?.() || "";
-      const views = unavailable ? [] : prompt?.views() ?? [];
       // The selection goes with the views: a board's packet lights what it names when it is drawn again.
-      const files = views.length ? prompt.files(views, selection) : null;
-      void files?.catch(() => {});
+      const snapshot = unavailable ? null : prompt?.snapshot?.(selection) ?? null;
       // The folders the message names its files by, asked at the press (a browser's workspace is its last launch's).
       const folders = host.promptFiles?.folders?.() ?? null;
       void folders?.catch(() => {});
-      const context = createQuickEditContext({ resource, references: selection, text, views, files, read: prompt?.read, viewUnavailable: unavailable, folders,
+      const context = createQuickEditContext({ resource, references: selection, text, snapshot, viewUnavailable: unavailable, folders,
         notes: note?.text ? [note.text] : [], subject: host.promptSubject });
       if (action === "send") outcome = host.promptContext.send(context);
       else if (action === "queue") outcome = host.promptContext.deliver(context);

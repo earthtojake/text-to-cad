@@ -7,10 +7,13 @@ service ``CAD_SHARE_URL`` names (``https://cad.fun`` by default). This process d
 apply; the server is never asked. Its files go into FOLDER (``./<its name>`` by default: the folder the zip holds),
 which is refused where it is there and holds anything, and every entry is refused that would land outside it (an
 absolute path, a ``..``, a drive, a link: ``sharing.zip_entries``); they are written beside it first and moved in once
-all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). It says what it wrote, the script that
-builds it, and where what built it (``Cad-Share-Made``) differs from this computer's cad and libraries, which a build
-here records (``_here``). It runs nothing: the next step it prints is ``cad run FOLDER/<script>`` (a file's,
-``cad viewer FOLDER/<file>``), since someone else's code is the person's to run. ``--json`` answers in one object.
+all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). It keeps a record of the fork
+(``sharing.fork_record``: the link, the folder, the script or the file, the share's name), asked of the running
+server as ``cad share`` keeps its records, so that the share's link names these files here where cad takes a document
+to draw or inspect (``sharing.copy_of``). It says what it wrote, the script that builds it, and where what built it
+(``Cad-Share-Made``) differs from this computer's cad and libraries, which a build here records (``_here``). It runs
+nothing: the next step it prints is ``cad run FOLDER/<script>`` (a file's, ``cad viewer FOLDER/<file>``), since
+someone else's code is the person's to run. ``--json`` answers in one object.
 
 A share this computer made (``sharing.made_here``: a live record of that origin and id, whose files are still where
 it was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where its files
@@ -35,7 +38,8 @@ DESCRIPTION = (
     "Write the files that made a shared document into a folder: a model's script, the modules of its project and the "
     "files it reads, at their paths there; a file document's file. LINK is the share's link (https://cad.fun/<id>), "
     "its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs "
-    "from this computer's cad and libraries, then the command that builds it, for the person to run. A share this "
+    "from this computer's cad and libraries, then the command that builds it, for the person to run. It keeps a record "
+    "of the fork, so the share's link names these files where cad snapshot and inspect take a document. A share this "
     "computer made is not downloaded: it says where its files are, to work on them there, and writes nothing.")
 # How long this computer's CAD kernel environment may take to say its libraries.
 VERSIONS_SECONDS = 60.0
@@ -142,11 +146,16 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
             raise Failure(f"could not write the share's files into {shown}: {error.strerror or error}") from None
     paths = [path for path, _size in written]
     entry = said["entry"] if said["entry"] in paths else None
+    viewed = _viewed(paths) if entry is None else None
+    try:
+        sharing.keep(fork=sharing.fork_record(origin, ident, folder, entry, viewed, top))
+    except OSError as error:
+        print(f"{prog}: warning: this computer could not keep a record of the fork ({error}), so the share's link "
+              "names no copy of it here: name its files by their paths", file=sys.stderr, flush=True)
     made, here = said["made"], _here()
     differs = [{"name": name, "made": value, "here": here[name]} for name, value in (made or {}).items()
                if name in here and here[name] is not None and here[name] != value]
     unknown = [name for name in (made or {}) if name in here and here[name] is None]
-    viewed = _viewed(paths) if entry is None else None
     step = ([_command("run", os.path.join(shown, *entry.split("/")))] if entry is not None else
             [_command("viewer", os.path.join(shown, *viewed.split("/")))] if viewed is not None else [])
     size = sum(count for _path, count in written)

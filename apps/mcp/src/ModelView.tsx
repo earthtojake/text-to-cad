@@ -98,7 +98,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     current.index < current.entries.length - 1 ? { ...current, index: current.index + 1 } : current), []);
   const showing = useRef(file);
   showing.current = file;
-  // A Quick Edit's views, annotation and pictures are made by the server, which is on this machine.
+  // How a Quick Edit names this machine's files: from the workspace the server's transport was started in, else `~/`.
   const promptFiles = useMemo(() => createHttpPromptFiles({ origin: TUNNEL_ORIGIN, fetch: tunnel }), [tunnel]);
   // What the chat's port says to the person, in the view's language as it is when it speaks.
   const sayRef = useRef(translator(locale));

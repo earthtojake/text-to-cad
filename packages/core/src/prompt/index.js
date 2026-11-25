@@ -2,6 +2,8 @@ import { buildBoardRefToken, isBoardRefPath, parseBoardRefSelector, parseBoardRe
 import { buildSchematicRefToken, isSchematicRefPath, parseSchematicRefSelector, parseSchematicRefToken } from '../lib/schematicRefs.js';
 import { buildCadRefToken, isDocumentId, isEngineRefFile, isEngineSelector, isLabelSelector, parseCadRefToken } from '../lib/cadRefs.js';
 
+export { snapshotPacket, snapshotPacketText } from './snapshotPacket.js';
+
 let operationSequence = 0;
 const operationNamespace = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
 const object = value => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -166,14 +168,24 @@ export function displayPath(path, folders) {
 }
 
 /**
+ * A document's address as a message names it: a file by its absolute path, or as `displayPath` names it by
+ * `folders`; a model by its id; a document by its link (a shared model's page) as it is. A Quick Edit's
+ * `File:` line and its snapshot packet's `input` are this one spelling.
+ * @param {import('./types.js').ResourceRef} resource
+ * @param {import('./types.js').PromptFolders | null} [folders]
+ */
+export function promptAddress(resource, folders = null) {
+  return resource.kind === 'url' ? resource.url
+    : resource.kind === 'workspace-file' ? displayPath(resource.path, folders) : resource.path;
+}
+
+/**
  * Keep machine identity structured; these strings are the portable human/prompt representation. A file
  * by its absolute path; `folders` names it as `displayPath` does instead, for a message a person reads.
  */
 export function formatPromptReference(reference, folders = null) {
   validatePromptReference(reference);
-  // A file by its absolute path (or as `displayPath` names it), a URL as it is.
-  const path = reference.resource.kind === 'url' ? reference.resource.url
-    : reference.resource.kind === 'workspace-file' ? displayPath(reference.resource.path, folders) : reference.resource.path;
+  const path = promptAddress(reference.resource, folders);
   requireValue(path.length > 0, 'a reference names its file or URL');
   if (reference.target.kind === 'cad-selector') {
     const selectors = [...reference.target.selectors];

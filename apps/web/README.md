@@ -186,7 +186,8 @@ need no engine: the clipboard, this build's links, the tab's appearance and the 
 this browser keeps (`src/host/browserLanguage.js`, [storage](docs/storage.md#localstorage)). It asks
 nothing of `/api/`: no server description, address link, library, Recents, telemetry, What's new, crash
 report or version to wait on, and no Export, Open in, Reveal or Copy path; parameters read as an `.xbf`'s
-do ("Edit these in the script."), and Quick Edit copies. What a bundle-backed view leaves out, and why, is
+do ("Edit these in the script."), and Quick Edit copies, its snapshot packet the page's as on the engine's page.
+What a bundle-backed view leaves out, and why, is
 [the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A bundle the page
 cannot open (none named, another origin's, no manifest, another format) says why, on a page of its own.
 
@@ -208,8 +209,9 @@ bundle's or the engine's page, as above; the engine's ids never have a share id'
   (`BundleApp`, titled by the document's name). A prompt from it (Quick Edit's, a screenshot's) names the model by
   the share's link, not by the model's id on the computer it was shared from, which means nothing to an agent on
   another: `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>` (as Copy Reference and a chip copy
-  it), with one line for the agent after what the person wrote, ``This model is shared at <origin>/<id>: run `cad
-  fork <origin>/<id>` to get its files, then work on them.`` (`sharePromptSubject`, the host's `promptSubject`). A
+  it) and its snapshot packet's `input` (`sharePromptSubject`, the host's `promptSubject`). Its Quick Edit carries
+  the views and the ink as the engine's page's does: for the same views, selection, ink and words the two pages'
+  prompts differ in the file's address alone. A
   404 says
   "This shared model has expired or was deleted.", and that a share lasts 7 days after it was last shared, so
   whoever shared it can share it again; a manifest that does not open or is not one, or a file not as it
@@ -466,11 +468,11 @@ setting has no effect. The prompt destination is the clipboard, so Quick Edit of
 text goes through the clipboard port's `writeText`, which takes pending text: a
 `ClipboardItem` holding the promise, so the write starts inside the gesture, or the
 text itself once it arrives where the browser takes no pending item. At the press,
-the server prepares a packet through the host's `promptFiles` (`createHttpPromptFiles`,
-over `/api/v1/local/prompt-files`), with the shared annotation, the current view and distinct
-drawn views (Measure's measurements are the person's: a packet carries none). Up to 1024 bytes of compact UTF-8 JSON goes directly
-into the prompt; larger packets are written as `.snapshot.json` and named by absolute path.
-No snapshot is written while drawing or typing, and no image is rendered.
+the page makes the snapshot packet (`snapshotPacket`, `@cad/core/prompt`) of the current view and the distinct
+drawn views, with the annotation (Measure's measurements are the person's: a packet carries none), and the prompt
+carries it inline and whole, whatever its size, after the references. The host's `promptFiles`
+(`createHttpPromptFiles`) says only the folders the prompt names this machine's files from. Nothing is written,
+and no image is rendered.
 
 ### The home
 

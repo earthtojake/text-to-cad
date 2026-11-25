@@ -5,7 +5,8 @@ A page of [the engine's documentation](../README.md). A name in bold in parenthe
 `cad share` puts a document on the web for anyone with its link to open in the hosted viewer, and to download the
 files that made it, with no sign-in. A share is two things under one id: the view, the document's view bundle (**View
 bundle**: what its page reads), and the files that made it, at the paths they have in the project. `cad fork` writes
-a share's files into a folder, as `cad run` builds them.
+a share's files into a folder, as `cad run` builds them; the share's link then names that copy where cad draws or
+inspects a document.
 
 ```bash
 cad share arm.xbf --yes        # the first time on a computer: the person's yes, kept
@@ -107,8 +108,11 @@ It says what it wrote, the script that builds it (`Cad-Share-Entry`), and where 
 differs from this computer: this release, the CAD kernel environment's libraries and Python (not compared where
 that environment is not made yet), the system and the architecture. It runs nothing: the next step it prints is
 `cad run FOLDER/<script>` (a file document's, `cad viewer FOLDER/<file>`), since someone else's code is the person's
-to read and run. `--json` is one object: `local` (false), `folder`, `name`, `files` (`count`, `bytes`, `paths`),
-`entry`, `made`, `here`, `differs` (each `name`, `made`, `here`) and `next`.
+to read and run. It keeps a record of the fork (**What is kept**), written by the running server as a share's is, so
+that the share's link names these files on this computer (**A share's link names this computer's copy**); where it
+cannot, a line says so. `--json` is one
+object: `local` (false), `folder`, `name`, `files` (`count`, `bytes`, `paths`), `entry`, `made`, `here`, `differs`
+(each `name`, `made`, `here`) and `next`.
 
 **A share this computer made.** A link of a live share this computer's records hold (**What is kept**: that service's
 origin and that id), whose files are still where it was shared from, is downloaded by no one: the command writes
@@ -118,6 +122,24 @@ there.`, or a file document's own file. `--json`: `local` (true), `name`, `root`
 `ignored` (the FOLDER given, or null) and `next` (`cad run <root>/<script>`, or `cad viewer <file>`: these files are
 this computer's own). A record of another service, one expired, or one whose files moved or went is no such share:
 its link is downloaded as any other.
+
+## A share's link names this computer's copy
+
+Where cad takes a document to draw or inspect -- `cad <type> snapshot`'s SRC and a Quick Edit packet's `input` (and a
+job's), `cad <type> inspect`'s DOC and a ref's FILE -- a share's view link, `<origin>/<id>` of the service
+`CAD_SHARE_URL` names or of `https://cad.fun`, names this computer's copy of the share, so that a shared page's
+prompt reads here as a local page's does:
+
+- **a share this computer made**: the document it shared under that link, as its record holds it (a model's id, a
+  file document's path);
+- **else a fork of it** whose folder is there: the model built from the folder's entry -- the one the engine's records
+  say that script is the home of (of the share's name, where it is the home of several) -- or, of a file document,
+  its file there. A fork not built yet is refused in one line naming the `cad run` that builds it (`not_found`).
+- **else** it is refused in one line, ``<link> is a shared model this computer has no copy of: run `cad fork <link>`,
+  then build it.`` (`not_found`, exit 2, with `next`).
+
+A selector after the link, `<link>#<selector>`, is the same in the copy as in the share: `cad model inspect
+'https://cad.fun/<id>#head_shell/f:...'`. A link of another origin, or a files' link (`.zip`), is no document's name.
 
 ## What is kept
 
@@ -138,9 +160,22 @@ POSIX), one record a share, dropped once past its expiry:
 A document is one record per service, by its document id (a file's `path` too); `bytes` is the share's size as
 the service stores it; `files`, where on this computer the files that made it are: their root, the script among them
 (`entry`, a model's) and a file document's own `file`, which `cad fork` of its link points at (**Forking**). A record with a `key` (`cad-share/1`'s) is none, as is one past its expiry: that
-document's next share is a new one. The id and the secrets are said only inside the links and in the record: in no
-other line of any command, no log, no telemetry and no file of the cache. The command is counted as any command is:
-its export as an export (a bundle is no counted kind), nothing of the share.
+document's next share is a new one. The id and the secrets are said only inside the links and in the records (and
+a view link a command was given, said back where this computer has no copy of it): in no other line of any command,
+no log, no telemetry and no file of the cache. The command is counted as any command is: its export as an export (a
+bundle is no counted kind), nothing of the share.
+
+`forks.json` beside `shares.json`, written the same way, one record a share's link, the latest fork of it, dropped once its
+folder is gone:
+
+```json
+{"format": "cad-forks/1", "forks": [{
+  "link": "https://cad.fun/<id>", "folder": "/home/me/arm", "entry": "arm.py", "file": null, "name": "arm",
+  "forked": "2026-11-24T11:00:00Z"}]}
+```
+
+`entry` is the script among the fork's files that builds it (a model's), `file` the file a file document's fork shows,
+each by its path in the folder; `name` the share's name as its zip's folder gives it.
 
 `shares/<document id>/` in cad's cache, for each document with a live share:
 

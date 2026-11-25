@@ -10,6 +10,15 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const resource = { kind: 'workspace-file', path: '/models/parts/bracket.step', revision: 'r1' } as const;
 const face = { resource, target: { kind: 'cad-selector', selectors: ['base/f:base.extrude1.2'] } } as const;
 const composer = { kind: 'composer', available: true } as const;
+// A view as a prompt carries it (`annotation/views.js`): a quarter pixel of it is 0.42 units, one decimal.
+const camera = { position: [1684.7442631095366, -1260.5132201786464, 725.5995354348008], target: [59.42248463398347, 16.525320052145076, -110.28023635262646],
+  up: [0, 0, 1], orthographicHalfHeight: 968.2754056727326 };
+const view = (label: string, display: Record<string, unknown> = {}) => ({ label, camera, display: { mode: 'solid', grid: false, ...display }, width: 1600, height: 1160 });
+// The snapshot packet a message carries, and the message before it.
+const packetOf = (message: string) => {
+  const block = /\nSnapshot JSON \(`cad (\w+) snapshot --job`\):\n```json\n(.*)\n```$/.exec(message);
+  return block ? { type: block[1], packet: JSON.parse(block[2]), text: message.slice(0, block.index) } : null;
+};
 
 function mount(host = testHost(), props: Record<string, unknown> = {}) {
   const view = (next: Record<string, unknown>) => <ViewerHostContext.Provider value={host}><div data-slot="cad-file-view">
@@ -121,41 +130,40 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   expect(used.mock.calls).toEqual([['quickEdit']]);
 });
 
-it('copies the note with its references by their files\' absolute paths, and its single snapshot by its path, keeping it all in the box', async () => {
+it('copies the note with its references by their files\' absolute paths, and its snapshot packet inline after them, keeping it all in the box', async () => {
   let copied: Promise<string> | string = '';
   const host = testHost({ clipboard: { writeText: async text => { copied = text; }, readText: async () => '', writeImage: async () => {} } });
   const annotation = { present: true };
-  const views = [{ label: 'view 1' }];
-  const prompt = {
-    views: () => views,
-    files: vi.fn(async () => ({ snapshot: '/tmp/p/bracket-1.snapshot.json' })),
-    read: vi.fn(async () => new Blob()),
-    annotation: () => ({ units: 'mm', marks: [] }),
-  };
+  const ink = { units: 'mm', marks: [{ id: 'ink-1', kind: 'stroke', points: [0, 0, 0, 10, 0, 0], color: '#ff2d55', view: 'view 1', width: 3, opacity: 1, closed: false, touches: [] }] };
+  const prompt = { snapshot: vi.fn(() => ({ views: [view('view 1')], annotation: ink })) };
   const clear = vi.fn();
   mount(host, { references: [face], annotation, prompt, onClear: clear });
   // The annotation is a chip of its own, Annotation, on the attachments row; without a way to wipe it, it has no X.
   expect(buttons()).toEqual(['Annotation', 'base/f:base.extrude1.2', 'Copy Prompt']);
   write('Round this edge.');
-  expect(prompt.files).not.toHaveBeenCalled();
+  expect(prompt.snapshot).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
   // Copied, nothing has gone yet: the note and what it carries stay, and the button says so.
   await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
   expect([note(), clear.mock.calls.length]).toEqual(['Round this edge.', 0]);
-  expect(await copied).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2'
-    + '\nSnapshot (cad step snapshot --annotation): /tmp/p/bracket-1.snapshot.json');
+  const message = await copied;
+  expect(packetOf(message)!.text).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
+  // The page's packet: the file as `File:` names it, the view without a path to write, the ink shortened.
+  expect(packetOf(message)!.type).toBe('step');
+  expect(packetOf(message)!.packet).toEqual({ input: '/models/parts/bracket.step', jobs: [{
+    camera: { position: [1684.7, -1260.5, 725.6], target: [59.4, 16.5, -110.3], up: [0, 0, 1], orthographicHalfHeight: 968.3 },
+    display: { mode: 'solid', grid: false }, output: { padding: 0, tightFrame: false }, outputs: [{ label: 'view 1', width: 1600, height: 1160 }] }],
+    annotation: { units: 'mm', marks: [{ kind: 'stroke', points: [0, 0, 0, 10, 0, 0], color: '#ff2d55', view: 'view 1', width: 3, touches: [] }] } });
+  expect(message).not.toMatch(/snapshot\.json|\/tmp\//);
   // The views go with the selection they were sent with, for a packet that carries it (a board's).
-  expect(prompt.files).toHaveBeenCalledWith(views, [face]);
-  // Copied as text, no file's bytes were read.
-  expect(prompt.read).not.toHaveBeenCalled();
+  expect(prompt.snapshot).toHaveBeenCalledWith([face]);
 });
 
-it("names the file as the host's prompts do where the host says how (a shared model's link), with its note after what the person wrote", async () => {
+it("names the file as the host's prompts do where the host says how (a shared model's link), and says nothing more of it", async () => {
   let copied: Promise<string> | string = '';
   const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
-  const note = `This model is shared at ${link}: run \`cad fork ${link}\` to get its files, then work on them.`;
   const host = testHost({ clipboard: { writeText: async text => { copied = text; }, writeImage: async () => {} },
-    promptSubject: { resource: { kind: 'url', url: link }, note } });
+    promptSubject: { resource: { kind: 'url', url: link } } });
   const { update } = mount(host);
   const copy = async () => {
     copied = '';
@@ -164,57 +172,50 @@ it("names the file as the host's prompts do where the host says how (a shared mo
     return copied;
   };
   write('Make it thicker.');
-  // The whole file, where nothing is picked: its link, and how the agent gets its files.
-  expect(await copy()).toBe(`Make it thicker.\n\n${note}\n\nFile: ${link}`);
-  // What is picked in it, by its link too, as it was picked.
-  update({ references: [face] });
-  expect(await copy()).toBe(`Make it thicker.\n\n${note}\n\nFile: ${link}\nReferences:\n${link}#base/f:base.extrude1.2`);
+  // The whole file, where nothing is picked: its link.
+  expect(await copy()).toBe(`Make it thicker.\n\nFile: ${link}`);
+  // What is picked in it, by its link too, as it was picked; and its packet's file, the link.
+  update({ references: [face], prompt: { snapshot: () => ({ views: [view('current view')], annotation: null }) } });
+  const message = await copy();
+  expect(packetOf(message)!.text).toBe(`Make it thicker.\n\nFile: ${link}\nReferences:\n${link}#base/f:base.extrude1.2`);
+  expect([packetOf(message)!.type, packetOf(message)!.packet.input]).toEqual(['step', link]);
 });
 
-it.each(['Copy Prompt', 'Queue', 'Send'])('%s creates the snapshot only at the press', async action => {
-  const composer = { kind: 'composer', available: true } as const;
+it.each(['Copy Prompt', 'Queue', 'Send'])('%s reads the views and makes their packet only at the press, inline and named by no path', async action => {
   const delivered: any[] = [];
-  const take = async (context: any) => {
-    delivered.push(context);
-    await Promise.all(context.parts.filter((part: any) => part.kind === 'attachment').map((part: any) => part.path));
-    return { status: 'added' as const, partIds: [] };
-  };
-  const prompt = { views: () => [{ label: 'view 1' }],
-    files: vi.fn(async () => ({ snapshot: '/tmp/p/a.snapshot.json' })), read: vi.fn(async () => new Blob()) };
+  const take = async (context: any) => { delivered.push(context); return { status: 'added' as const, partIds: [] }; };
+  const prompt = { snapshot: vi.fn(() => ({ views: [view('view 1')], annotation: null })) };
   const host = testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take } as any });
   mount(host, { annotation: { present: true }, prompt });
   write('Change this.');
-  expect(prompt.files).not.toHaveBeenCalled();
+  expect(prompt.snapshot).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
-  await waitFor(() => expect(prompt.files).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(prompt.snapshot).toHaveBeenCalledTimes(1));
   if (action !== 'Copy Prompt') {
     const attachments = delivered[0].parts.filter((part: any) => part.kind === 'attachment');
     expect(attachments).toHaveLength(1);
-    expect(await attachments[0].path).toBe('/tmp/p/a.snapshot.json');
+    expect([attachments[0].path, attachments[0].label]).toEqual([undefined, undefined]);
+    expect(await attachments[0].inlineText).toMatch(/^Snapshot JSON \(`cad step snapshot --job`\):\n```json\n\{"input":"\/models\/parts\/bracket.step","jobs":\[/);
   }
 });
 
 it('the annotation chip keeps its removal without copying or saving individual files, and the prompt carries no measurements', async () => {
-  const writeText = vi.fn(async (_text: string | PromiseLike<string>) => {}), save = vi.fn(), files = vi.fn();
+  const writeText = vi.fn(async (_text: string | PromiseLike<string>) => {});
   const clearInk = vi.fn();
-  const host = testHost({ clipboard: { writeText, readText: async () => '', writeImage: async () => {} },
-    promptFiles: { create: files, read: vi.fn(), save } });
-  const ink = { units: 'mm', marks: [] };
+  const host = testHost({ clipboard: { writeText, readText: async () => '', writeImage: async () => {} } });
+  const ink = { units: 'mm', marks: [{ id: 'ink-1', kind: 'stroke', points: [0, 0, 0, 10, 0, 0], color: '#ff2d55', view: 'current view', width: 3 }] };
+  const snapshot = vi.fn(() => ({ views: [view('current view')], annotation: ink }));
   render(<ViewerHostContext.Provider value={host}>
-    <QuickEdit resource={resource} annotation={{ present: true, clear: clearInk }}
-      prompt={{ views: () => [{ label: 'current view' }], save, files: async () => ({
-        inline: JSON.stringify({ input: resource.path, jobs: [], annotation: ink }) }) } as any} />
+    <QuickEdit resource={resource} annotation={{ present: true, clear: clearInk }} prompt={{ snapshot }} />
   </ViewerHostContext.Provider>);
   fireEvent.click(screen.getByRole('button', { name: 'Annotation' }));
   expect(writeText).not.toHaveBeenCalled();
-  expect(save).not.toHaveBeenCalled();
-  expect(files).not.toHaveBeenCalled();
+  expect(snapshot).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' }));
   await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
   const copied = await writeText.mock.calls[0][0];
   expect(copied).toContain('"annotation":');
   expect(copied).not.toContain('measurements');
-  expect(save).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Remove Annotation' }));
   expect(clearInk).toHaveBeenCalledOnce();
 });
@@ -364,22 +365,27 @@ it('Copy needs no note: with nothing written it copies what is picked, while Que
   expect(await copied).toBe('File: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
 });
 
-it.each(['Copy Prompt', 'Queue', 'Send'])('%s includes a small snapshot as JSON with no file read', async action => {
+it.each(['Copy Prompt', 'Queue', 'Send'])('%s carries the packet inline whatever its size: compact JSON with no apostrophe, after the references', async action => {
   const { resolvePromptMessage } = await import('@cad/core/prompt');
   let message = '';
   const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'added' as const, partIds: [] }; };
   const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take } });
-  const packet = JSON.stringify({ input: resource.path, jobs: [{ camera: 'front' }] });
-  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ inline: packet })), read: vi.fn() };
+  // Ink of many strokes, which no packet would once have carried inline: many kilobytes of it.
+  const marks: Record<string, unknown>[] = Array.from({ length: 40 }, (_, index) => ({ id: `ink-${index}`, kind: 'stroke', color: '#ff2d55', view: 'view 1', width: 3,
+    points: Array.from({ length: 30 }, (_, at) => [at * 7, index * 13, (at % 2) * 50]).flat() }));
+  marks.push({ id: 'ink-t', kind: 'text', color: '#000000', view: 'view 1', points: [0, 0, 0, 5, 0, 0, 5, 2, 0, 0, 2, 0], text: "the lid's lip", fontPx: 14 });
+  const prompt = { snapshot: () => ({ views: [view('view 1')], annotation: { units: 'mm', marks } }) };
   mount(host, { references: [face], prompt });
   write('Keep it.');
-  expect(prompt.files).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
-  await waitFor(() => expect(message).toContain('Snapshot JSON (cad step snapshot --annotation):'));
-  expect(message).toContain(packet);
-  expect(message).toContain('/models/parts/bracket.step#base/f:base.extrude1.2');
-  expect(prompt.read).not.toHaveBeenCalled();
+  await waitFor(() => expect(message).toContain('Snapshot JSON (`cad step snapshot --job`):\n```json\n'));
+  const { text, packet } = packetOf(message)!;
+  expect(text).toBe('Keep it.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
+  expect(new TextEncoder().encode(message).length).toBeGreaterThan(8 * 1024);
+  expect(packet.annotation.marks.at(-1).text).toBe("the lid's lip");
+  expect(message.slice(text.length)).not.toContain("'");
+  expect(message.slice(text.length)).toContain('lid\\u0027s lip');
 });
 
 
@@ -392,25 +398,80 @@ it.each(['Copy Prompt', 'Send'])('%s names every file from the workspace the hos
   const folders = vi.fn(async () => ({ start: '/Users/jake/robots/demo', home: '/Users/jake' }));
   const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take },
-    promptFiles: { create: vi.fn(), read: vi.fn(), folders } });
-  const packet = JSON.stringify({ input: board.path, jobs: [{ camera: 'front', outputs: [{ path: '/tmp/cad-quick-edit-a/twin_orbit-1-current.png' }] }] });
-  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ inline: packet })), read: vi.fn() };
+    promptFiles: { folders } });
+  // A board's view: its plan view, and what its prompt names in it, which the packet lights.
+  const plan = { label: 'current view', camera: { position: [25, 10, 40], target: [25, 10, 0], up: [0, 1, 0], orthographicHalfHeight: 10 }, width: 1600, height: 1000 };
+  const prompt = { snapshot: (picked: readonly object[]) => ({ views: [plan], annotation: null, references: picked.length ? ['#R1'] : [] }) };
   mount(host, { resource: board, references: [part], prompt });
   write('Add a logo here.');
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
   await waitFor(() => expect(message).toContain('Snapshot JSON'));
   expect(folders).toHaveBeenCalledTimes(1);
-  expect(message).toContain('File: twin_orbit.kicad_pcb\nReferences:\ntwin_orbit.kicad_pcb#R1\n');
-  expect(message).toContain('{"input":"twin_orbit.kicad_pcb","jobs":[{"camera":"front","outputs":[{"path":"/tmp/cad-quick-edit-a/twin_orbit-1-current.png"}]}]}');
+  expect(message).toContain('File: twin_orbit.kicad_pcb\nReferences:\ntwin_orbit.kicad_pcb#R1\nSnapshot JSON (`cad kicad_pcb snapshot --job`):\n');
+  // A drawing's view has no 3D framing; its picture is named by its label alone.
+  expect(message).toContain('{"input":"twin_orbit.kicad_pcb","jobs":[{"camera":{"position":[25,10,40],"target":[25,10,0],"up":[0,1,0],"orthographicHalfHeight":10},'
+    + '"outputs":[{"label":"current view","width":1600,"height":1000}]}],"references":["#R1"]}');
   expect(message).not.toContain('/Users/jake');
+});
+
+// The same model on the engine's page and on a share's: each host's view spells the file by its own name for it -- a hidden
+// part as the view names the file (`xbfNodeRefs`), what a mark touches as the host's prompts do (`xbfCopyText`) -- and the
+// local host names this computer's files from its workspace (`promptFiles.folders`), the share's by its link (`promptSubject`).
+const LINK = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+const ID = '98427829-14ec-563f-a02d-9372a85cecef';
+it.each([
+  ['model', { kind: 'cad-model', path: ID }, { kind: 'cad-model', path: ID }, ID],
+  ['file', { kind: 'workspace-file', path: '/Users/jake/robots/demo/parts/bracket.step' }, { kind: 'workspace-file', path: '/bracket.step' }, 'parts/bracket.step'],
+] as const)("a Quick Edit of a %s from a shared page is the engine page's, word for word, but for the file's address", async (_kind, localFile, sharedFile, address) => {
+  const { resolvePromptMessage } = await import('@cad/core/prompt');
+  const views = (own: string) => [view('view 1', { hidden: [`${own}#bracket/lid`] }), view('current view', { isolated: [`${own}#bracket`] })];
+  const ink = (named: string) => ({ units: 'mm', marks: [
+    { id: 'ink-1', kind: 'stroke', view: 'view 1', color: '#ff2d55', width: 3, opacity: 1, closed: false, widths: [1, 1.0421, 0.97],
+      points: [6.0515, 188.0811, 407.0838, 50.33, 188.0811, 400.1, 99.98, 188.0811, 407.0838],
+      touches: [{ part: 'i3', ref: `${named}#bracket/f:bracket.extrude1.2` }, { part: 'i9' }] },
+    { id: 'ink-2', kind: 'text', view: 'view 1', color: '#000000', text: "the lid's lip", fontPx: 14, touches: [],
+      points: [0.04, 0, 0, 5.06, 0, 0, 5.06, 1.94, 0, 0.04, 1.94, 0] }] });
+  const quickEdit = async (host: ReturnType<typeof testHost>, file: typeof localFile | typeof sharedFile, named: string, action: string) => {
+    let message = '';
+    const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'added' as const, partIds: [] }; };
+    const picked = { resource: file, target: { kind: 'cad-selector', selectors: ['bracket/f:bracket.extrude1.2'] } };
+    mount({ ...host, clipboard: { writeText: async text => { message = await text; }, writeImage: async () => {} },
+      promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take } },
+    { resource: file, references: [picked], annotation: { present: true }, prompt: { snapshot: () => ({ views: views(file.path), annotation: ink(named) }) } });
+    write('Make the lid thicker.');
+    fireEvent.click(within(box()!).getByRole('button', { name: action }));
+    await waitFor(() => expect(message).not.toBe(''));
+    cleanup();
+    return message;
+  };
+  const local = testHost({ promptFiles: { folders: async () => ({ start: '/Users/jake/robots/demo', home: '/Users/jake' }) } });
+  const shared = testHost({ promptSubject: { resource: { kind: 'url', url: LINK } } });
+  for (const action of ['Copy Prompt', 'Queue', 'Send']) {
+    const here = await quickEdit(local, localFile, localFile.path, action);
+    const there = await quickEdit(shared, sharedFile, LINK, action);
+    // The engine page's names the file three times, and only there: its `File:`, its reference's file, its packet's `input`.
+    expect(here.split(address).length - 1).toBe(3);
+    expect(here).toContain(`File: ${address}\nReferences:\n${address}#bracket/f:bracket.extrude1.2\nSnapshot JSON (\`cad ${localFile.kind === 'cad-model' ? 'model' : 'step'} snapshot --job\`):`);
+    expect(here).toContain(`{"input":${JSON.stringify(address)},`);
+    const addressed = here.replace(`File: ${address}\n`, `File: ${LINK}\n`).replace(`\n${address}#`, `\n${LINK}#`)
+      .replace(`{"input":${JSON.stringify(address)},`, `{"input":${JSON.stringify(LINK)},`);
+    expect(addressed).toBe(there);
+    // Neither names the file by a page's own name for it, nor the person's home.
+    for (const own of [sharedFile.path, localFile.path, '/Users/jake']) expect(there).not.toContain(own);
+    expect(here).not.toContain('/Users/jake');
+    // The ink and the parts hidden, as both pages saw them, within the file.
+    const { packet } = packetOf(there)!;
+    expect([packet.jobs[0].display.hidden, packet.jobs[1].display.isolated, packet.hidden, packet.annotation.marks[0].touches])
+      .toEqual([['bracket/lid'], ['bracket'], ['bracket/lid'], ['bracket/f:bracket.extrude1.2']]);
+  }
 });
 
 it.each(['unsaved build preview', 'previous revision'])('keeps the note and honestly delivers text/references for a displayed %s without snapshot jobs', async displayed => {
   const copied: string[] = [];
-  const files = vi.fn();
+  const snapshot = vi.fn(() => ({ views: [view('current view')], annotation: null }));
   const unavailable = `The references and view describe the displayed ${displayed}. The saved file may differ; view replay is unavailable.`;
   const host = testHost({ clipboard: { writeText: async (value: string | Promise<string>) => { copied.push(await value); }, readText: async () => '', writeImage: async () => {} } });
-  mount(host, { references: [face], prompt: { unavailable: () => unavailable, views: () => [{ label: 'current view' }], files } });
+  mount(host, { references: [face], prompt: { unavailable: () => unavailable, snapshot } });
   write('Round this edge.');
   expect(screen.getByRole('status').textContent).toContain(displayed);
   fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' }));
@@ -420,7 +481,7 @@ it.each(['unsaved build preview', 'previous revision'])('keeps the note and hone
   expect(copied[0]).toContain('The saved file may differ');
   expect(copied[0]).toContain(face.target.selectors[0]);
   expect(copied[0]).not.toContain('Snapshot JSON');
-  expect(files).not.toHaveBeenCalled();
+  expect(snapshot).not.toHaveBeenCalled();
   expect(note()).toBe('Round this edge.');
 });
 

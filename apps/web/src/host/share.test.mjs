@@ -47,11 +47,8 @@ test("a share's pack is read beside its manifest, as the browser's cache keeps i
     error => error.status === 404 && error.code === undefined && /No such pack/.test(error.message));
 });
 
-test("a prompt from a share's view names the model by the share's link, and tells the agent how to get its files", () => {
-  assert.deepEqual(sharePromptSubject(ID, ORIGIN), {
-    resource: { kind: "url", url: `${ORIGIN}/${ID}` },
-    note: `This model is shared at ${ORIGIN}/${ID}: run \`cad fork ${ORIGIN}/${ID}\` to get its files, then work on them.`,
-  });
+test("a prompt from a share's view names the model by the share's link, and says nothing else of it", () => {
+  assert.deepEqual(sharePromptSubject(ID, ORIGIN), { resource: { kind: "url", url: `${ORIGIN}/${ID}` } });
   // Any origin the page is served from, a local one's port included.
   assert.equal(sharePromptSubject(ID, "http://127.0.0.1:8787").resource.url, `http://127.0.0.1:8787/${ID}`);
 });

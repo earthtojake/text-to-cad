@@ -31,8 +31,8 @@ cad_server/
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
                          #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
-                         #   (robots), Quick Edit's packets (prompt_files), a document's view
-                         #   bundle, its page's reads written as a folder (bundle)
+                         #   (robots), a document's view bundle, its page's reads written as a
+                         #   folder (bundle)
   plugin/                # the plugin in the agent apps, and the one place that names an app, a plugin or
                          #   a skill: the table of apps (apps), this computer and its files (computer),
                          #   where the plugin comes from and what is ours (source), what a person's
@@ -53,7 +53,8 @@ cad_server/
   sharing.py             # `cad share`'s and `cad fork`'s client of the share service: a share's names and links,
                          #   the files that made a document, the cad-share/2 packs of the files a share lacks, the
                          #   service's API (urllib, in the command's own process), a share's zip written into a
-                         #   folder, and what is kept: the agreement, the setting, the records, and each shared
+                         #   folder, a share's link as the name of this computer's copy of it, and what is kept:
+                         #   the agreement, the setting, the shares' and forks' records, and each shared
                          #   document's folder in the cache
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
@@ -162,8 +163,10 @@ cad_server/
   until `on`. **`cad share delete TARGET|LINK`**: a share deleted, asked first. The agreement, the setting, the
   records and the cache's folders are written by the server that runs, as `cad update auto`'s switch is, else by the
   command (the engine's **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command itself
-  into a folder, every entry kept inside it; it runs nothing, and prints the command that builds it. Of a share this
-  computer made, it downloads nothing and says where its files are.
+  into a folder, every entry kept inside it, and a record of the fork kept; it runs nothing, and prints the command
+  that builds it. Of a share this computer made, it downloads nothing and says where its files are. A share's link
+  names this computer's copy of it where `cad <type> snapshot` and `cad <type> inspect` take a document: the document
+  it shared, else the model built from its fork's folder.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which

@@ -13,7 +13,7 @@ its `Probe` -- the program, the minimum version, the install hint and the variab
 one file take (`FILE_OPERATIONS`): `mujoco`'s `check` on `.xml` and `.mjcf`; `orcaslicer`'s `presets` and
 `complete`, on presets found by name, take none). `by_extension` and
 `type_of` map a file to its type. Every layer reads it: the viewer's file kinds, the content types its
-file route sends, the catalog's extensions, the snapshot packets' inputs, the routes each kind
+file route sends, the catalog's extensions, the routes each kind
 answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
 runtime bundled at build time, which are generated from it (`python -m cad.registry --js`) and checked
 against it. `wire` is the one other spelling, the frozen

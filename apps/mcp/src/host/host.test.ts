@@ -374,9 +374,10 @@ describe('a Quick Edit in the chat', () => {
   const face = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'cad-selector', selectors: ['base/f:base.extrude1.2'] } }, 'face');
   const annotation = () => ({ id: 'annotation', kind: 'attachment' as const, name: 'a.annotation.json', label: 'Annotation', mimeType: 'application/json', about: ['file'],
     content: { then: () => { throw new Error('JSON bytes must not be read for handoff'); } }, path: Promise.resolve('/tmp/p/a-1.annotation.json') });
-  // The snapshot packet: a file, never an image, always named by where it was made.
-  const snapshot = () => ({ id: 'snapshot', kind: 'attachment' as const, name: 'a.snapshot.json', label: 'Snapshot', mimeType: 'application/json', about: ['file'],
-    content: new Blob(['{}'], { type: 'application/json' }), path: Promise.resolve('/tmp/p/a-1.snapshot.json') });
+  // The snapshot packet, as a Quick Edit carries it: text inline in the message, never an image or a file.
+  const PACKET = 'Snapshot JSON (`cad step snapshot --job`):\n```json\n{"input":"/project/parts/a.step","jobs":[]}\n```';
+  const snapshot = () => ({ id: 'snapshot', kind: 'attachment' as const, name: 'a-snapshot.json', mimeType: 'application/json', about: ['file'],
+    content: new Blob(['{"input":"/project/parts/a.step","jobs":[]}'], { type: 'application/json' }), inlineText: Promise.resolve(PACKET) });
   const edit = (...parts: any[]) => createPromptContext([{ id: 'text', kind: 'text', text: 'Round it.' }, file, ...parts]);
 
   it('reaches what the host declared: a tab host queues whatever it declares, and messages only need text', () => {
@@ -422,15 +423,14 @@ describe('a Quick Edit in the chat', () => {
     const port = createChatPromptContext({ hostContext: {}, onHostContext: () => () => {},
       request: async (method: string, params: any) => { sent.push({ method, params }); return {}; },
     } as any, { reach: { queue: true, send: true } });
-    const context = edit({ ...snapshot(), path: Promise.resolve(''),
-      inlineText: Promise.resolve('Snapshot JSON:\n{"jobs":[]}') });
+    const context = edit(face, snapshot());
     await (action === 'queue' ? port.deliver(context) : port.send!(context));
     expect(sent[0].method).toBe(action === 'queue' ? 'ui/update-model-context' : 'ui/message');
-    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot JSON:\n{"jobs":[]}');
+    expect(sent[0].params.content[0].text).toBe(`Round it.\n\nFile: /project/parts/a.step\nReferences:\n/project/parts/a.step#base/f:base.extrude1.2\n${PACKET}`);
     port.dispose();
   });
 
-  it('sends a message into the chat, its single snapshot named by path even when the host supports images', async () => {
+  it('sends a message into the chat, its snapshot packet as text even when the host supports images', async () => {
     const sent: any[] = [];
     let refuse = false;
     const bridge = {
@@ -447,11 +447,10 @@ describe('a Quick Edit in the chat', () => {
     expect(sent[0].method).toBe('ui/message');
     expect(sent[0].params.role).toBe('user');
     expect(sent[0].params.content.map((block: any) => block.type)).toEqual(['text']);
-    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot: /tmp/p/a-1.snapshot.json');
+    expect(sent[0].params.content[0].text).toBe(`Round it.\n\nFile: /project/parts/a.step\n${PACKET}`);
     refuse = true;
     expect((await port.send!(edit(snapshot()))).status).toBe('sent');
-    expect(sent.at(-1).params.content).toEqual([{ type: 'text',
-      text: 'Round it.\n\nFile: /project/parts/a.step\nSnapshot: /tmp/p/a-1.snapshot.json' }]);
+    expect(sent.at(-1).params.content).toEqual([{ type: 'text', text: `Round it.\n\nFile: /project/parts/a.step\n${PACKET}` }]);
   });
 });
 

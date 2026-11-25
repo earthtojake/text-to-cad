@@ -538,8 +538,7 @@ it('a rewritten drawing stays on screen while its next revision is read, and aft
 
 
 it('a measurement on a drawing is Measure\'s row\'s chip, and opens no Quick Edit', async () => {
-  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/drawing.snapshot.json' })), read: vi.fn(), save: vi.fn() };
-  const { tap, dispose } = await openDrawing('clipboard', null, promptFiles);
+  const { tap, dispose } = await openDrawing('clipboard');
   fireEvent.click(screen.getByRole('button', { name: 'Measure', exact: true }));
   expect(screen.queryByRole('toolbar', { name: 'Measurements' })).toBeNull();
   tap(0, 0);
@@ -547,6 +546,5 @@ it('a measurement on a drawing is Measure\'s row\'s chip, and opens no Quick Edi
   const row = await screen.findByRole('toolbar', { name: 'Measurements' });
   expect(within(row).getByRole('button', { name: 'Measurement 1: 100.00 mm' })).toBeTruthy();
   expect(screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-context]')).toBeNull();
-  expect(promptFiles.create).not.toHaveBeenCalled();
   dispose();
 });

@@ -149,11 +149,13 @@ drawn on changes.
 included, to the clipboard as a PNG.
 
 Quick Edit captures the current view and distinct views with remaining ink when
-Copy Prompt, Queue or Send is pressed (`host.promptFiles`). The snapshot packet
-includes shared annotation and measurements: up to 1 KiB of compact UTF-8 JSON
-travels inline, and larger packets are saved to a temporary `.snapshot.json`.
-No images are rendered at handoff. Save inline JSON to a file, then
-`cad <type> snapshot <document> <out.png> --annotation <file> --camera authored` draws the
-view the ink was drawn in over the model, or over an edit of it.
+Copy Prompt, Queue or Send is pressed, and the page makes their snapshot packet with the
+annotation (`snapshotPacket`, `@cad/core/prompt`; Measure's measurements never go), which the message
+carries inline and whole: each mark without its id, its points to a quarter pixel of the view it was
+drawn in, a stroke within half a pixel of its line, and what it touches as the selectors it was drawn
+over within the file. No images are rendered at handoff. `cad <type> snapshot --job` draws each view
+with the ink from the packet as it is (or `-`, on standard input), and
+`cad <type> snapshot <document> <out.png> --annotation - --camera authored` the view the ink was
+last drawn in, over the model or over an edit of it.
 The Annotation chip does not copy references or save individual files.
 Queue and Send clear the annotation with the note; Copy Prompt keeps it.

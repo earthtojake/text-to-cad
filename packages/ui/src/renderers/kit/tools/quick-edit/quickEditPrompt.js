@@ -1,20 +1,20 @@
 import { DOCUMENT_TYPE_REGISTRY } from "@cad/core/lib/documentTypes.generated.js";
-import { createPromptContext, displayPath, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@cad/core/prompt";
+import { createPromptContext, formatPromptReference, parsePromptReference, promptAddress, referencePart, resolvePromptMessage, snapshotPacket,
+  snapshotPacketText, textPart } from "@cad/core/prompt";
 import { subjectReference } from "../../shell/promptContext.js";
 
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
 const pathOf = resource => resource.kind === "url" ? new URL(resource.url).pathname : resource.path;
 const stemOf = resource => stem(pathOf(resource));
-// The command that draws the packet again: the file's document type's snapshot (`cad <type> snapshot`),
-// the type read off the registry by the file's extension; a model's document, which has no file of its
-// own, is the engine's.
+// What draws the packet again: the file's document type's snapshot (`cad <type> snapshot`), the type read off
+// the registry by the extension of the file the view shows; a model's document, which has no file of its own, is
+// the engine's.
 const typeOf = path => {
   const name = String(path || "").split("/").pop().toLowerCase();
   const found = DOCUMENT_TYPE_REGISTRY.documentTypes.find(type => type.extensions.some(extension => name.endsWith(extension)));
   return found ? found.id : "model";
 };
-const snapshotCommand = resource => `cad ${typeOf(pathOf(resource))} snapshot --annotation`;
-// Awaited the first time something reads it: a file is fetched only by a host that carries its bytes.
+// Made the first time something reads it: no host carries the packet's bytes beside its text.
 const lazy = start => {
   let started = null;
   return { then: (resolve, reject) => (started ??= Promise.resolve().then(start)).then(resolve, reject) };
@@ -53,60 +53,52 @@ export const referenceToken = reference => formatPromptReference(reference);
 export const quickEditSelection = references => references.filter(reference => reference.target.kind !== "whole-resource");
 
 /**
- * A Quick Edit as one prompt context: what the person wrote, the file on screen (always), the
- * selection in it (`references`, in the prompt grammar), and — once the host has made them
- * (`files`) — the current and drawn views with the annotation, inline
- * when small or named by the saved .snapshot.json path. No pictures are rendered or attached. Built at the press.
+ * A Quick Edit as one prompt context: what the person wrote, the file on screen (always), the selection in it
+ * (`references`, in the prompt grammar), and, where there is a view (`snapshot`: the views the prompt carries, the
+ * annotation and a board's references, read at the press), its snapshot packet, made in the page
+ * (`snapshotPacket`) and carried inline, whole, after the references: the same for every host, whatever its size.
+ * Nothing is written and no picture is rendered or attached. Built at the press.
  * `folders` (the host's promise of `{ start, home }`): the message names every file by them — relative to
- * the workspace, else `~/` — the inline packet's `input` too, so no message carries the person's home.
+ * the workspace, else `~/` — the packet's `input` too, so no message carries the person's home.
  * `notes`: what the view itself has to tell the agent with this message, each a line or two of plain
  * text (what a person changed from the view since the last message), said after what the person wrote
  * and before the file. `subject` (the host's `promptSubject`): what the host's prompts name the file by,
- * in place of `resource` for it and for each reference into it, and its note, after the view's.
+ * in place of `resource` for it, for each reference into it and for the packet's `input`.
  *
- * @param {{ resource: object, references?: object[], text: string, views?: { label: string }[],
- *   files?: Promise<{ snapshot?: string, inline?: string }> | null, notes?: readonly string[],
- *   read?: (path: string) => Promise<Blob>, folders?: Promise<{ start?: string, home?: string }> | null,
+ * @param {{ resource: object, references?: object[], text: string,
+ *   snapshot?: { views: { label: string }[], annotation?: object | null, references?: string[] } | null,
+ *   notes?: readonly string[], viewUnavailable?: string, folders?: Promise<{ start?: string, home?: string }> | null,
  *   subject?: import("../../../../host/types.js").PromptSubject | null }} quickEdit
  */
-export function createQuickEditContext({ resource, references = [], text, views = [], files = null, read = null, viewUnavailable = "", folders = null, notes = [], subject = null }) {
+export function createQuickEditContext({ resource, references = [], text, snapshot = null, viewUnavailable = "", folders = null, notes = [], subject = null }) {
   const named = reference => subjectReference(reference, resource, subject);
+  const file = named({ resource: { ...resource }, target: { kind: "whole-resource" } });
   const parts = [
     textPart(String(text || "").trim(), "text"),
-    ...[...notes, subject?.note].map(note => String(note || "").trim()).filter(Boolean).map((note, index) => textPart(note, `note-${index}`)),
+    ...notes.map(note => String(note || "").trim()).filter(Boolean).map((note, index) => textPart(note, `note-${index}`)),
     ...(viewUnavailable ? [textPart(`View replay unavailable: ${viewUnavailable}`, "view-unavailable")] : []),
-    referencePart(named({ resource: { ...resource }, target: { kind: "whole-resource" } }), "file"),
+    referencePart(file, "file"),
     ...quickEditSelection(references).map((reference, index) => referencePart(named({ ...reference, resource: { ...reference.resource } }), `reference-${index}`)),
   ];
-  if (files && views.length) {
-    const name = stemOf(resource);
-    const made = pick => { const path = files.then(pick); path.catch(() => {}); return path; };
-    const path = made(result => result.snapshot || "");
-    const known = Promise.resolve(folders).catch(() => null);
-    const inlineText = made(result => typeof result.inline === "string"
-      ? known.then(where => `Snapshot JSON (${snapshotCommand(resource)}):\n\`\`\`json\n${shownPacket(result.inline, where)}\n\`\`\``) : null);
-    parts.push({ id: "snapshot", kind: "attachment", label: `Snapshot (${snapshotCommand(resource)})`,
-      name: `${name}.snapshot.json`, mimeType: "application/json", path, inlineText,
-      content: lazy(() => files.then(result => typeof result.inline === "string"
-        ? new Blob([result.inline], { type: "application/json" }) : read(result.snapshot))), about: ["file"] });
+  if (snapshot?.views?.length) {
+    // Made now, of the views as they are; addressed once the host has said the folders its files are named by, its
+    // `input` the file's address as `File:` names it (`promptAddress`).
+    const type = typeOf(pathOf(resource));
+    const made = snapshotPacket({ input: "", type, views: snapshot.views, annotation: snapshot.annotation ?? null,
+      references: snapshot.references ?? null });
+    const packet = Promise.resolve(folders).catch(() => null).then(where => snapshotPacketText({ ...made,
+      input: promptAddress(file.resource, where && typeof where === "object" ? where : null) }));
+    packet.catch(() => {});
+    parts.push({ id: "snapshot", kind: "attachment", name: `${stemOf(resource)}-snapshot.json`, mimeType: "application/json",
+      inlineText: packet.then(json => `Snapshot JSON (\`cad ${type} snapshot --job\`):\n\`\`\`json\n${json}\n\`\`\``),
+      content: lazy(() => packet.then(json => new Blob([json], { type: "application/json" }))), about: ["file"] });
   }
   return createPromptContext(parts, undefined, folders ? { folders } : {});
 }
 
-// The inline packet as the message shows it: its `input` named as the message names files (`displayPath`),
-// which `cad <type> snapshot --job` reads from the agent's workspace or `~` as it read the absolute path.
-function shownPacket(inline, folders) {
-  if (!folders) return inline;
-  try {
-    const packet = JSON.parse(inline);
-    if (!packet || typeof packet !== "object" || typeof packet.input !== "string") return inline;
-    return JSON.stringify({ ...packet, input: displayPath(packet.input, folders) });
-  } catch { return inline; }
-}
-
 /**
  * A Quick Edit as the person copies it: its references by their files' paths (from the workspace, else `~/`), and its
- * snapshot as inline JSON or the path it was saved at.
+ * snapshot packet inline.
  * @returns {Promise<string>}
  */
 export async function copiedQuickEdit(context) {

@@ -9,7 +9,7 @@ browser gates defend against cross-origin requests:
   re-resolves to loopback and the browser treats us as same-origin. Skipped when
   bound non-loopback, matching Jupyter's ``allow_remote_access``.
 * Every request that changes something -- a POST, PUT, PATCH or DELETE (``CHANGING_METHODS``:
-  the model library, a person's settings, a prompt's files) -- requires an ``x-cad-viewer``
+  the model library, a person's settings, an export) -- requires an ``x-cad-viewer``
   header. A cross-origin POST whose params ride the query string is otherwise a no-preflight
   "simple request"; a custom header forces a preflight instead.
 
@@ -296,7 +296,6 @@ class CadApp:
 
         from .drawings import DrawingRenders
         from .plots import BoardAnswers
-        from .prompt_files import PromptFiles
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -305,7 +304,6 @@ class CadApp:
         # The engine's documents (an .xbf, a STEP): each served off the request, and the page's
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
-        self.prompt_files = PromptFiles()
         self._exports = None
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
         # Whether this computer has a file chooser for the home's Open (``POST /api/v1/local/pick``).
@@ -1078,17 +1076,11 @@ class CadApp:
 
     def _local(self, request, response, rest) -> None:
         """``/api/v1/local``: what a local engine does on this computer -- the explorer,
-        files by path, Quick Edit's files, Reveal, Open in, the clipboard, Open's chooser, the page's link,
-        the page's activity."""
-        route = rest[0] if rest else ""
+        files by path, Reveal, Open in, the clipboard, Open's chooser, the page's link, the page's activity."""
         if rest == ["folder"]:
             return self._methods(request, {"GET": lambda: self._handle_folder(response, request.query)})
         if rest == ["files"]:
             return self._methods(request, {"GET": lambda: self._handle_file(response, request.query)})
-        if rest == ["prompt-files"]:
-            return self._methods(request, {"POST": lambda: self._create_prompt_files(request, response)})
-        if route == "prompt-files" and len(rest) == 2 and rest[1]:
-            return self._methods(request, {"GET": lambda: self._handle_prompt_files_get(request, response, rest[1])})
         if rest == ["reveal"]:
             return self._methods(request, {"POST": lambda: self._reveal(request, response)})
         if rest == ["open-in"]:
@@ -1104,13 +1096,6 @@ class CadApp:
         if rest == ["activity"] and self.analytics is not None:
             return self._methods(request, {"POST": lambda: self._activity(request, response)})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
-
-    def _create_prompt_files(self, request, response) -> None:
-        from .prompt_files import MAX_BODY_BYTES
-
-        self._limit(request, MAX_BODY_BYTES)
-        status, body = self.prompt_files.create(request.body())
-        send_json(response, status, body)
 
     def _reveal(self, request, response) -> None:
         from .reveal import reveal_path
@@ -1480,16 +1465,6 @@ class CadApp:
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
-
-    def _handle_prompt_files_get(self, request, response, name):
-        """Read a prompt JSON file; every request carries the viewer guard."""
-        if not request.header(POST_GUARD_HEADER):
-            raise ApiError(403, f"missing {POST_GUARD_HEADER} header", f"send '{POST_GUARD_HEADER}: 1'")
-        found = self.prompt_files.file(name)
-        if found is None:
-            raise ApiError(404, f"no prompt file {name}", "a prompt's files are read by the name its packet gives")
-        data, content_type = found
-        response.send_bytes(200, data, content_type, RAW_FILE_HEADERS)
 
     def _handle_file(self, response, query):
         """``GET /api/v1/local/files?path=<abs>``: a CAD file's bytes, by absolute path (a robot's link

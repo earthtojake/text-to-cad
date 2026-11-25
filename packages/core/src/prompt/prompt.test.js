@@ -152,6 +152,19 @@ test('prompt serialization prefers inline text and preserves references without 
   await assert.rejects(resolvePromptMessage(createPromptContext([{ ...small, inlineText: Promise.reject(new Error('save failed')) }])), /save failed/);
 });
 
+test("a document's address is its message's one spelling of it: a file from the workspace, a model by its id, a link as it is", async () => {
+  const { promptAddress } = await import('./index.js');
+  const folders = { start: '/Users/jake/robots/demo', home: '/Users/jake' };
+  const file = { kind: 'workspace-file', path: '/Users/jake/robots/demo/my board.kicad_pcb' };
+  assert.deepEqual([promptAddress(file, folders), promptAddress(file), promptAddress({ kind: 'workspace-file', path: '/Users/jake/a.step' }, folders)],
+    ['my board.kicad_pcb', file.path, '~/a.step']);
+  assert.equal(promptAddress({ kind: 'cad-model', path: '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab' }, folders), '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab');
+  assert.equal(promptAddress({ kind: 'url', url: 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-' }, folders), 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-');
+  // The file a message's `File:` line names, unquoted.
+  const message = formatPromptMessage(createPromptContext([referencePart({ resource: file, target: { kind: 'whole-resource' } }, 'file')]), { folders });
+  assert.equal(message, `File: ${JSON.stringify(promptAddress(file, folders))}`);
+});
+
 test('a model is referenced by its document id, in the engine grammar, and nothing else names one', () => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   const reference = parsePromptReference(`${id}#face 1`);

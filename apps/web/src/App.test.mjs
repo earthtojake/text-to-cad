@@ -340,8 +340,7 @@ test("a share's page hands the viewer what its prompts name the model by, and no
   const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
   try {
     await act(() => root.render(createElement(BundleApp, { client, tabStore, promptSubject: subject })));
-    assert.deepEqual(snapshot().host.promptSubject, { resource: { kind: 'url', url: `https://cad.example/${id}` },
-      note: `This model is shared at https://cad.example/${id}: run \`cad fork https://cad.example/${id}\` to get its files, then work on them.` });
+    assert.deepEqual(snapshot().host.promptSubject, { resource: { kind: 'url', url: `https://cad.example/${id}` } });
     // What the page offers of the files is its prompt's line: no host action in the navbar, and no file menu.
     assert.deepEqual(['fullSize', 'navbarActions'].filter(name => name in snapshot()), []);
     assert.equal(snapshot().host.fileActions, undefined);

@@ -1,4 +1,4 @@
-import { createPromptContext, referencePart, textPart } from "@cad/core/prompt";
+import { createPromptContext, referencePart } from "@cad/core/prompt";
 
 const sameResource = (one, other) => one?.kind === other?.kind && (one.kind === "url" ? one.url === other.url : one.path === other.path);
 
@@ -14,15 +14,15 @@ export function subjectReference(reference, shown, subject) {
 /**
  * One prompt context for a view: the file as a whole-resource reference (or the
  * references the renderer resolved itself), and the PNG that depicts them, as the host's
- * prompts name the file (`subject`: its resource for it, and its note first). Built
- * once, before asynchronous image encoding or host routing.
+ * prompts name the file (`subject`: its resource for it). Built once, before asynchronous
+ * image encoding or host routing.
  */
 export function createViewPromptContext({ resource, references = [], capture, operationId, subject = null }) {
   const named = references.map((reference, index) => referencePart(subjectReference(reference, resource, subject), `reference-${index}`));
   if (capture && !named.length) {
     named.push(referencePart(subjectReference({ resource: { ...resource }, target: { kind: "whole-resource" } }, resource, subject), "source"));
   }
-  const parts = [...(subject?.note ? [textPart(subject.note, "note")] : []), ...named];
+  const parts = [...named];
   if (capture) {
     const name = `${String(resource.path || "view").split("/").pop().replace(/\.[^.]+$/, "")}-view.png`;
     parts.push({ id: "capture", kind: "attachment", name, mimeType: "image/png", content: capture, about: named.map(part => part.id) });

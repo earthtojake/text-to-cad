@@ -128,7 +128,8 @@ protocol relationship never imports Python or discovers an interpreter.
 src/
   client/          # CAD service/resource contracts, HTTP adapter and worker tickets, and
                    #   bundle.js: the same service over a view bundle, with no engine
-  prompt/          # typed context bundles, identity/targets and pure serialization
+  prompt/          # typed context bundles, identity/targets and pure serialization, and
+                   #   snapshotPacket (a Quick Edit's snapshot packet, made in the page)
   common/          # rendering + runtime entries shared by every consumer:
                    #   renderModel/renderOptions (interactive canvases, the docs
                    #   hero), renderMeshScene (the parity page's stills),
@@ -269,13 +270,11 @@ its path exactly one share id (22 base64url characters), and its fragment `delet
 delete page; any other fragment (such as an earlier link's key) is passed over, and any other path is
 null. `isShareSecret` checks a delete secret's form.
 
-`createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
-Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,
-validates the packet without rendering and answers `{ inline: compactJson }` up to
-1024 UTF-8 bytes, otherwise writes one `.snapshot.json` and answers `{ snapshot: absolutePath }`.
-The client sends `acceptInline: true`; without this capability the server always saves
-and returns a path for compatibility with already-open viewers;
-`read(path)` fetches a JSON file. The annotation format, and
+`createHttpPromptFiles({ origin, fetch })` is how a Quick Edit's message names the files on the viewer
+server's computer: `folders()` reads its workspace (`start`, the folder it was last launched in) and the
+person's home from its description (`GET /api/v1/server`), which the message names each file from
+(`displayPath`). The page makes a Quick Edit's snapshot packet itself (below), and asks the server nothing
+for it. The annotation format, and
 the code that draws an annotation in a scene for the viewer and for a snapshot alike, is
 `common/annotation.js`.
 
@@ -303,10 +302,24 @@ canonical release versions during normal development.
 `@cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
-person wrote, then `File:`, `References:` and, for a picture that travels as a file,
-its label and path. A context's `folders` (`{ start, home }`, which the host says) name every file in that
-message as `displayPath` does: relative to the workspace, else `~/`, so the person's home is never in it;
-its parts, and Copy References, keep the absolute path. Text, typed resource
+person wrote, then `File:`, `References:` and each attachment, inline where it is text (a Quick Edit's
+snapshot packet) or, for one that travels as a file, by its label and path. A context's `folders`
+(`{ start, home }`, which the host says) name every file in that
+message as `displayPath` does (`promptAddress`: a model by its id, a link as it is): relative to the
+workspace, else `~/`, so the person's home is never in it; its parts, and Copy References, keep the absolute path.
+
+A Quick Edit's snapshot packet is the page's, the same code for every host (`prompt/snapshotPacket.js`):
+`snapshotPacket({ input, type, views, annotation, references })` is what `cad <type> snapshot --job` draws
+again — a job per view (its `camera`, and its `display`, `kinematics`, `jointValues`, `animation` and
+`selection` where it has them; a 3D view's `output` framing, a drawing's none; its picture by its `label`
+and size, never a path), a board's `references`, the ink, and the parts hidden and isolated where it was
+last drawn — shortened: each view's numbers to a quarter of its pixel, a mark's to its view's, a stroke within
+half a pixel of its line (Douglas–Peucker), a mark without its id or a default, an area its outline alone,
+and what a mark touches and the parts a view hides by their selectors within the file. `input` is the file's
+address as `File:` names it, so the same views and ink on a local and a shared page make packets that differ
+in it alone. `snapshotPacketText` is the packet as a message carries it, inline and whole: compact JSON with
+no character a single-quoted argument ends at (an apostrophe is written `\u0027`, and PowerShell's typographic
+quotes, U+2018 to U+201B, their escapes too), so `--job '<packet>'` pastes as one argument in bash and PowerShell alike. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's
 optional `label` ("Annotation") names it in that message. Text ranges use

@@ -874,13 +874,15 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     was (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the
     model lit in a studio, in its materials, on a floor with its shadow, in perspective.
 
-    ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
-    ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
-    object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
-    and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
-    of its outputs (``snapshot.job_pictures``). ``source`` is then drawn in place of every job's
-    input; a flag given overrides every job. Every request is checked before anything renders, and
-    a picture that fails writes none of the job's, leaving every output as it was.
+    ``job`` is every picture a job names (``cad <type> snapshot --job``), a list of ``Drawn``: a
+    Quick Edit packet (the JSON a Quick Edit's message carries, a file of it, or its object), a job
+    or a list of jobs, each job a view drawn as it was -- its camera, display, hidden and isolated
+    parts, pose, the packet's ink and dimensions -- at its output settings, into each of its outputs
+    (``snapshot.job_pictures``): at its path, or, naming none, in the folder ``out`` (the current
+    folder when it is None) as ``<its input's stem>-<its label>.png``. ``source`` is then drawn in
+    place of every job's input; a flag given overrides every job. Every request is checked before
+    anything renders, and a picture that fails writes none of the job's, leaving every output as it
+    was.
 
     Where each picture is goes, frame by frame, to ``progress`` (``progress.py``: ``scene`` while the
     document is served, meshed and its scene made, ``draw`` while the frame is drawn, ``write`` as
@@ -903,10 +905,8 @@ def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, gri
               measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
-        if out is not None:
-            raise TypeError("snapshot() takes out or job, not both: a job's outputs name its pictures")
-        return _job(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose, width=width,
-                    height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
+        return _job(job, source, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
+                    width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                     measurements=measurements, progress=progress)
     if source is None or out is None:
         raise TypeError(f"snapshot() missing required argument: {'source' if source is None else 'out'!r}")
@@ -990,16 +990,17 @@ def _whole(source: Any) -> None:
                           part="source")
 
 
-def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
+def _job(job: Any, source: Any, folder: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
          width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
          measurements: Any, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
-    """``snapshot(job=...)``: every picture the job names (see ``snapshot``)."""
+    """``snapshot(job=...)``: every picture the job names, one that names no path in ``folder`` (see
+    ``snapshot``)."""
     from cad.engine import snapshot as drawing
 
     _heard("source", os.fspath(source) if source is not None else drawing.job_input(job))
-    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
-                                    width=width, height=height, size_profile=size_profile, annotation=annotation,
-                                    measurements=measurements)
+    pictures = drawing.job_pictures(job, source, folder=folder, display=display, camera=camera, grid=grid,
+                                    preview=preview, pose=pose, width=width, height=height, size_profile=size_profile,
+                                    annotation=annotation, measurements=measurements)
     return [Drawn(Path(found["output"]), found["width"], found["height"], found)
             for found in drawing.draw_pictures(pictures, daemon=daemon, progress=progress)]
 

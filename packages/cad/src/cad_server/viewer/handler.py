@@ -27,9 +27,9 @@ from .response import Request, Response
 
 __all__ = ["CadHTTPServer", "make_handler_class", "MAX_REQUEST_BODY_BYTES"]
 
-# The most body any request may carry, past every route's own cap (a Quick Edit's
-# prompt files are the largest: ``prompt_files.MAX_BODY_BYTES``); a body over it is
-# refused before it is read.
+# The most body any request may carry, past every route's own cap (a picture copied to the
+# clipboard is the largest: ``clipboard.MAX_PNG_BYTES``); a body over it is refused before
+# it is read.
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 
 # The methods a route may take (``http_app``): the API's PUT, PATCH and DELETE among them.

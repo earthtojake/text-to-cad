@@ -30,22 +30,28 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   and one that names none commits again, once. A connection that cannot be made, or an answer that is not the
   service's (a proxy's refusal: no JSON ``error``), is ``Unreachable``; the service's own refusal is ``Refused``, with
   its ``error`` and ``hint``;
-- **a fork** (``fork_link``, ``zip_entries``, ``unpack``): a share's zip read as the service makes one, one folder
-  of files, and written into a folder through one made beside it, refusing any entry that would land outside it;
-  nothing of it is run;
+- **a fork** (``fork_link``, ``zip_entries``, ``unpack``, ``fork_record``): a share's zip read as the service makes
+  one, one folder of files, and written into a folder through one made beside it, refusing any entry that would land
+  outside it; nothing of it is run; and the fork's record kept;
+- **a share's link as a document's name** (``document_link``, ``copy_of``, ``local``): where cad takes a document to
+  draw or inspect, a share's view link of the service this computer shares with or of cad.fun names this computer's
+  copy of it -- the document it shared under that link (its record), else the model built from the entry of the
+  folder a fork wrote it into (a file document's file there) --, a ``#<selector>`` after it the same in the copy as in
+  the share; a link this computer has no copy of is refused in a line (``NoCopy``);
 - **what is kept** (``change``): the person's agreement and whether sharing is on (the settings' ``share`` section:
   ``{"agreed": <ISO time>, "on": false}``, on where ``on`` is absent); each share's record (``shares.json`` in the
-  state folder, readable and writable by this user alone: ``RECORDS``); and each shared document's folder in the
-  cache (``folder_of``): its bundle (``BUNDLE``), written over at each share; where each file of the share's last
-  commit lives (``STORED``); and the lock one ``cad share`` of the document holds at a time (``held``). A command
-  asks the running server to write them (``{"op": "share"}``: ``answer``), as it does every other write a shell's
-  sandbox may be refused, and writes them itself where none answers. As the records are written, a folder that no
-  live record names is removed: a share deleted, expired, or never committed.
+  state folder, readable and writable by this user alone: ``RECORDS``) and each fork's (``forks.json`` beside it, the
+  same: ``FORKS``); and each shared document's folder in the cache (``folder_of``): its bundle (``BUNDLE``), written
+  over at each share; where each file of the share's last commit lives (``STORED``); and the lock one ``cad share``
+  of the document holds at a time (``held``). A command asks the running server to write them (``{"op": "share"}``:
+  ``answer``), as it does every other write a shell's sandbox may be refused, and writes them itself where none
+  answers. As the records are written, a folder that no live record names is removed: a share deleted, expired, or
+  never committed; and a fork's record whose folder is gone is dropped.
 
 The id and the two secrets leave this module only inside the links, in a record, and where the protocol puts them in
 a request -- the id in its path, the write secret as its ``Authorization``, the delete secret as a hash, or as a
-delete's ``Authorization`` --: never in an exception's words, a log, telemetry or the cache, where ``STORED`` names a
-share by its id's SHA-256 (``Share.named``).
+delete's ``Authorization`` --: never in an exception's words (but a view link a command was given, said back:
+``NoCopy``), a log, telemetry or the cache, where ``STORED`` names a share by its id's SHA-256 (``Share.named``).
 """
 
 from __future__ import annotations
@@ -76,6 +82,9 @@ if TYPE_CHECKING:
 FORMAT = "cad-share/2"
 RECORDS = "shares.json"
 RECORDS_FORMAT = "cad-shares/1"
+# Each fork's record, beside the shares' (``fork_record``).
+FORKS = "forks.json"
+FORKS_FORMAT = "cad-forks/1"
 SECTION = "share"
 EXPIRY_DAYS = 7
 # The cache's folder of shared documents, one each by its document id, and what each holds.
@@ -1061,6 +1070,156 @@ def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]],
     return written
 
 
+def fork_record(origin: str, ident: str, folder: Path | str, entry: str | None, file: str | None,
+                name: str) -> dict[str, Any]:
+    """A fork's record (``FORKS``), by which the share's link names its files here (``copy_of``): the share's view link,
+    the folder its files were written into (absolute), the script among them that builds it (``entry``, a model's) or
+    the file a file document's fork shows (``file``), each by its path in the folder, the share's name as its zip's
+    folder gives it (``folder_name``), and when it was forked."""
+    return {"link": f"{origin}/{ident}", "folder": os.path.abspath(folder), "entry": entry, "file": file,
+            "name": name, "forked": now()}
+
+
+def _forked(row: Any) -> bool:
+    """Whether ``row`` is a fork's record (``fork_record``)."""
+
+    def inside(path: Any) -> bool:
+        return path is None or (isinstance(path, str) and all(_plain(segment) for segment in path.split("/")))
+
+    link = parse_link(row["link"]) if isinstance(row, dict) and isinstance(row.get("link"), str) else None
+    return (link is not None and link[2] is None and isinstance(row.get("folder"), str) and os.path.isabs(row["folder"])
+            and inside(row.get("entry")) and inside(row.get("file")) and isinstance(row.get("name"), str)
+            and isinstance(row.get("forked"), str))
+
+
+def folder_name(name: str) -> str:
+    """A share's name as its zip's one folder is named (the service's): each letter, digit, ``.``, ``-`` and ``_``
+    kept and any other character ``_``, no ``.`` at either end, at most 100 characters; ``UNNAMED`` where nothing is
+    left."""
+    kept = "".join(character if re.fullmatch(r"[A-Za-z0-9._-]", character) else "_" for character in name)
+    return kept.lstrip(".")[:100].rstrip(".") or UNNAMED
+
+
+# --- a share's link as a document's name --------------------------------------------------------------------------
+
+
+class NoCopy(LookupError):
+    """A share's link that names nothing on this computer (``copy_of``): its words, a line, and the command that would
+    make a copy (``next``)."""
+
+    def __init__(self, words: str, next: tuple[str, ...] = ()) -> None:  # noqa: A002 - the failure contract's key
+        super().__init__(words)
+        self.next = next
+
+
+def document_link(text: object) -> tuple[str, str, str | None] | None:
+    """A share's view link where cad takes a document -- ``<origin>/<id>``, of the share service this computer shares
+    with (``CAD_SHARE_URL``'s origin) or of cad.fun -- and the ``#<selector>`` after it where a ref is taken, as
+    ``(origin, id, selector)``, the selector None where it has none; None for any other text: a path, a document's
+    id, a link of another origin or of the share's files."""
+    from urllib.parse import urlsplit
+
+    from cad_server._internal.api import SHARE, share_url
+
+    if not isinstance(text, str):
+        return None
+    head, separator, selector = text.strip().partition("#")
+    try:
+        parts = urlsplit(head)
+    except ValueError:
+        return None
+    ident = parts.path.strip("/")
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.query or not _ID.fullmatch(ident):
+        return None
+    origin = f"{parts.scheme}://{parts.netloc}"
+    if origin.lower() not in (share_url().lower(), SHARE.lower()):
+        return None
+    return origin, ident, selector if separator else None
+
+
+def _of(link: str, origin: str, ident: str) -> bool:
+    """Whether a record's view link is the share at ``origin`` with the id ``ident``."""
+    found = parse_link(link)
+    return found is not None and found[1] == ident and found[0].lower() == origin.lower()
+
+
+def _built_from(script: str) -> list[tuple[str, str]]:
+    """The models the engine's records (``cad_server.engine.registry``) say ``script`` is the home of: each its
+    document's id and its name."""
+    from cad.engine.ids import canonical
+    from cad_server.engine import registry as registering
+
+    held = registering.current()
+    if held is None:
+        return []
+    target = canonical(script)
+    return [(row["id"], str(row.get("name") or row.get("entry") or "")) for row in held.list()
+            if row.get("kind") == "model" and isinstance(row.get("root"), str) and isinstance(row.get("home"), str)
+            and canonical(registering.home(held, row)) == target]
+
+
+def copy_of(origin: str, ident: str) -> str:
+    """The name cad takes this computer's copy of the share at ``origin`` with the id ``ident`` by: the document it
+    shared under that link (its record, ``records``: a model's document id, a file document's path); else, of the fork
+    of it whose folder is there (``forks``), the model built from the folder's entry -- the one the engine's records
+    say the script is the home of, the one of the share's name where it is the home of several -- or a file document's
+    file there. ``NoCopy``, in a line naming what would make one, for a link this computer neither shared nor forked,
+    a fork whose model is not built here yet, and one whose script builds several, none of the share's name."""
+    link = f"{origin}/{ident}"
+    try:
+        shared = records()
+    except OSError:
+        shared = []
+    for row in shared:
+        if row["id"] == ident and row["service"].lower() == origin.lower():
+            document = row["document"]
+            return document["path"] if isinstance(document.get("path"), str) else document["id"]
+    try:
+        forked = forks()
+    except OSError:
+        forked = []
+    for row in forked:
+        if not _of(row["link"], origin, ident) or not os.path.isdir(row["folder"]):
+            continue
+        if row.get("entry") is None:
+            if row.get("file") is None:
+                break
+            return os.path.join(row["folder"], *row["file"].split("/"))
+        script = os.path.join(row["folder"], *row["entry"].split("/"))
+        models = _built_from(script)
+        if len(models) > 1:
+            models = [model for model in models if folder_name(share_name(model[1])) == row["name"]] or models
+        if len(models) == 1:
+            return models[0][0]
+        from cad.engine.records import rerun
+
+        if not models:
+            command = rerun(script)
+            raise NoCopy(f"{link} is forked into {row['folder']}, and its model is not built on this computer: build "
+                         f"it with `{command}`", (command,))
+        raise NoCopy(f"{link} is forked into {row['folder']}, whose {row['entry']} builds {len(models)} models, none "
+                     f"of them {row['name']}: name the one you mean by its document's id (`cad status` lists them)")
+    fork = f"cad fork {link}"
+    raise NoCopy(f"{link} is a shared model this computer has no copy of: run `{fork}`, then build it.", (fork,))
+
+
+def local(text: str, *, ref: bool = False) -> str:
+    """``text`` -- a document's name, or with ``ref`` a ref's (``FILE#SELECTOR``) -- with the share's link it starts
+    with (``document_link``) in the name of this computer's copy of that share (``copy_of``), its ``#<selector>`` kept:
+    a ref's selector is the same in the copy as in the share. A ref's file is JSON-quoted where it holds a ``#`` or a
+    quote, as the refs grammar reads one. Any other text as it is; ``NoCopy`` where this computer has no copy."""
+    found = document_link(text)
+    if found is None:
+        return text
+    origin, ident, selector = found
+    name = copy_of(origin, ident)
+    if selector is None:
+        return name
+    if ref and ("#" in name or '"' in name):
+        name = json.dumps(name, ensure_ascii=False)
+    return f"{name}#{selector}"
+
+
 # --- what is kept ------------------------------------------------------------------------------------------------
 
 
@@ -1083,6 +1242,27 @@ def records_path() -> Path:
     from cad.engine.places import state_dir
 
     return state_dir() / RECORDS
+
+
+def forks_path() -> Path:
+    from cad.engine.places import state_dir
+
+    return state_dir() / FORKS
+
+
+def forks(path: Path | None = None) -> list[dict[str, Any]]:
+    """Every fork's record this computer keeps (``FORKS``: ``fork_record``); [] where there are none. ``OSError``
+    where the file is there and cannot be read."""
+    try:
+        text = (path or forks_path()).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return []
+    try:
+        found = json.loads(text)
+    except ValueError:
+        return []
+    rows = found.get("forks") if isinstance(found, dict) else None
+    return [row for row in rows if _forked(row)] if isinstance(rows, list) else []
 
 
 def records(path: Path | None = None) -> list[dict[str, Any]]:
@@ -1174,16 +1354,20 @@ def made_here(origin: str, ident: str) -> dict[str, Any] | None:
 
 
 def _write_records(path: Path, rows: list[dict[str, Any]]) -> None:
-    """The records written whole, readable and writable by this user alone (a file made 0600 in the same folder,
-    then put in place), so no other user of the computer reads a link or a secret."""
+    """The shares' records written whole (``_write_private``)."""
+    _write_private(path, {"format": RECORDS_FORMAT, "shares": rows})
+
+
+def _write_private(path: Path, found: dict[str, Any]) -> None:
+    """Records written whole, readable and writable by this user alone (a file made 0600 in the same folder, then put
+    in place), so no other user of the computer reads a link or a secret."""
     from cad._internal.atomic_replace import replace_atomic
 
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(handle, "wb") as file:
-            file.write((json.dumps({"format": RECORDS_FORMAT, "shares": rows}, indent=1, sort_keys=True)
-                        + "\n").encode("utf-8"))
+            file.write((json.dumps(found, indent=1, sort_keys=True) + "\n").encode("utf-8"))
         os.chmod(temporary, 0o600)
         replace_atomic(temporary, path)
     finally:
@@ -1393,17 +1577,19 @@ def change(request: dict[str, Any]) -> dict[str, Any]:
     """One change of what is kept, in this process: ``{"set": "on"|"off"}``, ``{"agree": true}``, ``{"folder":
     <document id>}`` (its folder in the cache made, with its lock: answered as ``folder``), ``{"record": <a share's
     record>, "stored": <its STORED>}`` (the record kept in place of any of the same share, or of the same document at
-    the same service, and ``stored``, where given, written in its document's folder) or ``{"forget": <share id>}``
+    the same service, and ``stored``, where given, written in its document's folder), ``{"forget": <share id>}``
     (its record dropped, and the folder of its document, which the asker holds the lock of, emptied, where no other
-    record names it). Every record past its expiry is dropped as the records are written, and every folder no live
-    record names removed (``_sweep``). ``{"ok": true, "settings"}``, or ``{"failed"}`` in one line for a change it
-    does not take. ``OSError`` where the state folder cannot be written."""
+    record names it) or ``{"fork": <a fork's record>}`` (``fork_record``: kept in place of any of the same share's,
+    every fork's record whose folder is gone dropped). Every record past its expiry is dropped as the records are
+    written, and every folder no live record names removed (``_sweep``). ``{"ok": true, "settings"}``, or
+    ``{"failed"}`` in one line for a change it does not take. ``OSError`` where the state folder cannot be written."""
     from cad_server._internal.file_lock import state
     from cad_server.settings import update_section
 
-    asked = [name for name in ("set", "agree", "folder", "record", "forget") if name in request]
+    asked = [name for name in ("set", "agree", "folder", "record", "forget", "fork") if name in request]
     if len(asked) != 1 or ("stored" in request and asked != ["record"]):
-        return {"failed": "a change of what sharing keeps is one of set, agree, folder, record (with stored) or forget"}
+        return {"failed": "a change of what sharing keeps is one of set, agree, folder, record (with stored), forget "
+                          "or fork"}
     if "set" in request:
         if request["set"] not in ("on", "off"):
             return {"failed": "sharing is set on or off"}
@@ -1422,6 +1608,16 @@ def change(request: dict[str, Any]) -> dict[str, Any]:
         with open(folder / LOCK, "a+b"):
             pass
         return {"ok": True, "settings": settings(), "folder": str(folder)}
+    elif "fork" in request:
+        fork = request["fork"]
+        if not _forked(fork):
+            return {"failed": "not a fork's record"}
+        origin, ident, _none = parse_link(fork["link"]) or ("", "", None)  # a view link: ``_forked`` holds it so
+        path = forks_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with state(path.parent):
+            rows = [row for row in forks(path) if not _of(row["link"], origin, ident) and os.path.isdir(row["folder"])]
+            _write_private(path, {"format": FORKS_FORMAT, "forks": [*rows, fork]})
     else:
         record, forget, kept = request.get("record"), request.get("forget"), request.get("stored")
         if "record" in request and not _record(record):

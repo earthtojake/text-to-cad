@@ -93,7 +93,7 @@ up the picture, as `top` and `bottom` do. SRC is a whole document: one that name
 document (`ID#bracket`, `arm.step#arm/face 3`) is refused, saying how to draw a part alone
 (`display.isolated`). `--annotation FILE` draws the viewer's annotation over the
 model -- each mark on the part it was drawn on, wherever the picture places that part -- from an
-annotation file or the Quick Edit packet that carries one (the `.snapshot.json` the viewer writes),
+annotation or the Quick Edit packet that carries one, as its JSON, a file of it, or `-` (standard input),
 and `--measurements FILE` Measure's dimensions (`[{start, end, label, color}]`). A camera object's
 lengths (`position`, `target`, `orthographicHalfHeight`), a measurement's points and the ink are in
 the viewer's scene coordinates, as a Quick Edit packet carries them -- a document's and a GLB's
@@ -102,15 +102,20 @@ millimetres, a robot's metres, a 3MF's declared unit (the structure's `millimetr
 (`render/occt.py` `camera_in_millimetres`, `measure`, `annotate`). A mark names the
 view it was drawn in by label alone (`"view": "view 1"`); the view itself -- its camera
 (`position`, `target`, `up`, `orthographicHalfHeight`, the snapshot's own camera object), size and
-projection -- is a job of the packet. `--camera authored` draws the picture from the view of the
+projection -- is a job of the packet. A mark as a packet carries it shortened reads as the whole one
+(`snapshot.parse_annotation`): no `id`, `opacity` 1 and `closed` false where it gives neither, no
+`triangles` (no still reads them), an area's points its outline alone, and what it was drawn over
+(`touches`, which no still draws) the refs of the file it touches, or the `{part, ref}` objects of an
+earlier packet. `--camera authored` draws the picture from the view of the
 last mark, exactly (no fit), at its size and projection unless the flags say otherwise: from the
-packet given as `--annotation`, else the newest packet beside the annotation file that draws this
-document; with none, it is refused by name. A face the mesher left without triangles is named in a
+packet given as `--annotation`, else the newest packet saved beside the annotation file as a
+`.snapshot.json` that draws this document; with none, it is refused by name. A face the mesher left without triangles is named in a
 warning. Nothing is written but OUT. OUT may be a folder -- one that is there, or a path ending in a
 separator -- and the picture is then `<SRC's stem>_<UTC time>.png` in it (a model's name for a model,
 `snapshot.picture_path`), the path the verb prints and reports (`output`).
 
-**A job.** `--job PACKET` replays a whole Quick Edit packet -- or a job file in its words: a job, a list
+**A job.** `--job PACKET` replays a whole Quick Edit packet -- the JSON a Quick Edit's message carries,
+given as it is, a file of it, or `-` (standard input), or a job file in its words: a job, a list
 of jobs, or `{"input", "jobs": [...], "annotation", "measurements"}` -- in one call
 (`snapshot.job_pictures`, `api.snapshot(job=)`), on the machinery above: each job is a view, drawn with
 its own `camera` (an output's own `camera` over it), its `display` (its `hidden` and `isolated` parts
@@ -119,7 +124,11 @@ takes it), and -- a robot's -- the visuals its `selection.hide` names by the vie
 (`link:v1`, each robot instance carrying its visual's), the packet's ink and dimensions over each
 (a job's own `annotation` and `measurements` over the packet's); and each of its `outputs` (`path`,
 `width`, `height`, `camera`, `label`) is a picture written at its path (a folder takes
-`<stem>[_j<m>][_<n>]_<UTC time>.png`, the job's and the output's place where there are several). A
+`<stem>[_j<m>][_<n>]_<UTC time>.png`, the job's and the output's place where there are several), or,
+where it names none, in `--out DIR` (the current folder unless given) as `<its input's
+stem>-<its label>.png`, each a slug (`view-<n>` for the `n`-th job's where it has no label), and
+`-2`, `-3` after it where two would share a name. The input, the packet's or a job's, is a path, a
+document's id or a share's link, which names this computer's copy of it (**Sharing**). A
 job's `output` settings finish its pictures: `padding` (0 to 0.15 of the picture each side, 0.04
 unless given) and `tightFrame` (true unless given: the fit on every drawn vertex, else on the drawn
 parts' box) frame a fitted camera, and a view's own camera -- a position, a target and, orthographic,
@@ -134,12 +143,13 @@ drawing's hairlines) stay one pixel of the larger frame and read finer: OCCT's c
 line wider than a pixel, and this is that, not a bug; `sizeProfile` sizes an output that gives no
 size. SRC, given, is drawn in place of every job's input, and a flag given overrides every job: the
 display, the grid, the camera, the pose, the ink, the dimensions, the size of every
-output; an OUT is refused. Every job is checked before anything renders (an unknown key, a setting
+output; an OUT is refused (`--out DIR` names the folder). Every job is checked before anything renders (an unknown key, a setting
 out of range, two outputs at one path, a file that is not there: refused by name, every file left as
 it was), and a picture that fails writes none of the job's: every picture is staged beside its
 output and moved into place only when all are drawn, and a failed snapshot leaves every existing picture as it was. Through the daemon each picture is a frame
 of the file's warm render process; `daemon=False` serves each file once for all its pictures.
-`--json` prints `{"ok": true, "pictures": [what each drew]}`.
+Each picture's line says the file it wrote; `--json` prints `{"ok": true, "pictures": [what each drew,
+its `output` the file]}`.
 
 **Native KiCad stills.** A `.kicad_pcb` is a file source, with no XCAF document or model worker.
 `formats/kicad/plot.py` builds the plot payload from the board and its sibling project, its pours KiCad's

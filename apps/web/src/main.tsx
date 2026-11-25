@@ -127,7 +127,7 @@ function startViewBundle(element: HTMLElement, address: string | null, refused: 
  * A shared view bundle's page, as a share service serves it at `/<id>`: the view reads the share's manifest and
  * its view's packs from this page's own origin (`shareService`), opens them with the key its id gives
  * (`openShare`) and shows the bundle as `?bundle=` does (`BundleApp`), its prompts naming the model by the share's
- * link and telling the agent how to get its files (`sharePromptSubject`); the delete link (`#delete=<secret>`) is
+ * link (`sharePromptSubject`); the delete link (`#delete=<secret>`) is
  * the page that deletes it (`ShareDelete`). The secret is read from the address once, here, and is never written
  * anywhere: not to the address or its history, storage, a log or a request but the DELETE's header. Until the
  * share opens the page is the bar `index.html` drew.
