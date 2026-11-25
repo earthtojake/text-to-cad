@@ -460,9 +460,9 @@ stays away while that alert stands, and its icon, first of the navbar's right-ha
   under the navbar as a view's card is over the view. Red, "Couldn't update to 0.12.3", the cause in plain words and
   what to do; "Try again" in Retry's place, which is the button's click; Details holds `cad update`, the way on in a
   terminal, and the path of the update's log as a comment line, so the copy pastes and runs. Report Issue only where
-  the cause is cad's own fault (the update's helper could not start, raised, went silent, or met an installer failure
-  cad does not recognize); a cause that is the person's to fix (a file in use, the network, the disk, an installer's
-  settings) says what to do instead. It blocks nothing: its X, or Escape, puts it away behind its icon, for every page
+  the cause is cad's own fault (the update's helper could not start, raised, went silent, or met a uv failure cad
+  does not recognize, or the new release did not run or start); a cause that is the person's to fix (a file in use, the
+  network, the disk, uv's settings) says what to do instead. It blocks nothing: its X, or Escape, puts it away behind its icon, for every page
   and through a reload, until another attempt begins or fails anew. Why: the cause is said where every error is, and
   an issue is asked for only where we must fix something.
 - **One card at a time.** A file's own card wins: a failed update's waits behind it, shown once the file's is put

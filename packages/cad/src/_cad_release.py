@@ -78,10 +78,19 @@ def pointer(prefix=None):
 
 def _pointed():
     """The stored release the pointer names for this install of cad, or None. Raises for a pointer it cannot read."""
-    try:
-        handle = open(pointer(), encoding="utf-8")
-    except OSError:
-        return None  # no pointer: an environment that runs its own packages
+    path, handle = pointer(), None
+    for wait in (0.0, 0.002, 0.01, 0.05):
+        try:
+            handle = open(path, encoding="utf-8")
+            break
+        except FileNotFoundError:
+            return None  # no pointer: an environment that runs its own packages
+        except OSError:  # Windows refuses a reader for the moment a new pointer is moved into place
+            import time
+
+            time.sleep(wait)
+    if handle is None:
+        return None
     import json
 
     with handle:
@@ -123,10 +132,6 @@ def _take():
     global STORED, HELD
     if any(name in sys.modules for name in ("cad", "cad_server", "cad_mcp", "cadgen")):
         return  # imported late, by something other than the interpreter's start: never under a cad already loaded
-    here = os.path.normcase(HERE)
-    at = next((at for at, entry in enumerate(sys.path) if os.path.normcase(os.path.abspath(entry)) == here), None)
-    if at is None:
-        return  # this folder is not on the import path: nothing of it to replace
     held = None
     for _ in range(2):  # a release removed between the two reads: the pointer names another by now
         path = _pointed()
@@ -139,6 +144,11 @@ def _take():
             continue
     if held is None:
         return
+    here = os.path.normcase(HERE)
+    at = next((at for at, entry in enumerate(sys.path) if os.path.normcase(os.path.abspath(entry)) == here), None)
+    if at is None:
+        held.close()
+        return  # this folder is not on the import path: nothing of it to replace
     sys.path[at] = path
     STORED, HELD = path, held
     import site

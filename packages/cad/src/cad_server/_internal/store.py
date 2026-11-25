@@ -61,8 +61,10 @@ LINK = "hardlink"
 # How long a build may take, and the one run of a release before it counts. Stopping either changes nothing that
 # runs: the folder is not a release yet.
 BUILD_SECONDS, VERIFY_SECONDS = 900.0, 180.0
-# How old a ``.building-`` folder is before ``clean`` takes it for one whose build died.
+# How old a ``.building-`` folder is before ``clean`` takes it for one whose build died, and how old a pointer that
+# means nothing is before ``clean`` removes it: never one an update may be writing at that moment.
 ABANDONED_SECONDS = 3600.0
+STALE_SECONDS = 600.0
 # What a release is run with before it counts (``verify``): nothing on the import path but the standard library and
 # its own folder, as ``_cad_release`` runs it, then its own check of itself (``cad_server._internal.selftest``).
 VERIFY = ("import runpy, sys; sys.path.append(sys.argv[1]); "
@@ -326,7 +328,8 @@ def verify(staged: str | os.PathLike[str], *, run: Run, timeout: float = VERIFY_
     code, said = run([sys.executable, "-I", "-S", "-c", VERIFY, str(staged)], timeout)
     lines = [line.strip() for line in (said or "").splitlines() if line.strip()]
     release = lines[-1][len("cad "):] if lines and lines[-1].startswith("cad ") else ""
-    if code != 0 or not release or own(staged) is None or own(staged)[0] != release:  # type: ignore[index]
+    built = own(staged)
+    if code != 0 or not release or built is None or built[0] != release:
         _delete(Path(staged))
         raise Failed("verify", code, said)
     return release
@@ -424,11 +427,12 @@ def remove(path: str | os.PathLike[str]) -> bool:
 
 def clean(keep: Iterable[str | os.PathLike[str] | None] = (), *, now: float | None = None) -> list[str]:
     """The store tidied. First each pointer that means nothing any more is removed (``_lasting``: its environment
-    is gone, cad was installed there again since it was written, or the release it names is gone). Then each stored
-    release is removed that is not one of ``keep``, not one a pointer names, of whatever environment, nor one it ran
-    before (``"previous"``), not the one this process runs, and that no process runs (``remove``); each ``.trash-``
-    folder is deleted as far as it can be; and each ``.building-`` folder older than ``ABANDONED_SECONDS``, whose
-    build died. The names removed. Never raises."""
+    is gone, cad was installed there again since it was written, or the release it names is gone), once it is
+    ``STALE_SECONDS`` old; one that cannot be read is left, and so is a newer one, with the releases it names: an
+    update may be writing it. Then each stored release is removed that is not one of ``keep``, not one a pointer
+    names, of whatever environment, nor one it ran before (``"previous"``), not the one this process runs, and that
+    no process runs (``remove``); each ``.trash-`` folder is deleted as far as it can be; and each ``.building-``
+    folder older than ``ABANDONED_SECONDS``, whose build died. The names removed. Never raises."""
     now = time.time() if now is None else now
     removed: list[str] = []
     try:
@@ -440,10 +444,12 @@ def clean(keep: Iterable[str | os.PathLike[str] | None] = (), *, now: float | No
         if not (entry.name.startswith("pointer-") and entry.name.endswith(".json")):
             continue
         found = _read(Path(entry.path))
-        if found is not None and _lasting(found):
-            named += [found.get("path"), found.get("previous")]
+        if found is None:
             continue
         try:
+            if _lasting(found) or now - entry.stat().st_mtime <= STALE_SECONDS:
+                named += [found.get("path"), found.get("previous")]
+                continue
             os.unlink(entry.path)
             removed.append(entry.name)
         except OSError:

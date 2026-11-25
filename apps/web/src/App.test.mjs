@@ -331,7 +331,7 @@ test('the update button: from the server\'s description, a click begins the upda
   globalThis.fetch = async (url, init = {}) => {
     if (url === '/api/v1/local/update') {
       posted.push([JSON.parse(init.body), init.headers?.['x-cad-viewer']]);
-      return new Response(JSON.stringify({ release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'waiting' } }),
+      return new Response(JSON.stringify({ release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'working', phase: 'building' } }),
         { status: 202, headers: { 'content-type': 'application/json' } });
     }
     if (isCatalog(url, init) && catalog === 'stopped') throw new TypeError('Failed to fetch');
@@ -382,7 +382,7 @@ test('a failed update is the viewer\'s alert, from the server\'s description, an
   globalThis.fetch = async (url, init = {}) => {
     if (url === '/api/v1/local/update') posted.push(JSON.parse(init.body));
     const reply = url === '/api/v1/local/update' ? { release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'failed',
-      at: 42, cause: 'in_use', installer: 'uv', said: 'in use', dismissed: true } }
+      at: 42, cause: 'in_use', said: 'in use', dismissed: true } }
       : url === '/api/v1/documents' ? { documents: [] }
       : url === '/api/v1/settings' ? { language: { locale: null }, telemetry: { share: false, reason: 'untold', policy: 'p' } } : { ok: true };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
@@ -391,12 +391,12 @@ test('a failed update is the viewer\'s alert, from the server\'s description, an
   const root = createRoot(window.document.getElementById('root'));
   try {
     const server = { start: '/m', release: '0.9.0', instance: 'first',
-      cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'failed', at: 42, cause: 'in_use', installer: 'uv', said: 'in use' } };
+      cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'failed', at: 42, cause: 'in_use', said: 'in use' } };
     await act(() => root.render(createElement(App, { client, server, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
     // The shared viewer's alert card says it (`CadViewer`'s `alert`); the button stays as it is offered.
     const { alert } = snapshot();
     assert.deepEqual([alert.alert.title, alert.alert.message, alert.alert.details, alert.alert.retryLabel, alert.alert.reportable, alert.dismissed],
-      ['Couldn’t update to 0.9.1', 'cad is in use by another program: close the apps using cad, then try again.', 'cad update', 'Try again', false, false]);
+      ['Couldn’t update to 0.9.1', 'A file uv was writing was in use by another program: try again.', 'cad update', 'Try again', false, false]);
     assert.equal(snapshot().update.props.state.latest, '0.9.1');
     await act(() => alert.onDismiss());
     await until(() => posted.length > 0);
