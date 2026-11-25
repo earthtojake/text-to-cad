@@ -973,6 +973,7 @@ export default {
   "update.cause.in_use": "cad is in use by another program: close the apps using cad, then try again.",
   "update.cause.denied": "{installer} was refused access to cad’s files: close the apps using cad, then try again.",
   "update.cause.disk_full": "The disk is full: free some space, then try again.",
+  "update.cause.half_made": "cad’s environment is half made (it has no pyvenv.cfg), so the update stopped: remove its folder, then install cad again.",
   "update.cause.network": "Couldn’t reach the package index: check your connection, then try again.",
   "update.cause.offline": "{installer} is set to work offline: turn that off, then try again.",
   "update.cause.no_release": "The package index has no release this update may take: try again later.",

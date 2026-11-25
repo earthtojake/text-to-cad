@@ -944,6 +944,7 @@ export default {
   "update.cause.in_use": "cad 正被另一个程序使用：请关闭正在使用 cad 的应用，然后重试。",
   "update.cause.denied": "{installer} 无权访问 cad 的文件：请关闭正在使用 cad 的应用，然后重试。",
   "update.cause.disk_full": "磁盘已满：请释放一些空间，然后重试。",
+  "update.cause.half_made": "cad 的环境不完整（缺少 pyvenv.cfg），因此更新已停止：请删除该文件夹，然后重新安装 cad。",
   "update.cause.network": "无法连接到软件包索引：请检查网络连接，然后重试。",
   "update.cause.offline": "{installer} 被设置为离线工作：请关闭该设置，然后重试。",
   "update.cause.no_release": "软件包索引中没有此更新可安装的版本：请稍后重试。",

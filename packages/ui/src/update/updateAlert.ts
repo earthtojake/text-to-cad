@@ -6,7 +6,7 @@ import type { UpdateFailure } from "./useUpdate.js";
 /** The command that updates cad in a terminal, the failure's way on: the same on every computer. */
 export const UPDATE_COMMAND = "cad update";
 /** The causes the page says in words of its own (`update.cause.<word>`); any other is said by the server's words. */
-export const UPDATE_CAUSES = ["timeout", "no_program", "in_use", "denied", "disk_full", "network", "offline", "no_release",
+export const UPDATE_CAUSES = ["timeout", "no_program", "in_use", "denied", "disk_full", "half_made", "network", "offline", "no_release",
   "python", "platform", "config_exclude", "config_index", "config_tls", "uv_old", "kept", "server_running", "helper_start",
   "helper_crash", "lost", "no_installer", "no_python", "packaged", "unknown"] as const;
 

@@ -943,6 +943,7 @@ export default {
   "update.cause.in_use": "cad が別のプログラムで使用されています。cad を使っているアプリを閉じてから、もう一度試してください。",
   "update.cause.denied": "{installer} が cad のファイルにアクセスできませんでした。cad を使っているアプリを閉じてから、もう一度試してください。",
   "update.cause.disk_full": "ディスクがいっぱいです。空き容量を作ってから、もう一度試してください。",
+  "update.cause.half_made": "cad の環境が作りかけのままです（pyvenv.cfg がありません）。そのため更新を中止しました。そのフォルダーを削除してから、cad をインストールし直してください。",
   "update.cause.network": "パッケージインデックスに接続できませんでした。接続を確認してから、もう一度試してください。",
   "update.cause.offline": "{installer} がオフラインで動作するよう設定されています。その設定をオフにしてから、もう一度試してください。",
   "update.cause.no_release": "パッケージインデックスに、このアップデートで入れられるリリースがありません。しばらくしてからもう一度試してください。",

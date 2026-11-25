@@ -943,6 +943,7 @@ export default {
   "update.cause.in_use": "다른 프로그램이 cad를 사용하고 있습니다. cad를 사용하는 앱을 닫은 뒤 다시 시도하세요.",
   "update.cause.denied": "{installer}이(가) cad 파일에 접근하지 못했습니다. cad를 사용하는 앱을 닫은 뒤 다시 시도하세요.",
   "update.cause.disk_full": "디스크가 가득 찼습니다. 공간을 확보한 뒤 다시 시도하세요.",
+  "update.cause.half_made": "cad 환경이 덜 만들어진 상태입니다(pyvenv.cfg가 없습니다). 그래서 업데이트를 중단했습니다. 그 폴더를 삭제한 뒤 cad를 다시 설치하세요.",
   "update.cause.network": "패키지 색인에 연결할 수 없습니다. 연결을 확인한 뒤 다시 시도하세요.",
   "update.cause.offline": "{installer}이(가) 오프라인으로 동작하도록 설정되어 있습니다. 이 설정을 끈 뒤 다시 시도하세요.",
   "update.cause.no_release": "패키지 색인에 이 업데이트가 설치할 수 있는 릴리스가 없습니다. 나중에 다시 시도하세요.",
