@@ -142,16 +142,13 @@ LINK` first: then `cad <type> snapshot` reads the link as the copy it wrote). Th
 - `hidden` and `isolated`: with ink, the parts the view it was last drawn in hid
   and isolated, which `--annotation` leaves out of the picture unless `--display` says otherwise.
 
-Draw the view a person drew their ink in, with the ink on the model, the packet on standard input:
+Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cad model snapshot "$ID" tmp/quick_edit.png --annotation - --camera authored <<'JSON'
-<the packet>
-JSON
+cad model snapshot "$ID" tmp/quick_edit.png --annotation '<packet>' --camera authored
 ```
 
-`--annotation` takes the packet or an annotation file (JSON, a file, or `-` for standard input)
-and draws each mark on its part,
+`--annotation` takes the packet and draws each mark on its part,
 wherever the picture places that part (posed or exploded). `--camera authored` draws exactly the
 view the last mark was drawn in (no fit), at its size and projection unless other flags say
 otherwise. Pass a job's `display` object as `--display` to draw in the person's mode with the
@@ -160,18 +157,16 @@ parts they hid left out, and its `jointValues` as `--pose`. A view without ink i
 over the model, a JSON list of `{start, end, label, color}` or a file of it.
 
 `--job` replays the whole packet in one call (every view, each with its own camera, display and
-pose, the ink over each). A Quick Edit's outputs name no file: each goes to `--out DIR` (the
-current folder unless given) as `<input>-<label>.png`, and the command says each path it wrote:
+pose, the ink over each), each picture into the current folder (or `--out DIR`) as
+`<input>-<label>.png`, and says where:
 
 ```bash
-cad model snapshot --job - --out tmp <<'JSON'
-<the packet>
-JSON
+cad model snapshot --job '<packet>'
+cad model snapshot --job '<packet>' "$ID"   # the same views, of the document as it is now
 ```
 
-Give a SRC (`cad model snapshot --job - "$ID"`) to draw the same views of the document as it is now.
 `--job` also takes a job (`{input, camera, display, preview, jointValues, output, outputs}`) or a
-list of jobs, as JSON, a file or `-`, so one command draws many pictures. A job's `jointValues` takes
+list of jobs, so one command draws many pictures. A job's `jointValues` takes
 what `--pose` does, so a list of jobs is a sequence's frames. Its `outputs` are its pictures
 (`path`, and `width`, `height`, `camera` of their own; a folder `path` takes a generated name; no
 `path`, a name in `--out`). A

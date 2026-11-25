@@ -145,8 +145,8 @@ A reference such as `0dc50a92-...#bracket/face 7` is what the viewer copies when
 something: a document, a part by its labels, then an element. Resolve it with `inspect`, then edit the
 code `made_by` names. A Quick Edit prompt carries its document under `File:`, its picks under
 `References:` and a snapshot packet, inline JSON. Where the person drew on the view, look at what they
-drew before editing: `cad model snapshot --job -`, the packet on standard input, draws each view with
-their ink ([annotations](references/snapshot-review.md#annotations-and-quick-edit-views)). A cad.fun
+drew before editing: `cad model snapshot --job '<packet>'` draws each view with their ink
+([annotations](references/snapshot-review.md#annotations-and-quick-edit-views)). A cad.fun
 link names a shared model: `cad fork LINK` writes its files into a folder; work on those.
 
 ## Check each change
