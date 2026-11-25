@@ -108,17 +108,17 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
     assert.ok(cards.every(([, width]) => width >= 232), "every card at least 232px");
     assert.equal(cards[0][0], 232 + 24);
     // Recents says each card's project before its facts.
-    assert.match(await page.getByRole("link", { name: "Open housing", exact: true }).locator(".cad-library-status").textContent(), /^gearbox Â· /);
+    assert.match(await page.getByRole("link", { name: "Open housing.xbf", exact: true }).locator(".cad-library-status").textContent(), /^gearbox Â· /);
   } finally { await context.close(); }
 });
 
 test("a card and a place are real links: a plain click stays in this view, and âŒ˜ or Ctrl and a click opens a new tab at the address", async () => {
   const { context, page } = await home();
   try {
-    const card = page.getByRole("link", { name: "Open housing", exact: true });
-    assert.equal(await card.getAttribute("href"), "/id-housing");
+    const card = page.getByRole("link", { name: "Open housing.xbf", exact: true });
+    assert.equal(await card.getAttribute("href"), "/id-housing.xbf");
     const [tab] = await Promise.all([context.waitForEvent("page"), card.click({ modifiers: ["ControlOrMeta"] })]);
-    assert.equal(tab.url(), `${origin}/id-housing`);
+    assert.equal(tab.url(), `${origin}/id-housing.xbf`);
     await tab.close();
     // A place too; and this view has not moved.
     const project = page.locator('[data-place="project:gearbox"]');
@@ -130,9 +130,26 @@ test("a card and a place are real links: a plain click stays in this view, and â
     await project.click();
     await page.locator('.cad-library-title:text-is("gearbox")').waitFor();
     assert.deepEqual([page.url(), await project.getAttribute("aria-current"), context.pages().length], [`${origin}/?`, "page", 1]);
-    // Its page: its folder from the home folder beside its name; a file of it no page has opened is a link as the rest are.
+    // Its page: its folder from the home folder beside its name; its folders first, each a link to its own page, as
+    // tall as a list's row and in the cards' columns, then its files.
     assert.equal(await page.locator(".cad-library-path").textContent(), "~/work/gearbox");
+    const folder = page.getByRole("link", { name: "Open dxf", exact: true });
+    assert.equal(await folder.getAttribute("href"), "/?place=gearbox&path=dxf");
+    const tiles = await page.locator(".cad-library-folder").evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
+    const columns = await page.locator(".cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
+    assert.deepEqual([tiles.length, tiles.every(([, , height]) => height === 44)], [3, true]);
+    assert.deepEqual(tiles.slice(0, columns.length).map(([x, width]) => [x, width]), columns);
+    const [folderTab] = await Promise.all([context.waitForEvent("page"), folder.click({ modifiers: ["ControlOrMeta"] })]);
+    assert.equal(folderTab.url(), `${origin}/?place=gearbox&path=dxf`);
+    await folderTab.close();
+    // A plain click goes into it here; a file of it no page has opened is a link as the rest are; the path leads back up.
+    await folder.click();
+    await page.locator('.cad-library-title:text-is("dxf")').waitFor();
     assert.equal(await page.getByRole("link", { name: "Open plate_0.dxf" }).getAttribute("href"), "/id-plate_0.dxf");
+    const up = page.locator(".cad-library-crumb");
+    assert.deepEqual([await up.textContent(), await up.getAttribute("href"), page.url()], ["gearbox", "/?place=gearbox", `${origin}/?`]);
+    await up.click();
+    await page.locator('.cad-library-title:text-is("gearbox")').waitFor();
     // The keyboard: Up and Down walk the places, and Enter on one goes there.
     await project.focus();
     await page.keyboard.press("ArrowUp");
@@ -148,7 +165,7 @@ test("a card and a place are real links: a plain click stays in this view, and â
 test("the document just left is ringed in the brand's colour and in view, with the way back in the heading row, as a card and as a row", async () => {
   for (const layout of ["grid", "list"]) {
     // A window too short for the whole place: the one just left is scrolled to.
-    const { context, page } = await home(`place=gearbox&from=plate_8.dxf&layout=${layout}`, { width: 1100, height: 420 });
+    const { context, page } = await home(`place=gearbox&path=dxf&from=plate_8.dxf&layout=${layout}`, { width: 1100, height: 420 });
     try {
       const ringed = page.locator("[data-from]");
       await ringed.waitFor();

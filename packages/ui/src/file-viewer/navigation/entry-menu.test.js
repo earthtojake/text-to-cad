@@ -21,7 +21,7 @@ test("the navbar's Open in is the browser, then the file manager by its plain na
   // A source moved or deleted: what opens it is disabled, saying why; the browser needs none.
   assert.deepEqual(openInMenu("darwin", new Set(["reveal", "browser"]), undefined, { sourceMissing: true }), [
     { action: "browser", label: "Browser", enabled: true, group: "places" },
-    { action: "reveal", label: "Finder", enabled: false, reason: "The source was moved or deleted.", group: "places" }]);
+    { action: "reveal", label: "Finder", enabled: false, reason: "The source was moved, or is gone.", group: "places" }]);
   assert.deepEqual(openInMenu("linux", new Set(["copy-path"])), []);
   assert.equal(fileManagerName("linux"), "File manager");
   // Finder is a product's name, the same in every language; the others are said in the view's.
@@ -66,7 +66,7 @@ test("a KiCad that refuses a file is drawn disabled with the reason, the source'
   assert.equal(rows("kicad_sch", "a.kicad_sch")[0].reason, "KiCad 9.0.6 can't open this schematic: it was saved by a newer KiCad.");
   // A source gone says so first, for every app.
   assert.deepEqual(rows("kicad_pcb", "a.kicad_pcb", { sourceMissing: true }).map(({ enabled, reason }) => [enabled, reason]),
-    [[false, "The source was moved or deleted."], [false, "The source was moved or deleted."]]);
+    [[false, "The source was moved, or is gone."], [false, "The source was moved, or is gone."]]);
   // An export's: its file's kind picks the words, and the label stays "App (file)".
   for (const [kind, noun] of [["kicad_pcb", "board"], ["kicad_sch", "schematic"]]) {
     const files = { targets: [{ target: "source", kind: "script", name: "a.py", present: false, apps: [] },

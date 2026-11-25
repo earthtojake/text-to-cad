@@ -66,11 +66,16 @@ test("the Home is the chrome's type scale: the place's name 15/20, names 12/16, 
   });
   assert.deepEqual(sizes, [
     [".cad-library-title", "var(--cad-text-heading)"],
+    // A project's page: each part of its folder's path is the place's name too, the way back up in its size.
+    [".cad-library-crumb", "var(--cad-text-heading)"],
+    [".cad-library-crumb-slash", "var(--cad-text-heading)"],
     [".cad-library-path", "var(--cad-text-xs)"],
     [".cad-library-back", "var(--cad-text-xs)"],
     [".cad-library-key", "var(--cad-text-tiny)"],
     // Home, in the navbar and in the page's own bar, is the navbar's 13/20.
     [".cad-library-heading", "var(--cad-text-ui)"],
+    // A folder's name, as a card's.
+    [".cad-library-folder .cad-library-label", "var(--cad-text-xs)"],
     [".cad-library-format", "var(--cad-text-tiny)"],
     [".cad-library-card .cad-library-label", "var(--cad-text-xs)"],
     [".cad-library-status", "var(--cad-text-tiny)"],
