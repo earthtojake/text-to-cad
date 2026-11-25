@@ -1,5 +1,5 @@
 // A scene's own lighting (`sceneContract.js`'s `rig`), on whatever stage shows it: the viewer's
-// viewport (`@text-to-cad/ui` renderers/kit, `ShellViewport.jsx`) and the parity page's headless stage
+// viewport (`@cad/ui` renderers/kit, `ShellViewport.jsx`) and the parity page's headless stage
 // (`common/renderMeshScene.js`) both light a scene that brings a rig with THIS, in place of the
 // theme's rig, outside photographic Render. A rig is plain data:
 //

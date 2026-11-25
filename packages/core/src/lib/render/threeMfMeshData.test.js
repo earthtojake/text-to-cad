@@ -290,6 +290,7 @@ test("a 3MF's objects are known by their place in its build, and its unit is the
   assert.deepEqual(scene.units, { unit: "in", perWorld: 1 });
   assert.deepEqual(["o1", "o2.1", "o2.2"].map(path => scene.describePart(path).name), ["frame", "wheel (o2.1)", "wheel (o2.2)"]);
   assert.deepEqual(scene.describePart("o2.2").facts.map(fact => fact.value), ["2, component 2", "12"]);
+  assert.deepEqual([scene.nameOf("o2.2"), scene.nameOf("o9")], ["wheel (o2.2)", ""]);
   scene.dispose();
 
   const model = unit => zipSync({ "3D/3dmodel.model": strToU8(`<?xml version="1.0"?>\n<model ${unit} xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources/></model>`) });
@@ -389,6 +390,24 @@ test("ordinary 3MF fallback finishes remain unchanged and malformed metallic tab
   const defaults = await buildMeshDataFrom3MfBuffer((await metallicPackage({ defaultScalars: true })).buffer);
   assert.deepEqual(defaults.parts[2].finish, { metalness: 0, roughness: 1 }, 'omitted scalars take the extension defaults');
   await assert.rejects(() => metallicPackage({ malformed: true }).then(bytes => buildMeshDataFrom3MfBuffer(bytes.buffer)), /Invalid 3MF metallic display properties/);
+});
+
+test("a slicer's print file, a 3MF of G-code and an empty build, is told from a 3MF with no geometry", async t => {
+  await xmlEnvironment(t);
+  const { zipSync, unzipSync, strToU8 } = await import('three/examples/jsm/libs/fflate.module.js');
+  const { buildMeshDataFrom3MfBuffer } = await import('./threeMfMeshData.js');
+  // As a slicer exports a plate's print file: the root model with no object and an empty build, the plate's G-code beside it.
+  const empty = '<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">\n <metadata name="Application">Slicer-1.0</metadata>\n <resources>\n </resources>\n <build/>\n</model>\n';
+  const rels = strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="r1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>');
+  const gcode = { 'Metadata/plate_1.gcode': strToU8('; HEADER_BLOCK_START\nG28\nG1 X10 Y10 E1.2 F1500\n'), 'Metadata/slice_info.config': strToU8('<config/>') };
+  const decode = entries => buildMeshDataFrom3MfBuffer(zipSync(entries).buffer);
+  const sliced = await decode({ '_rels/.rels': rels, '3D/3dmodel.model': strToU8(empty), ...gcode });
+  assert.deepEqual([sliced.indices.length, sliced.sliced], [0, true]);
+  const nothing = await decode({ '_rels/.rels': rels, '3D/3dmodel.model': strToU8(empty) });
+  assert.deepEqual([nothing.indices.length, nothing.sliced], [0, undefined], 'no G-code: a 3MF with no geometry, as before');
+  // A package with a model and G-code beside it is a model.
+  const meshed = await decode({ ...unzipSync(await metallicPackage({ noMaterial: true })), ...gcode });
+  assert.deepEqual([meshed.indices.length > 0, meshed.sliced], [true, undefined]);
 });
 
 

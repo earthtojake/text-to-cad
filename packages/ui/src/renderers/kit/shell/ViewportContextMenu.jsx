@@ -5,9 +5,10 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { cn } from "@cad/ui/utils";
 import { prefersCoarsePointer } from "../viewport/dom.js";
+import { LONG_PRESS_EVENT } from "../viewport/touchGestures.js";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 
 // A secondary press that MOVED is a pan, not a menu. Coarse pointers wander more.
@@ -36,7 +37,9 @@ export function viewportMenuAnchorStyle({ clientX, clientY }, viewportWidth, vie
  * the tap slop opens nothing, and so does a secondary press made while the primary
  * button is held, which is a pan chord), and a press that opens nothing leaves the
  * camera exactly as it was. The browser's own menu is already kept off the canvas by the
- * camera controls, for every renderer, menu or no menu.
+ * camera controls, for every renderer, menu or no menu. A finger's long press on the canvas is a secondary press
+ * (`viewport/touchGestures.js`'s `LONG_PRESS_EVENT`, which the frame says for every view): the menu opens at the finger.
+ * A browser's own `contextmenu` (Android's, for that long press) opens nothing here: one menu.
  *
  * What the menu SAYS is the renderer's alone: `items({ clientX, clientY, shiftKey })`
  * is asked at the moment of the press and answers with descriptors, or with an
@@ -48,14 +51,17 @@ export function viewportMenuAnchorStyle({ clientX, clientY }, viewportWidth, vie
  * has gone (an item chosen, a dismissal, a replaced viewport), so the renderer can keep
  * what the menu is ABOUT marked in its scene for exactly as long as the menu is up.
  *
- * @param {{ viewport: { runtimeRef: object, hostRef: object, viewerReadyTick: number },
+ * A flat view (a board, a schematic, a drawing) hands its own canvas (`viewport.canvasRef`) and the
+ * pane round it (`hostRef`) in place of a 3D view's runtime: its right drag pans as a 3D view's does.
+ *
+ * @param {{ viewport: { runtimeRef?: object, canvasRef?: object, hostRef: object, viewerReadyTick?: number },
  *   items: ((press: { clientX: number, clientY: number, shiftKey: boolean }) =>
  *     ({ id: string, label: import("react").ReactNode, disabled?: boolean,
  *        separatorBefore?: boolean, onSelect?: () => void }[] | null)) | null,
  *   onOpenChange?: ((open: boolean) => void) | null }} props
  */
 export default function ViewportContextMenu({ viewport, items, onOpenChange = null }) {
-  const { runtimeRef, hostRef, viewerReadyTick } = viewport;
+  const { runtimeRef = null, canvasRef = null, hostRef, viewerReadyTick = 0 } = viewport;
   const [open, setOpen] = useState(null);
   const openChangeRef = useRef(onOpenChange);
   openChangeRef.current = onOpenChange;
@@ -83,7 +89,7 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
     const slop = pointerType => (pointerType === "touch" || pointerType === "pen" || coarseDefault
       ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX);
     // The scene's own canvas only: a control drawn over it keeps its presses.
-    const onCanvas = event => event.target === runtimeRef.current?.renderer?.domElement;
+    const onCanvas = event => event.target === (canvasRef ? canvasRef.current : runtimeRef?.current?.renderer?.domElement);
     let press = null;
 
     // Primary and secondary held TOGETHER is a camera chord (a pan), whichever went down first.
@@ -108,9 +114,17 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
       if (!list?.length) return;
       setOpen({ items: list, clientX: event.clientX, clientY: event.clientY });
     };
+    const longPress = event => {
+      if (!onCanvas(event)) return;
+      const { clientX, clientY } = event.detail ?? {};
+      const list = itemsRef.current?.({ clientX, clientY, shiftKey: false });
+      if (!list?.length) return;
+      setOpen({ items: list, clientX, clientY });
+    };
     host.addEventListener("pointerdown", down, true);
     host.addEventListener("pointermove", move, true);
     host.addEventListener("pointerup", up, true);
+    host.addEventListener(LONG_PRESS_EVENT, longPress);
     const cancel = () => { press = null; };
     host.addEventListener("pointercancel", cancel, true);
     return () => {
@@ -118,9 +132,10 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
       host.removeEventListener("pointermove", move, true);
       host.removeEventListener("pointerup", up, true);
       host.removeEventListener("pointercancel", cancel, true);
+      host.removeEventListener(LONG_PRESS_EVENT, longPress);
       press = null;
     };
-  }, [hostRef, runtimeRef, viewerReadyTick, offering]);
+  }, [hostRef, runtimeRef, canvasRef, viewerReadyTick, offering]);
 
   // A new model, or a viewport that was rebuilt, is not the press's model any more.
   useEffect(() => { setOpen(null); }, [viewerReadyTick]);
@@ -136,7 +151,7 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
         {open.items.map(item => (
           <div key={item.id} className="contents">
             {item.separatorBefore ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem className="text-xs" disabled={item.disabled === true}
+            <DropdownMenuItem disabled={item.disabled === true}
               onSelect={() => { setOpen(null); item.onSelect?.(); }}>{item.label}</DropdownMenuItem>
           </div>
         ))}

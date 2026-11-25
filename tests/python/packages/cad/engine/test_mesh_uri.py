@@ -1,7 +1,7 @@
 """A robot description's mesh reference as every reader of one resolves it (``cad.engine.mesh_uri``):
 a drive letter is not a URI scheme, a ``file:`` URI is the platform's path, and a ``file:`` URI's host is
 a share on Windows and no local file elsewhere. Windows is pinned on every platform by reading the
-references with Windows' ``url2pathname``, as ``cadgen (Windows)`` reads them natively."""
+references with Windows' ``url2pathname``, as ``packages (Windows)`` reads them natively."""
 
 from __future__ import annotations
 

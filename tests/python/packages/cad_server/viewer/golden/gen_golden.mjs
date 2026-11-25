@@ -445,24 +445,24 @@ function tryDecode(value) {
 // `new URL(target, "http://localhost").pathname` normalises dot segments,
 // converts backslashes, strips an authority, and re-percent-encodes part of
 // ASCII. urlsplit() does NONE of that, so routing on urlsplit().path would send
-// /__cad/../etc/passwd into the API dispatch instead of the SPA. Pin the whole
+// /api/../etc/passwd into the API dispatch instead of the SPA. Pin the whole
 // behaviour rather than reasoning about the spec.
 const URL_TARGETS = [
-  "/", "/__cad", "/__cad/", "/__cad/server", "/__cad/catalog",
-  "/__cad/../etc/passwd", "/__cad/./asset", "/__cad/%2e%2e/etc",
-  "/__cad/%2E%2E/etc", "/__cad/.%2e/etc", "/__cad/%2e./etc", "/__cad/%2e/x",
+  "/", "/api", "/api/", "/api/server", "/api/catalog",
+  "/api/../etc/passwd", "/api/./asset", "/api/%2e%2e/etc",
+  "/api/%2E%2E/etc", "/api/.%2e/etc", "/api/%2e./etc", "/api/%2e/x",
   "/__tess_cache/%2e%2e%2fescape.tess", "/__tess_cache/..%2Fescape.tess",
   "/__tess_cache/../escape.tess", "/__tess_cache/a.tess",
-  "/__cad\\asset", "/__cad//asset", "/%2F__cad/asset",
-  "//evil.example/__cad/server", "http://evil.example/__cad/server",
-  "https://evil.example:8443/__cad/server",
-  "/__cad/asset#frag?file=x", "/a b", "/a\"b", "/a<b>c", "/a`b", "/a{b}c",
+  "/api\\asset", "/api//asset", "/%2Fapi/asset",
+  "//evil.example/api/server", "http://evil.example/api/server",
+  "https://evil.example:8443/api/server",
+  "/api/asset#frag?file=x", "/a b", "/a\"b", "/a<b>c", "/a`b", "/a{b}c",
   "/a|b", "/a^b", "/a%zz", "/a%2Fb", "/a%00b",
   "/assets/%2e%2e%2f%2e%2e%2fetc%2fpasswd", "/assets/app.js", "/assets/missing.js",
   "/index.html%00.js", "/a/./b/../c", "/../..", "/..", "/.", "/a/..",
-  "/a/../..", "/\\/evil", "/;p=1/x", "/a?b?c", "/__cad/asset;x", "/#", "/?",
-  "/x#y#z", "/é/x", "/%C3%A9/x", "/Users/someone/models", "/__CAD/server",
-  "/__cad/store", "/__cad/nope", "/__cad/export",
+  "/a/../..", "/\\/evil", "/;p=1/x", "/a?b?c", "/api/asset;x", "/#", "/?",
+  "/x#y#z", "/é/x", "/%C3%A9/x", "/Users/someone/models", "/API/server",
+  "/api/store", "/api/nope", "/api/export",
 ];
 
 const QUERY_TARGETS = [
@@ -519,10 +519,10 @@ const golden = {
   }),
   localAssetUrl: ASSET_URL_CASES.map(([filePath, version]) => {
     const params = new URLSearchParams();
-    params.set("file", path.resolve(String(filePath || "")));
+    params.set("path", path.resolve(String(filePath || "")));
     const normalized = String(version || "").trim();
     if (normalized) params.set("v", normalized);
-    return [filePath, version, `/__cad/asset?${params.toString()}`];
+    return [filePath, version, `/api/v1/local/files?${params.toString()}`];
   }),
   strictDecode: DECODE_INPUTS.map((value) => [value, tryDecode(value)]),
   urlPathname: URL_TARGETS.map((target) => {

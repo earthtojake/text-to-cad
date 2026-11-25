@@ -1,452 +1,541 @@
-# Installing text-to-cad by hand
+# Installing text-to-cad
 
-The install command in the [README](../README.md) sets up text-to-cad in every
-agent app on your computer, and running it again updates them all:
+One command installs text-to-cad and its plugin in every agent app on your computer:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. It names
-`www.texttocad.dev` because `texttocad.dev` redirects there with a 308, which Windows
-PowerShell 5.1's `irm` does not follow.
+On Windows, in PowerShell:
 
-This page is the long way round: what that command does, step by step, each agent
-app's own commands to install, update or reinstall text-to-cad one app at a time,
-and how [updates](#updates) reach you.
-
-## What the install command does
-
-It is a short script, served by texttocad.dev and attached to each
-[release](https://github.com/earthtojake/text-to-cad/releases) with its SHA-256
-checksum. It:
-
-1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
-2. Runs `cad setup` from the latest release, pinned, through uvx; for this
-   release that is
-   `uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad setup`.
-   Its first run downloads the release, and Python 3.14 for it.
-3. On a computer 0.8 was set up on, moves what 0.9 keeps of 0.8's state folder
-   into its own, once: your telemetry answer and language, the installations'
-   records, the page token, the documents' records and Recents
-   ([Migrating from 0.8](migrations/migrating-0.8-to-0.9.md#folders)). Then installs
-   the release in a folder of its own in text-to-cad's state folder
-   (`releases/<release>`), from uv's cache where it has it, and runs the rest from
-   there.
-4. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
-   Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
-   its plan for each: add, update, remove a duplicate, or leave as it is.
-5. Stops the server of a release from before 0.9 (0.8's cadgen) on CAD's port
-   (3245, or `CAD_ENGINE_PORT`) when nothing is using it, through that installation's
-   own `cadgen stop`. One still in use (an app session open on it, a page watching it, a
-   build) is left running, and the plan says how to stop it.
-6. Writes the plugin, this release's, into a folder of text-to-cad's state folder
-   (`plugin`), and points each app at that folder with the app's own commands
-   ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
-   one an earlier release installed from GitHub. A copy that a plugin store manages is
-   reported, never removed. The agents without a plugin get the skills alone, copied
-   from the folder through the Skills CLI ([Other Agents](#other-agents)). Claude
-   Desktop's config gets CAD's server for this release, with a `.bak` of the file kept
-   beside it.
-7. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
-   Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
-   starts.
-8. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
-   build123d and what they need, about 220 MB the first time) on the same Python,
-   in text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
-   first model builds without a download.
-9. Writes a receipt of everything it changed in text-to-cad's state folder.
-10. Moves your computer's CAD server to this release: a running server finishes
-    what it is doing (a build, an export), stops, and this release's takes its place
-    on the same port, so every open page and card keeps its link and reloads itself;
-    should it not start, the release before comes back. With none running, the next
-    CAD session starts this release's.
-11. Says what each app has now, and lists the apps to restart to load what it
-    installed or updated.
-
-It asks nothing on the way: it carries out the plan it prints, so a dry run is how
-to see the plan before anything changes. Run it again to update: an app that is up
-to date is left as it is. Options go after `sh -s --`:
-
-```bash
-curl -fsSL https://texttocad.dev/install.sh | sh -s -- --dry-run            # print the plan, change nothing
-curl -fsSL https://texttocad.dev/install.sh | sh -s -- --only claude,codex  # only these apps
-curl -fsSL https://texttocad.dev/install.sh | sh -s -- --no-telemetry       # also turn telemetry off
-curl -fsSL https://texttocad.dev/install.sh | sh -s -- --uninstall          # undo what the receipt records
+```powershell
+irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-`--only` takes `claude`, `claude-desktop`, `codex`, `cursor`, `grok` and `gemini`, and
-the Skills CLI's ids of the agents under [Other Agents](#other-agents) (`windsurf`,
-`goose` and so on; `cad setup --help` lists them).
-`--uninstall` runs `cad uninstall` in place of `cad setup`: it takes back what
-the receipt records, or, with no receipt, every copy of text-to-cad it finds but a
-store's, removes the `cad` command and stops the server; `--purge` with it also
-removes text-to-cad's state and cache folders. `--version <release>` installs that release
-instead of the latest; a release from before the install command has no
-`cad setup` to run. To read the script before it runs, download it first, then
-run it:
+It does five things, and nothing else:
+
+1. Installs [uv](https://docs.astral.sh/uv/) if it is missing. Where uv is older than 0.9.0, it updates
+   it, or installs a newer one beside it with uv's own installer.
+2. Installs `cad`, the command text-to-cad runs on, as a uv tool, at the newest release, where no
+   cad is installed. Where the cad there does not start, it installs it again. Where it installed
+   cad and cad's folder is not on your PATH, it runs uv's own `uv tool update-shell`, which adds it
+   for new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH).
+   Setting `UV_NO_MODIFY_PATH` stops that.
+3. Where cad was installed already, brings it up to date with its own `cad update`: the newest
+   release of its major version ([Updating](#updating)), which restarts a running cad server on it
+   once that is idle; it waits for that 11 minutes at most. It says one line as it begins, and in its place one line of what
+   came of it: the release cad was updated to, that it is the newest already, or why cad was not
+   updated now, which never stops the run: cad updates itself.
+4. Hands the agent apps to cad, by running `cad plugin install`. That installs or updates the
+   plugin in each agent app it finds, with that app's own command (below), all but Kimi Code, which
+   you install by hand; and removes what earlier releases of text-to-cad left in those apps. It
+   prints one line per app.
+5. Turns on the plugin's automatic updates, with cad's own `cad plugin update auto on`
+   ([Updating](#updating)).
+
+It takes no options and does not start cad's server. Run it again at any time to bring cad and the
+plugin up to date in every app. To do step 4 alone, leaving cad and the plugin's automatic updates as
+they are, run:
 
 ```bash
-curl -fsSL https://texttocad.dev/install.sh -o install.sh
-sh install.sh --dry-run
+cad plugin install
 ```
 
-On Windows, `irm https://www.texttocad.dev/install.ps1 -OutFile install.ps1` downloads
-it, and `powershell -ExecutionPolicy Bypass -File install.ps1 --dry-run` runs it
-with the same options.
+In a terminal, `cad plugin install` builds the CAD logo before it starts on the apps, marks each
+app's line, and keeps a live line under them that names the app it is setting up and the command it
+is running. `NO_COLOR` turns that off. So do `TERM=dumb`, `CI`, and output that goes to a pipe or a
+file, which get the plain lines alone.
 
-## What each app gets
+cad 0.11.12 and 0.11.13 have no `cad plugin install`; there, `cad plugin update` updates the plugin.
+Where the install command finds one of them and could not update it, or could not install cad at
+all, it runs the newest release's instead, which uv downloads once and does not install: `uv tool
+run cad@latest plugin install`.
 
-The install command gives every app the same plugin, from one folder on your computer
-that the release writes: `plugin` in text-to-cad's state folder
-(`~/Library/Application Support/texttocad/plugin` on macOS,
-`~/.local/state/texttocad/plugin` on Linux, `%LOCALAPPDATA%\texttocad-state\plugin` on
-Windows); `cad plugin` prints its path. It holds the plugin as the `latest` branch does
--- each app's manifest, its config for CAD's server, and the skills -- at the release
-your computer runs, and is written again in place when an update moves your computer to
-another release. Each app takes it the way it takes a local plugin:
+Those two releases, and the move from 0.10.0 to 0.11.11 ([From an earlier
+release](#from-an-earlier-release)), run the install command by themselves. Run by cad, it skips
+step 3 and leaves your PATH as it is: only your own run updates cad or changes the PATH.
 
-| App | What it gets | After an update |
-| --- | --- | --- |
-| Claude Code | the folder added as a local catalog, `texttocad`, and its plugin installed, `text-to-cad@texttocad`; Claude Code reads the folder in place | its next session reads the new release; the update also refreshes the copy Claude Code keeps in its cache (`claude plugin update`), which Cursor and Grok Build may read |
-| Codex | the same catalog and plugin; Codex copies the plugin when it is added | the update adds it again; a running Codex session keeps the copy it started with until you restart it |
-| Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
-| Cursor | the plugin loaded with Claude Code's; without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad` | the update copies the folder again |
-| Grok Build | the plugin loaded with Claude Code's; without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
-| Claude Desktop (Chat tab) | CAD's server in its config, run by your own `uvx` at its full path | the update moves the server to the new release |
-| Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
+Where any app it found failed, cad keeps no release as the one the plugin is up to date for, and
+runs `cad plugin install` again later where the plugin's automatic updates are on
+([Updating](#updating)): at most three times for one release, an hour or more apart.
 
-Nothing of it updates by itself: the folder and the copies move when you update
-([Updates](#updates)). Leave the folder where it is: Claude Code and Gemini read it in
-place. `cad doctor` says where each app's plugin comes from, and writes the folder
-again if it is gone. The install command with `--uninstall` takes all of it out, the
-folder too.
+It removes only what is ours: a skill counts as ours only where its `SKILL.md` says it comes from
+text-to-cad's repository, so a skill of yours with the same name is left as it is. A copy from a
+plugin store (Codex's or Claude's) is never touched.
 
-## App by app
+Your agent shows each model it makes in a viewer. In the Codex app that is a **CAD** tab beside the
+thread; every other app opens it in its own browser, or gives you a link to open in yours.
 
-1. CAD runs through [uv](https://docs.astral.sh/uv/): check that it is installed
-   (`uv --version`), and if it is missing, install it with
-   [uv's installer](https://docs.astral.sh/uv/getting-started/installation/).
-2. Run the commands under your agent app's heading below, or under
-   [Other Agents](#other-agents) if it has none.
-3. Restart the app. Its first start downloads CAD's runtime and makes the environment
-   models run in ([What a model runs in](#what-a-model-runs-in)), so it needs a network
-   connection.
+On Windows, run it in Windows Terminal or PowerShell, not in a Windows Store app's shell such as
+the Claude desktop app's: Windows can keep what such an app's commands write inside that app, where no
+terminal and no other app finds it. The command names `www.texttocad.dev` because Windows
+PowerShell 5.1 does not follow the redirect from `texttocad.dev`.
 
-The plugin for your agent app brings the skills and CAD's viewer, a local server
-(`cad-mcp`). For an agent without a plugin, install the skills alone. Install
-one or the other in an app, not both: two copies means every skill twice.
+## What it sends
 
-The runtime supports Python 3.14+; the launch commands use uv-managed Python 3.14.
+`cad plugin install` counts each run in cad's telemetry: who started it (you,
+the install command or cad's server), how it ended, how many seconds it took, what the terminal was
+shown (the logo, and in which colours), and how many agent apps it found on your computer and how many
+of those failed, as numbers. cad names an agent app only where its install failed: by cad's own short
+name for it (`claude`, `codex`, `cursor`, ...), with its seconds and one word for why (a command that
+did not answer in time, a command that failed, no network, a mistake of cad's own, or anything else).
+Which agent apps you have is never sent. Never a path, a message, or a version of an app.
+It goes out as the rest of cad's telemetry does: under your random install ID, only after cad has
+said in one line that it sends usage stats and crash reports, and never in CI.
 
-The commands below take the `latest` branch: it holds the plugin alone and gets
-each release once it is on PyPI. `main`, where development happens, installs too,
-but can hold changes that aren't released yet. Each app names the branch in its
-own way (`#latest`, `--ref latest`, `@latest` or `--branch latest`); leave it out
-and the app installs `main`. The install command, run later, replaces a copy
-installed this way with the plugin folder's ([What each app gets](#what-each-app-gets)).
+The install command sends nothing itself where it ends with a cad that works. Where it fails with
+no working cad to count the failure, it sends one anonymous report to `api.texttocad.dev`: a random
+ID made for that one run and kept nowhere, the stage that failed (installing uv, downloading
+`install.py`, running it, installing cad, running the plugin's step, or a crash of the script), an
+exit status, your operating system and processor type, uv's version, and whether a person or cad
+ran it. For a crash it adds the error's type and the function names and line numbers in the install
+script where it happened, never a message or a path. When you run the command, it says so in one
+line near its start, wherever it could send one.
 
-Each app's heading also says how to update text-to-cad, and how to reinstall it:
-remove it, then install it again. Updating the plugin updates CAD: the new
-release is downloaded the first time it runs, and the skills and the
-server share it. Earlier releases stay in uv's cache until you run `uv cache prune`.
+Where cad itself runs the install command (0.11.12 and 0.11.13 do, and the move from 0.10.0 to
+0.11.11), nobody reads its output, so it prints no such line. Such a run sends a report only where
+cad's settings show that cad had already told you what it sends, or that you said yes, and never
+for a failure before `install.py` runs.
+
+To turn both off, set `DO_NOT_TRACK=1` or `CAD_TELEMETRY=0` where the command runs, for example:
+
+```bash
+curl -fsSL https://texttocad.dev/install.sh | DO_NOT_TRACK=1 sh
+```
+
+On Windows, in PowerShell, which keeps it for that window:
+
+```powershell
+$env:DO_NOT_TRACK = "1"; irm https://www.texttocad.dev/install.ps1 | iex
+```
+
+`cad telemetry off` turns cad's telemetry off for good, and the install command reads that choice
+too. The [privacy policy](https://www.texttocad.dev/privacy-policy) has the details.
+
+## Install by hand
+
+First install cad, which needs uv:
+
+```bash
+uv tool install cad
+```
+
+If uv says the `cad` executable already exists, add `--force` after `install`. cad updates itself
+([Updating](#updating)). The runtime supports Python 3.11+.
+
+Then install the plugin in each app with the commands under its name. Install it once per app: two
+copies show every skill twice. Restart the app afterwards. The plugin's skills run text-to-cad
+through the `cad` command; when it is missing, the skill tells your agent how to install it.
+
+The commands take the `latest` branch: the plugin alone, moved to each release once it is on PyPI.
+Devin CLI, Antigravity and Factory Droid cannot name a branch here and install `main`, where
+development happens.
+
+Claude Code, Codex and Cursor are tested before every release. Gemini CLI, Grok Build and Hermes
+Agent are installed on the computer we test on. The other entries follow each vendor's
+documentation.
 
 ### Claude Code
-
-Claude Desktop's Code tab uses this plugin. Its regular Chat tab needs separate
-local MCP setup; Cowork uses the plugin's bundled MCP server.
 
 ```bash
 claude plugin marketplace add earthtojake/text-to-cad#latest
 claude plugin install text-to-cad@earthtojake
 ```
 
-The plugin also starts CAD's server. Where Claude Code can show app views, CAD
-shows models as viewer cards in the conversation; otherwise, as in a terminal,
-asking it to show a model gives you a link that opens the model in the CAD
-Viewer in your browser.
+Claude Code shows models in its browser pane or your browser. Claude Desktop's Code tab runs Claude
+Code and uses the same plugin. The install command adds it with the `claude` command; without that
+command, add it in Claude Code's plugin manager with the two commands above.
 
-To update, run these, then restart Claude Code:
+To update:
 
 ```bash
 claude plugin marketplace update earthtojake
 claude plugin update text-to-cad@earthtojake
 ```
 
-To reinstall, remove it with these, then run the install commands again:
-
-```bash
-claude plugin uninstall text-to-cad@earthtojake
-claude plugin marketplace remove earthtojake
-```
-
-### Claude Desktop: Chat tab
-
-Use this setup for CAD in Claude Desktop's **Chat** tab. Claude Code and Cowork
-use the plugin's bundled MCP server and do not need this separate configuration.
-
-CAD shows models in the chat: ask Claude to show one and it appears as a viewer
-card you can orbit, add to your prompt, and open full size; Claude can read what
-you selected and see what you see. It runs locally through uv: add the server to
-Claude Desktop's config (Settings > Developer > Edit Config), then restart the
-app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
-
-```json
-{
-  "mcpServers": {
-    "cad": {
-      "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.9.0", "cad-mcp"],
-      "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
-    }
-  }
-}
-```
-
-The config pins a release in `args`, and uvx keeps the version it first
-downloads. To update, change that version to the
-[latest release](https://pypi.org/project/cad-mcp/), then restart Claude Desktop.
-The install command writes this entry, with uvx's full path, and moves its release
-to the new one each time it updates.
-
 ### Codex
 
+#### Codex app
+
+text-to-cad is in the [official Codex plugin directory](https://chatgpt.com/plugins/plugins_6ac32e7e1a74819193e1edd581a99966?open_in_app).
+
+- In the Codex app, click **Plugins** in the sidebar.
+- Find **text-to-cad**.
+- Click the **+** next to it and follow the prompts.
+
+#### Codex CLI
+
+text-to-cad is in the [official Codex plugin directory](https://chatgpt.com/plugins/plugins_6ac32e7e1a74819193e1edd581a99966?open_in_app).
+
+- Open the plugin search:
+
+  ```text
+  /plugins
+  ```
+
+- Search for text-to-cad:
+
+  ```text
+  text-to-cad
+  ```
+
+- Select **Install Plugin**.
+
+The directory updates its copy.
+
+#### From this repository
+
+Or install it from this repository:
+
 ```bash
-codex plugin marketplace add earthtojake/text-to-cad --ref latest
+codex plugin marketplace add earthtojake/text-to-cad --ref latest --sparse .claude-plugin --sparse .codex-plugin --sparse skills --sparse codex.mcp.json
 codex plugin add text-to-cad@earthtojake
 ```
 
-In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
-(recent models, and Open), a **CAD** tab beside each thread that the agent
-drives, and *Open with CAD* for model files.
+The `--sparse` paths keep Codex to the plugin's files: without them it clones the whole repository, and
+its `marketplace upgrade` can run out of time on a slow disk.
 
-Codex's plugin directory lists text-to-cad too, but for now its listing trails
-the releases, so install it from the marketplace. A copy from the directory and
-one from the marketplace would load side by side: keep one.
-
-To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
-Marketplace), then restart Codex:
+To update:
 
 ```bash
 codex plugin marketplace upgrade earthtojake
+codex plugin add text-to-cad@earthtojake
 ```
 
-To reinstall, remove it with these, then run the install commands again:
-
-```bash
-codex plugin remove text-to-cad@earthtojake
-codex plugin marketplace remove earthtojake
-```
-
-The marketplace was renamed from `text-to-cad` to `earthtojake`; if you added it
-before, remove the old one first (`codex plugin marketplace remove text-to-cad`).
+In the Codex app the plugin also brings the viewer: **CAD** in the sidebar, a **CAD** tab beside
+each thread, and *Open with CAD* for model files. It is the only app that gets it.
 
 ### Cursor
-
-Cursor also loads the plugin installed with Claude Code. If the Claude Code plugin
-is installed, Cursor already has text-to-cad: skip this.
 
 ```bash
 git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
 ```
 
-Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. Teams
-can import the repository instead, under **Dashboard → Plugins & MCPs → Team
-Marketplaces**.
+Cursor also loads the plugin installed in Claude Code: if Claude Code has it, skip this. Cursor shows
+models in its browser.
 
-To update, pull the latest release, then restart Cursor:
+To update:
 
 ```bash
 git -C ~/.cursor/plugins/local/text-to-cad pull
 ```
 
-To reinstall, delete the folder, then run the install command again:
+### Gemini CLI
 
 ```bash
-rm -rf ~/.cursor/plugins/local/text-to-cad
+gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent
+```
+
+To update:
+
+```bash
+gemini extensions update text-to-cad
 ```
 
 ### Grok Build
-
-Grok Build also loads the plugin installed with Claude Code. If the Claude Code
-plugin is installed, Grok Build already has text-to-cad: skip this.
 
 ```bash
 grok plugin install earthtojake/text-to-cad@latest --trust
 grok plugin enable text-to-cad
 ```
 
-Grok Build reads the Claude plugin manifest. Grok shows tool results as text, so
-asking it to show a model gives you a CAD Viewer link.
+Grok Build also loads the plugin installed in Claude Code: if Claude Code has it, skip this.
 
-To update, run this, then restart Grok Build:
+To update:
 
 ```bash
 grok plugin update text-to-cad
 ```
 
-To reinstall, remove it with this, then run the install commands again:
+### Antigravity
 
 ```bash
-grok plugin uninstall text-to-cad
+agy plugin install https://github.com/earthtojake/text-to-cad
 ```
 
-### Gemini
+To update, run the same command again.
+
+### Devin CLI
 
 ```bash
-gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent
+devin plugins install earthtojake/text-to-cad
 ```
 
-Gemini installs the plugin as an extension, with the skills and CAD's server
-(`--consent` answers its security prompt). Like
-Grok, it shows tool results as text, so asking it to show a model gives you a CAD
-Viewer link.
+To update: `devin plugins update text-to-cad`. Devin CLI takes a plugin only once you are signed in
+(`devin auth login`): until then the install command skips it and says so.
 
-To update now, run this, then restart Gemini:
+### Factory Droid
 
 ```bash
-gemini extensions update text-to-cad
+droid plugin marketplace add earthtojake/text-to-cad
+droid plugin install text-to-cad@text-to-cad --scope user
 ```
 
-To reinstall, remove it with this, then run the install command again:
+To update: `droid plugin marketplace update text-to-cad`, then
+`droid plugin update text-to-cad@text-to-cad --scope user`.
+
+### GitHub Copilot CLI
 
 ```bash
-gemini extensions uninstall text-to-cad
+copilot plugin marketplace add earthtojake/text-to-cad#latest
+copilot plugin install text-to-cad@earthtojake
 ```
 
-### Other Agents
-
-For an agent without plugin support: the skills give you everything you need for
-core CAD workflows and let you view CAD files in a localhost web app. The install
-command gives them to the agents it knows when they are installed: GitHub Copilot
-(VS Code's agent too), Windsurf, Cline, Amp, Antigravity, OpenClaw, Droid, Goose,
-Kilo Code, Kiro CLI, Hermes Agent, OpenCode, Roo Code, Trae and Zed. It copies them
-from the plugin folder's `skills` ([What each app gets](#what-each-app-gets)) into each
-one's own skills folder with the [Skills CLI](https://skills.sh), which needs Node
-(`npx`), in one command:
-`npx --prefer-offline -y skills@latest add <plugin folder>/skills -g -a <agent> ... -s '*' -y --copy --json`.
-It names each agent: it never does this for an app with a plugin, and moves a loose
-copy of the skills out of such an app's skills folder. Cline and Zed keep skills in
-`~/.agents/skills`, which Codex and Gemini CLI read too: there, those apps list the
-skills beside their plugin's. Its receipt records which skills each agent got, from which
-release; running it again, or an update, adds them again after a new release or when
-one of them is gone, and `--uninstall` removes them.
-
-For any other agent, install them with the Skills CLI yourself:
+To update:
 
 ```bash
-npx skills add earthtojake/text-to-cad#latest
+copilot plugin update text-to-cad
 ```
 
-The command asks which agents to install for, and where. To skip the questions,
-name the agent and install for your user:
-`npx skills add earthtojake/text-to-cad#latest -g -a <agent> -y`.
+### Kimi Code
 
-Each skill runs text-to-cad's server through uv, pinned to the skill's release, as
-the plugin's server is, so uv must be installed. Without the plugin there is no CAD server, so the
-skills open models in the CAD Viewer in your browser.
+Type this inside Kimi Code:
 
-**To update or reinstall, run the same command again**, then restart the app.
-`add` re-fetches the package and overwrites what is already installed, so it both
-refreshes existing skills and installs any skill added in a newer release.
-`npx skills update` only refreshes skills already in your lockfile, so it silently
-misses new ones — which matters here, because releases do add skills.
+```text
+/plugins install https://github.com/earthtojake/text-to-cad/tree/latest
+```
 
-Neither command removes a skill that was retired upstream; drop one with
-`npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
-now covered by the CAD, DXF and robot-description skills, and the retired
-`cad-mcp-setup` by the install command and this page. Remove old standalone
-installs with `npx skills remove cad-viewer cad-mcp-setup`.
+To update, type it again. The install command cannot do this one for you.
 
-No plugin for your agent yet?
+### Muse
+
+```bash
+git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad
+muse plugins install ./text-to-cad
+muse plugins approve text-to-cad
+```
+
+Muse keeps its own copy, so the clone can be deleted afterwards.
+
+To update:
+
+```bash
+muse plugins update text-to-cad
+```
+
+### Pi
+
+```bash
+pi install git:github.com/earthtojake/text-to-cad@latest
+```
+
+To update, run the same command again: `pi update` does not move a named branch.
+
+### Qwen Code
+
+```bash
+qwen extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent
+```
+
+To update:
+
+```bash
+qwen extensions update text-to-cad
+```
+
+### Other agents
+
+These agents take the skills alone, copied into their own skills folder. The install command does
+it for each one it finds.
+
+| Agent | Skills folder |
+| --- | --- |
+| Amp | `~/.config/amp/skills` |
+| Cline | `~/.cline/skills` |
+| Goose | `~/.config/goose/skills` |
+| Hermes Agent | `~/.hermes/skills` (`$HERMES_HOME/skills` where that is set) |
+| Kilo Code | `~/.kilo/skills` |
+| Kiro CLI | `~/.kiro/skills` |
+| OpenClaw | `~/.openclaw/skills` |
+| OpenCode | `~/.config/opencode/skills` |
+| Roo Code | `~/.roo/skills` |
+| Trae | `~/.trae/skills` |
+| Windsurf | `~/.codeium/windsurf/skills` |
+
+By hand, copy each folder under `skills/` on the `latest` branch into the agent's folder, for
+example for Cline:
+
+```bash
+git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad text-to-cad
+mkdir -p ~/.cline/skills
+cp -R text-to-cad/skills/* ~/.cline/skills/
+```
+
+To update, copy them again, or run the install command.
+
+Earlier releases installed a Hermes Agent plugin instead. The install command removes it; by hand,
+run `hermes plugins remove text-to-cad`.
+
+Zed and GitHub Copilot in VS Code are not supported yet. No route for your agent?
 [Request one](https://github.com/earthtojake/text-to-cad/issues/new?title=Plugin%20request%3A%20).
 
-## Updates
+## Updating
 
-When a newer release is out, CAD shows an update button: a blue icon first in its
-navbar and on its home, and in the corner of a CAD card that has no navbar. Click
-it, and the server installs the release, updates text-to-cad in every agent app on
-your computer as the install command does, and restarts on the new release; the
-page or the card reloads itself once the server is back. An app that shows CAD's
-replies as text gets a line with its first reply instead, naming the install
-command. Nothing updates until you ask.
+cad and the plugin update separately.
 
-Running the install command again does the same, and so does `cad update` in a
-terminal: each installs the newest release, updates every app, moves the server to
-it and lists the apps to restart. To update one app by hand, run the update
-commands under its heading, then restart it.
+### cad
 
-An update writes the plugin folder again for the new release
-([What each app gets](#what-each-app-gets)), with no network: Claude Code and Gemini
-read it in place, and the apps that keep a copy of it (Codex, Cursor, the agents with
-the skills alone) get it again. Should the new release's server not start, the release
-before comes back, and its plugin and Claude Desktop's server with it; the CAD Viewer page
-you clicked in says the update failed, and offers it again.
+cad updates itself to every new release of its major version (the first number: 0 in 0.12.3). While
+its server runs, it looks for a new release about once an hour and, once nothing has run for a
+minute, installs it beside the cad that runs, without restarting anything: the viewer's update
+button then becomes a restart icon ("Restart to update"), and a click restarts. Otherwise cad restarts its
+server on the new release when nobody would notice: as the server next starts, once nothing has
+asked anything of it for an hour (a viewer page asks while it is shown), or, a day later, the next
+time nothing has run for a minute. To update it now:
 
-Your computer runs one CAD server, the current release's, whatever release each
-app's plugin names: an app whose plugin is behind or ahead uses that server all the
-same. An app runs its updated plugin from the session it starts after the update.
-Each release is kept in a folder of its own in text-to-cad's state folder
-(`releases/<release>`): the one before the current stays, to go back to should the
-new one not start, and older ones go at the next update. `cad doctor` says
-which releases are there, which one is current, the release the server runs, the
-plugin folder's, and where each app's plugin comes from and its release.
+```bash
+cad update
+```
 
-Copies from a plugin directory or the Cursor Marketplace are not told of a release
-from the feed, since their store updates their plugin. Once the store has moved an
-app's plugin ahead of your server, the button shows for them too, and moves the
-server to it.
+That updates cad alone; the install command, run again, does the same and then updates the plugin.
+The viewer and the CAD app show a blue update button, at the top right, while a newer release of your
+major is out, or installed and waiting for its restart; clicking it does what `cad update` does.
+Where an update fails, the viewer says why and what to do.
+With automatic updates on, a `cad` command also says once a day when cad has stayed behind for three
+days, and what to do. Where it keeps failing, or cad no longer runs: run `cad update`, which says why and
+what to do; then `cad doctor`, which ends with the one thing to do next; then install cad again, which
+always gives a clean cad: `uv tool install --force cad`, or the install command where cad does not start.
+A new major version never installs itself, because it may need changes on your side: `cad update` and `cad doctor` say when one is out, and this installs it:
 
-To find out a release is out, text-to-cad fetches `api.texttocad.dev/v1/versions` at
-most once an hour: one anonymous request, with no ID, path or anything about you,
-never in CI and never for a copy that something else updates.
-`CAD_UPDATE_CHECK=0` turns it off. An app whose plugin already runs a newer
-release says so too, with no request at all. A click on the button reads the feed
-again, for the newest release.
+```bash
+cad update --major
+```
 
-Updating from 0.8: [Migrating from 0.8 to 0.9](migrations/migrating-0.8-to-0.9.md) says
-what 0.9 renames (the `cad` command, `CAD_*`, the folders, the packages) and what the
-install command moves for you.
+The [migration guides](https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations) say what
+changes. Automatic updates are on unless you turn them off. To see whether they are on, or to turn them
+off or on:
 
-Updating from 0.8.0 or 0.8.1, whose engine runs until it is stopped:
-[the migration guide](migrations/migrating-0.7-to-0.8.md#updating-from-080-or-081)
-says what the install command and the new engine do with it.
+```bash
+cad update auto        # says whether they are on
+cad update auto off
+cad update auto on
+```
 
-A CAD project written for cadgen 0.7 needs porting to 0.8:
-[the migration guide](migrations/migrating-0.7-to-0.8.md) takes one across, step by
-step, and an agent with the CAD skill can follow it.
+A cad installed with `uv tool install cad` updates itself; one installed with pip into a project's
+own Python never does. Setting `CAD_UPDATE_CHECK=0` (or `CI`) where cad runs turns the check off for
+that process, and makes `cad update` refuse there too. You can also update cad with uv yourself:
 
-## What a model runs in
+```bash
+cad server stop
+uv tool upgrade cad
+cad server start
+```
 
-The release the install command runs is text-to-cad's server (`cad-server`): the
-`cad` command, the CAD Viewer's server and the engine every build goes through, without
-the CAD kernel. Each app's CAD server is the smaller `cad-mcp`, which
-reaches it. A model runs where the kernel is: in one environment the server makes with uv
-in its cache folder and keeps, the library with its kernel (`cad[build123d]`) on the
-server's Python, 3.14. Every model runs there, and so do the server's own kernel
-processes: exports, snapshots and the meshes the viewer shows. The install command makes
-it; otherwise the server makes it as it starts, in the background (with a plugin alone,
-the first start of an app's CAD app), and a first model or view waits for it. A model
-imports what that environment holds: the library (`cad`), build123d and what they bring.
+cad's own update leaves uv's record of cad as it is, so `uv tool upgrade cad` takes the newest of all, a
+new major version included, unless an update by 0.11.17 or earlier left uv a range there; where that
+range is below the cad that runs, `cad doctor` says so, and `uv tool install --force cad` clears it.
 
-To run models with a Python of your own instead, install the library with its kernel
-into it: `pip install 'cad[build123d]==0.9.0'` (`pip install cad==0.9.0` is the library alone,
-and `import build123d` fails there). That environment is then the one models run in.
+### The plugin
 
-## Windows 11: Smart App Control
+The install command turns on the plugin's automatic updates as its last step: each time cad is
+newer than the release the plugin is up to date for, cad runs `cad plugin install` once, in the
+background, which puts the newest plugin in every agent app it finds. That holds however cad
+got newer: by itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens
+the next time cad's server starts or looks after itself with nothing running. A run that fails (any
+app failing counts, though the others went well), or that is still running after 15 minutes and is stopped (a minute later for certain, whatever it is
+doing), is tried again an hour or more later: at most three runs for one release. To update the plugin now:
 
-The CAD kernel behind the `cad`, `dxf`, `urdf`, `srdf` and `sdf`
-skills is `OCP`, OpenCascade's Python binding, and its wheel ships an unsigned
-native module. Windows 11's Smart App Control blocks unsigned native code, so
-on a machine where it is on (the default on a fresh install) every `cad`
-command and `import build123d` fails with
-`ImportError: DLL load failed while importing OCP`, and Event Viewer records
-the refusal as Event ID 3077 under CodeIntegrity › Operational. `cad doctor`
-names this when it sees it.
+```bash
+cad plugin install
+```
 
-Smart App Control has no per-app exception. Either turn it off (Settings ›
-Privacy & security › Windows Security › App & browser control › Smart App
-Control settings; once off it can only be turned back on by reinstalling
-Windows) or run the CAD skills under WSL, where it does not apply. The wheel
-is built by the cadquery-ocp project, so signing it is not something this
-repository can do.
+That leaves cad as it is; the install command updates cad first, then runs `cad plugin install`.
+(`cad plugin update`, the name 0.11.12 and 0.11.13 give it, still does the same.) One such run goes
+at a time: a second waits for the first to end.
+
+To update one app alone, run the update command under its name. To see whether the plugin's
+automatic updates are on, or to turn them off or on:
+
+```bash
+cad plugin update auto        # says whether they are on
+cad plugin update auto off
+cad plugin update auto on
+```
+
+They are off until the install command turns them on, or you do: `cad plugin install` alone never
+changes them, and cad never changes your apps where you did not ask it to.
+
+A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
+skills may then be older than cad. That is fine: a command the skills used keeps working for at least
+30 days after the skills stop using it.
+
+### Staying on an older release
+
+Turn automatic updates off, then install the release you want, for example 0.11.12 (what uv installs
+is what runs, whatever cad's own update installed beside it):
+
+```bash
+cad update auto off
+cad server stop
+uv tool install cad==0.11.12
+cad server start
+```
+
+Do not run the install command there: run by a person, it updates cad. `cad plugin install` (on
+0.11.12 and 0.11.13, `cad plugin update`) brings the plugin up to date and leaves cad as it is. The
+newest plugin's skills may ask for a newer cad.
+
+### From an earlier release
+
+A computer on 0.10.0 to 0.11.11 is brought over once, by the updater those releases shipped: it
+installs the new cad with uv. Where the install command was used on that computer, it runs it once
+more and turns on the plugin's automatic updates; where it was not, your apps are left as they are.
+That run is done once cad is installed: an app that failed in it is tried again as on any computer
+([The plugin](#the-plugin)), at most three times for one release.
+From then on, both update as above. A computer on an older release moves when you run the install
+command.
+
+## Removing
+
+Remove the plugin from each app with that app's own command:
+
+| App | Remove |
+| --- | --- |
+| Claude Code | `claude plugin uninstall text-to-cad@earthtojake`, then `claude plugin marketplace remove earthtojake` |
+| Codex | `codex plugin remove text-to-cad@earthtojake`, then `codex plugin marketplace remove earthtojake` |
+| Cursor | `rm -rf ~/.cursor/plugins/local/text-to-cad` |
+| Gemini CLI | `gemini extensions uninstall text-to-cad` |
+| Grok Build | `grok plugin uninstall text-to-cad` |
+| Antigravity | `agy plugin uninstall text-to-cad` |
+| Devin CLI | `devin plugins remove text-to-cad` |
+| Factory Droid | `droid plugin uninstall text-to-cad@text-to-cad`, then `droid plugin marketplace remove text-to-cad` |
+| GitHub Copilot CLI | `copilot plugin uninstall text-to-cad`, then `copilot plugin marketplace remove earthtojake` |
+| Pi | `pi remove git:github.com/earthtojake/text-to-cad@latest` |
+| Qwen Code | `qwen extensions uninstall text-to-cad` |
+| Kimi Code, Muse | remove text-to-cad in the app's plugin manager |
+| Other agents | delete our skills from the agent's skills folder |
+
+Then stop cad's server and remove cad:
+
+```bash
+cad server stop
+uv tool uninstall cad
+```
+
+That removes the program. Your settings, Recents and the records of your models stay in two
+folders, which you can delete by hand:
+
+| | Data | Cache |
+| --- | --- | --- |
+| macOS | `~/Library/Application Support/cad` | `~/.cache/cad` |
+| Linux | `~/.local/state/cad` | `~/.cache/cad` |
+| Windows | `%USERPROFILE%\.local\state\cad` | `%USERPROFILE%\.cache\cad` |
+
+`cad doctor` and `cad cache dir` print where they are on your computer; run them before you remove
+cad. What uv downloaded stays in uv's cache until you run `uv cache prune`. The data folder also
+holds, in `store`, the releases cad's own update installed, the one that runs and the one before it:
+about 180 MB each, less where they share their files with uv's cache. `cad cache prune` removes those
+nothing runs.
+
+## What it needs
+
+- A network connection to install cad, and again the first time a model is built, when cad fetches
+  the CAD kernel (OCP and build123d). cad itself is about 110 MB on disk; the kernel about 620 MB.
+- On Linux, the system's OpenGL library, `libGL.so.1` (the `libgl1` package on Debian and Ubuntu).
+- On Windows 11, Smart App Control turned off, or WSL. The CAD kernel's wheel ships an unsigned
+  native module, which Smart App Control blocks: every `cad` command and `import build123d` then
+  fails with `ImportError: DLL load failed while importing OCP`, and Event Viewer records Event ID
+  3077 under CodeIntegrity › Operational. Smart App Control has no per-app exception; turning it
+  off is under Settings › Privacy & security › Windows Security › App & browser control › Smart App
+  Control settings, and once off it can be turned back on only by reinstalling Windows. Under WSL it
+  does not apply.

@@ -1,6 +1,7 @@
 import { formatMeasurement, formatMeasurementAngle } from "./measurement.js";
 import { dimensionEndpoints } from "./measureLines.js";
 import { projectWorldPointToClient } from "./measureRuler.js";
+import { segmentTouchesBox, triangleTouchesBox } from "./boxSelect.js";
 
 // Draft state is amber so it can never be confused with a committed dimension.
 export const MEASURE_DIMENSION_DRAFT_COLOR = "#f59e0b";
@@ -48,8 +49,11 @@ export function measureSeriesColor(index) {
 // active dimension now comes mostly from line weight and its label.
 export const MEASURE_DIMENSION_FADED_ALPHA = 0.7;
 export const MEASURE_DIMENSION_LABEL_BACKGROUND = "rgba(15, 23, 42, 0.92)";
+// A dimension's label and the snap chip: text drawn into the viewport keeps its own size, never under 10px
+// (`docs/design-system.md`, "The type scale"), on a 14px line in its chip.
 export const MEASURE_DIMENSION_LABEL_FONT =
-  "600 8px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
+  "600 10px ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
+const LABEL_LINE_PX = 14;
 
 const LABEL_PADDING_X = 6;
 const LABEL_PADDING_Y = 3;
@@ -249,6 +253,10 @@ const segmentDistance = (point, start, end) => {
   return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
 };
 
+// The label's reach, about its middle: what a press or a box finds of the chip drawn there.
+const LABEL_REACH_X = 36;
+const LABEL_REACH_Y = 12;
+
 /**
  * Whether a point (the layout's pixels) is on a drawn dimension: within `tolerance` of its
  * dimension line or a witness line, or over its label.
@@ -257,7 +265,21 @@ export function dimensionLayoutHit(layout, point, tolerance = 6) {
   if (!layout || !point) return false;
   const lines = [layout.dimensionLine, ...layout.witnesses];
   if (lines.some(([start, end]) => segmentDistance(point, start, end) <= tolerance)) return true;
-  return Math.abs(point.x - layout.label.x) <= 36 && Math.abs(point.y - layout.label.y) <= 12;
+  return Math.abs(point.x - layout.label.x) <= LABEL_REACH_X && Math.abs(point.y - layout.label.y) <= LABEL_REACH_Y;
+}
+
+/**
+ * Whether a box (`boxSelect.js`'s, in the layout's pixels) touches a drawn
+ * dimension, even in part: its dimension line, a witness line, a tick,
+ * an arrowhead, or its label, as far as a press reaches it (`dimensionLayoutHit`).
+ */
+export function dimensionLayoutTouchesBox(layout, box) {
+  if (!layout || !box) return false;
+  const lines = [layout.dimensionLine, ...layout.witnesses, ...(layout.ticks || [])];
+  if (lines.some(([a, b]) => segmentTouchesBox(box, a.x, a.y, b.x, b.y))) return true;
+  if ((layout.arrows || []).some(({ tip, left, right }) => triangleTouchesBox(box, tip.x, tip.y, left.x, left.y, right.x, right.y))) return true;
+  const { x, y } = layout.label;
+  return x + LABEL_REACH_X >= box.left && x - LABEL_REACH_X <= box.right && y + LABEL_REACH_Y >= box.top && y - LABEL_REACH_Y <= box.bottom;
 }
 
 function strokeSegment(context, start, end) {
@@ -334,7 +356,7 @@ export function drawMeasureDimension(context, layout, {
     const paddingX = LABEL_PADDING_X;
     const paddingY = LABEL_PADDING_Y;
     const chipWidth = textWidth + (paddingX * 2);
-    const chipHeight = 11 + (paddingY * 2);
+    const chipHeight = LABEL_LINE_PX + (paddingY * 2);
     let chipX = layout.label.x - (chipWidth / 2);
     let chipY = layout.label.y - (chipHeight / 2);
     if (bounds && Number(bounds.width) > 0 && Number(bounds.height) > 0) {

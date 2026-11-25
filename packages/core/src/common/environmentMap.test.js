@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as THREE from "three";
 
 import {
   PROCEDURAL_STUDIO_ENVIRONMENT_ID,
   createEnvironmentResource,
   createStudioEnvironmentScene,
   disposeEnvironmentResource,
+  environmentResourceFromPixels,
   environmentResourceIdentity
 } from "./environmentMap.js";
 import {
@@ -184,4 +186,35 @@ test("environment disposal remains caller-owned", () => {
   disposeEnvironmentResource(resource);
   assert.equal(count, 1);
   disposeEnvironmentResource(null);
+});
+
+test("a worker's pixels rebuild its PMREM: every face of every level, from where readPixels put it", () => {
+  const draws = [];
+  let target = null, face = 0, lod = 0;
+  const renderer = {
+    autoClear: true,
+    getRenderTarget: () => target,
+    setRenderTarget(next, index = 0, level = 0) { target = next; face = index; lod = level; },
+    render(quad) {
+      const { faces, face: drawnFace } = quad.material.uniforms;
+      draws.push({ face, lod, viewport: target.viewport.toArray(), uniform: drawnFace.value,
+        texture: [faces.value.image.width, faces.value.image.height, faces.value.image.data[0]], autoClear: renderer.autoClear });
+    }
+  };
+  // Two levels of a 4-texel cube, each level's texels marked with its number.
+  const data = new Uint16Array(6 * (16 + 4) * 4);
+  data.fill(1, 0, 6 * 16 * 4);
+  data.fill(2, 6 * 16 * 4);
+  const resource = environmentResourceFromPixels(renderer, "studio", { data, size: 4, levels: 2 });
+  const { texture } = resource;
+  assert.deepEqual([texture.isPMREMTexture, texture.mipmaps.map(({ width }) => width), texture.type, texture.generateMipmaps],
+    [true, [4, 2], THREE.HalfFloatType, false], "a PMREM three reads by its levels");
+  assert.deepEqual(draws.map(({ face: index, lod: level }) => [index, level]),
+    [0, 1].flatMap((level) => [0, 1, 2, 3, 4, 5].map((index) => [index, level])));
+  assert.ok(draws.every(({ face: index, uniform }) => index === uniform), "each face drawn from its own rows");
+  assert.deepEqual(draws.map(({ lod: level, viewport, texture: [width, height, marker] }) => [level, viewport[2], width, height, marker]).filter((_, at) => at % 6 === 0),
+    [[0, 4, 4, 24, 1], [1, 2, 2, 12, 2]], "a level's faces stacked, at the level's size");
+  assert.ok(draws.every((draw) => draw.autoClear === false));
+  assert.deepEqual([target, renderer.autoClear, resource.identity], [null, true, "studio"], "the renderer given back as it was");
+  resource.dispose();
 });

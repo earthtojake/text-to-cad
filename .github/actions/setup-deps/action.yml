@@ -1,10 +1,17 @@
 name: Set up dependencies
-description: Install the selected root npm workspaces and optional Python/browser dependencies.
+description: Install the selected root npm workspaces and optional Python, browser and system dependencies.
+
+# Every install here is a download. A caller bounds the whole action with a step-level
+# `timeout-minutes` (a composite's own steps take none): a stalled mirror then fails in
+# minutes rather than running out the job's timeout.
 
 inputs:
   python:
-    description: Install requirements-dev.txt.
+    description: Install the development environment from uv.lock (`uv sync --locked`) into the interpreter setup-python provides.
     default: "true"
+  python-version:
+    description: The Python the environment is made on.
+    default: "3.14"
   playwright:
     description: Install Python Playwright's headless Chromium, which the viewer's launch smoke test drives (requires python).
     default: "true"
@@ -14,24 +21,28 @@ inputs:
   npm:
     description: Space-separated root workspace paths, or "none". Include shared dependencies used by the job.
     default: "packages/core packages/ui apps/web apps/mcp apps/docs"
+  apt:
+    description: Space-separated apt packages a Linux job needs from the system (the display the engine's stills draw on, say). Installed only when one is missing.
+    default: ""
 
 runs:
   using: composite
   steps:
     - name: Set up Python
       if: inputs.python == 'true'
+      id: python
       uses: actions/setup-python@v7
       with:
-        python-version: "3.14"
+        python-version: ${{ inputs.python-version }}
 
-    # uv installs requirements-dev.txt into that interpreter: pip took 99 s of every
-    # Windows job even from its cache. uv's own cache is keyed on the same file.
+    # uv makes the environment on that interpreter from the lock contributors use (pip took 99 s
+    # of every Windows job even from its cache). uv's own cache is keyed on the lock.
     - name: Set up uv
       if: inputs.python == 'true'
-      uses: astral-sh/setup-uv@v10.2.0
+      uses: astral-sh/setup-uv@v10.3.3
       with:
         enable-cache: true
-        cache-dependency-glob: requirements-dev.txt
+        cache-dependency-glob: uv.lock
 
     - name: Set up Node.js
       uses: actions/setup-node@v7
@@ -40,10 +51,75 @@ runs:
         cache: npm
         cache-dependency-path: package-lock.json
 
+    # A hosted runner's apt reads Ubuntu's own mirrors, all named under ubuntu.com. When the runner
+    # cannot resolve that name (11 November 2026: three runs over two hours, every job that fetched a
+    # package), apt waits out each mirror for each file and the job ends before a test runs. So when
+    # the name does not resolve, this job's apt reads mirrors named elsewhere, those of them that do:
+    # the same archive, and what is installed is checked against Ubuntu's keys as ever. Playwright's
+    # `--with-deps` below runs the same apt.
+    - name: Find a package mirror that answers
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        mirrors=/etc/apt/apt-mirrors.txt
+        if [ ! -f "$mirrors" ] || timeout 20 getent hosts azure.archive.ubuntu.com >/dev/null; then
+          exit 0
+        fi
+        echo "azure.archive.ubuntu.com does not resolve here."
+        answering=""
+        priority=1
+        for mirror in https://mirrors.edge.kernel.org/ubuntu/ https://mirror.arizona.edu/ubuntu/ https://mirrors.mit.edu/ubuntu/; do
+          host=${mirror#https://}
+          if timeout 20 getent hosts "${host%%/*}" >/dev/null; then
+            answering+="$mirror"$'\t'"priority:$priority"$'\n'
+            priority=$((priority + 1))
+          fi
+        done
+        if [ -z "$answering" ]; then
+          echo "Nor does any other mirror: apt is left as it was."
+          exit 0
+        fi
+        printf '%s' "$answering" | sudo tee "$mirrors"
+
+    # The engine's stills are drawn by OCCT in an OpenGL context, which on a machine with no
+    # screen is made on an X server's: Xvfb, with Mesa's software GL, and the font the stills'
+    # text is set in. Nothing is fetched when the image already has them all; when it does not,
+    # apt gives up on a connection that says nothing for 30 s and tries again (an `apt-get
+    # update` once waited 39 minutes on one, to the job's timeout).
+    - name: Install system packages
+      if: inputs.apt != '' && runner.os == 'Linux'
+      shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.apt }}
+      run: |
+        missing=()
+        for package in $APT_PACKAGES; do
+          if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+            missing+=("$package")
+          fi
+        done
+        if [ "${#missing[@]}" -eq 0 ]; then
+          echo "Already installed: $APT_PACKAGES"
+          exit 0
+        fi
+        echo "Installing: ${missing[*]}"
+        apt=(sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+             -o DPkg::Lock::Timeout=60)
+        "${apt[@]}" update
+        "${apt[@]}" install -y "${missing[@]}"
+
+    # The lock contributors sync into `.venv`, installed here into the interpreter setup-python put on
+    # the PATH (UV_PROJECT_ENVIRONMENT, its prefix), as CI always ran: a Windows venv's python.exe is a
+    # launcher that starts the interpreter as its child, and the suites that follow a process by its
+    # id would follow the launcher. `--locked` refuses a lock that no longer matches the pyproject
+    # files rather than resolving again; `--inexact` leaves the interpreter's own pip and setuptools.
+    # Later steps' uv commands (`uv sync --group fea`) take the same environment.
     - name: Install Python dependencies
       if: inputs.python == 'true'
       shell: bash
-      run: uv pip install --system --python python -r requirements-dev.txt
+      run: |
+        echo "UV_PROJECT_ENVIRONMENT=$pythonLocation" >>"$GITHUB_ENV"
+        UV_PROJECT_ENVIRONMENT="$pythonLocation" uv sync --locked --inexact
 
     - name: Install the launch smoke test's browser
       if: inputs.python == 'true' && inputs.playwright == 'true'
@@ -69,10 +145,10 @@ runs:
         done
         npm ci "${args[@]}"
         case " $NPM_WORKSPACES " in
-          *" packages/core "*) npm run build --workspace @text-to-cad/core ;;
+          *" packages/core "*) npm run build --workspace @cad/core ;;
         esac
         case " $NPM_WORKSPACES " in
-          *" packages/ui "*) npm run build --workspace @text-to-cad/ui ;;
+          *" packages/ui "*) npm run build --workspace @cad/ui ;;
         esac
 
     # npm and Python Playwright can require different Chromium revisions.

@@ -8,14 +8,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HOST="127.0.0.1"
 # VIEWER_RUNTIME_DIR points the smoke test at a client bundled somewhere else
 # (CAD_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad/src/cad_server/_runtime/viewer}"
 
-echo "==> CAD Viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
+echo "==> viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
 
 # The built client has to be IN the wheel's runtime: its absence is the exact regression
 # this guards, and it surfaces as a served page that is 404 rather than as a bad server.
 if [ ! -f "$RUNTIME/index.html" ]; then
-  echo "FAIL: no bundled CAD Viewer client at $RUNTIME (index.html missing)" >&2
+  echo "FAIL: no bundled viewer client at $RUNTIME (index.html missing)" >&2
   echo "      Run scripts/bundle/bundle.sh first (test.yml bundles before this step)." >&2
   exit 1
 fi
@@ -54,13 +54,13 @@ if ! pick_interpreter; then
     echo "FAIL: VIEWER_PYTHON=$VIEWER_PYTHON cannot run, or cannot import the server (cad_server)." >&2
   elif [ -z "$FOUND_INTERPRETER" ]; then
     echo "FAIL: no Python interpreter found (tried the repo venv, python3, and python)." >&2
-    echo "      Set VIEWER_PYTHON to the one that installed requirements-dev.txt." >&2
+    echo "      Run uv sync, or set VIEWER_PYTHON to an interpreter that imports cad_server." >&2
     exit 1
   else
     echo "FAIL: the server (cad_server) is not importable from $FOUND_INTERPRETER." >&2
   fi
   echo "      This test imports a real STEP end to end, so the launching interpreter" >&2
-  echo "      needs the packages: pip install -r requirements-dev.txt, or set VIEWER_PYTHON." >&2
+  echo "      needs the packages: uv sync, or set VIEWER_PYTHON." >&2
   exit 1
 fi
 export VIEWER_RUNTIME_DIR="$RUNTIME"
@@ -80,13 +80,18 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
     def launch(*options):
         result = subprocess.run([sys.executable, "-m", "cad_server.viewer", "--json", *options],
                                 cwd=root, env=env, capture_output=True, text=True, timeout=120)
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 0, result.stderr or result.stdout
         return json.loads(result.stdout)
     try:
+        # A launch starts no server: this checkout's is started first, as a person or an agent starts one
+        # (`cad server start`), in this test's own folders, and stopped on the way out.
+        started = subprocess.run([sys.executable, "-m", "cad_server.cli", "server", "start"], cwd=root, env=env,
+                                 capture_output=True, text=True, timeout=180)
+        assert started.returncode == 0, started.stderr or started.stdout
         first = launch()
         again = launch()
         assert first["pid"] == again["pid"] and first["port"] == again["port"]
-        with urlopen(Request(first["apiUrl"]+"/__cad/server", headers={"Authorization": "Bearer "+first["token"]})) as response:
+        with urlopen(Request(first["apiUrl"]+"/api/v1/server", headers={"Authorization": "Bearer "+first["token"]})) as response:
             assert json.load(response)["pid"] == first["pid"]
         # The STEP the page imports: one cylinder, written by build123d's own STEP export, so that no
         # CAD file is committed.
@@ -106,12 +111,13 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
                 page = browser.new_page(viewport={"width": 1000, "height": 720})
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
-                with page.expect_response(lambda response: "/__cad/api/doc/" in response.url and "/part/" in response.url and response.ok, timeout=120000):
+                with page.expect_response(lambda response: "/api/v1/documents/step/" in response.url and "/parts/" in response.url and response.ok, timeout=120000):
                     page.goto(opened["url"])
                 page.locator(".cad-loading-overlay").wait_for(state="hidden", timeout=120000)
                 assert page.locator("canvas").first.is_visible()
                 assert not errors, errors
-                assert "token=" not in page.url
+                # The address keeps a working link, so the same page opens in another browser on this machine.
+                assert "token=" in page.url, page.url
                 assert urlsplit(page.url).path == page_path, page.url
                 print("Bundled viewer rendered a STEP on the engine at /<id>; launch reuse and authentication passed.")
             finally:

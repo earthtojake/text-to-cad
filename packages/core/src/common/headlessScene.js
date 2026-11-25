@@ -1,7 +1,7 @@
-// A GLB, an STL, a 3MF, a robot description (URDF, SRDF, SDF) or an engine document on the OCCT
+// A GLB, an STL, a 3MF, a robot description (URDF, SRDF) or an engine document on the OCCT
 // parity bench's headless page, as the SCENE ITS VIEWER RENDERER DRAWS. There is one builder per file
 // family and it lives in this package so that both hosts call it: the viewer's renderers
-// (`@text-to-cad/ui` renderers/glb, mesh, robot) and this stage. A snapshot of those files
+// (`@cad/ui` renderers/glb, mesh, robot) and this stage. A snapshot of those files
 // therefore cannot show something the viewer does not — the same loader reads the file,
 // the same builder makes the scene, the same look (`resolveSceneSurfaceLook`) dresses it
 // and the same pose poses it. What is this stage's own is only what a still has and a
@@ -118,7 +118,6 @@ const FAMILY_BY_KIND = Object.freeze({
   "3mf": MESH_FAMILY,
   urdf: ROBOT_FAMILY,
   srdf: ROBOT_FAMILY,
-  sdf: ROBOT_FAMILY,
   xbf: XBF_FAMILY
 });
 

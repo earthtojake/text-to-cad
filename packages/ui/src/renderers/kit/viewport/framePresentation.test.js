@@ -18,6 +18,19 @@ test("Render stays covered until both geometry and the studio can produce a fram
   assert.equal(events.at(-1), "clear", "clearing an existing model must not leave its old pixels visible");
 });
 
+test("a scene not yet fit to be seen keeps the canvas covered until it is, and its first frame is then drawn", () => {
+  const canvas = { style: {} }, events = [];
+  const presentation = createFramePresentation({ canvas, renderMode: false, onPresent: (key) => events.push(`present:${key}`) });
+  let faces = false;
+  const runtime = { hasVisibleModel: true, kitScene: { presentable: () => faces } };
+  assert.equal(presentation.draw(runtime, () => events.push("bare slab"), { key: "board", ready: true }), false);
+  assert.equal(canvas.style.visibility, "hidden");
+  faces = true;
+  assert.equal(presentation.draw(runtime, () => events.push("board"), { key: "board", ready: true }), true);
+  assert.deepEqual(events, ["board", "present:board"]);
+  assert.equal(canvas.style.visibility, "visible");
+});
+
 test("Inspect can present without constructing a photographic environment", () => {
   const canvas = { style: {} };
   const presentation = createFramePresentation({ canvas, renderMode: false });

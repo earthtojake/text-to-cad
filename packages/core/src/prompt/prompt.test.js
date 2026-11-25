@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference, parsePromptReference, validatePromptReference, promptReferenceIds, resolveAttachmentPaths } from './index.js';
 
-// A STEP's ref is the engine's: its part's label, then its element's name, as `cad inspect` writes it.
+// A STEP's ref is the engine's: its part's label, then its element's name, as `cad <type> inspect` writes it.
 const FACE = 'bracket/f:bracket.extrude1.3';
 const EDGE = 'bracket/e:bracket.fillet1.2';
 const reference = { resource: { kind: 'workspace-file', path: '/work/STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: [FACE] } };
@@ -54,6 +54,10 @@ test('an .xbf and a STEP are referenced in the engine\'s grammar: one line per r
   const urdf = { kind: 'workspace-file', path: '/work/arm.urdf' };
   assert.deepEqual(parsePromptReference('/work/arm.urdf#upper_arm'), { resource: urdf, target: { kind: 'cad-selector', selectors: ['upper_arm'] } });
   assert.throws(() => referencePart({ resource: urdf, target: { kind: 'cad-selector', selectors: ['kit/hand/finger.2/face 7'] } }), /invalid CAD/);
+  // A 3MF's component, by its place in the build, as its scene picks it and the cad skill writes it.
+  const plate = { kind: 'workspace-file', path: '/work/out/plate.3mf' };
+  assert.equal(formatPromptReference({ resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } }), '/work/out/plate.3mf#o2.1');
+  assert.deepEqual(parsePromptReference('/work/out/plate.3mf#o2.1'), { resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } });
 });
 test('code targets preserve explicit ranges rather than borrowing the CAD fragment grammar', () => {
   const code = { resource: { kind: 'workspace-file', path: '/work/src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };
@@ -65,6 +69,27 @@ test('a reference names its ids as a person reads them: each selector, a range f
   assert.deepEqual(promptReferenceIds(range), ['1:5–3:1']);
   assert.deepEqual(promptReferenceIds({ ...range, label: 'def plate' }), ['def plate']);
   assert.deepEqual(promptReferenceIds({ ...range, target: { kind: 'whole-resource' } }), []);
+});
+
+test('a KiCad board names its references as board selectors, as the agent resolver reads them', () => {
+  const board = { resource: { kind: 'workspace-file', path: '/work/PCB/servo hat.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#U3', '#J4.A4', '#net:"a,b"', '#@x1.5y-2'] } };
+  assert.equal(formatPromptReference(referencePart(board).reference), '"/work/PCB/servo hat.kicad_pcb"#U3,J4.A4,net:"a,b",@x1.5y-2');
+  assert.deepEqual(promptReferenceIds(board), ['#U3', '#J4.A4', '#net:"a,b"', '#@x1.5y-2']);
+  // A named engine face is not a board selector.
+  assert.throws(() => referencePart({ ...board, target: { kind: 'cad-selector', selectors: [FACE] } }), /invalid CAD/);
+  // A board's copied reference pasted into a note is that reference again, in the board's grammar.
+  assert.deepEqual(parsePromptReference('/work/blinky.kicad_pcb#R1,R1.2,net:VBUS'),
+    { resource: { kind: 'workspace-file', path: '/work/blinky.kicad_pcb' }, target: { kind: 'cad-selector', selectors: ['#R1', '#R1.2', '#net:VBUS'] } });
+  assert.equal(parsePromptReference('/work/blinky.kicad_pcb#R1 and more'), null);
+});
+
+test('a KiCad schematic names its references as schematic selectors: a board\'s for what both hold, its own for sheets and uuids', () => {
+  const schematic = { resource: { kind: 'workspace-file', path: '/work/divider.kicad_sch' }, target: { kind: 'cad-selector', selectors: ['#R1.2', '#net:/MID', '#sheet:/Load/'] } };
+  assert.equal(formatPromptReference(referencePart(schematic).reference), '/work/divider.kicad_sch#R1.2,net:/MID,sheet:/Load/');
+  // A board's point is no schematic selector.
+  assert.throws(() => referencePart({ ...schematic, target: { kind: 'cad-selector', selectors: ['#@x1y2'] } }), /invalid CAD/);
+  assert.deepEqual(parsePromptReference('/work/divider.kicad_sch#R1,wire:AB12'),
+    { resource: { kind: 'workspace-file', path: '/work/divider.kicad_sch' }, target: { kind: 'cad-selector', selectors: ['#R1', '#wire:ab12'] } });
 });
 
 test('invalid bundles fail before delivery, including dangling relationships and unknown targets', () => {
@@ -120,4 +145,32 @@ test('a model is referenced by its document id, in the engine grammar, and nothi
   assert.equal(formatPromptReference(reference), `${id}#face 1`);
   assert.throws(() => validatePromptReference({ resource: { kind: 'cad-model', path: '/m/parts.py' }, target: { kind: 'whole-resource' } }), /by its id/);
   assert.equal(parsePromptReference('/m/parts.py::cube#face 1'), null);
+});
+
+test('a message names each file from the workspace or the home, never by the home itself; the parts keep absolute paths', async () => {
+  const { displayPath, resolvePromptMessage } = await import('./index.js');
+  const folders = { start: '/Users/jake/robots/demo', home: '/Users/jake' };
+  assert.equal(displayPath('/Users/jake/robots/demo/boards/lfo.kicad_pcb', folders), 'boards/lfo.kicad_pcb');
+  assert.equal(displayPath('/Users/jake/robots/other/a.step', folders), '~/robots/other/a.step');
+  assert.equal(displayPath('/Users/jakeX/a.step', folders), '/Users/jakeX/a.step', 'a folder by its name, not its prefix');
+  assert.equal(displayPath('/tmp/cad-quick-edit-x/a.snapshot.json', folders), '/tmp/cad-quick-edit-x/a.snapshot.json');
+  assert.equal(displayPath('/Users/jake/robots/demo/a.step', null), '/Users/jake/robots/demo/a.step');
+  // The root, the home and a folder above it are no workspace (a desktop host's server starts in one).
+  for (const start of ['/', '/Users', '/Users/jake', '']) assert.equal(displayPath('/Users/jake/w/a.step', { ...folders, start }), '~/w/a.step', start);
+  assert.equal(displayPath('C:/Users/Jake/w/a.step', { start: 'c:/users/jake/w', home: 'C:/Users/Jake' }), 'a.step', 'a drive in either case');
+  assert.equal(displayPath('0123456789abcdef', folders), '0123456789abcdef', 'an id as it is');
+
+  const board = { kind: 'workspace-file', path: '/Users/jake/robots/demo/my board.kicad_pcb' };
+  const snapshot = { id: 'snapshot', kind: 'attachment', name: 'b.snapshot.json', mimeType: 'application/json', content: new Blob(),
+    label: 'Snapshot', path: Promise.resolve('/Users/jake/robots/demo/tmp/b.snapshot.json'), about: ['file'] };
+  const parts = [textPart('Add a logo.'), referencePart({ resource: board, target: { kind: 'whole-resource' } }, 'file'),
+    referencePart({ resource: board, target: { kind: 'cad-selector', selectors: ['#R1'] } }, 'r1'), snapshot];
+  const context = createPromptContext(parts, undefined, { folders: Promise.resolve(folders) });
+  assert.equal(await resolvePromptMessage(context),
+    'Add a logo.\n\nFile: "my board.kicad_pcb"\nReferences:\n"my board.kicad_pcb"#R1\nSnapshot: tmp/b.snapshot.json');
+  assert.equal(context.parts[1].reference.resource.path, board.path, 'the part keeps the absolute path');
+  assert.equal(formatPromptReference(context.parts[2].reference), '"/Users/jake/robots/demo/my board.kicad_pcb"#R1', 'Copy References writes it whole');
+  // Folders the host could not say: every file by its absolute path.
+  assert.match(await resolvePromptMessage(createPromptContext(parts, undefined, { folders: Promise.reject(new Error('offline')) })),
+    /File: "\/Users\/jake\/robots\/demo\/my board.kicad_pcb"/);
 });

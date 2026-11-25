@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { isDocumentId } from "@text-to-cad/core/lib/cadRefs.js";
+import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { failureAlert } from "../kit/status/loadAlerts.js";
 import { english } from "../../i18n/core.js";
 

@@ -1,4 +1,4 @@
-"""`cad snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
+"""`cad <type> snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
 reported, and what an engine document's view does not offer refused by name before anything
 renders, with OUT untouched; the document's own mesh exports drawn by OCCT too, read by their
 readers (`engine/formats`, and `test_formats.py` for every kind), in this process and through the
@@ -25,6 +25,7 @@ from cad.engine.render import context
 from cad.engine.serve import Server
 from cad.engine.snapshot import (SnapshotRefused, authored, parse_annotation, parse_camera, parse_display, parse_measurements, snapshot)
 from tests.python.support import opengl
+from tests.python.support.http_listener import listener
 from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
@@ -101,6 +102,13 @@ class SnapshotTest(unittest.TestCase):
         # The painted top face is warm (the viewer's surface grades its orange): red well above blue.
         self.assertTrue(any(r - b > 60 for r, g, b in drawn))
 
+    def test_preview_is_drawn_lit_in_its_studio_in_perspective(self) -> None:
+        gl()
+        out = self.folder / "preview.png"
+        report = snapshot(self.document, out, preview=True, size=(320, 240), daemon=False)
+        self.assertEqual((report["preview"], report["projection"], report["renderer"]), (True, "perspective", "occt"))
+        self.drawn(out, (320, 240))
+
     def test_the_cli_prints_what_it_drew_and_its_timings(self) -> None:
         gl()
         out = self.folder / "wire.png"
@@ -134,7 +142,8 @@ class SnapshotTest(unittest.TestCase):
             parse_display("sideways", grid=False)
         with self.assertRaisesRegex(SnapshotRefused, "underneath"):
             parse_camera("underneath")
-        with self.assertRaisesRegex(SnapshotRefused, "projection"):
+        with self.assertRaisesRegex(SnapshotRefused, "projection belongs to display.camera: "
+                                                     "--display '{\"camera\": {\"projection\": \"perspective\"}}'"):
             parse_camera('{"projection": "perspective"}')
         (self.folder / "out.jpg").write_bytes(b"a photo")
         with self.assertRaisesRegex(SnapshotRefused, r"\.png"):
@@ -159,6 +168,90 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual(done.returncode, 2)
         self.assertIn("display.exploded", done.stderr)
         self.assertEqual(out.read_bytes(), b"before")
+
+    def test_a_clip_and_a_camera_object_take_what_the_viewer_takes_and_refuse_the_rest_by_name(self) -> None:
+        """``display.clip`` and a camera object are the viewer's own vocabularies (``@cad/core``'s
+        ``displaySettings.js`` and ``camera.js``): what the viewer writes is taken whole, and anything else
+        is refused before anything renders, saying what is taken -- never a cut drawn where nobody asked
+        (an unknown ``position``), a view other than the one named (an unknown preset), or Python's own
+        words (``substring not found``, ``'list' object has no attribute 'strip'``)."""
+        from cad.engine.snapshot import options
+
+        viewer = {"enabled": True, "axis": "y", "at": 12.5, "invert": True, "partColors": False}
+        self.assertEqual(parse_display(json.dumps({"clip": viewer}), grid=False)["clip"], viewer)
+        camera = {"position": [80, -80, 60], "target": [0, 0, 0], "up": [0, 0, 1], "orthographicHalfHeight": 30, "zoom": 1}
+        self.assertEqual(parse_camera(json.dumps(camera)), camera)  # a Quick Edit packet's view, as the viewer writes it
+        self.assertEqual(parse_camera('{"preset": "45:30", "zoom": 1.5}'), {"preset": "45:30", "zoom": 1.5})
+        for display, said in (('{"clip": {"axis": "Z"}}', "display.clip.axis is x, y or z, not 'Z'"),
+                              ('{"clip": {"axis": "z", "position": 3}}',
+                               "display.clip has no position; it takes at, axis, enabled, invert, partColors"),
+                              ('{"clip": {"at": "3"}}', "display.clip.at is a number"),
+                              ('{"clip": {"enabled": "yes"}}', "display.clip.enabled is true or false"),
+                              ('{"clip": true}', "display.clip is {")):
+            with self.subTest(display=display), self.assertRaises(SnapshotRefused) as refused:
+                parse_display(display, grid=False)
+            self.assertTrue(str(refused.exception).startswith(said), str(refused.exception))
+        for given, said in (('{"preset": "isometric"}', "camera.preset 'isometric' is no preset (back, bottom, front, "
+                                                         "iso, left, right, top) or azimuth:elevation pair"),
+                            ('{"position": [1, 2], "target": [0, 0, 0]}', "camera.position is [x, y, z]"),
+                            ('{"up": [0, 0, 0]}', "camera.up is [x, y, z], not all 0"),
+                            ('{"zoom": 0}', "camera.zoom is a number above 0"),
+                            ('{"azimuth": 45, "elevation": 30}', "camera has no azimuth, elevation; its keys are direction, "
+                                                                 "name, orthographicHalfHeight, position, preset, target, "
+                                                                 "up, zoom; an azimuth and an elevation, in degrees, are "
+                                                                 "--camera 45:30")):
+            with self.subTest(camera=given), self.assertRaises(SnapshotRefused) as refused:
+                parse_camera(given)
+            self.assertEqual(str(refused.exception), said)
+        # A function's (or a tool's) display and camera are text or an object; anything else is refused as such.
+        with self.assertRaisesRegex(SnapshotRefused, r'^--display is a mode \(solid, .*\) or the display object, not \["solid"\]$'):
+            options(display=["solid"])
+        with self.assertRaisesRegex(SnapshotRefused, r'^--camera is a preset .* or a camera object, not \["iso"\]$'):
+            options(camera=["iso"])
+
+    def test_a_camera_object_s_preset_is_the_view_it_names(self) -> None:
+        # An azimuth:elevation preset in a camera object turns the camera as the string does (camera.js); it
+        # once fell back to iso without a word.
+        gl()
+        pictures = {}
+        for name, camera in (("pair", {"preset": "200:15"}), ("iso", {"preset": "iso"})):
+            out = self.folder / f"preset-{name}.png"
+            snapshot(self.document, out, camera=camera, size=(160, 120), daemon=False)
+            pictures[name] = out.read_bytes()
+        self.assertNotEqual(pictures["pair"], pictures["iso"])
+
+    def test_what_a_model_does_not_offer_is_refused_by_the_model_s_own_name(self) -> None:
+        # A model's document no file holds is drawn under a name made from OUT; its refusals name the document as
+        # its code labels it, never that stand-in (they once said "review.xbf places 1 part").
+        from cad.engine import api
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-named-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        script = folder / "plate.py"
+        script.write_text("import build123d as bd\nfrom cad import model\n\n\n@model\ndef plate():\n"
+                          "    return bd.Box(10, 10, 2)\n", encoding="utf-8")
+        with self.assertRaises(SnapshotRefused) as refused:
+            api.snapshot(_model(script, "plate"), folder / "review.png", display="parts", daemon=False)
+        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate places 1 part. "
+                                                 "Use solid.")
+        self.assertFalse((folder / "review.png").exists())
+
+    def test_a_snapshot_draws_a_whole_document_and_says_how_to_draw_a_part_alone(self) -> None:
+        # A source naming something inside a document (a ref, as inspect takes one) is refused before anything
+        # runs, saying what to give and how to draw one part; it once said "is neither a document nor a file".
+        from cad.engine import api
+
+        for source, said in (("0dc50a92-a21f-5895-a245-ebdeb5352f3b#bracket/face 7",
+                              "a snapshot draws a whole document, so its source names no #bracket/face 7: give "
+                              "0dc50a92-a21f-5895-a245-ebdeb5352f3b; --display '{\"isolated\": [\"bracket\"]}' draws "
+                              "bracket alone"),
+                             (f"{self.document}#plate", f"a snapshot draws a whole document, so its source names no "
+                                                        f"#plate: give {self.document}; --display '{{\"isolated\": "
+                                                        f"[\"plate\"]}}' draws plate alone")):
+            with self.subTest(source=source), self.assertRaises(SnapshotRefused) as refused:
+                api.snapshot(source, self.folder / "whole.png", daemon=False)
+            self.assertEqual(str(refused.exception), said)
+        self.assertFalse((self.folder / "whole.png").exists())
 
     def test_a_snapshot_says_its_stages_as_it_reaches_them_and_a_job_s_pictures_are_counted(self) -> None:
         from cad.engine import snapshot as drawing
@@ -253,8 +346,9 @@ class SnapshotTest(unittest.TestCase):
         self.assertEqual((Path(drawn.report["output"]), drawn.path.read_bytes()[:4]), (drawn.path, b"\x89PNG"))
 
     def test_a_failure_under_json_is_its_envelope_on_stdout(self) -> None:
-        """Under --json a verb says its failure as ``{"ok": false, "error": ...}`` on stdout, the result's
-        channel, and exits 1; without it, its words on stderr: 2 for a request refused before anything ran."""
+        """Under --json a verb says its failure as ``{"ok": false, "error": ..., "reason": ...}`` on stdout, the
+        result's channel; without it, its words on stderr: either way its class's status, 2 for a request
+        refused before anything ran."""
         import contextlib
         import io
 
@@ -272,7 +366,8 @@ class SnapshotTest(unittest.TestCase):
             with self.subTest(argv=argv):
                 code, printed, err = run(lambda: cli.main([*argv, "--json"]))
                 found = json.loads(printed)
-                self.assertEqual((code, set(found), found["ok"], err), (1, {"ok", "error"}, False, ""))
+                self.assertEqual((code, set(found), found["ok"], found["reason"], err),
+                                 (status, {"ok", "error", "reason"}, False, "invalid_argument", ""))
                 self.assertIn(said, found["error"])
                 code, printed, err = run(lambda: cli.main(argv))
                 self.assertEqual((code, printed), (status, ""))
@@ -446,6 +541,16 @@ class SnapshotTest(unittest.TestCase):
                          [("view-1.png", True, 0.0, False, False, 1.0, (240, 180)),
                           ("front.png", False, 0.15, True, True, 2.0, (160, 120))])
         self.assertEqual(pictures[0][2].display["hidden"], ["peg.1"])
+        walking = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "jointValues": "walk@0.6"}]})
+        self.assertEqual(walking[0][2].pose, "walk@0.6", "a sequence at a time, the document's to answer when drawn")
+        studio = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "preview": True}]})
+        self.assertEqual([still.preview for _document, _out, still in [*studio, *job_pictures(packet, preview=True),
+                                                                       *pictures]],
+                         [True] * 4 + [False] * 3, "a job's own Preview, the flag's over every job, else none")
+        self.assertTrue(cli.parser_for("snapshot").parse_args([str(self.document), "out.png", "--preview"]).preview)
+        coloured = job_pictures({**packet, "jobs": [{**packet["jobs"][0], "output": {"background": "#202830"}}]})
+        self.assertEqual([still.background for _document, _out, still in [*coloured, *pictures]],
+                         ["#202830", None, None, None])
         self.assertEqual([still.annotation for _document, _out, still in pictures], [packet["annotation"]] * 3,
                          "the packet's ink, over every view")
         # The flags override every job: SRC drawn in place of the input, and the size of every output.
@@ -460,6 +565,11 @@ class SnapshotTest(unittest.TestCase):
                 ({**packet, "jobs": [{**job, "output": {"padding": 0.5}}]}, r"padding is a number from 0 to 0.15"),
                 ({**packet, "jobs": [{**job, "output": {"renderScale": 4}}]}, r"renderScale is a number from 1 to 3"),
                 ({**packet, "jobs": [{**job, "output": {"viewLabels": True}}]}, "output has no viewLabels"),
+                ({**packet, "jobs": [{**job, "output": {"background": "grey"}}]}, "background is a colour as #rrggbb"),
+                ({**packet, "jobs": [{**job, "motion": {"name": "walk", "at": 0.6}}]}, r"jobs\[0\] has no motion"),
+                ({**packet, "jobs": [{**job, "preview": "studio"}]}, r"jobs\[0\].preview is true or false"),
+                ({**packet, "jobs": [{**job, "output": {"background": "#202830", "transparent": True}}]},
+                 "background and transparent: a picture stands on a colour or on nothing"),
                 ({**packet, "jobs": [{**job, "outputs": []}]}, "lists the pictures it writes"),
                 ({**packet, "jobs": [{**job, "outputs": [{"path": str(folder / "a.jpg")}]}]}, r"a\.jpg is not one"),
                 ({**packet, "jobs": [job, job]}, "writes .*front.png twice"),
@@ -485,8 +595,10 @@ class SnapshotTest(unittest.TestCase):
             with self.subTest(argv=argv):
                 printed = io.StringIO()
                 with contextlib.redirect_stdout(printed):
-                    self.assertEqual(cli.main(["snapshot", *argv, "--json"]), 1)
-                self.assertIn(said, json.loads(printed.getvalue())["error"])
+                    self.assertEqual(cli.main(["snapshot", *argv, "--json"]), 2)  # the command line's, as without --json
+                found = json.loads(printed.getvalue())
+                self.assertEqual(found["reason"], "usage")
+                self.assertIn(said, found["error"])
 
     def drawn(self, path: Path, size: tuple[int, int]) -> None:
         """A picture of something: the size asked, and more than a backdrop."""
@@ -575,16 +687,16 @@ def _model(script: Path, name: str):
 
 
 class AccessTest(unittest.TestCase):
-    """The engine's own routes answer its own page alone: its standalone page (``page/``) reads them
-    from its origin, and every other page goes through the viewer's relay of them, which keeps its
-    own law. No origin, a page on this machine's included, is named as a reader."""
+    """The engine's own routes name no reader of another origin: every page reads them through the
+    viewer's relay of them, which keeps its own law. No origin, a page on this machine's included,
+    is named as a reader."""
 
     def test_no_page_of_another_origin_is_named_a_reader(self) -> None:
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         for origin in ("http://127.0.0.1:3245", "http://localhost:5173", "https://example.com", "null"):
-            for path in ("/api/look", "/api/docs", "/"):
+            for path in ("/api/v1/look", "/api/docs"):
                 with self.subTest(origin=origin, path=path):
                     request = urllib.request.Request(f"{server.url}{path}", headers={"Origin": origin})
                     with urllib.request.urlopen(request, timeout=60) as answer:

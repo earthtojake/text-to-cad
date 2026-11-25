@@ -6,16 +6,16 @@ service per workspace and lends it to every mounted CAD view. The HTTP adapter,
 cache and worker-session lifetimes. Disposing a view releases its render session;
 disposing the service aborts its resources and sessions.
 
-Where a document the cadgen engine serves is read belongs to the service too:
-`engineDocument(file)` (an `.xbf`, or a STEP) answers the document's API URL through
-the viewer, `/__cad/api/doc/<id>`, asked again after the server's `retryMs` while
+Where a document the engine serves is read belongs to the service too:
+`engineDocument(file)` (an `.xbf`, a STEP, or a model by its id) answers the document's API URL,
+`/api/v1/documents/<kind>/<id>` (`POST /api/v1/documents` opens it), asked again after the server's `retryMs` while
 the engine still reads the file, and the fetch every read of it is made with. The
 HTTP implementation owns request encoding and cancellation. UI consumes the
 resulting tickets and never supplies a same-origin transport fallback.
 
 `service.resources` owns JSON, byte and size reads, dependency resolution
 and worker tickets. Pass it as `{ resources }` to render loaders, peeks and robot
-loads. Relative references and URDF/SDF mesh references are resolved by the
+loads. Relative references and URDF mesh references are resolved by the
 provider. Direct glTF buffers and textures are read through it
 as well; the Three.js loader receives temporary object URLs that are revoked
 once parsing completes. Up to six nested glTF reads run together, each limited

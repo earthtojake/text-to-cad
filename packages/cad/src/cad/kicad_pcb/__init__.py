@@ -1,0 +1,112 @@
+"""``cad.kicad_pcb``: the KiCad PCB document type (``cad.registry``), a saved KiCad board.
+
+A ``.kicad_pcb`` is an AUTHORED file, edited in KiCad, as text or in place by :func:`edit`, never a
+document a model makes: the type has no decorator. Its functions take paths and our own board objects, so
+they are the type's, not the ``kicad`` integration's (the signature rule):
+
+* :func:`read` parses the file and the ``.kicad_pro`` beside it with the standard library
+  (:mod:`cad.engine.formats.kicad`), so a check script run with ``cad run`` imports it without the
+  CAD kernel and without KiCad; :func:`inside` is the even-odd test a check measures a pour or an
+  outline with, in the same millimetres.
+* :func:`inspect` is the board in one look as plain data -- its format, thickness, size, layers, parts
+  and nets -- what ``cad kicad_pcb inspect`` prints; ``snapshot`` draws it flat, as ``cad kicad_pcb
+  snapshot`` does.
+* :func:`edit` opens the saved board in KiCad's IPC API for a ``with`` block, the ``kicad`` integration's
+  (``cad.kicad._session``): the block gets KiPy's open board, which is saved at its end when it was changed
+  (made by KiCad when the file is not there yet) and not at all when the block raises.
+* :func:`drc` (KiCad's design rule check) and :func:`export` (its fabrication, assembly and 3D outputs)
+  run KiCad's own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``): they are the
+  commands ``cad kicad_pcb drc`` and ``cad kicad_pcb export``, one to one. Where this environment lacks
+  kicode, the command runs them in the environment of ``cad[kicad]`` the engine makes on first need; a
+  function called here says to install the extra (or run the script with ``cad run``, which does).
+"""
+
+from __future__ import annotations
+
+from contextlib import AbstractContextManager
+from pathlib import Path
+
+from typing import Any
+
+from cad.results import CheckResult, ExportResult
+
+__all__ = ["drc", "edit", "export", "inside", "inspect", "read"]
+
+# The reader and the even-odd test load when first used: the formats package they live in imports
+# numpy, and a command's help (``cad kicad_pcb drc --help``) is made from this module without it.
+_LAZY = {"read": ("cad.engine.formats.kicad.board_index", "read_board"),
+         "inside": ("cad.engine.formats.kicad.geometry", "inside")}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY:
+        import importlib
+
+        module, attribute = _LAZY[name]
+        value = getattr(importlib.import_module(module), attribute)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY))
+
+
+def inspect(path: Path | str) -> dict:
+    """What the board at ``path`` holds, as plain data: ``file``, ``format``, ``thickness``, ``size``,
+    ``layers``, ``parts``, ``nets`` and ``counts`` (``cad kicad_pcb inspect``)."""
+    from cad.engine.formats.kicad.summary import inspect_board
+
+    return inspect_board(path)
+
+
+def edit(board: Path | str) -> AbstractContextManager[Any]:
+    """The board at ``board`` open in KiCad, for a ``with`` block: ``with kicad_pcb.edit("board.kicad_pcb") as
+    b:`` hands the block KiPy's open board (kicode's ``kicode.board.Board``), through kicode's headless
+    ``kicad-cli api-server``. At the block's end the board is saved when it was changed (KiCad's own modified
+    state), so a block that changes nothing leaves the file byte for byte; when the block raises, nothing is
+    saved and the exception goes on. A board not there yet is made by KiCad, with its project, and saved. A
+    ``kicad_sch.edit`` of the same project inside the block shares its KiCad. A saved board is checked for the
+    nets KiCad moved (it gives copper the net of a pad it overlaps): each track, via, copper shape or zone saved
+    on another net than the block gave it, else the file had, is a warning on stderr and, after the block, one
+    of ``b.net_changes`` (``kind``, ``id``, ``ref``, ``was``, ``now``, ``pad``, ``joined``). Needs the kicad extra
+    (``cad[kicad]``; ``cad run`` gives a script that calls it the extra)."""
+    from cad.kicad._session import edit as editing
+
+    return editing(board, "kicad_pcb")
+
+
+def drc(board: Path) -> CheckResult:
+    """Check the KiCad board BOARD with KiCad's design rule check.
+
+    Runs ``kicad-cli pcb drc`` on the saved file with every severity reported
+    and lists each violation and unconnected item with where it is (millimetres
+    from the board's origin). The board fails when any error-severity violation
+    or any unconnected item exists; warnings are reported and do not fail it.
+    The result's ``measurements["drc"]`` is every finding as KiCad reported it,
+    each item with its uuid and position.
+
+    board: the .kicad_pcb to check (its .kicad_pro beside it carries the rules).
+    """
+    from cad.kicad._check import check
+
+    return check(Path(board))
+
+
+def export(board: Path | str, to: str, out: Path | str) -> ExportResult:
+    """KiCad's ``to`` export of the saved ``board`` into the folder ``out`` (``cad kicad_pcb export BOARD
+    --to KIND -o DIR``): ``to`` is one of ``gerbers``, ``drill``, ``pos``, ``bom``, ``step``, ``glb``,
+    ``odb``, ``ipc2581``, ``pdf`` and ``dxf`` (``cad.kicad._export``'s table says what each writes). The
+    result says the files written and any warning. ``RuntimeError`` in KiCad's words when it fails."""
+    from cad.kicad._export import export as run
+
+    said: list[str] = []
+    source = Path(board).expanduser()
+    written = run(source, str(to), Path(out).expanduser(), warn=said.append)
+    return ExportResult(path=source.resolve(), to=str(to), written=tuple(written), warnings=tuple(said))
+
+
+from cad._internal.document_type import bind as _bind  # noqa: E402
+
+_bind(__name__)

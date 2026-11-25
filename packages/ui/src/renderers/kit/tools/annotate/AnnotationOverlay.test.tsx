@@ -7,10 +7,10 @@ import { ViewerHostContext } from '../../../../../dist/host/context.js';
 import { testHost } from '../../../../../dist/host/testing/host.js';
 
 // Projecting needs a WebGL scene: here a mark goes into the annotation as it was made.
-const projected = vi.hoisted(() => ({ calls: [] as unknown[][] }));
+const projected = vi.hoisted(() => ({ calls: [] as unknown[][], screen: [] as any[] }));
 vi.mock('../../../../../dist/renderers/kit/tools/annotate/annotation3d.js', () => ({
   projectAnnotations: (...args: unknown[]) => { projected.calls.push(args); return args[1]; },
-  annotationsOnScreen: () => [],
+  annotationsOnScreen: () => projected.screen,
   moveAnnotations: () => [],
 }));
 
@@ -109,4 +109,25 @@ it('the highlighter puts down an ordinary stroke: five times the weight, 0.35 op
   const [inked] = pen.annotation.add.mock.calls[0][0];
   expect(inked).toMatchObject({ kind: 'stroke', width: 3, opacity: 1 });
   expect(inked.widths).toHaveLength(inked.points.length);
+});
+
+// A right or middle drag in Draw is the view's, and the SAME press it is under Select: handed to the canvas with its own
+// button, buttons and keys, so the view's one camera mapping (a 3D view's OrbitControls: the right button pans) decides it
+// in both tools. A left press stays the drawing's, and never reaches the canvas.
+it("hands a right or middle press to the view's canvas as Select's canvas gets it: the same button, so a right drag pans", () => {
+  const canvas = document.body.appendChild(document.createElement('canvas'));
+  const reached: Array<Record<string, unknown>> = [];
+  canvas.addEventListener('pointerdown', event => reached.push({ button: event.button, buttons: event.buttons, shiftKey: event.shiftKey, clientX: event.clientX }));
+  const annotation = { items: [], selected: [], tool: 'pen', style: { color: '#ff2d55', strokeWidth: 2, placement: 'surface' }, noteView: vi.fn(),
+    add: vi.fn(), remove: vi.fn(), replace: vi.fn(), select: vi.fn(), undo: vi.fn(), redo: vi.fn() };
+  render(<ViewerHostContext.Provider value={testHost()}>
+    <AnnotationOverlay annotation={annotation} runtimeRef={{ current: { renderer: { domElement: canvas } } }} viewOf={() => ({ camera: {} })} /></ViewerHostContext.Provider>);
+  const surface = document.querySelector('[data-cad-annotation-overlay]') as HTMLElement;
+  // What Select's canvas would get: the raw press.
+  const presses = [{ button: 2, buttons: 2, shiftKey: false, clientX: 40 }, { button: 1, buttons: 4, shiftKey: true, clientX: 60 }];
+  for (const init of presses) fireEvent.pointerDown(surface, { pointerId: 7, pointerType: 'mouse', clientY: 30, ...init });
+  expect(reached).toEqual(presses);
+  fireEvent.pointerDown(surface, { pointerId: 8, pointerType: 'mouse', button: 0, buttons: 1, clientX: 80, clientY: 30 });
+  expect(reached).toHaveLength(2);
+  canvas.remove();
 });

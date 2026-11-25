@@ -212,10 +212,11 @@ test("an unknown path command is refused, naming it", () => {
   );
 });
 
-test("a payload from another schema version is refused with the upgrade to make", () => {
+test("a payload from another schema version is refused with the way out", () => {
   assert.throws(
     () => prepareDrawing({ ...payload([]), schemaVersion: DRAWING_SCHEMA_VERSION + 1 }, { Path2D: RecordingPath }),
-    new RegExp(`schemaVersion ${DRAWING_SCHEMA_VERSION + 1}, but this build reads version ${DRAWING_SCHEMA_VERSION}.*Update text-to-cad and the app together`, "s")
+    new RegExp(`schemaVersion ${DRAWING_SCHEMA_VERSION + 1}, but this build reads version ${DRAWING_SCHEMA_VERSION}: `
+      + "cad-server and this page are of different releases\\. Reload the page, or restart the app that shows it\\.$")
   );
   assert.throws(() => prepareDrawing(null, { Path2D: RecordingPath }), /needs a drawing payload object/);
   assert.throws(

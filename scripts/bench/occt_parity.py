@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""How alike the CAD Viewer and the OCCT prototype draw the regular display modes.
+"""How alike the viewer and the OCCT prototype draw the regular display modes.
 
 A manual measurement, never run in CI; what it writes goes under an ignored folder
 (``tmp/bench/occt-parity`` by default). Each document is drawn in every mode and camera
@@ -244,7 +244,7 @@ def draw_occt(doc: Path, folder: Path, modes: list[str], cameras: list[str], siz
 # the ignored tmp/bench/snapshot-page, once per run, so it is always the checkout's own scene code;
 # it is read as files and routed to the page's origin, and it reads the document from the engine
 # daemon that serves it: those requests are fetched for the page with the user's token, which the
-# page has no way to send, and answered with the page's origin allowed (the engine sends no CORS). ``cad snapshot`` drew mesh files this way before OCCT drew every kind;
+# page has no way to send, and answered with the page's origin allowed (the engine sends no CORS). ``cad <type> snapshot`` drew mesh files this way before OCCT drew every kind;
 # nothing cadgen ships carries the page now, and this bench builds it for the viewer's side alone.
 
 PAGE_ORIGIN = "http://localhost"
@@ -278,8 +278,9 @@ def _served(doc: Path) -> tuple[str, str]:
     if not answer or "failed" in answer:
         raise RuntimeError(f"the engine would not serve {doc.name}: {(answer or {}).get('failed', 'no daemon')}")
     parsed = urlparse(answer["url"])
-    url = f"{parsed.scheme}://{parsed.netloc}/api/doc/{answer['doc']}"
-    headers = {"Authorization": f"Bearer {answer['token']}", "x-cadgen-viewer": "1"}
+    kind = "step" if doc.suffix.lower() in (".step", ".stp") else "xbf"
+    url = f"{parsed.scheme}://{parsed.netloc}/api/v1/documents/{kind}/{answer['doc']}"
+    headers = {"Authorization": f"Bearer {answer['token']}", "x-cad-viewer": "1"}
     with urlopen(Request(f"{url}/mesh", data=b"", method="POST", headers=headers), timeout=900) as done:  # noqa: S310 - the engine, on loopback
         done.read()
     return url, answer["token"]

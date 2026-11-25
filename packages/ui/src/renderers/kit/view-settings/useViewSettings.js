@@ -9,9 +9,9 @@ const NO_SNAPSHOT = () => null;
  * result of this hook (a renderer that needed the settings before the shell could hand them over):
  * it is returned as it is, and no second store is made. A caller passes the same kind every render.
  */
-export function useViewSettings(appearance, provided = null) {
-  const [store] = useState(() => (provided ? null : createViewSettingsStore({}, { appearance, lightingQuality: "preview" })));
-  useLayoutEffect(() => { store?.configure({ appearance, lightingQuality: "preview" }); }, [store, appearance]);
+export function useViewSettings(appearance, provided = null, canvas = null) {
+  const [store] = useState(() => (provided ? null : createViewSettingsStore({}, { appearance, canvas, lightingQuality: "preview" })));
+  useLayoutEffect(() => { store?.configure({ appearance, canvas, lightingQuality: "preview" }); }, [store, appearance, canvas]);
   const snapshot = useSyncExternalStore(store ? store.subscribe : NO_SUBSCRIPTION, store ? store.getSnapshot : NO_SNAPSHOT, store ? store.getSnapshot : NO_SNAPSHOT);
   return provided || { ...snapshot, store };
 }

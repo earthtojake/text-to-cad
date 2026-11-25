@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DRAWING_ZOOM_IN_LIMIT,
   DRAWING_ZOOM_OUT_LIMIT,
+  carryTransform,
   clampScale,
   fitTransform,
   modelToScreen,
@@ -135,6 +136,30 @@ test("sameTransform tells a resize's drift from a pan", () => {
   assert.ok(!sameTransform(base, { ...base, offsetX: 21 }));
   assert.ok(!sameTransform(base, null));
   assert.ok(sameTransform(null, null));
+});
+
+test("a view carried to another pane keeps what it shows, and on its own pane is itself exactly", () => {
+  const bounds = [0, 0, 100, 50];
+  const wide = { width: 1440, height: 800 }, narrow = { width: 1224, height: 800 };
+  const fit = pane => ({ ...pane, fitScale: fitTransform(bounds, pane.width, pane.height).scale });
+  // A view the person framed on the narrow pane (the panel docked), zoomed in and panned.
+  const framed = { scale: fit(narrow).fitScale * 3, offsetX: 140.25, offsetY: 610.5 };
+  // On the pane it was framed in it is the view itself, to the bit, whatever the fits say.
+  assert.deepEqual(carryTransform(framed, fit(narrow), fit(narrow)), framed);
+  assert.deepEqual(carryTransform(framed, fit(narrow), { ...narrow, fitScale: 1 }), framed);
+  // On the wide pane: the point at the centre stays at the centre, and the zoom against the fit is kept.
+  const carried = carryTransform(framed, fit(narrow), fit(wide));
+  const centre = screenToModel(framed, narrow.width / 2, narrow.height / 2);
+  const there = screenToModel(carried, wide.width / 2, wide.height / 2);
+  assert.ok(Math.abs(there[0] - centre[0]) < 1e-9 && Math.abs(there[1] - centre[1]) < 1e-9);
+  assert.ok(Math.abs(carried.scale / fit(wide).fitScale - 3) < 1e-12);
+  // And back: the pane it was framed in gives that view again.
+  const back = carryTransform(carried, fit(wide), fit(narrow));
+  for (const key of ["scale", "offsetX", "offsetY"]) assert.ok(Math.abs(back[key] - framed[key]) < 1e-9, key);
+  // A zoom past the new fit's limits (a record from a pane of another shape) is brought inside them.
+  const far = carryTransform({ ...framed, scale: fit(narrow).fitScale * DRAWING_ZOOM_IN_LIMIT * 2 }, fit(narrow), fit(wide));
+  assert.equal(far.scale, zoomLimits(fit(wide).fitScale).maxScale);
+  assert.throws(() => carryTransform(framed, { ...narrow, fitScale: 0 }, fit(wide)), /positive fitted scale/);
 });
 
 test("a fit keeps clear of the room at the pane's top (the view's tool strip)", () => {

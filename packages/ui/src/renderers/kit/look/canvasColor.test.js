@@ -1,0 +1,97 @@
+// A scene is drawn on the app's canvas (the `--canvas` token), with a default when
+// the document or stylesheet is unavailable.
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  CANVAS_FALLBACK,
+  cssColorToHex,
+  readCanvasToken,
+  resolveCanvasColor,
+  sceneEdgeColor
+} from "./canvasColor.js";
+
+test("oklch: percentages, hue units, chroma and `none`", () => {
+  assert.equal(cssColorToHex("oklch(100% 0 0)"), "#ffffff");
+  assert.equal(cssColorToHex("oklch(0 0 0)"), "#000000");
+  assert.equal(cssColorToHex("oklch(1 0 0 / 50%)"), "#ffffff");
+  assert.equal(cssColorToHex("oklch(none none none)"), "#000000");
+  // A real chroma, and the same colour written with each hue unit.
+  const red = cssColorToHex("oklch(0.628 0.2577 29.23)");
+  assert.match(red, /^#[0-9a-f]{6}$/u);
+  assert.equal(cssColorToHex("oklch(0.628 0.2577 29.23deg)"), red);
+  assert.equal(cssColorToHex("oklch(0.628 0.2577 0.08119turn)"), red);
+  // Roughly sRGB red, which is what that triple is.
+  assert.equal(red.slice(1, 3), "ff");
+});
+
+test("hex and rgb() come through; anything else is nothing", () => {
+  assert.equal(cssColorToHex("#FFFFFF"), "#ffffff");
+  assert.equal(cssColorToHex("#abc"), "#aabbcc");
+  assert.equal(cssColorToHex("rgb(255, 255, 255)"), "#ffffff");
+  assert.equal(cssColorToHex("rgb(10 10 10 / 0.5)"), "#0a0a0a");
+  assert.equal(cssColorToHex("rgba(0, 0, 0, 1)"), "#000000");
+  assert.equal(cssColorToHex("color-mix(in srgb, red 50%, blue)"), null);
+  assert.equal(cssColorToHex("white"), null);
+  assert.equal(cssColorToHex(""), null);
+  assert.equal(cssColorToHex(null), null);
+  assert.equal(cssColorToHex("oklch(1 0)"), null);
+  assert.equal(cssColorToHex("oklch(1 0 nope)"), null);
+});
+
+test("with a document, the token is the canvas", () => {
+  // The desktop app and the standalone viewer: `--canvas` is on <html>,
+  // and the `.dark` class swaps the pair under it.
+  const doc = (token) => ({
+    documentElement: {},
+    defaultView: { getComputedStyle: () => ({ getPropertyValue: () => token }) }
+  });
+  assert.equal(readCanvasToken(doc(" oklch(1 0 0) ")), "oklch(1 0 0)");
+  assert.equal(
+    resolveCanvasColor({ token: readCanvasToken(doc("oklch(0.145 0 0)")), prefersDark: true }),
+    "#0a0a0a"
+  );
+  // The token wins over the app's light/dark: a host that themes its canvas
+  // some other colour gets that colour, not the default pair.
+  assert.equal(
+    resolveCanvasColor({ token: "#123456", prefersDark: true }),
+    "#123456"
+  );
+});
+
+test("with no document the viewer fallback pair is the answer", () => {
+  assert.equal(readCanvasToken(null), "");
+  assert.equal(readCanvasToken({}), "");
+  assert.equal(readCanvasToken({ documentElement: {} }), "");
+  assert.equal(resolveCanvasColor({ token: "", prefersDark: false }), CANVAS_FALLBACK.light);
+  assert.equal(resolveCanvasColor({ token: "", prefersDark: true }), CANVAS_FALLBACK.dark);
+  assert.equal(resolveCanvasColor(), CANVAS_FALLBACK.light);
+  // An unreadable token is a missing one, not a crash.
+  assert.equal(
+    resolveCanvasColor({ token: "color-mix(in srgb, var(--x) 38%, transparent)", prefersDark: true }),
+    CANVAS_FALLBACK.dark
+  );
+});
+
+test("the box behind the scene takes its edge colour", () => {
+  assert.equal(sceneEdgeColor({ type: "solid", solidColor: "#101010" }), "#101010");
+  // A gradient ends on its outer stop, and that is the edge of the picture.
+  assert.equal(
+    sceneEdgeColor({ type: "linear", solidColor: "#edf5fb", linearStart: "#fbfdff", linearEnd: "#b8cadb" }),
+    "#b8cadb"
+  );
+  assert.equal(
+    sceneEdgeColor({ type: "radial", solidColor: "#111111", radialInner: "#23242a", radialOuter: "#0a0a0d" }),
+    "#0a0a0d"
+  );
+  // A type with no stop of its own falls back through the solid base to the
+  // caller's canvas colour.
+  assert.equal(sceneEdgeColor({ type: "linear", solidColor: "#222222" }), "#222222");
+  assert.equal(sceneEdgeColor(null, "#0a0a0a"), "#0a0a0a");
+  assert.equal(sceneEdgeColor({}, "#0a0a0a"), "#0a0a0a");
+  assert.equal(sceneEdgeColor(null), CANVAS_FALLBACK.light);
+  assert.equal(
+    sceneEdgeColor({ type: "transparent", solidColor: "#123456" }, "#292929"),
+    "#292929"
+  );
+});

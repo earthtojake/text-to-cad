@@ -1,4 +1,4 @@
-"""What the asset routes will send, and the gates every route keeps.
+"""What the files route will send, and the gates every route keeps.
 
 There is no served directory: a file is named by its absolute path, wherever it is
 (``cad_server.viewer.backend``). What IS refused is a ref that is not an absolute path (400), and
@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 from urllib.parse import quote
 
+from cad.engine.formats.kicad import sexpr
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
 
@@ -43,7 +44,7 @@ class AttackFixture:
 
         self.write("ok.step", "public step\n")
         self.write("ok.stl", "solid public\n")
-        self.write("robot.urdf", '<robot name="r" xmlns:h="http://www.w3.org/1999/xhtml"><h:script>fetch("/__cad/analytics")</h:script></robot>')
+        self.write("robot.urdf", '<robot name="r" xmlns:h="http://www.w3.org/1999/xhtml"><h:script>fetch("/api/v1/settings")</h:script></robot>')
         self.write("part.step.json", '{"kinematics":{}}')
         self.write("secrets.json", f'{{"token":"{SECRET}"}}')
         self.write(".env", f"TOKEN={SECRET}\n")
@@ -102,7 +103,7 @@ class AttackFixture:
             conn.close()
 
     def asset(self, file_param):
-        return self.request("GET", f"/__cad/asset?file={quote(str(file_param), safe='')}")
+        return self.request("GET", f"/api/v1/local/files?path={quote(str(file_param), safe='')}")
 
 
 class SecurityTestCase(unittest.TestCase):
@@ -163,21 +164,21 @@ class FilesByAbsolutePath(SecurityTestCase):
             with self.subTest(ref=ref):
                 status, _, body = self.fixture.asset(ref)
                 self.assertDenied(status, body, {400})
-        for target in ("/__cad/asset", "/__cad/asset?file=", "/__cad/asset?v=1"):
+        for target in ("/api/v1/local/files", "/api/v1/local/files?path=", "/api/v1/local/files?v=1"):
             with self.subTest(target=target):
                 self.assertEqual(self.fixture.request("GET", target)[0], 400)
 
     def test_a_null_byte_is_a_400_with_the_exact_message(self):
-        status, _, body = self.fixture.request("GET", "/__cad/asset?file=%2Froot%2Fok.step%00.png")
+        status, _, body = self.fixture.request("GET", "/api/v1/local/files?path=%2Froot%2Fok.step%00.png")
         self.assertEqual(status, 400)
-        self.assertEqual(body, b'{"ok":false,"error":"File path contains an invalid null byte"}')
+        self.assertEqual(body, b'{"error":"File path contains an invalid null byte","hint":"fix the request as the error says"}')
 
     def test_repeated_file_params_take_the_first(self):
         good = quote(self.fixture.path("ok.step"), safe="")
         bad = quote(self.fixture.path(".dotfile.step"), safe="")
-        status, _, body = self.fixture.request("GET", f"/__cad/asset?file={good}&file={bad}")
+        status, _, body = self.fixture.request("GET", f"/api/v1/local/files?path={good}&path={bad}")
         self.assertEqual((status, body), (200, b"public step\n"))
-        status, _, body = self.fixture.request("GET", f"/__cad/asset?file=&v=1&file={bad}")
+        status, _, body = self.fixture.request("GET", f"/api/v1/local/files?path=&v=1&path={bad}")
         self.assertDenied(status, body, {400})
 
     def test_an_enormous_path_does_not_500(self):
@@ -229,23 +230,62 @@ class OnlyCadBytesLeave(SecurityTestCase):
                 self.assertDenied(status, body, {404})
 
 
+class ABoardsModelsReadNothingOutsideItsFolders(SecurityTestCase):
+    """A board's 3D models table (``GET .../kicad_pcb/<id>/models``) answers only STEPs inside the board's folder
+    and KiCad's 3D library: a board naming any other file is told it is missing, gets no document id, and so no
+    route serves that file. A STEP it does find is a document like any other, whose structure names its file."""
+
+    def test_a_hostile_board_cannot_aim_the_table_outside(self):
+        outside = os.path.join(self.fixture.base, "outside.step")
+        Path(outside).write_text(SECRET, encoding="utf-8")
+        link = self.fixture.path("models/link.step")
+        os.makedirs(os.path.dirname(link), exist_ok=True)
+        try:
+            os.symlink(outside, link)
+        except (OSError, NotImplementedError):
+            pass
+        # Each name is written as KiCad writes a string (a backslash and a quote escaped): the Windows path
+        # and a share's backslashes, and the quotes, are read back as the names, on every platform.
+        names = ["/etc/passwd", "../../outside.step", "${KIPRJMOD}/../outside.step", outside, "${KIPRJMOD}/models/link.step",
+                 "${KIPRJMOD}/secrets.json", "${KIPRJMOD}/.env", 'C:\\Users\\x\\"evil".step', "\\\\server\\share\\x41.step"]
+        board = self.fixture.write("hostile.kicad_pcb", "(kicad_pcb (version 20240108) (footprint \"x\" (at 0 0) "
+                                   + " ".join(f"(model {sexpr.quote(name)})" for name in names) + "))")
+        opened = json.dumps({"path": board}).encode()
+        status, _, body = self.fixture.request("POST", "/api/v1/documents", body=opened, headers={
+            "x-cad-viewer": "1", "content-type": "application/json", "content-length": str(len(opened))})
+        self.assertEqual(status, 201, body[:400])
+        api = json.loads(body)["api"]
+        status, _, body = self.fixture.request("GET", f"{api}/models")
+        self.assertEqual(status, 200, body[:400])
+        table = json.loads(body)["models"]
+        self.assertEqual(sorted(table), sorted(names))
+        for name, answer in table.items():
+            self.assertIn("missing", answer, name)
+            self.assertNotIn("document", answer, name)
+        self.assertNotIn(SECRET.encode("ascii"), body)
+        # The names are the board's own words, answered as keys; no answer carries a path the server found.
+        # (As JSON writes the folder: a Windows path's backslashes are doubled there.)
+        self.assertNotIn(json.dumps(self.fixture.base)[1:-1], json.dumps(list(table.values())))
+
+
 class MalformedPercentEncoding(SecurityTestCase):
     def test_a_malformed_escape_does_not_take_the_server_down(self):
-        status, _, _ = self.fixture.request("GET", "/__cad/asset?file=%zz")
+        status, _, _ = self.fixture.request("GET", "/api/v1/local/files?path=%zz")
         self.assertIn(status, {400, 404})
-        status, _, _ = self.fixture.request("GET", "/__cad/server")
+        status, _, _ = self.fixture.request("GET", "/api/v1/server")
         self.assertEqual(status, 200, "the server still answers afterwards")
 
     def test_the_routing_table(self):
         cases = [
             # (target, expected status, expected body fragment)
-            ("/__cad/../etc/passwd", 200, b"<!doctype html>"),
-            ("/__cad/%2e%2e/etc/passwd", 200, b"<!doctype html>"),
+            ("/api/../etc/passwd", 200, b"<!doctype html>"),
+            ("/api/%2e%2e/etc/passwd", 200, b"<!doctype html>"),
+            ("/api/v1/%2e%2e/etc/passwd", 404, b'"error":"no route /api/etc/passwd"'),
             ("/__tess_cache/../escape.tess", 200, b"<!doctype html>"),
-            ("/__cad", 200, b"<!doctype html>"),
-            ("/__cad/", 404, b'{"error":"Not found"}'),
-            ("/__cad//asset", 404, b'{"error":"Not found"}'),
-            ("/__CAD/server", 200, b"<!doctype html>"),
+            ("/api", 404, b'"error":"no route /api"'),
+            ("/api/v1/", 404, b'"error":"no route /api/v1/"'),
+            ("/api/v1//server", 404, b'"error":"no route /api/v1//server"'),
+            ("/API/v1/server", 200, b"<!doctype html>"),
         ]
         for target, status, fragment in cases:
             with self.subTest(target=target):
@@ -255,7 +295,7 @@ class MalformedPercentEncoding(SecurityTestCase):
 
     def test_a_backslash_routes_as_a_separator(self):
         ref = quote(self.fixture.path("ok.step"), safe="")
-        status, _, body = self.fixture.request("GET", f"/__cad\\asset?file={ref}")
+        status, _, body = self.fixture.request("GET", f"/api\\v1\\local\\files?path={ref}")
         self.assertEqual(status, 200)
         self.assertEqual(body, b"public step\n")
 
@@ -264,11 +304,12 @@ class TheTwoGatesCoverTheDataRoutes(SecurityTestCase):
     def targets(self):
         ref = quote(self.fixture.path("ok.step"), safe="")
         return [
-            f"/__cad/catalog?file={ref}",
-            f"/__cad/asset?file={ref}",
-            f"/__cad/folder?path={quote(self.fixture.root, safe='')}",
-            f"/__cad/xbf?file={ref}&held=1",
-            "/__cad/api/look",
+            f"/api/v1/documents?path={ref}",
+            f"/api/v1/local/files?path={ref}",
+            f"/api/v1/local/folder?path={quote(self.fixture.root, safe='')}",
+            "/api/v1/documents",
+            "/api/v1/look",
+            "/app",
         ]
 
     def test_a_hostile_host_is_refused_on_every_data_route(self):
@@ -287,10 +328,11 @@ class TheTwoGatesCoverTheDataRoutes(SecurityTestCase):
     def test_no_access_control_header_on_any_route_method_or_status(self):
         # Their absence is what keeps another site from reading any of it: a refused host, a guarded
         # POST and a preflight included.
-        asked = [("GET", target, {}) for target in ["/", "/assets/app.js", "/assets/missing.js", "/__cad/server", "/__cad/nope",
-                                                     "/__cad/asset?file=/etc/passwd", "/__cad/asset?file=relative.step",
+        asked = [("GET", target, {}) for target in ["/", "/assets/app.js", "/assets/missing.js", "/api/v1/server", "/api/v1/nope",
+                                                     "/api/v1/local/files?path=/etc/passwd", "/api/v1/local/files?path=relative.step",
                                                      *self.targets()]]
-        asked += [("GET", "/__cad/server", {"Host": "evil.example"}), ("POST", "/__cad/recents", {}), ("OPTIONS", "/", {})]
+        asked += [("GET", "/api/v1/server", {"Host": "evil.example"}), ("POST", "/api/v1/documents", {}),
+                  ("PUT", "/api/v1/settings", {}), ("OPTIONS", "/", {})]
         for method, target, headers in asked:
             with self.subTest(method=method, target=target, headers=headers):
                 _, answered, _ = self.fixture.request(method, target, headers=headers)

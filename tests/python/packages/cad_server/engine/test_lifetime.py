@@ -53,7 +53,7 @@ class BudgetTest(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="engine-lifetime-")).resolve()
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.server = Server(port=0, mesh_mode="inline", budget=64 * MIB)
+        self.server = Server(mesh_mode="inline", budget=64 * MIB)
         self.addCleanup(self.server.stop)
 
     def file(self, name: str, size: int) -> str:
@@ -209,6 +209,15 @@ class StatusTextTest(unittest.TestCase):
         self.assertIn("serving http://127.0.0.1:1: 0 documents opened by a page or a command", lines)
         self.assertEqual(sum(line.startswith("  live") for line in lines), 6, "the documents held, listed apart")
 
+    def test_a_port_handed_on_by_an_update_is_said_with_the_port_it_served_before(self) -> None:
+        from cad_server.engine.cli import status_text
+
+        text = status_text({"pid": 1, "up": 5, "cap": 4, "workers": [], "models": [],
+                            "serving": {"url": "http://127.0.0.1:3246", "port": 3246, "defaultPort": 3245,
+                                        "portSource": "handed", "also": [3300], "documents": []}})
+        self.assertIn("serving http://127.0.0.1:3246 (the port pages were on before this server started), and on port 3300 too: "
+                      "0 documents opened by a page or a command", text.splitlines())
+
     def test_a_shape_handed_over_is_worded_as_one_with_no_script_to_rerun(self) -> None:
         from cad_server.engine.cli import status_text
 
@@ -233,7 +242,7 @@ def {name}():
 HINGE = """
 import pathlib
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import model
 
 pathlib.Path(__file__).with_suffix(".ran").write_text("ran", encoding="utf-8")
@@ -255,9 +264,9 @@ def {name}():
 
 # The hinge with a configuration sequence (the document's) and an animation (the GLB's, recorded in
 # the xbf), its GLB declared: the build writes it live, the export of its hold writes it again.
-ANIMATED = HINGE.replace("from cad.engine import model", """from cad.ap242 import configuration_sequence
+ANIMATED = HINGE.replace("from cad.engine import model", """from cad.build123d import configuration_sequence
 from cad.engine import glb
-from cad.gltf import animation""").replace("@model", '@glb("live.glb")').replace("    return root", """\
+from cad.build123d import animation""").replace("@model", '@glb("live.glb")').replace("    return root", """\
     configuration_sequence(root, "lift", [(0, {{"elbow": 30}}), (1, "raised")])
     show = animation(root, "show", duration=2)
     show.pose(at={{0: {{}}, 1: "raised", 2: {{}}}})
@@ -328,6 +337,12 @@ class LifetimeDaemonTest(unittest.TestCase):
         shutil.rmtree(self.folder, ignore_errors=True)
         shutil.rmtree(self.state, ignore_errors=True)
 
+    def restart(self, env: dict) -> None:
+        """The test's server stopped and started again with ``env``: what it reads of its environment it reads as
+        it starts."""
+        engine_daemon.run([sys.executable, "-m", "cad_server.engine", "stop"], cwd=self.folder, env=self.env)
+        engine_daemon.start(env)
+
     def ask(self, message: dict) -> dict:
         from cad.engine.client import request
 
@@ -367,7 +382,7 @@ class LifetimeDaemonTest(unittest.TestCase):
     def page(self, ident: str) -> tuple[int, dict]:
         serving = self.ask({"op": "status"})["serving"]
         token = self.ask({"op": "http"}).get("token", "")
-        return get(f"{serving['url']}/api/doc/{ident}", token)
+        return get(f"{serving['url']}/api/v1/documents/model/{ident}/structure", token)
 
     def test_a_held_document_exports_by_id_with_no_worker_of_its_script(self) -> None:
         ident = self.built("bracket")
@@ -397,6 +412,7 @@ class LifetimeDaemonTest(unittest.TestCase):
         (self.folder / "part.py").write_text(textwrap.dedent(PART), encoding="utf-8")
         (self.folder / "assembly.py").write_text(textwrap.dedent(ASSEMBLY), encoding="utf-8")
         env = {**self.env, "CAD_ENGINE_WORKER_RSS_MB": ""}  # no small cap: the assembly's worker holds both
+        self.restart(env)
         for _ in range(2):  # the second run: the child's body marks it building, and the run's end built
             done = engine_daemon.run([sys.executable, "assembly.py"], cwd=self.folder, env=env)
             self.assertEqual(done.returncode, 0, done.stderr)
@@ -422,7 +438,7 @@ class LifetimeDaemonTest(unittest.TestCase):
         self.row(ident, "held")
         out = {kind: self.folder / f"held.{kind}" for kind in ("xbf", "step")}
 
-        # The document as built, mechanism and all: a posed file is a model of its own (law 22).
+        # The document as built, mechanism and all: a posed file is a model of its own.
         answer = self.ask({"op": "export", "source": {"id": ident}, "destinations": [str(p) for p in out.values()],
                            "cwd": str(self.folder), "env": dict(os.environ)})
         self.assertIn("done", answer, answer)
@@ -476,8 +492,9 @@ class LifetimeDaemonTest(unittest.TestCase):
         self.assertFalse((self.folder / "hinge.ran").exists(), "nothing ran the script")
 
     def test_a_document_no_cache_keeps_names_its_rebuild_and_nothing_runs_it(self) -> None:
-        # Every document leaves memory once drained, and no cache can keep it on disk (``test_cache``'s).
+        # Every document leaves memory once drained, and no cache can keep it on disk (``test_cache_keeping``'s).
         tiny = {**self.env, "CAD_ENGINE_MEMORY_MB": "0.001", "CAD_CACHE_DIR": engine_daemon.unwritable(self.folder)}
+        self.restart(tiny)
         unsaved = self.built("arm", env=tiny)
         command = f"cad run {self.folder / 'arm.py'}"
         row = self.row(unsaved, "unsaved")

@@ -1,1 +1,2 @@
-include cad-lazy-kernel.pth
+include cad.pth
+include cad.start

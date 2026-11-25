@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Drawer as DrawerPrimitive } from "vaul"
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 // shadcn's drawer (vaul), as shadcn ships it.
 
@@ -45,11 +45,12 @@ function DrawerOverlay({ className, ...props }) {
   )
 }
 
-// `overlay={false}` for a non-modal sheet, whose page stays usable; `container` is its portal's.
-function DrawerContent({ className, children, overlay = true, container, ...props }) {
+// `overlay={false}` for a non-modal sheet, whose page stays usable; `overlayClassName` for its scrim's own look (a
+// transparent one keeps what is under the sheet as it is, and a tap on it still closes it); `container` is its portal's.
+function DrawerContent({ className, children, overlay = true, overlayClassName, container, ...props }) {
   return (
     <DrawerPortal data-slot="drawer-portal" container={container}>
-      {overlay ? <DrawerOverlay /> : null}
+      {overlay ? <DrawerOverlay className={overlayClassName} /> : null}
       <DrawerPrimitive.Content
         data-slot="drawer-content"
         className={cn(

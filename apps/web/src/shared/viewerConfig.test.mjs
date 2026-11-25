@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEXT_TO_CAD_LINKS } from "@text-to-cad/ui/links";
+import { TEXT_TO_CAD_LINKS } from "@cad/ui/links";
 
 import {
   DEFAULT_VIEWER_DISCORD_URL,
@@ -12,7 +12,7 @@ import {
   viewerGithubRepositoryUrl
 } from "./viewerConfig.mjs";
 
-test("normalizeViewerGithubUrl defaults to the CAD Viewer repository link", () => {
+test("normalizeViewerGithubUrl defaults to the viewer repository link", () => {
   assert.equal(normalizeViewerGithubUrl(""), DEFAULT_VIEWER_GITHUB_URL);
 });
 

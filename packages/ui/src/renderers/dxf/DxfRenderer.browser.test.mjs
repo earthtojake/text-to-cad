@@ -5,9 +5,10 @@ import { createServer } from 'node:http';
 import { harnessBundle } from '../harness/bundle.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
+import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 
 // The drawing under test is a COMMITTED payload: exactly what
-// `GET /__cad/drawing` answered for `__fixtures__/sample.dxf`, so this test
+// a DXF document's `drawing` answered for `__fixtures__/sample.dxf`, so this test
 // needs neither Python nor ezdxf and cannot drift from the route by accident.
 // `__fixtures__/README.md` says how to regenerate the pair.
 const SAMPLE = JSON.parse(await readFile(new URL('./__fixtures__/sample.drawing.json', import.meta.url), 'utf8'));
@@ -29,18 +30,30 @@ before(async () => {
   server = createServer((request, response) => {
     const url = new URL(request.url, 'http://test');
     const root = url.pathname.split('/')[1];
+    if (url.pathname.endsWith('/api/v1/documents') && request.method === 'POST') {
+      // A file opened by its path: its document's reads are under its kind, by an id (here its name).
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        const file = String(JSON.parse(body || '{}').path || '').split('/').pop();
+        response.statusCode = 201;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ id: file, kind: file.split('.').pop(), api: `/api/v1/documents/${file.split('.').pop()}/${file}` }));
+      });
+      return;
+    }
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/__cad/drawing')) {
-      // Asked for by the file's absolute path, which names the fixture last.
-      const drawing = DRAWINGS[String(url.searchParams.get('file')).split('/').pop()];
+    else if (url.pathname.endsWith('/drawing')) {
+      // Asked for under the document's id, which names the fixture.
+      const drawing = DRAWINGS[url.pathname.split('/').at(-2)];
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify(drawing));
-    } else if (url.pathname.endsWith('/__cad/catalog')) {
+    } else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ entries: files.map(file => (
-        { kind: 'dxf', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 })) }));
-    } else if (url.pathname.endsWith('/__cad/server')) {
+      response.end(JSON.stringify({ documents: (files.map(file => (
+        { kind: 'dxf', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 }))).map(entry => ({ entry, revision: entry.hash })) }));
+    } else if (url.pathname.endsWith('/api/v1/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
@@ -80,8 +93,12 @@ async function frame(pane, before = null) {
   let last = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await settle(pane.page());
-    // The drawing alone: the tools that float over it (the strip, Quick Edit) are not its picture.
-    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right] { visibility: hidden !important; }' });
+    // The drawing alone: the tools that float over it (the strip, Quick Edit, the corner's zoom) are not its picture,
+    // and neither is the hover tip, which shows by the pointer once it has rested a moment over an entity
+    // (`HOVER_TIP_DELAY_MS`): a frame slow to come to rest after a wheel over the drawing caught it, its box
+    // read as ink below the pointer. Quick Edit's bar is always there; its buttons ease every property (`transition-all`),
+    // visibility too, so they are hidden with no transition, or a shot catches them still showing.
+    const shot = await canvasOf(pane).screenshot({ style: '[data-cad-tool-groups], [data-viewport-top-right], [data-zoom-pill], [data-flat-panel-pill], [data-inspector-pill], [data-hover-tip], [data-quick-edit] { visibility: hidden !important; } [data-quick-edit] * { transition: none !important; }' });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }
@@ -158,45 +175,46 @@ const wheelAt = (page, box, point, deltaY) => page.mouse.move(box.x + point.x, b
 const deltaForFactor = factor => -Math.log(factor) / 0.0015;
 
 // The room the view measures for its tool strip at the pane's top, which a fit keeps clear of.
+// Both margins of a fit: every flat view's, 6% of the pane's shorter side and at least 16px (`fitBoardBounds`).
+const margins = shot => 2 * Math.max(16, 0.06 * Math.min(shot.width, shot.height));
 const stripRoom = page => page.evaluate(() => Number.parseFloat(getComputedStyle(document.querySelector('[data-slot="cad-file-view"]')).getPropertyValue('--cad-tools-bottom')) || 0);
 
-test('a drawing opens fitted and centred, in the theme’s ink, and flips with the theme', async (t) => {
+test('a drawing opens fitted and centred, in the viewport’s ink, and flips with the viewport’s Background', async (t) => {
   const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
 
-  // This harness opens dark. Ask for the light token cascade before measuring its light ink;
-  // the later switch on html then exercises the same host theme change in the other direction.
-  await page.evaluate(() => {
-    for (let element = document.querySelector('[data-drawing-surface]'); element; element = element.parentElement) {
-      element.classList.remove('dark');
-    }
-    document.documentElement.classList.add('light');
-  });
+  // This harness's app opens dark. The viewport's Background Light (the default in the apps): the drawing on the light
+  // canvas in dark ink, whatever the app's theme; the switch to Dark then repaints it the other way.
+  await page.evaluate(() => window.__cadViewportBackground('light'));
+  await page.waitForFunction(() => document.querySelector('[data-viewport-scheme="light"]'));
 
   const light = await frame(pane);
   const box = inkBox(light);
   const strip = await stripRoom(page);
-  // Fitted: the drawing's own aspect, centred, filling the pane below its tool strip but for the gutter.
+  // Fitted: the drawing's own aspect, centred, filling the pane below its tool strip but for its margin.
   assert.ok(strip > 0, `the strip's room is measured: ${strip}`);
   assert.ok(Math.abs(box.centreX - light.width / 2) <= 2, `centred across: ${box.centreX} of ${light.width}`);
   assert.ok(Math.abs(box.centreY - (strip + (light.height - strip) / 2)) <= 2, `centred down, under the strip: ${box.centreY} of ${light.height}`);
   const aspect = box.width / box.height;
   assert.ok(Math.abs(aspect - MODEL.width / MODEL.height) < 0.05, `the drawing's own aspect: ${aspect}`);
-  // The pane is wider than the drawing, so height is the binding axis: the ink
-  // reaches to the 16 px gutter and no further.
-  assert.ok(Math.abs(box.height - (light.height - strip - 32)) <= 3, `fitted to the gutter: ${box.height} in ${light.height}`);
+  // Fitted on its binding axis: the ink reaches the margin there and no further (beside the docked Layers panel, at
+  // this 800px view, the canvas is the narrower one; on a wider one, the height binds).
+  const tall = Math.abs(box.height - (light.height - strip - margins(light))) <= 3, wide = Math.abs(box.width - (light.width - margins(light))) <= 3;
+  assert.ok((tall || wide) && box.height <= light.height - strip - margins(light) + 3 && box.width <= light.width - margins(light) + 3,
+    `fitted to the margin: ${box.width} × ${box.height} in ${light.width} × ${light.height}`);
 
-  // Default pen: the theme's foreground, on the theme's background. The outline is
+  // Default pen: the theme's foreground, on the canvas. The outline is
   // default-pen line-work.
-  assert.ok(near(box.backdrop, [255, 255, 255], 12), `light background: ${box.backdrop}`);
+  const canvas = [1, 3, 5].map(at => Number.parseInt(APP_THEME_COLORS.light.canvas.slice(at, at + 2), 16));
+  assert.ok(near(box.backdrop, canvas, 12), `light canvas: ${box.backdrop}`);
   const edgeLight = darkestInk(light);
   assert.ok(edgeLight[0] < 110 && edgeLight[1] < 110 && edgeLight[2] < 110, `dark ink on light: ${edgeLight}`);
 
   // The red circle is red — its own pen, not the theme's.
   assert.ok(countWhere(light, reddish) > 200, `a red circle is drawn: ${countWhere(light, reddish)} px`);
 
-  // One payload serves both themes: flipping the app's tokens repaints, it does not refetch.
-  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  // One payload serves both: the Background's switch repaints, it does not refetch.
+  await page.evaluate(() => window.__cadViewportBackground('dark'));
   const dark = await frame(pane, light);
   const darkBox = inkBox(dark);
   assert.ok(darkBox.backdrop[0] < 110, `dark background: ${darkBox.backdrop}`);
@@ -258,7 +276,7 @@ test('strokes stay hairlines when the drawing is zoomed in eight times', async (
   assert.deepEqual(errors, []);
 });
 
-test('the wheel zooms about the pointer, dragging pans, and a double-click fits again', async (t) => {
+test('the wheel zooms about the pointer, a middle drag pans (a plain one is Select\'s box), and a double-click fits again', async (t) => {
   const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
   const fittedShot = await frame(pane);
@@ -276,13 +294,13 @@ test('the wheel zooms about the pointer, dragging pans, and a double-click fits 
     `the corner under the pointer stayed put: (${zoomed.minX}, ${zoomed.maxY}) vs (${anchor.x}, ${anchor.y})`);
   assert.ok(Math.abs(zoomed.height / fitted.height - 0.5) < 0.03, `and it halved: ${zoomed.height / fitted.height}`);
 
-  // Dragging moves the picture by exactly the pointer's travel. Up and to the
-  // right, so the whole drawing stays on the canvas and the ink box measures it
-  // rather than the pane's edges.
+  // A middle drag moves the picture by exactly the pointer's travel (a plain one draws Select's box).
+  // Up and to the right, so the whole drawing stays on the canvas and the ink box measures it rather
+  // than the pane's edges.
   await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
-  await page.mouse.down();
+  await page.mouse.down({ button: 'middle' });
   await page.mouse.move(canvas.x + canvas.width / 2 + 140, canvas.y + canvas.height / 2 - 45, { steps: 8 });
-  await page.mouse.up();
+  await page.mouse.up({ button: 'middle' });
   const pannedShot = await frame(pane, zoomedShot);
   const panned = inkBox(pannedShot);
   assert.ok(Math.abs((panned.minX - zoomed.minX) - 140) <= 2, `panned right 140: ${panned.minX - zoomed.minX}`);
@@ -311,7 +329,7 @@ test('a pane that is resized re-fits only while the view is still the one it ope
   const resized = await frame(pane, fittedShot);
   const refitted = inkBox(resized);
   assert.ok(refitted.height < fitted.height * 0.8, `re-fitted smaller: ${fitted.height} -> ${refitted.height}`);
-  assert.ok(Math.abs(refitted.height - (resized.height - await stripRoom(page) - 32)) <= 3, `fitted to the new pane: ${refitted.height} in ${resized.height}`);
+  assert.ok(Math.abs(refitted.height - (resized.height - await stripRoom(page) - margins(resized))) <= 3, `fitted to the new pane: ${refitted.height} in ${resized.height}`);
 
   // Touched: the person's framing is theirs and a resize does not take it back — but it is
   // kept in the terms it was chosen in, not in pixels. The view holds the same zoom
@@ -326,9 +344,9 @@ test('a pane that is resized re-fits only while the view is still the one it ope
   const grownShot = await frame(pane, chosenShot);
   const kept = inkBox(grownShot);
   // The canvas is the pane less its navbar; the share of what a fit fills (below the strip, inside
-  // the gutter) that the drawing covers is the person's zoom, and that is what survives.
+  // the margin) that the drawing covers is the person's zoom, and that is what survives.
   const strip = await stripRoom(page);
-  const share = (ink, shot) => ink.height / (shot.height - strip - 32);
+  const share = (ink, shot) => ink.height / (shot.height - strip - margins(shot));
   assert.ok(Math.abs(share(kept, grownShot) - share(chosen, chosenShot)) < 0.02,
     `half the fit, before and after: ${share(chosen, chosenShot)} -> ${share(kept, grownShot)}`);
   assert.ok(kept.height > chosen.height * 1.3,
@@ -349,7 +367,11 @@ test('the view a person chose comes back when the tab is reopened', async (t) =>
   await page.waitForFunction(stateKey => window.cadHarness.state.renderers?.[stateKey]?.camera?.scale > 0, key);
   const record = await page.evaluate(stateKey => window.cadHarness.state.renderers[stateKey], key);
   assert.equal(record.version, 2);
-  assert.deepEqual(Object.keys(record.camera).sort(), ['offsetX', 'offsetY', 'scale'], 'the drawing\'s transform is its camera');
+  // Its camera is its transform with the pane it was framed in, in CSS pixels (`kit/viewport/flatView.js`).
+  assert.deepEqual(Object.keys(record.camera).sort(), ['height', 'offsetX', 'offsetY', 'scale', 'width'],
+    'the drawing\'s transform and its pane are its camera');
+  assert.ok(Math.abs(record.camera.width - canvas.width) <= 1 && Math.abs(record.camera.height - canvas.height) <= 1,
+    `the pane is the canvas it was framed in: ${record.camera.width}x${record.camera.height} vs ${canvas.width}x${canvas.height}`);
   assert.deepEqual([record.display, record.renderer], [null, {}], 'and a drawing has nothing else');
 
   await page.evaluate(() => window.cadHarness.mounted(false));

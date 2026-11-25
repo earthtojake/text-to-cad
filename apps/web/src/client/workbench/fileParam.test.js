@@ -13,22 +13,22 @@ test("a page names its document by id in its path, and every other path is the h
   assert.equal(readDocumentId(`/${ID.toUpperCase()}`), null);
 });
 
-test("the URL is /<id> for a document and / for the home, a step pushed for each", () => {
+test("the URL is /<id> for a document and / for the home, a step pushed for each, its link kept", () => {
   const originalWindow = globalThis.window;
   const calls = [];
   globalThis.window = {
-    location: { pathname: "/", search: "?debug=1", hash: "" },
+    location: { pathname: "/", search: "?debug=1&token=1800000000.mac", hash: "" },
     history: { pushState: (...args) => calls.push(["push", args[2]]), replaceState: (...args) => calls.push(["replace", args[2]]) },
   };
   try {
     writeDocumentId(ID, { history: "replace" });
-    window.location = { pathname: `/${ID}`, search: "?debug=1", hash: "" };
+    window.location = { pathname: `/${ID}`, search: "?debug=1&token=1800000000.mac", hash: "" };
     writeDocumentId(ID);
     writeDocumentId("");
     // The URL already names the document: nothing is written.
     assert.deepEqual(calls, [
-      ["replace", `/${ID}?debug=1`],
-      ["push", "/?debug=1"],
+      ["replace", `/${ID}?debug=1&token=1800000000.mac`],
+      ["push", "/?debug=1&token=1800000000.mac"],
     ]);
   } finally {
     globalThis.window = originalWindow;

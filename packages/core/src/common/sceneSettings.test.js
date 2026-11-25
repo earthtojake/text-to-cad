@@ -22,7 +22,7 @@ test("normal CAD stays an orthographic responsive inspection scene", () => {
   assert.equal(dark.materialOverrides, null);
   assert.equal(light.quality.id, SCENE_QUALITY.INTERACTIVE);
   assert.equal(light.theme.background.solidColor, "#f0f4f9");
-  assert.equal(dark.theme.background.solidColor, "#25272b");
+  assert.equal(dark.theme.background.solidColor, "#272727");
   assert.deepEqual(dark.theme.materials, light.theme.materials);
   assert.deepEqual(dark.theme.lighting, light.theme.lighting);
   assert.deepEqual(dark.theme.environment, light.theme.environment);

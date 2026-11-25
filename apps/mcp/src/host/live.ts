@@ -1,6 +1,6 @@
-import { formatPromptReference } from '@text-to-cad/core/prompt';
-import type { PromptReference } from '@text-to-cad/core/prompt';
-import { createLiveRegistry as createRegistry, type LiveRegistry as Registry, type LiveView } from '@text-to-cad/ui/host';
+import { formatPromptReference } from '@cad/core/prompt';
+import type { PromptReference } from '@cad/core/prompt';
+import { createLiveRegistry as createRegistry, type LiveRegistry as Registry, type LiveView } from '@cad/ui/host';
 
 /** What every renderer's live controller answers, whichever family it is. */
 export interface LiveController extends LiveView {

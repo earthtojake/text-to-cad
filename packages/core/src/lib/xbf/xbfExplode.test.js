@@ -31,7 +31,7 @@ const LOOK = fs.readFileSync(path.join(FIXTURES, "look.json"), "utf8");
 // Its environment image: 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128).
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n"),
   255, 255, 255, 128]).buffer;
-const URL_BASE = "http://127.0.0.1:9/api/doc/explode";
+const URL_BASE = "http://127.0.0.1:9/api/v1/documents/xbf/explode";
 const TOLERANCE = 1e-6;
 
 /** An XBM2 part buffer of two nodes, a box's corners; none for a part that draws nothing. */
@@ -57,11 +57,11 @@ async function sceneOf(fixture) {
     tree: fixture.tree
   };
   const fetch = async (url) => {
-    if (url.endsWith("/api/look")) return new Response(LOOK);
-    if (url.endsWith("/api/look/environment")) return new Response(ENVIRONMENT);
+    if (url.endsWith("/api/v1/look")) return new Response(LOOK);
+    if (url.endsWith("/api/v1/look/environment")) return new Response(ENVIRONMENT);
     const rest = url.slice(URL_BASE.length);
-    if (rest === "") return new Response(JSON.stringify(structure));
-    const part = /^\/part\/p(\d+)$/.exec(rest);
+    if (rest === "/structure") return new Response(JSON.stringify(structure));
+    const part = /^\/parts\/p(\d+)$/.exec(rest);
     if (part) return new Response(boxPart(fixture.boxes[Number(part[1])]));
     return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
   };

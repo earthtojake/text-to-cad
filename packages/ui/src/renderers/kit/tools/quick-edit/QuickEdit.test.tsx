@@ -31,50 +31,46 @@ const note = () => field().textContent;
 const write = (value: string) => { field().textContent = value; fireEvent.input(field()); };
 const buttons = () => within(box()!).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent);
 
-it('follows what it would carry while the note is empty: open for the person with the keyboard, for an agent without it', () => {
+it('is always there: one row with nothing to carry, no close button; a row of attachments above the note with a pick, the keyboard the person\'s, never an agent\'s', () => {
   const edge = { resource, target: { kind: 'cad-selector', selectors: ['base/e:base.extrude1.3'] } } as const;
   const { update } = mount();
-  // With nothing to carry there is nothing at all: no box, and no button standing in for one.
-  expect(box()).toBeNull();
-  expect(screen.queryByRole('button')).toBeNull();
-  // An agent's selection (no press of the person's) opens it, and leaves their keyboard where it was.
+  // Nothing to carry: the bar, one row (the note and Copy Prompt); no attachments row, no X.
+  expect([box() !== null, box()!.querySelector('[data-quick-edit-context]'), buttons()]).toEqual([true, null, ['Copy Prompt']]);
+  // An agent's selection (no press of the person's) brings the attachments, above the note, which stays the same
+  // element at the bar's foot (its box unmoved: `RendererShell.browser.test.mjs`), and leaves their keyboard where it was.
+  const compose = box()!.querySelector('[data-quick-edit-compose]');
   update({ references: [face] });
-  expect(box()).not.toBeNull();
-  expect(document.activeElement).not.toBe(field());
+  const context = box()!.querySelector('[data-quick-edit-context]');
+  expect([context !== null, document.activeElement === field(), box()!.querySelector('[data-quick-edit-compose]') === compose,
+    Boolean(context && context.compareDocumentPosition(compose!) & Node.DOCUMENT_POSITION_FOLLOWING)]).toEqual([true, false, true, true]);
   update({ references: [] });
-  expect(box()).toBeNull();
-  // The person's pick opens it with the keyboard in its note; the header counts what is picked.
+  expect([box() !== null, box()!.querySelector('[data-quick-edit-context]')]).toEqual([true, null]);
+  // The person's pick puts the keyboard in its note; a renderer with no chips of its own has its references
+  // drawn as chips, one chip as every other: one is its own name, several their count.
+  const groupText = () => [...box()!.querySelectorAll('[data-quick-edit-ref]')].map(chip => chip.textContent);
   press();
   update({ references: [face] });
   expect(document.activeElement).toBe(field());
   expect(within(box()!).queryByText('bracket.step')).toBeNull();
-  expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
+  expect(groupText()).toEqual(['base/f:base.extrude1.2']);
   // Each pick of theirs puts the keyboard back in the note.
   field().blur();
   press();
   update({ references: [face, edge] });
   expect(document.activeElement).toBe(field());
-  expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('2 refs');
+  expect(groupText()).toEqual(['2 refs']);
   // A reference naming several picks counts each, and each is listed by its id.
   const several = [{ resource, target: { kind: 'cad-selector', selectors: ['base/f:base.extrude1.2', 'base/e:base.extrude1.3', 'base/e:base.fillet1.4'] } }] as const;
   update({ references: several });
-  expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('3 refs');
+  expect(groupText()).toEqual(['3 refs']);
   expect(quickEditReferenceIds(several)).toEqual(['base/f:base.extrude1.2', 'base/e:base.extrude1.3', 'base/e:base.fillet1.4']);
-  // A note keeps it open when the selection goes.
+  // A note is kept as the selection goes.
   write('Round it.');
   update({ references: [] });
   expect(note()).toBe('Round it.');
-  // The X clears the note and has the renderer clear what it carries; the box goes with that.
-  const clear = vi.fn();
-  update({ references: [face, edge], onClear: clear });
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
-  expect([note(), clear.mock.calls.length]).toEqual(['', 1]);
-  update({ references: [] });
-  expect(box()).toBeNull();
-  // Escape keeps a note, box and all; in an empty box it is the viewer's own (whose clear closes it).
+  // Escape keeps a note; in an empty box it is the viewer's own (whose clear takes the attachments).
   const escape = vi.fn();
   update({ references: [face], onEscape: escape });
-  write('Round it.');
   fireEvent.keyDown(field(), { key: 'Escape' });
   expect([box() !== null, escape.mock.calls.length]).toEqual([true, 0]);
   write('');
@@ -82,12 +78,12 @@ it('follows what it would carry while the note is empty: open for the person wit
   expect(escape.mock.calls.length).toBe(1);
 });
 
-it('opens with an annotation while there is ink, taking the keyboard once the pen lifts, and closes when the ink goes', () => {
+it('carries the annotation while there is ink, taking the keyboard once the pen lifts, and lets it go with the ink', () => {
   const annotation = (present: boolean) => ({ present });
   const view = () => document.querySelector('[data-slot="cad-file-view"]')!;
   const { update } = mount();
   update({ annotation: annotation(false) });
-  expect(box()).toBeNull();
+  expect(box()!.querySelector('[data-quick-edit-context]')).toBeNull();
   fireEvent.pointerDown(view());
   update({ annotation: annotation(true) });
   expect(box()!.querySelector('[data-quick-edit-ref="annotation"]')!.textContent).toBe('Annotation');
@@ -95,7 +91,7 @@ it('opens with an annotation while there is ink, taking the keyboard once the pe
   fireEvent.pointerUp(view(), { button: 0 });
   expect(document.activeElement).toBe(field());
   update({ annotation: annotation(false) });
-  expect(box()).toBeNull();
+  expect(box()!.querySelector('[data-quick-edit-context]')).toBeNull();
   update({ annotation: annotation(true) });
   write('A boss here.');
   update({ annotation: null });
@@ -108,7 +104,8 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   const clear = vi.fn();
   const used = vi.fn();
   mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver, send }, usage: { used } }), { references: [face], onClear: clear });
-  expect(buttons()).toEqual(['Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
+  // The reference's own chip first (a renderer with no chips of its own has one a reference), then the bar's buttons.
+  expect(buttons()).toEqual(['base/f:base.extrude1.2', 'Copy Prompt', 'Queue', 'Send']);
   expect(within(box()!).getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
   write('Make it 2 mm thicker.');
   fireEvent.keyDown(field(), { key: 'Enter', shiftKey: true });
@@ -137,8 +134,8 @@ it('copies the note with its references by their files\' absolute paths, and its
   };
   const clear = vi.fn();
   mount(host, { references: [face], annotation, prompt, onClear: clear });
-  // The annotation is a chip of its own, Annotation; without a way to wipe it, it has no X.
-  expect(buttons()).toEqual(['Close Quick Edit', 'Annotation', 'Copy Prompt']);
+  // The annotation is a chip of its own, Annotation, on the attachments row; without a way to wipe it, it has no X.
+  expect(buttons()).toEqual(['Annotation', 'base/f:base.extrude1.2', 'Copy Prompt']);
   write('Round this edge.');
   expect(prompt.files).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
@@ -146,8 +143,9 @@ it('copies the note with its references by their files\' absolute paths, and its
   await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
   expect([note(), clear.mock.calls.length]).toEqual(['Round this edge.', 0]);
   expect(await copied).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2'
-    + '\nSnapshot (cad snapshot --annotation): /tmp/p/bracket-1.snapshot.json');
-  expect(prompt.files).toHaveBeenCalledWith(views);
+    + '\nSnapshot (cad step snapshot --annotation): /tmp/p/bracket-1.snapshot.json');
+  // The views go with the selection they were sent with, for a packet that carries it (a board's).
+  expect(prompt.files).toHaveBeenCalledWith(views, [face]);
   // Copied as text, no file's bytes were read.
   expect(prompt.read).not.toHaveBeenCalled();
 });
@@ -232,9 +230,6 @@ it('a pasted reference is a chip in the note, where it was pasted, and goes as t
   fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
   expect(await waitFor(() => copied)).toBe('Round /models/parts/hinge.step#hinge/e:hinge.make1.4,hinge/e:hinge.make1.5 \nand\n/robots/arm.urdf#upper_arm see /models/parts/hinge.step#hinge/e:hinge.make1.9'
     + '\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
-  // The box's X empties the note, chips and all (the selection here is fixed, so the box stays).
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
-  expect([note(), field().childNodes.length]).toEqual(['', 0]);
 });
 
 it('every chip\'s copy pasted is its pill, as its chip shows it: the annotation, a named part', async () => {
@@ -271,32 +266,52 @@ it('keeps the note and says why when it did not go, and counts no use', async ()
   expect([used.mock.calls.length, within(box() ?? document.body).queryByRole('alert')]).toEqual([1, null]);
 });
 
-it('is sized by its corner while it is open, rendering nothing for the drag, and opens at the default size again', async () => {
-  let commits = 0;
-  const view = (references: readonly unknown[]) => <Profiler id="quick-edit" onRender={() => { commits += 1; }}>
-    <ViewerHostContext.Provider value={testHost()}><QuickEdit resource={resource} references={references} /></ViewerHostContext.Provider>
-  </Profiler>;
-  const { rerender } = render(view([face]));
-  const size = () => [box()!.style.width, (box()!.querySelector('[data-quick-edit-note-box]') as HTMLElement).style.height];
-  expect(size()).toEqual(['', '']);
-  // jsdom measures the box and its note as 0, so a drag of the corner 300px left and 100px down
-  // makes them that: drawn on the next frame, and nothing renders, then or when the pointer lets go.
-  const corner = box()!.querySelector('[data-quick-edit-resize]')!;
-  const before = commits;
-  fireEvent.pointerDown(corner, { button: 0, pointerId: 1, clientX: 400, clientY: 100 });
-  fireEvent.pointerMove(corner, { pointerId: 1, clientX: 100, clientY: 200 });
-  await waitFor(() => expect(size()).toEqual(['300px', '100px']));
-  fireEvent.pointerUp(corner, { pointerId: 1, clientX: 100, clientY: 200 });
-  expect(commits).toBe(before);
-  // The size holds for as long as the box is open.
-  write('Wider.');
-  expect(size()).toEqual(['300px', '100px']);
-  // Closed, it is forgotten: the next box is 15rem wide, its note growing with what is written.
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
-  rerender(view([]));
-  expect(box()).toBeNull();
+it("is a chat's input at the bottom of the view: its attachments on a row over the note, no X; the note across the bar, its buttons at its bottom-right in room the note keeps clear; one line growing as it is written to four", () => {
+  mount(testHost(), { references: [face], chips: [{ key: 'a', label: 'bracket', glyph: 'solid' }, { key: 'b', label: 'Annotation', glyph: 'pencil' }] });
+  const [context, compose] = [...box()!.children];
+  expect([context.hasAttribute('data-quick-edit-context'), compose.hasAttribute('data-quick-edit-compose')]).toEqual([true, true]);
+  expect([...context.querySelectorAll('[data-quick-edit-ref]')].map(chip => chip.getAttribute('data-quick-edit-ref'))).toEqual(['a', 'b']);
+  expect(box()!.querySelector('[data-quick-edit-close]')).toBeNull();
+  // The note spans the bar; its buttons stand at its bottom-right, the note keeping their room (one button, the control:
+  // 28px on a desktop, from THE scale's tokens; 6px and the scrollbar's 8px lane) clear on every line; no corner to drag,
+  // no sheet.
+  expect([compose.firstElementChild!.hasAttribute('data-quick-edit-note-box'), compose.lastElementChild!.hasAttribute('data-quick-edit-actions'), field().style.paddingRight])
+    .toEqual([true, true, 'calc(1 * var(--cad-control) + 0 * var(--cad-step) + 14px)']);
+  expect([box()!.querySelector('[data-quick-edit-resize]'), document.querySelector('[data-quick-edit-sheet]')]).toEqual([null, null]);
+  expect((box()!.querySelector('[data-quick-edit-note-box]') as HTMLElement).style.maxHeight).toBe('92px');
+  expect(field().getAttribute('data-placeholder')).toBe('Describe a change…');
+  // What a person types, and the placeholder, at the chrome's UI size (13/20), not the bar's 12px.
+  expect([field().classList.contains('text-ui'), field().classList.contains('text-xs'), field().classList.contains('leading-5')]).toEqual([true, false, true]);
+});
+
+it('Shift+Enter writes a new line in the note, a real one that goes with it; Enter copies', async () => {
+  let copied: Promise<string> | string = '';
+  const host = testHost({ clipboard: { writeText: async text => { copied = text; }, readText: async () => '', writeImage: async () => {} } });
+  mount(host, { references: [face] });
+  write('First line.');
+  const selection = document.getSelection()!;
+  selection.selectAllChildren(field());
+  selection.collapseToEnd();
+  fireEvent.keyDown(field(), { key: 'Enter', shiftKey: true });
+  field().append(document.createTextNode('Second line.'));
+  fireEvent.input(field());
+  expect(note()).toBe('First line.\nSecond line.');
+  fireEvent.keyDown(field(), { key: 'Enter' });
+  await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
+  expect(String(await copied).startsWith('First line.\nSecond line.\n\nFile:')).toBe(true);
+});
+
+it("counts its attachments coming, so we can tell how often it has something to carry", async () => {
+  const { ControlUsageProvider } = await import('../../../../../dist/usage/controls.js');
+  const report = vi.fn();
+  const view = (references: readonly unknown[]) => <ControlUsageProvider report={report} flushMs={0}>
+    <ViewerHostContext.Provider value={testHost()}><div data-slot="cad-file-view"><QuickEdit resource={resource} references={references} /></div></ViewerHostContext.Provider>
+  </ControlUsageProvider>;
+  const { rerender, unmount } = render(view([]));
   rerender(view([face]));
-  expect(size()).toEqual(['', '']);
+  unmount();
+  const counted = report.mock.calls.flatMap(([counts]) => counts.map((count: { control: string }) => count.control));
+  expect(counted).toEqual(['quick_edit_shown']);
 });
 
 it('keeps its note through a reload of the view: out of sight while it loads, and back as it was', () => {
@@ -308,21 +323,12 @@ it('keeps its note through a reload of the view: out of sight while it loads, an
   expect(note()).toBe('Thicker here.');
 });
 
-it('docked on a phone it is a bottom sheet peeking at its header and chips, keeps the keyboard down on a pick, and opens from its write button', async () => {
+it('docked on a phone it is the same bar, at the scale\'s sizes (its tokens: a phone\'s from the one switch), and a pick leaves the keyboard down', () => {
   const { update } = mount(testHost(), { docked: true });
   press();
   update({ references: [face] });
-  // A bottom sheet (shadcn's drawer), peeking: its note and buttons are out of reach until it opens.
-  expect(document.querySelector('[data-quick-edit-sheet]')).not.toBeNull();
-  // Peeking, its way in is a field-like button under the chips; the note and buttons are out of reach.
-  const opener = () => within(box()!).queryByRole('button', { name: 'Describe your changes…' });
-  const compose = () => box()!.querySelector('[data-quick-edit-compose]')!;
-  const note = () => box()!.querySelector<HTMLElement>('[data-quick-edit-note]')!;
-  expect([opener()?.getAttribute('aria-expanded'), compose().hasAttribute('inert'), document.activeElement === note()]).toEqual(['false', true, false]);
-  fireEvent.click(opener()!);
-  await waitFor(() => expect(document.activeElement).toBe(note()));
-  expect([opener(), compose().hasAttribute('inert')]).toEqual([null, false]);
-  expect(box()!.querySelector('[data-quick-edit-resize]')).toBeNull();
+  expect([box()!.hasAttribute('data-docked'), document.querySelector('[data-quick-edit-sheet]'), document.activeElement === field()]).toEqual([true, null, false]);
+  expect(within(box()!).getByRole('button', { name: 'Copy Prompt' }).className).toMatch(/\bsize-control\b/);
 });
 
 it('Copy needs no note: with nothing written it copies what is picked, while Queue and Send wait for one', async () => {
@@ -337,27 +343,8 @@ it('Copy needs no note: with nothing written it copies what is picked, while Que
   expect(await copied).toBe('File: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
 });
 
-it('peeking on a phone, its row is the note\'s field and a plain icon button per action, which acts without opening the sheet', async () => {
-  let copied: Promise<string> | string = '';
-  const host = testHost({ clipboard: { writeText: async text => { copied = text; }, readText: async () => '', writeImage: async () => {} },
-    promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: vi.fn(), send: vi.fn() } as any });
-  const { update } = mount(host, { docked: true });
-  press();
-  update({ references: [face] });
-  const peek = box()!.querySelector<HTMLElement>('[data-quick-edit-peek]')!;
-  const actions = [...peek.querySelectorAll<HTMLButtonElement>('[data-quick-edit-peek-action]')];
-  expect([within(peek).getByRole('button', { name: 'Describe your changes…' }) !== null,
-    actions.map(button => [button.dataset.quickEditPeekAction, button.getAttribute('aria-label'), button.getAttribute('data-variant'), button.disabled])])
-    .toEqual([true, [['copy', 'Copy Prompt', 'outline', false], ['queue', 'Queue', 'outline', true], ['send', 'Send', 'outline', true]]]);
-  fireEvent.click(actions[0]);
-  await waitFor(() => expect(peek.querySelector('[data-quick-edit-peek-action="copy"]')!.getAttribute('aria-label')).toBe('Prompt copied'));
-  expect(await copied).toBe('File: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
-  expect(within(box()!).getByRole('button', { name: 'Describe your changes…' }).getAttribute('aria-expanded')).toBe('false');
-});
-
-
 it.each(['Copy Prompt', 'Queue', 'Send'])('%s includes a small snapshot as JSON with no file read', async action => {
-  const { resolvePromptMessage } = await import('@text-to-cad/core/prompt');
+  const { resolvePromptMessage } = await import('@cad/core/prompt');
   let message = '';
   const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'added' as const, partIds: [] }; };
   const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },
@@ -368,12 +355,34 @@ it.each(['Copy Prompt', 'Queue', 'Send'])('%s includes a small snapshot as JSON 
   write('Keep it.');
   expect(prompt.files).not.toHaveBeenCalled();
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
-  await waitFor(() => expect(message).toContain('Snapshot JSON (cad snapshot --annotation):'));
+  await waitFor(() => expect(message).toContain('Snapshot JSON (cad step snapshot --annotation):'));
   expect(message).toContain(packet);
   expect(message).toContain('/models/parts/bracket.step#base/f:base.extrude1.2');
   expect(prompt.read).not.toHaveBeenCalled();
 });
 
+
+it.each(['Copy Prompt', 'Send'])('%s names every file from the workspace the host says, the inline packet\'s input too, never by the home', async action => {
+  const { resolvePromptMessage } = await import('@cad/core/prompt');
+  let message = '';
+  const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'sent' as const, partIds: [] }; };
+  const board = { kind: 'workspace-file', path: '/Users/jake/robots/demo/twin_orbit.kicad_pcb' } as const;
+  const part = { resource: board, target: { kind: 'cad-selector', selectors: ['#R1'] } } as const;
+  const folders = vi.fn(async () => ({ start: '/Users/jake/robots/demo', home: '/Users/jake' }));
+  const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },
+    promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver: take, send: take },
+    promptFiles: { create: vi.fn(), read: vi.fn(), folders } });
+  const packet = JSON.stringify({ input: board.path, jobs: [{ camera: 'front', outputs: [{ path: '/tmp/cad-quick-edit-a/twin_orbit-1-current.png' }] }] });
+  const prompt = { views: () => [{ label: 'current view' }], files: vi.fn(async () => ({ inline: packet })), read: vi.fn() };
+  mount(host, { resource: board, references: [part], prompt });
+  write('Add a logo here.');
+  fireEvent.click(within(box()!).getByRole('button', { name: action }));
+  await waitFor(() => expect(message).toContain('Snapshot JSON'));
+  expect(folders).toHaveBeenCalledTimes(1);
+  expect(message).toContain('File: twin_orbit.kicad_pcb\nReferences:\ntwin_orbit.kicad_pcb#R1\n');
+  expect(message).toContain('{"input":"twin_orbit.kicad_pcb","jobs":[{"camera":"front","outputs":[{"path":"/tmp/cad-quick-edit-a/twin_orbit-1-current.png"}]}]}');
+  expect(message).not.toContain('/Users/jake');
+});
 
 it.each(['unsaved build preview', 'previous revision'])('keeps the note and honestly delivers text/references for a displayed %s without snapshot jobs', async displayed => {
   const copied: string[] = [];
@@ -392,4 +401,58 @@ it.each(['unsaved build preview', 'previous revision'])('keeps the note and hone
   expect(copied[0]).not.toContain('Snapshot JSON');
   expect(files).not.toHaveBeenCalled();
   expect(note()).toBe('Round this edge.');
+});
+
+it('carries every reference as one chip: one its name, several their count, whose list names each with its kind and its key facts and whose X drops them all; the drawing its own chip; every reference still goes', async () => {
+  let copied: Promise<string> | string = '';
+  const host = testHost({ clipboard: { writeText: async text => { copied = text; }, readText: async () => '', writeImage: async () => {} } });
+  const removed: string[] = [];
+  const part = (name: string) => ({ key: `part:${name}`, label: name, glyph: 'solid', copy: `/models/parts/bracket.step#${name}`, onRemove: () => removed.push(name) });
+  const faces = { key: 'run:base|face', label: 'base · 3 faces', glyph: 'face', count: 3, compact: { name: 'base', kind: 'face', count: 3 }, onRemove: () => removed.push('faces') };
+  const edge = { key: 'edge:base|e2', label: 'base · edge 2', glyph: 'edge', onRemove: () => removed.push('edge') };
+  // The view's description of a part: its key facts, a bad one among them (left out, never drawn).
+  const flange = { ...part('output_flange'), detail: { id: 'part:output_flange', pick: '', kind: 'solid', title: 'output_flange',
+    facts: [{ label: 'Size', value: '10 × 10 × 2 mm' }, { label: 'Volume', value: { not: 'text' } }, { label: 'Mass', value: '0.1 kg' }] } };
+  const references = ['a', 'output_flange'].map(name => ({ resource, target: { kind: 'cad-selector', selectors: [name] } }));
+  mount(host, { references, chips: [part('a'), faces, edge, flange], annotation: { present: true, clear: () => removed.push('ink') } });
+  const chips = () => [...box()!.querySelectorAll('[data-quick-edit-refs] > [data-quick-edit-ref]')].map(chip => [chip.getAttribute('data-quick-edit-ref'), chip.textContent]);
+  // A part, a run of three faces, an edge and another part: six references, one chip; the drawing beside it.
+  expect(chips()).toEqual([['annotation', 'Annotation'], ['group:references', '6 refs']]);
+  // Its list names each, by its glyph, its name and its kind, with its X and no card of its own, its key facts under it
+  // (only what the view knows: a part with no description has none); its X drops them all.
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  await act(async () => { fireEvent.click(within(box()!).getByRole('button', { name: '6 refs' })); });
+  const list = await screen.findByRole('dialog', { name: '6 refs' });
+  const rows = () => within(screen.getByRole('dialog')).getAllByRole('listitem').map(item => [item.querySelector('[data-quick-edit-group-show]')!.textContent,
+    [...item.querySelectorAll('[data-quick-edit-ref-facts] > div')].map(fact => fact.textContent).join('; ')]);
+  expect(rows()).toEqual([['aPart', ''], ['base · 3 faces3 faces', ''], ['base · edge 2Edge', ''], ['output_flangePart', 'Size10 × 10 × 2 mm; Mass0.1 kg']]);
+  // The facts in the muted 11/16, under the name.
+  expect(list.querySelector('[data-quick-edit-ref-facts]')!.className).toContain('text-tiny');
+  expect(list.querySelector('[data-quick-edit-ref-facts]')!.className).toContain('text-muted-foreground');
+  expect(document.querySelector('[data-quick-edit-ref-card]')).toBeNull();
+  expect(warn).toHaveBeenCalled();
+  warn.mockRestore();
+  fireEvent.click(within(box()!).getByRole('button', { name: 'Remove 6 refs' }));
+  expect(removed).toEqual(['a', 'faces', 'edge', 'output_flange']);
+  // One reference is its own chip, by its name; a run of faces alone is its count.
+  cleanup();
+  mount(host, { references: [references[1]], chips: [flange] });
+  expect(chips()).toEqual([['part:output_flange', 'output_flange']]);
+  // A press on it shows that one's row and facts, the same list (no second popover); a press on its name there copies it.
+  await act(async () => { fireEvent.click(within(box()!).getByRole('button', { name: 'output_flange' })); });
+  await screen.findByRole('dialog', { name: 'output_flange' });
+  expect(rows()).toEqual([['output_flangePart', 'Size10 × 10 × 2 mm; Mass0.1 kg']]);
+  expect(document.querySelectorAll('[role="dialog"]').length).toBe(1);
+  await act(async () => { fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'output_flange' })); });
+  expect(await waitFor(() => copied)).toBe('/models/parts/bracket.step#output_flange');
+  copied = '';
+  cleanup();
+  mount(host, { references: [references[0]], chips: [faces] });
+  expect(chips()).toEqual([['group:references', '3 refs']]);
+  cleanup();
+  // The prompt is the same: every reference goes, whatever the chips show.
+  mount(host, { references, chips: [part('a'), flange] });
+  fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
+  const text = String(await waitFor(() => copied));
+  for (const name of ['a', 'output_flange']) expect(text).toContain(`/models/parts/bracket.step#${name}`);
 });

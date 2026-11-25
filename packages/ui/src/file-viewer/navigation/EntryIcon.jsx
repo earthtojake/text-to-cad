@@ -1,6 +1,6 @@
 import { File, LoaderCircle } from "lucide-react";
 
-import { cn } from "@text-to-cad/ui/utils";
+import { cn } from "@cad/ui/utils";
 import {
   ENTRY_ICON_KIND,
   entryIconKind

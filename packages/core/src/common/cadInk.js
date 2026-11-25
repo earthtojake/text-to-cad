@@ -3,6 +3,7 @@ import {
   normalizeDisplayEdgeSettings
 } from "./displaySettings.js";
 import { GRID_AXIS_COLORS, GRID_LINE_DEFAULTS } from "../lib/viewer/stageGrid.js";
+import { SCENE_COLORS } from "../lib/viewportTheme.js";
 
 // Full widths in drawing-buffer (device) pixels. Both the instanced CAD pass
 // and LineMaterial use the same values and analytic antialiasing feather.
@@ -22,7 +23,10 @@ export function resolveCadEdgeSettings(value = null) {
       opacity: 1,
       thickness: WIDTHS[classId]
     }])),
-    highlightColor: "#8dc5ff",
+    highlightColor: SCENE_COLORS.hover,
+    // A picked edge, and a picked face's outline: the highlight's blue, deep enough to read as a
+    // line on the model's light surfaces, which the fill's pale blue barely did; at 3 pixels, a line, not a band.
+    highlightEdgeColor: SCENE_COLORS.selectedEdge,
     highlightOpacity: 1,
     highlightThickness: 3,
     silhouetteScale: 0.004,

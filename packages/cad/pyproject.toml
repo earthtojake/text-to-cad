@@ -1,15 +1,15 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.9.0"
-description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra."
+version = "0.11.17"
+description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra; and the cad command, its server and the viewer."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 authors = [{ name = "earthtojake" }]
 keywords = ["cad", "step", "glb", "build123d", "parametric", "agent-skills"]
 classifiers = [
@@ -17,13 +17,16 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Manufacturing",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Multimedia :: Graphics :: 3D Modeling",
   "Topic :: Scientific/Engineering",
 ]
-# Two sets. The required dependencies are what the server imports of the library -- the document
-# model, the protocol a client speaks, the build's words -- none of which imports the CAD kernel (a
-# test holds that): numpy alone, the meshes' arrays. The `build123d` extra is what a model runs on: the
+# Two sets. The required dependencies are what the server and the library's kernel-free modules import
+# -- the document model, the protocol a client speaks, the build's words, the server -- none of which
+# imports the CAD kernel (a test holds that). The `build123d` extra is what a model runs on: the
 # server installs `cad[build123d]` at its own release into the one environment every worker starts
 # from (the base), and a person who installs the library by hand to run models installs
 # `cad[build123d]`.
@@ -33,6 +36,17 @@ dependencies = [
   # wire format's buffers too, so numpy is required. build123d requires numpy 2 already; the library
   # names the same range because it imports numpy itself.
   "numpy>=2,<3",
+  # The server makes the environment its workers run in, and each release's an update installs, with
+  # uv: a dependency, so it is always there (its wheel carries the binary, `uv.find_uv_bin`), on a
+  # machine with no uv on PATH too.
+  "uv>=0.13.8",
+  # The viewer's DXF pane flattens a drawing with ezdxf in the server's own process.
+  "ezdxf",
+  # The DXF pane's raster and the Recents' previews are drawn with Pillow.
+  "pillow",
+  # The cad command on Windows, cad.exe, is distlib's console launcher (the one pip writes for every
+  # console script) in front of a zip the server writes (cad_server._internal.installations).
+  'distlib; sys_platform == "win32"',
 ]
 
 [project.optional-dependencies]
@@ -68,12 +82,100 @@ build123d = [
   # measurements with Pillow. Both run in the kernel's processes.
   "ezdxf",
   "pillow",
+  # A stress study (`cad <type> solve`) finds the parts of an assembly that touch with scipy (a KD-tree
+  # of sampled faces) in the kernel's process, beside the B-rep it reads. build123d brings it already;
+  # it is named here because the library imports it itself.
+  "scipy>=1.17.1,<2",
+]
+# The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
+# (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
+# person's own KiCad is never run. Pinned exactly: one KiCad nightly's build (kicode-pcb, the board side,
+# 55-85 MB a platform, and kicode-sch, the schematic side a BOM reads), whose kicad-cli and KiPy match.
+kicad = [
+  "kicode==10.99.0.dev20261106",
+]
+# The netgen integration's extra: a stress study (`cad <type> solve`, cad._internal.fea) meshes a part's own
+# faces with netgen (LGPL-2.1, a wheel installed beside the library and imported only by the mesher's own
+# process, cad.netgen._mesher, since its OpenCascade and OCP's cannot share one; about 8-11 MB). A study
+# reads the document's B-rep with OCP too, so the `cad` command runs it in the environment of
+# cad[build123d,netgen,calculix]. Bounded above because the mesher reaches past netgen's entry points into its
+# geometry and meshing parameters (OCCGeometry, SecondOrder, curvaturesafety, grading), which a minor
+# release is free to change; the accuracy margins were measured at 6.2.2608, the floor. netgen publishes
+# wheels for macOS, Linux x86_64 and Windows x86_64 alone, and no sdist, so the extra installs it only
+# there: anywhere else (Linux on ARM) it installs nothing and a solve refuses, naming the platform
+# (cad._internal.fea.mesh). CalculiX, which solves, is the calculix integration's, below.
+netgen = [
+  "netgen-mesher>=6.2.2608,<6.3; sys_platform == 'darwin' or (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
+# The calculix integration's extra: a stress study (`cad <type> solve`) is solved by CalculiX's ccx, which the
+# cad-ccx package carries (CalculiX's own program, unmodified, from conda-forge's build, with the libraries it loads:
+# 8-13 MB a platform, GPL-2.0 like CalculiX, run as a separate program and never linked). Pinned exactly: the
+# release a study's numbers were measured against. A person's own ccx is never run unless CAD_CCX names it.
+calculix = [
+  "cad-ccx==2.23.0",
+]
+# The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
+# (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and
+# subdivision APIs (face adjacency, connected components, subdivide_to_size, intersects_location), which a
+# major release is free to change. rtree, scipy and networkx are trimesh's optional extras, and ours are
+# not optional: the undercut and wall-thickness ray casts need rtree's index; mesh.split, body_count and
+# the connected-component graphs need scipy; and mesh.split's repair of an open body (fill_holes: two
+# bodies printed one on the other share a face, so neither is closed) needs networkx -- without them a
+# family dies on a ModuleNotFoundError. Meshes are read by the library's own readers (a 3MF and a GLB
+# written as an STL first), so trimesh's 3MF loader and lxml, which it alone needs, are not ours.
+trimesh = [
+  "trimesh>=5.2.1,<6",
+  "rtree>=1.2,<2",
+  "scipy>=1.17.1,<2",
+  "networkx>=3.6.1,<4",
+]
+# The mujoco integration's extra: MuJoCo's headless core -- the compiler and the Python bindings, numpy their
+# one dependency (cad.mujoco) -- and MuJoCo Studio. `cad mujoco check` compiles a model with the core, so
+# what MuJoCo refuses is a finding in its own words. Studio's web viewer is the person's window onto a model
+# (`cad run mujoco-studio --model scene.xml`, cad.mujoco._command): a Python package with its own command line,
+# so it comes with the extra as kicad-cli comes with cad[kicad]; it serves the page from this process, so it
+# stays headless (websockets its one dependency beside the core's, no GL). Never `mujoco` itself, which from
+# 4.0 is a meta-package that adds glfw and PyOpenGL for Studio's native window (a display and a GPU an agent's
+# sandbox has neither of), nor the menagerie or the USD plugin. Bounded above: the compiler's Python API
+# (MjSpec, the warning hook) and Studio's command line moved between majors.
+mujoco = [
+  "mujoco-core>=4.0,<5",
+  "mujoco-studio>=4.0.1,<5",
+]
+# The coacd integration's extra: cad.mujoco.decompose makes a part of a MuJoCo function's spec collide as
+# the convex hulls CoACD cuts its mesh into (cad.coacd), imported only by the decomposer's own process
+# (cad.coacd._decomposer), since its native library carries a TBB of its own beside the kernel's. One wheel, its
+# library loaded with ctypes, numpy its one dependency, MIT; about 1.5-3.5 MB. Bounded to the 1.0 line: the hulls
+# are a function of CoACD's release (the decomposer's cache key names the line) and its ctypes entry point's
+# arguments are positional. Where an environment lacks it, the engine makes this extra's environment on first need
+# for the decomposer (cad.engine.hulls). CoACD publishes abi3 wheels for macOS arm64, Linux x86_64 and aarch64
+# (manylinux: glibc) and Windows x86_64 alone, and no sdist, so the extra installs it only there: anywhere else (an
+# Intel Mac, Windows on ARM) it installs nothing, and a musl Linux, which no marker tells apart, cannot install it;
+# there a decomposition the cache does not hold is refused, naming the extra and the platform.
+coacd = [
+  "coacd>=1.0.14,<1.1; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and (platform_machine == 'x86_64' or platform_machine == 'aarch64')) or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
+# The blender integration's extra: Blender as a Python module (bpy, the Blender Foundation's wheel, GPL: a
+# script that imports it runs it, and the library links nothing of it), which cad.blender loads a GLB into
+# for a render. Pinned exactly, as kicode is: the loader leans on what Blender's own glTF importer does
+# with a file (a node's extras kept as its object's properties, one action a clip), which a release is
+# free to change, and it was checked against this one. bpy 5.2.3 publishes wheels for CPython 3.13 alone,
+# on macOS arm64, Linux x86_64 and Windows (x86_64 and arm64: every machine its Python runs on), and no sdist,
+# so the extra installs it only there: on another Python or platform it installs nothing, `cad run` refuses a
+# program that needs it in one line, and cad.blender says which extra a script lacks
+# (cad._internal.integrations.missing). 245 MB a download on macOS, 340 on Windows x86_64, 400 on Linux; bpy
+# brings cattrs, cython, requests and zstandard, and takes the numpy the library does.
+blender = [
+  "bpy==5.2.3; python_version == '3.13' and ((sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64') or sys_platform == 'win32')",
 ]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"
 Repository = "https://github.com/earthtojake/text-to-cad"
 Issues = "https://github.com/earthtojake/text-to-cad/issues"
+
+[project.scripts]
+cad = "cad_server.cli:main"
 
 [tool.pyrefly]
 preset = "basic"
@@ -82,16 +184,37 @@ search-path = ["src"]
 # A checkout under an ignored folder (a `.claude/worktrees/...` worktree) would
 # otherwise have src excluded by the ignore files above it and check nothing.
 use-ignore-files = false
+# netgen: imported only by the mesher's own process (`cad/netgen/_mesher.py`), and it ships no type stubs.
+# cad_ccx: the calculix extra's, imported where a study looks for the program (`cad/calculix/_program.py`), and the
+# package jobs that check types do not install it.
+# coacd: imported only by the decomposer's own process (`cad/coacd/_decomposer.py`), and it ships no type stubs.
+# bpy, mathutils: the blender extra's, Blender's own modules (`cad/blender/_scene.py`), built for another Python than
+# the one the package jobs check types on.
+ignore-missing-imports = ["netgen", "netgen.*", "cad_ccx", "coacd", "bpy", "bpy.*", "mathutils"]
+
+[tool.setuptools]
+# The one module that is no package: what an interpreter of the environment imports first, from cad.pth, before any
+# package of cad's (src/_cad_release.py).
+py-modules = ["_cad_release"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-# `cad`, the library, and `cadgen`, its earlier name: an alias of it (src/cadgen/__init__.py).
-include = ["cad", "cad.*", "cadgen"]
+# `cad`, the library, and `cadgen`, its earlier name: an alias of it (src/cadgen/__init__.py); `cad_server`,
+# the server and the `cad` command; `cad_mcp`, the stdio transport an agent app starts.
+include = ["cad", "cad.*", "cadgen", "cad_server", "cad_server.*", "cad_mcp", "cad_mcp.*"]
 
 [tool.setuptools.package-data]
 cad = ["py.typed", "*.pyi"]
-# The page `cad serve` shows a document in (cad.engine.serve reads it beside itself).
-"cad.engine" = ["page/*"]
 # The engine's look lights the regular display modes with this environment image, which the
 # engine serves to the viewer and the OCCT stills read (cad.engine.render.look).
 "cad.engine.render" = ["studio.hdr"]
+# _runtime holds what the server serves that is not Python: the viewer's built client that
+# `cad viewer` serves and the CAD app page its MCP endpoint serves. It is data, not a subpackage (no
+# __init__), and it is found at call time by cad_server.assets. Verified by
+# scripts/release/check-wheel-contents.sh.
+cad_server = ["py.typed", "_runtime/**/*"]
+# The viewer server's catalog ordering is ICU root collation, read from this table at
+# runtime; it ships beside the code that reads it.
+"cad_server.viewer" = ["collation.json"]
+# The engine's README and its pages are the mechanisms the laws constrain: an index, and a page per mechanism.
+"cad_server.engine" = ["README.md", "docs/*.md"]

@@ -1,5 +1,5 @@
-"""``cad snapshot SRC OUT.png``: a picture of a document or of a file the viewer opens,
-drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
+"""``cad <type> snapshot SRC OUT.png``: a picture of a document or of a file the viewer opens,
+drawn by OCCT as the viewer draws it. One dispatcher by SRC's suffix:
 
 - ``.xbf``, ``.step``: a document, served by the engine (the daemon, so its meshes are the ones
   the viewer and every build share, or with ``daemon=False`` a server in this process; a model's own
@@ -8,22 +8,42 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.stl``, ``.3mf``, ``.glb``: a mesh file, read by its reader (``formats/``: numpy, zip and XML,
   OCCT's glTF reader) into a structure and part buffers as a document's are, with the viewer's
   feature edges, and drawn by the documents' own path; a GLB's base colour textures through OCCT.
-- ``.urdf``, ``.sdf``, ``.srdf``: a robot, its link meshes placed by the viewer's forward
+- ``.urdf``, ``.srdf``: a robot, its link meshes placed by the viewer's forward
   kinematics (``formats/robot.py``), drawn as a document is; ``--pose`` poses it.
 - ``.dxf``: a drawing, from above, in its pens, in the viewer's 2D look (``render/drawing.py``).
+- ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
+  colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
+  mode (``board``, ``copper``, ``assembly``, ``placement``) or ``{mode, side, poured, layers,
+  active, others, zones, tracks, window}`` (the active layer drawn on top, ``others`` the rest
+  ``shown``, ``dimmed`` or ``hidden`` -- the outline and the holes through an active copper layer kept at full
+  strength; the earlier ``dim: true`` reads as ``dimmed`` -- the zones' and tracks' opacities from 0 to 1,
+  and ``window``, ``[x0, y0, x1, y1]`` in KiCad's millimetres, the box of the board the still frames, filling it).
+- ``.kicad_sch``: a KiCad schematic, its hierarchy read from the files on each draw and one sheet
+  painted flat in KiCad's schematic colours (``render/schematic.py``); its ``--display`` is
+  ``{sheet, border, title}`` (the root sheet, ``/``, unless it names another: ``/Power/``; KiCad's title
+  block drawn unless ``title`` is false, the page's edge and frame with ``border``).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
-it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one
+it read changes; ``daemon=False`` (Python's alone) draws in this process. An engine that cannot make an
+OpenGL context (``NO_GL``: on Linux, a daemon started with no X display and no Xvfb of its own) fails the
+picture; where this process can draw (``drawable_here``: the kernel here and a context it can make, as
+under ``xvfb-run``), it draws the picture itself instead, saying so on stderr -- a held document's
+exported through the engine to a temporary xbf first -- and where it cannot, the engine's failure stands.
+Every kind is drawn in the engine's one
 look (``render/look.py``). The modes, the camera fit, clip, grid and Preview are the viewer's, in
-the look the viewer's viewport resolves for the same display settings. The answer is PNG bytes,
-which this writes to OUT.
+the look the viewer's viewport resolves for the same display settings. Every picture is light: a 3D
+document on the look's flat backdrop (Preview's studio sweep only for a still asked for Preview,
+``--preview``), the drawing's white paper, KiCad's light colours,
+whatever theme the person's viewer is in: a snapshot is a tool for an agent, and dark is the harder
+to read, so no request, flag or packet names a theme. The answer is PNG bytes, which this writes to
+OUT.
 
 The request is the snapshot contract's where it applies (``--display`` mode or JSON, ``--grid``,
 ``--camera``, ``clip`` -- its ``at`` in the file's unit, as the viewer reads it: a
 document's millimetres, a robot's or a GLB's metres, a 3MF's declared unit (``render/clip.py``) --
 the sizes, ``--json``), and what a kind does not offer is
 refused by name before anything renders: ``parts`` and ``exploded`` for a file that places a single
-part, ``--pose`` for a mesh, and everything but ``appearance`` for a drawing. ``--display
+part, ``--pose`` for a mesh, and every display setting for a drawing. ``--display
 exploded=0.6`` (or ``display.exploded``) moves the parts apart as the viewer's Explode does, by its
 amount (0.5 unless one is given). ``--annotation FILE`` draws the viewer's annotation over the
 model (its ink on the parts it was drawn on, wherever they stand): an annotation file, or the Quick
@@ -46,9 +66,11 @@ refused by name before anything renders.
 
 ``--job PACKET`` replays a Quick Edit packet (the ``.snapshot.json`` the viewer writes) or a job
 file in its words (``job_pictures``): every output of every job drawn, each job a view with its
-own camera, display (its hidden and isolated parts among it), pose (``jointValues``) and, a
-robot's, the visuals it hid (``selection.hide``), the packet's ink and dimensions over each, at
-the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``,
+own camera, display (its hidden and isolated parts among it), pose (``jointValues``, or ``motion``: a
+configuration sequence at a time, ``{"name", "at"}``) and, a
+robot's, the visuals it hid (``selection.hide``), a board's, what its prompt named lit
+(``references``: board references, ``render/board_refs.py``), the packet's ink and dimensions over each, at
+the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``, ``background``,
 ``renderScale``, ``sizeProfile``). A view's own camera with the tight frame off is drawn exactly;
 any other camera is fitted with the job's padding. Every request is checked before anything
 renders, and a failure writes none of the job's pictures, leaving every output as it was.
@@ -58,6 +80,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import functools
 import json
 import math
 import os
@@ -65,30 +88,42 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 
 from cad.engine.atomic_replace import replace_atomic, staging
 
-__all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
-           "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
-           "picture_path", "snapshot"]
+__all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "drawable_here",
+           "job_input", "job_pictures", "no_gl", "options", "parse_annotation", "parse_camera", "parse_display",
+           "parse_measurements", "parse_pose",
+           "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
-DISPLAY_KEYS = frozenset({"mode", "grid", "appearance", "camera", "clip", "exploded", "hidden", "isolated"})
+DISPLAY_KEYS = frozenset({"mode", "grid", "camera", "clip", "exploded", "hidden", "isolated", "edges"})
+# The edge classes a picture draws as lines over its faces, by the names the mesh and the viewer give them
+# (``render.shapes.LINES``; the viewer's ``CAD_EDGE_CLASS_IDS``): where two faces meet at an angle or a face
+# has a free border (``feature``), where they meet smoothly (``tangent``: a fillet's ends, a loft's rows),
+# and where a face closes on itself (``seam``: a cylinder's, a loft's). All of them unless ``display.edges``
+# names which (``{"classes": [...]}``; ``edges=feature`` on the command line).
+EDGE_CLASSES = ("feature", "tangent", "seam")
 # What the viewer's hide and isolate leave out of a picture: each a list of part refs (``refs``), the
 # display object's and a Quick Edit packet's alike.
 VISIBILITY = ("hidden", "isolated")
-APPEARANCES = ("light", "dark")
 EXPLODED_KEYS = frozenset({"enabled", "amount"})
 # Explode's amount when a request names none: the viewer's own default.
 EXPLODED_AMOUNT = 0.5
+# ``display.clip``, as the viewer's display settings take it (``@cad/core``'s ``displaySettings.js``,
+# ``DISPLAY_CLIP_SETTINGS_KEYS``): ``partColors`` is the viewer's cap colour switch.
+CLIP_KEYS = frozenset({"enabled", "axis", "at", "invert", "partColors"})
+CLIP_AXES = ("x", "y", "z")
 CAMERA_PRESETS = frozenset({"front", "back", "right", "left", "top", "bottom", "iso"})
 CAMERA_KEYS = frozenset({"preset", "name", "position", "target", "up", "direction", "zoom", "orthographicHalfHeight"})
+# What a camera object leaves to the display (``display.camera``): the lens, not where the camera stands.
+LENS_KEYS = ("projection", "focalLength")
 # ``--camera authored``: the view the annotation's ink was drawn in, exactly (``authored``).
 AUTHORED = "authored"
 # The Quick Edit packets an annotation file is looked for beside (``cad_server.viewer`` writes them).
 PACKETS = "*.snapshot.json"
-# The viewer's annotation file (``@text-to-cad/core`` ``common/annotation.js``) and Measure's marks.
+# The viewer's annotation file (``@cad/core`` ``common/annotation.js``) and Measure's marks.
 ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
 MARK_KINDS = ("stroke", "area", "text")
 MARK_MAX = 8192  # a still's annotation holds at most this many marks
@@ -106,11 +141,11 @@ DEFAULT_SIZE = SIZE_PROFILES["diagnostic"]
 MAX_SIDE = 8192
 # ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
 # view, its outputs the pictures it writes, its output settings how they are framed and finished.
-PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated"})
-JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
-                      "output", "outputs"})
+PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
+JOB_KEYS = frozenset({"input", "camera", "display", "preview", "jointValues", "selection", "annotation", "measurements",
+                      "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
-SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale"})
+SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale", "background"})
 SELECTION_KEYS = {"hide": "hidden", "focus": "isolated"}  # a view's selection, as the display says it
 # The frame's margin each side, a share of the picture (the camera fit's), and the supersampling.
 PADDING, PADDING_RANGE = 0.04, (0.0, 0.15)
@@ -118,7 +153,46 @@ RENDER_SCALE_RANGE = (1.0, 3.0)
 
 
 class SnapshotRefused(ValueError):
-    """A request the snapshot will not draw, said before anything renders."""
+    """A request the snapshot will not draw, said before anything renders. ``part``: which part of the
+    request it refused, one word (``refusing``: ``source``, ``out``, ``display``, ``display.mode``,
+    ``display.exploded``, ``display.clip``, ``display.grid``, ``display.visibility``, ``camera``, ``pose``,
+    ``size``, ``annotation``, ``measurements``, ``references``, ``job``), never the value given: what the
+    server's telemetry counts a refusal by (``cad_server.analytics.SNAPSHOT_PARTS``); None where none said."""
+
+    part: str | None = None
+
+    def __init__(self, *args: Any, part: str | None = None) -> None:
+        super().__init__(*args)
+        if part is not None:
+            self.part = part
+
+
+_Checked = TypeVar("_Checked", bound=Callable[..., Any])
+
+
+def refusing(part: str) -> Callable[[_Checked], _Checked]:
+    """A check whose refusals name ``part`` of the request (``SnapshotRefused.part``), unless a check it
+    called named its own first: the innermost part stands."""
+
+    def named(function: _Checked) -> _Checked:
+        @functools.wraps(function)
+        def checked(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return function(*args, **kwargs)
+            except SnapshotRefused as error:
+                if error.part is None:
+                    error.part = part
+                raise
+
+        return checked  # type: ignore[return-value]
+
+    return named
+
+
+class NoSuchFile(SnapshotRefused):
+    """A file a flag names (``--annotation``, ``--measurements``, ``--job``) that is not there: refused as every
+    request is, and told apart as the input that is not there it is (the server's ``cad`` command says it
+    ``not_found``)."""
 
 
 # --- the request ---------------------------------------------------------------------------
@@ -134,6 +208,7 @@ def _json_or_file(text: str, label: str) -> Any:
         raise SnapshotRefused(f"{label} is not JSON: {error}") from None
 
 
+@refusing("display.exploded")
 def _amount(text: str) -> float:
     try:
         amount = float(text)
@@ -144,6 +219,7 @@ def _amount(text: str) -> float:
     return amount
 
 
+@refusing("display.exploded")
 def _exploded(value: Any) -> dict[str, Any]:
     """``display.exploded``, checked: ``{"enabled", "amount"}``, the amount 0 to 1 (0.5 unless given)."""
     if not isinstance(value, dict):
@@ -160,16 +236,48 @@ def _exploded(value: Any) -> dict[str, Any]:
     return {"enabled": enabled, "amount": float(amount)}
 
 
+@refusing("display.clip")
+def _clip(value: Any) -> dict[str, Any]:
+    """``display.clip``, checked as the viewer checks it (``@cad/core``'s ``displaySettings.js``): ``enabled``,
+    ``axis`` (x, y or z), ``at`` (the plane's coordinate on its axis, in the file's unit) and ``invert``, and
+    the viewer's ``partColors``. A clip given cuts unless it says ``"enabled": false``."""
+    if not isinstance(value, dict):
+        raise SnapshotRefused('display.clip is {"axis": "x", "y" or "z", "at": the plane\'s coordinate on it, '
+                              '"invert": true or false}')
+    unknown = sorted(set(value) - CLIP_KEYS)
+    if unknown:
+        raise SnapshotRefused(f"display.clip has no {', '.join(unknown)}; it takes {', '.join(sorted(CLIP_KEYS))}")
+    if "axis" in value and value["axis"] not in CLIP_AXES:
+        raise SnapshotRefused(f"display.clip.axis is x, y or z, not {value['axis']!r}")
+    at = value.get("at")
+    if "at" in value and (isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at)):
+        raise SnapshotRefused("display.clip.at is a number: the plane's coordinate on its axis, in the file's unit")
+    for key in ("enabled", "invert", "partColors"):
+        if key in value and not isinstance(value[key], bool):
+            raise SnapshotRefused(f"display.clip.{key} is true or false")
+    return dict(value)
+
+
 def exploded_amount(display: dict[str, Any]) -> float:
     """How far apart the display moves the parts: 0 when it does not explode them."""
     exploded = display.get("exploded")
     return float(exploded["amount"]) if exploded and exploded.get("enabled") else 0.0
 
 
-def parse_display(value: str | None, grid: bool) -> dict[str, Any]:
-    """``--display``: a mode, ``exploded=AMOUNT``, an appearance (``light``, ``dark``: all a drawing
-    takes), several by commas (``hidden-line,exploded=0.6``), or the viewer's display object (JSON,
-    or a JSON file)."""
+@refusing("display")
+def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
+    """``--display``: a mode, ``exploded=AMOUNT``, ``edges=CLASS``, by commas (``hidden-line,exploded=0.6``), or
+    the viewer's display object (JSON, or a JSON file); a drawing takes none. A KiCad board's
+    (``board``) is its own vocabulary (``render/board.py``), and so is a schematic's (``schematic``:
+    ``render/schematic.py``)."""
+    if schematic:
+        from cad.engine.render.schematic import display_options as schematic_options
+
+        return schematic_options(value, grid)
+    if board:
+        from cad.engine.render.board import display_options
+
+        return display_options(value, grid)
     display: dict[str, Any] = {}
     if value:
         text = value.strip()
@@ -183,30 +291,42 @@ def parse_display(value: str | None, grid: bool) -> dict[str, Any]:
                 name, equals, amount = token.partition("=")
                 if name == "exploded" and "exploded" not in display:
                     display["exploded"] = {"enabled": True, "amount": _amount(amount) if equals else EXPLODED_AMOUNT}
+                elif name == "edges" and equals and "edges" not in display:
+                    display["edges"] = {"classes": [amount.strip()]}
                 elif token in DISPLAY_MODES and "mode" not in display:
                     display["mode"] = token
-                elif token in APPEARANCES and "appearance" not in display:
-                    display["appearance"] = token
                 else:
                     raise SnapshotRefused(f"--display {token!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}, "
-                                          "exploded=AMOUNT moves the parts apart, and light or dark is the appearance "
-                                          "(all a drawing takes; one of each, by commas)")
+                                          "exploded=AMOUNT moves the parts apart, and edges=CLASS draws the edges "
+                                          f"of one class alone ({', '.join(EDGE_CLASSES)}; one of each, by commas)",
+                                          part="display.mode")
     if "exploded" in display:
         display["exploded"] = _exploded(display["exploded"])
+    if "clip" in display:
+        display["clip"] = _clip(display["clip"])
     unknown = sorted(set(display) - DISPLAY_KEYS)
     if unknown:
         raise SnapshotRefused(f"display has no {', '.join(unknown)}; an engine document's display takes "
                               f"{', '.join(sorted(DISPLAY_KEYS))}")
     if "mode" in display and display["mode"] not in DISPLAY_MODES:
-        raise SnapshotRefused(f"display.mode {display['mode']!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}")
+        raise SnapshotRefused(f"display.mode {display['mode']!r} is no display mode; the modes are {', '.join(DISPLAY_MODES)}",
+                              part="display.mode")
     if "grid" in display and not isinstance(display["grid"], bool):
-        raise SnapshotRefused("display.grid is true or false")
+        raise SnapshotRefused("display.grid is true or false", part="display.grid")
+    if "edges" in display:
+        edges = display["edges"]
+        classes = edges.get("classes") if isinstance(edges, dict) and set(edges) == {"classes"} else None
+        if (not isinstance(classes, list) or not classes or len(set(map(str, classes))) != len(classes)
+                or not all(name in EDGE_CLASSES for name in classes)):
+            raise SnapshotRefused('display.edges is {"classes": [...]}, the edge classes drawn, each once, of '
+                                  f"{', '.join(EDGE_CLASSES)}; not {edges!r}", part="display")
     _visibility(display)
     if grid:
         display["grid"] = True
     return display
 
 
+@refusing("display.visibility")
 def _visibility(display: dict[str, Any]) -> None:
     for field in VISIBILITY:
         if field in display and (not isinstance(display[field], list)
@@ -214,6 +334,7 @@ def _visibility(display: dict[str, Any]) -> None:
             raise SnapshotRefused(f"display.{field} is a list of part refs (an occurrence's path: hand/finger.2)")
 
 
+@refusing("annotation")
 def packet_visibility(value: Any) -> dict[str, list[str]]:
     """What a Quick Edit packet (``--annotation``'s, ``_packet``) hides and isolates, as the viewer
     had it: its ``hidden`` and ``isolated`` part refs; nothing for an annotation file."""
@@ -227,13 +348,15 @@ def packet_visibility(value: Any) -> dict[str, list[str]]:
     return taken
 
 
+@refusing("display.visibility")
 def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: str) -> frozenset[int]:
     """The instances a picture leaves out: those ``display.hidden``'s refs name, and, where
     ``display.isolated`` is given, every one its refs do not. A ref is a part or an assembly
-    (every part below it), in the refs grammar, or -- a robot's -- the viewer's id of a visual
-    (``link:v1``, every object it draws, or ``link:v1/object/0``, one), as a robot's view names what
-    it hid; one that names nothing, or an element, is refused by name, and so is a choice that
-    leaves nothing to draw."""
+    (every part below it), in the refs grammar, or a glob over the occurrences (``*skin*``,
+    ``*/screw``, ``chest/skin_screw.?``: ``refs.matching``; several in one string, by commas), or --
+    a robot's -- the viewer's id of a visual (``link:v1``, every object it draws, or
+    ``link:v1/object/0``, one), as a robot's view names what it hid; one that names nothing, or an
+    element, is refused by name, and so is a choice that leaves nothing to draw."""
     if not display.get("hidden") and display.get("isolated") is None:
         return frozenset()
     from cad.engine import refs
@@ -251,15 +374,33 @@ def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: s
             if ref in visuals:
                 found.update(visuals[ref])
                 continue
-            try:
-                hits = refs.resolve_structure(structure, ref)
-            except refs.RefError as error:
-                raise SnapshotRefused(f"display.{field}: {error}") from None
-            for hit in hits:
-                if hit.kind is not None:
-                    raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
-                                          "it takes parts and assemblies")
-                found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
+            if isinstance(ref, str) and refs.GLOB & set(ref) and '"' not in ref:  # a quoted label is itself
+                for pattern in (item.strip() for item in ref.split(",")):
+                    if not refs.GLOB & set(pattern):
+                        found.update(named_by(field, pattern))
+                        continue
+                    nodes = refs.glob_structure(structure, pattern)
+                    if not nodes:
+                        raise SnapshotRefused(f"display.{field}: the glob {pattern!r} matches no part or assembly "
+                                              f"of {name}")
+                    found.update(part.payload["instance"] for node in nodes for part in node.parts()
+                                 if "instance" in part.payload)
+                continue
+            found.update(named_by(field, ref))
+        return found
+
+    def named_by(field: str, ref: str) -> set[int]:
+        """The instances one ref of the grammar names: its parts, or every part of its assembly."""
+        found: set[int] = set()
+        try:
+            hits = refs.resolve_structure(structure, ref)
+        except refs.RefError as error:
+            raise SnapshotRefused(f"display.{field}: {error}") from None
+        for hit in hits:
+            if hit.kind is not None:
+                raise SnapshotRefused(f"display.{field}: {ref!r} names {hit.kind} {hit.ordinal} of a part; "
+                                      "it takes parts and assemblies")
+            found.update(node.payload["instance"] for node in hit.node.parts() if "instance" in node.payload)
         return found
 
     every = set(range(len(structure.get("instances") or [])))
@@ -269,6 +410,7 @@ def hidden_instances(structure: dict[str, Any], display: dict[str, Any], name: s
     return frozenset(every - drawn)
 
 
+@refusing("camera")
 def parse_camera(value: str | None) -> Any:
     """``--camera``: a preset, an ``azimuth:elevation`` pair in degrees, a camera JSON object, or
     ``authored``: the camera the annotation's ink was drawn in (``--annotation``'s ``view``)."""
@@ -281,23 +423,61 @@ def parse_camera(value: str | None) -> Any:
         parsed = _json_or_file(text, "--camera")
         if not isinstance(parsed, dict):
             raise SnapshotRefused("--camera is a preset, an azimuth:elevation pair or a JSON object")
+        moved = {key: parsed[key] for key in LENS_KEYS if key in parsed}
+        if moved:
+            raise SnapshotRefused(f"camera {', '.join(moved)} belongs to display.camera: "
+                                  f"--display '{json.dumps({'camera': moved})}'")
         unknown = sorted(set(parsed) - CAMERA_KEYS)
         if unknown:
-            raise SnapshotRefused(f"camera has no {', '.join(unknown)}; its keys are {', '.join(sorted(CAMERA_KEYS))}")
-        moved = [key for key in ("projection", "focalLength") if key in parsed]
-        if moved:
-            raise SnapshotRefused(f"camera {', '.join(moved)} belongs to display.camera")
+            said = f"camera has no {', '.join(unknown)}; its keys are {', '.join(sorted(CAMERA_KEYS))}"
+            if {"azimuth", "elevation"} & set(unknown):
+                # The angles are the string form's, which says them in degrees: --camera 45:30.
+                angles = [parsed.get("azimuth"), parsed.get("elevation")]
+                given = all(isinstance(angle, (int, float)) and not isinstance(angle, bool) for angle in angles)
+                said += ("; an azimuth and an elevation, in degrees, are --camera "
+                         + (":".join(f"{angle:g}" for angle in angles) if given else "AZIMUTH:ELEVATION (45:30)"))
+            raise SnapshotRefused(said)
+        _camera_values(parsed)
         return parsed
     if text.lower() in CAMERA_PRESETS:
         return text.lower()
-    pair = text.split(":")
-    try:
-        if len(pair) == 2 and all(math.isfinite(float(part)) for part in pair):
-            return text
-    except ValueError:
-        pass
+    if _angle_pair(text):
+        return text
     raise SnapshotRefused(f"camera {text!r} is no preset ({', '.join(sorted(CAMERA_PRESETS))}), "
                           "azimuth:elevation pair, JSON object or authored")
+
+
+def _angle_pair(text: str) -> bool:
+    """Whether ``text`` is an ``azimuth:elevation`` pair of degrees (``45:30``), as ``camera.js`` reads one."""
+    pair = text.split(":")
+    try:
+        return len(pair) == 2 and all(math.isfinite(float(part)) for part in pair)
+    except ValueError:
+        return False
+
+
+@refusing("camera")
+def _camera_values(camera: dict[str, Any]) -> None:
+    """A camera object's values, checked as the viewer's ``camera.js`` checks them (``normalizeCameraSpec``):
+    ``preset`` a preset or an ``azimuth:elevation`` pair; ``position`` and ``target`` three numbers, ``up``
+    and ``direction`` three and not all 0; ``zoom`` and ``orthographicHalfHeight`` above 0; ``name`` a word."""
+    preset = camera.get("preset")
+    if "preset" in camera and not (isinstance(preset, str) and (preset.strip().lower() in CAMERA_PRESETS
+                                                                 or _angle_pair(preset))):
+        raise SnapshotRefused(f"camera.preset {preset!r} is no preset ({', '.join(sorted(CAMERA_PRESETS))}) "
+                              "or azimuth:elevation pair")
+    for key in ("position", "target", "up", "direction"):
+        if key in camera and not _numbers(camera[key], 3):
+            raise SnapshotRefused(f"camera.{key} is [x, y, z]")
+        if key in ("up", "direction") and key in camera and sum(value * value for value in camera[key]) <= 1e-12:
+            raise SnapshotRefused(f"camera.{key} is [x, y, z], not all 0")
+    for key in ("zoom", "orthographicHalfHeight"):
+        value = camera.get(key)
+        if key in camera and (isinstance(value, bool) or not isinstance(value, (int, float))
+                              or not math.isfinite(value) or value <= 0):
+            raise SnapshotRefused(f"camera.{key} is a number above 0")
+    if "name" in camera and not isinstance(camera["name"], str):
+        raise SnapshotRefused("camera.name is the view's name, a string")
 
 
 def _load(value: Any, label: str) -> Any:
@@ -312,7 +492,7 @@ def _load(value: Any, label: str) -> Any:
             raise SnapshotRefused(f"{label} is not JSON: {error}") from None
     path = Path(text).expanduser()
     if not path.is_file():
-        raise SnapshotRefused(f"{label} {text}: no such file")
+        raise NoSuchFile(f"{label} {text}: no such file")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -336,6 +516,7 @@ def _packet(found: Any) -> bool:
         isinstance(found.get("jobs"), list) or isinstance(found.get("views"), list))
 
 
+@refusing("annotation")
 def parse_annotation(value: Any) -> dict[str, Any] | None:
     """``--annotation``: the viewer's annotation (its file's path, its JSON, or a Quick Edit packet
     that carries it), checked where a still reads it: its marks and each part's placement. The page
@@ -382,6 +563,7 @@ def parse_annotation(value: Any) -> dict[str, Any] | None:
     return found
 
 
+@refusing("measurements")
 def parse_measurements(value: Any) -> list[dict[str, Any]] | None:
     """``--measurements``: Measure's dimensions, ``[{start, end, label, color}]`` (or one of them,
     as a chip copies it): a file's path, or its JSON."""
@@ -438,6 +620,7 @@ def _view_of(packet: dict[str, Any], label: str) -> View | None:
     return None
 
 
+@refusing("camera")
 def authored(camera: Any, annotation: dict[str, Any] | None, source: Any, document: Path) -> tuple[Any, bool, View | None]:
     """The camera a still is drawn with, whether it is drawn exactly so (no fit to the model), and
     the view it came from. ``authored`` is the view the annotation's ink was drawn in: a mark names
@@ -480,13 +663,16 @@ def authored(camera: Any, annotation: dict[str, Any] | None, source: Any, docume
                           f"(.snapshot.json) {where}holds that view of {document.name}: give the packet as --annotation")
 
 
+@refusing("pose")
 def parse_pose(value: str | None) -> Any:
-    """``--pose``: a configuration's name, or ``{"<joint or coupling>": value}`` (JSON, or a JSON file of it)."""
+    """``--pose``: a configuration's name, a configuration sequence at a time of it (``walk@0.6``), or
+    ``{"<joint or coupling>": value}`` (JSON, or a JSON file of it)."""
     if value is None:
         return None
     text = value.strip()
     if not text:
-        raise SnapshotRefused("--pose names a configuration, or gives joint values as a JSON object")
+        raise SnapshotRefused("--pose names a configuration or a sequence at a time (NAME@SECONDS), or gives joint "
+                              "values as a JSON object")
     if text.startswith("{") or (text.endswith(".json") and Path(text).is_file()):
         parsed = _json_or_file(text, "--pose")
         if not isinstance(parsed, dict):
@@ -495,6 +681,7 @@ def parse_pose(value: str | None) -> Any:
     return text
 
 
+@refusing("size")
 def parse_size(width: int | None, height: int | None, profile: str | None) -> tuple[int, int]:
     if profile and (width or height):
         raise SnapshotRefused("--size-profile names a size; give it, or --width and --height, not both")
@@ -514,7 +701,7 @@ def parse_size(width: int | None, height: int | None, profile: str | None) -> tu
 
 DOCUMENTS = (".xbf", ".step", ".stp")
 # The files no document, each read by its reader (``formats.KINDS``): meshes, robots, a drawing.
-FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf")
+FILES = (".stl", ".3mf", ".glb", ".urdf", ".srdf", ".dxf", ".kicad_pcb", ".kicad_sch")
 MESHES = (".stl", ".3mf", ".glb")
 
 
@@ -525,7 +712,8 @@ class Still:
     a job's own view; no fit), Preview, the size, the pose, the annotation and the measurements
     drawn over it, and how it is finished (a job's output settings): the fit's ``padding`` each
     side, a share of the picture, on every drawn vertex (``tight``) or the drawn parts' box, a
-    ``transparent`` backdrop, and ``scale`` times the size drawn and brought down (supersampling).
+    ``transparent`` backdrop or a flat ``background`` colour, and ``scale`` times the size drawn and
+    brought down (supersampling).
     The request OCCT draws, and what a renderer process is handed (``as_json``)."""
 
     display: dict[str, Any] = field(default_factory=dict)
@@ -540,24 +728,53 @@ class Still:
     tight: bool = True
     transparent: bool = False
     scale: float = 1.0
+    references: list[str] | None = None  # a board's: what its prompt named, lit (``parse_references``)
+    background: str | None = None  # the flat colour behind a 3D document (``#rrggbb``); None: the look's own
 
     def as_json(self) -> dict[str, Any]:
         return {"display": self.display, "camera": self.camera, "exact": self.exact, "preview": self.preview,
                 "size": list(self.size), "pose": self.pose, "annotation": self.annotation,
                 "measurements": self.measurements, "padding": self.padding, "tight": self.tight,
-                "transparent": self.transparent, "scale": self.scale}
+                "transparent": self.transparent, "scale": self.scale, "references": self.references,
+                "background": self.background}
 
     @staticmethod
     def from_json(found: dict[str, Any]) -> "Still":
         return Still(dict(found.get("display") or {}), found.get("camera"), bool(found.get("exact")),
                      bool(found.get("preview")), tuple(found.get("size") or DEFAULT_SIZE), found.get("pose"),
                      found.get("annotation"), found.get("measurements"), float(found.get("padding", PADDING)),
-                     bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0))
+                     bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0),
+                     found.get("references"), found.get("background"))
 
     @property
     def drawn(self) -> tuple[int, int]:
         """The size the picture is drawn at: its size, times ``scale`` (brought down after)."""
         return (max(1, round(self.size[0] * self.scale)), max(1, round(self.size[1] * self.scale)))
+
+
+@refusing("references")
+def parse_references(value: Any, document: Path) -> list[str] | None:
+    """A board's ``references`` (a packet's, or a job's): what its prompt named, each a board reference
+    (``#R1``, ``#track:<uuid>``, ``#F.Cu@x10y5..x20y15``), lit over the board; ``None`` for none. Each is
+    checked as the language says it (``cad.engine.formats.kicad.refs``) and kept canonical."""
+    if value is None:
+        return None
+    if Path(os.fspath(document)).suffix.lower() != ".kicad_pcb":
+        raise SnapshotRefused(f"references light what a board's prompt named; {Path(os.fspath(document)).name} is no board")
+    from cad.engine.formats.kicad.refs import parse_board_selector
+    from cad.engine.render.board_refs import MAX_REFERENCES
+
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise SnapshotRefused("references lists board references: #R1, #R1.2, #net:GND, #track:<uuid>, #F.Cu@x10y5..x20y15")
+    if len(value) > MAX_REFERENCES:
+        raise SnapshotRefused(f"references names at most {MAX_REFERENCES} things")
+    canonical = []
+    for item in value:
+        selector = parse_board_selector(item)
+        if selector is None:
+            raise SnapshotRefused(f"references: {item!r} is not a board reference (#R1, #R1.2, #net:GND, #track:<uuid>, #F.Cu@x10y5)")
+        canonical.append(selector.canonical)
+    return canonical
 
 
 def refusals(still: Still, structure: dict[str, Any], name: str) -> None:
@@ -568,10 +785,11 @@ def refusals(still: Still, structure: dict[str, Any], name: str) -> None:
         return
     count = f"{placed} part{'' if placed == 1 else 's'}"
     if still.display.get("mode") == "parts":
-        raise SnapshotRefused(f"display.mode parts colours each placed part apart; {name} places {count}. Use solid.")
+        raise SnapshotRefused(f"display.mode parts colours each placed part apart; {name} places {count}. Use solid.",
+                              part="display.mode")
     if exploded_amount(still.display) > 0:
         raise SnapshotRefused(f"display.exploded moves a document's parts apart; {name} places {count}. "
-                              "Remove display.exploded.")
+                              "Remove display.exploded.", part="display.exploded")
 
 
 def stamp() -> str:
@@ -581,6 +799,7 @@ def stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+@refusing("out")
 def names_a_folder(text: str) -> bool:
     """Whether OUT names a folder to write a generated name into: a trailing separator says so (a
     folder that need not exist yet), else a folder that is there. A trailing separator on a file
@@ -602,6 +821,7 @@ def stem_of(source: Any) -> str:
     return Path(os.fspath(source)).stem or "snapshot"
 
 
+@refusing("out")
 def picture_path(out: Any, source: Any, *, at: str | None = None, job: tuple[int, int] = (0, 1),
                  output: tuple[int, int] = (0, 1)) -> Path:
     """Where a picture is written: OUT as given, or -- OUT a folder (``names_a_folder``) -- a name
@@ -625,25 +845,37 @@ def write_png(out: Path, data: bytes) -> None:
 
 
 def options(display: Any = None, camera: Any = None, grid: bool = False, width: int | None = None,
-            height: int | None = None, size_profile: str | None = None) -> tuple[dict[str, Any], Any, tuple[int, int]]:
+            height: int | None = None, size_profile: str | None = None, *,
+            board: bool = False, schematic: bool = False) -> tuple[dict[str, Any], Any, tuple[int, int]]:
     """A snapshot's options as a function gives them -- ``display`` a mode, a
-    JSON text or the display object -- checked as the verb checks its flags."""
-    if isinstance(display, dict):
-        display = json.dumps(display)
-    return (parse_display(display, bool(grid)), parse_camera(camera if camera is None or isinstance(camera, str)
-                                                              else json.dumps(camera)),
-            parse_size(width, height, size_profile))
+    JSON text or the display object, ``camera`` a preset, a pair, JSON text or a camera object --
+    checked as the verb checks its flags."""
+    return (parse_display(_flag_text(display, "--display"), bool(grid), board=board, schematic=schematic),
+            parse_camera(_flag_text(camera, "--camera")), parse_size(width, height, size_profile))
+
+
+def _flag_text(value: Any, flag: str) -> str | None:
+    """``--display`` or ``--camera`` as a function may give it -- its text, or the object it names --
+    as the text the flag's parser reads; anything else refused by name, as the flag takes it."""
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return json.dumps(value)
+    takes = (f"a mode ({', '.join(DISPLAY_MODES)}) or the display object" if flag == "--display" else
+             f"a preset ({', '.join(sorted(CAMERA_PRESETS))}), an azimuth:elevation pair or a camera object")
+    raise SnapshotRefused(f"{flag} is {takes}, not {json.dumps(value, default=repr)[:80]}",
+                          part="display" if flag == "--display" else "camera")
 
 
 def draw(source: Any, out: Path, *, display: Any = None, camera: Any = None, grid: bool = False,
-         pose: Any = None, width: int | None = None, height: int | None = None,
+         preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
          size_profile: str | None = None, annotation: Any = None, measurements: Any = None) -> dict[str, Any]:
     """A build's document (an ``export.Source``, in this process's memory) drawn into ``out``:
     a model's picture (``Model.snapshot``). Served from memory over the process's mesh
     cache, so nothing the build meshed is meshed again."""
     shown, framed, size = options(display, camera, grid, width, height, size_profile)
     path = source.path or Path(out).with_suffix(".xbf")
-    return snapshot(path, Path(out), display=shown, camera=framed,
+    return snapshot(path, Path(out), display=shown, camera=framed, preview=bool(preview),
                     size=None if width is None and height is None and size_profile is None else size, pose=pose,
                     source=source, annotation=parse_annotation(annotation), measurements=parse_measurements(measurements),
                     annotation_source=annotation)
@@ -682,16 +914,16 @@ def _checked(document: Path, out: Path, source: Any = None) -> str:
     ``.png``. SRC's suffix (an id's document is drawn as an ``.xbf``)."""
     if by_id(document):
         if out.suffix.lower() != ".png":
-            raise SnapshotRefused(f"a snapshot is a .png; {out.name} is not one")
+            raise SnapshotRefused(f"a snapshot is a .png; {out.name} is not one", part="out")
         return ".xbf"
     suffix = document.suffix.lower()
     if suffix not in DOCUMENTS and suffix not in FILES:
         raise SnapshotRefused(f"{document.name} is neither a document (.xbf, .step) nor a file the stills draw "
-                              f"({', '.join(FILES)})")
+                              f"({', '.join(FILES)})", part="source")
     if source is None and not document.is_file():
-        raise SnapshotRefused(f"no document {document}")
+        raise SnapshotRefused(f"no document {document}", part="source")
     if out.suffix.lower() != ".png":
-        raise SnapshotRefused(f"a snapshot is a .png; {out.name} is not one")
+        raise SnapshotRefused(f"a snapshot is a .png; {out.name} is not one", part="out")
     return suffix
 
 
@@ -710,7 +942,7 @@ def _snapshot(document: Path, out: Path, *, display: dict[str, Any] | None, came
     size = size or (view.size if view is not None and view.size else DEFAULT_SIZE)
     still = Still(display, framed, exact, preview, tuple(size), pose, annotation, measurements)
     if suffix in MESHES and pose is not None:
-        raise SnapshotRefused(f"--pose poses a document's mechanism; {document.name} is a mesh and has none")
+        raise SnapshotRefused(f"--pose poses a document's mechanism; {document.name} is a mesh and has none", part="pose")
     if not out.parent.is_dir():
         out.parent.mkdir(parents=True, exist_ok=True)
     return _occt(document, out, still, daemon, source, started, progress)
@@ -746,35 +978,116 @@ def _occt(document: Path, out: Path, still: Still, daemon: bool, source: Any, st
             from cad.engine import api
 
             spec = api._source(str(document))
-            drawn = api._exported({"op": "export", "source": spec, "destinations": [],
-                                   "draw_still": {"out": str(out), "still": still.as_json()},
-                                   "cwd": os.getcwd()}, spec, lambda _text: None, daemon, progress)["drawn"]
+            try:
+                drawn = api._exported({"op": "export", "source": spec, "destinations": [],
+                                       "draw_still": {"out": str(out), "still": still.as_json()},
+                                       "cwd": os.getcwd()}, spec, lambda _text: None, daemon, progress)["drawn"]
+            except Exception as error:
+                if not (daemon and _here_instead(error)):
+                    raise
+                return _held_here(document, out, still, started)
             return {**drawn, "document": str(document)}  # the id it was named by, not the worker's stand-in
         if daemon and source is None:
-            from cad.engine.client import request
-
-            answer = request({"op": "draw", "path": str(document), "still": still.as_json(), "out": str(out)},
-                             on_progress=progress)
-            if answer is None:
-                raise RuntimeError("no engine daemon")
-            if "refused" in answer:
-                raise SnapshotRefused(answer["refused"])
-            if "failed" in answer:
-                raise RuntimeError(answer["failed"])
-            data, report = base64.b64decode(answer["png"]), answer["report"]
-        else:
-            from cad.engine.formats import FormatError
-            from cad.engine.render.service import draw_here
-
             try:
-                data, report = draw_here(document, still, source=source)
-            except FormatError as error:
-                raise SnapshotRefused(str(error)) from None
+                data, report = _drawn_by_engine(document, out, still, progress)
+            except Exception as error:
+                if not _here_instead(error):
+                    raise
+                data, report = _draw_here(document, still, None)
+        else:
+            data, report = _draw_here(document, still, source)
         # A build's document held in memory, no file of it (``draw``), is served under a name made from
         # ``out``: a path no file is at, which the report never names.
         stand_in = source is not None and getattr(source, "path", None) is None
         say("write", detail=out.name)
         return _written(document, out, data, report, started, named=None if stand_in else str(document))
+
+
+#: What an engine that has no OpenGL context to draw in fails a picture with (``render.context.Unavailable``,
+#: carried as the failure's type: ``api._failed``'s ``raised``).
+NO_GL = "cad.engine.render.context.Unavailable"
+
+
+def no_gl(error: BaseException) -> bool:
+    """Whether ``error`` is the engine's failure to make an OpenGL context to draw a picture in (``NO_GL``)."""
+    return getattr(error, "raised", None) == NO_GL
+
+
+def drawable_here() -> str | None:
+    """None when this process can draw a picture itself -- the kernel importable here and an OpenGL context
+    made (``render.context.available``: on Linux an X display, this process's ``DISPLAY``) --, else why not.
+    Asked only once the engine could not draw: it loads the kernel."""
+    import importlib.util
+
+    try:
+        if importlib.util.find_spec("OCP") is None:
+            return "this process has no CAD kernel to draw with"
+    except (ImportError, ValueError):
+        return "this process has no CAD kernel to draw with"
+    from cad.engine.render.context import available
+
+    return available()
+
+
+def _here_instead(error: BaseException) -> bool:
+    """Whether a picture the engine failed is drawn in this process instead: the engine had no OpenGL context
+    (``no_gl``) and this process can draw (``drawable_here``), said once on stderr."""
+    if not no_gl(error):
+        return False
+    why = drawable_here()
+    if why is not None:
+        return False
+    print("warning: the engine could not make an OpenGL context to draw in (on Linux: it has no X display); "
+          "this process draws the picture instead", file=sys.stderr)
+    return True
+
+
+def _drawn_by_engine(document: Path, out: Path, still: Still,
+                     progress: Callable[[dict[str, Any]], None] | None) -> tuple[bytes, dict[str, Any]]:
+    """A file's picture drawn by the daemon's render process for it: the PNG's bytes and what was drawn."""
+    from cad.engine.client import request
+
+    answer = request({"op": "draw", "path": str(document), "still": still.as_json(), "out": str(out)},
+                     on_progress=progress)
+    if answer is None:
+        raise RuntimeError("no engine daemon")
+    if "refused" in answer:
+        raise SnapshotRefused(answer["refused"], part=answer.get("part"))
+    if "failed" in answer:
+        if "type" not in answer:
+            raise RuntimeError(answer["failed"])
+        from cad.engine import api
+
+        raise api._failed(answer)  # an EngineError: the type the render process failed with in it
+    return base64.b64decode(answer["png"]), answer["report"]
+
+
+def _draw_here(document: Path, still: Still, source: Any) -> tuple[bytes, dict[str, Any]]:
+    """A picture drawn in this process (``render/service.py``): a file read here, or a build's ``source``."""
+    from cad.engine.formats import FormatError
+    from cad.engine.render.service import draw_here
+
+    try:
+        return draw_here(document, still, source=source)
+    except FormatError as error:
+        raise SnapshotRefused(str(error), part="source") from None
+
+
+def _held_here(document: Path, out: Path, still: Still, started: float) -> dict[str, Any]:
+    """A held document's picture drawn in this process: the document exported by the engine to an xbf in a
+    temporary folder (an export draws nothing), read and drawn here, and named by its id."""
+    import tempfile
+
+    from cad.engine import api
+    from cad.engine.progress import say
+
+    with tempfile.TemporaryDirectory(prefix="cad-snapshot-") as folder:
+        saved = Path(folder) / "document.xbf"
+        api.export(os.fspath(document), saved, progress=False)
+        data, report = _draw_here(saved, still, None)
+        say("write", detail=out.name)
+        found = _written(saved, out, data, report, started, named=None)
+    return {**found, "document": os.fspath(document)}
 
 
 def _written(document: Path, out: Path, data: bytes, report: dict[str, Any], started: float, *,
@@ -783,6 +1096,7 @@ def _written(document: Path, out: Path, data: bytes, report: dict[str, Any], sta
     document's file (``document`` by default), or None for a document no file holds."""
     named = str(document) if named == "" else named
     _warn(report.get("unmeshed") or {})
+    _warn_untextured(report.get("untextured") or {})
     for warning in report.get("warnings") or []:
         print(f"warning: {Path(named).name if named else 'the document'}: {warning}", file=sys.stderr)
     write_png(out, data)
@@ -815,9 +1129,12 @@ def job_input(job: Any) -> str | None:
     return str(first["input"]) if isinstance(first, dict) and first.get("input") else None
 
 
+@refusing("job")
 def _settings(value: Any, where: str, drawing: bool) -> dict[str, Any]:
     """A job's output settings (``output``), checked: ``sizeProfile``, ``padding`` (0 to 0.15 of
-    the picture each side), ``tightFrame``, ``transparent``, ``renderScale`` (1 to 3)."""
+    the picture each side), ``tightFrame``, ``transparent``, ``renderScale`` (1 to 3), and
+    ``background`` (a ``#rrggbb``: the flat colour behind a 3D document, in place of the look's own;
+    not with ``transparent``, which draws on nothing, nor for a drawing, which stands on its paper)."""
     if value is None:
         return {}
     if not isinstance(value, dict):
@@ -835,6 +1152,13 @@ def _settings(value: Any, where: str, drawing: bool) -> dict[str, Any]:
     for key in ("tightFrame", "transparent"):
         if key in value and not isinstance(value[key], bool):
             raise SnapshotRefused(f"{where}.{key} is true or false")
+    if "background" in value:
+        if not _color(value["background"]):
+            raise SnapshotRefused(f"{where}.background is a colour as #rrggbb, not {value['background']!r}")
+        if value.get("transparent"):
+            raise SnapshotRefused(f"{where} gives background and transparent: a picture stands on a colour or on nothing")
+        if drawing:
+            raise SnapshotRefused(f"{where} gives background, which is behind a model; a drawing stands on its paper")
     if drawing:
         framed = [key for key in ("padding", "tightFrame") if key in value]
         if framed:
@@ -843,6 +1167,7 @@ def _settings(value: Any, where: str, drawing: bool) -> dict[str, Any]:
     return value
 
 
+@refusing("camera")
 def _view_camera(value: Any, where: str, projection: str, tight: bool) -> tuple[Any, bool]:
     """A job's camera (or an output's), and whether it is drawn exactly: the view's own camera --
     a position, a target and, orthographic, its half height -- with the tight frame off is the view
@@ -860,6 +1185,7 @@ def _view_camera(value: Any, where: str, projection: str, tight: bool) -> tuple[
     return camera, bool(whole) and not tight
 
 
+@refusing("size")
 def _job_size(output: dict[str, Any], settings: dict[str, Any], flags: tuple[Any, Any, Any], where: str) -> tuple[int, int]:
     """An output's size: the flags' for every output, else its own, else its job's profile."""
     if any(flag is not None for flag in flags):
@@ -873,8 +1199,9 @@ def _job_size(output: dict[str, Any], settings: dict[str, Any], flags: tuple[Any
     return SIZE_PROFILES[settings["sizeProfile"]] if settings.get("sizeProfile") else DEFAULT_SIZE
 
 
+@refusing("job")
 def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: Any = None, grid: bool = False,
-                 pose: Any = None, width: int | None = None, height: int | None = None,
+                 preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
                  size_profile: str | None = None, annotation: Any = None,
                  measurements: Any = None) -> list[tuple[Path, Path, Still]]:
     """Every picture a job names (``--job``: a Quick Edit packet, a job, or a list of jobs), each
@@ -902,8 +1229,9 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                               "outputs, ...}) or a list of jobs")
     if not jobs:
         raise SnapshotRefused("--job names no job")
-    shown_flags = parse_display(display, grid) if display is not None else None
-    camera_flag = parse_camera(camera if camera is None or isinstance(camera, str) else json.dumps(camera))
+    shown_flags = None  # parsed per file: each file family owns its Display vocabulary
+    display = _flag_text(display, "--display")
+    camera_flag = parse_camera(_flag_text(camera, "--camera"))
     pose_flag = parse_pose(pose) if isinstance(pose, str) else pose
     ink_flag = parse_annotation(annotation)
     dimensions_flag = parse_measurements(measurements)
@@ -925,7 +1253,10 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         document = Path(os.fspath(named))
         if not by_id(document):
             document = document.expanduser().resolve()
-        drawing = document.suffix.lower() == ".dxf"
+        board = document.suffix.lower() == ".kicad_pcb"
+        schematic = document.suffix.lower() == ".kicad_sch"
+        drawing = board or schematic or document.suffix.lower() == ".dxf"
+        shown_flags = parse_display(display, grid, board=board, schematic=schematic) if display is not None else None
         settings = _settings(view.get("output"), f"{where}.output", drawing)
         tight, padding = settings.get("tightFrame", True), float(settings.get("padding", PADDING))
         scale = float(settings.get("renderScale", 1.0))
@@ -934,8 +1265,8 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         else:
             if view.get("display") is not None and not isinstance(view["display"], dict):
                 raise SnapshotRefused(f"{where}.display is the view's display object")
-            shown = parse_display(json.dumps(view["display"]), grid) if view.get("display") else (
-                {"grid": True} if grid else {})
+            shown = (parse_display(json.dumps(view["display"]), grid, board=board, schematic=schematic)
+                     if view.get("display") else ({"grid": True} if grid else {}))
         selection = view.get("selection")
         if selection is not None:
             if not isinstance(selection, dict) or set(selection) - set(SELECTION_KEYS):
@@ -944,10 +1275,14 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                 if selection.get(key):
                     shown[field_name] = [*(shown.get(field_name) or []), *selection[key]]
             _visibility(shown)
-        projection = (shown.get("camera") or {}).get("projection") or "orthographic"
+        if view.get("preview") is not None and not isinstance(view["preview"], bool):
+            raise SnapshotRefused(f"{where}.preview is true or false")
+        studio = bool(preview or view.get("preview"))  # Preview's photographic look, in place of the display's mode
+        projection = (shown.get("camera") or {}).get("projection") or ("perspective" if studio else "orthographic")
         ink = ink_flag if annotation is not None else parse_annotation(view.get("annotation", shared.get("annotation")))
         dimensions = dimensions_flag if measurements is not None else parse_measurements(
             view.get("measurements", shared.get("measurements")))
+        lit = parse_references(view.get("references", shared.get("references")), document)
         posed = pose_flag if pose is not None else view.get("jointValues")
         if isinstance(posed, str):
             posed = parse_pose(posed)
@@ -976,14 +1311,23 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                                                projection, tight))
             if framed == AUTHORED:
                 framed, exact, _view = authored(AUTHORED, ink, given if isinstance(given, dict) else None, document)
-            pictures.append((document, out, Still(shown, framed, exact, False, size,
+            pictures.append((document, out, Still(shown, framed, exact, studio, size,
                                                   posed, ink, dimensions, padding, tight,
-                                                  bool(settings.get("transparent")), scale)))
+                                                  bool(settings.get("transparent")), scale, lit,
+                                                  settings.get("background"))))
     written = [out for _document, out, _still in pictures]
     twice = sorted({str(out) for out in written if written.count(out) > 1})
     if twice:
         raise SnapshotRefused(f"--job writes {', '.join(twice)} twice: give each output a path of its own")
     for document, _out, still in pictures:
+        if document.suffix.lower() == ".kicad_pcb":
+            from cad.engine.render.board import refusals as board_refusals
+
+            board_refusals(still, document.name)
+        if document.suffix.lower() == ".kicad_sch":
+            from cad.engine.render.schematic import refusals as schematic_refusals
+
+            schematic_refusals(still, document.name)
         if document.suffix.lower() == ".dxf":
             from cad.engine.render.drawing import refusals as drawing_refusals
 
@@ -1034,7 +1378,7 @@ def _draw_staged(staged: list[tuple[Path, Path, Path, Still]], daemon: bool,
             try:
                 answers = draw_here_each(document, [still for _document, _out, _stage, still in group])
             except FormatError as error:
-                raise SnapshotRefused(str(error)) from None
+                raise SnapshotRefused(str(error), part="source") from None
             for index, ((_document, out, stage, _still), (data, report)) in enumerate(zip(group, answers)):
                 say("write", detail=out.name, count=[index, len(group)] if len(group) > 1 else None)
                 drawn.append(_written(document, stage, data, report, started))
@@ -1042,10 +1386,30 @@ def _draw_staged(staged: list[tuple[Path, Path, Path, Still]], daemon: bool,
     return drawn
 
 
+#: The parts the mesher's warning names before it counts the rest.
+UNMESHED_NAMED = 4
+
+
 def _warn(unmeshed: dict[str, list[int]]) -> dict[str, list[int]]:
-    """A warning for each part's faces the mesher left without triangles: the picture lacks them."""
-    for name, faces in unmeshed.items():
-        print(f"warning: {name}: the mesher left face{'s' if len(faces) > 1 else ''} "
-              f"{', '.join(map(str, faces))} without triangles, so the picture does not draw "
-              f"{'them' if len(faces) > 1 else 'it'}", file=sys.stderr)
+    """One warning for the faces the mesher left without triangles, which the picture lacks: how many, of how
+    many parts, the first ``UNMESHED_NAMED`` parts named with their faces' ordinals. A vendor's STEP leaves a
+    few on a large assembly (a screw's tip, a sliver a boolean left), so it is a line, not a line a part."""
+    if not unmeshed:
+        return unmeshed
+    count = sum(len(faces) for faces in unmeshed.values())
+    named = [f"{name} ({', '.join(map(str, faces))})" for name, faces in unmeshed.items()]
+    rest = len(named) - UNMESHED_NAMED
+    listed = "; ".join(named[:UNMESHED_NAMED]) + (f"; and {rest} more part{'s' if rest != 1 else ''}" if rest > 0
+                                                   else "")
+    print(f"warning: the mesher left {count} face{'s' if count != 1 else ''} of {len(named)} "
+          f"part{'s' if len(named) != 1 else ''} without triangles, so the picture does not draw "
+          f"{'them' if count != 1 else 'it'}: {listed}", file=sys.stderr)
     return unmeshed
+
+
+def _warn_untextured(untextured: dict[str, dict[str, list[str]]]) -> None:
+    """A warning for each part whose material's texture maps the picture leaves out (``untextured``)."""
+    from cad.engine.document import untextured_said
+
+    for name, materials in untextured.items():
+        print(f"warning: {untextured_said(name, materials)}", file=sys.stderr)

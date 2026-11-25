@@ -1,11 +1,11 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
-import { Popover, PopoverTrigger, PopoverContent } from "@text-to-cad/ui/primitives/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@cad/ui/primitives/popover";
 import { useEffect, useState } from 'react';
 import { Eye, LoaderCircle, RotateCcw } from 'lucide-react';
-import { cn } from '@text-to-cad/ui/utils';
-import { Button } from '@text-to-cad/ui/primitives/button';
-import { useI18n } from '@text-to-cad/ui/i18n';
+import { cn } from '@cad/ui/utils';
+import { Button } from '@cad/ui/primitives/button';
+import { useI18n } from '@cad/ui/i18n';
 import { isProgressKey } from './progressEvent.js';
 import { statusLine } from './statusLabels.js';
 
@@ -39,7 +39,7 @@ export function ViewUpdateStatus({ status, onRetry, className }) {
   const updating = statusLine(status, t) || t('viewUpdate.updatingView');
   const label = status.error ? t('viewUpdate.failedWith', { error: status.error }) : updating;
   if (mobile) return <Popover>
-    <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" className="pointer-events-auto size-6 shrink-0" aria-label={label}  data-view-update-status>
+    <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" className="pointer-events-auto size-icon-button shrink-0" aria-label={label}  data-view-update-status>
       {status.error ? <RotateCcw className="size-3.5" /> : <LoaderCircle className="size-3.5 animate-spin" />}
     </Button></PopoverTrigger>
     <PopoverContent className="w-max max-w-64 px-3 py-2 text-tiny" align="start">

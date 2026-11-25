@@ -1,6 +1,6 @@
 // What one face, edge or vertex of an engine document IS, for the tools that take an element
 // whole -- Measure (`../viewer/measureEntities.js` reads what a pair of them makes) and Look at
-// (`@text-to-cad/ui`'s `kit/camera/lookAt.js` turns the view square to one) -- read from the part
+// (`@cad/ui`'s `kit/camera/lookAt.js` turns the view square to one) -- read from the part
 // buffer alone (`xbm.js`), as a STEP's were read from its topology rows:
 //
 // - a face's surface, from its nodes and the normals the engine meshed it with (the surface's own

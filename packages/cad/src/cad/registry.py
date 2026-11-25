@@ -1,0 +1,705 @@
+"""The document types and the integrations: one table, the single source of every layer.
+
+A **document type** is what is in a file. Each has one lowercase underscore id, the same in Python
+(``cad.<id>``), the ``cad`` command (``cad <id> <operation>``), the server, the viewer and the
+JavaScript generated from this table (``python -m cad.registry --js``). The table maps extensions to
+ids (``.step`` and ``.stp`` are both ``step``); 3MF's id is ``threemf`` because an id is a Python name.
+
+An **integration** is our support for one third-party tool, named for the tool's own project: one
+extra (``cad[<name>]``) grouping what our code for it needs, our code for it (helpers that take its
+objects, producers and operations), and a process kind. A **producer** is code that makes a document
+type from some input; many integrations may produce one type, each stating which parts of the type's
+content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
+shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
+``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
+``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint stops found from its geometry,
+``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
+description's conformance check.
+
+``model`` is the one type with no file: a model built from code and held in the engine's memory,
+addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
+``.xbf`` file the engine writes of one.
+
+Kernel-free, the standard library alone: the server imports this module, and so does every page's
+build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
+never importing the library the value comes from.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from collections.abc import Callable, Mapping
+from functools import cache
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any
+
+__all__ = ["DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
+           "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integration_help",
+           "integrations_of",
+           "interference_check", "manufacturing_check", "platform_of", "producer_for", "producers_for",
+           "type_of"]
+
+#: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
+#: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate")
+#: What an integration does to its tool's own files, which are no document type (files we check or write and
+#: never show): a closed set too. ``check`` takes one file and answers findings, as a type's check does
+#: (``cad.results.CheckResult``); ``presets`` lists the presets of one kind the tool's own folders hold, by name,
+#: and ``complete`` writes chosen ones complete for the tool's command line, answering the files it wrote (the
+#: orcaslicer integration's, whose presets are found by name, never handed over as a file).
+INTEGRATION_OPERATIONS = ("check", "presets", "complete")
+#: The integration operations that take a file of the tool's (``cad <integration> <operation> FILE``), whose
+#: suffixes the integration names (``files``).
+FILE_OPERATIONS = ("check",)
+#: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
+#: drawing, a robot description, a plot.
+VIEWS = ("document", "mesh", "drawing", "robot", "plot")
+#: Where an integration's code runs: inside the Python process that calls it, as a separate program, or both.
+PROCESS_KINDS = ("in-process", "separate", "both")
+#: The platforms the server runs on, in the words an integration's ``platforms`` names them by (``platform_of``).
+PLATFORMS = ("macOS arm64", "macOS x86-64", "Linux x86-64", "Linux arm64", "Windows x86-64", "Windows arm64")
+
+
+def platform_of(system: str, machine: str) -> str:
+    """A platform in ``PLATFORMS``' words, from ``sys.platform`` and the machine as ``platform.machine()`` (or, on
+    Windows, ``PROCESSOR_ARCHITECTURE``) says it: ``("darwin", "x86_64")`` is ``macOS x86-64``. Another is said as
+    given."""
+    named = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}.get(system, system)
+    arch = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "x86-64", "amd64": "x86-64"}.get(machine.lower(), machine)
+    return f"{named} {arch}"
+
+
+@dataclass(frozen=True)
+class Operation:
+    """One operation a type implements: what it does, the integration it needs (None: our own code alone), and
+    whether the engine runs it (``engine``: ``cad.engine.api``'s, in the daemon, whose base holds that
+    integration), so a program that calls it needs none of its own; else it runs in the calling process."""
+
+    name: str
+    summary: str
+    integration: str | None = None
+    #: ``manufacturing``: the manufacturing check every 3D type shares (``cad._internal.manufacturing``).
+    family: str | None = None
+    engine: bool = False
+
+
+@dataclass(frozen=True)
+class Probe:
+    """How an external program an integration runs is found: the program, the oldest version our code
+    supports, what to say when it is missing, and the variable that names it outright."""
+
+    program: str
+    minimum: str
+    install_hint: str
+    override: str
+
+
+@dataclass(frozen=True)
+class Integration:
+    """Our support for one third-party tool: its extra, its process kind, the top-level modules a script
+    imports it by (``modules``: a script that imports one uses the integration), the distributions its
+    extra installs (``distributions``) and, for an external program, its probe."""
+
+    name: str
+    summary: str
+    extra: str | None
+    process: str
+    probe: Probe | None = None
+    #: What it does to its tool's own files, which are no document type (``INTEGRATION_OPERATIONS``): ``cad
+    #: <integration> <operation>`` and ``cad.<integration>.<operation>``, one to one, as a type's are. A file
+    #: that has a document type has its operations there, never here; ``files`` are the suffixes its operations
+    #: on a file take (``FILE_OPERATIONS``), and an integration with none of those names none.
+    operations: tuple[Operation, ...] = ()
+    files: tuple[str, ...] = ()
+    #: Set where its operations are deprecated: what to do instead, in a line. They keep working while skill
+    #: text of the last 30 days uses them (the compatibility law's first tier), ``cad --help`` no longer lists
+    #: them, and a run says this line once on stderr.
+    deprecated: str = ""
+    modules: tuple[str, ...] = ()
+    distributions: tuple[str, ...] = ()
+    #: The distributions that ARE it (its own and the other builds of its modules), of which one a resolution
+    #: pulls in through another package means the program uses it; and the package indexes and wheel folders
+    #: its packages come from beside the default index (none today: a hook for packaged binaries).
+    identity: tuple[str, ...] = ()
+    indexes: tuple[str, ...] = ()
+    find_links: tuple[str, ...] = ()
+    #: The commands its extra puts in an environment (``kicad-cli``), each the tool's own command line:
+    #: ``cad run <command>`` makes the integration's environment for one and runs it there, through the
+    #: integration's ``_command`` module (``cad.<name>._command``), headless in private homes.
+    commands: tuple[str, ...] = ()
+    #: What its extra brings, in the words said as its environment is made, and about how many megabytes of
+    #: wheels it downloads: PyPI's wheels for what the extra adds to the library (whose own numpy uv's cache has from
+    #: the server's install), macOS arm64, Linux x86-64 and Windows x86-64, rounded to what holds on all three. A
+    #: download's size, never the installed environment's, which is two to three times that.
+    holds: str = ""
+    download_mb: int = 0
+    #: The integrations its operations need in the same environment (netgen's: a stress study reads the B-rep with
+    #: the kernel, build123d's, beside the mesher), so the environment the ``cad`` command makes for it holds them too.
+    alongside: tuple[str, ...] = ()
+    #: What only its tool decides of the environment its extra is installed in, each empty for a tool that decides
+    #: none: the one Python line its tool is built for (``python``: ``3.13``; an environment ``cad run`` makes with
+    #: it is made on that line, a Python uv manages, where the engine's own is another), the platforms it is built
+    #: for (``platforms``, ``PLATFORMS``' words: its extra installs nothing anywhere else, and a run there is
+    #: refused by name), and the variables that name its tool's own settings folders (``homes``: a run's are
+    #: private folders of the engine's, so nothing of a person's own copy of the tool loads into it).
+    python: str | None = None
+    platforms: tuple[str, ...] = ()
+    homes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for operation in self.operations:
+            if operation.name not in INTEGRATION_OPERATIONS:
+                raise ValueError(f"{self.name}: {operation.name!r} is not an integration's operation "
+                                 f"({', '.join(INTEGRATION_OPERATIONS)})")
+        if any(operation.name in FILE_OPERATIONS for operation in self.operations) != bool(self.files):
+            raise ValueError(f"{self.name}: an integration's operations on a file take its tool's own files, and one "
+                             "with neither names neither")
+
+    @property
+    def operation_names(self) -> tuple[str, ...]:
+        return tuple(operation.name for operation in self.operations)
+
+    def operation(self, name: str) -> Operation | None:
+        return next((operation for operation in self.operations if operation.name == name), None)
+
+
+@dataclass(frozen=True)
+class Producer:
+    """Code that makes ``document_type`` from a value ``matcher`` accepts: the integration it belongs to,
+    the values it takes (``accepts``, in words), the code that writes the file (``writer``), and the parts
+    of the type's content it provides. A producer regenerates its file from code: the type's decorator is
+    the engine's (``cad.engine.model``), the function a model, and its result is checked against the matchers
+    when it is built."""
+
+    document_type: str
+    integration: str
+    accepts: str
+    matcher: Callable[[Any], bool] = field(compare=False, repr=False)
+    writer: str
+    provides: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Edit:
+    """How a file of a type is changed in place, in the caller's process, rather than made by a producer: the
+    function that opens it for a ``with`` block (``<type>.edit``), the integration it runs, the word for what it
+    opens, what the block is handed, in words, and the parts of the type's content it can change."""
+
+    integration: str
+    noun: str
+    hands: str
+    changes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DocumentTypeEntry:
+    """One document type: its id, its name as people write it, its extensions (the first the one a
+    written file takes; none for ``model``, which has no file), its MIME type, how it is viewed, the
+    content it carries, its operations, and whether it has a decorator (``@<id>("out.<ext>")``) and a
+    reader (``<id>.read``).
+
+    ``wire`` is the spelling the frozen protocols carry for it -- the HTTP API's document kinds
+    (``/api/v1/documents/<kind>/...``) and the analytics schemas -- which is the id but for
+    ``threemf``, whose protocols say ``3mf``: a released page and a released receiver read them."""
+
+    id: str
+    title: str
+    summary: str
+    extensions: tuple[str, ...]
+    mime: str
+    view: str
+    content: tuple[str, ...]
+    operations: tuple[Operation, ...]
+    decorator: bool = False
+    reader: bool = False
+    #: The integration its reader needs in the process that calls it (None: our own code alone): a STEP's,
+    #: an xbf's and an STL's read hands a model build123d's objects, through the kernel memo.
+    reader_integration: str | None = None
+    wire: str = ""
+    #: How a file of it is changed in place (``<id>.edit``, a ``with`` block), where it can be: a KiCad board's
+    #: and schematic's, through KiCad's IPC API. None for a type whose files are made or authored alone.
+    edit: Edit | None = None
+
+    def __post_init__(self) -> None:
+        if not self.id.isidentifier() or self.id != self.id.lower():
+            raise ValueError(f"a document type's id is a lowercase Python name, not {self.id!r}")
+        if self.view not in VIEWS:
+            raise ValueError(f"{self.id}: view {self.view!r} is not one of {', '.join(VIEWS)}")
+        for operation in self.operations:
+            if operation.name not in OPERATIONS:
+                raise ValueError(f"{self.id}: {operation.name!r} is not an operation ({', '.join(OPERATIONS)})")
+        if self.reader_integration is not None and not self.reader:
+            raise ValueError(f"{self.id}: a reader_integration with no reader")
+
+        if not self.wire:
+            object.__setattr__(self, "wire", self.id)
+
+    @property
+    def suffix(self) -> str:
+        """The extension a file of this type is written with ("" for a type with no file: ``model``)."""
+        return self.extensions[0] if self.extensions else ""
+
+    @property
+    def has_file(self) -> bool:
+        """Whether a document of this type is a file (every type's but ``model``'s, held in memory)."""
+        return bool(self.extensions)
+
+    def operation(self, name: str) -> Operation | None:
+        return next((operation for operation in self.operations if operation.name == name), None)
+
+    @property
+    def operation_names(self) -> tuple[str, ...]:
+        """Its operations, in the fixed order of ``OPERATIONS``."""
+        mine = {operation.name for operation in self.operations}
+        return tuple(name for name in OPERATIONS if name in mine)
+
+
+_KERNEL = "build123d"
+
+_EXPORT_DOCUMENT = Operation("export", "write the document to other files, each kind by its suffix "
+                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), "
+                                       ".urdf (its meshes beside it)); "
+                                       "--tolerance and --angle mesh a .glb, an .stl or a .3mf finer", _KERNEL,
+                                       engine=True)
+_EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
+_SNAPSHOT = Operation("snapshot", "draw it as the viewer does, into a PNG", _KERNEL, engine=True)
+_INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
+                                         "element or part is and what made it", _KERNEL, engine=True)
+_INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL, engine=True)
+# The manufacturing check every 3D type shares (``cad._internal.manufacturing``): exact geometry measured on
+# its B-rep by the build123d integration, a mesh by the trimesh integration; a DXF checked as a cut file.
+_DFM_SUMMARY = ("check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding "
+                  "(molding) or 3D printing (printing), measured and judged against general, cited rules")
+_DFM_EXACT = Operation("dfm", _DFM_SUMMARY + ", each finding at a face's or an edge's ref", "build123d",
+                       "manufacturing")
+_DFM_MESH = Operation("dfm", "check it can be 3D printed (--process printing), measured as a mesh and judged "
+                                 "against general, cited rules", "trimesh", "manufacturing")
+_DFM_CUT = Operation("dfm", "check it as a sheet's cut file (--process sheet): closed contours, nothing cut "
+                                "twice, features against the kerf and the thickness, the sheet's size", "build123d",
+                       "manufacturing")
+
+# The interference check a B-rep type shares (``cad._internal.interference``): the engine measures, in a
+# checks process, every pair of parts whose boxes meet, on their own solids.
+_INTERFERENCE = Operation("interference", "which parts share volume, as built and at each pose asked (--pose: a "
+                                          "mechanism state, a configuration sequence at a time, or joint values): a "
+                                          "pair with air between its parts ruled out on their meshes, every other "
+                                          "measured exactly on the parts' own solids, the fits named on purpose "
+                                          "(--fit A B) listed apart, and each pair it could not measure said",
+                          _KERNEL, engine=True)
+
+# The stress study a B-rep type shares (``cad._internal.fea``): the kernel reads the part, netgen meshes it, CalculiX
+# solves it. A mesh type has no faces a study can hold or load by, so it has none.
+_SOLVE = Operation("solve", "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, "
+                            "the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, "
+                            "displacement.png), each part's peak stress and safety factor, and a part that yields "
+                            "failing it; with no --study, the parts, the pairs that touch and a part's faces a study "
+                            "names", "calculix")
+
+# The joint stops a document with a mechanism shares (``cad._internal.ranges``): each joint swept alone against its
+# parts' surfaces, read and meshed by the kernel. A mesh holds no mechanism, so it has none.
+_RANGES = Operation("ranges", "each joint's stops found from the geometry: the joint turned or slid alone, a step at a "
+                              "time each way, until its parts meet another part; the stops and which parts meet, "
+                              "nothing written", _KERNEL)
+
+# What a STEP holds of a document, and what only the engine's own document holds beside it: the kernel reads
+# AP242's kinematics and has no writer for them, so a STEP, posed or not, is placements only.
+_STEP_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names")
+_DOCUMENT_CONTENT = (*_STEP_CONTENT, "mechanism", "configuration sequences")
+
+_TYPES = (
+    DocumentTypeEntry(
+        "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
+                          "addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
+        (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True),
+    DocumentTypeEntry(
+        "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
+                      "closure", (".xbf",), "application/octet-stream", "document",
+        (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
+        reader_integration=_KERNEL),
+    DocumentTypeEntry(
+        "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
+        "application/step", "document", _STEP_CONTENT,
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True, reader=True,
+        reader_integration=_KERNEL),
+    DocumentTypeEntry(
+        "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
+        (_EXPORT_MESH, _SNAPSHOT, _DFM_MESH), decorator=True, reader=True, reader_integration=_KERNEL),
+    DocumentTypeEntry(
+        "glb", "GLB", "a binary glTF scene of triangle meshes", (".glb",), "model/gltf-binary", "mesh",
+        ("triangles", "assembly", "names", "colours", "materials", "animations"),
+        (_EXPORT_MESH, _SNAPSHOT, _INSPECT_GLB, _DFM_MESH), decorator=True),
+    DocumentTypeEntry(
+        "threemf", "3MF", "a 3D Manufacturing Format package of triangle meshes", (".3mf",), "model/3mf", "mesh",
+        ("triangles", "assembly", "names", "colours", "materials"),
+        (_EXPORT_MESH, _SNAPSHOT, _DFM_MESH), decorator=True, wire="3mf"),
+    DocumentTypeEntry(
+        "dxf", "DXF", "a 2D drawing of a planar document", (".dxf",), "application/dxf", "drawing",
+        ("2D geometry", "layers"), (_SNAPSHOT, _DFM_CUT), decorator=True),
+    DocumentTypeEntry(
+        "urdf", "URDF", "a robot description (ROS's Unified Robot Description Format)", (".urdf",),
+        "application/xml; charset=utf-8", "robot", ("links", "joints", "inertials", "mesh references"),
+        (Operation("validate", "check it for conformance: structure, joints, inertials, mesh references"), _SNAPSHOT)),
+    DocumentTypeEntry(
+        "srdf", "SRDF", "a MoveIt semantic robot description, read against its URDF", (".srdf",),
+        "application/xml; charset=utf-8", "robot",
+        ("planning groups", "end effectors", "group states", "disabled collision pairs", "virtual joints"),
+        (Operation("validate", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),
+    DocumentTypeEntry(
+        "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
+        "text/plain; charset=utf-8", "plot",
+        ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
+        (Operation("export", "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, "
+                             "step, glb, odb, ipc2581, pdf or dxf", "kicad"),
+         Operation("snapshot", "draw it flat, as the viewer's board view does, into a PNG"),
+         Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
+         Operation("drc", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
+                   "kicad")), reader=True,
+        edit=Edit("kicad", "board", "the open board, through KiCad's IPC API (kicode's KiPy)",
+                  ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"))),
+    DocumentTypeEntry(
+        "kicad_sch", "KiCad schematic", "a KiCad schematic, read with every sheet of its project's hierarchy",
+        (".kicad_sch",), "text/plain; charset=utf-8", "plot",
+        ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"),
+        (Operation("export", "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder", "kicad"),
+         Operation("snapshot", "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG"),
+         Operation("inspect", "what the schematic holds: its sheets, parts and nets; with a ref, what that names"),
+         Operation("erc", "KiCad's electrical rules check: errors fail it, warnings are said", "kicad")),
+        reader=True,
+        edit=Edit("kicad", "schematic", "the open schematic, its project's symbol libraries loaded, through KiCad's IPC API "
+                           "(kicode's KiPy)",
+                  ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"))),
+)
+
+#: Every document type, by id, in the table's order.
+DOCUMENT_TYPES: Mapping[str, DocumentTypeEntry] = MappingProxyType({entry.id: entry for entry in _TYPES})
+
+#: Every integration, by name.
+INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
+    "build123d": Integration(
+        "build123d", "build123d and the OCCT kernel under it (OCP): model code builds with it, and the engine "
+                     "makes, reads, writes and draws documents with it", extra="build123d", process="in-process",
+        # bd_materials too: the materials a model gives its parts, which a script may import before build123d.
+        modules=("build123d", "OCP", "bd_materials"),
+        distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
+                       "ezdxf", "pillow", "scipy"),
+        identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy"),
+        holds="the CAD kernel", download_mb=240),
+    "kicad": Integration(
+        "kicad", "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and "
+                 "its fabrication exports run kicad-cli, headless, and an edit of a board or a schematic goes "
+                 "through the API",
+        extra="kicad", process="separate",
+        # kicad-cli is kicode's (the extra's), or the one CAD_KICAD_CLI names: a check or an export runs 9 or
+        # newer, an edit (kicad_pcb.edit, kicad_sch.edit) needs its headless api-server (kicode's has it; another's
+        # is asked, cad.kicad._program.check_api_server, before it starts). A person's own KiCad is never run.
+        probe=Probe("kicad-cli", "9.0", "kicad-cli comes with cad's kicad integration, cad[kicad] (kicode), which the "
+                                        "cad command installs on first need (a script run with cad run: name "
+                                        "cad[kicad] in its header); or set CAD_KICAD_CLI to a kicad-cli of "
+                                        "KiCad 9 or newer (a nightly's, 10.99, for kicad_pcb.edit and kicad_sch.edit)",
+                    "CAD_KICAD_CLI"),
+        modules=("kicode",), distributions=("kicode",),
+        identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",),
+        holds="KiCad's kicad-cli", download_mb=100),
+    "trimesh": Integration(
+        "trimesh", "trimesh, the triangle-mesh library: a mesh's manufacturing check measures it with trimesh for "
+                   "3D printing -- its walls, overhangs and support; every other process is judged on exact "
+                   "geometry", extra="trimesh", process="in-process",
+        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
+        holds="trimesh", download_mb=40),
+    "mujoco": Integration(
+        "mujoco", "MuJoCo, the physics engine, as its headless core (mujoco-core: the compiler and the bindings, no "
+                  "renderer) and MuJoCo Studio's web viewer: cad.mujoco makes a document a mujoco.MjSpec, chooses "
+                  "a part's collision on it and saves it; `cad mujoco check robot.xml` compiles a MuJoCo model "
+                  "with the core, so what MuJoCo refuses is a finding with MuJoCo's own words; and `cad run "
+                  "mujoco-studio --model scene.xml` serves the model in Studio for the person to open in a browser",
+        extra="mujoco",
+        operations=(Operation("check", "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo "
+                                       "refuses or warns of, the model-health checks, what collides as what, and "
+                                       "the contact excludes", "mujoco"),),
+        files=(".xml", ".mjcf"),
+        process="in-process", modules=("mujoco",), distributions=("mujoco-core", "mujoco-studio"),
+        identity=("mujoco", "mujoco-core", "mujoco-studio"), commands=("mujoco-studio",),
+        holds="MuJoCo's headless core and MuJoCo Studio", download_mb=20),
+    "coacd": Integration(
+        "coacd", "CoACD, the approximate convex decomposition of a triangle mesh: cad.mujoco.decompose makes a part "
+                 "of a MuJoCo function's spec collide as the convex hulls CoACD cuts its mesh into, its "
+                 "visual whole, always in a process of its own (its TBB and the kernel's cannot share one), the "
+                 "hulls kept in the engine's cache by the mesh's digest",
+        extra="coacd", process="separate",
+        modules=("coacd",), distributions=("coacd",), identity=("coacd",),
+        holds="CoACD's convex decomposition", download_mb=4),
+    "netgen": Integration(
+        "netgen", "netgen, the tetrahedral mesher: a stress study (solve) meshes a part's own faces with it, curved "
+                  "second-order elements, every face kept under its ref, always in a process of its own (its "
+                  "OpenCascade and the kernel's cannot share one)",
+        extra="netgen", process="separate",
+        modules=("netgen",), distributions=("netgen-mesher",), identity=("netgen-mesher",),
+        holds="the netgen mesher", download_mb=11),
+    "calculix": Integration(
+        "calculix", "CalculiX's solver, ccx, as the cad-ccx package carries it: a stress study (solve) writes its input, "
+                    "runs it headless on one thread in a private folder, and reads its answer",
+        extra="calculix", process="separate",
+        # ccx is the cad-ccx package's (the extra's), or the one CAD_CCX names; a person's own CalculiX is never run.
+        probe=Probe("ccx", "2.20", "ccx comes with cad's calculix integration, cad[calculix] (the cad-ccx package), which "
+                                   "the cad command installs on first need (a script run with cad run: name "
+                                   "cad[calculix] in its header); or set CAD_CCX to a ccx of CalculiX 2.20 or newer",
+                    "CAD_CCX"),
+        modules=("cad_ccx",), distributions=("cad-ccx",), identity=("cad-ccx",), commands=("ccx",),
+        # A study reads the B-rep with the kernel and meshes it with netgen before CalculiX solves it.
+        alongside=("build123d", "netgen"),
+        holds="CalculiX's ccx solver", download_mb=13),
+    "blender": Integration(
+        "blender", "Blender as a Python module, bpy (the Blender Foundation's wheel): a script loads the GLB cad "
+                   "exports into Blender's scene, every part where the file places it and each clip playable alone "
+                   "(cad.blender.load), then frames, lights and renders it with bpy itself",
+        extra="blender", process="in-process", modules=("bpy",), distributions=("bpy",), identity=("bpy",),
+        # bpy 5.2.3 is ``Requires-Python ==3.13.*``, cp313 wheels alone, and none for Intel Macs or Linux arm64: the
+        # extra's markers say the same (packages/cad/pyproject.toml), and a test holds the two together.
+        python="3.13", platforms=("macOS arm64", "Linux x86-64", "Windows x86-64", "Windows arm64"),
+        # Blender's own folders for a person's preferences, add-ons, extensions and data, which bpy reads as the app
+        # does: a run's are private, so a person's Blender settings and add-ons never load into it.
+        homes=("BLENDER_USER_RESOURCES", "BLENDER_USER_CONFIG", "BLENDER_USER_SCRIPTS", "BLENDER_USER_DATAFILES",
+               "BLENDER_USER_EXTENSIONS"),
+        # PyPI's wheels with what they need: 262 MB on macOS arm64, 356 on Windows x86-64, 429 on Linux x86-64.
+        holds="Blender as a Python module", download_mb=430),
+    "orcaslicer": Integration(
+        "orcaslicer", "OrcaSlicer, the slicer, whose command line slices only with complete presets: `cad orcaslicer "
+                      "presets machine` lists the presets a person can select, from their own OrcaSlicer folders and "
+                      "the app's profiles, and `cad orcaslicer complete` writes a printer, a process and filaments "
+                      "complete, every parent merged in and the printer named as compatible, for OrcaSlicer's own "
+                      "command line to slice with",
+        # The person's own OrcaSlicer: our code never runs it (so no probe), and reads and writes its presets, JSON
+        # files, with the standard library alone (so no extra), in the process that calls it.
+        extra=None, process="in-process",
+        deprecated="OrcaSlicer's own command line slices a project saved from the app (File > Save Project) as it "
+                   "is, and from OrcaSlicer 2.5 the built-in presets are binary caches this command cannot read",
+        operations=(Operation("presets", "list the presets of one kind a person can select (machine, process or "
+                                         "filament), from their own OrcaSlicer folders and the app's profiles",
+                              "orcaslicer"),
+                    Operation("complete", "write a printer, a process and filaments complete for OrcaSlicer's "
+                                          "command line: every parent merged in, the printer named as compatible",
+                              "orcaslicer"))),
+})
+
+_BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})
+
+
+def integrations_of(modules: Any) -> tuple[str, ...]:
+    """The integrations a script uses, by the top-level modules it imports (``Integration.modules``)."""
+    roots = {str(module).split(".")[0] for module in modules}
+    return tuple(name for name, integration in INTEGRATIONS.items() if roots & set(integration.modules))
+
+
+def by_extension(extension: str) -> DocumentTypeEntry | None:
+    """The type a file extension names (``".stp"`` -> ``step``), case-insensitively; None for none."""
+    extension = str(extension or "").lower()
+    return _BY_EXTENSION.get(extension if extension.startswith(".") else "." + extension)
+
+
+def type_of(path: Any) -> DocumentTypeEntry | None:
+    """The type of the file at ``path``, by its extension; None for a file of no type."""
+    import os
+
+    name = os.path.basename(os.fspath(path)) if path is not None else ""
+    dot = name.rfind(".")
+    return by_extension(name[dot:]) if dot > 0 else None
+
+
+@cache
+def _producers() -> tuple[Producer, ...]:
+    # Each integration registers the producers it has; this is the one place they are gathered.
+    from cad.build123d._producers import PRODUCERS as build123d
+
+    return build123d
+
+
+def manufacturing_check() -> Any:
+    """The integration module that measures a manufacturing check of a document the engine holds, for the
+    engine's worker: build123d's (``held``). As
+    with the producers, the one place the engine reaches an integration, and each integration names its own
+    (``_producers``); it loads only for a check."""
+    from cad.build123d._producers import manufacturing_check as named
+
+    return named()
+
+
+def interference_check() -> Any:
+    """The integration module that measures an interference check of a document the engine holds, for the
+    engine's worker: build123d's (``held``), reached as ``manufacturing_check`` is and loaded only for one."""
+    from cad.build123d._producers import interference_check as named
+
+    return named()
+
+
+def producers_for(document_type: str) -> tuple[Producer, ...]:
+    """The producers of one type, every integration's."""
+    return tuple(producer for producer in _producers() if producer.document_type == document_type)
+
+
+def producer_for(document_type: str, value: Any, *, where: str = "a model") -> Producer:
+    """The one producer that makes ``document_type`` of ``value``; a ``TypeError`` naming what the type
+    takes, and the integration that would take more, for a value none takes. Two producers taking one
+    value is the registry's error, said as one."""
+    found = [producer for producer in producers_for(document_type) if producer.matcher(value)]
+    if len(found) == 1:
+        return found[0]
+    if len(found) > 1:
+        raise RuntimeError(f"{document_type}: {len(found)} producers take {type(value).__name__} "
+                           f"({', '.join(producer.integration for producer in found)}): exactly one may")
+    accepted = sorted({producer.accepts for producer in producers_for(document_type)})
+    origin = str(type(value).__module__).split(".")[0]
+    if origin in INTEGRATIONS:
+        more = f"the {origin} integration has no producer of {document_type} from {type(value).__name__}"
+    elif origin in ("builtins", "", "__main__", "cad"):
+        more = f"integrations: {', '.join(INTEGRATIONS)}"
+    else:
+        more = f"there is no {origin} integration: one would add a producer of it"
+    takes = " or ".join(accepted) if accepted else "nothing: no producer is registered"
+    raise TypeError(f"{where} returned {type(value).__name__}; a {document_type} document is made of {takes} "
+                    f"({more})")
+
+
+def help_text(document_type: str) -> str:
+    """A type's help, worked out from this table: what it is, the content it carries, its operations and
+    what writes it."""
+    entry = DOCUMENT_TYPES[document_type]
+    lines = [f"{entry.id}: {entry.summary}" + (f" ({', '.join(entry.extensions)})" if entry.has_file else ""),
+             f"carries: {', '.join(entry.content)}"]
+    lines.append("operations:")
+    width = max((len(operation.name) for operation in entry.operations), default=0)
+    for name in entry.operation_names:
+        operation = entry.operation(name)
+        assert operation is not None
+        needs = f" [{operation.integration}]" if operation.integration else ""
+        lines.append(f"  {name.ljust(width)}  {operation.summary}{needs}")
+    producers = producers_for(entry.id)
+    if entry.edit is not None:
+        lines.append("written by:")
+        lines.append(f"  with {entry.id}.edit(\"{entry.edit.noun}{entry.suffix}\") as {entry.edit.noun}: {entry.edit.hands}, "
+                     f"changed in place, saved at the block's end when changed ({entry.edit.integration}: "
+                     f"{', '.join(entry.edit.changes)})")
+    elif producers and not entry.has_file:
+        lines.append("made by:")
+        for producer in producers:
+            lines.append(f"  @{entry.id} on a function returning {producer.accepts.removesuffix(' a model returns')} "
+                         f"({producer.integration}: {', '.join(producer.provides)})")
+    elif producers:
+        lines.append("written by:")
+        for producer in producers:
+            lines.append(f"  @{entry.id}(\"out{entry.suffix}\") of {producer.accepts} "
+                         f"({producer.integration}: {', '.join(producer.provides)})")
+    else:
+        lines.append("written by: no producer; a file of it is authored")
+    return "\n".join(lines)
+
+
+def integration_help(name: str) -> str:
+    """An integration's help, worked out from this table: what it is, its extra, and its operations on its
+    tool's own files (none for an integration whose files are all document types)."""
+    entry = INTEGRATIONS[name]
+    lines = [f"{entry.name}: {entry.summary}",
+             "extra: " + (f"cad[{entry.extra}]" if entry.extra else "none (a program the person installs)")]
+    if entry.operations:
+        lines.append(f"operations (on {', '.join(entry.files)}):" if entry.files else "operations:")
+        width = max(len(operation.name) for operation in entry.operations)
+        lines.extend(f"  {operation.name.ljust(width)}  {operation.summary}" for operation in entry.operations)
+    else:
+        lines.append("operations: none of its own; the document types it serves have them")
+    return "\n".join(lines)
+
+
+def as_data() -> dict[str, Any]:
+    """The table as data, for the JavaScript side (``--js``) and its parity test."""
+    return {
+        "operations": list(OPERATIONS),
+        "views": list(VIEWS),
+        "documentTypes": [
+            {"id": entry.id, "title": entry.title, "wire": entry.wire, "extensions": list(entry.extensions),
+             "mime": entry.mime, "view": entry.view, "operations": list(entry.operation_names),
+             "decorator": entry.decorator}
+            for entry in _TYPES
+        ],
+    }
+
+
+def as_docs() -> dict[str, Any]:
+    """The table as data for the documentation site, which says of every type and integration what this
+    table says: each type's summary, the content it carries, its operations and what writes it, and each
+    integration's extra, its size and where it runs. Fuller than ``as_data``, which every page's build loads;
+    the site's copy (``--docs``) is held to this by the same parity test."""
+    def operations(entry: Any) -> list[dict[str, Any]]:
+        return [{"name": operation.name, "summary": operation.summary, "integration": operation.integration,
+                 "engine": operation.engine} for operation in entry.operations]
+
+    return {
+        "operations": list(OPERATIONS),
+        "integrationOperations": list(INTEGRATION_OPERATIONS),
+        "views": list(VIEWS),
+        "documentTypes": [
+            {"id": entry.id, "title": entry.title, "summary": entry.summary, "extensions": list(entry.extensions),
+             "mime": entry.mime, "view": entry.view, "content": list(entry.content),
+             "operations": operations(entry), "decorator": entry.decorator, "reader": entry.reader,
+             "readerIntegration": entry.reader_integration,
+             "edit": None if entry.edit is None else {
+                 "integration": entry.edit.integration, "noun": entry.edit.noun, "hands": entry.edit.hands,
+                 "changes": list(entry.edit.changes)},
+             "producers": [{"integration": producer.integration, "accepts": producer.accepts,
+                            "provides": list(producer.provides)} for producer in producers_for(entry.id)]}
+            for entry in _TYPES
+        ],
+        "integrations": [
+            {"name": entry.name, "summary": entry.summary, "extra": entry.extra, "process": entry.process,
+             "operations": operations(entry), "files": list(entry.files), "modules": list(entry.modules),
+             "distributions": list(entry.distributions), "commands": list(entry.commands), "holds": entry.holds,
+             "downloadMb": entry.download_mb, "alongside": list(entry.alongside), "python": entry.python,
+             "platforms": list(entry.platforms),
+             "program": None if entry.probe is None else {
+                 "name": entry.probe.program, "minimum": entry.probe.minimum, "override": entry.probe.override}}
+            for entry in INTEGRATIONS.values()
+        ],
+    }
+
+
+def as_docs_json() -> str:
+    """``as_docs`` as the file the documentation site reads, ``apps/docs/src/lib/docs/registry.generated.json``."""
+    return json.dumps(as_docs(), indent=2, ensure_ascii=False) + "\n"
+
+
+_JS_HEAD = ("// GENERATED from the library's document type registry (cad.registry): do not edit.\n"
+            "// Regenerate with `python -m cad.registry --js > packages/core/src/lib/documentTypes.generated.js`;\n"
+            "// tests/python/packages/cad/test_registry.py fails when this file and the registry differ.\n")
+
+
+def as_js() -> str:
+    """The table as the ES module ``@cad/core``'s ``lib/documentTypes.generated.js`` is."""
+    body = json.dumps(as_data(), indent=2, ensure_ascii=False)
+    return f"{_JS_HEAD}export const DOCUMENT_TYPE_REGISTRY = Object.freeze({body});\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv == ["--js"]:
+        sys.stdout.write(as_js())
+        return 0
+    if argv == ["--json"]:
+        sys.stdout.write(json.dumps(as_data(), indent=2) + "\n")
+        return 0
+    if argv == ["--docs"]:
+        sys.stdout.write(as_docs_json())
+        return 0
+    if len(argv) == 1 and argv[0] in DOCUMENT_TYPES:
+        sys.stdout.write(help_text(argv[0]) + "\n")
+        return 0
+    if len(argv) == 1 and argv[0] in INTEGRATIONS:
+        sys.stdout.write(integration_help(argv[0]) + "\n")
+        return 0
+    sys.stderr.write(f"usage: python -m cad.registry --js | --json | --docs | {{{','.join([*DOCUMENT_TYPES, *INTEGRATIONS])}}}\n")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

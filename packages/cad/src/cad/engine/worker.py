@@ -3,12 +3,14 @@
 The daemon starts one per script and talks to it over the worker's stdin and its
 original stdout. A request is one JSON object per line: ``{"id", "op": "build", "script",
 "functions", "cwd", "run", "env"}`` (``run``: the calling process's run, ``build.build``; ``env``: its
-environment, ``adopt``). The answers are frames: a JSON object on one line and, when it has
+environment, ``adopt``); an export that draws carries the engine's X display too (``display``,
+``told_display``). The answers are frames: a JSON object on one line and, when it has
 ``bytes``, exactly that many bytes after it. A build is answered by ``{"id", "log"}`` frames while it
 builds and ``{"id", "progress"}`` frames saying where it is (``progress.py``: each stage, and each
 body a build runs), then one ``{"id", "done", "rssMb"}`` (the build's reports, and the worker's
 resident memory after it, in MiB; ``"retire": true`` too when it is over its cap, ``retirement``)
-or ``{"id", "failed"}`` (with ``kind`` where it is a refusal: ``refusal``). A file the build writes
+or ``{"id", "failed"}`` (with ``kind`` where it is a refusal: ``refusal``; with ``type`` where it is a
+failure said in words alone, a file not written: ``frames.failed_type``). A file the build writes
 is sent nowhere: a page serving it as a file reads it from the disk, as it reads any file another
 program wrote. What the model prints goes to the worker's stderr, which the daemon passes on. The
 worker exits when its stdin closes: the daemon's supervisor closes it to retire the worker
@@ -25,6 +27,16 @@ element of a document this worker built (``doc``, its id) (``build.made_by``): i
 ``{"id", "where": {...} | null}``, by the thread that reads the requests -- during a
 build too, from the last build that named the document -- so a page asking about an
 element never waits on a build.
+
+An ``export`` request with ``check`` (``{"type", "process", "resolved", "candidates", "given", "token"}``,
+``api.check``) and no destinations is a manufacturing check, which the daemon asks of its checks processes
+alone -- this program started for a slot of the daemon's pool, never a model's worker -- of a file (``path``)
+or of the bytes of a document the engine holds (``document``, its bytes after the line), measured in memory
+(``_check``: the integration ``cad.registry.manufacturing_check`` names) and answered ``{"id", "done":
+{"checked": ...}}``. Nothing stops a check from within: the daemon holds it to its limits from outside and
+kills the process of one it stops, which holds nothing but what it read for checks. A checks process over its
+memory cap after a check drops what it read (``shed``) and, still over it, is retired as a worker is after a
+build.
 
 A worker whose resident memory alone is over the workers' memory cap after a build
 (``CAD_ENGINE_WORKER_RSS_MB``, by default a quarter of the machine's memory, which the daemon holds
@@ -54,6 +66,14 @@ worker does it only when no other request waits (a request that comes meanwhile 
 serialisation), and it answers no ``done``. A ``result`` request with ``document``
 reads the bytes after its line (the cache's file) as ``export`` does a held document's: its
 structure and shape bytes, as a built document's.
+
+A ``{"id", "op": "preview", "script", "name", "values", "digest", "known", "cwd", "env"}`` request asks for
+one model of the script at other values of its declared parameters, which a page is trying
+(``build.preview``): built in this worker's memo and answered as ``result`` answers, the structure and the
+shape bytes of each part whose key is not in ``known``, after the line -- never kept, never written,
+never said as a build's progress (no page but the one that asked sees it). Its refusals (``ParameterRefused``:
+the script's bytes are not the ones the last run read) are answered ``{"id", "done": {"ok": false, "code",
+"error", "hint"}}``.
 
 A build runs with the cyclic collector off, and the worker collects once it is idle: the memo
 keeps every live result of the last builds, millions of objects, and a full collection walks
@@ -191,6 +211,166 @@ def rss_cap_mb() -> float | None:
     return None if physical is None else max(physical / 4, 2048.0)
 
 
+def footprint_mb(pid: int) -> float | None:
+    """The memory the system charges process ``pid`` now, in MiB, its compressed and swapped pages
+    with it -- what Activity Monitor shows on macOS, resident and swapped on Linux, the private
+    commit on Windows; None where the platform will not say. Read from outside the process: a busy
+    one says its own memory only when it answers (``Supervisor.overrun``)."""
+    try:
+        if sys.platform == "darwin":
+            import ctypes
+
+            class Usage(ctypes.Structure):  # rusage_info_v0
+                _fields_ = [("uuid", ctypes.c_uint8 * 16),
+                            *((name, ctypes.c_uint64) for name in (
+                                "user_time", "system_time", "pkg_idle_wkups", "interrupt_wkups", "pageins",
+                                "wired_size", "resident_size", "phys_footprint", "proc_start_abstime",
+                                "proc_exit_abstime"))]
+
+            usage = Usage()
+            system = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            if system.proc_pid_rusage(pid, 0, ctypes.byref(usage)) != 0:  # RUSAGE_INFO_V0
+                return None
+            return usage.phys_footprint / 2**20
+        if sys.platform.startswith("linux"):
+            with open(f"/proc/{pid}/status", encoding="ascii") as handle:
+                held = [line.split() for line in handle if line.startswith(("VmRSS:", "VmSwap:"))]
+            return sum(int(row[1]) for row in held) / 2**10 if held else None  # kB
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            *((name, ctypes.c_size_t) for name in (
+                                "PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                                "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
+                                "PagefileUsage", "PeakPagefileUsage"))]
+
+            kernel = ctypes.windll.kernel32
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                counters = Counters()
+                counters.cb = ctypes.sizeof(Counters)
+                info = ctypes.windll.psapi.GetProcessMemoryInfo
+                info.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+                info.restype = wintypes.BOOL
+                return counters.PagefileUsage / 2**20 if info(handle, ctypes.byref(counters), counters.cb) else None
+            finally:
+                kernel.CloseHandle(handle)
+    except Exception:  # noqa: BLE001 - a platform that will not say has no ceiling
+        return None
+    return None
+
+
+def memory_ceiling_mb() -> float | None:
+    """The memory one busy process of the daemon may reach before the daemon stops its work
+    (``Supervisor.overrun``): a build runs in native code, which nothing of its own interrupts, and
+    left alone one that runs away takes the machine. ``CAD_ENGINE_WORKER_CEILING_MB`` (``0`` for
+    none), else half the machine's memory, at least 4 GiB. None: no ceiling."""
+    given = os.environ.get("CAD_ENGINE_WORKER_CEILING_MB", "").strip()
+    if given:
+        try:
+            value = float(given)
+        except ValueError:
+            value = -1.0
+        if value >= 0:
+            return value or None
+    physical = _physical_mb()
+    return None if physical is None else max(physical / 2, 4096.0)
+
+
+# --- a manufacturing check's limits ---------------------------------------------------------------
+
+# A manufacturing check measured this long is stopped (``check_limits``): ``CAD_ENGINE_CHECK_SECONDS``, by
+# default half an hour.
+CHECK_SECONDS = 1800.0
+
+
+def check_limits(cap: Callable[[], float | None] = rss_cap_mb) -> tuple[
+        float | None, Callable[[], float | None], tuple[str, ...]]:
+    """What one manufacturing check may take before whoever watches its process stops it -- the engine, of a
+    check in one of its checks processes, or a caller that measures one itself in a process it starts
+    (``cad._internal.manufacturing``): the seconds it may measure (None: no limit),
+    ``CAD_ENGINE_CHECK_SECONDS``, by default ``CHECK_SECONDS``; its process's resident memory in MiB, asked each
+    time it is looked at (None: no limit), ``CAD_ENGINE_CHECK_RSS_MB``, by default ``cap()`` -- the memory the
+    engine holds all its processes to together (``rss_cap_mb``: ``CAD_ENGINE_WORKER_RSS_MB``), which one check
+    alone never takes; ``0`` for no limit; and what is said of a setting that is no number of zero or more,
+    for which the default holds."""
+    notes: list[str] = []
+
+    def number(name: str) -> float | None:
+        given = os.environ.get(name, "").strip()
+        if not given:
+            return None
+        try:
+            value = float(given)
+        except ValueError:
+            value = -1.0
+        if value < 0:
+            notes.append(f"{name}={given!r} is no number of zero or more: the default holds")
+            return None
+        return value
+
+    seconds, memory = number("CAD_ENGINE_CHECK_SECONDS"), number("CAD_ENGINE_CHECK_RSS_MB")
+    return (CHECK_SECONDS if seconds is None else (seconds or None),
+            cap if memory is None else (lambda: memory or None), tuple(notes))
+
+
+def resident_of(pid: int | None) -> float | None:
+    """The resident memory of process ``pid`` now, in MiB, read from outside it (``/proc`` on Linux, the
+    system's own count on Windows, ``ps`` elsewhere), as whoever holds a manufacturing check to its limits
+    reads its process's (``check_limits``); None where the system does not say, which holds a check to no
+    memory limit there."""
+    if not pid:
+        return None
+    try:
+        if sys.platform.startswith("linux"):
+            with open(f"/proc/{pid}/statm", encoding="ascii") as handle:
+                return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 2**20
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            class Counters(ctypes.Structure):  # PROCESS_MEMORY_COUNTERS, as ``resident_mb`` reads its own
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t),
+                            ("PeakPagefileUsage", ctypes.c_size_t)]
+
+            kernel32, psapi = ctypes.windll.kernel32, ctypes.windll.psapi
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                counters = Counters()
+                counters.cb = ctypes.sizeof(Counters)
+                if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+                    return None
+                return counters.WorkingSetSize / 2**20
+            finally:
+                kernel32.CloseHandle(handle)
+        import subprocess
+
+        said = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=5,
+                              check=False).stdout.split()
+        return int(said[0]) / 1024 if said else None
+    except Exception:  # noqa: BLE001 - a system that will not say holds a check to no memory limit
+        return None
+
+
 def request_cap(request: dict[str, Any]) -> float | None:
     """The memory cap a request holds this process to: the daemon's, which each request of its
     carries (``rssCapMb``; None: no cap); a request with none, this process's own (``rss_cap_mb``)."""
@@ -244,8 +424,10 @@ _KERNEL_LOADED = False
 def kernel(say: Callable[[str], None]) -> None:
     """The kernel loaded before a build of this worker, unless it is (``load_kernel``): a load that
     takes longer than ``KERNEL_PATIENCE`` is said once, while it goes on (``KERNEL_NOTICE``), and
-    a warm worker says nothing."""
-    if _KERNEL_LOADED:
+    a warm worker says nothing. An environment without the build123d integration (a script whose
+    imports name none of it: the server's ``cad run`` makes it with the integrations they name) loads
+    none: what its build imports is its own."""
+    if _KERNEL_LOADED or not _has_kernel():
         return
     told = threading.Timer(KERNEL_PATIENCE, say, (KERNEL_NOTICE,))
     told.daemon = True
@@ -257,13 +439,38 @@ def kernel(say: Callable[[str], None]) -> None:
         told.join()  # gone before the build: a profile records every thread's calls (``profiling``)
 
 
+def _has_kernel() -> bool:
+    """Whether this environment has build123d installed (found, not loaded)."""
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("build123d") is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def kept() -> dict[str, str]:
     """What of this worker's environment no run's replaces (``adopt``): what started its
-    interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH) and what it
-    set for itself."""
+    interpreter (``places.RESTARTS``; the engine's own folder is on its PYTHONPATH), what it
+    set for itself; and, once an export that draws has told it (``told_display``), the engine's X display
+    and its authority."""
     from cad.engine.places import BYTECODE, RESTARTS
 
     return {name: os.environ[name] for name in (*RESTARTS, *BYTECODE, "CAD_ENGINE_WORKER") if name in os.environ}
+
+
+def told_display(told: Any, own: dict[str, str]) -> None:
+    """The engine's X display and its authority (``places.DISPLAY``, ``places.XAUTHORITY``), as an export that
+    draws tells them (``display``), kept with what no run's environment replaces (``own``, ``kept``) and set
+    now: a still for a run with no ``DISPLAY`` of its own is drawn there (``render.context.display``). Told
+    with the first picture, never at the worker's start, so an engine that draws nothing starts no display."""
+    from cad.engine.places import DISPLAY, XAUTHORITY
+
+    if not isinstance(told, dict):
+        return
+    found = {name: told[name] for name in (DISPLAY, XAUTHORITY) if isinstance(told.get(name), str) and told[name]}
+    own.update(found)
+    os.environ.update(found)
 
 
 def adopt(environment: dict[str, str] | None, own: dict[str, str]) -> None:
@@ -301,11 +508,17 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     it; a mesh file read as its triangles, no kernel loaded) -- written
     to each destination, and drawn into ``draw``'s
     PNG where the request has one (``{"out", option: value}``, the snapshot verb's: a
-    model's picture is drawn from the document in this worker's memory). Answers what was
-    written."""
+    model's picture is drawn from the document in this worker's memory). A GLB, an STL or a 3MF is
+    meshed to within the request's ``tolerance`` and ``angle`` where it gives either
+    (``export/__init__.py``), and its row says it; a robot description (an MJCF, a URDF) is taken at the
+    request's ``zero`` state where it gives one, its row saying it, and its row carries what it holds
+    (``robot``: ``Description.summary``, with its notes). Answers what was written."""
     from cad.engine import build as engine_build
     from cad.engine import export
 
+    tolerance = export.tolerance_of(request.get("tolerance"), request["destinations"])
+    angle = export.angle_of(request.get("angle"), request["destinations"])
+    zero = export.zero_of(request.get("zero"), request["destinations"])
     source_spec = request["source"]
     built: list[dict[str, Any]] = []
     if "id" in source_spec:
@@ -358,24 +571,46 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     if request.get("expected") and "document" not in source_spec:
         from cad.engine.export.viewer import check
         check(source, request["expected"])  # a held document's revision is the daemon's to check
-    files = []
-    for index, destination in enumerate(request["destinations"]):
-        from cad.engine.progress import say
+    from cad.engine.progress import say
 
+    destinations = [Path(destination) for destination in request["destinations"]]
+    # Every destination checked, and drawn where its kind can refuse only once drawn (a DXF, a GLB, a
+    # robot description), before any is written: a refusal leaves no file of the export behind. Its
+    # time is its row's; its frames are its write's, below, so the count only goes up.
+    prepared: list[tuple[Any, float]] = []
+    for target in destinations:
         clock = time.perf_counter()
-        target = Path(destination)
-        # Each destination written, counted of them all (``progress.py``: an export's ``write``).
-        say("write", detail=target.name, count=[index, len(request["destinations"])])
-        before = _stat(target)
         if request.get("original"):
-            from cad.engine.export.viewer import original
-            size = original(source, target, request["expected"])
-        else:
-            size = export.translate(source, None, target)
-        seconds = time.perf_counter() - clock
+            prepared.append((None, 0.0))
+            continue
+        prepared.append((export.prepare(source, None, target, tolerance, angle, zero), time.perf_counter() - clock))
+    files = []
+    for index, (target, (ready, drew)) in enumerate(zip(destinations, prepared)):
+        clock = time.perf_counter()
+        # Each destination written, counted of them all (``progress.py``: an export's ``write``).
+        say("write", detail=target.name, count=[index, len(destinations)])
+        before = _stat(target)
+        robot: list[dict[str, Any]] = []
+        try:
+            if ready is None:
+                from cad.engine.export.viewer import original
+                size = original(source, target, request["expected"])
+            else:
+                size = ready.land(log, robot.append)
+        except Exception as error:
+            if not index:
+                raise
+            # Some are written: said, never a refusal (which says nothing was).
+            raise export.ExportIncomplete([row.name for row in destinations[:index]], target.name,
+                                          [row.name for row in destinations[index + 1:]], error) from error
+        seconds = drew + time.perf_counter() - clock
         # A file that held these bytes already is left as it was (``atomic_replace.put``): unchanged.
         files.append({"path": str(target), "kind": export.kind_of(target), "bytes": size,
-                      "seconds": round(seconds, 4), "written": before is None or _stat(target) != before})
+                      "seconds": round(seconds, 4), "written": before is None or _stat(target) != before,
+                      **({"tolerance": tolerance} if tolerance is not None else {}),
+                      **({"angle": angle} if angle is not None else {}),
+                      **({"zero": zero} if zero is not None else {}),
+                      **({"robot": robot[0]} if robot else {})})
     drawn = None
     if request.get("draw"):
         from cad.engine import snapshot
@@ -458,6 +693,23 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     return answer, b"".join(data)
 
 
+def _preview(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
+    """A ``preview`` request: one model at other values of its parameters (``build.preview``)."""
+    from cad.engine import build as engine_build
+    from cad.engine.parameters import ParameterRefused
+
+    values = request.get("values")
+    if not isinstance(values, dict):
+        raise ValueError("a preview names its values: {name: number}")
+    cwd = request.get("cwd")
+    try:
+        return engine_build.preview(Path(request["script"]), str(request["name"]), values,
+                                    cwd=Path(cwd) if cwd else None, digest=request.get("digest"),
+                                    known=request.get("known") or ())
+    except ParameterRefused as refused:
+        return {"ok": False, "code": refused.code, "error": str(refused), "hint": refused.hint}, b""
+
+
 def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     """A ``save`` request: the document of a model this worker built, as the xbf bytes the engine's
     cache keeps (``document.to_bytes``, the drain's bytes)."""
@@ -474,33 +726,177 @@ def _save(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
     return header, document.to_bytes(source.xcaf, source.shapes.values())
 
 
+# --- a manufacturing check, in a checks process ---------------------------------------------------------
+
+
+# The files a checks process holds, by path: each the digest of the bytes it read, their source and their size,
+# the most recent last. A file is read once while its bytes stay as they were, whatever its modification time
+# says, and a new digest replaces the old one's. Held to ``_FILES_KEPT`` files and ``KEPT_BYTES`` of them (their
+# bytes on disk, the size a read source takes in memory is said by), and dropped whole when the process is over
+# its memory cap (``shed``).
+_FILES: "dict[str, tuple[str, Any, int]]" = {}
+_FILES_KEPT = 4
+# The bytes each of a checks process's memos of what a check read holds at most (``_FILES``, ``_DOCUMENTS``):
+# one larger is read for its check and not kept.
+KEPT_BYTES = 256 * 2**20
+
+
+def _bounded(memo: "dict[str, Any]", count: int, size: Callable[[Any], int]) -> None:
+    """``memo`` held to ``count`` entries and ``KEPT_BYTES`` of them (``size`` of each), the least recently
+    used (the first) going first."""
+    while memo and (len(memo) > count or sum(size(held) for held in memo.values()) > KEPT_BYTES):
+        memo.pop(next(iter(memo)))
+
+
+def shed() -> None:
+    """What this checks process holds of the checks it measured, dropped: the files and documents it read
+    (``_FILES``, ``_DOCUMENTS``)."""
+    _FILES.clear()
+    _DOCUMENTS.clear()
+
+
+def resident_after_check(cap: float | None) -> float | None:
+    """A checks process's resident memory after a check (``resident_mb``): over its cap (``cap``), what it read
+    for checks is dropped first (``shed``) and it is measured again after a collection, so it is retired only
+    for what it cannot let go."""
+    resident = resident_mb()
+    if resident is not None and cap is not None and resident > cap:
+        shed()
+        gc.collect()
+        resident = resident_mb()
+    return resident
+
+
+def _file(path: Path) -> tuple[Any, str | None, bool]:
+    """A STEP's or an xbf's file as a source, read once while its bytes stay as they were (``_FILES``), the
+    digest of the bytes it was read from -- None where they changed while it was read, so nothing is measured
+    of them -- and whether it was read now."""
+    import hashlib
+
+    from cad.engine import document, export
+
+    def digest() -> str:
+        found = hashlib.blake2b(digest_size=20)
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                found.update(block)
+        return found.hexdigest()
+
+    before = digest()
+    held = _FILES.pop(str(path), None)
+    if held is not None and held[0] == before:
+        _FILES[str(path)] = held
+        return held[1], before, False
+    source = export.Source.from_loaded(document.Loaded(path))
+    if digest() != before:
+        return source, None, True  # rewritten while it was read: no version of the file is what was read
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = KEPT_BYTES + 1
+    if size <= KEPT_BYTES:
+        _FILES[str(path)] = (before, source, size)
+        _bounded(_FILES, _FILES_KEPT, lambda row: row[2])
+    return source, before, True
+
+
+# The held documents' bytes a checks process holds, by their id: each the version it was sent at (the
+# daemon's generation of it), its source and its bytes' size, the most recent last. A version read once: a
+# new one replaces it. Held to ``_DOCUMENTS_KEPT`` and ``KEPT_BYTES``, and shed with ``_FILES``.
+_DOCUMENTS: "dict[str, tuple[str, Any, int]]" = {}
+_DOCUMENTS_KEPT = 4
+
+
+def _document(spec: dict[str, Any], payload: bytes) -> tuple[Any, bool]:
+    """A held document's bytes as a source (``build.held_source``), read once per version (``_DOCUMENTS``)
+    where the request says its version, and whether they were read now."""
+    from cad.engine import build as engine_build
+
+    ident, version = str(spec["document"]), spec.get("version")
+    held = _DOCUMENTS.pop(ident, None)
+    if held is not None and version is not None and held[0] == version:
+        _DOCUMENTS[ident] = held
+        return held[1], False
+    reads = engine_build.held_reads
+    source = engine_build.held_source(payload, str(spec.get("name") or "document"), origin=spec.get("origin"))
+    if version is not None and len(payload) <= KEPT_BYTES:
+        _DOCUMENTS[ident] = (str(version), source, len(payload))
+        _bounded(_DOCUMENTS, _DOCUMENTS_KEPT, lambda row: row[2])
+    return source, engine_build.held_reads != reads
+
+
+def _check(request: dict[str, Any]) -> dict[str, Any]:
+    """An ``export`` request with ``check``: the document it names -- the bytes of one the engine holds
+    (``document``, read once per version: ``_document``) or a STEP's or an xbf's file (``_file``) -- checked in
+    memory (its integration's ``held``). Answers ``{"reports": [], "files": [], "checked"}``, the ``checked``
+    saying the release that measured it, what measures here (``measures``), whether it read the document anew
+    (``read``) and, for a file, the digest of the bytes it measured -- or, where they changed while it read
+    them, ``changed`` and nothing measured: no version of the file is those bytes. A caller of other code or
+    libraries than this process's is answered with no ``checked``, nothing measured."""
+    from cad.engine import export
+    from cad.engine.contract import measures_for, measuring, release
+    from cad.registry import interference_check, manufacturing_check
+
+    spec = request["source"]
+    check = request["check"]
+    mine = measuring()
+    if not measures_for(check.get("measures"), mine):
+        # Another code or library than the caller's: nothing measured, and the caller measures it its own way.
+        return {"reports": [], "files": [], "release": release(), "measures": mine}
+    said = {"release": release(), "measures": mine}
+    read = Path(spec["path"]).name if "path" in spec else None  # how a reading failure names it
+    digest, fresh = None, False
+    try:
+        if "document" in spec:
+            source, fresh = _document(spec, request.get("payload") or b"")
+        elif "path" in spec:
+            source, digest, fresh = _file(Path(spec["path"]))
+            if digest is None:
+                return {"reports": [], "files": [], "checked": {**said, "read": True, "digest": None, "changed": True}}
+        else:
+            raise export.ExportRefused("a check reads a document the engine holds or a STEP's or an xbf's file")
+    except export.ExportRefused:
+        raise
+    except Exception as error:  # noqa: BLE001 - a document that does not read is the check's answer
+        checked = {"unmeasured": {"code": "document_unreadable",
+                                  "message": f"failed to read {read or 'the document'}: {error}"}}
+    else:
+        # A check is its family's to measure: an interference check's (``cad._internal.interference``), else a manufacturing one's.
+        measurer = interference_check() if check.get("process") == "interference" else manufacturing_check()
+        checked = measurer.held(source, check, read)
+    return {"reports": [], "files": [], "checked": {**checked, **said, "read": fresh,
+                                                    **({"digest": digest} if "path" in spec else {})}}
+
+
 def refusal(error: BaseException) -> dict[str, str]:
     """A refusal's type, carried beside its words: a ``ValueError`` (an ``ExportRefused``, a
     ``SnapshotRefused``, a ``KinematicsError``, ...) answered as ``kind``, ``module:name``, so the
     caller raises it as that type (``api._failed``) and a refused export or snapshot is refused the
-    same through the daemon as in the caller's own process (``daemon=False``). Anything else is
-    no refusal: its words alone."""
+    same through the daemon as in the caller's own process (``daemon=False``), with the part of the
+    request a snapshot's refusal named (``part``: ``SnapshotRefused.part``). Anything else is no
+    refusal: its words alone."""
     if not isinstance(error, ValueError):
         return {}
     kind = type(error)
-    return {"kind": f"{kind.__module__}:{kind.__qualname__}"}
+    part = getattr(error, "part", None)
+    return {"kind": f"{kind.__module__}:{kind.__qualname__}", **({"part": part} if isinstance(part, str) else {})}
+
 
 def main() -> int:
     os.environ["CAD_ENGINE_WORKER"] = "1"
+    from cad.engine.contract import measuring
+
+    measuring()  # what measures its checks: its code as it starts, before anything a check measures with loads
     protocol = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)  # the model's prints go where the daemon reads logs from
     sys.stdout = sys.stderr
     # The daemon's requests come on a handle of the worker's own, and standard input is the null
-    # device. On Windows a thread blocked reading a pipe holds every other call on that pipe --
-    # GetFileType, which a DLL's C runtime asks of the standard handles as the DLL loads (numpy's
-    # OpenBLAS, say) -- so a model's first import would wait for the daemon's next request, which
-    # waits for the build: a worker that never builds. And a model reading its input reads none
-    # of the protocol.
-    asked = os.fdopen(os.dup(0), "rb")
-    null = os.open(os.devnull, os.O_RDONLY)
-    os.dup2(null, 0)
-    os.close(null)
-    sys.stdin = open(os.devnull, encoding="utf-8")  # noqa: SIM115 - standard input, for the worker's life
+    # device (``places.standard_input_aside``): on Windows a model's first import would otherwise wait
+    # for the daemon's next request, which waits for the build -- a worker that never builds. And a
+    # model reading its input reads none of the protocol.
+    from cad.engine.places import standard_input_aside
+
+    asked = os.fdopen(standard_input_aside(), "rb")
 
     lock = threading.Lock()
 
@@ -509,6 +905,7 @@ def main() -> int:
             frames.write(protocol, message, payload)
 
     from cad.engine.build import BuildError, build, made_by
+    from cad.engine.export import ExportIncomplete
     from cad.engine.profiling import quiet
     from cad.engine.progress import Progress, building
 
@@ -593,12 +990,30 @@ def main() -> int:
             send({"id": ident, "saved": header}, payload)
             owed = True
             continue
-        if op in ("export", "result"):
+        if op in ("export", "result", "preview"):
             try:
+                told_display(request.get("display"), own)
                 adopt(request.get("env"), own)
                 cwd = request.get("cwd")
                 os.chdir(cwd or home)
-                if op == "export":
+                if op == "export" and request.get("check"):
+                    # A manufacturing check, measured in memory; over the cap after it, retired as after a build.
+                    from cad.engine.export import ExportRefused
+
+                    try:
+                        done = _check(request)
+                    except ExportRefused:
+                        raise  # a request that names nothing to check: refused by its type, below
+                    except Exception as error:  # noqa: BLE001 - the check's own failure: its words, not its stack
+                        traceback.print_exc()  # the stack on this process's stderr, never in the answer
+                        send({"id": ident, "failed": f"{type(error).__name__}: {error}"})
+                    else:
+                        cap = request_cap(request)
+                        resident = resident_after_check(cap)
+                        retire = resident is not None and cap is not None and resident > cap
+                        send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident),
+                              **({"retire": True} if retire else {})})
+                elif op == "export":
                     # An export's frames, or a snapshot's for a request that draws (``job_progress``).
                     said = job_progress(lambda frame: send({"id": ident, "progress": frame}), request, cwd=cwd)
                     with building(said):
@@ -610,11 +1025,18 @@ def main() -> int:
                     retire = bool(done.get("reports")) and retirement(done["reports"], resident, cap)
                     send({"id": ident, "done": done, "rssMb": None if resident is None else round(resident),
                           **({"retire": True} if retire else {})})
+                elif op == "preview":
+                    answer, payload = _preview(request)
+                    resident = resident_mb()
+                    send({"id": ident, "done": answer, "rssMb": None if resident is None else round(resident)}, payload)
                 else:
                     answer, payload = _result(request)
                     send({"id": ident, "done": answer}, payload)
             except (BuildError, ValueError, OSError) as error:
-                send({"id": ident, "failed": str(error), **refusal(error)})
+                # A refusal by its type and part; a failure (a file not written, a BuildError) by its type.
+                send({"id": ident, "failed": str(error), **(refusal(error) or frames.failed_type(error))})
+            except ExportIncomplete as error:  # an export that wrote some files: what failed, by its cause's type
+                send({"id": ident, "failed": str(error), **error.failed_type()})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
                 send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
                                                                                 error.__traceback__))})
@@ -653,7 +1075,7 @@ def main() -> int:
             send({"id": ident, "done": reports, "rssMb": None if resident is None else round(resident),
                   **({"retire": True} if retire else {})})
         except BuildError as error:
-            send({"id": ident, "failed": str(error)})
+            send({"id": ident, "failed": str(error), **frames.failed_type(error)})
         except BaseException as error:  # noqa: BLE001 - the worker answers every request
             send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error, error.__traceback__))})
             if isinstance(error, (KeyboardInterrupt, SystemExit)):

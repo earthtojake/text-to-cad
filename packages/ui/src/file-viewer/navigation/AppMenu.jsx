@@ -1,13 +1,14 @@
-import { ArrowLeft, Check, ChevronRight, Info, MessageCircle, Monitor, Moon, Sun } from "lucide-react";
+import { ArrowLeft, Check, Info, MessageCircle, Monitor, Moon, Sun } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { DropdownMenu as MenuPrimitive } from "radix-ui";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator,
-  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { LOCALES, useI18n } from "@text-to-cad/ui/i18n";
-import { cn } from "@text-to-cad/ui/utils";
+  DropdownMenu, DropdownMenuContent, DropdownMenuInlineSub, DropdownMenuInlineSubContent, DropdownMenuInlineSubTrigger, DropdownMenuItem,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger,
+  DropdownMenuTrigger
+} from "@cad/ui/primitives/dropdown-menu";
+import { LOCALES, useI18n } from "@cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
 import { TooltipHint } from "../../primitives/tooltip.jsx";
 
 import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
@@ -19,17 +20,17 @@ import { useControlUsage } from "../../usage/controls.js";
 
 const NONE = Object.freeze([]);
 // A setting's row: 32px, its name and its control spaced apart, the control's centre on one line.
-const SETTING_ROW_CLASS = "flex min-h-8 items-center justify-between gap-2 py-0.5 pr-1 pl-2 text-tiny text-foreground";
+const SETTING_ROW_CLASS = "flex min-h-[max(2rem,var(--cad-row))] items-center justify-between gap-2 py-0.5 pr-1 pl-pad text-xs text-foreground";
 const COLOR_SCHEMES = Object.freeze([["system", Monitor], ["light", Sun], ["dark", Moon]]);
 // AUTOMATIC is the Language submenu's value for "no choice": the context decides.
 const AUTOMATIC = "automatic";
 
 /** Language's choices: Automatic, naming what the context infers, then each language under its own name. */
-const languageOptions = (language, t, className = undefined) => [
-  <DropdownMenuRadioItem key={AUTOMATIC} value={AUTOMATIC} onSelect={event => event.preventDefault()} className={className} data-language-option={AUTOMATIC}>
+const languageOptions = (language, t) => [
+  <DropdownMenuRadioItem key={AUTOMATIC} value={AUTOMATIC} onSelect={event => event.preventDefault()} data-language-option={AUTOMATIC}>
     {t("menu.languageAutomatic", { language: t(`language.${language.inferred}`) })}
   </DropdownMenuRadioItem>,
-  ...LOCALES.map(id => <DropdownMenuRadioItem key={id} value={id} lang={id} onSelect={event => event.preventDefault()} className={className} data-language-option={id}>
+  ...LOCALES.map(id => <DropdownMenuRadioItem key={id} value={id} lang={id} onSelect={event => event.preventDefault()} data-language-option={id}>
     {t(`language.${id}`)}
   </DropdownMenuRadioItem>),
 ];
@@ -73,17 +74,19 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
       // Language: the language in force at the row's end; its submenu, Automatic (what the context infers,
       // named) then each language under its own name, whatever the menu is reading in. A phone has no
       // room beside the menu for a submenu: there the same row opens its choices under it, in the menu
-      // itself (its chevron turning down), and a choice closes them again.
-      ...(language && mobile ? [<MenuPrimitive.Item key="language" onSelect={event => { event.preventDefault(); setLanguageOpen(open => !open); }}
-        aria-expanded={languageOpen} className={cn(SETTING_ROW_CLASS, "cursor-default rounded-sm pr-2 outline-none focus:bg-accent")}
-        data-slot="dropdown-menu-item" data-menu-language="" data-state={languageOpen ? "open" : "closed"}>
-        <span className="min-w-0 flex-1">{t("menu.language")}</span>
-        <span className="shrink-0 text-muted-foreground" lang={language.locale}>{t(`language.${language.locale}`)}</span>
-        <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", languageOpen && "rotate-90")} aria-hidden="true" />
-      </MenuPrimitive.Item>, ...(languageOpen ? [<DropdownMenuRadioGroup key="language-options" aria-label={t("menu.language")} value={language.choice ?? AUTOMATIC}
-        onValueChange={value => { usage.used("language"); language.onChoiceChange(value === AUTOMATIC ? null : value); setLanguageOpen(false); }}>
-        {languageOptions(language, t, "pl-5")}
-      </DropdownMenuRadioGroup>] : [])] : []),
+      // itself (`DropdownMenuInlineSub`, as the strip's More does), and a choice closes them again.
+      ...(language && mobile ? [<DropdownMenuInlineSub key="language" open={languageOpen} onOpenChange={setLanguageOpen}>
+        <DropdownMenuInlineSubTrigger className={cn(SETTING_ROW_CLASS, "pr-2 focus:text-foreground")} data-menu-language="">
+          <span className="min-w-0 flex-1">{t("menu.language")}</span>
+          <span className="shrink-0 text-muted-foreground" lang={language.locale}>{t(`language.${language.locale}`)}</span>
+        </DropdownMenuInlineSubTrigger>
+        <DropdownMenuInlineSubContent aria-label={t("menu.language")}>
+          <DropdownMenuRadioGroup value={language.choice ?? AUTOMATIC}
+            onValueChange={value => { usage.used("language"); language.onChoiceChange(value === AUTOMATIC ? null : value); setLanguageOpen(false); }}>
+            {languageOptions(language, t)}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuInlineSubContent>
+      </DropdownMenuInlineSub>] : []),
       ...(language && !mobile ? [<DropdownMenuSub key="language">
         {/* The chevron's 16px box is centred where the checkbox's and Theme's last segment are (16px in
             from the row's end), and the row keeps the setting rows' text colour while its submenu is open. */}
@@ -109,9 +112,9 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
             </span>
           </TooltipHint> : null}
         </span>
-        <span className="grid size-6 shrink-0 place-items-center" aria-hidden="true">
-          <span className="grid size-3.5 place-items-center rounded-[4px] border border-input text-primary-foreground group-data-[state=checked]/setting:border-primary group-data-[state=checked]/setting:bg-primary">
-            <Check className="hidden size-3 group-data-[state=checked]/setting:block" strokeWidth={3} />
+        <span className="grid size-icon-button shrink-0 place-items-center" aria-hidden="true">
+          <span className="grid size-(--cad-check) place-items-center rounded-[4px] border border-input text-primary-foreground group-data-[state=checked]/setting:border-primary group-data-[state=checked]/setting:bg-primary">
+            <Check className="hidden size-[calc(var(--cad-check)-2px)] group-data-[state=checked]/setting:block" strokeWidth={3} />
           </span>
         </span>
       </MenuPrimitive.CheckboxItem>),
@@ -120,7 +123,7 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
         <MenuPrimitive.RadioGroup value={colorScheme.preference} onValueChange={value => { usage.used(`theme_${value}`); colorScheme.onPreferenceChange(value); }} aria-label={t("menu.theme")}
           className="-mr-0.5 flex shrink-0 items-center gap-0.5 rounded-md bg-muted p-0.5">
           {COLOR_SCHEMES.map(([id, Icon]) => <MenuPrimitive.RadioItem key={id} value={id} aria-label={t(`appearance.${id}`)} onSelect={event => event.preventDefault()}
-            className="grid size-6 cursor-default place-items-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus:bg-accent focus:text-foreground data-[state=checked]:bg-background data-[state=checked]:text-foreground data-[state=checked]:shadow-xs"
+            className="grid size-icon-button cursor-default place-items-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus:bg-accent focus:text-foreground data-[state=checked]:bg-background data-[state=checked]:text-foreground data-[state=checked]:shadow-xs"
             data-theme-option={id}>
             <Icon className="size-3.5" aria-hidden="true" />
           </MenuPrimitive.RadioItem>)}
@@ -133,7 +136,7 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, colorSchem
   ].filter(group => group.length);
   // Only the version shortens to fit the line, never the rest of it, and says itself whole when it does.
   const version = links?.version ? <TooltipHint content={`v${links.version}`} overflowOnly>{links.release
-    ? <a href={links.release} target="_blank" rel="noreferrer" onClick={follow} className="min-w-0 truncate hover:text-foreground"
+    ? <a href={links.release} target="_blank" rel="noreferrer" onClick={follow} className="min-w-0 truncate text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
       data-menu-version="">v{links.version}</a>
     : <span className="min-w-0 truncate" data-menu-version="">v{links.version}</span>}</TooltipHint> : null;
   const madeBy = links?.x ? <MadeBy links={links} /> : null;

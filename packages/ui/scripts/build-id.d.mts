@@ -1,5 +1,5 @@
 /** The variable a release's own build names its version in. */
-export declare const RELEASE_ENV: "TEXT_TO_CAD_RELEASE";
+export declare const RELEASE_ENV: "CAD_RELEASE";
 
 export interface BuildIdOptions {
   /** The version the build is of (its app's package version, stamped from VERSION). */

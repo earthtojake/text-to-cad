@@ -6,6 +6,8 @@
     snapshot(source=None, *, job, the same flags) -> list[Drawn]
     serve(source, port=0) -> Served
     inspect(source, ref=None) -> Facts (the build closure without a ref)
+    check(source, check) -> dict (a manufacturing check, measured in the engine's checks processes)
+    params(source, **values) -> dict (a model's parameters written into its script, the model built again)
     status() / stop()
 
 Every one goes through the daemon (``client``), so the warm worker of the script or of the
@@ -22,8 +24,9 @@ The engine counts nothing. After each build, ``export`` and ``snapshot`` it call
 function in ``observers``, in the verb's thread, with one plain dict of what the verb did
 (``_facts``): kinds, counts, times, the warm worker's part, and an error's type and frames --
 never a name, a path or a message of the person's but the frames' files as Python has them. An
-observer that raises is passed over, and the verb returns or raises as it would have. cadgen's
-telemetry is one, appended by cadgen's own ``__init__`` (law 3: nothing here imports it).
+observer that raises is passed over, and the verb returns or raises as it would have. The server's
+telemetry is one, appended by the server's own package in the processes that import it (law 3:
+nothing here imports it); a model's own process, where only the library is, has none.
 """
 
 from __future__ import annotations
@@ -42,11 +45,36 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar, cast
 
-__all__ = ["Document", "Drawn", "EngineError", "Facts", "Report", "Served", "Written", "export", "hand_over",
-           "observers", "serve", "snapshot", "status", "stop", "inspect"]
+__all__ = ["Document", "Drawn", "EngineError", "Facts", "IN_CALLER", "IN_ENGINE", "NoDaemon", "Outdated", "Report",
+           "Served", "Stopped", "Unanswered", "Unreached", "Written", "check", "export", "hand_over", "observers",
+           "serve", "snapshot", "status", "stop", "inspect"]
 
 class EngineError(RuntimeError):
-    """A request the engine refused or could not run: its words."""
+    """A request the engine refused or could not run: its words; ``raised``: the type the engine failed with
+    (``module.Name``), where its answer said (``type``: a failure, never a refusal), which the verb's facts
+    tell its observers (``_error``); ``reason``: why a manufacturing check did not complete, one short word
+    (``check``), None for any other failure; ``refusal``: whether one of no ``raised`` type is the request
+    refused (its words say why), False for one its class says is the system's state, not the request's
+    (``NoDaemon``, ``Outdated``, ``Stopped``, ``Unanswered``): what the facts' ``refused`` says (``_error``)."""
+
+    raised: str | None = None
+    reason: str | None = None
+    refusal: bool = True
+
+
+class NoDaemon(EngineError):
+    """No engine daemon answered the request: none runs, and none was started for it. The system's state,
+    no refusal."""
+
+    refusal = False
+
+
+class Outdated(EngineError):
+    """The CAD server running is of a release before an option this library asked of it (an export's
+    ``tolerance``, ``angle`` or ``zero``), and did the work without it: updating it is the remedy. The
+    system's state, no refusal."""
+
+    refusal = False
 
 
 def _files(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -86,13 +114,15 @@ class Report:
 @dataclass
 class Written:
     """One file an export wrote, or found holding its bytes already and left as it was
-    (``written`` False)."""
+    (``written`` False); a robot description's (an MJCF, a URDF) with what it holds (``robot``:
+    ``Description.summary``, with the notes it was written with), None for any other file."""
 
     path: Path
     kind: str
     bytes: int
     seconds: float
     written: bool = True
+    robot: dict[str, Any] | None = None
 
 
 @dataclass
@@ -180,7 +210,7 @@ class Document:
         part's shape bytes, as an ``export.Source`` of this process. Nothing is built."""
         from cad.engine.export import Source
 
-        answer = _ask({"op": "result", "id": self.id, "cwd": str(self.cwd)})
+        answer = _ask({"op": "result", "id": self.id, "cwd": str(self.cwd), **_interpreter()})
         payload = base64.b64decode(answer.get("payload") or "")
         done = answer["done"]
         shapes, at = {}, 0
@@ -195,19 +225,22 @@ class Document:
             raise TypeError(f"{verb} of {self.name}: the body that calls it is building it; {verb} the "
                             "document the model call returns, once the build is done")
 
-    def export(self, *destinations: Any) -> list[Written]:
-        """``export(handle, *destinations)``: the document written to each destination."""
+    def export(self, *destinations: Any, tolerance: float | None = None, angle: float | None = None,
+               zero: str | None = None) -> list[Written]:
+        """``export(handle, *destinations)``: the document written to each destination; a GLB, an STL or a
+        3MF meshed to within ``tolerance`` (mm) and ``angle`` (degrees) when either is given, a robot
+        description taken at the mechanism state ``zero`` when one is given, as ``export`` does."""
         self._outside("export")
-        return _said(_exporting(self, destinations), destinations)
+        return _said(_exporting(self, destinations, tolerance=tolerance, angle=angle, zero=zero), destinations)
 
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
-                 pose: Any = None, width: int | None = None, height: int | None = None,
+                 preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
                  size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
                  measurements: Any = None) -> Drawn:
         """``snapshot(handle, out, ...)``: the document drawn into ``out`` (a ``.png``); every option is
-        the ``snapshot`` verb's, about the picture (law 22)."""
+        the ``snapshot`` verb's, about the picture."""
         self._outside("snapshot")
-        return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid,
+        return cast(Drawn, snapshot(self, out, display=display, camera=camera, grid=grid, preview=preview,
                                     pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon,
                                     annotation=annotation, measurements=measurements))
 
@@ -271,7 +304,7 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     ident = derived_id(scope, name)
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
-                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii")})
+                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"), **_interpreter()})
     report = {"ok": True, "model": name, "id": ident, "url": (answer.get("done") or {}).get("url"),
               "source": {"script": scope, "name": name}, "kind": "shape", "bytes": len(data)}
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
@@ -287,12 +320,16 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
 
 
 def _ask(message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] | None = None,
-         on_progress: Callable[[dict[str, Any]], None] | None = None) -> dict[str, Any]:
-    from cad.engine.client import environment, request
+         on_progress: Callable[[dict[str, Any]], None] | None = None, connection: Any = None) -> dict[str, Any]:
+    from cad.engine.client import _exchange, environment, request
 
-    answer = request({**message, "env": environment()}, on_log or (lambda _message: None), on_progress=on_progress)
+    if connection is not None:  # reached already (``check``)
+        answer = _exchange(connection, {**message, "env": environment()}, on_log or (lambda _message: None),
+                           on_progress)
+    else:
+        answer = request({**message, "env": environment()}, on_log or (lambda _message: None), on_progress=on_progress)
     if answer is None:
-        raise EngineError("no engine daemon")
+        raise NoDaemon("no engine daemon")
     _heard("worker", answer.get("worker"))
     if "failed" in answer:
         raise _failed(answer)
@@ -307,6 +344,8 @@ def _failed(answer: dict[str, Any]) -> Exception:
     import importlib
 
     text = str(answer["failed"])
+    if answer.get("stopped"):
+        return Stopped(text)  # the engine stopping under it (``checks_runner.Runner``): run it again
     module, _, name = str(answer.get("kind") or "").partition(":")
     kind: Any = None
     if module == "builtins" or module == "cad.engine" or module.startswith("cad.engine."):
@@ -315,16 +354,62 @@ def _failed(answer: dict[str, Any]) -> Exception:
         except ImportError:
             kind = None
     if not (isinstance(kind, type) and issubclass(kind, ValueError)):
-        return EngineError(text) if not module else ValueError(text)
+        if module:
+            return ValueError(text)
+        failed = EngineError(text)
+        if isinstance(answer.get("type"), str):
+            failed.raised = answer["type"]  # what the engine failed with: the facts' type (``_error``)
+        if isinstance(answer.get("reason"), str):
+            failed.reason = answer["reason"]  # why a check did not complete (``check``)
+        return failed
     try:
         error = kind(text)
     except TypeError:  # a refusal whose type takes more than its words
         error = ValueError(text)
-    for key in ("state", "rebuild"):  # a document not held: what it is, and what builds it again
+    # A document not held: what it is, and what builds it again; a snapshot's refusal: the part it refused; a
+    # change of parameters refused: why, by one word, what to do, and a parameter's own reason.
+    for key in ("state", "rebuild", "part", "code", "hint", "reason"):
         if key in answer and hasattr(error, key):
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
     return error
+
+
+def _interpreter() -> dict[str, Any]:
+    """What an order that starts or reaches a script's worker says of the Python it comes from
+    (``contract.interpreter``: its executable, environment, release and worker contract), which the
+    server checks against its own contract and builds the script in; nothing from a base the server made
+    (``cad run``'s), whose scripts it builds in its own environment."""
+    from cad.engine.contract import interpreter
+
+    named = interpreter()
+    return {"interpreter": named} if named is not None else {}
+
+
+# The update notice a run of a script says once (``contract.notice``), as the build that heard the
+# server's release left it, and whether it was said: per process, so a forked child is a run of its own.
+_NOTICE: dict[str, Any] = {"pid": None, "line": None, "said": False}
+
+
+def _heard_release(server: Any) -> None:
+    """The server's release, as a build of this run's in its caller's own Python heard it: kept as the
+    line its run says once (``say_notice``) when it is another release than this library, under one
+    contract (the build ran)."""
+    from cad.engine.contract import notice
+
+    if _NOTICE["pid"] != os.getpid():
+        _NOTICE.update(pid=os.getpid(), line=None, said=False)
+    if _NOTICE["line"] is None and not _NOTICE["said"]:
+        _NOTICE["line"] = notice(server)
+
+
+def say_notice() -> None:
+    """The update notice this run heard (``_heard_release``), on stderr, once a run: after the report of
+    the model call that heard it, never in its way."""
+    if _NOTICE["pid"] != os.getpid() or not _NOTICE["line"] or _NOTICE["said"]:
+        return
+    _NOTICE["said"] = True
+    print(_NOTICE["line"], file=sys.stderr, flush=True)
 
 
 def _program() -> str | None:
@@ -392,8 +477,11 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 streamed = streamed or (log is not None and message.get("stream") == "model")
                 shown(message["log"] if message.get("stream") == "model" else f"  {message['log']}")
 
+            # The Python this script runs in, which the server builds it in (``contract.interpreter``).
+            named = _interpreter()
             order = {"op": "build", "script": str(script), "functions": functions,
-                     "cwd": str(cwd), "verify": verify, "profile": profile, "run": _run(), "program": _program()}
+                     "cwd": str(cwd), "verify": verify, "profile": profile, "run": _run(), "program": _program(),
+                     **named}
             try:
                 answer = _ask(order, relay, frames)
             except EngineError as error:
@@ -402,8 +490,12 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 if not streamed or WORKER_STDERR not in str(error):
                     raise
                 # A dead worker's stderr tail is what this log just showed: said once.
-                raise EngineError(str(error).partition(WORKER_STDERR)[0]) from None
+                again = EngineError(str(error).partition(WORKER_STDERR)[0])
+                again.raised = error.raised
+                raise again from None
             reports, fresh = answer["done"], answer.get("worker", {}).get("fresh")
+            if named:
+                _heard_release(answer.get("release"))
     finally:
         if bar is not None:
             bar.close()
@@ -441,7 +533,9 @@ def _source(source: Any) -> dict[str, Any]:
     path = Path(text).resolve()
     if path.suffix.lower() not in SOURCES + MESHES:
         # A script is the commonest such source: its run makes the document, and prints its id.
-        run = (f"; run `cad run {text}` first, then export its document by id"
+        from cad.engine.said import COMMAND
+
+        run = (f"; run `{COMMAND} run {text}` first, then export its document by id"
                if path.suffix.lower() == ".py" else "")
         raise ExportRefused(f"{path.name} is no document: an export reads an .xbf, a .step, a mesh "
                             f"({', '.join(MESHES)}) or a document id{run}")
@@ -450,19 +544,34 @@ def _source(source: Any) -> dict[str, Any]:
     return {"path": str(path)}
 
 
-def export(source: Any, *destinations: Any,
+def export(source: Any, *destinations: Any, tolerance: float | None = None, angle: float | None = None,
+           zero: str | None = None,
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
-    ``.glb``, ``.stl``, ``.3mf``, and ``.dxf`` of a planar document): the document of an
+    ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, and ``.xml`` or ``.mjcf``: an MJCF, the
+    document's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,
+    ``export/mjcf.py``; ``.urdf``: the same description as ROS reads one, its meshes in a ``meshes``
+    folder beside it, ``export/urdf.py``): the document of an
     ``.xbf``, of a ``.step`` read into one, of a handle (``Document``) or a document id (the one the
     engine holds, never built), or of a ``Model`` (called first, as this program's own call of it builds it); or a mesh file (``.glb``,
     ``.stl``, ``.3mf``) to the other two mesh kinds, each file holding what its format carries,
-    with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP or DXF is made from one). Several
+    with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP, DXF, MJCF or URDF is made from one). Several
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
-    carries every configuration sequence the document defines, as a clip. A call the program's own
-    code makes (``python exports.py``) says each file, as ``cad export`` does. Where the export is
+    carries every configuration sequence the document defines, as a clip. A GLB, an STL and a 3MF are
+    meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part and 28.5
+    degrees), unless ``tolerance`` gives an absolute ceiling in millimetres (at least
+    ``export.MIN_TOLERANCE``), for a print whose fits are finer or a picture whose curves are, or
+    ``angle`` a ceiling in degrees (``export.MIN_ANGLE`` to ``export.MAX_ANGLE``): each part is then
+    meshed again at the finer of each for these files, and each file says it; every destination is
+    then a GLB, an STL or a 3MF. An MJCF and a URDF are the robot description at the as-built state,
+    unless ``zero`` names a mechanism state to take every joint's zero at (``describe``'s **The zero**:
+    the bodies posed there, each joint's value there its zero, its limits and the other states around
+    it); every destination is then an MJCF or a URDF. Each robot file's ``Written.robot`` says what it
+    holds, and the program's own call says it on stderr after the file's line (``said.robot``). A call
+    the program's own
+    code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
     terminal and nowhere when it is not, ``False`` nowhere, a callable each frame."""
@@ -472,7 +581,7 @@ def export(source: Any, *destinations: Any,
     if bar is not None:
         log = bar.around(log or (lambda _text: None))  # a line of the log goes above the bar
     try:
-        return _said(_exporting(source, destinations, log, daemon, frames), destinations)
+        return _said(_exporting(source, destinations, log, daemon, frames, tolerance, angle, zero), destinations)
     finally:
         if bar is not None:
             bar.close()
@@ -480,10 +589,10 @@ def export(source: Any, *destinations: Any,
 
 def _said(written: list[Written], destinations: tuple) -> list[Written]:
     """``written``, a line said of each file when the call is the program's own (the first frame
-    outside this module, past the verb's observer, is ``__main__``'s), as a model call's report is
-    said (``Model.__call__``)."""
+    outside this module and a document type's dispatch of it, past the verb's observer, is
+    ``__main__``'s), as a model call's report is said (``Model.__call__``)."""
     frame = sys._getframe(1)
-    while frame is not None and frame.f_globals.get("__name__") == __name__:
+    while frame is not None and frame.f_globals.get("__name__") in (__name__, "cad._internal.document_type"):
         frame = frame.f_back
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
         from cad.engine.said import written as said_written
@@ -493,14 +602,17 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 
 
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
-               progress: Callable[[dict], None] | None = None) -> list[Written]:
-    from cad.engine.export import ExportRefused, kind_of
+               progress: Callable[[dict], None] | None = None, tolerance: float | None = None,
+               angle: float | None = None, zero: str | None = None) -> list[Written]:
+    from cad.engine.export import ExportRefused, angle_of, kind_of, tolerance_of, zero_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
     resolved = [Path(os.fspath(destination)).resolve() for destination in destinations]
     for destination in resolved:
         kind_of(destination)
+    tolerance, angle = tolerance_of(tolerance, resolved), angle_of(angle, resolved)
+    zero = zero_of(zero, resolved)
     source = _called(source, daemon)
     spec = _source(source)
     if "path" in spec:
@@ -512,10 +624,24 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
                 raise ExportRefused(why)
     cwd = str(source.cwd) if isinstance(source, Document) else os.getcwd()
     shown = log or (lambda _text: None)
-    order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd}
+    order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd,
+             **({"tolerance": tolerance} if tolerance is not None else {}),
+             **({"angle": angle} if angle is not None else {}),
+             **({"zero": zero} if zero is not None else {})}
     done = _exported(order, spec, shown, daemon, progress)
-    return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True))
-            for row in done["files"]]
+    unmet = [option for option, asked in (("tolerance", tolerance), ("angle", angle))
+             if asked is not None and any(row.get(option) != asked for row in done["files"])]
+    if unmet:
+        # A server of a release before the option writes the files at its own, and says none.
+        raise Outdated(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
+                          f"own {' and '.join(unmet)}: it is older than this library. Update cad "
+                          "and export again")
+    if zero is not None and any(row.get("zero") != zero for row in done["files"]):
+        # A server of a release before the zero describes the robot as built, and says no zero.
+        raise Outdated(f"the CAD server running wrote {', '.join(Path(p).name for p in destinations)} as built, "
+                          "not at the zero state: it is older than this library. Update cad and export again")
+    return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True),
+                    row.get("robot")) for row in done["files"]]
 
 
 def _called(source: Any, daemon: bool) -> Any:
@@ -538,6 +664,7 @@ def _exported(order: dict[str, Any], spec: dict[str, Any], shown: Callable[[str]
     else:
         from cad.engine import progress as progressing
         from cad.engine.build import BuildError
+        from cad.engine.export import ExportIncomplete
         from cad.engine.worker import _export, job_progress
 
         said = job_progress(progress or (lambda _frame: None), order)
@@ -546,6 +673,10 @@ def _exported(order: dict[str, Any], spec: dict[str, Any], shown: Callable[[str]
                 done = _export(order, shown)
         except BuildError as error:
             raise EngineError(str(error)) from None
+        except ExportIncomplete as error:  # some files written: a failure, as the worker answers it
+            failed = EngineError(str(error))
+            failed.raised = error.failed_type()["type"]
+            raise failed from error
     _heard("reports", done.get("reports"))
     failed = [report for report in done.get("reports") or [] if not report.get("ok")]
     if failed:
@@ -553,8 +684,122 @@ def _exported(order: dict[str, Any], spec: dict[str, Any], shown: Callable[[str]
     return done
 
 
+class Unreached(ConnectionError):
+    """No engine could be reached or started for a check (``check``): its words, the client's
+    (``client.connect``: none registered, a sandbox that cannot start one, the system's refusal)."""
+
+    reason = "unreachable"
+
+
+class Unanswered(EngineError):
+    """An engine that measured no check answered one: a server of a release before checks in memory, or one
+    whose library is another release, or other code or libraries, than this (``checks_runner.Runner``), so it
+    measured nothing: its answer carried no ``checked``."""
+
+    reason = "unanswered"
+    refusal = False
+
+
+class Stopped(EngineError):
+    """The engine stopped while it measured a check (``check``): an update moving the device to another
+    release, or ``cad stop``. Nothing is measured here instead: the check is the engine's to run again."""
+
+    reason = "stopped"
+    refusal = False
+
+
+STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
+           "run the check again")
+#: Where a check was measured, as its answer says it (``check``'s ``measured_in``): in the engine, or -- what a
+#: caller that measures it itself after ``Unreached`` or ``Unanswered`` says of its own result -- in the caller.
+IN_ENGINE, IN_CALLER = "engine", "caller"
+
+
+def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
+    """A manufacturing check of a document, measured in the engine's checks processes (``worker._check``): a
+    STEP's or an xbf's path, read once while its bytes stay as they were, or a document the engine holds (its
+    handle or id), from the bytes it holds of it -- never in a model's worker, so nothing of that model waits
+    for its check. ``check`` is ``{"type", "process", "resolved", "candidates", "given"}``, its options resolved
+    by the caller (``manufacturing.options``). The same check of an unchanged document is answered from the
+    results the engine keeps (``reused``: true), measuring nothing, and one asked while the same one runs waits
+    for it, which is said on stderr; a check runs to its end even if its caller goes, so asking again finds its
+    result. The answer says the release whose library measured it (``release``) and where
+    (``measured_in``: ``IN_ENGINE``).
+
+    Plain data, which ``manufacturing.measure`` finishes: ``{"measured": {"process", "resolved",
+    "report"}}``, ``{"unmeasured": {"code", "message"}}`` or ``{"refused": words}``. A refusal is raised as its
+    type (``serve.NotHeld`` for an id the engine does not hold). A check that did not complete is never a
+    result: it raises, with one word for why (``reason``) --
+
+    - ``Unreached`` (``unreachable``): no engine can be reached or started;
+    - ``Unanswered`` (``unanswered``): the engine measured nothing -- of a release before checks in memory, or of
+      another release, code or libraries than this library's, which it says before anything is measured;
+    - ``Stopped`` (``stopped``): the engine stopped before it answered (an update, ``cad stop``);
+    - an ``EngineError`` whose ``reason`` is ``cancelled`` (every caller of it had gone and its process was given
+      to another check), ``over_time`` or ``over_memory`` (past a check's limits, ``CAD_ENGINE_CHECK_SECONDS``
+      and ``CAD_ENGINE_CHECK_RSS_MB``), ``process_lost`` (its checks process exited under it), ``no_kernel``
+      (none could be started), ``superseded`` (its document was built again, or its file rewritten, under each
+      try of it: a check whose model is built again is stopped and asked again of the model as it is now, which
+      one line on stderr says) or ``error`` (the measuring itself failed).
+
+    After ``Unreached`` (of a file) or ``Unanswered`` a caller with the kernel may measure the document
+    itself (in a process it holds to the same limits, ``manufacturing._watched``), and says ``IN_CALLER`` in
+    its result: one line on stderr says, there, why the engine measures
+    nothing and that such a check is kept by no one, so it is measured again each time it is asked."""
+    from cad.engine import client
+    from cad.engine.contract import measuring, release
+    from cad.engine.export import MESHES, ExportRefused
+
+    source = _called(source, True)
+    spec = _source(source)
+    if "path" in spec and Path(spec["path"]).suffix.lower() in MESHES:
+        raise ExportRefused(f"{Path(spec['path']).name} is a mesh: its check is measured from its triangles")
+    cwd = str(source.cwd) if isinstance(source, Document) else os.getcwd()
+    mine = measuring()
+    try:
+        connection = client.connect()
+    except ConnectionError as error:
+        if "path" in spec:  # a file is its caller's to measure; a document the engine holds is no one else's
+            _outside(mine, f"no CAD server could be reached ({error})")
+        raise Unreached(str(error)) from None
+    # Its release and what measures here (``contract.measuring``): no process unlike it measures it.
+    order = {"op": "export", "source": spec, "destinations": [], "cwd": cwd, "caller": release(),
+             "measures": mine, "check": {**check, "token": os.urandom(8).hex()}}
+
+    def relay(message: dict[str, Any]) -> None:
+        if message.get("stream") == "waiting":  # what it waits for: the same check running, or a busy process
+            try:
+                print(message["log"], file=sys.stderr, flush=True)
+            except OSError:
+                pass  # a standard error closed (its reader gone): the check is waited for all the same
+
+    try:
+        done = _ask(order, relay, connection=connection)["done"]
+    except ConnectionError:  # the engine's connection closed, or was reset, before the answer: the engine stopped
+        raise Stopped(STOPPED) from None
+    checked = done.get("checked") if isinstance(done, dict) else None
+    if not isinstance(checked, dict):
+        # Another release's server, or one of other code or libraries, answers with no check, having measured nothing.
+        _outside(mine, "the CAD server running is of another release, code or libraries than this library")
+        raise Unanswered("the CAD server running measured no check: it is of another release than this library")
+    return {**checked, "measured_in": IN_ENGINE, **({"reused": True} if done.get("reused") else {})}
+
+
+def _outside(measures: dict[str, Any], why: str) -> None:
+    """One line on stderr from a process that can measure a check itself (one with the kernel:
+    ``contract.measuring`` names its libraries), as the engine measures nothing for it: why, and what a check
+    measured outside the engine costs."""
+    if not measures.get("libraries"):
+        return  # a command with no kernel measures nothing itself: the process it hands the check to says it
+    try:
+        print(f"cad: {why}, so nothing keeps this manufacturing check: measured by this caller, it is measured "
+              "again each time it is asked", file=sys.stderr, flush=True)
+    except OSError:
+        pass
+
+
 def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,
-             grid: bool = False, pose: Any = None, width: int | None = None,
+             grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
              height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
              measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]:
     """Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh
@@ -566,9 +811,10 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     annotation's ink was drawn in, which the packet holds. ``out`` a folder (a path ending in a
     separator, or one that is there) is given a name inside it, the source's stem and the time
     (``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it
-    was (``snapshot.write_png``).
+    was (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the
+    model lit in a studio, in its materials, on a floor with its shadow, in perspective.
 
-    ``job`` in place of ``out`` is every picture a job names (``cad snapshot --job``), a list of
+    ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
     ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
     object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
     and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
@@ -584,7 +830,7 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
 
     frames, bar = progressing.sink(progress)
     try:
-        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, pose=pose,
+        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                          width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                          measurements=measurements, progress=frames)
     finally:
@@ -592,14 +838,14 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
             bar.close()
 
 
-def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, pose: Any,
+def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
         if out is not None:
             raise TypeError("snapshot() takes out or job, not both: a job's outputs name its pictures")
-        return _job(job, source, display=display, camera=camera, grid=grid, pose=pose, width=width,
+        return _job(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose, width=width,
                     height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                     measurements=measurements, progress=progress)
     if source is None or out is None:
@@ -607,12 +853,12 @@ def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, gri
     from cad.engine import snapshot as drawing
 
     out = drawing.picture_path(out, source)
-    return _snapshot(source, out, display=display, camera=camera, grid=grid, pose=pose,
+    return _snapshot(source, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                      width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                      measurements=measurements, progress=progress)
 
 
-def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, pose: Any,
+def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
               width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None = None) -> Drawn:
     from cad.engine import snapshot as drawing
@@ -621,25 +867,43 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
 
     if isinstance(source, (Model, Document)) or is_id(os.fspath(source)):
         if out.suffix.lower() != ".png":
-            raise drawing.SnapshotRefused(f"a snapshot is a .png; {out.name} is not one")
+            raise drawing.SnapshotRefused(f"a snapshot is a .png; {out.name} is not one", part="out")
         drawing.options(display, camera, grid, width, height, size_profile)  # refused here, before any build
         drawing.parse_annotation(annotation)  # refused here, before any build
         source = _called(source, daemon)
         spec = _source(source)
         if isinstance(annotation, (str, Path)) and not str(annotation).lstrip().startswith("{"):
             annotation = str(Path(annotation).expanduser().resolve())  # read in the worker, beside its packets
-        draw = {"out": str(out), "display": display, "camera": camera, "grid": grid,
+        draw = {"out": str(out), "display": display, "camera": camera, "grid": grid, "preview": bool(preview),
                 "pose": drawing.parse_pose(pose) if isinstance(pose, str) else pose, "width": width,
                 "height": height, "size_profile": size_profile, "annotation": annotation,
                 "measurements": drawing.parse_measurements(measurements)}
         order = {"op": "export", "source": spec, "destinations": [], "draw": draw,
                  "cwd": str(source.cwd) if isinstance(source, Document) else os.getcwd()}
-        found = _exported(order, spec, lambda _text: None, daemon, progress)["drawn"]
+        try:
+            found = _exported(order, spec, lambda _text: None, daemon, progress)["drawn"]
+        except Exception as error:
+            # An engine with no OpenGL context: drawn here, where this process can draw (``snapshot.drawable_here``),
+            # from an xbf of the document the engine exports (an export draws nothing).
+            if not (daemon and "id" in spec and drawing._here_instead(error)):
+                raise
+            import tempfile
+
+            with tempfile.TemporaryDirectory(prefix="cad-snapshot-") as folder:
+                saved = Path(folder) / "document.xbf"
+                export(spec["id"], saved, progress=False)
+                found = _snapshot(saved, out, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
+                                  width=width,
+                                  height=height, size_profile=size_profile, daemon=False, annotation=annotation,
+                                  measurements=measurements, progress=progress).report
         if "id" in spec:
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
-    shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile)
-    found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed,
+    _whole(source)
+    shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile,
+                                          board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
+                                          schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
+    found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed, preview=bool(preview),
                              size=None if width is None and height is None and size_profile is None else size,
                              daemon=daemon, pose=drawing.parse_pose(pose) if isinstance(pose, str) else pose,
                              annotation=drawing.parse_annotation(annotation),
@@ -648,14 +912,32 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
     return Drawn(out, found["width"], found["height"], found)
 
 
-def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, pose: Any,
+_ELEMENT = re.compile(r"(?:^|/)\s*(?:(?:face|edge|vertex)\s+\d+|[fev]:.*)\s*$")
+
+
+def _whole(source: Any) -> None:
+    """A snapshot draws a whole document: a source that names something inside one (``ID#bracket``,
+    ``arm.step#arm/face 3``, a ``FILE#REF`` that is no file) is refused, saying what to draw instead."""
+    from cad.engine.addresses import parts
+    from cad.engine.snapshot import SnapshotRefused
+
+    named, ref = parts(os.fspath(source))
+    if ref is None:
+        return
+    owner = _ELEMENT.sub("", ref).strip(" /")  # the part an element ref is on, or the part itself
+    alone = f'--display \'{{"isolated": {json.dumps([owner or "PART"])}}}\' draws {owner or "a part"} alone'
+    raise SnapshotRefused(f"a snapshot draws a whole document, so its source names no #{ref}: give {named}; {alone}",
+                          part="source")
+
+
+def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
          width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
          measurements: Any, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
     """``snapshot(job=...)``: every picture the job names (see ``snapshot``)."""
     from cad.engine import snapshot as drawing
 
     _heard("source", os.fspath(source) if source is not None else drawing.job_input(job))
-    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, pose=pose,
+    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
                                     width=width, height=height, size_profile=size_profile, annotation=annotation,
                                     measurements=measurements)
     return [Drawn(Path(found["output"]), found["width"], found["height"], found)
@@ -671,24 +953,25 @@ def _document(source: Any, verb: str, named: str | None = None) -> Path | str:
     path = key(os.fspath(source))
     if isinstance(path, Path):
         if path.suffix.lower() not in (".xbf", ".step", ".stp"):
-            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a document id")
+            # A script is the commonest such source, as for an export (``_source``): its run makes the document.
+            from cad.engine.said import COMMAND
+
+            run = (f"; run `{COMMAND} run {os.fspath(source)}` first, then {verb} its document by id"
+                   if path.suffix.lower() == ".py" else "")
+            raise ValueError(f"{named or os.fspath(source)} is no document: {verb} reads an .xbf, a .step or a "
+                             f"document id{run}")
         if not path.is_file():
             raise ValueError(f"no document {named or source}")
     return path
 
 
-def serve(source: Any, port: int = 0, three: str | None = None) -> Served:
+def serve(source: Any, port: int = 0) -> Served:
     """Serve a document (``.xbf``, ``.step``, or a document id the engine holds) from the daemon;
     its page's URL, ``/<id>``."""
     from cad.engine.addresses import key
 
     path = _document(source, "serve")
-    if three is None:
-        from cad.engine.serve import find_three
-
-        found = find_three()
-        three = str(found) if found else None
-    answer = _ask({"op": "serve", "path": str(path), "port": port, "three": three})
+    answer = _ask({"op": "serve", "path": str(path), "port": port})
     return Served(answer["url"], answer["port"])
 
 
@@ -705,7 +988,7 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
     name (``refs.RefError``). No query builds a missing model or writes its declared
     outputs. ``query="build"`` returns file metadata/closure or live build metadata;
     ``query="geometry"`` requires a ref, and ``query="closure"`` accepts none.
-    ``query="summary"`` (``cad inspect DOC`` with no ref) is ``{"summary", "closure"}``:
+    ``query="summary"`` (``cad xbf inspect DOC`` with no ref) is ``{"summary", "closure"}``:
     what the document holds at a glance (``_summary``), and its closure, as the engine holds it; of
     a GLB, ``{"mesh"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).
     ``query="structure"`` is the summary without bounds, volume or mass and requests no measurements.
@@ -730,10 +1013,13 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
 
     from cad.engine import refs
     from cad.engine.said import weighed
+    from cad.engine.weights import declares
 
-    from cad.engine.addresses import key, split
+    from cad.engine.addresses import key, parts, split
 
-    named = os.fspath(source).partition("#")[0]
+    if isinstance(source, Document):
+        source = source.id  # the handle a model call returns, as every verb takes it: its document, by its id
+    named = parts(source)[0]
     source, embedded_ref = split(source)
     if ref is not None and embedded_ref is not None and ref != embedded_ref:
         raise EngineError("source reference and ref disagree")
@@ -800,6 +1086,8 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     # Every part a part's or an assembly's ref weighs, measured in one read (its facts by key).
     weighs = sorted({structure["prototypes"][node.payload["prototype"]]["key"]
                      for hit in hits if hit.kind is None for node in hit.node.parts()})
+    if weighs and declares(structure):  # a declared mass scales the parts beside the ref's too: every part measured
+        weighs = sorted({prototype["key"] for prototype in structure["prototypes"]})
     measured = get("/volumes?keys=" + ",".join(quote(key, safe="") for key in weighs)) if weighs else {}
     volumes = {key: facts["volume"] for key, facts in measured.items()}
     boxes = {key: facts.get("box") for key, facts in measured.items()}
@@ -827,10 +1115,12 @@ def _mesh(path: Path, named: str, query: str) -> Facts:
     if not path.is_file():
         raise ValueError(f"no document {named}")
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
-        said = (f"`cad inspect {path.name}` alone tells its nodes, meshes and animations, and "
-                f"`cad viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
-                f"inspect reads nothing more of it: `cad viewer {path.name}` shows it, and the document it was "
-                "exported from, inspected, tells the rest")
+        from cad.engine.said import COMMAND
+
+        said = (f"`{COMMAND} glb inspect {path.name}` alone tells its nodes, meshes and animations, and "
+                f"`{COMMAND} viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
+                f"inspect reads nothing more of it: `{COMMAND} viewer {path.name}` shows it, and the document it "
+                "was exported from, inspected, tells the rest")
         raise ValueError(f"{path.name} is a mesh: it has no B-rep for a ref to name and no build closure (only an "
                          f".xbf carries one); {said}")
     from cad.engine.formats.gltf import _chunks
@@ -877,8 +1167,10 @@ def _placed(structure: dict[str, Any], hit: Any, boxes: dict[str, Any]) -> dict[
 def _no_closure(path: Path) -> str:
     """Why a STEP holds no build closure: the format carries none (an xbf does, law 1), whoever wrote
     it -- cadgen's own export among them -- and what to inspect instead."""
+    from cad.engine.said import COMMAND
+
     return (f"{path.name} holds no build closure: a STEP file carries none, only an .xbf does; inspect the model's "
-            f"document by its id for its closure, or name a ref in the file (cad inspect {path.name} REF)")
+            f"document by its id for its closure, or name a ref in the file ({COMMAND} step inspect {path.name} REF)")
 
 
 def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -906,16 +1198,21 @@ def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any], ident: str,
              progress: Callable[[dict], None] | None = None, *, measured: bool = True) -> dict[str, Any]:
-    """What a served document holds, at a glance (``cad inspect DOC``): its name and id; its
+    """What a served document holds, at a glance (``cad xbf inspect DOC``): its name and id; its
     state -- a model's (``live``, ``held``, ...: ``ModelDocuments.state``), where the engine holds
     it and whether its cache has it, or ``file`` for a file's document; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
-    occurrences stand; its materials and their masses, where any part has one; its joints,
-    mechanism states, configuration sequences and animations; and a model's declared files.
-    Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume or masses, and
-    nothing measured for them -- the lists alone."""
+    occurrences stand, and the occurrences of a part with a solid inside out (``inverted``); its
+    materials and their masses, where any part has one, and what the model declares a part or an assembly to weigh
+    and its point masses (``declared``: the masses then as the robot description weighs them, ``weights``); the
+    parts whose texture maps are not drawn (``untextured``); its joints,
+    mechanism states, configuration sequences and animations; the parameters its script declares
+    (``parameters``); and a model's declared files.
+    Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume, inside-out parts or
+    masses, and nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
+    from cad.engine.weights import declares, weigh
 
     model = None
     if not isinstance(path, Path):
@@ -946,10 +1243,13 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     low, high, volume = [math.inf] * 3, [-math.inf] * 3, 0.0
     materials: dict[str, dict[str, Any]] = {}
     unweighed: list[str] = []
+    inverted: list[str] = []
     for instance in instances:
         prototype = prototypes[instance["prototype"]]
         facts = each[prototype["key"]] if measured else {}
         volume += facts.get("volume") or 0.0
+        if facts.get("inverted"):
+            inverted.append(instance["path"])
         if facts.get("box"):
             box = placed_facts({"box": facts["box"]}, instance["matrix"])["box"]
             low = [min(a, b) for a, b in zip(low, box["min"])]
@@ -971,24 +1271,48 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     joints = [{"name": pair.get("label"), "type": pair.get("type"), "range": pair.get("limits"),
                "units": pair.get("units"), "asBuilt": built.get(pair.get("label"))}
               for pair in kinematics.get("pairs") or []]
+    declared = None
+    if measured and declares(structure):
+        # A part or an assembly declared to weigh grams, and the point masses a part declares, weigh as the robot
+        # description weighs them (``weights``): the materials' masses, the total and the parts that weigh nothing.
+        weights = weigh(structure, {key: facts.get("volume") for key, facts in each.items()})
+        declared = weights.said()
+        for row in materials.values():
+            row["mass"] = None
+        for at, instance in enumerate(instances):
+            material = (prototypes[instance["prototype"]].get("material") or {}).get("material")
+            if material and weights.parts.get(at) is not None:
+                row = materials[material["name"]]
+                row["mass"] = (row["mass"] or 0.0) + weights.parts[at]
+        if weights.refused is None:
+            unweighed = [instance["path"] for at, instance in enumerate(instances) if not weights.weighs(at)]
     weighed = [row["mass"] for row in materials.values() if row["mass"] is not None]
+    if declared is not None:
+        weighed = [] if declared["mass"] is None else [declared["mass"]]
     found = {
         "name": structure.get("name"), "id": ident, "state": state,
         "parts": {"occurrences": len(instances), "distinct": len(prototypes), "root": (structure.get("tree") or {}).get("name")},
-        "bounds": bounds, "volume": volume,
+        "bounds": bounds, "volume": volume, "inverted": inverted,
         "materials": list(materials.values()), "mass": sum(weighed) if weighed else None,
-        "unweighed": unweighed if materials else [],
+        "unweighed": unweighed if materials or declared else [],
+        **({"declared": declared} if declared is not None else {}),
+        # Each part whose materials' texture maps are drawn as their scalar look (``untextured``).
+        "untextured": [{"part": prototype.get("name") or prototype["key"], "materials": prototype["untextured"]}
+                       for prototype in prototypes if prototype.get("untextured")],
         "joints": joints,
         "couplings": couplings_of(kinematics),
         "states": [{"name": name, "values": values} for name, values in (kinematics.get("configurations") or {}).items()],
         "sequences": [{"name": name, "duration": motion.get("duration")}
                       for name, motion in (kinematics.get("motions") or {}).items()],
         "animations": structure.get("animations") or [],
+        # What its script declares (``parameters.served``): each its value, kind, range and unit, and whether
+        # the viewer's Save can write it (``writable``, else ``reason``) and where (``source``).
+        "parameters": list(structure.get("parameters") or []),
         "files": list((model or {}).get("files") or []),
     }
     if not measured:
         # The lists alone: nothing was measured, so there are no bounds, volume or masses (never a zero).
-        for name in ("bounds", "volume", "mass"):
+        for name in ("bounds", "volume", "inverted", "mass"):
             del found[name]
         found["materials"] = [{key: value for key, value in row.items() if key != "mass"} for row in found["materials"]]
     return found
@@ -1028,9 +1352,10 @@ def stop() -> bool:
 #     error     why it failed, or None: {type (the error's class, ``module.Name`` or a builtin's name; None
 #               when no error says), frames ([{file, line, function}], innermost last), engine (raised in
 #               the engine's own code, or its worker's), refused (the engine refused the request by name),
-#               here (raised in this process, as against told by the daemon or a report)}
+#               here (raised in this process, as against told by the daemon or a report), part (a snapshot's
+#               refusal: the part of the request it named, ``SnapshotRefused.part``; where it named one)}
 #     source    export, snapshot: what it read -- "xbf", "step", "glb", "stl", "threemf", "dxf", "urdf",
-#               "sdf", "srdf", "model" (a script's model) or "other"
+#               "srdf", "model" (a script's model) or "other"
 #     found     snapshot: the source file is there (a model's always is)
 #     outputs   export: each destination, {kind, seconds (None for one not written)}
 #     pose      snapshot: a pose was asked for
@@ -1042,7 +1367,8 @@ observers: list[Callable[[dict[str, Any]], None]] = []
 _HEARD = threading.local()  # what the daemon's answers said while a verb ran in this thread (``_heard``)
 _ENGINE = os.path.dirname(os.path.abspath(__file__)) + os.sep
 _SUFFIXES = {".xbf": "xbf", ".step": "step", ".stp": "step", ".glb": "glb", ".stl": "stl", ".3mf": "threemf",
-             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf"}
+             ".dxf": "dxf", ".urdf": "urdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
+             ".kicad_sch": "kicad_sch"}
 _FRAME = re.compile(r'  File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<function>\S.*)')
 _TYPE = re.compile(r"(?P<type>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
 _DIED = re.compile(r"exited \((?P<status>-?\d+)\) during the build")  # the daemon's word (``services.WORKER``)
@@ -1127,7 +1453,9 @@ def _facts(verb: str, args: tuple, kwargs: dict[str, Any], heard: dict[str, Any]
             found["outputs"] = [{"kind": _SUFFIXES.get(Path(os.fspath(path)).suffix.lower(), "other"),
                                  "seconds": None} for path in args[1:]]
     if verb == "snapshot":
-        found["found"] = found["source"] == "model" or Path(os.fspath(source)).is_file()
+        from cad.engine.addresses import parts
+
+        found["found"] = found["source"] == "model" or Path(parts(os.fspath(source))[0]).is_file()
     return found
 
 
@@ -1136,9 +1464,10 @@ def _kind(source: Any) -> str:
 
     if isinstance(source, (Model, Document)):
         return "model"
+    from cad.engine.addresses import parts
     from cad.engine.ids import is_id
 
-    text = os.fspath(source)
+    text = parts(os.fspath(source))[0]  # the document a FILE#REF or an ID#REF names
     if is_id(text):
         return "model"  # a document by its id
     return _SUFFIXES.get(Path(text).suffix.lower(), "other")
@@ -1153,13 +1482,13 @@ def _model(report: dict[str, Any]) -> dict[str, Any]:
 def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: dict[str, Any]) -> dict[str, Any] | None:
     """Why a verb failed: the first failed report's error -- a body's (the model's frames, ``build``), or
     a file the engine could not write (``trace``, the engine's) -- else what the verb raised: the worker's
-    own error as it answered it, a worker that died under the work (``worker["died"]``), a refusal, or an
-    error raised here."""
+    own error as it answered it, a worker that died under the work (``worker["died"]``) -- not one the engine
+    stopped itself, which its answer names by a type (past the ceiling on one process, ``MemoryError``) --, a
+    refusal, or an error raised here."""
     told = {"engine": True, "refused": False, "here": False}
     failed = next((report for report in reports if not report.get("ok")), None)
     if failed is not None:
-        trace = failed.get("trace")
-        return {**_read(trace or failed.get("error") or ""), **told, "engine": bool(trace)}
+        return told_error(failed)
     if error is None:
         return None
     if isinstance(error, EngineError):
@@ -1167,16 +1496,22 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
 
         text = str(error).partition(WORKER_STDERR)[0]
         died = _DIED.search(text)
-        if died:
+        if died and not error.raised:
             worker["died"] = int(died["status"])
             return {"type": None, "frames": [], **told}
         if _TRACEBACK in text:
             return {**_read(text), **told}
-        return {"type": None, "frames": [], **told, "refused": text != "no engine daemon"}
+        if error.raised:  # a failure the engine named by its type: what it is, a refusal only where that says so
+            refused = any(error.raised == f"{module}.{name}" for module, name in _REFUSALS)
+            return {"type": error.raised, "frames": [], **told, "refused": refused}
+        # By its class, never its words: a subclass names itself (``Outdated``: the server older than this library).
+        kind = type(error)
+        named = None if kind is EngineError else f"{kind.__module__}.{kind.__qualname__}"
+        return {"type": named, "frames": [], **told, "refused": error.refusal}
     if getattr(error, "_engine_refusal", False):  # the worker's refusal, raised here as its type (``_failed``)
         kind = type(error)
         return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
-                "frames": [], **told, "refused": True}
+                "frames": [], **told, "refused": True, **_part(error)}
     refusals = tuple(kind for kind in (getattr(sys.modules.get(module), name, None) for module, name in _REFUSALS)
                      if isinstance(kind, type))
     frames = [{"file": frame.f_code.co_filename, "line": int(line or 0), "function": frame.f_code.co_name}
@@ -1184,7 +1519,25 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     kind = type(error)
     return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
             "frames": frames, "engine": bool(frames) and os.path.abspath(frames[-1]["file"]).startswith(_ENGINE),
-            "refused": isinstance(error, refusals), "here": True}
+            "refused": isinstance(error, refusals), "here": True, **_part(error)}
+
+
+def _part(error: BaseException) -> dict[str, str]:
+    """The part of a snapshot's request a refusal named (``SnapshotRefused.part``), where it named one."""
+    part = getattr(error, "part", None)
+    return {"part": part} if isinstance(part, str) else {}
+
+
+def told_error(report: dict[str, Any]) -> dict[str, Any]:
+    """A failed build report's error as the verbs tell it (``observers``' ``error``): its type and frames,
+    innermost last -- the whole traceback the build kept (``build._raised``), else what its text shows --
+    and whether it was the engine's own, writing a file (``trace``). The server reads it to tell a mistake
+    in the library's code from the model's: for a crash report, and for whether a page offers to report
+    the failure (``cad_server.analytics.told_signature``, the one rule for both)."""
+    trace = report.get("trace")
+    raised = report.get("raised")
+    found = dict(raised) if isinstance(raised, dict) and raised.get("frames") else _read(trace or report.get("error") or "")
+    return {**found, "engine": bool(trace), "refused": False, "here": False}
 
 
 def _read(text: str) -> dict[str, Any]:

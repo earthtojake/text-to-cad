@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -51,7 +52,7 @@ class SignatureTest(unittest.TestCase):
         self.assertEqual((found["where"], found["type"], found["handled"]), ("build", "KeyError", True))
         files = [frame["file"] for frame in found["frames"]]
         self.assertIn("<user>", files)
-        self.assertEqual(files[-1], "cadgen/analytics.py", "the innermost frame is where it failed")
+        self.assertEqual(files[-1], "cad_server/analytics.py", "the innermost frame is where it failed")
         self.assertEqual(found["frames"][-1]["function"], "_Tally.note")
         self.assertTrue(analytics.valid_signature(found))
         said = json.dumps(found)
@@ -91,12 +92,12 @@ class SignatureTest(unittest.TestCase):
         exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), namespace)  # noqa: S102
         file_of = analytics._file_of
         ours = os.path.realpath(source)
-        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/_internal/generation.py"
+        with mock.patch.object(analytics, "_file_of", lambda path: "cad/_internal/generation.py"
                                if os.path.realpath(path) == ours else file_of(path)):
             self.assertIsNone(analytics.signature(_caught(namespace["told"]), "build", bugs_only=True))
             self.assertIsNone(analytics.signature(_caught(lambda: namespace["told_too"](0)), "build", bugs_only=True))
             found = analytics.signature(_caught(_user_calls(namespace["broke"])), "build", bugs_only=True)
-        self.assertEqual(found["frames"][-1], {"file": "cadgen/_internal/generation.py", "function": "broke", "line": 9})
+        self.assertEqual(found["frames"][-1], {"file": "cad/_internal/generation.py", "function": "broke", "line": 9})
 
     def test_what_a_model_asks_wrongly_of_cadgens_helpers_is_its_own_mistake(self) -> None:
         # A name build123d does not have, asked of the module cadgen's finder bound lazily (still with Python's
@@ -109,7 +110,8 @@ class SignatureTest(unittest.TestCase):
 
         missing = _caught(_user_calls(lambda: bd.Boxx))
         self.assertIsInstance(missing, AttributeError)
-        self.assertIn("Did you mean: 'Box'?", "".join(traceback.format_exception_only(missing)))
+        if sys.version_info >= (3, 12):  # Python's own hint: 3.11 gives none for a module's attribute
+            self.assertIn("Did you mean: 'Box'?", "".join(traceback.format_exception_only(missing)))
         not_a_colour = _caught(_user_calls(lambda: linear(0x2E3742, "a shape's color")))
         self.assertIsInstance(not_a_colour, ValueError)
         self.assertIn("not 3028802", str(not_a_colour))
@@ -145,7 +147,7 @@ class SignatureTest(unittest.TestCase):
         file_of, here = analytics._file_of, os.path.realpath(__file__)
         self.addCleanup(sys.setrecursionlimit, sys.getrecursionlimit())
         sys.setrecursionlimit(200)  # a short stack: each frame's file is looked up on disk
-        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/engine/model.py"
+        with mock.patch.object(analytics, "_file_of", lambda path: "cad/engine/model.py"
                                if os.path.realpath(path) == here else file_of(path)):
             theirs, mine = _caught(model), _caught(_user_calls(ours, "/work/model.py"))
             sys.setrecursionlimit(1000)
@@ -154,7 +156,7 @@ class SignatureTest(unittest.TestCase):
                     self.assertIsNone(analytics.signature(theirs, where, bugs_only=bugs_only), "theirs is in the cycle")
                     found = analytics.signature(mine, where, bugs_only=bugs_only)
                     self.assertEqual((found["type"], {frame["file"] for frame in found["frames"]}),
-                                     ("RecursionError", {"cadgen/engine/model.py"}), "the person's call is far outside it")
+                                     ("RecursionError", {"cad/engine/model.py"}), "the person's call is far outside it")
 
     def test_cadgens_own_module_gone_is_its_installation_removed_and_never_a_crash(self) -> None:
         import importlib
@@ -164,7 +166,9 @@ class SignatureTest(unittest.TestCase):
 
         for missing in ("cadgen._gone_under_this_test", "cad._internal._gone_under_this_test"):
             with self.subTest(missing=missing):
-                gone = _caught(lambda: importlib.import_module(missing))
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
+                    gone = _caught(lambda: importlib.import_module(missing))
                 self.assertIsInstance(gone, ModuleNotFoundError)
                 with mock.patch.object(cad_server, "__file__", str(Path(tempfile.gettempdir()) / "removed" / "__init__.py")):
                     self.assertIsNone(analytics.signature(gone, "command", handled=False))
@@ -204,6 +208,13 @@ class SignatureTest(unittest.TestCase):
         # status, and the crash says it as a signal's would.
         self.assertEqual(analytics.died(0xC0000005)["status"], 0xC0000005)
         self.assertTrue(analytics.valid_signature(analytics.died(0xC0000005)))
+        # The engine's crash of no kernel process says which failure it was, a word of ours; no other crash does.
+        unavailable = {"where": "tool", "type": analytics.KERNEL_UNAVAILABLE, "handled": True, "frames": [],
+                       "cause": "network"}
+        self.assertTrue(analytics.valid_signature(unavailable))
+        for bad in ({**unavailable, "cause": "dns error: failed to lookup address"}, {**good, "cause": "network"}):
+            with self.subTest(bad=bad):
+                self.assertFalse(analytics.valid_signature(bad))
         for status in (70000, -0xC0000005, 0x100000000):
             with self.subTest(status=status):
                 self.assertNotIn("status", analytics.died(status))
@@ -246,7 +257,7 @@ class FailureReasonTest(unittest.TestCase):
         self.cadgen: dict = {}
         exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), self.cadgen)  # noqa: S102
         located, ours = analytics._located, os.path.realpath(source)
-        placed = mock.patch.object(analytics, "_located", lambda path: ("cadgen", "cadgen/_internal/export.py")
+        placed = mock.patch.object(analytics, "_located", lambda path: ("ours", "cad/_internal/export.py")
                                    if os.path.realpath(path) == ours else located(path))
         placed.start()
         self.addCleanup(placed.stop)
@@ -384,6 +395,53 @@ class ServerCrashTest(_Recording):
         self.assertEqual((crash["where"], crash["tool"], crash["type"], crash["count"]), ("tool", "cad_show", "KeyError", 1))
         self.assertNotIn("secret", json.dumps(self.sent))
 
+    def test_a_kernel_environment_that_cannot_be_made_is_one_crash_with_its_cause_however_many_calls_it_fails(self) -> None:
+        # 0.11.9: 93 crashes from 12 installs, each call making the base again and failing, and nothing said why.
+        # Now the failure is remembered, every call is counted as failed for it, and its crash is sent once per
+        # making that failed, with a word for which failure it was.
+        import contextlib
+        import io
+        import subprocess
+
+        from cad.engine import places
+        from cad_server._internal import base
+
+        core = self.tmp / "core"
+        installation = base.Installation(release="9.9.9", python="3.14.2",
+                                         executable=str(base.interpreter(core)), prefix=str(core),
+                                         root=str(core / "site-packages"), source=None, arch="arm64", kernel=False)
+        making = base.Making(clock=lambda: 0.0)
+        asked: list[str] = []
+
+        def uv(step, folder, settings=None):
+            asked.append(step[1])
+            return subprocess.CompletedProcess(step, 2, "", "error: Failed to inspect Python interpreter at secret_path")
+
+        server = self.serve()
+        server.warm = places.kernel  # as the engine's pool asks it
+        step = self.tmp / "arm.step"
+        step.write_bytes(b"\0")
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(self.tmp / "cache")}), \
+                mock.patch.object(places, "KERNEL", base.kernel), mock.patch.object(base, "MAKING", making), \
+                mock.patch.object(base, "_uv", uv), mock.patch.object(base, "find_uv", return_value="uv"), \
+                mock.patch.object(base.Installation, "here", return_value=installation), \
+                contextlib.redirect_stderr(io.StringIO()):
+            answers = [self.call(server, "cad_open", {"source": str(step)}) for _ in range(3)]
+            self.assertEqual(asked, ["venv"], "made once: the later calls are told the failure")
+            [crash] = self.crashes()
+            failed = [event for event in self.sent[-1]["events"] if event["name"] == "tool_failure"]
+            making.follow(lambda _line: None)  # `cad run` makes it again, and it fails again: one crash more
+            self.call(server, "cad_open", {"source": str(step)})
+            [again] = self.crashes()
+        self.assertTrue(all(answer["isError"] for answer in answers))
+        self.assertIn('`cad run -c "import build123d"` tries again', answers[0]["content"][0]["text"])
+        self.assertIn("nothing made since", answers[2]["content"][0]["text"])
+        self.assertEqual((crash["type"], crash["cause"], crash["count"]),
+                         ("cad.engine.serve.KernelProcessesUnavailable", "python", 1))
+        self.assertEqual(failed, [{"name": "tool_failure", "tool": "cad_open", "reason": "no_kernel", "count": 3}])
+        self.assertEqual((again["cause"], again["count"]), ("python", 1))
+        self.assertNotIn("secret", json.dumps(self.sent))
+
 
 class CommandCrashTest(unittest.TestCase):
     """A command sends nothing itself: its crash is kept with its counts (``analytics.hand_over``)."""
@@ -444,7 +502,7 @@ class CommandCrashTest(unittest.TestCase):
         for invoke in (told, _cadgen_bug):
             emit(invoke, prog="cad urdf validate", as_json=True, stdout=io.StringIO())
         [crash] = self.crashes()
-        self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cadgen/analytics.py"))
+        self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cad_server/analytics.py"))
 
 
 if __name__ == "__main__":

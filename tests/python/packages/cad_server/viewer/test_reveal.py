@@ -61,16 +61,16 @@ class RevealTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_route_takes_a_valid_payload(self):  # the header gate is test_http_layer.PostGuard's
-        headers = {'x-cadgen-viewer': '1', 'Content-Type': 'application/json'}
+        headers = {'x-cad-viewer': '1', 'Content-Type': 'application/json'}
         body = json.dumps({'path': str(self.target)}).encode()
         with mock.patch('cad_server.viewer.reveal.reveal_path') as reveal:
-            self.assertEqual(self.server.request('POST', '/__cad/reveal', headers=headers, body=body)[0], 204)
+            self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=body)[0], 204)
             reveal.assert_called_once_with(str(self.target))
             reveal.reset_mock()
-            self.assertEqual(self.server.request('POST', '/__cad/reveal', headers=headers, body=b'{}')[0], 400)
-            self.assertEqual(self.server.request('POST', '/__cad/reveal', headers=headers, body=b'x' * 8193)[0], 413)
+            self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=b'{}')[0], 400)
+            self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=b'x' * 8193)[0], 413)
             reveal.assert_not_called()
         gone = json.dumps({'path': str(self.target.with_name('gone.step'))}).encode()
-        self.assertEqual(self.server.request('POST', '/__cad/reveal', headers=headers, body=gone)[0], 404)
+        self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=gone)[0], 404)
         relative = json.dumps({'path': self.target.name}).encode()
-        self.assertEqual(self.server.request('POST', '/__cad/reveal', headers=headers, body=relative)[0], 400)
+        self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=relative)[0], 400)

@@ -1,7 +1,10 @@
 @import "tailwindcss" source("../../");
-@import "@text-to-cad/ui/tokens.css";
-@import "@text-to-cad/ui/styles.css";
+@import "@cad/ui/tokens.css";
+@import "@cad/ui/styles.css";
 @layer base {
   html, body, #root { min-height: 100%; }
+  /* The page never scrolls: the app is its one frame, pinned to the window (`App.tsx`, `StartingView.tsx`: fixed, not a
+     viewport unit, which a phone's browser may measure with its own bars hidden), and scrolls inside itself. */
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
   body { @apply bg-background text-foreground text-ui; font-family: var(--font-sans); font-weight: 400; }
 }

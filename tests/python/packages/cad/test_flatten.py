@@ -1,6 +1,6 @@
 """Flat patterns stay EXACT: an arc that goes in comes out an arc.
 
-``cad.flatten`` used to sample every wire into points, union polygons in
+``cad.build123d._flatten`` used to sample every wire into points, union polygons in
 shapely, and emit polylines — so a filleted corner reached the DXF as a run of
 chords at a resolution nobody chose, and kerf compensation compounded it. The
 union and the offset are OCC operations on the real faces now,
@@ -46,7 +46,7 @@ def _entity_kinds(shape) -> dict[str, int]:
 
 class FlatPatternTests(unittest.TestCase):
     def test_a_flat_pattern_keeps_arcs_and_circles(self) -> None:
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         kinds = _entity_kinds(flatten.flat_pattern(_plate(), coordinate=6.0))
         self.assertEqual(kinds.get("ARC"), 6, "four corner fillets and two slot ends")
@@ -56,14 +56,14 @@ class FlatPatternTests(unittest.TestCase):
     def test_kerf_compensation_keeps_arcs(self) -> None:
         """The reason the shapely path stopped being primary: its buffer()
         turned every offset curve into chords."""
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         kinds = _entity_kinds(flatten.flat_pattern(_plate(), coordinate=6.0, kerf=0.2))
         self.assertEqual(kinds.get("ARC"), 6)
         self.assertEqual(kinds.get("CIRCLE"), 2)
 
     def test_kerf_changes_the_geometry_in_the_right_direction(self) -> None:
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         plate = _plate()
         plain = flatten.flat_pattern(plate, coordinate=6.0)
@@ -75,7 +75,7 @@ class FlatPatternTests(unittest.TestCase):
     def test_flatten_face_lands_the_face_on_z_zero(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         raised = bd.Location((3, -4, 12)) * bd.Rectangle(10, 5).face()
         flat = flatten.flatten_face(raised)
@@ -85,7 +85,7 @@ class FlatPatternTests(unittest.TestCase):
     def test_planar_faces_raises_when_the_selection_is_empty(self) -> None:
         """An empty selection means the plane or the sign is wrong. Returning
         nothing would write an empty drawing that nobody notices."""
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         with self.assertRaises(RuntimeError):
             flatten.planar_faces(
@@ -99,7 +99,7 @@ class FlatPatternTests(unittest.TestCase):
     def test_an_impossible_offset_says_what_went_wrong(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         with self.assertRaises(RuntimeError) as caught:
             flatten.offset_profile(bd.Rectangle(2, 2).face(), -5.0)
@@ -110,7 +110,7 @@ class UnionTests(unittest.TestCase):
     def test_overlapping_faces_fuse_into_one(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         left = bd.Rectangle(10, 5).face()
         right = bd.Pos(5, 0) * bd.Rectangle(10, 5).face()
@@ -122,7 +122,7 @@ class UnionTests(unittest.TestCase):
     def test_disjoint_faces_stay_a_nested_layout(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         left = bd.Rectangle(10, 5).face()
         right = bd.Pos(30, 0) * bd.Rectangle(10, 5).face()
@@ -133,13 +133,13 @@ class UnionTests(unittest.TestCase):
     def test_a_single_face_passes_through_untouched(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         face = bd.Rectangle(10, 5).face()
         self.assertIs(flatten.union_faces([face]), face)
 
     def test_no_faces_is_an_error(self) -> None:
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         with self.assertRaises(RuntimeError):
             flatten.union_faces([])
@@ -150,7 +150,7 @@ class UnionTests(unittest.TestCase):
         choice."""
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _flatten as flatten
 
         left = bd.Rectangle(10, 5).face()
         right = bd.Pos(5, 0) * bd.Rectangle(10, 5).face()

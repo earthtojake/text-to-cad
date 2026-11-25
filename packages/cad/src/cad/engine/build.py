@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 import traceback
+import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +50,10 @@ from typing import Any, Callable
 from cad.engine.ids import canonical, file_id
 
 __all__ = ["BuildError", "build", "load_script"]
+
+# What the library's aliases say of an earlier spelling (``cad.read_step is deprecated; use cad.step.read``,
+# ``cadgen is deprecated; use cad``).
+_DEPRECATED = r"cad(gen)?(\.[\w.]+)? is deprecated; use "
 
 # The library's import names: its own, and ``cadgen``, its earlier one (an alias of it). A model's module
 # is never named so (``load_script``).
@@ -85,6 +90,9 @@ class _Written:
     # (a mesh export leaves the shapes meshed, which a later serialisation would write too): what
     # its declared xbf is written from on every run, and what the engine's cache keeps of it.
     xbf: bytes | None = None
+    # The parameters the document records (``parameters.record``, as text), or None: a model whose script
+    # declares others now is built again, though its key stands (``_taken``).
+    parameters: str | None = None
 
 
 @dataclass
@@ -135,27 +143,34 @@ def _uncached_said(call: str, count: int) -> str:
     times = f"{count} call{'' if count == 1 else 's'}"
     if call.startswith("OCCT's "):
         return (f"runs {call} uncached ({times}): it is never retained; use build123d's operation for it, "
-                "or an engine reader (read_step, read_xbf, read_mesh)")
+                "or an engine reader (step.read, xbf.read, stl.read)")
     return (f"runs {call} uncached ({times}) on a shape no keyed call made (OCCT called past build123d, say): it is "
             "never retained; make that shape with build123d's operation, read it with an engine reader, or make it in "
             "a @memo function of values that returns it as made")
 
 
 def _first_party_namespace(module: Any) -> bool:
-    """Whether ``module`` is a namespace package whose every folder is the model's own: under no
-    library root (``trace._library_roots``)."""
+    """Whether ``module`` is a namespace package of the model's own: a folder of it is under no
+    library root (``trace._library_roots``), and none that is holds a module. A library's folder
+    of none gives the package nothing to import: netgen's Linux wheel installs top-level ``lib/``
+    and ``include/`` of CMake files and headers into site-packages, which a model's ``lib/`` spans."""
     if getattr(module, "__file__", None) is not None:
         return False
     try:
         folders = [Path(folder).resolve() for folder in getattr(module, "__path__", None) or ()]
     except (OSError, RuntimeError, TypeError):
         return False
-    if not folders:
-        return False
     from cad.engine.kernel.trace import _library_roots
 
     roots = _library_roots()
-    return all(not any(root == folder or root in folder.parents for root in roots) for folder in folders)
+    library = [folder for folder in folders if any(root == folder or root in folder.parents for root in roots)]
+    return len(library) < len(folders) and not any(_holds_module(folder) for folder in library)
+
+
+def _holds_module(folder: Path) -> bool:
+    """Whether any file under ``folder`` is one Python imports (``importlib.machinery.all_suffixes``)."""
+    suffixes = tuple(importlib.machinery.all_suffixes())
+    return any(name.endswith(suffixes) for _here, _folders, names in os.walk(folder) for name in names)
 
 
 class _SourceOnlyLoader(importlib.machinery.SourceFileLoader):
@@ -300,8 +315,9 @@ def load_script(script: Path) -> Any:
 @dataclass
 class _Load:
     """A script's load kept for its run's later calls: the module and the models it defined, the
-    first-party modules it imported, the stat of every file it read, the environment it ran in, and
-    the build's key resolution (``sources.Symbols``), made against that module."""
+    first-party modules it imported, the parameters it declared (``parameters.recording``), the stat of
+    every file it read, the environment it ran in, and the build's key resolution (``sources.Symbols``),
+    made against that module."""
 
     key: tuple
     stats: dict[str, tuple | None]
@@ -309,6 +325,7 @@ class _Load:
     module: Any
     models: dict[str, Any]
     loaded: set[str]
+    declared: list
     symbols: Any = None
     resolved: dict | None = None
     others: dict | None = None
@@ -391,6 +408,37 @@ def _model_traceback(error: BaseException) -> str:
     return "".join(lines).rstrip()
 
 
+# The innermost frames a failed report keeps of its error (``_raised``): enough to find whose code raised it.
+RAISED_FRAMES = 64
+
+
+def _raised(error: BaseException) -> dict[str, Any]:
+    """``raised``: a failed report's error as facts -- its type's name (a built-in's, or ``module.Name``) and its
+    whole traceback's frames, innermost last (each ``{file, line, function}``, the file as Python has it). The
+    error text keeps the model's frames alone (``_model_traceback``); these are every frame, the library's
+    included, so whoever reads the report can tell a mistake in the library's code from the model's own
+    (the server's ``analytics.told_signature``, which decides both a crash report and a page's Report Issue)."""
+    kind = type(error)
+    frames = [{"file": frame.filename, "line": int(frame.lineno or 0), "function": frame.name}
+              for frame in traceback.extract_tb(error.__traceback__)]
+    return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
+            "frames": frames[-RAISED_FRAMES:]}
+
+
+def _failed(error: BaseException) -> dict[str, Any]:
+    """A failed report's error: the model's frames (``_model_traceback``), the error as facts (``_raised``) and
+    the kernel call it was refused at (``_refused``)."""
+    return {"error": _model_traceback(error), "raised": _raised(error), **_refused(error)}
+
+
+def _output_failed(report: dict[str, Any], error: BaseException) -> None:
+    """A file that cannot be written: the report's error, as facts (``_raised``) and its trace."""
+    report["ok"] = False
+    report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
+    report["raised"] = _raised(error)
+    report["trace"] = traceback.format_exc()
+
+
 def _refused(error: BaseException) -> dict[str, str]:
     """``failedAt``: the kernel call an OCCT exception was raised in (``memo.refused_call``),
     which the failure line names; nothing for any other error."""
@@ -440,7 +488,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
     instead, and its fresh result is compared with the logged one; the report's
     ``verify`` names each body checked and how it went, and a function whose result
     differs runs on every call for the worker's life (``memo.always``)."""
-    from cad.engine import previous
+    from cad.engine import parameters, previous
     from cad.engine.kernel import determinism, memo
     from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, models_in
 
@@ -483,6 +531,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             seat(script, module_of(script)[2])
             context.loaded, context.symbols = kept.loaded, kept.symbols
             context.resolved, context.others = kept.resolved, kept.others
+            context.declared = kept.declared
         else:
             _LOAD.clear()  # this load replaces the modules any kept one held
             made, began, heard = _made(run), time.time_ns(), []
@@ -491,11 +540,23 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 _hear()
                 _HEARD[0] = heard
             try:
-                module = load_script(script)
+                with warnings.catch_warnings():
+                    if run_token:
+                        # The program's own process imported this script and said each earlier spelling of the
+                        # library's it spells (``cad._internal.aliases``): once a run, never again here, where
+                        # each still counts as said.
+                        warnings.filterwarnings("ignore", message=_DEPRECATED, category=FutureWarning)
+                    from cad.engine.kernel.trace import first_party_file
+
+                    # Each parameter the load declares, recorded with where its default is spelled
+                    # (``parameters.param``): forgotten with the models, declared again by this load.
+                    with parameters.recording(first_party_file) as declared_now:
+                        module = load_script(script)
+                    context.declared = declared_now
             except BuildError:
                 raise
             except Exception as error:  # noqa: BLE001 - the model's own error, reported
-                return [{"ok": False, "model": f"{shown}", "error": _model_traceback(error), **_refused(error)}]
+                return [{"ok": False, "model": f"{shown}", **_failed(error)}]
             finally:
                 _HEARD[0] = None
             context.loaded = set(_first_party_modules())
@@ -504,7 +565,8 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 sources = [stats.get(getattr(sys.modules.get(name), "__file__", None) or "") for name in context.loaded]
                 # A module edited while it loaded: the load may hold either version, so it is not kept.
                 if all(stat is None or max(stat[0], stat[4]) < began for stat in sources):
-                    fresh = _Load(load_key, stats, environment, module, dict(_MODELS), context.loaded)
+                    fresh = _Load(load_key, stats, environment, module, dict(_MODELS), context.loaded,
+                                  context.declared)
         loaded = time.perf_counter()
         context.base = script.parent
         context.script = script
@@ -573,8 +635,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             try:
                 result = context.root(model)
             except Exception as error:  # noqa: BLE001 - the model's own error, reported
-                reports.append({"ok": False, "model": f"{shown}::{model.name}", "id": model.id,
-                                "error": _model_traceback(error), **_refused(error)})
+                reports.append({"ok": False, "model": f"{shown}::{model.name}", "id": model.id, **_failed(error)})
                 # A child that ran before the error writes its files all the same.
                 results.append((model, None, 0.0, ran(model, before)))
                 continue
@@ -605,7 +666,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 body_script, _, function = body_name.rpartition("::")
                 retention["fallbacks"].setdefault(f"{Path(body_script).name}::{function}", []).extend(
                     f"reads {_shown(Path(path), Path(body_script).parent) if path else 'a file'} through {call}: "
-                    "its body is never retained (any edit runs it whole); use read_step/read_xbf/read_mesh" for call, path in reads)
+                    "its body is never retained (any edit runs it whole); use step.read/xbf.read/stl.read" for call, path in reads)
             # Each call a body ran uncached (``memo._ran_uncached``), which keeps it from being retained:
             # an OCCT maker no key names, or a build123d call given what no keyed call made.
             for body_name, counts in run.uncached.items():
@@ -633,9 +694,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             try:
                 _taken_outputs(model, report, log)
             except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
-                report["ok"] = False
-                report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
-                report["trace"] = traceback.format_exc()
+                _output_failed(report, error)
         if model in own:
             report["source"]["declares"] = declared
         # Each child that ran writes the files it declares, from its own document, after its
@@ -647,8 +706,82 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             if not row["ok"]:
                 report["ok"] = False
                 report.setdefault("error", f"{identity}: {row['error']}")
+                if "raised" in row:
+                    report.setdefault("raised", row["raised"])
     _keep_load(kept or fresh, reports, context)
     return reports
+
+
+def preview(script: Path, name: str, values: dict[str, Any], *, cwd: Path | None = None, digest: str | None = None,
+            known: Any = ()) -> tuple[dict[str, Any], bytes]:
+    """Model ``name`` of ``script`` at other values of the parameters its script declares (``values``, which the
+    daemon checked against its last run's declarations): a page's preview. The script is loaded as a build
+    loads it, but with ``param`` returning those values in place of the defaults (``parameters.recording``'s
+    ``values``), from bytes of the digest the last run recorded (``digest``: else ``script_changed``), and the
+    one model is built in a run of the worker's memo (``memo.run``): every kernel call keyed by its inputs, so
+    a value tried before, and every stage the values do not reach, is a hit. Nothing a build keeps is touched:
+    no file is written (no declared xbf, no export), no document is kept (``_WRITTEN``, ``_BUILT``), no load
+    is kept for a run (``_LOAD`` is dropped, as any fresh load drops it), no closure is made and nothing is
+    taken from the engine's cache; the report is the answer alone. Answered as ``result`` answers a held
+    model: ``{"ok", "structure", "shapes": [[key, size]], "timings", "memo"}`` with the bytes of each part
+    whose key is not in ``known`` (the parts the daemon holds already), in order -- or ``{"ok": false,
+    "error", ...}``, the model's own error at those values, and no bytes."""
+    from cad.engine import document, parameters, reader
+    from cad.engine.export import structure_of
+    from cad.engine.kernel import determinism, memo
+    from cad.engine.kernel.trace import first_party_file
+    from cad.engine.mesh import shape_bytes
+    from cad.engine.model import _FINGERPRINTS, _MODELS, _NAMES, BuildContext, models_in
+
+    script = Path(script).resolve()
+    if not script.is_file():
+        raise BuildError(f"no script {script}")
+    determinism.install()
+    memo.install()
+    shown = _shown(script, cwd)
+    started = time.perf_counter()
+    with memo.run(script, model=("preview", name)) as run, BuildContext() as context, reader.session():
+        _MODELS.clear()
+        _NAMES.clear()
+        _FINGERPRINTS.clear()
+        _LOAD.clear()  # its modules are about to be replaced: a run's next call loads again
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=_DEPRECATED, category=FutureWarning)
+                with parameters.recording(first_party_file, values=values, script=canonical(script)) as declared:
+                    module = load_script(script)
+        except BuildError:
+            raise
+        except Exception as error:  # noqa: BLE001 - the model's own error at those values, answered
+            return {"ok": False, "model": shown, **_failed(error)}, b""
+        parameters.previewed(declared, values, canonical(script), digest)
+        context.declared = declared
+        context.loaded = set(_first_party_modules())
+        context.base, context.script = script.parent, script
+        context.preview = json.dumps(sorted(values.items()), separators=(",", ":"))
+        loaded = time.perf_counter()
+        model = next((found for found in models_in(vars(module), script) if found.name == name), None)
+        if model is None:
+            raise BuildError(f"{shown} defines no model {name}")
+        try:
+            result = context.root(model)
+        except Exception as error:  # noqa: BLE001 - the model's own error at those values, answered
+            return {"ok": False, "model": f"{shown}::{model.name}", **_failed(error)}, b""
+        body = time.perf_counter()
+        report: dict[str, Any] = {"timings": {"load": round(loaded - started, 4), "body": round(body - loaded, 4)}}
+        tree, _tokens, _built = _tree(model, result, run, report, context, None, closure=False)
+        structure = structure_of(tree, None)
+        held = set(known or ())
+        shapes, data = [], []
+        for part in tree.parts:
+            if part.key in held or any(key == part.key for key, _size in shapes):
+                continue
+            made = shape_bytes(part.shape)
+            shapes.append([part.key, len(made)])
+            data.append(made)
+        report["timings"]["total"] = round(time.perf_counter() - started, 4)
+        return {"ok": True, "model": f"{shown}::{model.name}", "structure": structure, "shapes": shapes,
+                "timings": report["timings"], "memo": dict(run.tally)}, b"".join(data)
 
 
 def _keep_load(load: _Load | None, reports: list[dict[str, Any]], context: Any) -> None:
@@ -668,9 +801,7 @@ def _written(model: Any, result: Any, run: Any, report: dict[str, Any], log: Cal
     try:
         _finish(model, result, run, report, log, plan, context)
     except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
-        report["ok"] = False
-        report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
-        report["trace"] = traceback.format_exc()
+        _output_failed(report, error)
 
 
 def _shown(script: Path, cwd: Path | None) -> str:
@@ -685,12 +816,33 @@ def _shown(script: Path, cwd: Path | None) -> str:
 
 def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Callable[[str], None],
             plan: list | None = None, context: Any = None) -> None:
-    from cad.engine import document
-
     timings = report["timings"]
     plan = plan if plan is not None else model.plan()
     targets = [(target.kind, target.path) for target in plan]
     _plan_said(model, plan)
+    xbf = next((path for kind, path in targets if kind == "xbf"), None)
+    tree, tokens, built = _tree(model, result, run, report, context, xbf)
+    signature = (_signature(tree), tuple(tokens), tree.closure, tree.parameters)
+    # What the tree holds at a glance, which the daemon says against the last build (``delta``).
+    clock = time.perf_counter()
+    from cad.engine.delta import facts
+
+    report["facts"] = facts(tree, f"{model.script}::{model.name}", signature)
+    timings["facts"] = round(time.perf_counter() - clock, 4)
+    _BUILT[model.id] = built
+    _write(model, plan, tree, signature, report, log)
+    timings["total"] = round(sum(value for name, value in timings.items() if name != "total"), 4)
+
+
+def _tree(model: Any, result: Any, run: Any, report: dict[str, Any], context: Any, xbf: Any,
+          closure: bool = True) -> tuple[Any, list, dict[str, "_Named"]]:
+    """A model's result as the document's tree (``document.collect``): its joints harvested (kept beside the
+    body's run), its closure (``closure``: a preview's tree has none) and the parameters its script declares
+    recorded, every part named and keyed (``_PARTS``), and parts of one geometry merged. The tree, each
+    part's naming token, and what the build made of each part by its key (``_BUILT``'s)."""
+    from cad.engine import document
+
+    timings = report["timings"]
     _say("named", model.name)
     clock = time.perf_counter()
     from cad.engine.kernel import memo
@@ -725,8 +877,7 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
         found = run.keys.get(name)
         if found is not None:
             run.keys[name] = (found[0], [*found[1], *checks], found[2] and keyed, found[3])
-    xbf = next((path for kind, path in targets if kind == "xbf"), None)
-    if context is not None:
+    if context is not None and closure:
         from cad.engine import previous
 
         modules, unkeyable = context.modules(model)
@@ -735,6 +886,13 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
                                  context.named(model))
         tree.closure = previous.text(made)
         report["closure"] = previous.located(made, folder)
+    if context is not None:
+        # The parameters its script declares (``parameters``): the document records what they are, the
+        # report says where each is in the code, which the engine keeps in memory and never writes.
+        from cad.engine import parameters
+
+        report["parameters"] = context.parameters(model)
+        tree.parameters = parameters.record(report["parameters"])
     timings["collect"] = round(time.perf_counter() - clock, 4)
     # What the joints' harvest found inconsistent: said, and the document written all the same.
     if tree.mechanism is not None and tree.mechanism.warnings:
@@ -769,19 +927,10 @@ def _finish(model: Any, result: Any, run: Any, report: dict[str, Any], log: Call
         tokens.append(cached.token)
         built[cached.key] = cached
     document.merge(tree)
-    signature = (_signature(tree), tuple(tokens), tree.closure)
     timings["names"] = round(time.perf_counter() - clock, 4)
     report["parts"] = len(tree.parts)
     report["named"] = named
-    # What the tree holds at a glance, which the daemon says against the last build (``delta``).
-    clock = time.perf_counter()
-    from cad.engine.delta import facts
-
-    report["facts"] = facts(tree, name, signature)
-    timings["facts"] = round(time.perf_counter() - clock, 4)
-    _BUILT[model.id] = built
-    _write(model, plan, tree, signature, report, log)
-    timings["total"] = round(sum(value for name, value in timings.items() if name != "total"), 4)
+    return tree, tokens, built
 
 
 def _write(model: Any, plan: list, tree: Any, signature: tuple, report: dict[str, Any],
@@ -823,7 +972,7 @@ def _write(model: Any, plan: list, tree: Any, signature: tuple, report: dict[str
         return sources[0]
 
     _outputs(plan, report, log, lambda path: document.write_bytes(path, data or b"", made_from), source, kept=True)
-    _WRITTEN[key] = _Written(signature, xbf, kept, tree.closure, made_from, xbf=data)
+    _WRITTEN[key] = _Written(signature, xbf, kept, tree.closure, made_from, xbf=data, parameters=tree.parameters)
     report["id"] = model.id
     report["source"] = model.source
 
@@ -833,7 +982,7 @@ def _outputs(plan: list, report: dict[str, Any], log: Callable[[str], None],
     """A model's declared files, each exactly an export of its document appended to the run: the xbf
     first (``save``: the document's own bytes), then each derived file translated from the document (``source``:
     ``export.translate``) -- every one landed only where the file does not hold its bytes already
-    (``atomic_replace.put``), as ``cad export`` writes. Nothing remembers what was written: every
+    (``atomic_replace.put``), as ``cad <type> export`` writes. Nothing remembers what was written: every
     run that reaches a declared file translates it and compares, so a file someone deleted or edited
     is written again from the document, and one nobody touched keeps its bytes and its time. The
     report's ``files``: each file's kind, whether it was written, the seconds and its bytes. ``log``
@@ -850,7 +999,7 @@ def _outputs(plan: list, report: dict[str, Any], log: Callable[[str], None],
         if target.kind == "xbf":
             fresh, size = save(target.path)
         else:
-            size = export.translate(source(), target.kind, target.path)
+            size = export.translate(source(), target.kind, target.path, target.tolerance, log, target.angle)
             fresh = _stat(target.path) != before
         seconds = time.perf_counter() - clock
         timings[target.kind] = round(seconds, 4)
@@ -914,6 +1063,8 @@ def taken(script: Path, name: str) -> bytes | None:
 # and an inspection of one document after another read its bytes once, as a file's read is held.
 _HELD_KEPT = 4
 _HELD: "dict[tuple[str, str, str], Any]" = {}
+# The held documents' bytes read so far (``held_source``, none kept): what a manufacturing check counts as read.
+held_reads = 0
 
 
 def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None) -> Any:
@@ -930,6 +1081,8 @@ def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None)
            json.dumps(origin, sort_keys=True, separators=(",", ":")))
     found = _HELD.pop(key, None)
     if found is None:
+        global held_reads
+        held_reads += 1
         try:
             found = _read_held(payload, name)
             found.origin = origin
@@ -966,7 +1119,7 @@ def _read_held(payload: bytes, name: str) -> Any:
                          xcaf=loaded.doc, world=lambda occurrence: loaded.worlds.get(occurrence),
                          local=lambda occurrence: loaded.locals.get(occurrence),
                          mechanism=loaded.mechanism, foreign=False, path=None, animations=loaded.animations,
-                         migration=loaded.migration)
+                         migration=loaded.migration, loaded=loaded)
 
 
 def _statuses(run: Any, name: str) -> dict[str, str]:
@@ -1009,14 +1162,31 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
     else of the engine's cache file of it (``cache``: ``<id>/document.xbf`` there, ``"from":
     "cache"``) -- the one take-up of every model, with or without declared files, warm and after a
     restart. A model's declared files play no part: they are written after it, from the document
-    taken, as an export of it is (``_taken_outputs``)."""
+    taken, as an export of it is (``_taken_outputs``).
+
+    A worker whose own record holds another key asks the cache too: its script's worker of another
+    environment (a check with another header) may have built this very state since, and the document
+    it saved is this model's whoever built it. Where the cache holds another key as well, the verdict
+    is the one against this worker's record: what changed since it last built."""
+    name = f"{model.script}::{model.name}"
+    remembered = _WRITTEN.get(name)
+    verdict, report = _taken(model, context, shown, cache, remembered)
+    if report is None and remembered is not None and cache is not None and verdict.get("changed"):
+        other, report = _taken(model, context, shown, cache, None)
+        if report is not None:
+            return other, report
+    return verdict, report
+
+
+def _taken(model: Any, context: Any, shown: str, cache: str | None, remembered: Any) -> tuple[dict, dict | None]:
+    """``_previous`` asked of one holder: this worker's record of the model (``remembered``), else,
+    with None, the engine's cache file of it."""
     from cad.engine import document, previous
     from cad.engine.kernel import memo
 
     targets = model.targets()
     xbf = next((Path(path) for kind, path in targets if kind == "xbf"), None)
     name = f"{model.script}::{model.name}"
-    remembered = _WRITTEN.get(name)
     if not memo.enabled() or os.environ.get("CAD_ENGINE_BODIES", "1").strip() == "0":
         return {"used": False, "reason": "retention is off"}, None
     folder = xbf.parent if xbf is not None else model.script.parent  # what the closure's paths are relative to
@@ -1068,6 +1238,14 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
         changes = changes or ["its closure changed"]
         shown_changes = changes[:3] + ([f"{len(changes) - 3} more"] if len(changes) > 3 else [])
         return {"used": False, "reason": ", ".join(shown_changes), "changed": changes}, None
+    # The parameters the script declares now against those the document records: a declaration the
+    # model's key does not reach (another model's, an unused one) changes its document all the same.
+    from cad.engine import parameters
+
+    declared = context.parameters(model)
+    wanted = parameters.record(declared)
+    if cached is None and remembered.parameters != wanted:
+        return {"used": False, "reason": "its parameters changed", "changed": ["its parameters changed"]}, None
     timings = {"key": round(keyed - clock, 4)}
     if cached is not None:
         # Taken read whole, and kept as its bytes: a document read is never written again (the
@@ -1079,12 +1257,16 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
         except Exception as error:  # noqa: BLE001 - a cache that does not read is built again
             # ``unreadable``: the daemon drops the file, so this build's document is cached again.
             return {"used": False, "reason": f"its cache does not read: {error}", "unreadable": True}, None
+        recorded = document._label_text(doc.Main(), document.PARAMETERS_GUID)
         del doc
         if document.written_format(held[0]) != previous.FORMAT or held[1] != text:
             return {"used": False, "reason": "its cache does not hold the closure its head shows",
                     "unreadable": True}, None
+        if recorded != wanted:
+            return {"used": False, "reason": "its parameters changed", "changed": ["its parameters changed"]}, None
         timings["read"] = round(time.perf_counter() - keyed, 4)
-        _WRITTEN[name] = _Written(("loaded", found["key"]), None, None, text, data=data, relocated=moved)
+        _WRITTEN[name] = _Written(("loaded", found["key"]), None, None, text, data=data, relocated=moved,
+                                  parameters=recorded)
     else:
         # What the bodies made stays the memo's, as a replay would keep it: an edit after
         # any number of these builds replays all it leaves alone.
@@ -1098,7 +1280,7 @@ def _previous(model: Any, context: Any, shown: str, cache: str | None = None) ->
                                           if key == model.identity},
                             "reads": {}},
               "children": {}, "bodies": {model.identity: "loaded"}, "cache": {"used": True, "from": where},
-              "timings": timings, "files": {}}
+              "timings": timings, "files": {}, "parameters": declared}
     report["closure"] = previous.located(compared, folder)
     return report["cache"], report
 

@@ -56,7 +56,7 @@ test("no path of this machine goes into the issue: the file's is written as its 
   const alert = { title: "Couldn’t prepare the model", message: `“${path}” could not be prepared for display.`,
     reason: `${path}: Part derivation failed for 03ff06ae62ca3a91`,
     details: [`File: ${path}`, "Operation: preparing display assets",
-      `Request: POST http://127.0.0.1:4178/__cad/artifact?${new URLSearchParams({ file: path })}`,
+      `Request: POST http://127.0.0.1:4178/api/v1/artifact?${new URLSearchParams({ file: path })}`,
       `${path}: Part derivation failed for 03ff06ae62ca3a91`,
       "  File \"/Users/jakefitzgerald/.venv/lib/python3.12/site-packages/cadgen/build.py\", line 9, in build",
       "  C:\\Users\\Ada Lovelace\\Desktop\\drawing.dxf, /home/ada/parts.step"].join("\n") };
@@ -68,7 +68,7 @@ test("no path of this machine goes into the issue: the file's is written as its 
     "> plate.step: Part derivation failed for 03ff06ae62ca3a91", "",
     "**Environment**", "", "- File: plate.step", "- CAD: 0.7.5", "- Platform: darwin", "",
     "**Details**", "", "```", "File: plate.step", "Operation: preparing display assets",
-    "Request: POST http://127.0.0.1:4178/__cad/artifact?file=plate.step",
+    "Request: POST http://127.0.0.1:4178/api/v1/artifact?file=plate.step",
     "plate.step: Part derivation failed for 03ff06ae62ca3a91",
     "  File \"~/.venv/lib/python3.12/site-packages/cadgen/build.py\", line 9, in build",
     "  ~/Desktop\\drawing.dxf, ~/parts.step", "```"

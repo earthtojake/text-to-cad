@@ -1,4 +1,4 @@
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@text-to-cad/ui/primitives/context-menu';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@cad/ui/primitives/context-menu';
 import { AssemblyPartMenuItems } from './xbfMenuItems.js';
 
 // A Features tree row's menu: the SAME menu the viewport offers over the node the row stands

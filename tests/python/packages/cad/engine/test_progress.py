@@ -219,7 +219,7 @@ class EventTest(unittest.TestCase):
             progress.event("render", "draw")
         with self.assertRaisesRegex(ValueError, "no stage 'body' of a snapshot"):
             progress.Progress(lambda _frame: None, kind="snapshot").stage("body")
-        self.assertEqual(progress.KINDS, ("build", "import", "export", "snapshot", "inspect-measure", "update"))
+        self.assertEqual(progress.KINDS, ("build", "import", "export", "snapshot", "inspect-measure"))
         self.assertEqual(list(progress.STAGES["snapshot"]), ["scene", "draw", "write"])
         self.assertTrue(all(words and words[0].isupper() for stages in progress.STAGES.values() for words in stages.values()))
 
@@ -518,7 +518,7 @@ class DaemonProgressTest(unittest.TestCase):
             self.assertEqual(served.returncode, 0, served.stderr)
             page = urlsplit(served.stdout.strip())
             token = parse_qs(page.query)["token"][0]
-            base = f"{page.scheme}://{page.netloc}/api/doc/{page.path.strip('/')}/version"
+            base = f"{page.scheme}://{page.netloc}/api/v1/documents/{page.path.strip('/')}/version"
 
             def get(query: str) -> dict:
                 with urllib.request.urlopen(urllib.request.Request(f"{base}?{query}",

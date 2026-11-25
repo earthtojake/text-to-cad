@@ -1,5 +1,6 @@
-"""The regular display modes' look (``render/look.py``): one record, served at ``GET /api/look``
-as the viewer reads it with its environment image at ``GET /api/look/environment``, and the copy
+"""The regular display modes' look (``render/look.py``): one record, served at ``GET /api/v1/look``
+as the viewer reads it, with its environment image where the record says it is
+(``GET /api/v1/look/environment``), and the copy
 of it the viewer's tests parse (``packages/core/src/lib/xbf/__fixtures__/look.json``) the same
 record; the image decodes as three's HDRLoader decodes it, and maps onto the cube map OCCT reads."""
 
@@ -16,6 +17,7 @@ import numpy as np
 from cad.engine.render.finish import cube_faces, decode_hdr, sample
 from cad.engine.render.look import LOOK
 from cad.engine.serve import Server
+from tests.python.support.http_listener import listener
 
 FIXTURE = Path(__file__).resolve().parents[5] / "packages" / "core" / "src" / "lib" / "xbf" / "__fixtures__" / "look.json"
 REGENERATE = ("regenerate it: PYTHONPATH=packages/cad/src python -c \"import json; from cad.engine.render.look "
@@ -24,14 +26,17 @@ REGENERATE = ("regenerate it: PYTHONPATH=packages/cad/src python -c \"import jso
 
 class LookTest(unittest.TestCase):
     def test_the_engine_serves_the_record_and_its_environment(self) -> None:
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
-        with urllib.request.urlopen(f"{server.url}/api/look", timeout=30) as answer:
+        # As a page reads it (core's ``fetchXbfLook``): the record, then the image at the URL it names.
+        with urllib.request.urlopen(f"{server.url}/api/v1/look", timeout=30) as answer:
+            self.assertEqual(answer.status, 200)
             served = json.loads(answer.read())
         self.assertEqual(served, LOOK.json())
-        url = f"{server.url}{served['environment']['url']}"
-        with urllib.request.urlopen(url, timeout=30) as answer:
+        self.assertEqual(served["environment"]["url"], "/api/v1/look/environment")
+        with urllib.request.urlopen(f"{server.url}{served['environment']['url']}", timeout=30) as answer:
+            self.assertEqual(answer.status, 200)
             self.assertEqual(answer.read(), LOOK.environment_path.read_bytes())
 
     def test_the_viewers_copy_is_the_record(self) -> None:

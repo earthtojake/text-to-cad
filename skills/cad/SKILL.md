@@ -1,71 +1,59 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer.
+description: Designs and edits 3D CAD - parametric parts, assemblies, mechanisms and 2D cut profiles, written as build123d Python and shown live in the text-to-cad viewer. Use for any request to model, change, measure, inspect, animate, export or convert a part or a CAD file (STEP, STL, 3MF, GLB, DXF, xbf), for references and Quick Edit prompts copied from the viewer, and to check whether a part can be machined, cut and bent, molded or printed. Not for robot descriptions, which the robot-simulation skill writes.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # CAD modeling and inspection
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files for the current interface.
-
-A model is a Python function; running its script rebuilds it in text-to-cad's warm server, and
-the page the person has open updates. Files are exports, made when asked.
+A model is a Python function that returns a build123d shape. Running its script builds it in
+text-to-cad's server, which holds the result as a document: the page the person has open follows
+every run, and every command (inspect, snapshot, export, check) acts on that document by its id.
+Files are exports, written when asked.
 
 ## Start with the task
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
-| **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
-| **Export STEP, STL, 3MF, GLB or xbf** | `cad export <id> <file>`. | [Exports](references/exports.md) |
-| **Use a vendor STEP, an xbf or a scan in a model** | `read_step`, `read_xbf` or `read_mesh` in the body. | [Inputs](references/model-contract.md#inputs) |
-| **Resolve a reference from a prompt** | `cad inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
-| **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
-| **See a model, a view or a pose** | `cad snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
-| **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
-| **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
-| **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
+| Create or edit a part or assembly | A model script ([below](#write-a-model-and-run-it)) | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
+| Let the person tune a number (a wall, a fit, a count) | `model.param(...)` at the script's top level; change a value by editing its number and running the script | [Parameters](references/model-contract.md#parameters-a-person-tunes) |
+| Organize a project | Its existing layout | [Project layout](references/project-layout.md) |
+| Export STEP, STL, 3MF, GLB or xbf | `cad model export <id> <file>` | [Exports](references/exports.md) |
+| A 2D profile, flat pattern or DXF | A model that returns 2D geometry on z=0, exported as `.dxf` | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
+| Use a vendor STEP, an xbf or a scan | `step.read`, `xbf.read` or `stl.read` in the body | [Inputs](references/model-contract.md#inputs) |
+| Resolve a reference or a Quick Edit prompt | `cad model inspect <id> '<ref>'` | [References](references/inspection-and-validation.md#references) |
+| Measure or check geometry | A check script that calls the model | [Inspection](references/inspection-and-validation.md) |
+| See a model, a view or a pose | `cad model snapshot <id> out.png` | [Snapshots](references/snapshot-review.md) |
+| Articulate a mechanism, find joint limits | build123d joints in the body; `cad model ranges <id>` | [Kinematics](references/kinematics.md) |
+| Explode, reveal or showcase a model | `animation()` in the body | [Animation](references/animation.md) |
+| Can it be machined, bent, molded or printed? | `cad model dfm <id> --process ...` | [Can it be made?](#can-it-be-made) |
+| Open an existing CAD file | Show it | [Show the model](#show-the-model) |
 
-A project built with cadgen 0.7 may need migrating; one built with 0.8 runs as it is: see
-[migrations](references/migrations.md).
+Whether a part holds under load is the fea skill's; a robot description, the robot-simulation skill's.
 
-For 2D DXF drawings use `$dxf`; this skill owns any 3D part the drawing projects.
-Use the corresponding robot-description skill for URDF, SRDF or SDF.
+## Setup
 
-## Setup and paths
+Written for `cad==0.11.17`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+0.11.12, run `uv tool install --force cad`.
 
-Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its server, with the CAD app's:
+If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:
+https://github.com/earthtojake/text-to-cad
+A project written for an earlier version may need changes; the migration guides say what:
+https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 
-- `cad` below means `cad +0.9.0` (`~/.local/bin/cad +0.9.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.9.0 run`
-
-For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, a server that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
-
-One server runs for the installation: the first run starts it, every run and every
-command goes through it, and it serves the viewer. `cad status` lists its workers
-and the documents it holds; `cad stop` stops it, and any older one left running.
-A build cut off by the shell's time limit keeps running in the server; run the same
-command again and it waits for that build and replays it (`cad status` shows it).
-Give a cold build of a large model the shell tool's longest timeout, or run it in the
-background. A command that ends with 'the system denies text-to-cad's local engine' is
-another case: [Setup and troubleshooting](references/setup.md#diagnose-a-failure).
-
-Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
-take, are relative to the working directory, as are a model's own file reads. Anchor
-them on `__file__` in code that must run from any folder.
+Every command goes through one server: start it once with `cad server start` (`status`, `stop`); a
+command that finds none says so. `cad run script.py` is `uv run` with cad's library and the
+integrations the script imports added, so a script header names only its own extra packages, never
+cad ([environments](references/environments.md)). A
+build outlives the shell's time limit: run the same command again and it joins the build in progress.
+`cad <command> --help` is the complete, current interface. Paths are relative to the working
+directory.
 
 ## Write a model and run it
 
-A part or an assembly is a function with no parameters, decorated `@model` (or with its
-file decorators, never both), that returns a build123d shape. Its dimensions are the
-arguments of a plain helper function, and each configuration is a `@model` of its own, with
-its own id and page; constants several models share live in a module they import. A call
-builds it and returns its document: a handle with `.id`, `.url`, `.shape` (the built shape)
-and `.export(...)`. For example, `src/bracket.py`:
+`src/bracket.py`:
 
 ```python
 import build123d as bd
@@ -73,9 +61,7 @@ from cad import model
 
 
 def bracket_body(width, thickness, bore):
-    body = bd.Box(width, 20, thickness)
-    hole = bd.Cylinder(bore / 2, thickness)
-    body = body - hole
+    body = bd.Box(width, 20, thickness) - bd.Cylinder(bore / 2, thickness)
     body.label = "bracket"
     body.color = "#4a6fa5"
     return body
@@ -97,252 +83,158 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/bracket.py
+cad run src/bracket.py
 ```
 
 ```text
 built src/bracket.py::bracket cold in 2.61s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
   parts 1 · bounds 40 × 20 × 6 mm · joints 0 · sequences 0
   id: 0dc50a92-a21f-5895-a245-ebdeb5352f3b
-  view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
-built src/bracket.py::bracket_wide warm in 0.01s: bodies 1 run; 6 misses, 0 hits; body 0.01s, names 0.00s, document 0.00s
-  parts 1 · bounds 60 × 20 × 6 mm · joints 0 · sequences 0
-  id: 966d03a5-7b43-5bed-b75c-eb67d56c72d2
-  view: http://127.0.0.1:54360/966d03a5-7b43-5bed-b75c-eb67d56c72d2?token=...
+  view: http://127.0.0.1:<port>/<id>?token=<token>
 ```
 
-Each call the script's `__main__` makes prints how its model built, the delta under it
-(parts, bounds, joints and sequences), its document's `id:` and its page, `view:` (the
-handle's `.id` and `.url`). An unchanged rerun prints `took ... nothing ran` instead. Give the
-user the page once ([Show the model](#show-the-model)) and use the id for every command
-after it. The id comes from the
-script's path and the function's name, or the script's folder and an explicit `@model(name="...")`,
-so it is the same run after run, and the open page follows every run. A model's name is its identity
-within its namespace, the function's name by default, `name=` gives it another. The namespace
-is the script's folder; two explicit names in it must differ.
+Each call prints how its model built, what it holds, its document's `id:` and its page, `view:`. The
+id comes from the script's path and the function's name, so it is the same on every run: use it for
+every command, and give the person the page once ([Show the model](#show-the-model)).
 
-- **Running the script is the rebuild.** It writes no file. The server's warm worker for
-  the script replays every operation an edit did not reach, so a comment re-runs nothing
-  and a dimension edit re-runs what reads it
-  ([what a run runs](references/model-contract.md#what-a-run-runs)). Decoration only
-  declares: keep the calls under `if __name__ == "__main__":` so other scripts can import
-  the models.
-- **`@memo` marks stages, never parts.** The server already replays every kernel call, so
-  mark only a function holding seconds of kernel work that an edit elsewhere leaves
-  alone, such as a whole sub-assembly stage; never a part, never a helper called many
-  times ([`@memo`](references/model-contract.md#memo-marks-stages)).
-- **An assembly calls its parts.** Its body calls each part model and composes its shape
-  (`plate().shape`), places and labels it, and returns a `Compound`. Each child builds in
-  the same run and keeps its own document and id. Running a child's script alone leaves the assemblies that
-  use it as they were: run the assembly.
-- **`import build123d as bd`, and use it attribute-style** (`bd.Box`). The import is lazy:
-  the kernel loads on first use, in the worker. `from build123d import Box`, or a
-  module-level `bd.Color(...)` or `bd.Align` default, loads it at that line instead.
-- **Colours are sRGB**, as a person picks them: `part.color = "#4a6fa5"`, or 0-255
-  integers. Import `metals` from `bd_materials`; assign a native material with
-  `part.material = metals.aluminum()`
-  ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
-- **Inputs** are `read_step`, `read_xbf` and `read_mesh` in the body, and any file its
-  Python opens, each tracked by its bytes. The clock, environment variables and
-  randomness are not seen: a body is a function of its code and its inputs. Compose
-  project models by calling them, never by reading a file the project exported.
-- **References** to faces, edges and parts come from `cad inspect <id> [ref]`, and the
-  body picks the same element with build123d's selectors; verify with a snapshot when in
-  doubt ([references](references/inspection-and-validation.md#references)).
-- **A shape with no function** (a notebook cell, a REPL) is handed over:
-  `model(shape, name="plate")` returns the same handle, and no command builds it again.
-- **The server never reruns code.** A restart reopens every document from the server's
-  cache, as last built. When the cache holds no file of one (deleted by hand, or never
-  saved), the page, `cad inspect <id>` and `cad_show` print the command that brings it
-  back (`cad run src/bracket.py`). Run it.
-- Model units are millimetres, +Z up. `$step-parts` finds real vendor models of
-  purchasable parts such as fasteners, bearings and servos.
-- An image without a scale sets no fit dimension, and a drawing's units, projection and
-  revision decide how its numbers read. A missing or conflicting dimension that changes
-  the result is the person's to settle; a value chosen in its place is an assumption.
+- **A model function takes no arguments.** Dimensions are arguments of a plain helper, and each
+  configuration is a `@model` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
+- **Running the script is the rebuild**, and it writes no file. The server replays whatever an edit
+  did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
+  ([what a run runs](references/model-contract.md#what-a-run-runs)). Keep the calls under
+  `if __name__ == "__main__":` so other scripts can import the models.
+- **An assembly calls its parts**: its body takes each part's shape (`plate().shape`), places and
+  labels it, and returns a `Compound`. Each part keeps its own document. After editing a part, run the
+  assembly's script.
+- **Use `import build123d as bd`, attribute-style.** The import is lazy, so the kernel loads in the
+  server; `from build123d import Box` or a module-level `bd.Color(...)` loads it in the script.
+- **Labels name parts** in every reference, check and export. Colours are sRGB hex
+  (`part.color = "#4a6fa5"`); a material gives a part density and a look
+  (`from bd_materials import metals`, `part.material = metals.aluminum()`:
+  [colour and materials](references/build123d-modeling.md#colour-and-materials)).
+- **A body is a function of its code and its inputs**: `step.read`, `xbf.read`, `stl.read` and any
+  file it opens are tracked; the clock, environment variables and randomness are not. Compose project
+  models by calling them, never by reading a file the project exported.
+- Units are millimetres, +Z up.
 
-## Files, when asked
+## Commands
 
-A file is an action on the document the server holds, never part of the model: no code
-change and no rebuild, written at once. It holds what the document held when it was
-written, so a change made after it is in the file only once it is written again. Write one
-when the person asks for it:
+Each acts on the document as the last run left it. `$ID` is a model's id; a file takes the
+operations its own type lists (`cad step|xbf|stl|threemf|glb|dxf --help`).
+
+| Command | Gives |
+| --- | --- |
+| `cad model inspect "$ID" ['<ref>']` | The document's parts, bounds, volume, mass and joints; with a ref, one part, face or edge as JSON, with `made_by`: the function, file and line that made it |
+| `cad model snapshot "$ID" out.png` | A picture, drawn as the viewer draws it: `--camera top`, `--display hidden-line`, `--pose open`, `--preview` (lit, for a person) |
+| `cad model export "$ID" a.step b.stl c.glb` | Files, by suffix; nothing rebuilds ([exports](references/exports.md)) |
+| `cad model interference "$ID" [--pose P]` | Every pair of parts that shares volume, exactly, as built and at each pose |
+| `cad model dfm "$ID" --process ...` | A manufacturing check ([Can it be made?](#can-it-be-made)) |
+| `cad model ranges "$ID"` | Each joint's stops, swept from the parts ([joint stops](references/kinematics.md#joint-stops)) |
+| `cad step export vendor.step vendor.xbf` | A vendor STEP as an xbf, which `xbf.read` loads many times faster |
+
+`--tolerance MM` and `--angle DEG` mesh an STL, a 3MF or a GLB finer (a print with fits, a close
+render) and apply to nothing else: an export that takes them names only mesh files, and a STEP, xbf or
+DXF beside them refuses the whole export.
 
 ```bash
-cad export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad model export "$ID" STEP/bracket.step GLB/bracket.glb
+cad model export "$ID" STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
 ```
 
-A project with standing deliverables gets an `exports.py` that imports its models and
-calls `export(x, path, ...)` on each (`x` a model call's handle); running it rewrites every deliverable
-([exports](references/exports.md)). An export takes a document and its destinations,
-and nothing else: a posed file is a model that returns the posed assembly
-(`posed(arm(), "folded")`), and a part on its own is the part's own model.
+A reference such as `0dc50a92-...#bracket/face 7` is what the viewer copies when the person picks
+something: a document, a part by its labels, then an element. Resolve it with `inspect`, then edit the
+code `made_by` names. A Quick Edit prompt carries its document under `File:`, its picks under
+`References:` and a snapshot packet, inline JSON (save it to a file) or a `.snapshot.json` path. Where
+the person drew on the view, look at what they drew before editing:
+`cad model snapshot "$ID" out.png --annotation packet.snapshot.json --camera authored`
+([annotations](references/snapshot-review.md#annotations-and-quick-edit-views)).
 
-The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
-code, or to compose it in another project with `read_xbf`. A restart needs none: the
-server's own cache reopens every document it built, as last built. A vendor STEP is
-converted to an xbf once
-(`cad export vendor/motor.step vendor/motor.xbf`) and read with `read_xbf`, many
-times faster than parsing the STEP.
+## Check each change
 
-## Projects built around exported files
+Read each run's output first: a part count, bounds or joint count that contradicts the intent is the
+first thing to fix. Then check the change the way it can be checked:
 
-A project can instead revolve around its exported files, but only when the person asks to
-iterate on the exported file itself or the project already does: an `exports.py`, a consumer
-that reads the files (a robot description, a slicer, a drawing pipeline), or a 0.7-era
-layout, whose runs wrote files. The loop is three steps. The script writes the file on each
-run, by a file decorator in place of `@model` (`@step("../STEP/bracket.step")`, relative to
-the script), or `exports.py` or `cad export` follows the run. Show the file's page, not
-the model's: it follows the file on disk, updating when a run rewrites the file.
-Verification reads the file: `cad snapshot` or `cad inspect` with its path, or
-`read_step` in a check. The costs keep the default the default: each iteration pays the
-file's translation and the page's re-read, a STEP parsed again; a file names no model, so a
-ref picked on its page has no `made_by` and a Quick Edit from it no way back into the code;
-and the model's page stays the better place to look while editing.
-[Exports](references/exports.md#model-page-or-file-page) tables the triggers and costs.
+| The change | Check it with |
+| --- | --- |
+| A number the person gave (a size, a distance, a volume) | An assert in the model's body on what the geometry measures, or `cad model inspect` |
+| A number the design implies (a clearance, a fit, a mass) | A check script that calls the model and measures what it returns ([inspection](references/inspection-and-validation.md)) |
+| An assembly's parts or a joint's travel | `cad model interference "$ID"`, with a `--pose` for each mechanism state |
+| Shape, placement, colour, a mechanism | The snapshots it takes to judge it, posed where it moves |
+| A 2D profile or DXF | The export, which runs the drawing checks, then `cad dxf snapshot` of the file |
+| A part made by a named process | Its manufacturing check ([below](#can-it-be-made)) |
 
-## Pictures
+- A snapshot shows arrangement and appearance; a number comes from the geometry, never from a picture.
+- Review an assembly from the inside out: a part alone before it is placed, then the parts that move
+  together, then a joint at both ends of its travel, and only then the whole, from behind as well as
+  the front. A cover that half encloses what it covers is a few pixels of the whole model's picture
+  and most of its own.
+- A check that fails to run, or cannot decide, has shown nothing. Trust a check you wrote only once
+  you have seen it fail on a planted fault of the kind it guards against. Boxes, mesh points and
+  sampled distances pick the pairs worth measuring; the verdict is exact geometry.
+- Say what a check cannot see beside what it passed: the poses it did not take, the pairs it could not
+  measure, the path between two poses checked only at its ends.
+- Dropping or shrinking a feature the person specified to get a build through is a different design:
+  say so instead.
+- A missing or conflicting dimension that changes the result is the person's to settle; a value
+  chosen in its place is an assumption to report.
 
-After every run, read its line and the delta under it; a contradiction with what you
-intended is fixed before anything else. A number the person gave is checked by an assert
-inside the model's body on what the geometry measures, a bound, a distance or a volume, or by
-`cad inspect`, never by restating the constant, and never by code after the call in the
-model's script ([inspection](references/inspection-and-validation.md)). A derived number they
-asked for is a check script; neither is ever read off a picture. A structural or appearance
-change, new parts, placements, colours or a mechanism,
-gets the snapshots it takes to judge it, usually one from the angle that shows the change,
-more when a view leaves the question open, and a posed one for a mechanism state; never
-several angles by habit. For a large assembly, isolate the parts the edit touched or hide
-what covers them and frame them, instead of drawing the whole model. Resolve a reference with
-`cad inspect` only when a prompt names one.
+## Can it be made?
 
-```bash
-cad snapshot "$ID" tmp/review.png
-cad snapshot "$ID" tmp/top.png --camera top --display hidden-line
-cad snapshot "$ID" tmp/open.png --pose open
-```
+`cad model dfm` says whether a part can be made by a process and what to change where it cannot. Run
+it when the request names or implies a process (machined, sheet metal or laser cut, injection molded,
+3D printed, or a printer, resin, filament or cutting service named), or the person asks. A material
+alone names no process, but a thickness with a metal ("2 mm steel") is sheet. With none, build what was asked: no check, and no draft, reliefs or tool radii
+added.
 
-A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing
-but the PNG. Its options say how the picture is drawn: camera (`--camera top`), display,
-grid, pose (`--pose open`) and size. It shows arrangement and appearance, not dimensions
-([snapshots](references/snapshot-review.md)).
-
-## Prompt references and inspection
-
-A reference such as `0dc50a92-a21f-5895-a245-ebdeb5352f3b#bracket/face 7` names geometry
-in a document by the server's own names: the document (a model's id, or a file's
-absolute path), `#`, a part or an assembly by the labels on its way from the root
-(`hand/finger.2` is the second component labelled `finger` in `hand`), then, after a
-slash, one element by its name (`f:`, `e:`, `v:`) or its number (`face 7`). The CAD
-viewer copies them. When a prompt names one, resolve it with `cad inspect`:
-
-```bash
-cad inspect "$ID" "bracket/face 7"
-```
-
-It answers in JSON what the ref names, placed where its occurrence stands: an element's
-canonical `ref`, `kind`, `ordinal` and `name`, the kernel's facts (a face's `area`,
-`centroid`, `surface`, `box`, `radius`; an edge's length and endpoints) and `made_by`,
-the function, file and line of the code that made it; a part's or an assembly's volume
-and mass. Edit the code `made_by` names, or pick the element in the body with
-build123d's selectors (`body.faces().sort_by(bd.Axis.Z)[-1]`) matching those facts. A
-ref resolves in the document as the latest run left it; one that names nothing, or
-several things where it names one, is refused with what it could mean. The grammar is
-in [references](references/inspection-and-validation.md#references).
-
-A Quick Edit prompt names its document under `File:` (a path or an id), selected
-entities under `References:`, and a snapshot packet as inline JSON or a `.snapshot.json`
-path. Save inline JSON to a temporary `.snapshot.json`, and draw the view the person
-drew their ink in, ink included:
-
-```bash
-cad snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
-```
-
-Inspect supplied annotations before editing. Without annotations, the captured view is
-optional context; render it when useful to the request. After editing, run the script and
-draw it again to check the change
-([annotations and Quick Edit views](references/snapshot-review.md#annotations-and-quick-edit-views)).
-
-A reference into a file that is not a document names what the viewer picked in it, in
-that file's own terms (none is a ref `cad inspect` resolves):
-
-| File | Reference | Means |
+| Process | Check | Reference |
 | --- | --- | --- |
-| URDF, SRDF, SDF | `/work/arm/arm.urdf#upper_arm` | the link `upper_arm` |
-| GLB | `/work/out/model.glb#n12` | the glTF node `nodes[12]` (0-based, the file's own index) |
-| 3MF | `/work/out/plate.3mf#o2.1` | the 2nd `<build><item>`'s 1st `<component>` (1-based); `#o3` is the 3rd build item |
-| STL | the file alone, on `File:` | one mesh: nothing in it is picked |
+| CNC milling and turning | `--process cnc --material M` (`--axes`, `--turning`, `--tools`) | [CNC](references/manufacturing-cnc.md) |
+| Sheet cutting and bending | `--process sheet --material M --thickness T` (`--bend-radius`, `--k-factor`); a cut file, `cad dxf dfm` | [Sheet metal](references/manufacturing-sheet-metal.md) |
+| Injection molding | `--process molding --pull z --material M` (`--cavities`) | [Injection molding](references/manufacturing-injection-molding.md) |
+| 3D printing | `--process printing --technology T` (`--material`, `--build-volume`, `--layer-height`) | [3D printing](references/manufacturing-printing.md) |
 
-## Check the design
-
-A check is a Python script that calls the model and measures what it returns, so it
-tests the model as it is now. Write one only when the person asks for a dimension, a fit
-or a mass, or when the change is numeric and the number matters ([Pictures](#pictures)):
-
-Copy `world_parts` and `find_part` from
-[Opening geometry](references/inspection-and-validation.md#opening-geometry) into the check
-first. They accumulate parent placements; raw `.leaves` do not.
-
-```python
-from cad.geometry import closest_points
-
-from assembly import assembly
-
-kit = assembly().shape                       # rebuilt (replayed), returned as a tree
-plate = find_part(kit, "plate")               # copied into world coordinates
-post = find_part(kit, "standoff_left")        # refuses missing or repeated labels
-print(plate.bounding_box().size)              # the envelope: not a hole's diameter or a wall's thickness
-print(closest_points(plate, post).distance)   # 0: the standoff sits on the plate
+```bash
+cad model dfm "$ID" --process cnc --material aluminum --tools 3,6,10
 ```
 
-- Measuring is what shows a request's dimensions and clearances. In an assembly, nothing
-  interferes when `overlap_volume` is 0 for every pair of solids apart from fits named
-  on purpose, and a part meant to rest on another touches it when their
-  `closest_points` distance is 0. Both describe the parts as built, not a pose
-  ([measurements](references/inspection-and-validation.md#measurements)).
-- `cad inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which
-  is also the root name `inspect "$ID"` prints): each part's volume times its material's
-  density, and the parts that have no material.
-- A check that fails or cannot decide has shown nothing about the design.
-- A retry that leaves out or shrinks a specified feature (a fillet skipped, a radius
-  reduced) builds a different design from the one asked for.
+A named process is part of the design, not a review at the end:
+
+1. Read the process reference's *Design it* before modelling, and build its limits in.
+2. Record the process in the model, so every later check is the same one: the material with its
+   process on each part (`part.material = metals.aluminum(process=machined())`, with `machined` from
+   `bd_materials.processes`), and the shop's flags in the module docstring
+   (`Check: cad model dfm "$ID" --tools 3,6,10`).
+3. Run that check after every run. The last line and the exit status are the result: `OK` (0, though
+   warnings may remain), `FAILED` (1: the part cannot be made as drawn), `NOT CHECKED` (3: something
+   was not judged, never a pass) and 2 for a refused command. Fix errors from each finding's `refs`,
+   `value` and `limit` (`--json`); fix a warning when that leaves the request intact, else report it.
+4. In the hand-off, say the process, the material the check judged with, the findings left, and that
+   the rules are general practice rather than a shop's own limits.
+
+A STEP or mesh file is checked by its own type (`cad step dfm part.step --process ...`); a mesh, for
+printing only. For a review, a shop's own limits or the result in full, read
+[manufacturing review](references/manufacturing-review.md). A SendCutSend order is the sendcutsend
+skill's; slicing a print, the print3d skill's.
+
+## Show the model
+
+Show the person each model you create or change as soon as its first run succeeds, and any model
+or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
+the first of these you have:
+
+1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
+   absolute path; its description says the rest.
+2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
+   Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
+   open the page there yourself, and give the person the link as well.
+3. Neither: give the person the link, to open in their browser.
+
+The page follows every run of the model. A file you export is a download: give its path. Showing is
+for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
+of the page. If it fails to launch, say so.
 
 ## Hand off
 
-The reply is the person's record of the work: the models made or changed, the files
-written, the checks run and what they showed, the requirements no check covered, and
-every assumption or departure from the request.
-
-### Show the model
-
-Show the user each model you create or change, and any model or file they ask to see.
-A file you export is a download: give its path, do not open it.
-Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad snapshot`.
-
-- If your tools include `cad_show` (your host may prefix it), call it with the model's id
-  or the file's absolute path, and follow its description for when to call it again.
-  The other tools depend on the host. A host that draws CAD cards or tabs (Claude
-  Desktop, the Codex app) also has `cad_view`, which reads what the user selected, and
-  `cad_screenshot`, which shows you what they see, both of a card or tab that is open, for
-  when they ask about it. A text host (Claude Code in a terminal, `codex exec`) draws
-  nothing: its `cad_show` opens the model's page in the user's browser and answers with
-  the URL to give them, and it has no view to read. `cad_inspect`, `cad_snapshot` and
-  `cad_export` are on every host. Call only the tools you have, and never say a card
-  shows a model when your host drew none.
-- Otherwise give the user the page's link once: a model's page is the `view:` line its
-  run prints. For a file, run the CAD Viewer, from any folder:
-
-  ```bash
-  cad viewer --json FILE [FILE ...]
-  ```
-
-  The command ensures this installation's server, registers each file and prints
-  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
-  JSON line (never guess the port); the URL carries its token query. A page follows
-  every later run of its model and every rewrite of its file, so share it once.
-  Return that link to the user. If it fails to launch, say so.
-
-Exact selection and measurement need a model's document, an `.xbf` or a STEP; mesh viewers
-measure approximately, on triangles.
+Say what was made or changed, the files written, the checks run and what they showed, what no check
+covered, and every assumption or departure from the request.

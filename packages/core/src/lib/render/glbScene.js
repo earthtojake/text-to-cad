@@ -128,6 +128,21 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
     node?.object.traverse((object) => { if (object.isMesh && recordsOf.has(object)) records.push(recordsOf.get(object)); });
     return records;
   };
+  // The file's node tree, as the view's panel lists it: every glTF node, under the node it hangs from, by its name;
+  // a node that draws is a part (`n<index>`, what Select picks), one that only groups is a branch to open.
+  const nodeTree = [];
+  const visitTree = (object, into) => {
+    const index = object.userData?.gltfNode;
+    if (Number.isInteger(index)) {
+      const draws = nodes.has(index);
+      const entry = { id: `n${index}`, node: index, label: draws ? nodeName(nodes.get(index)) : glbNodeName(object), part: draws ? `n${index}` : null, children: [] };
+      into.push(entry);
+      for (const child of object.children) visitTree(child, entry.children);
+      return;
+    }
+    for (const child of object.children) visitTree(child, into);
+  };
+  visitTree(document.scene, nodeTree);
   const pickable = meshes.filter(record => record.node).map(record => record.mesh);
   // A hover is a pick per frame: each rigid geometry gets its accelerator in idle time, the first
   // time a ray reaches its bounds. A deformed one is tested the plain way, where it is drawn.
@@ -182,19 +197,45 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
       clipPlanes = Array.isArray(planes) ? planes : [];
       look.setClipPlanes(clipPlanes);
     },
+    /** The file's nodes as a tree: `{ id, node, label, part, children }`, `part` the node's pick (`n12`) where it draws, else null. */
+    nodeTree,
     /** Whether `id` (`n12`) is a node of this file that draws. */
     hasPart: id => nodeOf(id) !== null,
-    /** A node, as Quick Edit's chip says it: its name, and what the file says of it. */
+    /** A node's name alone, as its chip says it, measuring nothing: the hover tip's. "" for none. */
+    nameOf(id) {
+      const index = nodeOf(id);
+      return index === null ? "" : nodeName(nodes.get(index));
+    },
+    /**
+     * A node, as Quick Edit's chip and its card say it: its name, and what the file says of it — its
+     * index, its triangles, the size of what it draws where it stands now (in the file's metres), the
+     * names of its authored materials where they have any, and the STEP occurrence it came from.
+     */
     describePart(id) {
       const index = nodeOf(id);
       if (index === null) return null;
       const node = nodes.get(index);
       const occurrence = String(node.object.userData?.cadOccurrenceId || "").trim();
+      const box = new THREE.Box3();
+      for (const mesh of node.meshes) box.union(new THREE.Box3().setFromObject(mesh, true));
+      const size = box.isEmpty() ? null : box.getSize(new THREE.Vector3()).toArray().map(value => value * GLB_SCENE_UNITS.perWorld);
+      const materials = [...new Set(node.meshes.flatMap(mesh => (authored.get(mesh) || []).map(material => String(material?.name || "").trim())).filter(Boolean))];
       return { name: nodeName(node), facts: [
         { label: "Node", key: "part.node", value: `nodes[${index}]` },
         { label: "Triangles", key: "part.triangles", value: node.meshes.reduce((sum, mesh) => sum + triangles(mesh), 0).toLocaleString("en-US") },
+        ...(size ? [{ label: "Size", key: "part.size", value: `${size.map(value => +value.toPrecision(4)).join(" × ")} ${GLB_SCENE_UNITS.unit}` }] : []),
+        ...(materials.length ? [{ label: "Material", key: "part.material", value: materials.join(", ") }] : []),
         ...(occurrence ? [{ label: "STEP occurrence", key: "part.stepOccurrence", value: occurrence }] : [])
       ] };
+    },
+    /** The box, where they stand now, of what nodes draw (`n12`): what Zoom to selection frames. */
+    selectionBounds(ids) {
+      const box = new THREE.Box3();
+      for (const id of ids) {
+        const index = nodeOf(id);
+        for (const mesh of index === null ? [] : nodes.get(index).meshes) box.union(new THREE.Box3().setFromObject(mesh, true));
+      }
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
     },
     /** Light what nodes draw: `hovered` and `selected` are nodes as a pick names them (`n12`). */
     setHighlight({ hovered = [], selected = [] } = {}) {

@@ -1,0 +1,30 @@
+# Files written on request (cad <type> export, exports.py): reproducible from the code.
+/STEP/
+/STL/
+/GLB/
+/3MF/
+/DXF/
+/tmp/
+__pycache__/
+# What render.py writes (cad run render.py): its stills, and the scene as a .blend.
+/RENDERS/
+# The board's fabrication outputs (cad kicad_pcb export, cad kicad_sch export).
+/fab/
+# The 3D models src/part_models.py writes for the footprints that name them (${KIPRJMOD}/orbit.3dshapes).
+/orbit.3dshapes/
+# KiCad's local settings beside a board it opened.
+*.kicad_prl
+fp-info-cache
+# The KiCad project build.py writes (cad run build.py): build output, made again from scripts/.
+/orbit.kicad_pcb
+/orbit.kicad_pro
+/orbit.kicad_sch
+/power.kicad_sch
+/mcu.kicad_sch
+/minutes.kicad_sch
+/hours.kicad_sch
+/orbit.kicad_sym
+/power.kicad_sym
+/orbit.pretty/
+/fp-lib-table
+/sym-lib-table

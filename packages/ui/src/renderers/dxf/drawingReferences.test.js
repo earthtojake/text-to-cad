@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { prepareDrawing } from "@text-to-cad/core/lib/drawing2d/index.js";
-import { parsePromptReference } from "@text-to-cad/core/prompt";
+import { prepareDrawing } from "@cad/core/lib/drawing2d/index.js";
+import { parsePromptReference } from "@cad/core/prompt";
 import {
-  createDrawingScene, describeEntity, drawingHandleOf, drawingReferenceId, drawingUnits, layerRows, layersSectionShown
+  createDrawingScene, describeDrawingPick, describeEntity, drawingPickTip, drawingHandleOf, drawingReferenceId, drawingUnits, layerRows, layersSectionShown
 } from "./drawingReferences.js";
 
 class NullPath { moveTo() {} lineTo() {} quadraticCurveTo() {} bezierCurveTo() {} closePath() {} }
@@ -27,10 +27,39 @@ test("the scene a selection reads maps each reference to its entity, by type and
   assert.equal(scene.hasPart("hFFFF"), false);
   assert.deepEqual(scene.describePart("h90"), describeEntity(drawing.entities.get("90"), "mm"));
   assert.equal(scene.describePart("h90").name, "Circle on CUT");
-  assert.deepEqual(scene.describePart("h90").facts.map(fact => fact.label), ["Handle", "Type", "Layer", "Centre", "Radius"]);
+  assert.deepEqual(scene.describePart("h90").facts.map(fact => fact.label), ["Layer", "Diameter Ø"]);
   assert.equal(scene.describePart("h99").name, "Block M5_NUT on HARDWARE");
   scene.setHighlight({ hovered: ["h99"], selected: ["h90", "hFFFF"] });
   assert.deepEqual(lit, { hovered: ["99"], selected: ["90"] });
+});
+
+test("a pick reads in its card as what it is and measures, the entity alone: a block reference lists none of its block's others", () => {
+  const drawing = fixture("layered.drawing.json");
+  const fact = (item, label) => item.facts.find(row => row.label === label)?.value;
+  const circle = describeDrawingPick(drawing, "h90", "mm");
+  assert.deepEqual([circle.title, circle.tip, circle.facts.map(row => [row.label, row.value])],
+    ["Circle on CUT", "Ø 12.00 mm", [["Layer", "CUT"], ["Diameter Ø", "12.00 mm"]]]);
+  const line = describeDrawingPick(drawing, "h92", "mm");
+  assert.match(line.tip, /^\d+\.\d\d mm$/);
+  assert.equal(fact(line, "Length"), line.tip);
+  assert.equal(fact(line, "Size"), undefined, "a line says its length, not a box");
+  const text = describeDrawingPick(drawing, "h93", "mm");
+  assert.match(fact(text, "Size"), / × .* mm$/);
+  const nut = describeDrawingPick(drawing, "h99", "mm");
+  assert.deepEqual([nut.title, fact(nut, "Block"), "related" in nut], ["Block M5_NUT on HARDWARE", "M5_NUT", false]);
+  assert.equal(describeDrawingPick(drawing, "hFFFF"), null);
+});
+
+test("a pick's lengths are in the unit its drawing declares, as Measure reads them there: a millimetre drawing reads mm, one that declares none bare units", () => {
+  const drawing = fixture("layered.drawing.json");
+  const diameter = units => describeDrawingPick(drawing, "h90", drawingUnits(units).unit).facts.find(row => row.label === "Diameter Ø").value;
+  assert.equal(diameter({ insunits: 4, name: "Millimeters" }), "12.00 mm");
+  assert.equal(diameter({ insunits: 6, name: "Meters" }), "12.00 m");
+  assert.equal(diameter({ insunits: 0, name: "Unitless" }), "12.00 units");
+  assert.equal(describeDrawingPick(drawing, "h90", drawingUnits({ insunits: 1 }).unit).tip, "Ø 12.00 in");
+  // The hover tip's own words: the name and the headline measure, from the entity alone.
+  assert.equal(drawingPickTip(drawing, "h90", "mm"), "Circle on CUT · Ø 12.00 mm");
+  assert.equal(drawingPickTip(drawing, "h99", "mm"), "Block M5_NUT on HARDWARE");
 });
 
 test("a drawing's unit is the one it declares, and bare drawing units when it declares none", () => {
@@ -40,14 +69,14 @@ test("a drawing's unit is the one it declares, and bare drawing units when it de
   assert.deepEqual(drawingUnits(null), { unit: "units", declared: false });
 });
 
-test("a Layers section is shown for several layers or any block reference, never for a flat pattern's few", () => {
+test("a drawing always shows its Layers section once it is read, a single layer as its one row", () => {
   const drawing = fixture("layered.drawing.json");
   assert.equal(layersSectionShown(drawing), true);
-  assert.equal(layersSectionShown(fixture("sample.drawing.json")), false);
-  const flat = { layers: [{ name: "CUT" }, { name: "BEND" }, { name: "ENGRAVE" }], entities: new Map([["1", { type: "LINE" }]]) };
-  assert.equal(layersSectionShown(flat), false);
-  assert.equal(layersSectionShown({ ...flat, layers: [...flat.layers, { name: "NOTES" }] }), true);
-  assert.equal(layersSectionShown({ layers: [{ name: "0" }], entities: new Map([["9", { type: "INSERT" }]]) }), true);
+  assert.equal(layersSectionShown(fixture("sample.drawing.json")), true);
+  const flat = { layers: [{ name: "CUT" }, { name: "BEND" }], entities: new Map([["1", { type: "LINE" }]]) };
+  assert.equal(layersSectionShown(flat), true);
+  assert.equal(layersSectionShown({ layers: [{ name: "0" }], entities: new Map([["9", { type: "LINE" }]]) }), true);
+  assert.equal(layersSectionShown(null), false);
   const hardware = layerRows(drawing).find(row => row.name === "HARDWARE");
   assert.deepEqual(hardware.inserts, [{ handle: "99", block: "M5_NUT" }, { handle: "9B", block: "M5_NUT" }]);
 });

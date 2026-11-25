@@ -1,10 +1,16 @@
-import { normalizeFormat } from "@text-to-cad/core/lib/fileFormats.js";
+import { normalizeFormat } from "@cad/core/lib/fileFormats.js";
 import {
   entryIconKindForRenderFormat,
   ENTRY_ICON_KIND
-} from "@text-to-cad/core/lib/renderCapabilities.js";
+} from "@cad/core/lib/renderCapabilities.js";
+
+import { DOCUMENT_TYPE_REGISTRY } from "@cad/core/lib/documentTypes.generated.js";
 
 export { ENTRY_ICON_KIND };
+
+const ROBOT_KINDS = new Set(
+  DOCUMENT_TYPE_REGISTRY.documentTypes.filter((type) => type.view === "robot").map((type) => type.wire)
+);
 
 // An entry names its format twice — the catalog's `kind` and the resolved source format —
 // and they can disagree (an `.srdf` entry whose source format resolves to the robot family,
@@ -13,6 +19,7 @@ export { ENTRY_ICON_KIND };
 // as data instead of re-deriving it from eight format comparisons.
 const ICON_KIND_PRECEDENCE = [
   ENTRY_ICON_KIND.DXF,
+  ENTRY_ICON_KIND.KICAD_PCB,
   ENTRY_ICON_KIND.ROBOT,
   ENTRY_ICON_KIND.STL_MESH,
   ENTRY_ICON_KIND.THREE_MF_MESH,
@@ -36,9 +43,9 @@ export function entryIconKind(entry, {
     entryIconKindForRenderFormat(normalizeFormat(sourceFormat || entry?.kind)),
     entryIconKindForRenderFormat(normalizedKind)
   ]);
-  // An `.srdf` catalog kind is not a render format of its own in every catalog payload,
-  // so it names the robot icon directly.
-  if (normalizedKind === "srdf") {
+  // A robot description's catalog kind is not a render format of its own in every catalog payload,
+  // so its document type's view names the robot icon directly (`cad.registry`).
+  if (ROBOT_KINDS.has(normalizedKind)) {
     candidates.add(ENTRY_ICON_KIND.ROBOT);
   }
 

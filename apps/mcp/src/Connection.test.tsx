@@ -1,14 +1,14 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
+import type { CadViewerProps } from '@cad/ui/cad-viewer';
 import Connection from './Connection';
 import { HostError } from './host/bridge';
 import { createChannel, declaresServerTools } from './host/channel';
 import { createServer, type Launch } from './host/server';
 
-// The shared CAD viewer, reduced to whether this page mounted it, and with what client.
+// The shared viewer, reduced to whether this page mounted it, and with what client.
 const viewer = vi.hoisted(() => ({ props: null as CadViewerProps | null }));
-vi.mock('@text-to-cad/ui/cad-viewer', async original => ({
+vi.mock('@cad/ui/cad-viewer', async original => ({
   ...await original<object>(),
   CadViewer: (props: CadViewerProps) => { viewer.props = props; return null; },
 }));
@@ -40,14 +40,14 @@ it('a host that refuses every call before any comes back gets one plain notice, 
   const fetchImpl = vi.fn(async () => { throw new TypeError('Refused to connect because it violates the document\'s Content Security Policy.'); });
   const { container } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
   const notice = await screen.findByRole('alert');
-  expect(notice.textContent).toContain('This chat can\'t connect the CAD viewer to its engine. Open the model in the CAD Viewer instead.');
-  const link = screen.getByRole('link', { name: 'Open in CAD Viewer' });
+  expect(notice.textContent).toContain('This chat can\'t connect to CAD\'s engine. Open the model in your browser instead.');
+  const link = screen.getByRole('link', { name: 'Open in browser' });
   expect([link.getAttribute('href'), link.getAttribute('target')]).toEqual([PAGE, '_blank']);
   // No home, no library, and never the host's own words or the sandbox's.
   expect(viewer.props).toBeNull();
   expect(container.textContent).not.toMatch(/IPC|Content Security|library/i);
   expect(channel.state).toBe('none');
-  // The probe asked the engine once, directly, with the page's day link as a Bearer credential.
+  // The probe asked the engine once, directly, with the page's link as a Bearer credential.
   expect(fetchImpl).toHaveBeenCalledTimes(1);
   // The host opens links: the link goes through it.
   act(() => link.click());
@@ -62,21 +62,39 @@ it('a host that declared it carries calls, and refused them anyway, ends on the 
   const { container } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={{ ...launch, browser: undefined, engine: undefined }}
     presentation="inline" fetchImpl={fetchImpl as any} />);
   await waitFor(() => expect(container.querySelector('[data-cad-unreachable]')).not.toBeNull());
-  expect(container.textContent).toBe('This chat can\'t connect the CAD viewer to its engine. Ask your agent to open the model in the CAD Viewer instead.');
+  expect(container.textContent).toBe('This chat can\'t connect to CAD\'s engine. Ask your agent to open the model in your browser instead.');
   expect(screen.queryByRole('link')).toBeNull();
   expect(fetchImpl).not.toHaveBeenCalled();
 });
 
-it('an engine the probe reaches runs the whole card over direct HTTP: the day link as its credential, no host call and no sync', async () => {
+it('a call CAD\'s server refuses for the card\'s capability ends on the notice and its button, never the server\'s words (Cursor)', async () => {
+  // Cursor carried every call, and CAD's server refused each: the card had no capability (0.10.0 to 0.11.5).
+  const said = { capability: 'Only a CAD view calls this tool.', stale: 'This CAD view was opened before CAD restarted: close it and open CAD again.' };
+  for (const refused of ['capability', 'stale'] as const) {
+    const { bridge, server, channel } = host({ serverTools: {}, openLinks: {} }, async () => ({
+      isError: true, content: [{ type: 'text', text: said[refused] }], structuredContent: { refused } }));
+    const { container, unmount } = render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" />);
+    await waitFor(() => expect(container.querySelector('[data-cad-unreachable]')).not.toBeNull());
+    expect(container.textContent).toContain(refused === 'stale'
+      ? 'This view was opened before CAD restarted, so it can\'t connect. Ask your agent to show the model again, or open it in your browser.'
+      : 'This chat can\'t connect to CAD\'s engine. Open the model in your browser instead.');
+    expect(container.textContent).not.toContain(said[refused]);
+    expect(screen.getByRole('link', { name: 'Open in browser' }).getAttribute('href')).toBe(PAGE);
+    expect(channel.refusal).toBe(refused);
+    unmount();
+  }
+});
+
+it('an engine the probe reaches runs the whole card over direct HTTP: the link as its credential, no host call and no sync', async () => {
   const { bridge, server, channel } = host({}, refuse);
   const asked: { url: string; headers: Headers; credentials?: string }[] = [];
   const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
     asked.push({ url, headers: new Headers(init.headers), credentials: init.credentials });
     const path = new URL(url).pathname;
-    if (path === '/__cad/server') return json({ app: 'cad-viewer' });
-    if (path === '/__cad/recents') return json({ recents: [] });
-    if (path === '/__cad/analytics') return json({ sharing: false, policy: 'https://www.texttocad.dev/privacy-policy' });
-    return json({ notice: null });
+    if (path === '/api/v1/server') return json({ app: 'cad-viewer' });
+    if (path === '/api/v1/documents') return json({ documents: [] });
+    if (path === '/api/v1/settings') return json({ language: { locale: null }, telemetry: { share: false, policy: 'https://www.texttocad.dev/privacy-policy' } });
+    return json({});
   });
   render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
   await waitFor(() => expect(viewer.props).not.toBeNull());
@@ -84,10 +102,10 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the day li
   // The client's requests (its library here) go to the engine's origin, path and query unchanged.
   await act(async () => { await viewer.props!.client.recents(); });
   expect(asked.every(request => request.url.startsWith(`${ENGINE}/`))).toBe(true);
-  expect(asked.map(request => new URL(request.url).pathname)).toEqual(expect.arrayContaining(['/__cad/server', '/__cad/recents']));
+  expect(asked.map(request => new URL(request.url).pathname)).toEqual(expect.arrayContaining(['/api/v1/server', '/api/v1/documents']));
   for (const request of asked) {
     expect(request.headers.get('authorization')).toBe('Bearer 1893456000.mac');
-    expect(request.headers.has('x-cadgen-app')).toBe(false);
+    expect(request.headers.has('x-cad-app')).toBe(false);
     expect(request.credentials).toBe('omit');
   }
   // The host was asked once, the check that found it refuses; never again, and no view sync.
@@ -96,7 +114,7 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the day li
 
 it('a host that carries calls without declaring it is checked once, then the card runs through it; a tab host is never checked', async () => {
   const answered = async (name: string, args: any) => name === 'cad_sync' ? new Promise(() => {})
-    : { structuredContent: { status: 200, headers: { 'content-type': 'application/json' }, body: btoa(JSON.stringify(new URL(args.url).pathname === '/__cad/server' ? { app: 'cad-viewer' } : {})) } };
+    : { structuredContent: { status: 200, headers: { 'content-type': 'application/json' }, body: btoa(JSON.stringify(new URL(args.url).pathname === '/api/v1/server' ? { app: 'cad-viewer' } : {})) } };
   const quiet = host({}, answered);
   const fetchImpl = vi.fn();
   const { container } = render(<Connection bridge={quiet.bridge as any} server={quiet.server} channel={quiet.channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
@@ -104,12 +122,12 @@ it('a host that carries calls without declaring it is checked once, then the car
   expect(viewer.props).toBeNull();
   await waitFor(() => expect(viewer.props).not.toBeNull());
   expect(quiet.channel.state).toBe('open');
-  expect(quiet.bridge.callTool.mock.calls[0].slice(0, 2)).toMatchObject(['cad_http', { method: 'GET', url: 'http://cad.invalid/__cad/server' }]);
+  expect(quiet.bridge.callTool.mock.calls[0].slice(0, 2)).toMatchObject(['cad_http', { method: 'GET', url: 'http://cad.invalid/api/v1/server' }]);
   cleanup();
   viewer.props = null;
   const tab = host({}, answered);
   render(<Connection bridge={tab.bridge as any} server={tab.server} channel={tab.channel} launch={{ ...launch, surface: 'tab' }} presentation="tabs" fetchImpl={fetchImpl as any} />);
   expect(viewer.props).not.toBeNull();
-  expect(tab.bridge.callTool.mock.calls.some(([, args]) => String(args.url).endsWith('/__cad/server'))).toBe(false);
+  expect(tab.bridge.callTool.mock.calls.some(([, args]) => String(args.url).endsWith('/api/v1/server'))).toBe(false);
   expect(fetchImpl).not.toHaveBeenCalled();
 });

@@ -2,5 +2,5 @@ export { ViewerHostContext, ViewerElementContext, useViewerHost, usePromptDestin
 export type * from './types.js';
 export { createLiveRegistry } from './liveRegistry.js';
 export type { LiveRegistry, LiveView, ThumbnailSize } from './liveRegistry.js';
-export type { PromptContext, PromptContextPort, PromptReference, PromptPart, PromptDeliveryResult, PromptDestinationState } from '@text-to-cad/core/prompt';
+export type { PromptContext, PromptContextPort, PromptReference, PromptPart, PromptDeliveryResult, PromptDestinationState } from '@cad/core/prompt';
 

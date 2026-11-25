@@ -1,7 +1,7 @@
 """The documents' records, read: what a model's run asks of the engine's registry in its own process.
 
-Each document the engine knows has one record, ``<state>/documents/<id>/document.json`` in the user's state
-folder (``places.state_dir``), which the engine's registry writes (``cad_server.engine.registry``, the server's).
+Each document the engine knows has one record, ``<state>/documents/<id>/document.json`` in the state folder
+(``places.state_dir``), which the engine's registry writes (``cad_server.engine.registry``, the server's).
 A model's script and its worker read a record of it now and then -- the file that claims an explicit name
 (``identity.claimed``), where a moved script's document was built (``build._relocation``) -- and write none:
 so the library reads them here, by the registry's one shape (``parse``), and the words the engine says of a
@@ -29,6 +29,8 @@ RECORD = "document.json"
 # A model document's bytes in the engine's cache folder (``cache``): ``documents/<id>/document.xbf``.
 FILE = "document.xbf"
 WINDOWS = os.name == "nt"
+# What cmd.exe reads as an operator in a word outside double quotes: ``pandas>=2`` bare is a redirection.
+_OPERATORS = frozenset("<>|&^")
 
 
 def parse(ident: str, data: bytes | None) -> dict[str, Any] | None:
@@ -67,7 +69,8 @@ class Records:
 
 
 def current() -> Records:
-    """The records of the user's state folder, where it is now (``CAD_STATE_DIR`` is read each time)."""
+    """The records of the state folder (``places.state_dir``), where it is now (``CAD_STATE_DIR`` is read each
+    time)."""
     from cad.engine.places import state_dir
 
     return Records(state_dir())
@@ -94,22 +97,70 @@ def program(registry: Any, record: dict[str, Any]) -> Path | None:
     return Path(os.path.normpath(registry.root(record) / given)) if given else None
 
 
-def rerun(program: str | os.PathLike) -> str:
-    """The command that runs ``program`` again, as a person pastes it into this platform's shell:
-    ``cad run`` and the program, absolute. The engine that says it is the one ``cad run``
-    reaches, and its python has the kernel a bare ``python`` may not. The program is quoted for a
-    POSIX shell (``shlex.quote``); on Windows in the double quotes cmd.exe and PowerShell both read,
-    and only where a space or a quote needs them (``subprocess.list2cmdline``) -- to cmd.exe a
-    single quote is part of the path."""
-    text = os.fspath(program)
-    return f"cad run {subprocess.list2cmdline([text]) if WINDOWS else shlex.quote(text)}"
+def rerun(program: str | os.PathLike, python: str | os.PathLike | None = None,
+          given: list[str] | None = None) -> str:
+    """The command that runs ``program`` again, as a person pastes it into this platform's shell, as its
+    run was made: ``cad run`` and the program, absolute -- the base, or the packages its script's header
+    names, which it names again. The engine that says it is the one ``cad run`` reaches, and its python
+    has the kernel a bare ``python`` may not. With the requirements ``cad run --with`` was given
+    (``given``: its record's ``with``), ``cad run --with`` each of them and the program; a program a run in
+    a Python of its own built (``python``: a venv's, with packages the base lacks), that Python and the
+    program, which ``cad run`` could not build. Each word is quoted for a POSIX shell (``shlex.quote``);
+    on Windows in the double quotes cmd.exe and PowerShell both read, and only where a space, a quote, an
+    operator of cmd.exe's or a ``%`` needs them (``_windows``) -- to cmd.exe a single quote is part of the
+    path."""
+    from cad.engine.said import COMMAND
+
+    def said(words: list[str]) -> str:
+        return " ".join(_windows(word) if WINDOWS else shlex.quote(word) for word in words)
+
+    if python:
+        return said([os.fspath(python), os.fspath(program)])
+    # An option ``cad run`` was given is said as one word (``--python=3.13``); a requirement after ``--with``.
+    options = [word for requirement in given or ()
+               for word in ((requirement,) if requirement.startswith("-") else ("--with", requirement))]
+    return f"{COMMAND} run {said([*options, os.fspath(program)])}"
+
+
+def _windows(word: str) -> str:
+    """One word as cmd.exe and PowerShell pass it on to a program: the C runtime's quoting
+    (``subprocess.list2cmdline``: double quotes around a word holding a space), and the double quotes too
+    around a word holding an operator of cmd.exe's (``_OPERATORS``). A word holding a ``%`` is quoted
+    between each, ``"C:\\my"%"20dir"``: cmd.exe expands a ``%NAME%`` inside double quotes too, and what lies
+    between two ``%`` is then a name with quotes in it, which no variable has; PowerShell, like the C runtime,
+    reads the parts as one word."""
+    if "%" in word:
+        return "%".join(_quoted(part) for part in word.split("%"))
+    said = subprocess.list2cmdline([word])
+    if said.startswith('"') or not _OPERATORS.intersection(word):
+        return said
+    return _quoted(word)
+
+
+def _quoted(word: str) -> str:
+    """``word`` in double quotes as the C runtime reads them: a quote in it escaped, and the backslashes
+    before that quote, and those before the quote that closes it, doubled."""
+    said, slashes = ['"'], 0
+    for char in word:
+        if char == "\\":
+            slashes += 1
+            continue
+        said.append("\\" * (slashes * 2 + 1) + '"' if char == '"' else "\\" * slashes + char)
+        slashes = 0
+    return "".join(said) + "\\" * (slashes * 2) + '"'
 
 
 def command(registry: Any, record: dict[str, Any]) -> str | None:
     """The command that builds a model's document again (``rerun``): ``cad run`` of its home, the
-    script that defines it, never a program that imported it and called it (a check script). None
-    for a shape handed over, which no run built, and for a file's. The engine never runs it."""
-    return rerun(home(registry, record)) if record.get("kind") == "model" else None
+    script that defines it, never a program that imported it and called it (a check script), with the
+    requirements its last run's ``cad run --with`` was given (its record's ``with``) -- or the Python of
+    its own its last run built it with (its record's ``python``) and its home. None for a shape handed
+    over, which no run built, and for a file's. The engine never runs it."""
+    if record.get("kind") != "model":
+        return None
+    python, given = record.get("python"), record.get("with")
+    return rerun(home(registry, record), python if isinstance(python, str) else None,
+                 [item for item in given if isinstance(item, str)] if isinstance(given, list) else None)
 
 
 def detached(registry: Any, record: dict[str, Any]) -> bool:

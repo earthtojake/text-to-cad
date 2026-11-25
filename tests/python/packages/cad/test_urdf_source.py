@@ -3,8 +3,8 @@ from pathlib import Path
 
 from tests.python.support.tmp_root import generated_cad_directory
 
-from cad.findings import format_findings
-from cad.urdf_source import (MeshUriKind, UrdfSource, classify_mesh_uri, resolve_mesh_uri, validate_urdf_file)
+from cad._internal.findings import format_findings
+from cad.urdf._source import (MeshUriKind, UrdfSource, classify_mesh_uri, resolve_mesh_uri, validate_urdf_file)
 
 
 class UrdfSourceTests(unittest.TestCase):

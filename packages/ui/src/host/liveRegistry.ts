@@ -9,7 +9,8 @@ export interface LiveView {
   /**
    * The model on its own, for a library card: once the view has settled — the whole file loaded
    * and drawn — framed whole from the default direction at `size`, whatever the person's camera,
-   * panels or window. Nothing on screen changes.
+   * panels or window. Nothing on screen changes. The picture is the light viewport's, which the
+   * library keeps (`CadClient.keepThumbnail`) and the home shows in both themes.
    */
   thumbnail(size: ThumbnailSize): Promise<Blob>;
 }

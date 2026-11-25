@@ -6,7 +6,7 @@
 // one reader of an event on the page: what it is, its key, its count.
 
 // A kind is lower-case words with hyphens between; a stage is too, but one named for a technology keeps
-// its name's digits (the update's `build123d`), as the engine's vocabulary policy allows.
+// its name's digits (`build123d`), as the engine's vocabulary policy allows.
 const KIND = /^[a-z][a-z-]*$/;
 const STAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const KEY = /^progress\.([^.]+)\.([^.]+)$/;

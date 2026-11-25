@@ -1,17 +1,24 @@
-"""The three distributions, by where their code runs, and what each may import.
+"""The three layers of the one distribution, cad, by where their code runs, and what each may import.
 
 - **The library** (``cad``, imported as ``cad``, and ``cadgen``, its earlier name): what a model imports and
   what runs in a worker -- the model API, the kernel-side engine, the document model and the protocol
   a client speaks. It runs in the CAD kernel environment, where the server is not installed, so it
   imports no module of the server's or the shim's, not even lazily: every import a library module
   makes, at its top or in a function, is of the library.
-- **The server** (``cad-server``: ``cad_server``): what runs in the daemon or a command -- the
-  daemon, the registry, the HTTP API, the CAD Viewer's and the CAD app's servers, every verb, the
+- **The server** (``cad_server``): what runs in the daemon or a command -- the
+  daemon, the registry, the HTTP API, the viewer's and the CAD app's servers, every verb, the
   environment makers, telemetry. It runs in the core, where the CAD kernel is not installed, so
   importing every module of it loads no kernel module, not even bound lazily (the build123d extra lives in
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.
-- **The shim** (``cad-mcp``: ``cad_mcp``): the stdio transport an agent app starts, the standard
-  library alone.
+- **The shim** (``cad_mcp``): the stdio transport an agent app starts (``cad mcp``): the standard library, the
+  library's engine client (``cad.engine``), the server's MCP protocol (``cad_server.mcp``) and what cad's own update
+  knows of the uv tool ``cad`` (``cad_server._internal.auto_update``: where it is installed, whose server the shim
+  starts), loading no kernel.
+
+Inside the library, each integration's package (``cad/<integration>/``, ``cad.registry.INTEGRATIONS``)
+imports only its own extra's dependencies, and each document type's (``cad/<type>/``) no third-party
+library at all: the type is neutral about who produces it. Every extra the library declares, every
+``cad.<name>`` namespace and every ``cad/<name>/`` package is a registered integration or document type.
 """
 
 from __future__ import annotations
@@ -24,12 +31,12 @@ import sys
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import LIBRARY, REPO_ROOT, SERVER, SHIM, SOURCE_PATH, add_sources
+from tests.python.support.paths import LIBRARY, REPO_ROOT, SOURCE_PATH, add_sources
 
 add_sources()
 
-# Each distribution's source tree and the top-level packages it holds.
-TREES = {LIBRARY / "src": ("cad", "cadgen"), SERVER / "src": ("cad_server",), SHIM / "src": ("cad_mcp",)}
+# The source tree and the top-level packages it holds.
+TREES = {LIBRARY / "src": ("cad", "cadgen", "cad_server", "cad_mcp")}
 SERVER_PACKAGE, SHIM_PACKAGE = "cad_server", "cad_mcp"
 # The build123d extra's distributions, as their modules are named, and what build123d brings.
 KERNEL = ("OCP", "build123d", "bd_materials", "threejs_materials", "matplotlib", "shapely", "lib3mf", "scipy",
@@ -37,8 +44,9 @@ KERNEL = ("OCP", "build123d", "bd_materials", "threejs_materials", "matplotlib",
 # What a model's process and a worker import first: none of them may bring a module of the server's.
 MODEL_ENTRY_POINTS = ("cadgen", "cad", "cad.engine", "cad.engine.api", "cad.engine.model", "cad.engine.build",
                       "cad.engine.worker", "cad.engine.client", "cad.engine.serve", "cad.engine.reader",
-                      "cad.engine.render.service", "cad.engine.snapshot", "cad.ap242", "cad.gltf",
-                      "cad.geometry", "cad.flatten", "cad.eng_drawing", "cad.urdf", "cad.sdf",
+                      "cad.engine.render.service", "cad.engine.snapshot", "cad.build123d", "cad.registry",
+                      "cad.step", "cad.xbf",
+                      "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.urdf",
                       "cad.srdf")
 
 
@@ -101,6 +109,12 @@ class SidesTest(unittest.TestCase):
                         offenders.append(f"{name}:{line} -> {imported}")
         self.assertEqual(offenders, [])
 
+    def test_nothing_of_ours_imports_the_deprecated_alias(self) -> None:
+        offenders = [f"{name}:{line} -> {imported}" for top in ("cad", SERVER_PACKAGE, SHIM_PACKAGE)
+                     for name, path in modules(top).items() for line, imported in imports(name, path)
+                     if of("cadgen", imported)]
+        self.assertEqual(offenders, [], "it warns where it is imported: only a person's program may")
+
     def test_a_models_process_loads_no_module_of_the_server_or_the_shim(self) -> None:
         code = ("import importlib, json, sys\n"
                 f"for name in {MODEL_ENTRY_POINTS!r}:\n"
@@ -118,23 +132,109 @@ class SidesTest(unittest.TestCase):
                 f"print(json.dumps(sorted(name for name in sys.modules if name.partition('.')[0] in {KERNEL!r})))\n")
         self.assertEqual(loaded(code), [])
 
-    def test_the_shim_imports_the_standard_library_and_itself_alone(self) -> None:
+    def test_the_shim_imports_the_engine_client_and_the_mcp_protocol_and_no_kernel(self) -> None:
+        allowed = ("cad.engine", "cad_server.mcp", "cad_server._internal.auto_update",
+                   "cad_server._internal.tool_install")
         offenders = []
         for name, path in modules(SHIM_PACKAGE).items():
             for line, imported in imports(name, path):
                 root = imported.partition(".")[0]
-                if root != SHIM_PACKAGE and root not in sys.stdlib_module_names and root != "__future__":
+                if root not in (SHIM_PACKAGE, "__future__") and root not in sys.stdlib_module_names \
+                        and not any(of(package, imported) for package in allowed):
                     offenders.append(f"{name}:{line} -> {imported}")
         self.assertEqual(offenders, [])
         shim = sorted(name for name in modules(SHIM_PACKAGE) if not name.endswith("__main__"))
-        # What the environment loads at its start (a checkout's .pth binds the lazy kernel) is not the shim's.
         code = ("import importlib, json, sys\n"
-                "before = set(sys.modules)\n"
                 f"for name in {shim!r}:\n"
                 "    importlib.import_module(name)\n"
-                "print(json.dumps(sorted(name for name in set(sys.modules) - before "
-                f"if name.partition('.')[0] in {('cad', 'cadgen', SERVER_PACKAGE)!r})))\n")
+                f"print(json.dumps(sorted(name for name in sys.modules if name.partition('.')[0] in {KERNEL!r})))\n")
         self.assertEqual(loaded(code), [])
+
+
+# Each extra's distributions, as their modules are named (``packages/cad/pyproject.toml``).
+EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
+                               "PIL", "scipy"},
+                 "kicad": {"kicode"},
+                 "mujoco": {"mujoco"},
+                 "coacd": {"coacd"},
+                 "netgen": {"netgen"},
+                 "calculix": {"cad_ccx"},
+                 "trimesh": {"trimesh", "rtree", "scipy", "networkx"},
+                 "blender": {"bpy", "mathutils"}}  # mathutils is Blender's own, in bpy's wheel
+# A platform an integration is built for (``cad.registry.PLATFORMS``' words), as its extra's marker says it.
+MARKED = {"macOS arm64": "(sys_platform == 'darwin' and platform_machine == 'arm64')",
+          "Linux x86-64": "(sys_platform == 'linux' and platform_machine == 'x86_64')",
+          "Windows x86-64": " or sys_platform == 'win32')", "Windows arm64": " or sys_platform == 'win32')"}
+# The library's required dependencies, as modules, which any of its code may import.
+REQUIRED = {"numpy"}
+# The library's packages that are neither an integration nor a document type: the engine and the internals.
+INFRASTRUCTURE = {"engine", "_internal"}
+# Its top-level modules: the registry, the shared result types, and @eng_drawing (open: a future pdf type).
+MODULES = {"registry", "results", "eng_drawing"}
+
+
+def third_party(path: Path, name: str) -> set[str]:
+    stdlib = set(sys.stdlib_module_names)
+    return {module.split(".")[0] for _line, module in imports(name, path)
+            if module.split(".")[0] not in stdlib | {"cad", "cadgen", "__future__"}}
+
+
+class IntegrationsTest(unittest.TestCase):
+    def test_every_extra_namespace_and_package_is_registered(self) -> None:
+        import tomllib
+
+        from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
+
+        extras = tomllib.loads((LIBRARY / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]
+        self.assertEqual(sorted(extras), sorted(integration.extra for integration in INTEGRATIONS.values()
+                                                if integration.extra))
+        self.assertEqual(sorted(EXTRA_MODULES), sorted(extras))
+        import re
+
+        for integration in INTEGRATIONS.values():
+            with self.subTest(integration=integration.name):
+                named = {re.split(r"[\s<>=!~;\[]", requirement, maxsplit=1)[0].lower().replace("_", "-")
+                         for requirement in extras.get(integration.extra or "", [])}
+                self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
+                                 "an integration's distributions are its extra's")
+                self.assertTrue(set(integration.modules) <= EXTRA_MODULES.get(integration.extra or "", set()))
+                # The one Python and the platforms the registry says its tool is built for are its extra's markers:
+                # anywhere else the extra installs nothing, and a run is refused by name.
+                for requirement in extras.get(integration.extra or "", []) if integration.python else ():
+                    marker = requirement.partition(";")[2]
+                    self.assertIn(f"python_version == '{integration.python}'", marker)
+                    self.assertEqual({platform for platform, said in MARKED.items() if said in marker},
+                                     set(integration.platforms))
+                    self.assertEqual(marker.count("sys_platform == "), 3, "macOS, Linux and Windows, each once")
+        root = LIBRARY / "src" / "cad"
+        packages = {path.parent.name for path in root.glob("*/__init__.py")}
+        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))
+        self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
+        import cad
+
+        self.assertEqual(sorted(cad._TYPES), sorted(DOCUMENT_TYPES))
+        self.assertEqual(sorted(cad._INTEGRATIONS), sorted(INTEGRATIONS))
+
+    def test_each_integration_imports_its_own_extras_dependencies_alone(self) -> None:
+        from cad.registry import INTEGRATIONS
+
+        library = modules("cad")
+        for integration in INTEGRATIONS.values():
+            allowed = EXTRA_MODULES.get(integration.extra or "", set()) | REQUIRED
+            for name, path in library.items():
+                if of(f"cad.{integration.name}", name):
+                    with self.subTest(module=name):
+                        self.assertEqual(set(), third_party(path, name) - allowed)
+
+    def test_each_document_type_imports_no_third_party_library(self) -> None:
+        from cad.registry import DOCUMENT_TYPES
+
+        library = modules("cad")
+        for document_type in DOCUMENT_TYPES:
+            for name, path in library.items():
+                if of(f"cad.{document_type}", name):
+                    with self.subTest(module=name):
+                        self.assertEqual(set(), third_party(path, name))
 
 
 if __name__ == "__main__":

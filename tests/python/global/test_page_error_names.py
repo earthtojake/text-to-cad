@@ -1,4 +1,4 @@
-"""A page's crash is typed by its error's ``name`` (`@text-to-cad/core`'s `client/crash.js`: `crashOf`), and the
+"""A page's crash is typed by its error's ``name`` (`@cad/core`'s `client/crash.js`: `crashOf`), and the
 bundler renames classes: an error class of the page's own whose ``name`` is not a string it sets would report what
 it inherits (``Error``), or -- set from its constructor's name -- a word the bundle made up (``i``). So every class
 in the page's packages and apps that extends ``Error``, another of the standard's errors, or one of these classes,

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import sys
 import tempfile
@@ -44,6 +45,25 @@ class RegistryTest(unittest.TestCase):
         self.registry = Registry(self.state)
         self.ident = model_id(self.state / "parts.py", "cube")
 
+    def test_a_file_s_derived_views_live_under_its_document_and_go_with_it(self) -> None:
+        """A KiCad board's plot, refilled pours, DRC and kept exports are kept in the document cache under the
+        board's own document, keyed by its bytes: a changed file is a new entry, and its deletion removes them."""
+        from cad.engine.formats.kicad import poured
+        from cad.engine.ids import file_id
+
+        cache = self.state / "cache"
+        board = self.state / "board.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20241229))", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(cache)}):
+            first = poured.folder(board, poured.key(board))
+            self.assertEqual(first, cache / "documents" / file_id(board) / "kicad" / poured.key(board))
+            first.mkdir(parents=True)
+            (first / "drc.json").write_text("{}", encoding="utf-8")
+            board.write_text("(kicad_pcb (version 20241229) (general))", encoding="utf-8")
+            self.assertNotEqual(poured.folder(board, poured.key(board)), first, "a changed file is a new entry")
+            Registry(self.state, cache).delete(file_id(board))  # what cad delete and the home's Delete both run
+        self.assertFalse((cache / "documents" / file_id(board)).exists(), "deleted with its document")
+
     def test_an_engine_record_reads_only_a_port_number(self) -> None:
         engines = self.state / registry.ENGINES
         engines.mkdir(parents=True, exist_ok=True)
@@ -71,13 +91,38 @@ class RegistryTest(unittest.TestCase):
     def test_the_rebuild_command_pastes_into_the_platform_s_shell(self) -> None:
         # Printed for a person to paste: quoted for a POSIX shell there; on Windows as cmd.exe and
         # PowerShell both read it, where a single quote would be part of the path.
-        cases = ((False, "/m/caller.py", "cad run /m/caller.py"),
-                 (False, "/my models/caller.py", "cad run '/my models/caller.py'"),
-                 (True, "C:\\m\\caller.py", "cad run C:\\m\\caller.py"),
-                 (True, "C:\\my models\\caller.py", 'cad run "C:\\my models\\caller.py"'))
-        for windows, program, pasted in cases:
-            with self.subTest(program=program), mock.patch.object(records, "WINDOWS", windows):
-                self.assertEqual(records.rerun(program), pasted)
+        cases = ((False, "/m/caller.py", None, None, "cad run /m/caller.py"),
+                 (False, "/my models/caller.py", None, None, "cad run '/my models/caller.py'"),
+                 (True, "C:\\m\\caller.py", None, None, "cad run C:\\m\\caller.py"),
+                 (True, "C:\\my models\\caller.py", None, None, 'cad run "C:\\my models\\caller.py"'),
+                 # Built with packages ``cad run --with`` was given: ``cad run --with`` them again; on Windows
+                 # a word cmd.exe would read an operator in (``>``: a redirection) in double quotes too.
+                 (False, "/my models/caller.py", None, ["/w/my pkg", "pandas>=2"],
+                  "cad run --with '/w/my pkg' --with 'pandas>=2' '/my models/caller.py'"),
+                 (True, "C:\\my models\\caller.py", None, ["C:\\w\\my pkg", "pandas>=2", "scipy"],
+                  'cad run --with "C:\\w\\my pkg" --with "pandas>=2" --with scipy "C:\\my models\\caller.py"'),
+                 # cmd.exe expands a %NAME% inside double quotes too: each % between quoted parts.
+                 (True, "C:\\my%20dir\\caller.py", None, ["C:\\w\\100%pure\\"],
+                  'cad run --with "C:\\w\\100"%"pure\\\\" "C:\\my"%"20dir\\caller.py"'),
+                 # Built by a Python of its own (a venv's): that Python runs it again, as its run did.
+                 (False, "/my models/caller.py", "/w/.venv/bin/python", None,
+                  "/w/.venv/bin/python '/my models/caller.py'"),
+                 (True, "C:\\my models\\caller.py", "C:\\w\\.venv\\Scripts\\python.exe", None,
+                  'C:\\w\\.venv\\Scripts\\python.exe "C:\\my models\\caller.py"'))
+        for windows, program, python, given, pasted in cases:
+            with self.subTest(program=program, python=python, given=given), \
+                    mock.patch.object(records, "WINDOWS", windows):
+                self.assertEqual(records.rerun(program, python, given), pasted)
+        # The record names that Python (``python``: absent, the base's, which ``cad run`` reaches), or the
+        # requirements ``cad run --with`` was given (``with``).
+        self.registry.put({**_record(self.ident, self.state), "python": "/w/.venv/bin/python"})
+        with mock.patch.object(records, "WINDOWS", False):
+            self.assertEqual(registry.command(self.registry, self.registry.get(self.ident)),
+                             f"/w/.venv/bin/python {shlex.quote(str(self.state / 'parts.py'))}")
+        self.registry.put({**_record(self.ident, self.state), "with": ["/w/pkg", "pandas>=2"]})
+        with mock.patch.object(records, "WINDOWS", False):
+            self.assertEqual(registry.command(self.registry, self.registry.get(self.ident)),
+                             f"cad run --with /w/pkg --with 'pandas>=2' {shlex.quote(str(self.state / 'parts.py'))}")
 
     def test_a_record_is_relocated_by_its_root_alone_and_a_shape_s_is_never_detached(self) -> None:
         moved = self.state / "elsewhere"
@@ -110,7 +155,7 @@ class StoreTest(unittest.TestCase):
         for nowhere in ("<stdin>", str(folder / "ipykernel_1" / "2.py")):  # a REPL's, a notebook cell's
             with self.subTest(file=nowhere), self.assertRaisesRegex(ValueError, r"model\(shape, name='cell'\)"):
                 self.define(source, nowhere)
-        # store= is gone: an unexpected keyword argument, as any name that never was (law 15).
+        # store= is gone: an unexpected keyword argument, as any name that never was (law 14).
         for given in ("@model(store='memory')", "@xbf('XBF/cell.xbf', store='memory')"):
             with self.subTest(given=given), self.assertRaisesRegex(
                     TypeError, r"^(model|xbf)\(\) got an unexpected keyword argument 'store'$"):
@@ -169,7 +214,7 @@ class RegistryDaemonTest(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.folder, True)
         cls.addClassCleanup(shutil.rmtree, cls.engine, True)
         # The registry alone, with a cache folder nothing can write: a restart knows an id by its
-        # record and its command. What the cache adds is ``test_cache``'s.
+        # record and its command. What the cache adds is ``test_cache_restart``'s.
         cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(cls.engine),
                                          "CAD_STATE_DIR": str(cls.state),
                                          "CAD_CACHE_DIR": engine_daemon.unwritable(cls.folder),
@@ -227,6 +272,7 @@ class RegistryDaemonTest(unittest.TestCase):
                          "an unchanged build rewrites nothing")
         # A restart: the id is known, not held, with the command that builds it again; nothing runs it.
         self.assertEqual(self.cli("stop").returncode, 0)
+        engine_daemon.start(self.env)
         inspected = self.cli("inspect", cube)
         self.assertEqual(inspected.returncode, 2, inspected.stderr)
         self.assertIn(f"run `cad run {project / 'parts.py'}`", inspected.stderr)

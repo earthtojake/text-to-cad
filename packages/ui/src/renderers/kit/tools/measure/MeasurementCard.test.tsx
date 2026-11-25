@@ -1,14 +1,12 @@
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
-import MeasurementCard from '../../../../../dist/renderers/kit/tools/measure/MeasurementCard.js';
-
-afterEach(cleanup);
+import { english } from '../../../../../dist/i18n/core.js';
+import { expect, it } from 'vitest';
+import { measurementFacts } from '../../../../../dist/renderers/kit/tools/measure/MeasurementCard.js';
 
 it("a measurement chip's card is its full reading: the distance, the delta, and what each end bound to", () => {
   const item = { measurement: { euclidean: 21.38, delta: [21.38, 0, 0], unit: 'mm' }, pickA: { snapKind: 'vertex' }, pickB: { snapKind: 'edge' } };
-  const view = render(<MeasurementCard item={item} />);
-  const rows = [...view.container.querySelectorAll('[data-info-row]')].map(row => row.textContent);
-  expect(rows[0]).toBe('Distance21.38 mm');
-  expect(rows[rows.length - 1]).toBe('BetweenVertex → Edge');
-  expect(rows.some(row => row.startsWith('Delta'))).toBe(true);
+  const facts = measurementFacts(item, english);
+  expect([facts[0].label, facts[0].value]).toEqual(['Distance', '21.38 mm']);
+  expect(facts.at(-1)!.label).toBe('Between');
+  expect(facts.at(-1)!.copy).toBe(false);
+  expect(facts.some(fact => fact.label === 'Delta')).toBe(true);
 });

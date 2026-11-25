@@ -1,24 +1,27 @@
-import { readPreviewSettings, readViewSettings } from "@text-to-cad/core/common/viewSettings.js";
-import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
+import { readPreviewSettings, readViewSettings } from "@cad/core/common/viewSettings.js";
+import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@cad/core/lib/perspective.js";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 
 // A file's view: the one record the host keeps for the file on screen in its tab, under
-// `[absolute file path, renderer id]` (`@text-to-cad/ui/tab-store`), until the tab leaves the file.
+// `[absolute file path, renderer id]` (`@cad/ui/tab-store`), until the tab leaves the file.
 // One flat, versioned object:
 //
-//   { version: 2, camera, display, preview, playback, renderer }
+//   { version: 2, camera, display, preview, playback, renderer, panel? }
 //
 //   camera    the renderer's own camera value, opaque here: a perspective snapshot for a scene
 //             (`readShellCamera`), a plane transform for a drawing. Null is "fit the model".
 //   display   the Display settings: the mode, the grid, and what every mode shares (the model tools, the lens).
 //   preview   Preview's own settings: Render's lighting, background, floor and part colours.
 //   playback  the playback settings (`tools/playbar/playbackPreferences.js`): Preview's orbit speed,
-//             Autoplay, and the speed and loop chosen for the routine.
+//             and the speed and loop chosen for the routine.
 //   renderer  the renderer's own slices of view state, each `{ signature, value }`: what the
 //             slice was written against. A slice comes back only while its signature still
 //             matches the one the renderer declares for the file on screen — a rebuilt model
 //             has different parts, so ids from the old one are not ids at all — while the
 //             camera and the display are always kept.
+//   panel     the view's panel, open or closed, its width and its tab
+//             (`filePanel.js`): written by the panel itself and merged into whatever a renderer
+//             writes by the file viewer, so no renderer reads or writes it here.
 //
 // Reading is forgiving (a record another version wrote, or a slice that no longer fits, is
 // simply not restored); writing is exact. Nothing here touches storage: the host owns that.

@@ -1075,7 +1075,7 @@ class Symbols:
             return self._function_token(value, node)
         if isinstance(value, type):
             return ("class:" if self._reach_class(value, node) else "ext:") + _identity(value)
-        if kind is types.ModuleType:
+        if isinstance(value, types.ModuleType):  # a document type (``cad.xbf``, ``cad.step``) is a module too
             if self._first_party_module(value.__name__):
                 self._fallback(node, value.__name__, f"{where} holds module {value.__name__} as a value")
             return "module:" + value.__name__

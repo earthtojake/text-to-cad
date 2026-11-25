@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -15,6 +16,56 @@ from urllib.parse import urlsplit
 
 from cad_server.viewer.engine_app import LINK_EXPIRED_PAGE, TOKEN_NEEDED_PAGE, sign
 from tests.python.support import engine_daemon
+
+
+class LinkLifetimeTest(unittest.TestCase):
+    def test_a_link_is_admitted_after_a_day_and_after_years_and_the_token_rotated_ends_it(self):
+        from unittest import mock
+
+        from cad_server.viewer import engine_app
+
+        master = 'm' * 43
+        link = engine_app.link_of(master)
+        now = time.time()
+        for later in (86400 + 60, 10 * 365 * 86400, 200 * 365 * 86400):
+            with mock.patch.object(engine_app.time, 'time', return_value=now + later):
+                self.assertEqual(engine_app.standing(master, 'link', link), 'ok', later)
+        # The token rotated: no link it signed is one.
+        self.assertIsNone(engine_app.standing('r' * 43, 'link', link))
+
+    def test_a_token_s_link_is_one_text_at_any_time_and_another_token_s_another(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from cad_server.viewer import engine_app
+
+        master = 'm' * 43
+        app = engine_app.EngineApp.__new__(engine_app.EngineApp)  # its link alone: no server, no recorders
+        app.token, app.lock = master, threading.RLock()
+        made = []
+        for at in (time.time(), time.time() + 5, time.time() + 50 * 365 * 86400):
+            with mock.patch.object(engine_app.time, 'time', return_value=at):
+                made += [app.link(), app.fresh_link()['link']]
+        self.assertEqual(len(set(made)), 1, 'one token, one link, whenever it is made')
+        self.assertEqual(engine_app.standing(master, 'link', made[0]), 'ok')
+        self.assertEqual(app.fresh_link()['expires'], engine_app.LINK_EXPIRES)
+        # Not sooner than a link signed the old way, now plus a hundred years.
+        self.assertGreater(engine_app.LINK_EXPIRES, time.time() + 100 * 365 * 86400)
+        # The view line a build prints carries it too, the same text at each build.
+        from cad_server.engine.models import Models
+
+        server = SimpleNamespace(url='http://127.0.0.1:1', http=SimpleNamespace(app=app))
+        self.assertEqual(Models.url(server, 'abc'), f'http://127.0.0.1:1/abc?token={made[0]}')
+        # Another token, and the token rotated: another text, which the first token refuses.
+        other = engine_app.link_of('r' * 43)
+        self.assertNotEqual(other, made[0])
+        self.assertIsNone(engine_app.standing(master, 'link', other))
+        app.retoken('r' * 43)
+        self.assertEqual(app.link(), other)
+        self.assertIsNone(engine_app.standing('r' * 43, 'link', made[0]))
+        # A link signed the old way (then plus a hundred years) is admitted as before.
+        old = sign(master, 'link', 100 * 365 * 86400, now=time.time() - 3 * 86400)
+        self.assertEqual(engine_app.standing(master, 'link', old), 'ok')
 
 
 class LauncherTest(unittest.TestCase):
@@ -39,12 +90,16 @@ class LauncherTest(unittest.TestCase):
         self.assertTrue(engine_daemon.await_exit(pid), "the stopped engine leaves the test's folder")
 
 
-    def launch(self, *args, cwd=None, ok=True):
+    def launch(self, *args, cwd=None, ok=True, reason='failed'):
         done = subprocess.run([sys.executable, '-m', 'cad_server.viewer', '--json', '--dist', str(self.dist), *args],
                               env=self.env, cwd=cwd or self.root, capture_output=True, text=True, timeout=60)
         if not ok:
-            self.assertNotEqual(done.returncode, 0)
-            return done.stderr
+            # The launch answers in JSON: its failure is its one document on stdout, the contract's, and its
+            # class sets the exit status (2 for a FILE that is not there or not one, 1 for a launch that failed).
+            found = json.loads(done.stdout)
+            self.assertEqual((found['ok'], found['reason']), (False, reason))
+            self.assertEqual(done.returncode, 1 if reason == 'failed' else 2, done.stderr)
+            return found['error']
         self.assertEqual(done.returncode, 0, done.stderr)
         return json.loads(done.stdout)
 
@@ -64,7 +119,7 @@ class LauncherTest(unittest.TestCase):
 
     def session(self, headers):
         """The ``Cookie`` header that sends back the session a response set."""
-        self.assertRegex(headers['set-cookie'], r'^cadgen-[\w-]{12}=\d+\.[\w-]{43}; Path=/; Max-Age=2592000; '
+        self.assertRegex(headers['set-cookie'], r'^cad-[\w-]{12}=\d+\.[\w-]{43}; Path=/; Max-Age=2592000; '
                                                 r'HttpOnly; SameSite=Strict$')
         return {'Cookie': headers['set-cookie'].split(';')[0]}
 
@@ -79,7 +134,7 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual({r['port'] for r in (first, again, latest)}, {first['port']})
         self.assertEqual([urlsplit(r['url']).path for r in (first, latest)], ['/', '/'])
         # One page: the most recent launch's folder, c, replacing b, which its relative files are read from.
-        status, _, data = self.get(first, '/__cad/server')
+        status, _, data = self.get(first, '/api/v1/server')
         self.assertEqual(status, 200)
         self.assertEqual(os.path.realpath(json.loads(data)['start']), os.path.realpath(c))
         self.assertEqual(json.loads(data)['pid'], first['pid'])
@@ -101,22 +156,40 @@ class LauncherTest(unittest.TestCase):
         # A symlink to it is the same document: one id, one catalog row.
         self.assertEqual(urlsplit(self.launch('link.stl')['url']).path, f'/{ident}')
         self.assertEqual(self.get(launched, f'/{ident}')[0], 200)
-        status, _, data = self.get(launched, f'/__cad/catalog?id={ident}')
+        status, _, data = self.get(launched, f'/api/v1/documents/{ident}')
         self.assertEqual(status, 200)
-        self.assertEqual([(row['id'], os.path.realpath(row['file'])) for row in json.loads(data)['entries']],
-                         [(ident, os.path.realpath(part))])
-        status, _, data = self.get(launched, '/__cad/catalog?file=' + str(link))
-        self.assertEqual([row['id'] for row in json.loads(data)['entries']], [ident])
+        envelope = json.loads(data)
+        self.assertEqual((envelope['id'], os.path.realpath(envelope['entry']['file'])), (ident, os.path.realpath(part)))
+        status, _, data = self.get(launched, '/api/v1/documents?path=' + str(link))
+        self.assertEqual([row['id'] for row in json.loads(data)['documents']], [ident])
         # An id nothing holds is missing, and says so; a script is no CAD file to open.
-        status, _, data = self.get(launched, '/__cad/catalog?id=6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab')
-        self.assertEqual((status, json.loads(data)['entries']), (200, []))
-        self.assertIn('is held', json.loads(data)['missing'])
+        status, _, data = self.get(launched, '/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab')
+        self.assertEqual(status, 404)
+        self.assertIn('is held', json.loads(data)['error'])
+        # A script, a file of no type and one that is not there are the command line's (refused before the engine
+        # is asked, as the engine refuses them), an id it does not hold the engine's to say: each by its reason.
         (self.root / 'model.py').write_text('print(1)\n', encoding='utf-8')
-        self.assertIn('no CAD file', self.launch('model.py', ok=False))
+        (self.root / 'notes.txt').write_text('x\n', encoding='utf-8')
+        self.assertEqual(self.launch('model.py', ok=False, reason='wrong_type'),
+                         "model.py is a model's script, not a CAD file: `cad run model.py` builds its models and prints "
+                         "each one's page")
+        self.assertIn('no CAD file at', self.launch('notes.txt', ok=False, reason='wrong_type'))
+        self.assertEqual(self.launch('gone.step', ok=False, reason='not_found'), 'no such file: gone.step')
+        self.assertIn('is held', self.launch('6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab', ok=False, reason='not_found'))
+        # The engine refuses the same FILEs by the same rule, for a launch that did not check them first.
+        from unittest import mock
+
+        from cad_server.viewer.engine_app import EngineApp
+        from cad_server.viewer.main import Unopened
+
+        for name, reason in (('model.py', 'wrong_type'), ('gone.step', 'not_found')):
+            with self.subTest(name=name), self.assertRaises(Unopened) as refused:
+                EngineApp.document(mock.Mock(), name, str(self.root))
+            self.assertEqual(refused.exception.reason, reason)
 
     def test_every_route_requires_token_and_keeps_host_and_post_gates(self):
         launch = self.launch()
-        for route in ('/', '/assets/app.js', '/__cad/server', '/api/docs', '/__cad/api/docs', '/mcp'):
+        for route in ('/', '/assets/app.js', '/app', '/api/v1/server', '/api/v1/documents', '/api/docs', '/mcp'):
             self.assertEqual(self.get(launch, route, token=False)[0], 403, route)
             self.assertEqual(self.get(launch, route, headers={'Host': 'evil.example'})[0], 403, route)
         # A page load without a credential is refused with a static page (no script, no asset), never
@@ -127,67 +200,86 @@ class LauncherTest(unittest.TestCase):
         master, link = self.master(), launch['token']
         self.assertNotIn(master, json.dumps(launch), 'a printed launch carries a link, never the token')
         self.assertEqual(launch['url'], f"{launch['apiUrl']}/?token={link}")
-        # The link (or the token itself) is exchanged for a session cookie, which is neither.
-        status, headers, _ = self.get(launch, f'{page}?token={link}', token=False)
-        self.assertEqual((status, headers['location']), (302, page))
+        # A link (or the token itself) opened is served as it is, the link left in the address: the
+        # page, a session cookie (which is neither), no redirect, no Referer and nothing cached.
+        navigation = {'Sec-Fetch-Dest': 'document'}
+        status, headers, body = self.get(launch, f'{page}?token={link}', token=False, headers=navigation)
+        self.assertEqual((status, body, 'location' in headers), (200, b'<html>viewer</html>', False))
+        self.assertEqual((headers['referrer-policy'], headers['cache-control']), ('no-referrer', 'no-store'))
         cookie = self.session(headers)
         status, headers, _ = self.get(launch, f'{page}?token={master}', token=False)
-        self.assertEqual(status, 302)
+        self.assertEqual(status, 200)
         for value in (master, link):
             self.assertNotIn(value, headers['set-cookie'] + cookie['Cookie'])
         name = cookie['Cookie'].split('=')[0]
         for stale in ({'Cookie': f'{name}=gone'}, {'Cookie': f'{name}={sign("x" * 43, "session", 60)}'}):
-            status, _, body = self.get(launch, '/', token=False, headers={**stale, 'Sec-Fetch-Dest': 'document'})
+            status, _, body = self.get(launch, '/', token=False, headers={**stale, **navigation})
             self.assertEqual((status, body), (403, TOKEN_NEEDED_PAGE), stale)
             # ... and never outranks the link of the URL a launch just printed.
-            self.assertEqual(self.get(launch, f'{page}?token={link}', token=False, headers=stale)[0], 302)
-        self.assertEqual(self.get(launch, '/?token=gone', token=False, headers={'Sec-Fetch-Dest': 'document'})[2],
-                         TOKEN_NEEDED_PAGE)
-        # Arrived from another origin (the browser opened on the launcher's redirect file): the
-        # cookie, and a page of this origin that navigates on, so the browser sends the cookie.
-        status, headers, body = self.get(launch, f'{page}?token={link}', token=False, headers={'Sec-Fetch-Site': 'cross-site'})
-        self.assertEqual(status, 200)
-        self.session(headers)
-        self.assertIn(b'http-equiv="refresh" content="0;url=/"', body)
-        self.assertNotIn(link.encode(), body)
-        # A link past its day says so, alone; with a session it is just dropped from the address, and
-        # one followed from another site is asked again from this origin, where the session is sent.
+            self.assertEqual(self.get(launch, f'{page}?token={link}', token=False, headers=stale)[0], 200)
+        self.assertEqual(self.get(launch, '/?token=gone', token=False, headers=navigation)[2], TOKEN_NEEDED_PAGE)
+        # Arrived from another site (the browser opened on the launcher's redirect file, or the address
+        # pasted into another browser): admitted by its URL's link, which stays, and given the cookie;
+        # the page's own requests after it are this origin's, which carry the cookie alone.
+        status, headers, body = self.get(launch, f'{page}?token={link}', token=False,
+                                         headers={**navigation, 'Sec-Fetch-Site': 'cross-site'})
+        self.assertEqual((status, body, 'location' in headers), (200, b'<html>viewer</html>', False))
+        arrived = self.session(headers)
+        self.assertEqual(self.get(launch, '/api/v1/server', token=False,
+                                  headers={**arrived, 'Sec-Fetch-Site': 'same-origin'})[0], 200)
+        # The link a launch prints lasts until the token is rotated, and the next launch prints the same text.
+        self.assertGreater(int(link.split('.')[0]), time.time() + 100 * 365 * 86400)
+        again = self.launch()
+        self.assertEqual((again['token'], again['url']), (link, launch['url']))
+        # One an earlier release printed, good for a day, still reads, and past its day still expires.
+        old = sign(master, 'link', 24 * 60 * 60, now=time.time() - 2 * 86400)
+        self.assertEqual(self.get(launch, f'/?token={old}', token=False, headers=navigation)[::2], (403, LINK_EXPIRED_PAGE))
+        # A link past its day says so, alone; with a session it is served too, the page left to put a
+        # fresh one in its address; one followed from another site is asked again from this origin,
+        # where the session is sent.
         expired = sign(master, 'link', -60)
-        navigation = {'Sec-Fetch-Dest': 'document'}
         self.assertEqual(self.get(launch, f'/?token={expired}', token=False, headers=navigation)[::2],
                          (403, LINK_EXPIRED_PAGE))
-        status, headers, _ = self.get(launch, f'/?token={expired}', token=False, headers={**cookie, **navigation})
-        self.assertEqual((status, headers['location']), (302, '/'))
+        status, headers, body = self.get(launch, f'/?token={expired}', token=False, headers={**cookie, **navigation})
+        self.assertEqual((status, body, 'location' in headers), (200, b'<html>viewer</html>', False))
         for sent, site in ((sent, site) for sent in ({}, cookie) for site in ('cross-site', 'same-site')):
             status, headers, body = self.get(launch, f'/?token={expired}', token=False,
                                              headers={**sent, **navigation, 'Sec-Fetch-Site': site})
             self.assertEqual((status, 'set-cookie' in headers), (200, False), (sent, site))
             self.assertIn(f'url=/?token={expired}'.encode(), body)
+        # The link for the page's own address: the cookie's, as every route's, and none without.
+        status, _, data = self.get(launch, '/api/v1/local/link', token=False, headers={**cookie, 'Sec-Fetch-Site': 'same-origin'})
+        fresh = json.loads(data)
+        self.assertEqual((status, set(fresh)), (200, {'link', 'expires'}))
+        self.assertEqual(int(fresh['link'].split('.')[0]), fresh['expires'])
+        self.assertEqual(fresh['link'], link, 'the one link the launch printed, lasting until the token is rotated')
+        self.assertEqual(self.get(launch, f"/?token={fresh['link']}", token=False)[0], 200, 'it opens the page')
+        self.assertEqual(self.get(launch, '/api/v1/local/link', token=False)[0], 403)
         for body in (TOKEN_NEEDED_PAGE, LINK_EXPIRED_PAGE):
             self.assertNotIn(b'<script', body)
             self.assertNotIn(b'?token=', body)
         # Each page load the session admits renews it, 30 days from then; a read only once it is a day old.
         status, headers, _ = self.get(launch, '/', token=False, headers={**cookie, **navigation})
-        self.assertEqual(status, 200)
+        self.assertEqual((status, headers['referrer-policy']), (200, 'no-referrer'))
         self.session(headers)
-        self.assertNotIn('set-cookie', self.get(launch, '/__cad/server', token=False, headers=cookie)[1])
+        self.assertNotIn('set-cookie', self.get(launch, '/api/v1/server', token=False, headers=cookie)[1])
         old = {'Cookie': f'{name}={sign(master, "session", 30 * 86400, now=time.time() - 2 * 86400)}'}
-        self.session(self.get(launch, '/__cad/server', token=False, headers=old)[1])
+        self.session(self.get(launch, '/api/v1/server', token=False, headers=old)[1])
         # A sibling cookie that another page on this host set (cookies are host-scoped, not
         # port-scoped), even one a strict parser rejects, must not drop the engine's own cookie.
         for header in (f"x=y z; {cookie['Cookie']}", f"{cookie['Cookie']}; a[b]=1"):
-            status, _, _ = self.get(launch, '/__cad/server', token=False, headers={'Cookie': header})
+            status, _, _ = self.get(launch, '/api/v1/server', token=False, headers={'Cookie': header})
             self.assertEqual(status, 200, header)
-        self.assertEqual(self.get(launch, '/__cad/server?token=%C3%A9', token=False)[0], 403)
+        self.assertEqual(self.get(launch, '/api/v1/server?token=%C3%A9', token=False)[0], 403)
         # The cookie reaches every port of this host, so it admits only what the browser says came
         # from this origin or from the person (or from a client that is not a browser); a token or a
         # link in the header or the URL is admitted from anywhere, and another origin with neither not.
         for site, expected in (('same-origin', 200), ('none', 200), ('same-site', 403), ('cross-site', 403)):
-            status, _, body = self.get(launch, '/__cad/server', token=False,
+            status, _, body = self.get(launch, '/api/v1/server', token=False,
                                        headers={**cookie, 'Sec-Fetch-Site': site})
             self.assertEqual(status, expected, site)
-            self.assertEqual(self.get(launch, '/__cad/server', headers={'Sec-Fetch-Site': site})[0], 200, site)
-            self.assertEqual(self.get(launch, '/__cad/server', token=False, headers={'Sec-Fetch-Site': site})[0], 403)
+            self.assertEqual(self.get(launch, '/api/v1/server', headers={'Sec-Fetch-Site': site})[0], 200, site)
+            self.assertEqual(self.get(launch, '/api/v1/server', token=False, headers={'Sec-Fetch-Site': site})[0], 403)
         self.assertIn(b'cross-origin request refused', self.get(
             launch, '/', token=False, headers={**cookie, 'Sec-Fetch-Site': 'same-site'})[2])
         # Every page may be framed by its own origin alone: the client's, and the link-gone page.
@@ -197,7 +289,7 @@ class LauncherTest(unittest.TestCase):
                       headers={'Sec-Fetch-Dest': 'document'})[1]['content-security-policy'])
         conn = http.client.HTTPConnection('127.0.0.1', launch['port'], timeout=10)
         try:
-            conn.request('POST', '/__cad/recents', body=b'{}', headers={'Authorization': 'Bearer '+launch['token']})
+            conn.request('PATCH', '/api/v1/documents', body=b'{}', headers={'Authorization': 'Bearer '+launch['token']})
             reply = conn.getresponse()
             self.assertEqual(reply.status, 403)
             reply.read()
@@ -209,7 +301,7 @@ class LauncherTest(unittest.TestCase):
                               env=self.env, cwd=self.root, capture_output=True, text=True, timeout=60)
         self.assertEqual(done.returncode, 0, done.stderr)
         launch = json.loads(done.stdout)
-        self.assertEqual(self.get(launch, '/__cad/server')[0], 200)
+        self.assertEqual(self.get(launch, '/api/v1/server')[0], 200)
 
 
 if __name__ == '__main__':

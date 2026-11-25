@@ -1,4 +1,4 @@
-import { boundsCenterAndRadius, fitDistanceForRadius } from '@text-to-cad/core/lib/viewer/autoZoom.js';
+import { boundsCenterAndRadius, fitDistanceForRadius } from '@cad/core/lib/viewer/autoZoom.js';
 import { DEFAULT_VIEW_DIRECTION, WORLD_UP } from './viewportCameraKit.js';
 
 // Interactive framing only. Snapshot/export framing retains its own policy.
@@ -18,17 +18,28 @@ export function interactiveFitPadding(aspect) {
   return { x: INTERACTIVE_CAMERA_FIT_PADDING, y: INTERACTIVE_CAMERA_FIT_PADDING + WIDE_VIEWPORT_EXTRA_VERTICAL_PADDING * wide };
 }
 
+/** The share of the viewport's height a fit frames in: what the strip over its top leaves
+ * (`clearTop` CSS pixels of a `height`-pixel viewport), never under half of it; 1 with no strip. */
+export function fitRoom(clearTop, height) {
+  if (!(Number(clearTop) > 0) || !(Number(height) > 0)) return 1;
+  return Math.max(1 - Number(clearTop) / Number(height), 0.5);
+}
+
 /** Fit the projected bounding box, including perspective depth, rather than
  * the rotation-invariant sphere that wastes space around long or flat models.
  * Returns a plan; never mutates the camera, controls or saved view. Without a
  * `padding` the viewport's own applies (`interactiveFitPadding`); a number is
- * both axes' padding (a library card's picture).
+ * both axes' padding (a library card's picture). `room`: the share of the height
+ * under the view's tool strip (`fitRoom`), the bottom of the viewport: the box is
+ * fitted in it and centred in it, as a flat view's fit keeps clear of the strip, so
+ * the target stands above the box's centre by half of what the strip takes.
  */
 export function interactiveCameraFrameForBounds(THREE, {
   camera, controls, bounds, modelOffset = null, frameAspect = camera?.aspect || 1,
   minRadius = 0, viewDirection = null, viewUp = null,
   nearClip = camera?.near,
   padding = null,
+  room = 1,
 } = {}) {
   if (!camera || !controls || !bounds?.min?.every(Number.isFinite) || !bounds?.max?.every(Number.isFinite)) return null;
   const frame = boundsCenterAndRadius(THREE, bounds, { offset: modelOffset });
@@ -45,9 +56,12 @@ export function interactiveCameraFrameForBounds(THREE, {
   const screenUp = new THREE.Vector3().crossVectors(direction, right).normalize();
   const halfSize = new THREE.Vector3(...bounds.max).sub(new THREE.Vector3(...bounds.min)).multiplyScalar(0.5);
   const aspect = Math.max(Number.isFinite(frameAspect) ? frameAspect : 1, 1e-3);
-  const fitPadding = Number.isFinite(padding)
+  const share = Number(room) > 0 && Number(room) < 1 ? Math.max(Number(room), 0.5) : 1;
+  const roomPadding = Number.isFinite(padding)
     ? { x: Math.max(padding, 1), y: Math.max(padding, 1) }
-    : interactiveFitPadding(aspect);
+    : interactiveFitPadding(aspect / share);
+  // Every height counts against the room's share of the viewport's.
+  const fitPadding = { x: roomPadding.x, y: roomPadding.y / share };
   const verticalSlope = Math.tan((Number(camera.fov) || 48) * Math.PI / 360);
   const horizontalSlope = verticalSlope * aspect;
   const nearMargin = Math.max(Number(nearClip) || 0, 0) * 1.1;
@@ -67,22 +81,25 @@ export function interactiveCameraFrameForBounds(THREE, {
   // Orthographic distance has no effect on screen occupancy; keep enough room
   // for orbit/near planes using the old conservative sphere depth.
   if (camera.isOrthographicCamera) {
-    distance = fitDistanceForRadius(camera, frame.radius, { aspect, minRadius, padding: Math.max(fitPadding.x, fitPadding.y) });
+    distance = fitDistanceForRadius(camera, frame.radius, { aspect, minRadius, padding: Math.max(roomPadding.x, roomPadding.y) });
   }
+  // Centred in the room: the room's middle stands (1 - share) of the half height under the viewport's.
+  const lift = (1 - share) * (camera.isOrthographicCamera ? halfHeight : distance * verticalSlope);
+  const target = frame.center.clone().addScaledVector(screenUp, lift);
   return {
     ...frame, halfHeight, distance, direction, up,
-    position: frame.center.clone().addScaledVector(direction, distance),
-    target: frame.center.clone(), zoom: 1,
+    position: target.clone().addScaledVector(direction, distance),
+    target, zoom: 1,
   };
 }
 
 /** A resize uses the orientation of the last fit, not a later manual orbit. */
-export function interactiveViewportFitScale(THREE, { camera, framing, aspect, minRadius = 0 }) {
+export function interactiveViewportFitScale(THREE, { camera, framing, aspect, minRadius = 0, room = 1 }) {
   if (!framing) return null;
   const frame = interactiveCameraFrameForBounds(THREE, {
     camera, controls: { target: new THREE.Vector3() }, bounds: framing.bounds,
     frameAspect: aspect, minRadius: framing.minRadius ?? minRadius, viewDirection: framing.direction, viewUp: framing.up,
-    nearClip: framing.nearClip ?? camera?.near,
+    nearClip: framing.nearClip ?? camera?.near, room,
   });
   return frame ? camera.isOrthographicCamera ? frame.halfHeight : frame.distance : null;
 }
@@ -90,11 +107,11 @@ export function interactiveViewportFitScale(THREE, { camera, framing, aspect, mi
 /** The zoom ruler is always the authored box at the default orientation.
  * Never derive 100% from a live pose, selection fit, near plane, or saved camera.
  */
-export function originalModelCameraFrame(THREE, { camera, bounds, frameAspect, minRadius = 0, modelOffset = null }) {
+export function originalModelCameraFrame(THREE, { camera, bounds, frameAspect, minRadius = 0, modelOffset = null, room = 1 }) {
   const radius = boundsCenterAndRadius(THREE, bounds)?.radius || minRadius;
   return interactiveCameraFrameForBounds(THREE, {
     camera, controls: { target: new THREE.Vector3() }, bounds, frameAspect, minRadius, modelOffset,
     viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
-    nearClip: Math.max(radius / 1200, 0.01),
+    nearClip: Math.max(radius / 1200, 0.01), room,
   });
 }

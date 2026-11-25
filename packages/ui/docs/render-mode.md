@@ -4,7 +4,8 @@ The Viewer and native snapshots share the sparse display contract. Core's
 `common/viewSettings.js` validates it and resolves the mode, or Preview's Render,
 into renderer groups.
 `common/sceneSettings.js` translates those groups into the scene recipe. The binding
-controls are in [settings-ui.md](settings-ui.md#display-settings-and-section-primitives).
+controls are in [viewer-ux.md](viewer-ux.md#the-display-card) (the Display card) and
+[design-system.md](design-system.md#components) (its rows and dropdowns).
 
 A file's display is a mode and the Grid switch. A mode is a look at its own defaults, with
 nothing to set. Render is no display mode: it is the photographic look Preview asks for
@@ -41,14 +42,16 @@ contains `colorMode` (`original`, `single`, `by-part`), `color` and `colors`; `l
 contains `quality`, `exposure`, `rotation`, `size`, `fill`; `background` contains `color`,
 `opacity`; `floor` contains `enabled`, `placement`, `color`, `opacity`, `finish`.
 
-Viewer appearance inherits the host; snapshots default to light. Preview's lighting quality
+Viewer appearance inherits the host. A snapshot is always light, whatever the viewer's: `cad <type> snapshot`'s
+display takes no `appearance`, and a view a Quick Edit packet carries names none. Preview's lighting quality
 defaults to Preview. There is no Custom state, legacy alias or
 migration. A stored display or Preview settings record is read setting by setting at the
 file-session read boundary (`readViewSettings`, `readPreviewSettings`): what this build
 cannot read (an older per-mode tree, a mode it no longer has) is left out, the rest kept.
 The same display shape powers live `setDisplaySettings` and snapshot `--display`; either
 refuses `mode: "render"` as it refuses any mode it does not know. A snapshot turns the grid
-on with `--grid` (`display.grid`); it has no Preview rendering option. `--camera` holds
+on with `--grid` (`display.grid`), and asks for Preview with `--preview`, its own flag and no display mode
+(the engine draws it with OCCT; no browser does). `--camera` holds
 pose/framing only. A Quick Edit's views carry the mode and the grid (`display.mode`,
 `display.grid`) with Clip and Explode, so a snapshot of them replays the view.
 
@@ -79,7 +82,7 @@ softbox environment; the other modes use neutral CAD lighting, but for an engine
 `lib/viewer/sceneRig.js`): the viewport lights it by that in place of the theme's lights, with
 the look's environment and under its own tone curve. Authored finishes show in Solid and Shaded:
 a file's reflect a small neutral environment; an engine document's reflect its look's
-environment, the studio image its engine serves beside the look (`GET /api/look/environment`),
+environment, the studio image its engine serves beside the look (`GET /api/v1/look/environment`),
 which lights every surface of the document and which the engine's OCCT stills reflect too, and
 every surface of it answers light as OCCT's PBR program does (core's `lib/viewer/surfaceBrdf.js`,
 the look's `brdf`), not by three's own physical model. Parts draws a plain finish. An engine
@@ -175,7 +178,7 @@ Behind it, Background is a studio backdrop rather than a flat fill: its color li
 toward white behind the middle of the frame, shaded toward the corners (more for a dark
 color) and above the horizon. Its opacity carries the gradient; at zero it draws nothing.
 Light Render defaults to a pure white background and retains the slightly gray
-floor (`#e7e7e5`); dark Render's background and floor are one charcoal (`#202226`), never
+floor (`#e7e7e5`); dark Render's background and floor are one neutral charcoal (`#222222`), never
 black. Explicit background colors still override the mode default.
 Pose and animation passes publish current placed bounds before
 drawing, and so does the exploded view wherever it comes to rest (a slider move,
@@ -193,28 +196,29 @@ unchanged after a runtime replacement does not.
 
 ## Where the controls live
 
-Display is a dropdown from the Display tile at the strip's end (the current mode's sphere,
-between Projection and Preview: `kit/shell/DisplayPopover.jsx`), present for every 3D file:
-the offered modes (`DisplayModeOptions.js`), then the Grid switch. On a phone it is the
-More menu's Display submenu, the same list. Preview, a view of its own over the editor's,
+Display is a card opened by the navbar's Display button, left of Preview (`kit/shell/DisplaySettings.jsx`), present
+for every 3D file: its Projection, a hairline, then its Style the offered modes (`DisplayModeOptions.js`), the Background
+and the Grid switch. On a phone it is the same card. Preview, a view of its own over the editor's,
 draws the model in Render whatever the file's mode (the store's `renderScene()`, as
 `kit/viewport/previewViewScene.js` draws it), and the tools view never does. Preview's own
 settings are its settings panel (`kit/shell/PreviewSettings.jsx`: Orbit, then
-`PreviewRenderSettings.jsx`), its edits the file's Preview settings. A file's model tree and Position are
-sections of the file sidebar (see
-[settings-ui.md](./settings-ui.md#the-file-sidebar-and-the-tool-stack)); nothing in them is
+`PreviewRenderSettings.jsx`), its edits the file's Preview settings. A file's model tree, Params and Joints are
+tabs of the view's panel (see
+[viewer-ux.md](./viewer-ux.md#the-panels-tabs)); nothing in them is
 a display setting.
 
-Display and Preview, the view's controls at the strip's end, are offered by a 3D view
-alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`):
+Display and Preview, the view's controls in the navbar, are offered by a 3D
+view, as its renderer declares to the shell (`useRendererShell`'s `previewable`); a board, a flat view shown in 3D,
+has Preview too, outside the shell, and every view has Display's card:
 
 | Renderer | Files | Display and Preview |
 | --- | --- | --- |
 | `xbf` | `.xbf`, STEP, STP | Yes |
 | `glb` | GLB | Yes |
 | `mesh` | STL, 3MF | Yes |
-| `robot` | URDF, SRDF, SDF | Yes |
-| `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
+| `robot` | URDF, SRDF | Yes |
+| `dxf` | DXF | Display, its card the Background alone; no Preview: a 2D drawing, on a surface of its own, without the shell |
+| `board` | KiCad board | Preview, outside the shell (`kit/shell/useFlatPreview.jsx`: the board in 3D as it is made, lit, with Render's settings less Part colours); Display, the same card with the board's rows (`BoardDisplay.jsx`: Side, Mode, in 3D Projection, then Style, its layer presets, and the Background), drawn flat or in 3D in the viewport's Background; its layers, Others, Pours and the zones' and tracks' opacities are its Layers tab's |
 
-A view without them has no Display or Preview control, not a disabled one, and a
+A view without Preview has no Preview control, not a disabled one, and a
 request for Preview leaves its normal view as it is.

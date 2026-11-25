@@ -13,11 +13,15 @@ texture drawn on it.
   1000); the viewer's scene draws those metres as millimetres (core's ``lib/render/glbScene.js``), so a
   Quick Edit packet's camera, Measure's points and the ink are millimetres already
   (``millimetresPerSceneUnit`` 1).
+- **Paths**: an instance's path is its nodes' names from the root down, a node named by its whole
+  path below the root (the engine's GLB names every node so) standing in for its parent's
+  (``_below``): ``model/board/D44/housing``, as a flat file's would be.
 - **Parts**: a mesh's triangulations (nodes, triangles, normals, texture coordinates), read from
   OCCT's binary shape format with numpy (``mesh.py``'s way); one face per primitive, with the
   viewer's feature edges (``buffer.py``, three's rounding at 1e-4 of the file's metres).
 - **Materials**: each primitive's ``XCAFDoc_VisMaterial`` -- base colour (linear), metallic,
-  roughness, emission, alpha (a ``BLEND`` material's; an opaque one is opaque) -- with what OCCT
+  roughness, emission, alpha (a ``BLEND`` material's; an opaque one is opaque, a transmissive one
+  previewed: ``gltf.preview_alpha``, the alpha an xbf's still draws it at) -- with what OCCT
   does not read of the file's material (the engine's KHR extensions: IOR, transmission, clear coat,
   anisotropy, emissive strength) taken from the file's own JSON, the material matched by its name
   and factors. A primitive without one is the look's fill. Its base colour texture is OCCT's own
@@ -237,10 +241,12 @@ def _vis_material(label: Any, authored: list[dict[str, Any]]) -> tuple[tuple, di
     name = raw.ToCString() if raw is not None else _name(label)
     from cad.engine.formats.gltf import material_of
 
+    # Matched as the file writes it, at its own alpha; drawn at its preview, which ``material_of`` works out.
     found = material_of({"name": name or "glTF material", "alphaMode": "BLEND" if colour[3] < 1 else "OPAQUE",
                          "pbrMetallicRoughness": {"baseColorFactor": colour, "metallicFactor": round(metallic, 6),
                                                  "roughnessFactor": round(roughness, 6)}, "emissiveFactor": emissive,
                          "extensions": _extensions(authored, name, colour, metallic, roughness)})
+    colour = (*colour[:3], float(found["pbr"]["values"]["opacity"]))
     aspect = Graphic3d_AspectFillArea3d()
     material.FillAspect(aspect)
     texture = aspect.TextureSet() if aspect.ToMapTexture() else None
@@ -320,7 +326,7 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
                 XCAFDoc_ShapeTool.GetReferredShape_s(component, referred)
                 child = _name(component) or _name(referred) or f"{name}.{at}"
                 node["children"].append(visit(referred, world @ _matrix(XCAFDoc_ShapeTool.GetLocation_s(component)),
-                                              names + [child], child))
+                                              _below(names, child), child))
             return node
         key = entry(label)
         if key not in leaves:
@@ -436,6 +442,15 @@ def read_glb(path: Path) -> tuple[list[Part], list[Placed], dict[str, Any], list
     if unused:
         warnings.append(f"its {', '.join(unused)} are not drawn: the base colour texture is")
     return parts, placed, tree, warnings
+
+
+def _below(names: list[str], child: str) -> list[str]:
+    """A child's names from the root down: its parent's and its own, or -- a node named by its whole path
+    below the root, as the engine's GLB names each (``board/D44`` under ``board``) -- its own in place
+    of its parent's, so its path is the document's (``model/board/D44``), not ``model/board/board/D44``."""
+    if len(names) > 1 and child.startswith(names[-1] + "/"):
+        return [*names[:-1], child]
+    return [*names, child]
 
 
 def glb_file(path: Path) -> Foreign:

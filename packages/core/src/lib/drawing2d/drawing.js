@@ -1,5 +1,5 @@
 /**
- * A `GET /__cad/drawing` payload, batched once and then drawn many times.
+ * A `GET /api/v1/documents/dxf/<id>/drawing` payload, batched once and then drawn many times.
  *
  * The backend flattens a `.dxf` into five primitive shapes (`point`, `lines`,
  * `path`, `filled-paths`, `filled-polygon`) and its text (`text`) in DXF
@@ -311,8 +311,8 @@ export function prepareDrawing(payload, { Path2D: injectedPath2D } = {}) {
   if (payload.schemaVersion !== DRAWING_SCHEMA_VERSION) {
     throw new Error(
       `This drawing was rendered at payload schemaVersion ${describe(payload.schemaVersion)}, but `
-      + `this build reads version ${DRAWING_SCHEMA_VERSION}. Update text-to-cad and the app together so `
-      + "the server and the viewer agree on the payload."
+      + `this build reads version ${DRAWING_SCHEMA_VERSION}: cad-server and this page are of different `
+      + "releases. Reload the page, or restart the app that shows it."
     );
   }
   const primitives = payload.primitives;

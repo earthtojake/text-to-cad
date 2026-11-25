@@ -1,6 +1,6 @@
 import {
   articulationControls, clampControlValue, openingControlValues
-} from "@text-to-cad/core/common/articulation.js";
+} from "@cad/core/common/articulation.js";
 import { cloneJointValueMap, findBestMatchingJointValueState, JOINT_VALUE_EPSILON } from "./robotMotion.js";
 
 // A robot's pose: the value of every control of its articulation (degrees, or metres for

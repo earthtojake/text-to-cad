@@ -1,0 +1,4 @@
+interface:
+  display_name: "Robot simulation"
+  short_description: "Generate or author URDF, SRDF and MuJoCo robot descriptions."
+  default_prompt: "Use $robot-simulation to generate the robot description or MuJoCo scene I describe from its CAD model, or to author or edit its URDF, MoveIt2 SRDF or MJCF by hand, check it with cad urdf validate, cad srdf validate or cad mujoco check, and show me the result."

@@ -1,6 +1,6 @@
 """Quick Edit writes replayable JSON synchronously, never starting a render.
 
-A packet is what ``cad snapshot`` reads: ``--annotation PACKET`` draws its ink, and
+A packet is what ``cad <type> snapshot`` reads: ``--annotation PACKET`` draws its ink, and
 ``--camera authored`` draws the view the ink was drawn in, found in the packet's jobs by label
 (``cad.engine.snapshot``). Its readers are the replay asserted here.
 """
@@ -15,7 +15,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from cad.engine.snapshot import _view_of, packet_visibility, parse_annotation
+from cad.engine.snapshot import _view_of, job_pictures, packet_visibility, parse_annotation
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
 from cad_server.viewer.prompt_files import PromptFiles
@@ -47,7 +47,7 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def call(self, method: str, path: str, body=None, *, guard: bool = True) -> tuple[int, bytes, str]:
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
-        headers = {"x-cadgen-viewer": "1", "content-type": "application/json"} if guard else {}
+        headers = {"x-cad-viewer": "1", "content-type": "application/json"} if guard else {}
         try:
             connection.request(method, path, body=None if body is None else json.dumps(body), headers=headers)
             response = connection.getresponse()
@@ -57,12 +57,12 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def request(self, **overrides) -> dict:
         return {"acceptInline": True, "name": "part.stl", "input": str(self.model), "annotation": ANNOTATION, "views": [
-            {"label": "view 1", "camera": CAMERA, "display": {"appearance": "dark"}, "width": 640, "height": 480},
+            {"label": "view 1", "camera": CAMERA, "display": {"mode": "xray", "grid": True}, "width": 640, "height": 480},
             {"label": "view 2", "camera": "iso"},
         ], **overrides}
 
     def test_a_prompt_writes_replayable_json_without_rendering_or_image_files(self) -> None:
-        status, body, _ = self.call("POST", "/__cad/prompt-files", self.request())
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request())
         answer = json.loads(body)
         snapshot_path = self.files / "part-1.snapshot.json"
         self.assertEqual((status, answer), (200, {"ok": True, "snapshot": str(snapshot_path)}))
@@ -75,11 +75,11 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(_view_of(packet, "view 2").camera, "iso")
         common = {"output": {"padding": 0, "tightFrame": False}}
         self.assertEqual(packet, {"input": str(self.model), "annotation": ANNOTATION, "jobs": [
-            {**common, "camera": CAMERA, "display": {"appearance": "dark"},
+            {**common, "camera": CAMERA, "display": {"mode": "xray", "grid": True},
              "outputs": [{"path": str(self.files / "part-1-view-1.png"), "label": "view 1", "width": 640, "height": 480}]},
             {**common, "camera": "iso", "outputs": [{"path": str(self.files / "part-1-view-2.png"), "label": "view 2"}]},
         ]})
-        status, _, content_type = self.call("GET", "/__cad/prompt-files/part-1.snapshot.json")
+        status, _, content_type = self.call("GET", "/api/v1/local/prompt-files/part-1.snapshot.json")
         self.assertEqual((status, content_type), (200, "application/json; charset=utf-8"))
 
     def test_the_parts_hidden_where_the_ink_was_drawn_are_the_packets_and_each_views_own(self) -> None:
@@ -91,7 +91,7 @@ class PromptFilesRouteTest(unittest.TestCase):
 
         def packet(annotation, *displays):
             views = [{"label": f"view {at + 1}", "camera": CAMERA, "display": display} for at, display in enumerate(displays)]
-            status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=annotation, views=views))
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=annotation, views=views))
             self.assertEqual(status, 200, body)
             answer = json.loads(body)
             return json.loads(answer["inline"] if "inline" in answer else Path(answer["snapshot"]).read_text(encoding="utf-8"))
@@ -109,7 +109,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         drawing = self.tmp / "panel.dxf"
         drawing.write_text("0\nSECTION\n", encoding="utf-8")
         plan = {"position": [50, 30, 120], "target": [50, 30, 0], "up": [0, 1, 0], "orthographicHalfHeight": 30}
-        status, body, _ = self.call("POST", "/__cad/prompt-files", {
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", {
             "name": "panel.dxf", "input": str(drawing), "annotation": ANNOTATION,
             "views": [{"label": "view 1", "camera": plan, "width": 1600, "height": 900}]})
         self.assertEqual(status, 200, body)
@@ -120,9 +120,71 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "panel-1-view-1.png"), "label": "view 1",
                                                          "width": 1600, "height": 900}])
 
+    def test_a_boards_view_is_its_plan_view_with_its_display_and_its_job_carries_the_ink(self) -> None:
+        """A board's Quick Edit, as a drawing's: the window as a plan-view camera, the board's Display,
+        the ink on the sheet, in a job `cad <type> snapshot` takes."""
+        board = self.tmp / "blinky.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [20, -15, 60], "target": [20, -15, 0], "up": [0, 1, 0], "orthographicHalfHeight": 16}
+        display = {"mode": "copper", "side": "bottom", "poured": False, "layers": ["B.Cu", "Edge.Cuts"]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", {
+            "name": "blinky.kicad_pcb", "input": str(board), "annotation": ANNOTATION,
+            "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]})
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "blinky-1.snapshot.json").read_text(encoding="utf-8"))
+        [source, _out, prepared] = job_pictures(packet)[0]
+        self.assertEqual((source, prepared.camera), (board, plan))
+        self.assertEqual({key: prepared.display[key] for key in display}, display)
+        self.assertEqual(prepared.annotation, ANNOTATION)
+        self.assertNotIn("output", packet["jobs"][0])
+        self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "blinky-1-current-view.png"),
+                                                         "label": "current view", "width": 1600, "height": 1200}])
+
+    def test_a_schematics_view_is_its_plan_view_with_its_sheet_and_names_no_theme(self) -> None:
+        """A schematic's Quick Edit, as a board's: the window as a plan-view camera and the sheet shown, in a
+        job `cad kicad_sch snapshot` takes. A snapshot is light whatever the viewer's theme, so a view that
+        names one is refused as a key that never was."""
+        schematic = self.tmp / "divider.kicad_sch"
+        schematic.write_text("(kicad_sch (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [114, -65, 60], "target": [114, -65, 0], "up": [0, 1, 0], "orthographicHalfHeight": 20}
+        display = {"sheet": "/Load/", "border": True}  # the viewer's: the whole drawing sheet it shows
+        request = {"name": "divider.kicad_sch", "input": str(schematic), "annotation": ANNOTATION,
+                   "views": [{"label": "current view", "camera": plan, "display": display, "width": 1600, "height": 1200}]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "divider-1.snapshot.json").read_text(encoding="utf-8"))
+        [source, _out, prepared] = job_pictures(packet)[0]
+        # The still draws KiCad's drawing sheet where the window reaches it: the frame with ``border``, the title
+        # block (``title``, on unless the view says false).
+        self.assertEqual((source, prepared.camera, prepared.display), (schematic, plan, {**display, "title": True}))
+        self.assertNotIn("output", packet["jobs"][0])
+        dark = {**request, "views": [{**request["views"][0], "display": {**display, "appearance": "dark"}}]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", dark)
+        self.assertEqual(status, 400, body)
+        self.assertRegex(json.loads(body)["error"], r"^a schematic's display takes border, sheet, title:")
+
+    def test_a_boards_prompt_names_its_references_for_the_snapshot_to_light(self) -> None:
+        """What a board's prompt names in it goes in its packet, canonical; a job takes them, and only a board's."""
+        board = self.tmp / "blinky.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [20, -15, 60], "target": [20, -15, 0], "up": [0, 1, 0], "orthographicHalfHeight": 16}
+        request = {"name": "blinky.kicad_pcb", "input": str(board), "annotation": None,
+                   "views": [{"label": "current view", "camera": plan, "display": {"mode": "board"}}],
+                   "references": ["#R1", "#track:7A1C0000-0000-4000-8000-000000000001", "#F.Cu@x20y15..x10y5"]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "blinky-1.snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(packet["references"], ["#R1", "#track:7a1c0000-0000-4000-8000-000000000001", "#F.Cu@x10y5..x20y15"])
+        self.assertEqual(job_pictures(packet)[0][2].references, packet["references"])
+        for references, said in ((["#R1", "not one"], "is not a board reference"), ("#R1", "references lists board references")):
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", {**request, "references": references})
+            self.assertEqual((status, said in json.loads(body)["error"]), (400, True), references)
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(references=["#R1"]))
+        self.assertEqual((status, "is no board" in json.loads(body)["error"]), (400, True))
+
     def test_a_prompt_without_an_annotation_names_none_and_the_next_prompt_is_numbered_on(self) -> None:
-        _, first, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=None))
-        _, second, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=None))
+        _, first, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
+        _, second, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
         self.assertNotIn("annotation", json.loads(first))
         packet = json.loads(json.loads(second)["inline"])
         self.assertIn("part-2-view-1.png", packet["jobs"][0]["outputs"][0]["path"])
@@ -134,7 +196,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         request.pop("acceptInline")
         for acceptance in (None, False, True):
             body_request = request if acceptance is None else {**request, "acceptInline": acceptance}
-            status, body, _ = self.call("POST", "/__cad/prompt-files", body_request)
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", body_request)
             self.assertEqual(status, 200, body)
             answer = json.loads(body)
             if acceptance is True:
@@ -152,7 +214,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         # The view's label is said once in the packet whatever its length past the 48 characters
         # its file name takes, so it pads the packet a byte at a time; its last, `é`, is two.
         def post(label: str) -> dict:
-            status, body, _ = self.call("POST", "/__cad/prompt-files",
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files",
                                         self.request(annotation=None, views=[{"label": label, "camera": CAMERA}]))
             self.assertEqual(status, 200, body)
             return json.loads(body)
@@ -170,14 +232,14 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def test_a_packets_input_is_a_files_path_or_a_documents_id_and_never_a_script(self) -> None:
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
-        status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(input=ident, name="bracket"))
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(input=ident, name="bracket"))
         self.assertEqual(status, 200, body)
         packet = json.loads(Path(json.loads(body)["snapshot"]).read_text(encoding="utf-8"))
         self.assertEqual(packet["input"], ident)
         script = self.tmp / "parts.py"
         script.write_text("print(1)\n", encoding="utf-8")
         for named in (str(script), f"{script}::cube"):
-            status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(input=named))
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(input=named))
             self.assertEqual(status, 400, named)
 
     def test_a_request_snapshot_would_refuse_is_refused_before_anything_renders(self) -> None:
@@ -193,37 +255,70 @@ class PromptFilesRouteTest(unittest.TestCase):
             (self.request(views=[{"label": "a", "camera": "iso", "width": 0}]), "views[0].width"),
             (self.request(annotation={"marks": {}}), "annotation is null or an object"),
             # snapshot's own parsers: a camera key it does not take, a display it does not draw
-            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "camera has no projection"),
+            (self.request(views=[{"label": "a", "camera": {"projection": "perspective"}}]), "camera projection belongs to display.camera"),
             (self.request(views=[{"label": "a", "camera": "iso", "display": {"mode": "sketch"}}]), "no display mode"),
             (self.request(views=[{"label": "a", "camera": "iso", "display": {"hidden": "lid"}}]), "display.hidden is a list of part refs"),
             (self.request(views=[{"label": "a", "camera": "authored"}]), "the view's own camera"),
             # Measure's measurements are the person's alone: they never travel in a prompt.
             (self.request(measurements=[]), "unknown field(s): measurements"),
             # a file snapshot does not draw
-            (self.request(input=str(self.notes)), "is no file cad snapshot draws"),
+            (self.request(input=str(self.notes)), "is no file cad <type> snapshot draws"),
         ):
-            status, body, _ = self.call("POST", "/__cad/prompt-files", request)
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
             self.assertEqual(status, 400, request)
-            self.assertEqual(json.loads(body)["ok"], False)
+            # Refused: never ``ok``, whether the packet's own check or the API's funnel said why.
+            self.assertNotEqual(json.loads(body).get("ok"), True)
             self.assertIn(said, json.loads(body)["error"])
         self.assertEqual(sorted(path.name for path in self.files.iterdir()) if self.files.exists() else [], [])
 
     def test_retired_save_route_does_not_write(self):
-        self.assertEqual(self.call("POST", "/__cad/prompt-files/save", {"kind": "annotation", "data": ANNOTATION})[0], 404)
+        # A prompt's file is read by its name; nothing is written there.
+        self.assertEqual(self.call("POST", "/api/v1/local/prompt-files/save", {"kind": "annotation", "data": ANNOTATION})[0], 405)
         self.assertFalse(self.files.exists())
 
     def test_render_polling_is_not_an_endpoint(self) -> None:
-        self.assertEqual(self.call("GET", "/__cad/prompt-files?id=nope")[0], 404)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files?id=nope")[0], 405)
 
     def test_files_are_served_from_the_prompt_files_directory_only_and_to_the_viewer_only(self) -> None:
-        _, body, _ = self.call("POST", "/__cad/prompt-files", self.request())
+        _, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request())
         (self.files / "part-1-view-1.png").write_bytes(PNG)
-        self.assertEqual(self.call("GET", "/__cad/prompt-files/part-1-view-1.png")[0], 404)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files/part-1-view-1.png")[0], 404)
         (self.tmp / "secret.json").write_text("{}", encoding="utf-8")
         for name in ("..%2Fsecret.json", "../secret.json", "missing.png", "part-1.job.txt", ""):
-            self.assertEqual(self.call("GET", f"/__cad/prompt-files/{name}")[0], 404, name)
-        self.assertEqual(self.call("GET", "/__cad/prompt-files/part-1-current.png", guard=False)[0], 403)
-        self.assertEqual(self.call("GET", "/__cad/prompt-files?id=old", guard=False)[0], 404)
+            self.assertEqual(self.call("GET", f"/api/v1/local/prompt-files/{name}")[0], 404, name)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files/part-1-current.png", guard=False)[0], 403)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files?id=old", guard=False)[0], 405)
+
+
+class ScratchDirectoryTest(unittest.TestCase):
+    """A message names the packet by its path: on POSIX a folder of this process's in /tmp, never the per-user
+    temporary folder (macOS's /var/folders/<hash>/T) or a home; elsewhere, or where /tmp refuses one, the
+    system's temporary folder."""
+
+    def made(self, files: PromptFiles) -> Path:
+        directory = files.directory
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        return directory
+
+    def test_on_posix_it_is_this_processs_own_folder_in_tmp(self) -> None:
+        import os
+        import stat
+
+        if os.name != "posix":
+            self.skipTest("POSIX only")
+        directory = self.made(PromptFiles())
+        self.assertEqual(Path("/tmp"), directory.parent)
+        self.assertTrue(directory.name.startswith("cad-quick-edit-"))
+        self.assertEqual(0o700, stat.S_IMODE(directory.stat().st_mode), "this user's alone")
+
+    def test_a_tmp_that_refuses_one_falls_back_to_the_systems_temporary_folder(self) -> None:
+        from unittest import mock
+
+        from cad_server.viewer import prompt_files
+
+        with mock.patch.object(prompt_files, "SHORT_TEMP", str(self.made(PromptFiles(directory=tempfile.mkdtemp())) / "missing")):
+            directory = self.made(PromptFiles())
+        self.assertEqual(Path(tempfile.gettempdir()).resolve(), directory.parent.resolve())
 
 
 if __name__ == "__main__":

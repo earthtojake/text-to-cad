@@ -1,27 +1,28 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { createInspectEnvironmentResource, INSPECT_ENVIRONMENT_ID } from "@text-to-cad/core/common/inspectEnvironment.js";
-import { resolveCadGridSettings } from "@text-to-cad/core/common/cadInk.js";
-import { resolveSceneSurfaceLook, scenePhotographicLighting } from "@text-to-cad/core/common/sceneSettings.js";
-import { applySceneRig, sceneRigFor } from "@text-to-cad/core/lib/viewer/sceneRig.js";
+import { createInspectEnvironmentResource, INSPECT_ENVIRONMENT_ID } from "@cad/core/common/inspectEnvironment.js";
+import { resolveCadGridSettings } from "@cad/core/common/cadInk.js";
+import { resolveSceneSurfaceLook, scenePhotographicLighting } from "@cad/core/common/sceneSettings.js";
+import { boxFromDrag } from "@cad/core/lib/viewer/boxSelect.js";
+import { applySceneRig, sceneRigFor } from "@cad/core/lib/viewer/sceneRig.js";
 import {
   CAMERA_PROJECTION, normalizeCameraProjection, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot
-} from "@text-to-cad/core/lib/perspective.js";
-import { mergeBoundsList } from "@text-to-cad/core/lib/viewer/autoZoom.js";
-import { applyRuntimeModelBounds, resolveRuntimeModelFloorZ, sceneRadiusForBounds } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
-import { defaultSceneGridRadius, getSceneScaleSettings, normalizeSceneScaleMode, VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
-import { buildCompositeScreenshotBlob, resolveElementBackgroundColor } from "@text-to-cad/core/lib/viewer/screenshotCapture.js";
+} from "@cad/core/lib/perspective.js";
+import { mergeBoundsList } from "@cad/core/lib/viewer/autoZoom.js";
+import { applyRuntimeModelBounds, resolveRuntimeModelFloorZ, sceneRadiusForBounds } from "@cad/core/lib/viewer/modelRuntime.js";
+import { defaultSceneGridRadius, getSceneScaleSettings, normalizeSceneScaleMode, VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
+import { buildCompositeScreenshotBlob, resolveElementBackgroundColor } from "@cad/core/lib/viewer/screenshotCapture.js";
 import {
   applySceneBackground, BASE_VIEWER_THEME, disposeTexture, getViewerThemeValue, updateSpotLightTarget
-} from "@text-to-cad/core/lib/viewer/stageTheme.js";
-import { buildRuntimeInitializationAlert } from "@text-to-cad/core/lib/viewer/webglSupport.js";
-import { THEME_FLOOR_MODES } from "@text-to-cad/core/lib/themeSettings.js";
+} from "@cad/core/lib/viewer/stageTheme.js";
+import { buildRuntimeInitializationAlert } from "@cad/core/lib/viewer/webglSupport.js";
+import { THEME_FLOOR_MODES } from "@cad/core/lib/themeSettings.js";
 import ViewPlaneControl from "../camera/ViewPlaneControl.js";
 import { CAD_DEFAULT_VERTICAL_FOV_DEGREES, explicitViewerFocalLength, perspectiveDistanceScale } from "../camera/cameraLens.js";
 import { PREVIEW_AUTO_ROTATE_SPEED } from "../camera/orbitControls.js";
 import {
   DEFAULT_DAMPING_FACTOR, applyPerspectiveSnapshot, boundsModelRadius, cancelCameraTransition, captureRuntimeViewportFitScale,
-  readOrthographicHalfHeight, readPerspectiveSnapshot, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, stepCameraTransition,
+  readOrthographicHalfHeight, readPerspectiveSnapshot, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, setRuntimeZoomPercent, CAMERA_ZOOMED_EVENT, stepCameraTransition,
   syncRuntimeCameraClipPlanes, syncRuntimeCameraProjection, syncRuntimeViewportFraming, transitionCameraToPerspectiveSnapshot,
   zoomRuntimeToBounds
 } from "../camera/runtimeCamera.js";
@@ -45,9 +46,10 @@ import { studioEnvironmentCacheFor } from "../look/studioEnvironmentCache.js";
 import { isKitScene } from "../scene.js";
 import LoadingIndicator from "../status/LoadingIndicator.js";
 import AnnotationOverlay from "../tools/annotate/AnnotationOverlay.jsx";
+import { backdropScheme } from "../tools/PreviewChrome.jsx";
 import { useSceneEffects } from "../tools/model-effects/useSceneEffects.js";
 import { TOUCH_HIT_PX, prefersCoarsePointer } from "../viewport/dom.js";
-import { annotationAt } from "../../../annotation/geometry.js";
+import { annotationAt, annotationsInBox } from "../../../annotation/geometry.js";
 import { annotationWorldPoints, annotationsOnScreen, mountAnnotations } from "../tools/annotate/annotation3d.js";
 import { createViewerRenderStateResolver } from "../view-settings/renderState.js";
 import { shareSettingsValue } from "../view-settings/shareSettingsValue.js";
@@ -59,8 +61,8 @@ import { requestSceneFrame } from "../viewport/sceneFrames.js";
 import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { VIEWPORT_CUBE_BOTTOM, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
+import { useI18n } from "@cad/ui/i18n";
+import { VIEWPORT_CUBE_SIZE, VIEWPORT_CUBE_TOP, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 // The theme's lights on the viewer runtime (`useViewerRuntime`): what Render and a scene's own rig hide.
@@ -214,6 +216,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   const activeViewPlaneFaceRef = useRef("");
   const previewRef = useRef(preview);
   useLayoutEffect(() => { runtimeRef.current?.setSuspended?.(suspended); }, [suspended, viewerReadyTick]);
+  const suspendedRef = useRef(suspended);
+  suspendedRef.current = suspended;
   const perspectivePropRef = useRef(perspective);
   const modelKeyRef = useRef(modelKey);
   const sceneScaleModeRef = useRef(normalizedSceneScaleMode);
@@ -317,12 +321,20 @@ const ShellViewport = forwardRef(function ShellViewport({
     finally { suppressPerspectiveEventsRef.current = Math.max(0, suppressPerspectiveEventsRef.current - 1); }
   };
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
+  // Zoom to fit frames what is shown now: the scene's own word for it (`shownBounds`: hidden and
+  // ghosted parts left out), else where it stands posed (`bounds`). 100% is the authored box's still.
+  const fitSceneRef = useRef(scene);
+  fitSceneRef.current = scene;
+  const fitBounds = useCallback(() => {
+    const live = fitSceneRef.current;
+    return live ? live.shownBounds?.() || live.bounds || null : null;
+  }, []);
   const {
     activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
     resetZoomAndPan, syncViewPlaneOrientation
   } = useViewportCamera({
     coordinateSystemFor, activeViewPlaneFaceRef,
-    lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKeyRef,
+    lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, shownBounds: fitBounds, modelKeyRef,
     modelTransformRef, perspectiveChangeRef, perspectivePropRef, perspectiveRef,
     runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
     setViewPlaneOrientation, suppressPerspectiveEventsRef
@@ -368,7 +380,14 @@ const ShellViewport = forwardRef(function ShellViewport({
   const handleViewportResize = useCallback(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    if (!refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
+    // A covered view (the editor's, under Preview) is resized with the page around it, not by
+    // anyone looking at it: it rescales and is never re-fitted to a size it is not seen at. A fit
+    // frames in the room under the strip, which depends on the height, so a fit to Preview's
+    // height kept after it would leave the view off the open fit when it is uncovered.
+    if (suspendedRef.current || !refitOpenFraming(runtime)) syncRuntimeViewportFraming(runtime);
+    // The zoom's reading follows: a pane that changed size (a panel docked, the page's chrome gone under Preview and
+    // back) rescales an orthographic camera without moving it, which the controls report to no one.
+    runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
     emitPerspectiveChange(runtime);
     // A resize can change what is on screen without changing the stored perspective,
     // so the settle is reported here rather than left to perspective deduplication.
@@ -417,6 +436,20 @@ const ShellViewport = forwardRef(function ShellViewport({
     }
     if (moved) touchCamera(runtime, CAMERA_TOUCH.LOOK_AT);
     return moved;
+  };
+  // The zoom set to `next(percent now)` about the camera's target: the camera touched, as a wheel's.
+  const zoomTo = next => {
+    const runtime = runtimeRef.current;
+    if (!runtime?.camera) return false;
+    const applied = setRuntimeZoomPercent(runtime, next(readRuntimeZoomPercent(runtime)));
+    if (applied) {
+      runtime.openFitPending = false;
+      touchCamera(runtime, CAMERA_TOUCH.WHEEL);
+      emitPerspectiveChange(runtime);
+      // An orthographic step moves only the zoom, which the controls do not report: say so for them.
+      runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
+    }
+    return applied;
   };
   useImperativeHandle(ref, () => ({
     async prepareViewSettings(nextScene, signal) {
@@ -480,6 +513,17 @@ const ShellViewport = forwardRef(function ShellViewport({
       const screen = annotationsOnScreen(runtime, marks, { width: rect.width, height: rect.height });
       return annotationAt({ x: clientX - rect.left, y: clientY - rect.top }, screen, pointerType === "touch" ? TOUCH_HIT_PX : undefined)[0]?.id ?? null;
     },
+    // The annotation's marks Box select's box touches (`box`: client pixels), by their ids, in drawing
+    // order. Ink behind the eye is not there.
+    annotationsInBox(box) {
+      const runtime = runtimeRef.current, element = runtime?.renderer?.domElement;
+      const marks = annotationRef.current?.items;
+      if (!runtime || !element || !marks?.length || !box) return [];
+      const rect = element.getBoundingClientRect();
+      const screen = annotationsOnScreen(runtime, marks, { width: rect.width, height: rect.height });
+      const local = boxFromDrag({ x: box.left - rect.left, y: box.top - rect.top }, { x: box.right - rect.left, y: box.bottom - rect.top });
+      return annotationsInBox(local, screen).map(ink => ink.id);
+    },
     // The camera as a snapshot job says it, and the viewport's size: a prompt's view
     // (`annotation/views.js`), including the actual projection and lens. The equivalent half-height
     // also lets annotation view grouping detect perspective zooms and pans.
@@ -515,6 +559,36 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
+    // Home: the view it opened with — from the opening direction, what is shown framed whole. A board's 3D view
+    // eases to it as it opens (`Board3dView.jsx`). A view seen from another side hands its own direction
+    // (`direction`, from the target to the eye, and its `up`), what is shown framed whole from there.
+    goHome({ direction = DEFAULT_VIEW_DIRECTION, up = WORLD_UP } = {}) {
+      const runtime = runtimeRef.current;
+      if (!runtime) return false;
+      const live = fitSceneRef.current;
+      const bounds = live?.shownBounds?.() || live?.bounds || runtime.zeroPoseBounds;
+      const moved = zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate: true, modelOffset: modelTransformRef.current.offset,
+        resetZoomBaseline: true, viewDirection: direction, viewUp: up });
+      if (moved) fitCamera(runtime);
+      return moved;
+    },
+    // The zoom's reading (`ZoomControl.jsx`'s `viewportZoom`): the zoom against the authored box (100%, which
+    // nothing shown redefines), a step of it about the camera's target, and word of the camera moving.
+    zoomPercent() { return runtimeRef.current?.camera ? readRuntimeZoomPercent(runtimeRef.current) : 100; },
+    zoomBy(factor) { return zoomTo(percent => percent * factor); },
+    // 100%: the authored box framed at the camera's angle, about its target (`zoomPercent`'s ruler).
+    zoomTo100() { return zoomTo(() => 100); },
+    subscribeCamera(listener) {
+      const controls = runtimeRef.current?.controls;
+      controls?.addEventListener?.("change", listener);
+      controls?.addEventListener?.(CAMERA_ZOOMED_EVENT, listener);
+      window.addEventListener("resize", listener);
+      return () => {
+        controls?.removeEventListener?.("change", listener);
+        controls?.removeEventListener?.(CAMERA_ZOOMED_EVENT, listener);
+        window.removeEventListener("resize", listener);
+      };
+    },
     // The scene moved its own bounds (a pose, a frame of a routine): lighting, shadows and
     // the floor follow it NOW, with no React render, no re-adoption and no reframe.
     syncSceneBounds() {
@@ -1200,6 +1274,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   const transitionBackdrop = viewerTransitionBackdrop({
     renderMode, renderConfiguration, background: normalizedThemeSettings.background, viewerTheme
   });
+  // The indicator in the ink of the backdrop it is on (Render's, where it has its own), else the viewport's: never the app's.
+  const transitionScheme = backdropScheme({ color: transitionBackdrop.backgroundColor }, appearance);
 
   return (
     <div
@@ -1210,7 +1286,8 @@ const ShellViewport = forwardRef(function ShellViewport({
     >
       <div className="h-full w-full" ref={mountRef} />
       {coveringModeTransition ? (
-        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center" style={transitionBackdrop} role="status" data-viewer-transition={renderMode ? "render" : "inspect"}>
+        <div className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center ${transitionScheme}`} style={transitionBackdrop} role="status"
+          data-viewer-transition={renderMode ? "render" : "inspect"} data-scheme={transitionScheme}>
           <LoadingIndicator
             progress={loadingPresentation?.busy ? loadingPresentation.progress : { label: "Preparing view" }}
             operationKey={`${resolvedPresentationKey}:${renderMode}`}
@@ -1226,16 +1303,17 @@ const ShellViewport = forwardRef(function ShellViewport({
         showViewPlane
         isLoading={isLoading}
         meshData={scene}
-        // Close into the bottom-right corner, clear of the file sidebar down the left: the cube's box
-        // is larger than the cube, whose labels overhang it.
+        // Close into the top-right corner (the bottom row is Quick Edit's), clear of the canvas's left edge: the cube's
+        // box is larger than the cube, whose labels overhang it.
         viewPlaneOffsetRight={VIEWPORT_CORNER_INSET_PX}
-        viewPlaneOffsetBottom={VIEWPORT_CUBE_BOTTOM}
+        viewPlaneOffsetTop={VIEWPORT_CUBE_TOP}
         viewPlaneSize={VIEWPORT_CUBE_SIZE}
         compact={false}
         activeViewPlaneFace={activeViewPlaneFace}
         viewPlaneFaces={VIEW_PLANE_FACES}
         orientation={viewPlaneOrientation}
         viewerTheme={viewerTheme}
+        scheme={appearance}
         activateViewPlaneFace={activateViewPlaneFace}
         orbitViewCube={orbitFromViewCube}
       />

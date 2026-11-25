@@ -1,6 +1,6 @@
 /**
  * The homepage's copy, which the README says too (README.md and apps/docs/README.md): the plugin's
- * description, how it works, the install commands, the agents and the skills. The page renders it,
+ * description, the install commands, the agents and the features. The page renders it,
  * and so does /llms.txt (app/llms.txt/route.ts), so the two never drift apart.
  */
 import { normalizeDiscordUrl } from "@/lib/github";
@@ -10,59 +10,50 @@ import { siteConfig } from "@/lib/site";
 export const pluginDescription =
   "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.";
 
-// Who it is for: the sentence after the description, the skills framework linked.
-export const support = {
-  before: "It is supported by all popular agents that support plugins or the",
-  link: { text: "skills", href: "https://skills.sh" },
-  after: "framework, including Claude Code, Codex, Cursor, Gemini and Grok.",
-};
-
-// How a model is made, under the overview: the README's How it works, step for step. Code is in
-// backticks, which the page sets as code.
-export const howItWorks = [
-  "Your agent writes each model as a Python script with build123d, built on Open CASCADE.",
-  "Running the script, `python model.py`, builds the model with text-to-cad's server into an `.xbf` document (its parts, names, colours, materials and joints) and the STEP, GLB, STL or 3MF files the script declares. The server keeps each model's work in memory, so an edit rebuilds only what it changed.",
-  "The CAD viewer shows the model in your agent app or your browser, and follows every rebuild.",
-];
-
 // The install: one command per system, which sets up text-to-cad in every agent app on the computer
-// and, run again, updates it (the README's Quickstart, which says the same, word for word).
+// (the README's Quickstart, which says the same, word for word).
 export const installCommands = [
   { system: "macOS and Linux", language: "bash", command: "curl -fsSL https://texttocad.dev/install.sh | sh" },
   { system: "Windows, in PowerShell", language: "powershell", command: "irm https://www.texttocad.dev/install.ps1 | iex" },
 ];
-// What the command does, and that running it again is the update, under the commands. The command
-// name is in backticks, which the page sets as code.
+// What the command does, under the commands. The command name is in backticks, which the page sets as
+// code.
 export const installSummary =
-  "It installs uv if it is missing, then sets up text-to-cad in every agent app on your computer with each app's own commands (the plugin, which brings the skills and CAD's MCP server, or for an agent without a plugin the skills alone), registers the `cad` command, and moves CAD's server to the new release. Run it again to update everything, or click CAD's update button when it shows one; it lists the apps to restart.";
-// Installing by hand, each app's own commands, and updates: a page in the repository (the README's
-// Quickstart links it too), which the site does not repeat.
-export const manualInstall = { label: "Installing by hand, app by app, and updates", path: "docs/install.md" };
+  "It installs uv if it is missing, then `cad`, the command text-to-cad runs on, then the plugin in each agent app it finds on your computer, with that app's own command (Kimi Code you install by hand), and turns on automatic updates.";
+// Installing by hand, each app's own commands, updating and removing: a page in the repository (the
+// README's Quickstart links it too), which the site does not repeat: the documentation shows that file as it
+// is, at `page`.
+export const manualInstall = { label: "Installing by hand, app by app, updating and removing", path: "docs/install.md" };
+export const manualInstallPage = "/docs/install";
 
-// The agents text-to-cad works with, as skills.sh shows them (its logos, in public/agents/), and
-// Grok (Lobe Icons' glyph, MIT, in skills.sh's tile).
-export const agents = [
+// The agent apps text-to-cad installs in, as docs/install.md lists them and the README names them: Claude
+// Code, Codex and Cursor first. Each logo is a light glyph on a black square in public/agents/ (skills.sh's
+// set, and Grok's glyph from Lobe Icons, MIT); an app with none there shows its initials in the same square.
+export const agents: { name: string; logo?: string }[] = [
   { name: "Claude Code", logo: "claude-code" },
   { name: "Codex", logo: "codex" },
   { name: "Cursor", logo: "cursor" },
   { name: "Gemini", logo: "gemini" },
   { name: "Grok", logo: "grok" },
-  { name: "GitHub Copilot", logo: "copilot" },
-  { name: "Windsurf", logo: "windsurf" },
-  { name: "Cline", logo: "cline" },
-  { name: "AMP", logo: "amp" },
-  { name: "Antigravity", logo: "antigravity" },
-  { name: "OpenClaw", logo: "openclaw" },
+  { name: "Copilot CLI", logo: "copilot" },
+  { name: "Qwen Code" },
   { name: "Droid", logo: "droid" },
-  { name: "Goose", logo: "goose" },
-  { name: "Kilo", logo: "kilo" },
+  { name: "Devin" },
+  { name: "Antigravity", logo: "antigravity" },
+  { name: "Pi" },
+  { name: "Muse" },
+  { name: "Kimi Code" },
+  { name: "Hermes", logo: "nous-research" },
+  { name: "Cline", logo: "cline" },
+  { name: "Amp", logo: "amp" },
+  { name: "OpenClaw", logo: "openclaw" },
+  { name: "Kilo Code", logo: "kilo" },
   { name: "Kiro CLI", logo: "kiro-cli" },
-  { name: "Nous Research", logo: "nous-research" },
-  { name: "OpenCode", logo: "opencode" },
-  { name: "Roo", logo: "roo" },
+  { name: "Roo Code", logo: "roo" },
   { name: "Trae", logo: "trae" },
-  { name: "VS Code", logo: "vscode" },
-  { name: "Zed", logo: "zed" },
+  { name: "Windsurf", logo: "windsurf" },
+  { name: "Goose", logo: "goose" },
+  { name: "OpenCode", logo: "opencode" },
 ];
 
 // A plugin for an agent that has none: a new issue, titled for the person to name it.
@@ -95,76 +86,115 @@ export const contributing = {
   ],
 };
 
-export const skillGroups = [
+// The projects around text-to-cad, the README's Community, item for item and word for word: the ones
+// built on top of it and the ones it uses. Each one's name, what it is, and its links, side by side.
+export const community = {
+  intro: "Projects built on top of text-to-cad, and projects that text-to-cad uses.",
+  items: [
+    {
+      title: "Studio",
+      body: "A community app by @amywork777: an open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand.",
+      links: [
+        { text: "Website", href: "https://texttocad.studio" },
+        { text: "GitHub", href: "https://github.com/amywork777/studio" },
+      ],
+    },
+    {
+      title: "build123d",
+      body: "The Python CAD library text-to-cad's models are written in: parts and assemblies as code, with sketches, features and joints, built on OpenCASCADE.",
+      links: [
+        { text: "Docs", href: "https://build123d.readthedocs.io" },
+        { text: "GitHub", href: "https://github.com/gumyr/build123d" },
+      ],
+    },
+    {
+      title: "OpenCASCADE",
+      body: "The open-source geometry kernel under build123d: it builds the solids and reads and writes the STEP files.",
+      links: [
+        { text: "Website", href: "https://dev.opencascade.org" },
+        { text: "GitHub", href: "https://github.com/Open-Cascade-SAS/OCCT" },
+      ],
+    },
+    {
+      title: "kicode",
+      body: "KiCad's command line, kicad-cli, and its Python client, KiPy, in one Python package: the headless KiCad that text-to-cad's circuit boards run on, with nothing else of KiCad installed. Unofficial: not made or supported by the KiCad project.",
+      links: [
+        { text: "PyPI", href: "https://pypi.org/project/kicode/" },
+        { text: "GitHub", href: "https://github.com/earthtojake/kicode" },
+      ],
+    },
+  ],
+};
+
+// What text-to-cad does, the README's Features, item for item and word for word: each one's name,
+// the page that documents it (a path in the repository; every skill's folder is one of them), what it
+// does, the file its picture on the homepage shows (`FeatureArt`, components/feature-art.tsx), and the
+// page of the documentation's Skills, one a skill and named after it, that its tile on the homepage
+// links (the README links the skill itself).
+export const featuresIntro = "The text-to-cad plugin gives your agent local workflows to generate 3D models as STEP, GLB, STL or 3MF files, check them for manufacturing, draw them, and connect to 3D printing, sheet metal and CNC services. It works with any agent that supports plugins or skills.";
+export const features = [
   {
-    name: "CAD",
-    path: "skills/cad",
-    summary:
-      "Creates and edits CAD models from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF and GLB exports.",
+    id: "parts",
+    name: "Parts and assemblies",
+    path: "skills/cad/SKILL.md",
+    summary: "Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, and as [DXF profiles and flat patterns](skills/cad/references/2d-profiles-and-dxf.md) for laser and waterjet cutting, with joints and animations for mechanisms, and shown live in the viewer.",
+    file: "bracket.py",
+    page: "/docs/cad",
   },
   {
-    name: "step.parts",
-    path: "skills/step-parts",
-    summary:
-      "Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.",
+    id: "boards",
+    name: "Circuit boards",
+    path: "skills/pcb/SKILL.md",
+    summary: "KiCad schematics and boards, placed and routed, checked with ERC and DRC, reviewed before you order, and exported as fabrication files.",
+    file: "sensor.kicad_pcb",
+    page: "/docs/pcb",
   },
   {
-    name: "Engineering Drawing",
-    path: "skills/engineering-drawing",
-    summary:
-      "Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block.",
+    id: "checks",
+    name: "Manufacturing checks",
+    path: "skills/cad/SKILL.md#can-it-be-made",
+    summary: "Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.",
+    file: "housing.step",
+    page: "/docs/cad#manufacturing-checks",
   },
   {
-    name: "DXF",
-    path: "skills/dxf",
-    summary:
-      "Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.",
+    id: "stress",
+    name: "Stress checks",
+    path: "skills/fea/SKILL.md",
+    summary: "Whether a part or an assembly of bonded parts holds under its loads, solved with CalculiX: each part's peak stress, safety factor and how far it moves, drawn on the model.",
+    file: "bracket.step",
+    page: "/docs/fea",
   },
   {
-    name: "URDF",
-    path: "skills/urdf",
-    summary:
-      "Writes robot structure files with links, joints, limits, inertials, and meshes.",
+    id: "drawings",
+    name: "Engineering drawings",
+    path: "skills/engineering-drawing/SKILL.md",
+    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
+    file: "bracket.pdf",
+    page: "/docs/engineering-drawing",
   },
   {
-    name: "SRDF",
-    path: "skills/srdf",
-    summary:
-      "Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.",
+    id: "renders",
+    name: "Renders",
+    path: "skills/render/SKILL.md",
+    summary: "Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.",
+    file: "hero.png, turntable.mp4",
+    page: "/docs/render",
   },
   {
-    name: "SDF",
-    path: "skills/sdf",
-    summary:
-      "Creates simulator models and worlds with frames, physics, sensors, and lights.",
+    id: "fabrication",
+    name: "Fabrication services",
+    path: "skills/sendcutsend/SKILL.md",
+    summary: "[Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.",
+    file: "bracket_flat.dxf, housing.gcode.3mf",
+    page: "/docs/sendcutsend",
   },
   {
-    name: "SendCutSend",
-    path: "skills/sendcutsend",
-    summary: "Checks DXF and STEP files before upload to SendCutSend.",
-  },
-  {
-    name: "DfAM Check",
-    path: "skills/dfam-check",
-    summary:
-      "Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.",
-  },
-  {
-    name: "DFM",
-    path: "skills/dfm",
-    summary:
-      "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding.",
-  },
-  {
-    name: "G-code",
-    path: "skills/gcode",
-    summary:
-      "Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.",
-  },
-  {
-    name: "Bambu Labs",
-    path: "skills/bambu-labs",
-    summary:
-      "Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.",
+    id: "robots",
+    name: "Robotics and simulation",
+    path: "skills/robot-simulation/SKILL.md",
+    summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo.",
+    file: "arm.urdf",
+    page: "/docs/robot-simulation",
   },
 ];

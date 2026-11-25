@@ -1,5 +1,6 @@
 import { DEFAULT_PART_COLOR_SETTINGS, normalizeExplodedViewSettings, validateDisplaySettings } from "./displaySettings.js";
 import { DEFAULT_STEP_CLIP_SETTINGS, normalizeStepClipSettings } from "../lib/viewer/clipPlane.js";
+import { AXIS_COLORS, GRID_COLORS } from "../lib/viewportTheme.js";
 
 /** @typedef {"solid" | "shaded" | "parts" | "xray" | "hidden-line" | "wireframe"} ViewMode */
 /** @typedef {ViewMode | "render"} ViewLook */
@@ -199,8 +200,7 @@ function lineDrawingEdgeColor(appearance) {
  * with the model's edges. @param {"light" | "dark"} appearance
  */
 export function viewGridDefaults(appearance = "light") {
-  const dark = appearance === "dark";
-  return { color: dark ? "#5d9ac0" : "#4ea8cc", opacity: dark ? 0.35 : 0.45, density: 1 };
+  return { ...GRID_COLORS[appearance === "dark" ? "dark" : "light"], density: 1 };
 }
 
 /**
@@ -212,8 +212,8 @@ export function previewDefaults({ appearance = "light", lightingQuality = "final
   return {
     parts: { colorMode: "original", color: DEFAULT_PART_COLOR_SETTINGS.color, colors: [...DEFAULT_PART_COLOR_SETTINGS.colors] },
     lighting: { quality: choice(lightingQuality, VIEW_LIGHTING_QUALITY_VALUES, "lightingQuality"), exposure: 0, rotation: 0, size: 1, fill: 0.25 },
-    background: { color: dark ? "#202226" : "#ffffff", opacity: 1 },
-    floor: { enabled: true, placement: RENDER_FLOOR_PLACEMENT, color: dark ? "#202226" : "#e7e7e5", opacity: 0.6, finish: "matte" }
+    background: { color: dark ? "#222222" : "#ffffff", opacity: 1 },
+    floor: { enabled: true, placement: RENDER_FLOOR_PLACEMENT, color: dark ? "#222222" : "#e7e7e5", opacity: 0.6, finish: "matte" }
   };
 }
 
@@ -349,7 +349,7 @@ export function resolveViewSettings(input = {}, {
     floor: { ...studio.floor, enabled: lit && studio.floor.enabled },
     grid: { enabled: !lit && saved.grid === true, ...viewGridDefaults(resolvedAppearance) },
     // The scene still has an axis guide; no view turns it on.
-    axes: { enabled: false, color: dark ? "#5b8cff" : "#3d6fe8", opacity: 0.85 },
+    axes: { enabled: false, color: AXIS_COLORS[dark ? "dark" : "light"].z, opacity: 0.85 },
     clip: normalizeStepClipSettings(offers("clip") ? saved.clip ?? DEFAULT_STEP_CLIP_SETTINGS : DEFAULT_STEP_CLIP_SETTINGS),
     exploded: normalizeExplodedViewSettings(offers("exploded") ? saved.exploded : null)
   };

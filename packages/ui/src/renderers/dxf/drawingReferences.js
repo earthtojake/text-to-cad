@@ -1,3 +1,4 @@
+import { formatMeasurement } from "@cad/core/lib/viewer/measurement.js";
 import { english } from "../../i18n/core.js";
 /**
  * What a drawing's picks are called, and what the viewer says of them: a DXF's references.
@@ -43,25 +44,95 @@ export function entityKind(entity, t = english) {
 /** An entity as Quick Edit's chip names it: its kind, on its layer. */
 export const entityName = (entity, t = english) => t("drawing.onLayer", { kind: entityKind(entity, t), layer: entity.layer || "0" });
 
-const round = value => String(Math.round(Number(value) * 1e4) / 1e4);
+// A length in the drawing, as Measure reads one there (`formatMeasurement`): its figures and the drawing's
+// unit, bare drawing units ("units") where it declares none, as Measure says them (`drawingUnits`).
+const inUnit = (value, unit) => formatMeasurement({ euclidean: Number(value), unit: unit || UNITLESS });
+
+// The length of what an entity drew where it is straight segments alone (a line, a polyline of lines):
+// its `lines` runs, and its paths of moves and lines; null where it drew a curve or nothing to measure.
+function strokedLength(entity) {
+  let length = 0, measured = false;
+  const run = (points) => {
+    for (let at = 2; at + 1 < points.length; at += 2) length += Math.hypot(points[at] - points[at - 2], points[at + 1] - points[at - 1]);
+  };
+  for (const primitive of entity.primitives || []) {
+    if (primitive.type === "lines") { for (const line of primitive.geometry) run(line); measured = true; continue; }
+    if (primitive.type !== "path") return null;
+    let last = null, start = null;
+    for (const command of primitive.geometry) {
+      const [op, x, y] = command;
+      if (op === "M") { last = [x, y]; start = last; } else if (op === "L" && last) { length += Math.hypot(x - last[0], y - last[1]); last = [x, y]; } else if (op === "Z" && last && start) { length += Math.hypot(start[0] - last[0], start[1] - last[1]); last = start; } else return null;
+    }
+    measured = true;
+  }
+  return measured ? length : null;
+}
+
+// What an entity measures, by its kind: a line's or a straight polyline's length, a circle's diameter, and
+// the size of its box for anything else that has one (an arc, a text, a block reference, a hatch).
+function entityMeasures(entity) {
+  const type = String(entity.type || "");
+  const straight = type === "LINE" || type === "LWPOLYLINE" || type === "POLYLINE" ? strokedLength(entity) : null;
+  const box = entity.box;
+  const size = box && type !== "LINE" && type !== "CIRCLE" && type !== "POINT" ? [box[2] - box[0], box[3] - box[1]] : null;
+  return { length: straight, diameter: type === "CIRCLE" && entity.radius != null ? 2 * entity.radius : null, size };
+}
+
+// An entity's headline measure, for its hover tip: a straight run's length, a circle's diameter, an arc's
+// radius ("25.00 mm", "Ø 12.00 mm", "R 4.00 mm"), from its own primitives alone; "" for anything else.
+function entityHeadline(entity, unit) {
+  const { length, diameter } = entityMeasures(entity);
+  return length !== null ? inUnit(length, unit) : diameter !== null ? `Ø ${inUnit(diameter, unit)}`
+    : entity.radius != null ? `R ${inUnit(entity.radius, unit)}` : "";
+}
 
 /**
- * An entity, as Quick Edit's chip says it: its name, and what the drawing says of it — its handle
- * and DXF type, its layer, the block an INSERT places, a circle's or arc's centre and radius.
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").DrawingEntity} entity
+ * The hover tip's words for a pick (`kit/inspector/inspect.js`'s `tip`): its name and its headline measure,
+ * from the entity alone — no facts, and no look through the drawing for its block's other references.
+ */
+export function drawingPickTip(drawing, id, unit = "", t = english) {
+  const handle = drawingHandleOf(id);
+  const entity = handle && HANDLE.test(handle) ? drawing.entities.get(handle) : null;
+  return entity ? [entityName(entity, t), entityHeadline(entity, unit)].filter(Boolean).join(" · ") : "";
+}
+
+/**
+ * An entity, as its Quick Edit chip's card says it: its name, and a few key facts — its layer, the block an
+ * INSERT places, and what it measures (a straight run's length, a circle's diameter, else the size of its
+ * box), each in the drawing's unit as Measure reads it there (`unit`: `drawingUnits`'s, "units" for none);
+ * for the hover tip, its headline measure ("25.00 mm", "Ø 12.00 mm"). Its handle is its name's and its
+ * reference's already.
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").DrawingEntity} entity
  */
 export function describeEntity(entity, unit = "", t = english) {
-  const units = unit ? ` ${unit}` : "";
+  const at = value => inUnit(value, unit);
+  const { length, diameter, size } = entityMeasures(entity);
+  const tip = entityHeadline(entity, unit);
   return {
     name: entityName(entity, t),
+    tip,
     facts: [
-      { label: t("drawing.handle"), value: entity.handle },
-      { label: t("drawing.typeLabel"), value: entity.type || "—" },
       { label: t("drawing.layer"), value: entity.layer || "0" },
       ...(entity.block ? [{ label: t("drawing.type.block"), value: entity.block }] : []),
-      ...(entity.center ? [{ label: t("drawing.centre"), value: `${round(entity.center[0])}, ${round(entity.center[1])}` }] : []),
-      ...(entity.radius != null ? [{ label: t("drawing.radius"), value: `${round(entity.radius)}${units}` }] : [])
+      ...(diameter !== null ? [{ label: t("measure.diameter"), value: at(diameter) }] : []),
+      ...(length !== null ? [{ label: t("measure.length"), value: at(length) }] : []),
+      ...(size ? [{ label: t("part.size"), value: `${at(size[0])} × ${at(size[1])}` }] : [])
     ]
+  };
+}
+
+/**
+ * An entity, as the frame reads a pick (`kit/inspector/inspect.js`'s `DetailItem`): `describeEntity`'s name,
+ * tip and facts, the entity in focus alone (a block reference's others are the Layers' rows).
+ */
+export function describeDrawingPick(drawing, id, unit = "", t = english) {
+  const handle = drawingHandleOf(id);
+  const entity = handle && HANDLE.test(handle) ? drawing.entities.get(handle) : null;
+  if (!entity) return null;
+  const described = describeEntity(entity, unit, t);
+  return {
+    id: `entity:${handle}`, pick: drawingReferenceId(handle), kind: entity.type === "INSERT" ? "block" : "", title: described.name, tip: described.tip,
+    facts: described.facts
   };
 }
 
@@ -70,7 +141,7 @@ export function describeEntity(entity, unit = "", t = english) {
  * `useSceneReferences`): its entities by reference id, each described, and its highlight, which
  * `onHighlight` paints.
  *
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
  * @param {{ onHighlight(ink: { hovered: string[], selected: string[] }): void, unit?: string }} options
  *   `onHighlight` is given handles; `t` says the entities in the view's language.
  */
@@ -112,31 +183,25 @@ export function drawingUnits(units) {
   return unit ? { unit, declared: true } : { unit: UNITLESS, declared: false };
 }
 
-/** A Layers section is worth its tile from this many layers, or with any block reference in it. */
-export const LAYERS_SECTION_MIN_LAYERS = 4;
-
 /**
- * Whether a drawing has the structure a Layers section is for: several layers to show and hide
- * (`LAYERS_SECTION_MIN_LAYERS` or more drawn on), or block references, whose contents a layer
- * nests. A flat pattern of two or three layers (CUT, BEND) and no blocks has none: its section
- * would be a few rows saying what the drawing already shows.
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").PreparedDrawing | null} drawing
+ * Whether a drawing shows its Layers section: always, once it is read — a drawing of one layer has its one row, as a
+ * part file's Model has its one, so the panel reads the same whatever the drawing holds.
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing | null} drawing
  */
 export function layersSectionShown(drawing) {
-  if (!drawing) return false;
-  if (drawing.layers.length >= LAYERS_SECTION_MIN_LAYERS) return true;
-  for (const entity of drawing.entities.values()) if (entity.type === "INSERT") return true;
-  return false;
+  return Boolean(drawing);
 }
 
 /**
  * The Layers section's rows: each layer drawn on, in the drawing's order, with its colour, the
  * number of entities drawn on it, and the block references placed on it (each a row of its own,
  * its block's name).
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
  * @returns {{ name: string, color: string | null, entities: number, inserts: { handle: string, block: string }[] }[]}
  */
 export function layerRows(drawing) {
+  // None yet: the drawing still loading, its Layers tab already the panel's.
+  if (!drawing) return [];
   const inserts = new Map();
   for (const entity of drawing.entities.values()) {
     if (entity.type !== "INSERT") continue;

@@ -45,7 +45,7 @@ test("internal display settings keep edge color and visibility while widths stay
     enabled: false, silhouette: true
   });
   assert.equal(normalizeDisplayEdgeSettings({ color: "#f00", visibility: "all" }).color, "#ff0000");
-  for (const key of ["thickness", "classes", "highlightColor", "highlightOpacity", "highlightThickness", "silhouetteScale", "depthTest"]) {
+  for (const key of ["thickness", "classes", "highlightColor", "highlightEdgeColor", "highlightOpacity", "highlightThickness", "silhouetteScale", "depthTest"]) {
     assert.throws(() => validateDisplaySettings({ edges: { [key]: 1 } }), /Unsupported display.edges fields/);
   }
   for (const key of ["centerColor", "cellColor"]) {

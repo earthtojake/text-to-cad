@@ -1,12 +1,13 @@
 import { ChevronRight, Ellipsis, LoaderCircle } from "lucide-react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
-import { TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_INSET_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
+import { treeKey } from "@cad/ui/primitives/tree-keys";
+import { TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_INSET_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
 import { FileIcon, FolderIcon } from "./icons.jsx";
 import { DOCUMENT_ROW_GLYPH_CLASS } from "./DocumentGlyph.jsx";
 import { useControlUsage } from "../../usage/controls.js";
@@ -17,7 +18,7 @@ const SEARCH_DELAY_MS = 150;
 const SHOWN_FOLDERS = 3;
 // A crumb is a folder's whole name, never cut: the ones that do not fit go into the ellipsis. Only
 // the folder the explorer is in, left on its own, is cut to the row.
-const CRUMB_CLASS = "rounded-sm px-1 py-0.5 hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
+const CRUMB_CLASS = "cad-hit rounded-sm px-1 py-0.5 hover:bg-accent/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 const CRUMB = `${CRUMB_CLASS} shrink-0 whitespace-nowrap text-muted-foreground`;
 const CURRENT_CRUMB = `${CRUMB_CLASS} min-w-0 truncate text-foreground`;
 // A row is the trees' compact line (`TreeRowSurface`) in 12px text. Its kind is the trees' small,
@@ -80,7 +81,7 @@ function Note({ children, busy = false }) {
 
 /** What a folder opened inline says while it has no rows to show: a row's height, in its glyph's column. */
 function InlineNote({ depth, busy = false, children }) {
-  return <p className="relative flex h-6 items-center gap-1 text-xs text-muted-foreground" style={{ paddingLeft: rowInset(depth) }}
+  return <p className="relative flex h-icon-button items-center gap-1 text-xs text-muted-foreground" style={{ paddingLeft: rowInset(depth) }}
     role={busy ? "status" : undefined}>
     <TreeRowGuides depth={depth} inset={ROW_INSET_PX} />
     <span className="flex size-3 shrink-0 items-center">{busy ? <LoaderCircle className="size-3 animate-spin" aria-hidden="true" /> : null}</span>
@@ -91,7 +92,7 @@ function InlineNote({ depth, busy = false, children }) {
 function Row({ kind, path, detail = "", name, depth = 0, active = false, expanded = false, onClick, onDoubleClick }) {
   return <TooltipHint content={path} overflowOnly><TreeRowSurface as="button" type="button" active={active}
     style={{ paddingLeft: rowInset(depth) }}
-    data-explorer-row="" data-kind={kind} data-path={path} aria-current={active ? "true" : undefined}
+    data-explorer-row="" data-kind={kind} data-path={path} data-depth={depth} aria-current={active ? "true" : undefined}
     aria-expanded={kind === "directory" ? expanded : undefined} onClick={onClick} onDoubleClick={onDoubleClick}>
     <TreeRowGuides depth={depth} inset={ROW_INSET_PX} />
     {kind === "directory" ? <TreeRowChevron expanded={expanded} />
@@ -181,21 +182,21 @@ export function FolderExplorer({ source, file, folder: start = null, onOpen, onF
     setQuery("");
     setOpen(current => { if (!current.has(path)) return current; const next = new Set(current); next.delete(path); return next; });
   };
-  // Arrows walk the rows on screen, from the filter into the list and back; on a folder, Right opens
-  // it inline and Left closes it.
+  // The rows' keys, every tree's that walks its rows (`primitives/tree-keys.js`): from the filter Down
+  // goes into the list, and from its first row Up comes back to it; on the rows Down and Up, Home and End,
+  // and on a folder Right opens it inline (on an open one, into it) and Left closes it (on any other row,
+  // up to its folder's).
   const walk = (event, from) => {
-    if (from?.dataset.kind === "directory" && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
-      event.preventDefault();
-      if ((event.key === "ArrowRight") !== open.has(from.dataset.path)) toggle(from.dataset.path);
-      return;
-    }
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    if (event.altKey || event.metaKey || event.ctrlKey) return;
     const all = [...(rows.current?.querySelectorAll("[data-explorer-row]") ?? [])];
     const at = from ? all.indexOf(from) : -1;
-    const next = event.key === "ArrowDown" ? all[at + 1] : at > 0 ? all[at - 1] : null;
-    event.preventDefault();
-    if (next) next.focus();
-    else if (event.key === "ArrowUp") event.currentTarget.closest("[data-folder-explorer]")?.querySelector("input")?.focus();
+    const action = treeKey(event.key, all.map(row => ({ depth: Number(row.dataset.depth) || 0, branch: row.dataset.kind === "directory",
+      open: row.getAttribute("aria-expanded") === "true" })), at);
+    // Down and Up are the list's wherever they land, the filter's caret and the scroller left alone.
+    if (action || event.key === "ArrowDown" || event.key === "ArrowUp") event.preventDefault();
+    if (action && "toggle" in action) toggle(all[action.toggle].dataset.path);
+    else if (action) all[action.focus]?.focus();
+    else if (event.key === "ArrowUp" && at <= 0) event.currentTarget.closest("[data-folder-explorer]")?.querySelector("input")?.focus();
   };
 
   // A folder's rows, `depth` folders in: its subfolders, each with what it holds under it while it is

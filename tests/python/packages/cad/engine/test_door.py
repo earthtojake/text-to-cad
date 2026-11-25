@@ -1,9 +1,11 @@
-"""The engine's door (``cad.engine.door``): a hello's framing, a connection over a pair of named
-pipes, the owner and type check on a pair, and the sweep of a killed client's pair."""
+"""The engine's door (``cad.engine.door``): a hello's and a greeting's framing and protocol number, a
+connection over a pair of named pipes, the owner and type check on a pair, and the sweep of a killed
+client's pair."""
 
 from __future__ import annotations
 
 import os
+import secrets
 import selectors
 import shutil
 import tempfile
@@ -26,21 +28,89 @@ class DoorTest(unittest.TestCase):
         from cad.engine import door
 
         path = self.folder / "x.door"
-        opened = door.Door(path, lambda ident: door.answer(self.clients, ident, serve))
+        opened = door.Door(path, lambda ident, protocol: door.answer(self.clients, ident, serve, protocol))
         self.addCleanup(opened.close)
         return path
 
-    def test_a_hello_is_one_short_line_and_only_an_id_is_a_hello(self) -> None:
+    def test_a_hello_is_one_short_line_naming_an_id_and_its_protocol_and_0_8_s_bare_id_is_none(self) -> None:
         from cad.engine import door
 
         ident = "0123456789abcdef" * 2
         line = door.hello(ident)
-        self.assertEqual(line, ident.encode() + b"\n")
+        self.assertEqual(line, ident.encode() + b" 1\n")
+        self.assertEqual(door.DOOR_PROTOCOL, 1)
         self.assertLess(len(line), 512, "below PIPE_BUF: hellos written at once never interleave")
-        self.assertEqual(door.hello_id(line.rstrip(b"\n")), ident)
-        for other in (b"", ident[:-1].encode(), ident.upper().encode(), ident.encode() + b"0",
-                      b"../" + ident[3:].encode(), ident.encode()[:-1] + b"\x00"):
+        for said, protocol in ((line, 1), (ident.encode() + b" 7 later fields\n", 7)):
+            self.assertEqual(door.hello_id(said.rstrip(b"\n")), ident)
+            self.assertEqual(door.hello_protocol(said.rstrip(b"\n")), protocol)
+        for other in (b"", ident.encode(), ident.encode() + b" 0", ident[:-1].encode(), ident.upper().encode(),
+                      ident.encode() + b"0", b"../" + ident[3:].encode(), ident.encode()[:-1] + b"\x00",
+                      ident.encode() + b" ", ident.encode() + b" one", ident.encode() + b" -1",
+                      ident.encode() + b"  1"):
             self.assertIsNone(door.hello_id(other), other)
+            self.assertIsNone(door.hello_protocol(other), other)
+
+    def test_a_greeting_names_the_protocol_the_connection_speaks_and_0_8_s_bare_ok_is_none(self) -> None:
+        from cad.engine import door
+
+        self.assertEqual(door.greeting(1), b"ok 1\n")
+        self.assertEqual(door.greeting(), b"ok 1\n")
+        for line, protocol in ((b"ok 1\n", 1), (b"ok 1", 1), (b"ok 2 later fields\n", 2)):
+            self.assertEqual(door.greeted(line), protocol, line)
+        for other in (b"", b"\n", b"ok\n", b"ok", b"ok 0\n", b"ok \n", b"ok one\n", b"no 1\n", b"okay\n",
+                      b"ok\n\n"):
+            self.assertIsNone(door.greeted(other), other)
+        # The server's release, an addition to protocol 1: every client since 0.10.0 reads this very rule
+        # (``greeted``), skipping it, and this release's reads it (``released``); the servers of 0.11.11 and earlier
+        # greet without.
+        said = door.greeting(1, "0.11.12")
+        self.assertEqual((said, door.greeted(said), door.released(said)), (b"ok 1 0.11.12\n", 1, "0.11.12"))
+        for line in (b"ok 1\n", b"ok 1 \n", b"ok 1 two words\n", b"ok\n", b"no 1 0.11.12\n"):
+            self.assertIsNone(door.released(line), line)
+
+    def test_the_daemon_greets_each_hello_in_the_protocol_it_spoke(self) -> None:
+        from cad.engine import door
+
+        path = self.open_door(lambda reader, writer: reader.readline())
+        for protocol, greeting in ((1, b"ok 1\n"), (9, b"ok 1\n")):
+            ident = secrets.token_hex(16)
+            up, down = door.pair(self.clients, ident)
+            os.mkfifo(up, 0o600)
+            os.mkfifo(down, 0o600)
+            hold = os.open(down, os.O_RDWR)
+            self.addCleanup(os.close, hold)
+            self.addCleanup(os.close, os.open(up, os.O_RDWR))
+            knock = os.open(path, os.O_WRONLY)
+            self.addCleanup(os.close, knock)
+            os.write(knock, door.hello(ident, protocol))
+            with selectors.DefaultSelector() as selector:
+                selector.register(hold, selectors.EVENT_READ)
+                self.assertTrue(selector.select(10), "the pair was greeted")
+                self.assertEqual(os.read(hold, 64), greeting, f"a protocol {protocol} hello")
+
+    def test_a_client_refuses_a_greeting_it_does_not_speak_0_8_s_bare_ok_among_them(self) -> None:
+        from cad.engine import door
+
+        for greeting, protocol in ((b"ok 1\n", 1), (b"ok\n", None), (b"ok 2\n", None), (b"no\n", None)):
+            def answer(ident: str, _protocol: int, greeting: bytes = greeting) -> None:
+                up, down = door.pair(self.clients, ident)
+                writer = os.open(down, os.O_WRONLY | os.O_NONBLOCK)
+                reader = os.open(up, os.O_RDONLY | os.O_NONBLOCK)
+                os.write(writer, greeting)  # an engine that greets so, and goes: the client holds its pair
+                os.close(writer)
+                os.close(reader)
+
+            path = self.folder / "other.door"
+            opened = door.Door(path, answer)
+            self.addCleanup(opened.close)
+            connection = door.dial(path, timeout=5)
+            if protocol is None:
+                self.assertIsNone(connection, greeting)
+            else:
+                self.assertIsNotNone(connection, greeting)
+                self.assertEqual(connection.protocol, protocol)
+                connection.close()
+            opened.close()
 
     def test_a_request_and_its_answers_cross_the_pair_and_either_side_leaving_is_the_other_s_end(self) -> None:
         from cad.engine import door
@@ -110,6 +180,25 @@ class DoorTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 30, "not the whole greeting wait: nobody reads the door")
         dying.join(5)
         self.assertEqual(list(self.clients.iterdir()), [])
+
+    def test_a_client_says_its_own_hello_at_any_door_never_0_8_s_bare_one(self) -> None:
+        from cad.engine import client, door, places
+
+        heard: list[int] = []
+
+        def engine(ident: str, protocol: int) -> None:
+            heard.append(protocol)
+            door.answer(self.clients, ident, lambda reader, writer: reader.readline(), protocol)
+
+        for name in ("0123456789ab", places.NAME):  # 0.8's doors were named for their installation
+            opened = door.Door(self.folder / f"{name}.door", engine)
+            self.addCleanup(opened.close)
+            connection = client._connect(opened.path)
+            self.assertIsNotNone(connection, name)
+            self.assertEqual(connection.protocol, door.DOOR_PROTOCOL, name)
+            connection.close()
+            opened.close()
+        self.assertEqual(heard, [door.DOOR_PROTOCOL] * 2)
 
     def test_a_clients_folder_opened_to_others_is_closed_again_and_connects(self) -> None:
         from cad.engine import door
@@ -199,7 +288,7 @@ class DoorTest(unittest.TestCase):
             greeting += os.read(hold, 64)
             if selector.select(0.5):  # a second answer, were there one, greets well within this
                 greeting += os.read(hold, 64)
-        self.assertEqual(greeting, door.GREETING, "one greeting: the second hello was not answered")
+        self.assertEqual(greeting, door.greeting(), "one greeting: the second hello was not answered")
         self.assertEqual(answered, [1])
 
     def test_the_sweep_takes_a_killed_client_s_old_pair_without_opening_it(self) -> None:

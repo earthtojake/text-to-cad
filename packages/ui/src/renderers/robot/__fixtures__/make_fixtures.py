@@ -1,8 +1,9 @@
-"""Write the robot renderer's browser-test fixtures: what ``GET /__cad/robot`` answers for each
-description here, and the primitive meshes cadgen makes for them.
+"""Write the robot renderer's browser-test fixtures: what a robot document's ``structure``
+(``GET /api/v1/documents/<urdf|srdf>/<id>/structure``) answers for each description here, and
+the primitive meshes cadgen makes for them.
 
 The descriptions are committed as they are (``arm.urdf``, the ``arm.srdf`` paired with it,
-``swing.sdf``, ``chain.urdf``, ``linkage.urdf`` (a four-bar linkage closed through
+``chain.urdf``, ``linkage.urdf`` (a four-bar linkage closed through
 ``tcad:four_bar``), and two cadgen refuses: ``gone.urdf``, whose link mesh is missing, and
 ``lonely.srdf``, with no URDF beside it). This script reads each one with cadgen
 (``cad_server.robot_payload``) and writes:
@@ -30,7 +31,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-DESCRIPTIONS = ("arm.urdf", "arm.srdf", "swing.sdf", "chain.urdf", "linkage.urdf", "gone.urdf", "lonely.srdf")
+DESCRIPTIONS = ("arm.urdf", "arm.srdf", "chain.urdf", "linkage.urdf", "gone.urdf", "lonely.srdf")
 
 
 def fixture_payloads() -> tuple[dict[str, dict], dict[str, str], dict[str, bytes]]:
@@ -70,8 +71,7 @@ def fixture_payloads() -> tuple[dict[str, dict], dict[str, str], dict[str, bytes
 
 
 def main() -> None:
-    for project in ("cad-mcp", "cad-server", "cad"):  # the library first on the path
-        sys.path.insert(0, str(HERE.parents[5] / "packages" / project / "src"))
+    sys.path.insert(0, str(HERE.parents[5] / "packages" / "cad" / "src"))
     payloads, refusals, meshes = fixture_payloads()
     primitives = HERE / "primitives"
     shutil.rmtree(primitives, ignore_errors=True)

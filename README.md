@@ -4,12 +4,11 @@
 
 Design physical products with AI.
 
-[Website](https://www.texttocad.dev)
+[Website](https://www.texttocad.dev) · [Docs](https://www.texttocad.dev/docs)
 
-[![cad-server](https://img.shields.io/pypi/v/cad-server?style=flat&logo=pypi&logoColor=white&label=cad-server)](https://pypi.org/project/cad-server/)
+[![cad](https://img.shields.io/pypi/v/cad?style=flat&logo=pypi&logoColor=white&label=cad)](https://pypi.org/project/cad/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat)](LICENSE)
-[![Downloads](https://img.shields.io/pepy/dt/cadgen?style=flat&logo=pypi&logoColor=white&label=downloads)](https://pepy.tech/projects/cadgen)
 
 [![Join Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/5FGB9DwJYU)
 [![Follow @earthtojake](https://img.shields.io/badge/Follow-%40earthtojake-000000?style=flat&logo=x)](https://x.com/earthtojake)
@@ -18,25 +17,6 @@ Design physical products with AI.
 </div>
 
 # text-to-cad
-
-The text-to-cad plugin gives your agent local workflows for generating 3D models
-as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks,
-generates engineering drawings, and connects to popular 3D printing, sheet metal
-and CNC fabrication services.
-
-It is supported by all popular agents that support plugins or the
-[skills](https://skills.sh) framework, including Claude Code, Codex, Cursor,
-Gemini and Grok.
-
-### How it works
-
-1. Your agent writes each model as a Python script with [build123d](https://github.com/gumyr/build123d), built on [Open CASCADE](https://dev.opencascade.org).
-2. Running the script, `python model.py`, builds the model with text-to-cad's
-   server into an `.xbf` document (its parts, names, colours, materials and joints)
-   and the STEP, GLB, STL or 3MF files the script declares. The server keeps each
-   model's work in memory, so an edit rebuilds only what it changed.
-3. The CAD viewer shows the model in your agent app or your browser, and follows
-   every rebuild.
 
 ## 🚀 Quickstart
 
@@ -52,37 +32,41 @@ Windows, in PowerShell:
 irm https://www.texttocad.dev/install.ps1 | iex
 ```
 
-It installs uv if it is missing, then sets up text-to-cad in every agent app on
-your computer with each app's own commands (the plugin, which brings the skills
-and CAD's MCP server, or for an agent without a plugin the skills alone),
-registers the `cad` command, and moves CAD's server to the new release. Run
-it again to update everything, or click CAD's update button when it shows one; it
-lists the apps to restart.
+It installs uv if it is missing, then `cad`, the command text-to-cad runs on, then
+the plugin in each agent app it finds on your computer, with that app's own command
+(Kimi Code you install by hand), and turns on automatic updates.
 
 Then ask your agent for a part or an assembly: it writes the model as a Python
-script, runs it to build the model and shows it in the CAD viewer.
+script, runs it to build the model and shows it in the viewer.
 
-Installing by hand, app by app, and updates: [docs/install.md](docs/install.md)
+It works in Claude Code, Codex, Cursor, Gemini CLI, Grok Build, Antigravity,
+Devin CLI, Factory Droid, GitHub Copilot CLI, Kimi Code, Muse, Pi, Qwen Code, Amp,
+Cline, Goose, Hermes Agent, Kilo Code, Kiro CLI, OpenClaw, OpenCode, Roo Code,
+Trae and Windsurf.
 
-## 🧰 Skills
+Installing by hand, app by app, updating and removing: [docs/install.md](docs/install.md)
 
-Install the library to give agents focused workflows for CAD, fabrication,
-robot description files, simulation, and local review.
+## ✨ Features
 
-| Skill        | Summary                                                                                                                                            | Source                                              |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| CAD          | Creates and edits CAD models from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF and GLB exports. | [skills/cad](skills/cad/SKILL.md)                   |
-| step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
-| Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
-| DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
-| URDF         | Writes robot structure files with links, joints, limits, inertials, and meshes.                                                                    | [skills/urdf](skills/urdf/SKILL.md)                 |
-| SRDF         | Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.                                                                  | [skills/srdf](skills/srdf/SKILL.md)                 |
-| SDF          | Creates simulator models and worlds with frames, physics, sensors, and lights.                                                                     | [skills/sdf](skills/sdf/SKILL.md)                   |
-| SendCutSend  | Checks DXF and STEP files before upload to SendCutSend.                                                                                            | [skills/sendcutsend](skills/sendcutsend/SKILL.md)   |
-| DfAM Check   | Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.                                          | [skills/dfam-check](skills/dfam-check/SKILL.md)     |
-| DFM | Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding; measures draft, undercuts and projected area from a mesh. | [skills/dfm](skills/dfm/SKILL.md) |
-| G-code       | Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.                                                           | [skills/gcode](skills/gcode/SKILL.md)               |
-| Bambu Labs   | Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.                                               | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
+The text-to-cad plugin gives your agent local workflows to generate 3D models as STEP, GLB, STL or 3MF files, check them for manufacturing, draw them, and connect to 3D printing, sheet metal and CNC services. It works with any agent that supports plugins or skills.
+
+- [**Parts and assemblies**](skills/cad/SKILL.md): Models written as Python scripts with [build123d](https://github.com/gumyr/build123d) and [OpenCASCADE](https://github.com/Open-Cascade-SAS/OCCT), exported as STEP, STL, 3MF or GLB, and as [DXF profiles and flat patterns](skills/cad/references/2d-profiles-and-dxf.md) for laser and waterjet cutting, with joints and animations for mechanisms, and shown live in the viewer.
+- [**Circuit boards**](skills/pcb/SKILL.md): KiCad schematics and boards, placed and routed, checked with ERC and DRC, reviewed before you order, and exported as fabrication files.
+- [**Manufacturing checks**](skills/cad/SKILL.md#can-it-be-made): Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.
+- [**Stress checks**](skills/fea/SKILL.md): Whether a part or an assembly of bonded parts holds under its loads, solved with CalculiX: each part's peak stress, safety factor and how far it moves, drawn on the model.
+- [**Engineering drawings**](skills/engineering-drawing/SKILL.md): Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.
+- [**Renders**](skills/render/SKILL.md): Photoreal stills, turntables and films of a model with Blender, lit and framed in a Python script and run on the GPU, with a quick draft before each final.
+- [**Fabrication services**](skills/sendcutsend/SKILL.md): [Checks DXF and STEP files against SendCutSend's guide](skills/sendcutsend/SKILL.md) before you upload them, and [slices 3D prints](skills/print3d/SKILL.md) with OrcaSlicer and sends them to Bambu Connect or Bambu Studio.
+- [**Robotics and simulation**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and MJCF for MuJoCo.
+
+## 🌐 Community
+
+Projects built on top of text-to-cad, and projects that text-to-cad uses.
+
+- **Studio**: A community app by @amywork777: an open-source desktop CAD app for mechanical engineers, built on text-to-cad, for Mac and Windows. You describe a part to the agent, and the 3D model, drawings, stress check and versions sit beside the chat, where you can also edit the model by hand. [Website](https://texttocad.studio) · [GitHub](https://github.com/amywork777/studio)
+- **build123d**: The Python CAD library text-to-cad's models are written in: parts and assemblies as code, with sketches, features and joints, built on OpenCASCADE. [Docs](https://build123d.readthedocs.io) · [GitHub](https://github.com/gumyr/build123d)
+- **OpenCASCADE**: The open-source geometry kernel under build123d: it builds the solids and reads and writes the STEP files. [Website](https://dev.opencascade.org) · [GitHub](https://github.com/Open-Cascade-SAS/OCCT)
+- **kicode**: KiCad's command line, kicad-cli, and its Python client, KiPy, in one Python package: the headless KiCad that text-to-cad's circuit boards run on, with nothing else of KiCad installed. Unofficial: not made or supported by the KiCad project. [PyPI](https://pypi.org/project/kicode/) · [GitHub](https://github.com/earthtojake/kicode)
 
 ## 🛠️ Contributing
 
@@ -96,14 +80,11 @@ text-to-cad is MIT-licensed and built in the open.
   Say what the skills got wrong, too: that is what improves them.
 - **Code, skills and models**: a new skill (a fabrication service, a printer, a
   CAD workflow) goes in `skills/`, an example model in `models/`, and fixes
-  anywhere. [CONTRIBUTING.md](CONTRIBUTING.md) has the local setup and how to
-  test in the agent apps; an agent working in the repository starts at
-  [AGENTS.md](AGENTS.md).
+  anywhere. [CONTRIBUTING.md](CONTRIBUTING.md) has the local setup, how to
+  test in the agent apps, and the guidance for agents working in the repository.
 
 By default, text-to-cad sends usage stats and crash reports, tagged with a random
 ID and never including your files, paths or prompts. The
 [privacy policy](https://www.texttocad.dev/privacy-policy) says what is sent and
-how to turn it off.
-
-
-<a href="https://trendshift.io/repositories/26559"><img src="https://trendshift.io/api/badge/repositories/26559" alt="earthtojake/text-to-cad | Trendshift" width="250" height="55"></a>
+how to turn it off, and the [terms of service](https://www.texttocad.dev/terms-of-service)
+govern using text-to-cad.

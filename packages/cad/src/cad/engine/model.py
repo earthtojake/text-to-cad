@@ -68,18 +68,23 @@ _MODELS: dict[str, "Model"] = {}
 
 @dataclass(frozen=True)
 class Output:
-    """One file a model declares: its kind and path (None requests the CLI default)."""
+    """One file a model declares: its kind and path (None requests the CLI default), and a GLB's,
+    an STL's or a 3MF's own mesh tolerance in mm and angle in degrees (None: the engine's)."""
 
     kind: str
     out: str | None
+    tolerance: float | None = None
+    angle: float | None = None
 
 
 @dataclass(frozen=True)
 class Target:
-    """One file a build writes: its kind and its path."""
+    """One file a build writes: its kind, its path and its mesh tolerance and angle (``Output``'s)."""
 
     kind: str
     path: Path
+    tolerance: float | None = None
+    angle: float | None = None
 
 
 def check_output(kind: str, out: Any, where: str) -> None:
@@ -255,6 +260,8 @@ class Model:
             _CONTEXT.program = previous
         if program:
             reported(built.models, built.wall, built.fresh, False)
+        # Once a run, after its report: the server is another release than this library, under one contract.
+        api.say_notice()
         if not built.ok:
             error = api.EngineError(next(row.get("error", "model failed") for row in built.models if not row.get("ok")))
             if program:
@@ -284,7 +291,7 @@ class Model:
     def plan(self) -> list[Target]:
         """The files a build of this model writes: what its decorators declare (law 10), the
         xbf first, then the derived files in the order the decorators are written."""
-        return [Target(output.kind, self._path(output.kind, output.out))
+        return [Target(output.kind, self._path(output.kind, output.out), output.tolerance, output.angle)
                 for output in sorted(self.outputs, key=lambda output: output.kind != "xbf")]
 
     # --- the verbs, through the daemon (``cad.engine.api``) -----------------------------
@@ -406,33 +413,50 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
     from cad.engine import api
 
     caller = sys._getframe(1)
-    while caller.f_back is not None and caller.f_code.co_filename == __file__:
+    # Past this module and ``cad.model``'s own call of it (``cad._internal.document_type``): the program's line.
+    while caller.f_back is not None and (caller.f_code.co_filename == __file__
+                                         or caller.f_globals.get("__name__") == "cad._internal.document_type"):
         caller = caller.f_back
     return api.hand_over(target, name, animations=animations, frame=caller)
 
 
 def _decorator(kind: str) -> Callable[..., Any]:
-    def decorate(out: Any, *, name: str | None = None) -> Any:
+    from cad.engine.export import TOLERANT, angle_of, tolerance_of
+
+    def declare(out: Any, name: str | None, tolerance: float | None = None, angle: float | None = None) -> Any:
         if out is None:
             raise TypeError(f"@{kind} requires an output path")
         check_output(kind, out, f"@{kind}(out=...)")
         if name is not None:
             check_name(name)
+        tolerance, angle = tolerance_of(tolerance, [out]), angle_of(angle, [out])
 
         def apply(target: Any) -> Model:
             model = target if isinstance(target, Model) else Model(target)
             model.declared(kind)
             if any(output.kind == kind for output in model.outputs):
                 raise TypeError(f"model {model.name!r} declares @{kind} twice")
-            model.outputs.insert(0, Output(kind, os.fspath(out)))
+            model.outputs.insert(0, Output(kind, os.fspath(out), tolerance, angle))
             return model.named(name)
 
         return apply
 
+    # A GLB, an STL and a 3MF take their own mesh tolerance and angle (``export/__init__.py``); no other
+    # kind is meshed.
+    if kind in TOLERANT:
+        def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None,
+                     angle: float | None = None) -> Any:
+            return declare(out, name, tolerance, angle)
+    else:
+        def decorate(out: Any, *, name: str | None = None) -> Any:
+            return declare(out, name)
+
     decorate.__name__ = kind
     decorate.__qualname__ = kind
     decorate.__doc__ = (f"Declare an explicit output: @{kind}(out='path{SUFFIXES[kind]}'), optionally named "
-                        "within the script folder by name=. The output path is required; decoration builds nothing.")
+                        "within the script folder by name=. The output path is required; decoration builds nothing."
+                        + (" tolerance= and angle= mesh it to within an absolute tolerance in mm and an angle in "
+                           "degrees, as cad xbf export --tolerance and --angle do." if kind in TOLERANT else ""))
     return decorate
 
 
@@ -653,7 +677,7 @@ def read_step(path: Any) -> Any:
     from cad.engine.reader import refuse_written
 
     # Before the memo: a read of a file this build writes is refused, whether or not the memo holds it.
-    refuse_written(path, "read_step")
+    refuse_written(path, "step.read")
     return _READ_STEP(os.fspath(path))
 
 
@@ -683,7 +707,7 @@ def read_xbf(path: Any) -> Any:
 
     from cad.engine.reader import refuse_written
 
-    refuse_written(path, "read_xbf")  # before the memo, as read_step's
+    refuse_written(path, "xbf.read")  # before the memo, as read_step's
     return _READ_XBF(os.fspath(path))
 
 
@@ -729,10 +753,14 @@ def _instance(shape: Any, copied: dict[int, Any]) -> Any:
     if joints:
         from build123d import Joint
 
+        from cad.engine.kernel.memo import own_joints
+
+        joints = attrs["joints"] = own_joints(joints, made)
         for label, joint in joints.items():
             if isinstance(joint, Joint):
-                joints[label] = copied[id(joint)] = copy.copy(joint)
-                joints[label].parent = made
+                own = copied[id(joint)] = copy.copy(joint)
+                dict.__setitem__(joints, label, own)  # as a dict is: a JointDict's own would move it
+                own.parent = made
     made.__dict__.update(attrs)
     if children:
         copies = [_instance(child, copied) for child in children]
@@ -777,6 +805,11 @@ class BuildContext:
         self.called: dict[str, Model] = {}
         # Per script of a child model from another file: the resolution its closure is made with.
         self.others: dict[Path, Any] = {}
+        # The parameters the script's load declared (``parameters.recording``; ``build`` sets it).
+        self.declared: list = []
+        # A preview's values (``build.preview``), as text: a body whose key falls back to a module's bytes
+        # (which a preview leaves as they are) is keyed by them too, so it never replays another value's run.
+        self.preview: str | None = None
 
     def source(self, model: Model) -> str:
         """What a model's body is made of: the symbols its function reaches, a module's
@@ -795,7 +828,8 @@ class BuildContext:
             digest, reasons = self.symbols.key(model.function)
             if reasons:
                 self.fallbacks[model.identity] = reasons
-            found = self.sources[key] = digest + _engine_version()
+            found = self.sources[key] = digest + _engine_version() + (
+                f"|preview {self.preview}" if reasons and self.preview is not None else "")
             self.key_seconds += time.perf_counter() - started
         return found
 
@@ -823,6 +857,23 @@ class BuildContext:
             loaded = {name for name in self.loaded or () if imported(name)}
             symbols = self.others[model.script] = Symbols(self.resolved, loaded, model.script.parent)
         return symbols.modules(model.function)
+
+    def parameters(self, model: Model) -> list[dict[str, Any]]:
+        """A model's parameters (``parameters.rows``): those its script's load declared, each with where
+        it is in the code and whether it can be written -- its own file's alone. A child model of another
+        script lists what a build of that script would: the declarations of the files its own script
+        imports (``sources.closure_files``), so its document is the one a build of its own writes."""
+        from cad.engine import parameters
+
+        if not self.declared:
+            return []
+        files = None
+        if self.script is not None and model.script != self.script:
+            from cad.engine.sources import closure_files
+
+            module = getattr(model.function, "__module__", None) or model.script.stem
+            files = {canonical(path) for path in closure_files(model.script, module, self.resolved)}
+        return parameters.rows(self.declared, str(model.script), files)
 
     def named(self, model: Model) -> dict[str, dict[str, str]]:
         """What ``modules`` digests per file, by name (``sources.Symbols.symbols``)."""
@@ -983,10 +1034,12 @@ def _placement(value: Any) -> Any:
 
 
 def check_result(model: Model, result: Any) -> None:
-    import build123d as bd
+    """A body's result, refused unless one producer (``cad.registry``) makes its document and every file
+    the model declares of it: today a model returns a build123d shape, the build123d integration's."""
+    from cad.registry import producer_for
 
-    if not isinstance(result, bd.Shape):
-        raise TypeError(f"model {model.identity} returned {type(result).__name__}; a model returns a build123d shape")
+    for kind in dict.fromkeys(("model", *(output.kind for output in model.outputs))):
+        producer_for(kind, result, where=f"model {model.identity}")
     if result.__dict__.get("_wrapped") is None:
         raise ValueError(f"model {model.identity} returned an empty shape")
 

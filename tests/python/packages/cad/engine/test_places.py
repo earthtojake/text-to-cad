@@ -1,25 +1,27 @@
 """The state folder an earlier release kept, adopted (``cad.engine.places.adopt``, ``adopt_earlier``).
 
-0.9 names its state folder ``texttocad`` where 0.8's was ``cadgen``: what this release keeps of the earlier
-one -- the person's settings, the installations' records less ``current``, the engines' records with the page
-token, the documents' records and Recents, setup's receipt and the install channels -- moves into its own,
-each once, and the rest stays, with the person's telemetry no for the earlier release still installed. Every folder here is a temporary one: the platform's places are stood in
-for, never read.
+0.10 names its state folder ``cad`` where 0.8's was ``cadgen``: what this release keeps of the earlier one
+-- the person's settings, the documents' records and Recents, and setup's receipt -- moves into its own, each
+once, and the rest stays -- 0.8's installations' records, its engines' records and page token, its install
+channels --, with the person's telemetry no for the earlier release still installed. Every folder here is a
+temporary one: the platform's places are stood in for, never read.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from cad.engine import places
 
-EVERYTHING = ["settings.json", "installations", "engines", "documents", "recents", "install-receipt.json",
-              "install-channels.json"]
+EVERYTHING = ["settings.json", "documents", "recents", "install-receipt.json"]
 
 
 def write(path: Path, text: str = "") -> Path:
@@ -35,7 +37,7 @@ class Folders(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory(prefix="places-")
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
-        self.earlier, self.folder = self.root / "cadgen", self.root / "texttocad"
+        self.earlier, self.folder = self.root / "cadgen", self.root / "cad"
         write(self.earlier / "settings.json", '{"telemetry": {"choice": "off"}}')
         write(self.earlier / "installations" / "0.8.4.json", '{"version": "0.8.4"}')
         write(self.earlier / "installations" / "current", "0.8.4")
@@ -52,17 +54,21 @@ class Folders(unittest.TestCase):
 class AdoptTest(Folders):
     def test_what_this_release_keeps_moves_and_the_rest_stays(self) -> None:
         self.assertEqual(places.adopt(self.earlier, self.folder), EVERYTHING)
-        self.assertEqual(sorted(path.name for path in (self.folder / "installations").iterdir()), ["0.8.4.json"],
-                         "an earlier release's current is not this one's to keep")
         self.assertEqual((self.folder / "settings.json").read_text(encoding="utf-8"), '{"telemetry": {"choice": "off"}}',
                          "a no stays a no")
-        self.assertEqual((self.folder / "engines" / "token").read_text(encoding="utf-8"), "t" * 43)
         self.assertTrue((self.folder / "documents" / "a" / "document.json").is_file())
         self.assertTrue((self.folder / "recents" / "thumbnails" / "a.png").is_file())
-        # Moved, never copied: the locks and what was noted and not sent stay behind, and the person's no, for
-        # the earlier release still installed, which would take settings it found missing for never told.
+        self.assertEqual((self.folder / "install-receipt.json").read_text(encoding="utf-8"), "{}")
+        # Moved, never copied: what only 0.8 runs by -- its installations' records, its engines' with the page
+        # token, its install channels --, the locks and what was noted and not sent stay behind, and the
+        # person's no, for the earlier release still installed, which would take settings it found missing for
+        # never told.
         self.assertEqual(sorted(path.name for path in self.earlier.iterdir()),
-                         ["install.lock", "settings.json", "settings.lock", "telemetry-spool.jsonl"])
+                         ["engines", "install-channels.json", "install.lock", "installations", "settings.json",
+                          "settings.lock", "telemetry-spool.jsonl"])
+        self.assertEqual((self.earlier / "engines" / "token").read_text(encoding="utf-8"), "t" * 43)
+        self.assertEqual((self.earlier / "installations" / "current").read_text(encoding="utf-8"), "0.8.4")
+        self.assertFalse((self.folder / "engines").exists() or (self.folder / "installations").exists())
         self.assertEqual(json.loads((self.earlier / "settings.json").read_text(encoding="utf-8")),
                          {"telemetry": {"choice": "off"}})
         self.assertEqual(places.adopt(self.earlier, self.folder), [], "once")
@@ -83,12 +89,12 @@ class AdoptTest(Folders):
 
     def test_what_this_release_already_keeps_is_never_replaced(self) -> None:
         write(self.folder / "settings.json", '{"telemetry": {"notifiedAt": 1}}')
-        write(self.folder / "engines" / "token", "n" * 43)
+        write(self.folder / "recents" / "thumbnails" / "b.png", "mine")
         self.assertEqual(places.adopt(self.earlier, self.folder),
-                         [name for name in EVERYTHING if name not in ("settings.json", "engines")])
-        self.assertEqual((self.folder / "engines" / "token").read_text(encoding="utf-8"), "n" * 43)
+                         [name for name in EVERYTHING if name not in ("settings.json", "recents")])
+        self.assertEqual(sorted(path.name for path in (self.folder / "recents" / "thumbnails").iterdir()), ["b.png"])
         self.assertEqual((self.folder / "settings.json").read_text(encoding="utf-8"), '{"telemetry": {"notifiedAt": 1}}')
-        self.assertTrue((self.earlier / "engines" / "token").is_file(), "left where it was")
+        self.assertTrue((self.earlier / "recents" / "thumbnails" / "a.png").is_file(), "left where it was")
 
     def test_no_earlier_folder_moves_nothing_and_makes_nothing(self) -> None:
         self.assertEqual(places.adopt(self.root / "absent", self.folder), [])
@@ -99,7 +105,13 @@ class AdoptEarlierTest(Folders):
     """Where no state folder is named: the platform's places, stood in for."""
 
     def platform(self, names: tuple[str, str]) -> Path:
-        return {places.STATE: self.folder, places.EARLIER_STATE: self.earlier}[names]
+        return {places.EARLIER_STATE: self.earlier}[names]
+
+    def setUp(self) -> None:
+        super().setUp()
+        local = mock.patch.object(places, "_local_state", return_value=self.root)  # this release's: root/cad
+        local.start()
+        self.addCleanup(local.stop)
 
     def test_the_earlier_folder_is_adopted_once_whatever_this_release_wrote_first(self) -> None:
         # A told command (`cad doctor`'s notice) may have written this release's folder first.
@@ -108,9 +120,9 @@ class AdoptEarlierTest(Folders):
                 mock.patch.dict(os.environ, {"CAD_STATE_DIR": ""}):
             self.assertEqual(places.adopt_earlier(), EVERYTHING)
             self.assertEqual(places.state_dir(), self.folder)
-            write(self.earlier / "installations" / "0.8.5.json", "{}")  # written by 0.8 after the move
+            write(self.earlier / "documents" / "b" / "document.json", "{}")  # written by 0.8 after the move
             self.assertEqual(places.adopt_earlier(), [], "this release's folder has it: never again")
-        self.assertFalse((self.folder / "installations" / "0.8.5.json").exists())
+        self.assertFalse((self.folder / "documents" / "b").exists())
 
     def test_what_earlier_releases_left_is_looked_for_in_their_own_folders_or_the_ones_named(self) -> None:
         with mock.patch.object(places, "_platform_state", side_effect=self.platform), \
@@ -118,7 +130,7 @@ class AdoptEarlierTest(Folders):
                                              "LOCALAPPDATA": str(self.root)}):
             self.assertEqual(places.earlier_state_dir(), self.earlier)
             self.assertEqual(places.earlier_cache_dir(), self.root / "cadgen")
-            self.assertEqual(places.cache_dir(), self.root / "texttocad")
+            self.assertEqual(places.cache_dir(), self.root / "cad")
         named = {"CAD_STATE_DIR": str(self.root / "s"), "CAD_CACHE_DIR": str(self.root / "c")}
         with mock.patch.dict(os.environ, named):
             self.assertEqual((places.earlier_state_dir(), places.earlier_cache_dir()), (self.root / "s", self.root / "c"))
@@ -132,6 +144,125 @@ class AdoptEarlierTest(Folders):
         self.assertFalse(self.folder.exists())
         self.assertFalse(named.exists())
         self.assertTrue((self.earlier / "installations" / "current").is_file())
+
+
+class WindowsTest(Folders):
+    """On Windows 0.10.0 kept its folders in the local application data, which an app package (the Claude
+    desktop app's) virtualizes for every process it starts; this release keeps them in the user's own
+    folder, as Linux does, and moves what 0.10.0 kept there once -- 0.10.0's folder before 0.8's, whose
+    settings are only the telemetry no it kept behind (#759)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.home = self.root / "home"
+        self.appdata = self.root / "AppData" / "Local"
+        self.ten = self.appdata / "cad-state"
+        (self.earlier / "settings.json").write_text('{"telemetry": {"choice": "off"}}', encoding="utf-8")
+        for name in ("documents", "recents", "install-receipt.json"):
+            path = self.earlier / name
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        write(self.ten / "settings.json", '{"telemetry": {"choice": "off"}, "language": "zh-TW"}')
+        write(self.ten / "engines" / "token", "u" * 43)
+        write(self.ten / "engines" / "engine.json", '{"port": 3246, "schema": 3}')
+        write(self.ten / "documents" / "a" / "document.json", "{}")
+        write(self.ten / "recents" / "thumbnails" / "a.png")
+        write(self.ten / "install-receipt.json", "{}")
+        write(self.ten / "install-channels.json", "{}")
+        write(self.ten / "installations" / "current", "0.10.0")
+        write(self.ten / "releases" / "0.10.0" / "Scripts" / "python.exe")
+        write(self.appdata / "cad" / "documents" / "a" / "document.xbf", "xbf")
+        write(self.appdata / "cad" / "base" / "0123" / "pyvenv.cfg")
+        environment = {"CAD_STATE_DIR": "", "CAD_CACHE_DIR": "", "CAD_ENGINE_DIR": "", "XDG_STATE_HOME": "",
+                       "XDG_CACHE_HOME": "", "HOME": str(self.home), "USERPROFILE": str(self.home),
+                       "LOCALAPPDATA": str(self.appdata)}
+        for patch in (mock.patch.object(places, "WINDOWS", True), mock.patch("sys.platform", "win32"),
+                      mock.patch.object(places, "_platform_state", side_effect=lambda names: self.earlier),
+                      mock.patch.dict(os.environ, environment)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_the_folders_are_the_users_own_out_of_the_local_application_data(self) -> None:
+        self.assertEqual(places.state_dir(), self.home / ".local" / "state" / "cad")
+        self.assertEqual(places.cache_dir(), self.home / ".cache" / "cad")
+        self.assertEqual(Path(places.default_engine_dir()), self.home / ".local" / "state" / "cad-engine")
+        self.assertEqual((places.appdata_state_dir(), places.appdata_cache_dir()), (self.ten, self.appdata / "cad"))
+        self.assertEqual(places.appdata_engine_dir(), Path(tempfile.gettempdir()) / "cad-engine")
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": "s", "CAD_CACHE_DIR": "c", "CAD_ENGINE_DIR": "e"}):
+            self.assertEqual((places.appdata_state_dir(), places.appdata_cache_dir(), places.appdata_engine_dir()),
+                             (None, None, None))
+
+    def test_what_0_10_kept_moves_once_with_the_page_token_its_port_and_its_documents_bytes(self) -> None:
+        state, cache = places.state_dir(), places.cache_dir()
+        self.assertEqual(places.adopt_earlier(), [*places.APPDATA_ADOPTED, "documents"])
+        self.assertEqual(json.loads((state / "settings.json").read_text(encoding="utf-8")),
+                         {"telemetry": {"choice": "off"}, "language": "zh-TW"}, "0.10's whole settings, not 0.8's no")
+        self.assertEqual((state / "engines" / "token").read_text(encoding="utf-8"), "u" * 43, "every link still works")
+        self.assertEqual(json.loads((state / "engines" / "engine.json").read_text(encoding="utf-8"))["port"], 3246)
+        self.assertTrue((state / "documents" / "a" / "document.json").is_file())
+        self.assertEqual((cache / "documents" / "a" / "document.xbf").read_text(encoding="utf-8"), "xbf")
+        # What 0.10.0 runs by stays for it -- its installations, its release, its base --, and its telemetry no.
+        self.assertTrue((self.ten / "installations" / "current").is_file())
+        self.assertTrue((self.ten / "releases" / "0.10.0" / "Scripts" / "python.exe").is_file())
+        self.assertTrue((self.appdata / "cad" / "base" / "0123" / "pyvenv.cfg").is_file())
+        self.assertEqual(json.loads((self.ten / "settings.json").read_text(encoding="utf-8")),
+                         {"telemetry": {"choice": "off"}})
+        self.assertFalse((state / "installations").exists() or (cache / "base").exists())
+        self.assertEqual(places.adopt_earlier(), [], "once")
+
+
+class StoredTest(unittest.TestCase):
+    """The release cad's update keeps beside the installed one, where this process runs it (``places.stored``), and
+    whether a process this one starts must be handed the engine's folder (``places.handed``): never the stored
+    release, which every process of the environment takes by itself as it starts."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory(prefix="stored-")
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name).resolve()
+        self.release, self.source = self.root / "store" / "1.0.1-tag", self.root / "checkout" / "src"
+        self.release.mkdir(parents=True)
+        self.source.mkdir(parents=True)
+        self.enterContext(mock.patch.dict(sys.modules))
+
+    def bootstrap(self, stored: str | None) -> None:
+        sys.modules["_cad_release"] = types.SimpleNamespace(STORED=stored)  # type: ignore[assignment]
+
+    def test_read_of_the_bootstrap_as_it_ran_and_never_imported(self) -> None:
+        sys.modules.pop("_cad_release", None)
+        self.assertIsNone(places.stored())
+        self.assertNotIn("_cad_release", sys.modules)
+        self.assertTrue(places.handed(str(self.source)))
+        self.bootstrap(None)
+        self.assertIsNone(places.stored())
+        self.bootstrap("")
+        self.assertIsNone(places.stored())
+        self.bootstrap(str(self.release))
+        self.assertEqual(places.stored(), str(self.release))
+
+    def test_handed_but_where_the_folder_is_the_stored_release(self) -> None:
+        self.bootstrap(None)
+        self.assertTrue(places.handed(str(self.release)), "nothing stored runs: a folder outside is a source tree")
+        self.bootstrap(str(self.release))
+        self.assertFalse(places.handed(str(self.release)))
+        self.assertFalse(places.handed(str(self.release) + os.sep))
+        self.assertTrue(places.handed(str(self.source)))
+        with mock.patch.object(places, "engine_root", return_value=str(self.release)):
+            self.assertFalse(places.handed(), "the engine's folder, by default")
+        with mock.patch.object(places, "engine_root", return_value=str(self.source)):
+            self.assertTrue(places.handed())
+
+    @unittest.skipIf(os.name == "nt", "a symbolic link to a folder needs a privilege on Windows")
+    def test_the_stored_release_is_known_through_a_symbolic_link_either_way(self) -> None:
+        link = self.root / "linked"
+        os.symlink(self.release, link, target_is_directory=True)
+        self.bootstrap(str(link))
+        self.assertFalse(places.handed(str(self.release)))
+        self.bootstrap(str(self.release))
+        self.assertFalse(places.handed(str(link)))
+        self.assertTrue(places.handed(str(self.source)))
 
 
 if __name__ == "__main__":

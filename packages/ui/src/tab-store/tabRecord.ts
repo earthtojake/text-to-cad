@@ -1,18 +1,20 @@
 import type { JsonValue } from '../file-viewer/types.js';
 import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
+import { normalizeViewportBackground } from '@cad/core/lib/viewportTheme.js';
 
 /**
  * The tab record: everything the viewer keeps, kept for one tab and thrown out with it.
  *
  *   { version, settings, files }
  *
- * `settings` is tab-wide — the tool stack's layout, the appearance, how the home lays out its
- * library and the folder the explorer was last in — and replaces every global preference.
+ * `settings` is tab-wide — the tool stack's layout, the appearance, the viewport's background, how
+ * the home lays out its library and the folder the explorer was last in — and replaces every global preference.
  * `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera, its Display
  * settings, its playback, its renderer's own slices) under `[absolute file path, renderer id]`,
  * and nothing else: a write puts a file last and drops any other (`TAB_FILE_LIMIT`), and a host
- * leaving a file drops its view (`files.retain`, which `CadViewer` calls), so a reload brings back
- * the file on screen and a file left starts over.
+ * leaving a file sets its view aside for the page (`files.retain`, which `CadViewer` calls: in the
+ * store's memory, never in the record), so a reload brings back the file on screen, and a file left
+ * and come back to in the same page opens as it was left.
  *
  * This module is the record's one definition: its shape, its version and its normalization.
  * Reading is forgiving — a record another version wrote is the defaults, a field that is not
@@ -21,18 +23,22 @@ import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
  * hands the shell. Nothing here touches storage: a host supplies that (`tabStore.ts`).
  */
 export const TAB_RECORD_VERSION = 2;
-/** One: a tab shows one file, and only the file on screen keeps its view. */
+/** One: a tab shows one file, and only the file on screen's view is the tab's (the page keeps those it left: `PAGE_FILE_LIMIT`). */
 export const TAB_FILE_LIMIT = 1;
 
 export type Appearance = 'system' | 'light' | 'dark';
+/** The model area's background, the person's (Display's Background): Light (the default) or Dark; a stored "theme" (the old Follow theme) reads as Light. */
+export type ViewportBackground = 'light' | 'dark';
 /** How the home lays out its models: a grid of cards, or a list of rows. */
 export type LibraryLayout = 'grid' | 'list';
 export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean> }
 export interface TabSettings {
-  /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes and the folded panels. */
+  /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes and the folded panels (the view's panel is each file's). */
   toolStack: ToolStackLayout;
   /** System, Light or Dark; a new tab follows the OS until the person picks. */
   appearance: Appearance;
+  /** The viewport's background in every file and view (`@cad/core/lib/viewportTheme.js`): Light unless the person picks. */
+  viewportBackground: ViewportBackground;
   /** The home's library: its models as a grid of cards (the default) or a list. */
   library: { layout: LibraryLayout };
   /** The folder the name menu's Files was last in, this tab: where a model's Files starts; null, none yet. */
@@ -68,6 +74,7 @@ export function normalizeTabSettings(value: unknown): TabSettings {
   return {
     toolStack: normalizeToolStack(record.toolStack) as ToolStackLayout,
     appearance: normalizeAppearance(record.appearance),
+    viewportBackground: normalizeViewportBackground(record.viewportBackground) as ViewportBackground,
     library: normalizeLibrary(record.library),
     explorer: normalizeExplorer(record.explorer),
   };

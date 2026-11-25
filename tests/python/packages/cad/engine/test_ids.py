@@ -171,6 +171,22 @@ class IdsTest(unittest.TestCase):
         later.write_bytes(b"x")
         self.assertEqual(file_id(later), before)
 
+    def test_a_path_that_holds_a_hash_is_one_file_and_a_ref_follows_the_file(self) -> None:
+        # ``FILE#REF``: a file's path may hold a '#' itself (a folder named project#1), and every command once cut
+        # it there ("project#1/part.step is not a step file"). The file is the longest part that is one.
+        from cad.engine.addresses import parts, split
+
+        part = self.folder / "project#1" / "bracket#2.step"
+        part.parent.mkdir()
+        part.write_text("ISO-10303-21;", encoding="utf-8")
+        ident = model_id(self.script, "part")
+        self.assertEqual(parts(str(part)), (str(part), None))
+        self.assertEqual(parts(f"{part}#arm/face 3"), (str(part), "arm/face 3"))
+        self.assertEqual(split(f"{part}#arm")[1], "arm")
+        self.assertEqual(parts(f"{ident}#bracket"), (ident, "bracket"))
+        self.assertEqual(parts("#U3"), ("", "U3"))
+        self.assertEqual(parts(str(self.folder / "gone.step#arm")), (str(self.folder / "gone.step"), "arm"))
+
     def test_derived_ids_are_version_5_uuids(self) -> None:
         for ident in (model_id(self.script, "part"), file_id(self.script)):
             self.assertTrue(is_id(ident))
@@ -184,10 +200,11 @@ class IdsTest(unittest.TestCase):
 class ServedByIdTest(unittest.TestCase):
     def setUp(self) -> None:
         from cad.engine.serve import Server
+        from tests.python.support.http_listener import listener
 
         self.folder = Path(tempfile.mkdtemp(prefix="engine-ids-"))
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.server = Server(port=0, mesh_mode="inline")
+        self.server = Server(mesh_mode="inline", http_factory=listener)
         self.addCleanup(self.server.stop)
 
     def test_the_page_s_document_route_serves_by_id(self) -> None:

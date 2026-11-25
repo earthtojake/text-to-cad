@@ -13,7 +13,7 @@ inputs. Outputs belong in ignored `tmp/`, never beside this source.
   capacitors, fins, standoffs and copper turns in contact.
 
 Run `exports.py --out /absolute/path/to/ignored/tmp/corpus` with this checkout's
-development Python. The source remains four normal cadgen models; the export
+development Python. The source remains four normal models; the export
 script performs the explicit file actions for this standing review corpus.
 
 The existing [`moonwatch` finishing sampler](../../moonwatch/src/finishing_sampler.py)

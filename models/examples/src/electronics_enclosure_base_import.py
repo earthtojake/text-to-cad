@@ -1,4 +1,4 @@
-"""Imported parts: STEP files read back as models, through `read_step`.
+"""Imported parts: STEP files read back as models, through `step.read`.
 
 The read the old `electronics_enclosure_base_drawing.py` made (the drawing calls
 the enclosure's model now): the STEP that `electronics_enclosure_base.py` exports,
@@ -9,7 +9,7 @@ as every export is; Git holds no CAD files) and reads them back from there, so r
 before opening either import model.
 """
 
-from cad import export, model, read_step
+from cad import model, step
 
 from pathlib import Path
 
@@ -22,16 +22,16 @@ FIXTURE_STEP = Path(__file__).parent / "../STEP/basic_shape_mating_test_fixture.
 
 @model
 def electronics_enclosure_base_import():
-    return read_step(ENCLOSURE_STEP)
+    return step.read(ENCLOSURE_STEP)
 
 
 @model
 def basic_shape_mating_test_fixture_import():
-    return read_step(FIXTURE_STEP)
+    return step.read(FIXTURE_STEP)
 
 
 if __name__ == "__main__":
-    export(electronics_enclosure_base, ENCLOSURE_STEP)
-    export(basic_shape_mating_test_fixture, FIXTURE_STEP)
+    model.export(electronics_enclosure_base, ENCLOSURE_STEP)
+    model.export(basic_shape_mating_test_fixture, FIXTURE_STEP)
     electronics_enclosure_base_import()
     basic_shape_mating_test_fixture_import()

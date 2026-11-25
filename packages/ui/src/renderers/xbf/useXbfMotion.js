@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   advanceAnimationElapsed, animationNowMs, clampAnimationElapsed, clampAnimationSpeed
-} from "@text-to-cad/core/common/animationClock.js";
-import { xbfMotions, xbfMotionTimeline } from "@text-to-cad/core/lib/xbf/xbfMotion.js";
+} from "@cad/core/common/animationClock.js";
+import { xbfMotions, xbfMotionTimeline } from "@cad/core/lib/xbf/xbfMotion.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 
@@ -23,13 +23,14 @@ function motionRows(kinematics) {
 
 /**
  * An engine document's motions (AP242's interpolated configuration sequences, `xbfMotion.js`) as
- * the kit's routine runtime: what the file sidebar's section (`AnimationSection.jsx`, headed
- * "Motion") and Preview's playbar drive, on this renderer's own clock. Each frame is the motion's
+ * the kit's routine runtime: what the tools view's Animation tab (`kit/tools/playbar/AnimationSection.jsx`) drives, and Preview's
+ * playbar (`PreviewPlaybar.jsx`) in Preview, their words "Motion", on this renderer's own clock. Each frame is the motion's
  * pair values at the clock's time, handed to `pose`, which poses the scene through the page's
  * forward kinematics.
  *
  * The motion owns the posed state while it is `enabled`: from the first play, scrub or choice of a
- * motion until Reset lets go of it; paused, its frame stays on the model. Letting go calls
+ * motion until it is let go of (`onRelease`: the playbar scrubbed back to its start, or another motion —
+ * Explode, a Position edit — taking over); paused, its frame stays on the model, and Position shows it, editable. Letting go calls
  * `pose(null)`: the scene is posed as Position now holds it, which taking the motion up put at rest
  * (one motion at a time, nothing set aside: `motionExclusion.js`).
  * The file opens with no motion owning anything, and so does each new revision of the model.
@@ -81,7 +82,7 @@ export function useXbfMotion(kinematics, pose) {
     clock.resetAnimationClock();
     update({ enabled: true, playing: false, elapsedSec: 0 });
   }, [clock, update]);
-  // Stop: stopped, rewound and let go of; the motion in hand, Speed and Loop stay.
+  // Let go of: stopped and rewound; the motion in hand, Speed and Loop stay.
   const onRelease = useCallback(() => {
     if (!stateRef.current.enabled && !stateRef.current.playing) return;
     clock.resetAnimationClock();

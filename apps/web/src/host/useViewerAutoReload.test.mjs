@@ -39,6 +39,13 @@ async function mount(serverInfo, drive) {
     advance: () => act(() => drive.advance()),
     // The hook's own answer is handled before this await resumes: it awaited the same promise first.
     focus: () => act(async () => { dom.window.dispatchEvent(new dom.window.Event('focus')); await drive.asked; }),
+    // The page hidden or shown, as a browser says it: a tab brought back fires no focus.
+    seen: visible => act(async () => {
+      if (visible) delete dom.window.document.visibilityState;
+      else Object.defineProperty(dom.window.document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));
+      await drive.asked;
+    }),
     async dispose() {
       await act(() => root.unmount()); dom.window.close();
       for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key]; }
@@ -84,4 +91,37 @@ test('a transient outage does not reload, and unmount cancels polling', async ()
   await view.advance(); await view.advance(); assert.deepEqual(drive.reloads, []);
   assert.equal(drive.scheduled, 1);
   await view.dispose(); assert.equal(drive.scheduled, 0);
+});
+
+test('a hidden page asks nothing, its ticks stopped; shown again it asks at once and keeps asking every 5 s', async () => {
+  const drive = driver([]);
+  const view = await mount({ identityToken: 'a' }, drive);
+  try {
+    await view.seen(false);
+    await view.advance();
+    assert.equal(drive.asks, 0, 'hidden: nothing asked');
+    assert.equal(drive.scheduled, 0, 'and no tick waits');
+    await view.seen(true);
+    assert.equal(drive.asks, 1, 'shown: asked at once');
+    assert.equal(drive.scheduled, 1);
+    await view.advance();
+    assert.equal(drive.asks, 2, 'then every 5 s while seen');
+    await view.seen(false);
+    await view.advance();
+    assert.equal(drive.asks, 2);
+    assert.equal(drive.scheduled, 0);
+    assert.deepEqual(drive.reloads, []);
+  } finally { await view.dispose(); }
+});
+
+test('a page shown again on another build reloads into it, as coming back to the window does', async () => {
+  const drive = driver([{ ok: true, identityToken: 'b' }]);
+  const view = await mount({ identityToken: 'a' }, drive);
+  try {
+    await view.seen(false);
+    await view.advance();
+    assert.deepEqual(drive.reloads, []);
+    await view.seen(true);
+    assert.equal(drive.reloads.length, 1);
+  } finally { await view.dispose(); }
 });

@@ -1,4 +1,4 @@
-import { isMissingFileError } from "@text-to-cad/core/client";
+import { isMissingFileError } from "@cad/core/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { selectRenderer } from "../registry.js";
 import type { FileMetadata, FileSource, PreparedRenderer, RendererRegistration } from "../types.js";

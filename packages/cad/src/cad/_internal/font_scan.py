@@ -10,7 +10,7 @@ no family name (whose empty name OCCT refuses, #636), therefore takes down
 scan is the one platform build123d runs it on (OCCT does not pick up user fonts there).
 
 ``install_font_guard`` hides such a file from the one folder listing build123d makes;
-``python -m cad.check_fonts`` names it. The permanent fix belongs upstream, in
+``python -m cad._internal.check_fonts`` names it. The permanent fix belongs upstream, in
 ``register_folder``.
 """
 

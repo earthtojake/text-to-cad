@@ -1,0 +1,2569 @@
+"""The engine daemon: the computer's one server, behind the engine folder's one door, lock and port file, which
+every client reaches (``client``) and only ``cad server start`` starts (``client.start``); its greeting names its
+release (``door.greeting``). It is never stopped by a timer: it stops on ``cad server stop`` (or a terminate), once
+it has drained (``drain``: nothing in flight; asked by cad's own update as it switches releases, and by the switch
+of 0.11.11 and earlier), when its door is gone and
+no one can reach it (``tend``), and with the machine. Idleness sheds memory instead.
+
+Every process it starts is a service it declares (``services``): a model script's warm worker (the
+documents worker among them) and a served document's render process. One supervisor runs them by
+those declarations (``supervisor.Supervisor``, ``Daemon.supervisor``), and the daemon binds its hooks
+to them by name: the drain, what a page watches, the progress that wakes pages, the cache's ``saved``.
+A request leases its service's process for itself, one request at a time per process, first come
+first served, keyed as the service declares: a worker by its script's path, a render process by its
+document's id. A build names the Python its script was run with (``contract.interpreter``): one whose
+environment is not the base the server's kernel processes run in gets a worker of that Python's own,
+keyed by its script, that environment and the release of cad it holds, so the packages of the
+environment the script was launched from import in its worker (``caller``); one whose worker contract is
+not the server's is refused in one line before any worker starts, naming which side to update and to what
+release (``contract.refusal``). The
+services that count -- the workers -- are held to ``CAD_ENGINE_WORKERS`` processes
+alive (by default, the machine's cores): a build for a script with a live worker waits for it while
+it is busy; one for a script with none starts one when fewer than the cap are alive; at the cap the
+least recently used idle worker no page watches is retired first (its stdin closed: it exits), and
+when every idle worker is watched the new one starts past the cap; with every worker busy, the build
+waits, first come first served, for the first to come free. Nothing is refused, and nothing is
+predicted: no admission. A render process does not count.
+
+No timer retires a process: memory alone does (``Supervisor.shed``). Each process's resident memory,
+as it last said it (its ``ready`` frame and each answer's ``rssMb``), is held with the others' to one
+cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``). Past it, or under the system's
+memory-pressure signal (``serve.Pressure``), idle processes are retired in the order their
+declarations rank them, least recently used first within a rank: the standby, then render processes,
+then the workers no page watches, and a watched one only when no other is left. A process that says,
+answering, that it alone is over the cap (``retire``: ``worker.retirement``) is retired once its
+request is done. A busy one is never retired, but one whose memory, as the system counts it, is past
+the ceiling on one process (``CAD_ENGINE_WORKER_CEILING_MB``, ``worker.memory_ceiling_mb``) at two
+``tend`` rounds running, during one request, is killed, and its request fails saying why, as a build
+out of memory (``Supervisor.overrun``, ``_overran``): a build in native code cannot stop itself, and
+one that runs away would take the machine. Before a worker is stopped,
+every document of it the server does not hold is taken from it (``models.Models.drain``): a document
+outlives its worker. A retired script's next build is a
+fresh worker's, a restart. Each such document is also kept in the engine's cache once it is idle, at
+its drain and at shutdown (``cache``), so a restart of the daemon opens it at once.
+
+The workers keep a standby with the kernel loaded (``services.WORKER``, ``Supervisor.stand``): started
+once the installation's default environment, the base, exists -- with the daemon when it is made already,
+else the moment the engine's making of it, on first need, is done (``made_base``); never before, and
+nothing waits on a standby that cannot stand -- and again each time a build takes it or starts a worker
+of its own while there is room for it. The engine never makes the base to stand one: it is made on first
+need (``places.kernel``, ``base.kernel``), and a kernel process asked for meanwhile waits on its making. A build for a script with no live worker takes the standby when its environment shapes
+the interpreter as the standby's does (``places.RESTARTS``), and starts a fresh worker otherwise;
+taken, the standby is that script's worker from then on (``Process.adopt``), so a new script's first
+build pays no kernel load. The standby counts toward the cap, is the first retired for room or
+memory, and is never a script's worker in ``status``. ``CAD_ENGINE_STANDBY=0`` keeps none
+(``standby``): an operator's seam for CI and machines short of memory.
+
+Every service speaks one protocol (``cad.engine.frames``). Requests are one JSON object per line on
+the process's stdin, a request's ``bytes`` exactly that many bytes after its line. The process
+answers on its original stdout in frames: a JSON object on one line and, when it says ``bytes``, that
+many bytes after it. Its first frame is ``{"ready": pid, "rssMb"}``; then, for each request, its
+``log``, ``notice`` and ``progress`` frames, which go to whoever asked, and one answer, which may
+carry ``rssMb`` and ``retire``. What it prints goes to its stderr, its log. It exits when its stdin
+closes.
+
+It also serves documents over HTTP (``serve``), holding each loaded document and its
+parts' tessellations in its memory under one budget (``serve.memory_budget``,
+``CAD_ENGINE_MEMORY_MB``; past it, or on the system's memory-pressure signal, what is held
+is evicted: ``serve.Server.trim``), and draws them (``draw``): each served document a
+snapshot asks for is drawn by a render process of its own (``renders``), started on its first
+picture, sent each new version of it at the picture that asks for it, gone with the daemon or under
+the memory cap.
+
+Its only files are the operating system's coordination, in its own folder (``places.engine_dir``): a lock,
+and on POSIX its door, a named pipe (``door_path``), and the pipes of the connections being opened
+(``door``: no socket, so a sandbox that refuses sockets still reaches it); on Windows a localhost
+TCP port and a token, in a port file there. It removes them as it stops (``let_go``); those of one
+killed are the next one's, which takes its lock and makes its door anew, and ``cad server status`` and ``cad
+server stop`` remove them (``client.sweep``). Requests are one JSON object per line on a connection; answers
+are JSON lines, the last of which carries ``done``, ``failed`` or ``ok``. Before it, a build
+sends its caller its ``{"log"}`` lines and its ``{"progress"}`` frames as its worker sends them
+(``progress.py``); the daemon keeps each busy worker's last frame for ``status``, and wakes the
+pages waiting on a served document the frame's build writes (``serve.Server.building``).
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import re
+import secrets
+import socket
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+from typing import Any, Callable
+
+from cad.engine.atomic_replace import replace_atomic
+from cad.engine.client import WORKER_STDERR
+from cad.engine.contract import refusal as contract_refusal
+from cad.engine.previous import version
+from cad.engine import places as _places
+from cad.engine.door import DOOR_PROTOCOL
+from cad.engine.frames import failed_type
+from cad.engine.ids import canonical, is_id
+from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation,
+                               lock, lock_path, names, pages_path, port_path)
+from cad_server.engine import display
+from cad_server.engine.services import SERVICES
+from cad_server.engine.supervisor import Gone, Process, Supervisor
+
+__all__ = ["DEFAULT_PORT", "PortHeld", "let_go", "main", "port_holder", "worker_cap"]
+
+
+def _application(server: Any, host: str, port: int) -> Any:
+    """The server's HTTP application on the engine's listener: the viewer's and the CAD app's
+    (``cad_server._internal.engine_host.http_factory``, the one module that imports either)."""
+    from cad_server._internal.engine_host import http_factory
+
+    return http_factory(server, host, port)
+
+
+def _kernel(make: bool) -> dict[str, Any] | None:
+    """The environment the engine's kernel processes run in: the installation's base
+    (``cad_server._internal.engine_host.kernel``)."""
+    from cad_server._internal.engine_host import kernel as made
+
+    return made(make)
+
+
+def _making() -> Any:
+    """The engine's making of the base when it is absent (``cad_server._internal.engine_host.making``)."""
+    from cad_server._internal.engine_host import making
+
+    return making()
+
+
+def _listen_also(server: Any, host: str, port: int) -> Any:
+    """Another listener of the engine's one HTTP application, on ``port``, serving already
+    (``cad_server._internal.engine_host.listen_also``): the same application, page token and sessions."""
+    from cad_server._internal.engine_host import listen_also
+
+    return listen_also(server, host, port)
+
+
+def _halt() -> None:
+    """The uv commands the engine runs now stopped (``cad_server._internal.engine_host.halt``)."""
+    from cad_server._internal.engine_host import halt
+
+    halt()
+
+
+# The engine's one listener and the application it serves (``serve.Server`` binds none of its own).
+HTTP_FACTORY: Callable[[Any, str, int], Any] = _application
+# Another listener of that application, on a port asked for while it serves on another (``Daemon.serve``).
+ALSO_FACTORY: Callable[[Any, str, int], Any] = _listen_also
+# Every process of the engine's that loads the kernel -- a model's worker, the standby, the documents
+# worker, the meshing and reading pools, the render processes -- runs in the installation's base, which
+# the library's modules that start them are told here (``places.kernel``): the library knows no installation.
+_places.KERNEL = _kernel
+
+# How often the daemon tends itself (``Daemon.tend``): its door, its pipes, and its processes'
+# memory against its cap. The server's pressure poller asks the system's signal more often.
+TEND_SECONDS = 30.0
+# What sets it instead, in seconds, one at the least (``tend_seconds``): a test's computers, whose servers
+# would otherwise wait half a minute for each step the tending takes.
+TEND_ENV = "CAD_ENGINE_TEND_SECONDS"
+# The engine's HTTP port when nothing names one (0xCAD): ``--port`` on ``cad server start`` (or a
+# request's own), then ``CAD_ENGINE_PORT``, then the installation's remembered port, then this
+# (``bind``). Held by another program, the engine rolls to the next free port and remembers it.
+DEFAULT_PORT = 3245
+# A test suite's own "default" (``default_port``), so no test binds or rolls from the machine's 3245.
+DEFAULT_PORT_ENV = "CAD_ENGINE_DEFAULT_PORT"
+# How many ports past a held default (or remembered) one the engine tries before any free one.
+PORTS_TRIED = 64
+# How long a build's worker is free, with no request waiting for it, before the documents the build
+# made that an inspection has measured are read and measured again for the inspection after it
+# (``serve.Server.measure_later``): a program calling its models one after another sends its next
+# build within milliseconds of an answer, so those calls never wait on that read. The worker's own
+# collection waits as long (``worker.COLLECT_IDLE``).
+MEASURE_IDLE = 0.5
+
+
+def standby() -> bool:
+    """Whether the daemon keeps a standby (``Daemon.stand``): ``CAD_ENGINE_STANDBY=0`` is the
+    operator's seam to keep none (CI, a machine short of memory); unset or anything else, it does."""
+    return os.environ.get("CAD_ENGINE_STANDBY", "").strip() != "0"
+
+
+def worker_cap() -> int:
+    """The live workers' cap: ``CAD_ENGINE_WORKERS``, else the machine's cores."""
+    try:
+        given = int(os.environ.get("CAD_ENGINE_WORKERS", "").strip() or 0)
+    except ValueError:
+        given = 0
+    return given if given > 0 else (os.cpu_count() or 1)
+
+
+def _note_failure(reason: str, error: OSError) -> None:
+    _note(f"{reason}: {error.strerror or error}", denied=isinstance(error, PermissionError))
+
+
+def _note(said: str, denied: bool = False) -> None:
+    """Why this daemon exits failing: on its stderr and in its note beside its lock."""
+    print(f"cad: {said}", file=sys.stderr)  # a foreground server's terminal; nowhere when started detached
+    try:
+        failure_path().write_text(json.dumps({"reason": said, "denied": denied}), encoding="utf-8")
+    except OSError:
+        pass  # a folder it cannot write either: the client says the daemon exited, and its code
+
+
+# The requests that serve (``Daemon.serve``: the HTTP server bound on the first), each counted busy
+# while it is underway (``Daemon.handle``).
+SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
+# The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
+# (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update or the plugin's switched,
+# or cad's update asked for (``cad update``, and its looks while it waits). Besides these, any request marked
+# ``internal`` (what one server asks another) and an ``http`` that names a port (an updater handing the pages' port on,
+# 0.11.10's among them) are not counted either.
+UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_update", "update"})
+# The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
+# as ``worker.refusal`` names it.
+UNREADABLE = "cad.engine.build:Unreadable"
+
+
+def refused(error: Exception) -> dict[str, Any]:
+    """A refusal as the daemon answers it: its words, its type (``worker.refusal``), and for a
+    document the engine does not hold (``serve.NotHeld``) its state and the command that builds it
+    again, so the caller raises it as that type (``api._failed``) and the CLI exits 2."""
+    from cad.engine.serve import NotHeld
+    from cad.engine.worker import refusal
+
+    from cad.engine.parameters import ParameterRefused
+
+    found: dict[str, Any] = {"failed": str(error), **refusal(error)}
+    if isinstance(error, NotHeld):
+        found.update(state=error.state, rebuild=error.rebuild)
+    if isinstance(error, ParameterRefused):
+        # Why a change of parameters is refused (``code``), what to do, a parameter's own reason, and a failed
+        # build's whole words (``parameters.Setting``).
+        found.update({key: value for key in ("code", "hint", "reason", "detail")
+                      if isinstance(value := getattr(error, key, None), str)})
+    return found
+
+
+# --- the daemon ---------------------------------------------------------------------------
+
+
+def environment_port() -> int | None:
+    """``CAD_ENGINE_PORT`` as a port (0: any free one), or None when it names none."""
+    given = os.environ.get("CAD_ENGINE_PORT", "").strip()
+    if not given:
+        return None
+    try:
+        port = int(given)
+    except ValueError:
+        raise ValueError(f"CAD_ENGINE_PORT={given!r} is not a port") from None
+    if not 0 <= port <= 65535:
+        raise ValueError(f"CAD_ENGINE_PORT={given!r} is not a port")
+    return port
+
+
+def default_port() -> int:
+    """``DEFAULT_PORT``, or the port ``CAD_ENGINE_DEFAULT_PORT`` names (1-65535): a test's seam,
+    the default it holds or frees without touching the machine's 3245."""
+    given = os.environ.get(DEFAULT_PORT_ENV, "").strip()
+    return int(given) if given.isdigit() and 0 < int(given) <= 65535 else DEFAULT_PORT
+
+
+def tend_seconds() -> float:
+    """How often the daemon tends itself: ``TEND_SECONDS``, or what ``CAD_ENGINE_TEND_SECONDS`` names, one second at
+    the least (a test's computers)."""
+    try:
+        return max(1.0, float(os.environ[TEND_ENV]))
+    except (KeyError, ValueError):
+        return TEND_SECONDS
+
+
+def catch_up_seconds() -> float:
+    """How long the server waits after its start before the plugin first catches up (``plugin_catch_up.START_SECONDS``,
+    two tendings), in step with its tending where a test's computer sets that (``CAD_ENGINE_TEND_SECONDS``): as many of
+    its own tendings."""
+    from cad_server._internal.plugin_catch_up import START_SECONDS
+
+    return START_SECONDS * tend_seconds() / TEND_SECONDS
+
+
+def _held(error: OSError) -> bool:
+    """Whether a bind failed because the port is someone else's (in use, or reserved on Windows)."""
+    import errno
+
+    return error.errno in (errno.EADDRINUSE, errno.EACCES) or getattr(error, "winerror", None) in (10048, 10013)
+
+
+def _answers(host: str, port: int) -> bool:
+    """Whether something already listens at ``port`` where a client of ``host`` reaches it: a
+    listener on every interface lets a loopback bind through on macOS, and would take its traffic."""
+    from cad.engine.serve import reachable_host
+
+    try:
+        socket.create_connection((reachable_host(host).strip("[]"), port), timeout=0.5).close()
+    except OSError:
+        return False
+    return True
+
+
+class PortHeld(ValueError):
+    """The engine's port is another process's (``bind``): ``who`` holds it, in words. A port named
+    (``--port``, ``CAD_ENGINE_PORT``) is refused in one line that names the holder; the default
+    or remembered one is rolled from."""
+
+    def __init__(self, said: str, who: str) -> None:
+        super().__init__(said)
+        self.who = who
+
+
+def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tuple[Any, dict[str, Any]]:
+    """The engine's HTTP server, listening, and where its port came from. ``listen(port, token)``
+    makes it. A port named -- ``asked`` (``--port``, or the switch's: the port the engine before it
+    served), else ``CAD_ENGINE_PORT`` -- is taken or refused by name (``PortHeld``). Else the
+    device's port: 3245 (``DEFAULT_PORT``) when it is free, else the port it remembers, else the one it
+    rolls to (``_installation_port``). Another process on it -- another engine, 0.8's among them,
+    whatever it is -- is asked nothing: a port named is refused, naming it, and the device's port is
+    rolled from (``_listen``). The page token is the user's (``registry.TOKEN``), one for every engine,
+    made by the first to start (``_new_token``); one there that cannot be read is refused by name, and
+    nothing is served.
+
+    ``where``: ``source`` (``--port``, ``CAD_ENGINE_PORT``, ``default`` or ``rolled``), for a
+    rolled port ``because`` (who holds 3245), and ``notice``, the line this start says once: a move of
+    its port (a roll, or the return to 3245)."""
+    from cad_server.engine import registry
+
+    held = registry.current()
+    record = held.engine(NAME) if held is not None else {}
+    token = (held.token() if held is not None else None) or _new_token(held)
+    remembered = record.get("port")
+    if asked is not None:
+        server, where = _listen(host, asked, "--port", token, listen), {"source": "--port"}
+    elif (named := environment_port()) is not None:
+        server, where = _listen(host, named, "CAD_ENGINE_PORT", token, listen), {"source": "CAD_ENGINE_PORT"}
+    else:
+        server, where = _installation_port(host, remembered, token, listen)
+        remembered = server.port if where["source"] == "rolled" else None
+    kept = {"port": remembered} if remembered else {}
+    if held is not None and kept != record:
+        try:
+            held.put_engine(NAME, kept)
+        except OSError:
+            pass  # a state folder it cannot write: this start's links work, the next start's are new
+    return server, where
+
+
+def _new_token(held: Any) -> str:
+    """A new page token, made the user's (``registry.TOKEN``) when there is a state folder: made only
+    where there is none (``Registry.make_token``), so of two engines starting at once one makes it and
+    the other serves the one it reads. One that is there but cannot be read is refused by name
+    (``Registry.token``), never replaced."""
+    token = secrets.token_urlsafe(32)
+    if held is None:
+        return token
+    for _attempt in range(3):
+        try:
+            if held.make_token(token):
+                return token
+        except OSError:
+            return token  # a state folder it cannot write: this start's links work, the next start's are new
+        found = held.token()  # another engine's, made first
+        if found is not None:
+            return found
+    return token  # made and removed again, each time it was read: this start's links work
+
+
+def _installation_port(host: str, remembered: int | None, token: str,
+                       listen: Callable[[int, str], Any]) -> tuple[Any, dict[str, Any]]:
+    """The server on the device's own port, and where it came from (``bind``): 3245 when it is free (a
+    remembered other port forgotten: the one time a link changes), else the remembered port, else --
+    that one held too -- the next free port, ``PORTS_TRIED`` above it and then any (``_roll``),
+    remembered from then on."""
+    default = default_port()
+    first = remembered or default
+    if first != default:
+        server = _free(host, default, token, listen)
+        if server is not None:
+            return server, {"source": "default",
+                            "notice": f"back on the default port {default}: links made on {first} no longer work"}
+    try:
+        server = _listen(host, first, "default", token, listen)
+    except PortHeld as refusal:
+        server = _roll(host, first, token, listen)
+        return server, {"source": "rolled", "because": refusal.who if first == default else _who(default),
+                        "notice": f"the engine serves on port {server.port} and keeps it for its links: {first} "
+                                  f"is in use by {refusal.who}"}
+    if first == default:
+        return server, {"source": "default"}
+    return server, {"source": "rolled", "because": _who(default)}
+
+
+def _free(host: str, port: int, token: str, listen: Callable[[int, str], Any]) -> Any:
+    """``listen(port, token)`` when nothing holds ``port``, else None."""
+    if _answers(host, port):  # a listener on every interface lets a loopback bind through
+        return None
+    try:
+        return listen(port, token)
+    except OSError as error:
+        if not _held(error):
+            raise ValueError(f"cannot listen on {host}:{port}: {error.strerror or error}") from None
+    return None
+
+
+def _roll(host: str, held: int, token: str, listen: Callable[[int, str], Any]) -> Any:
+    """The server on the first free port past ``held``, ``PORTS_TRIED`` at most, else on any."""
+    for port in range(held + 1, min(held + 1 + PORTS_TRIED, 65536)):
+        server = _free(host, port, token, listen)
+        if server is not None:
+            return server
+    try:
+        return listen(0, token)
+    except OSError as error:
+        raise ValueError(f"cannot listen on {host}: {error.strerror or error}") from None
+
+
+def _listen(host: str, port: int, source: str, token: str, listen: Callable[[int, str], Any]) -> Any:
+    """``listen(port, token)``, or ``PortHeld`` naming the process that holds ``port`` (``_holder``): no
+    other process is asked anything, another engine -- 0.8's among them -- no more than any program."""
+    import errno
+
+    try:
+        if port and _answers(host, port):  # a listener on every interface lets a loopback bind through
+            raise OSError(errno.EADDRINUSE, os.strerror(errno.EADDRINUSE))
+        return listen(port, token)
+    except OSError as error:
+        if not port or not _held(error):
+            raise ValueError(f"cannot listen on {host}:{port}: {error.strerror or error}") from None
+    raise _holder(port, source)
+
+
+def _holder(port: int, source: str) -> PortHeld:
+    """``port`` refused, naming who holds it as the system names it (``_who``) and what to do about it.
+    ``source``: where the port came from (``bind``), which says how to name another."""
+    other = "pass another --port" if source == "--port" else "start the server with another CAD_ENGINE_PORT"
+    who = _who(port)
+    return PortHeld(f"port {port} is held by {who}: stop it, or {other}", who)
+
+
+def _who(port: int) -> str:
+    """Who holds ``port``, in words, as the system names it (``port_holder``): another cad server, of any release, by
+    its command line (``_CADGEN``), else its name and pid, else another process."""
+    from cad_server._internal.launch import COMMAND
+
+    pid, name, command = port_holder(port)
+    if pid is None:
+        return "another process"
+    return f"another {COMMAND} server ({name}, pid {pid})" if _CADGEN.search(command or "") else f"{name or 'a process'} (pid {pid})"
+
+
+# A command line that runs a server's engine or viewer, this release's or an earlier one's: ``-m cad_server.…``
+# or ``-m cadgen.…``, or the command's -- ``cad``, an earlier release's ``cadgen`` -- ``viewer``, ``server`` or
+# ``mcp``.
+_CADGEN = re.compile(r"(-m\s+(cad_server|cadgen)(\.\w+)*|[/\\](cad|cadgen)(\.exe)?\s+(viewer|server|mcp))(\s|$)")
+
+
+def port_holder(port: int) -> tuple[int | None, str | None, str | None]:
+    """The process listening on TCP ``port`` here, as the system names it: its pid, its name and
+    its command line, each None where the system does not say (another user's process, a tool
+    missing). macOS and the BSDs ask ``lsof``; Linux reads ``/proc``; Windows asks ``netstat``."""
+    try:
+        if sys.platform.startswith("linux"):
+            return _proc_holder(port)
+        if WINDOWS:
+            return _netstat_holder(port)
+        return _lsof_holder(port)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None, None, None
+
+
+def _lsof_holder(port: int) -> tuple[int | None, str | None, str | None]:
+    import shutil
+
+    lsof = shutil.which("lsof") or ("/usr/sbin/lsof" if os.path.exists("/usr/sbin/lsof") else None)
+    if lsof is None:
+        return None, None, None
+    said = subprocess.run([lsof, "-nP", "+c", "0", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpc"], capture_output=True,
+                          text=True, timeout=5).stdout
+    pid = name = None
+    for line in said.splitlines():
+        if line.startswith("p") and pid is None:
+            pid = int(line[1:])
+        elif line.startswith("c") and name is None:
+            name = line[1:]
+    if pid is None:
+        return None, None, None
+    command = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True,
+                             timeout=5).stdout.strip()
+    return pid, name, command or None
+
+
+def _proc_holder(port: int) -> tuple[int | None, str | None, str | None]:
+    inodes = set()
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            rows = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            fields = row.split()
+            if len(fields) > 9 and fields[3] == "0A" and int(fields[1].rsplit(":", 1)[1], 16) == port:
+                inodes.add(f"socket:[{fields[9]}]")
+    if not inodes:
+        return None, None, None
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            if not any(os.readlink(fd) in inodes for fd in (entry / "fd").iterdir()):
+                continue
+            name = (entry / "comm").read_text().strip() or None
+            command = (entry / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+        except OSError:
+            continue
+        return int(entry.name), name, command or None
+    return None, None, None
+
+
+def _console(argv: list[str]) -> str:
+    """What a Windows console tool printed. Such tools write in the console's OEM code page, not
+    the one ``text=True`` assumes (UTF-8 under ``PYTHONUTF8=1``), and a localized header in it
+    must not end the read: ``netstat`` on a zh-TW Windows writes cp950."""
+    return subprocess.run(argv, capture_output=True, encoding="oem", errors="replace", timeout=10).stdout or ""
+
+
+def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
+    said = _console(["netstat", "-ano", "-p", "TCP"])
+    pid = None
+    for line in said.splitlines():
+        fields = line.split()
+        if len(fields) == 5 and fields[3] == "LISTENING" and fields[1].rsplit(":", 1)[-1] == str(port):
+            pid = int(fields[4])
+            break
+    if pid is None:
+        return None, None, None
+    listed = _console(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"]).strip()
+    name = listed.split('","', 1)[0].strip('"') if listed.startswith('"') else None
+    return pid, name, None
+
+
+def rotate_token(told: Callable[[str], None] = lambda _line: None) -> str | None:
+    """Replace the user's page token (``cad server --rotate-token``): every link and browser session made before
+    stops working, at once. The new token is written into the state folder (an ``OSError`` there is the command's
+    failure), and the server running is told to take it now (``{"op": "token"}``, ``Daemon.retoken``); one that
+    cannot be told -- a server of 0.11.11 or earlier, which reads its token only as it starts -- is said through
+    ``told``. The new token; None where there is no state folder to keep it in."""
+    from cad.engine.client import request
+    from cad_server.engine import registry
+
+    held = registry.current()
+    if held is None:
+        return None
+    token = secrets.token_urlsafe(32)
+    held.put_token(token)
+    answer = request({"op": "token"}, start=False)
+    if answer is not None and not answer.get("ok"):
+        told("the server that runs still admits the token before until it stops (`cad server stop`); it reads the "
+             "new one as it starts again")
+    return token
+
+
+def switch_auto_update(request: dict[str, Any]) -> dict[str, Any]:
+    """cad's own update switched by the server (``{"op": "auto_update", "on"}``: ``cad update auto on|off`` where a
+    server runs), which keeps the switch in the state folder as the command would (``auto_update.change``), so a shell
+    whose sandbox may not write that folder (an agent app's) needs no permission: ``{"ok": true, "switches"}``, or
+    ``{"failed"}`` in one line. Whether the cad that asked may turn it on (a global install) is that command's to
+    judge, for the cad it runs from. What else an earlier release's command sends is not read."""
+    from cad_server._internal import auto_update
+
+    on = request.get("on")
+    if type(on) is not bool:
+        return {"failed": "not a switch of cad's own update: on is true or false"}
+    try:
+        return {"ok": True, "switches": auto_update.change(on)}
+    except OSError as error:
+        return {"failed": str(error)}
+
+
+def switch_plugin(request: dict[str, Any]) -> dict[str, Any]:
+    """Whether the server runs ``cad plugin install`` once where cad is newer than the release it is up to date for
+    (``plugin_catch_up``), switched by the server (``{"op": "plugin_auto_update", "on", "release", "note"}``: ``cad
+    plugin update auto on|off`` where a server runs; ``release``, the asking cad's, which turning it on takes the plugin
+    as up to date for; this server's where it names none; ``"note": false``, nothing taken as up to date: the install
+    command that turns it on is ending its run badly, or the cad that asks is no global install), as ``switch_auto_update`` keeps
+    its own: ``{"ok": true, "on"}``, or ``{"failed"}`` in one line."""
+    from cad_server._internal import auto_update
+
+    on = request.get("on")
+    if type(on) is not bool:
+        return {"failed": "not a switch: on is true or false"}
+    asking = request.get("release")
+    try:
+        return {"ok": True, "on": auto_update.change_plugin(on, asking if isinstance(asking, str) else None,
+                                                            note=request.get("note") is not False)}
+    except OSError as error:
+        return {"failed": str(error)}
+
+
+def _reportable(report: dict[str, Any]) -> bool:
+    """Whether a failed build's error is a mistake in cadgen's own code, for its page to offer to report:
+    what telemetry counts as a crash of a build (``analytics.told_signature`` of the report's error as the
+    verbs tell it, ``api.told_error``). The model's own error -- its code, a library it called, the kernel
+    refusing a call, cadgen refusing what it was given -- is the model's to correct, and is not. One rule
+    for both, so the tracker hears of what telemetry would. Never raises: a failure it cannot tell is
+    reported."""
+    try:
+        from cad.engine.api import told_error
+        from cad_server import analytics
+
+        return analytics.told_signature(told_error(report), "build") is not None
+    except Exception:  # noqa: BLE001 - a failure that cannot be told is offered to report, as every one was
+        return True
+
+
+class Daemon:
+    def __init__(self, cap: int | None = None, port: int | None = None) -> None:
+        self.port = port  # ``cad server start --port``: the HTTP port this engine must take, or None
+        self.port_source = ""  # where the HTTP port the server took came from (``bind``)
+        self.port_because = ""  # a rolled port: who holds the default one
+        self.port_notice = ""  # a start that moved the port: the line it says, once (``bind``)
+        # That line when no request of a client bound the port -- a build's page did
+        # (``models.register_page``): the next build's answer says it (``_serve``).
+        self.unsaid = ""
+        self.refusal: PortHeld | None = None  # its named port held by another process: it stops (``serve``)
+        from cad.engine.serve import Pressure
+        from cad.engine.worker import footprint_mb, memory_ceiling_mb, rss_cap_mb
+
+        # The system's memory-pressure signal, the server's too once it runs (``serve``): under it the
+        # supervisor sheds the standby and its least recently used processes (``Supervisor.shed``); as
+        # ``CAD_ENGINE_PRESSURE`` says, where it is set (``Pressure.from_environment``).
+        self.pressure = Pressure.from_environment()
+        # Every process the daemon starts, by its service's declaration (``services``), its hooks bound
+        # here by name: the drain (a worker's documents taken from it before it stops), what a page
+        # watches, the progress that wakes pages, and the cache's ``saved``.
+        self.supervisor = Supervisor(cap or worker_cap(), SERVICES, watched=self.connected,
+                                     drain=lambda process: self.models.drain(process), memory=rss_cap_mb,
+                                     ceiling=memory_ceiling_mb, measure=footprint_mb,
+                                     pressed=self.pressure.under, on_progress=self.progressed,
+                                     on_event={"saved": lambda process, header, payload:
+                                               self.models.cache.saved(process, header, payload)})
+        self.workers_lock = threading.Lock()  # each worker's ``held``
+        self.born = time.time()
+        # What the startup identity migration did (``identity.migrate``), which ``status`` says when it
+        # did anything: a started engine's stderr is no one's.
+        self.identity: dict[str, Any] | None = None
+        self.last = time.monotonic()
+        self.busy = 0
+        self.busy_lock = threading.Lock()
+        # When the last command ended (monotonic): a build, draw, export or request that serves, any other request
+        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``).
+        self.worked = self.began = self.last
+        self.stopping = threading.Event()
+        # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
+        # runs), which ``status`` counts.
+        self.holders = 0
+        # Draining for an update (``drain``): it stops once nothing is in flight.
+        self.draining = False
+        self.listener: socket.socket | None = None  # on Windows, the port clients reach it by
+        self.hosts: dict[str, int] = {}  # the holders per agent host they serve (``hold``)
+        self.door = None  # on POSIX, the door clients reach it by (``door.Door``)
+        # Where clients reach it (its door; on Windows its port file) and that file's identity
+        # (``reached_by``): once it is gone or another's, no one can reach this engine, and it stops.
+        self.address: Path | None = None
+        self.address_id: tuple[int, int] | None = None
+        self.server = None
+        # The listeners of the HTTP application beside the server's own (``serve``): a port asked for while it served
+        # on another -- the one an updater hands on, which pages were on --, and the one it served on before.
+        self.listeners: list[Any] = []
+        self.token = secrets.token_hex(16) if WINDOWS else ""
+        # Per model document a build made (its ``model_id``), the worker that built it last: the one
+        # that holds its provenance (``provenance``). A file the build wrote is no key: it names no model.
+        self.builders: dict[str, Process] = {}
+        self.renders = None  # the served documents' pictures, by their render processes (``renders.Renders``)
+        self.serving = threading.Lock()
+        # BRIDGE-ONLY: the install command's one run this server may owe (``install_script.Carrier``), and the bridge's
+        # part of the tending (``cli.setup.Tending``).
+        from cad_server._internal.install_script import Carrier
+        from cad_server.cli.setup import Tending
+
+        self.handover = Carrier(time.monotonic())
+        self.bridge = Tending()
+        # The install command's one run where cad is newer than the release it is up to date for
+        # (``plugin_catch_up``), held while it runs; none asked for until a short while after this start.
+        from cad_server._internal.plugin_catch_up import Catcher
+
+        self.catching = Catcher(self.began, wait=catch_up_seconds())
+        from cad_server.engine.models import Models
+
+        self.models = Models(self)
+        from cad_server.engine.parameters import Setting
+
+        # A model's parameters set in its script and the script built again (``parameters``): a page's Save,
+        # ``set``; and a page's look at other values, built in the model's worker and held for that page alone:
+        # ``preview``. Both reach the engine through the page's routes alone (``server.set_parameters``,
+        # ``server.preview_parameters``), never a request of this socket.
+        self.setting = Setting(self)
+        from cad_server.engine.parameters import Previewing
+
+        self.previewing = Previewing(self)
+        from cad_server.engine import registry
+        from cad_server.engine.checks import Checks, Pool, pool_size
+        from cad_server.engine.checks_runner import Limits, Runner
+
+        # The manufacturing checks (``checks_runner``): their kept results, in memory and in the cache folder,
+        # and the checks processes that measure them, a check's limits said where a setting is no number.
+        size, said = pool_size()
+        limits = Limits.of_environment(self.supervisor.memory)
+        for line in (said, *limits.notes):
+            if line:
+                print(f"cad: {line}", file=sys.stderr, flush=True)
+        self.checks = Runner(
+            Checks(folder=self._checks_folder), Pool(self.supervisor, size, said),
+            lease=lambda slot: self.supervisor.lease("checks", slot, {}),
+            release=self.supervisor.release, version=self._check_version, read=self._check_document,
+            durable=self._durable, stopping=lambda: self.draining or self.stopping.is_set(), limits=limits)
+        # Told of each document the registry deletes, under its lock (``Registry.delete``): its kept checks go.
+        registry.FORGOTTEN.append(self.checks.store.deleted)
+
+    def touch(self) -> None:
+        self.last = time.monotonic()
+
+    def stamp(self) -> None:
+        """A command just ended (``worked``). Every request through a door but the server's own asks (``ended``), and every agent's tool call (the CAD app's
+        ``mcp.http.Sessions``)."""
+        with self.busy_lock:
+            self.worked = time.monotonic()
+
+    def ended(self, request: dict[str, Any]) -> None:
+        """A request through a door answered: stamped (``stamp``) unless it is no command's -- one of ``UNCOUNTED``,
+        one marked ``internal``, or an ``http`` naming a port (an updater handing the pages' port on)."""
+        op = request.get("op")
+        if op in UNCOUNTED or request.get("internal") is True or (op == "http" and request.get("port")):
+            return
+        self.stamp()
+
+    def stand(self) -> None:
+        """At the daemon's start: each service's standby (``Supervisor.stand``) -- the workers', a worker
+        with the kernel loaded, so a new script's first build pays no kernel load, nor, on a fresh
+        installation, the operating system's first look at its native libraries (macOS checks each once:
+        43 s measured on a new uvx environment, against 2.5 s loaded again), which the standby pays while
+        nobody waits -- once the engine's kernel environment, the base, exists: now, where it is made
+        already (or the installation carries the kernel), else the moment the engine's making of it is done
+        (``made_base``). The base is never made here: it is made on first need (``base.kernel``), and until
+        then no standby stands and nothing waits on one. Started in the environment of the client that
+        started the daemon (``environment``); each standby after it in that of the lease that took the last
+        one. With ``CAD_ENGINE_STANDBY=0`` (``standby``) no service's standby is enabled: none stands by, and
+        none replaces one."""
+        _making().made = self.made_base
+        if not standby():
+            return
+        for service in SERVICES:
+            if service.standby is not None:
+                self.supervisor.enable_standby(service.name)
+        try:
+            made = _kernel(False) is not None
+        except Exception:  # noqa: BLE001 - none to stand in: its first need makes it, and the standby follows
+            made = False
+        if made:
+            self.made_base()
+
+    def made_base(self) -> None:
+        """The base made here (``base.Making``): each service's standby, when standbys are enabled,
+        stands in it now, and the checks processes of the base before it are retired (``Pool.rebased``)."""
+        if self.stopping.is_set():
+            return
+        self.checks.pool.rebased()
+        for service in SERVICES:
+            if service.standby is not None:
+                self.supervisor.stand(service.name, self.environment())
+
+    def base(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """The base, asked of the engine by a client that cannot make it (``{"op": "base", "key"}``: a
+        sandboxed ``cad run``, ``base.ensure``'s ``engine``) -- or, with ``spec``, the environment ``cad run``
+        makes for a program beside it (its integrations, packages and uv's options: ``extras.Spec``,
+        ``extras.ensure``; ``with`` alone, an earlier client's: those requirements): made here when it is not
+        -- the making under way followed, or one started (``base.Making.follow``) -- each of its lines a
+        ``log`` frame, then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one line. One of
+        another installation's (``key``) is not this engine's to make: ``{"ok": false, "other": true}``."""
+        named, spec = request.get("with"), request.get("spec")
+        if isinstance(spec, dict) or (isinstance(named, list) and named
+                                      and all(isinstance(item, str) for item in named)):
+            from cad_server._internal import extras
+
+            try:
+                making = extras.making(spec if isinstance(spec, dict) else named)
+            except extras.Refused as refused:  # no spec, or an option of uv's handed as a requirement
+                send({"failed": str(refused), "base": True})
+                return
+        else:
+            making = _making()
+        if request.get("key") != making.key():
+            send({"ok": False, "other": True})
+            return
+        error = making.follow(lambda line: send({"log": line}))
+        send({"ok": True, "base": True} if error is None else {"failed": error, "base": True})
+
+    @staticmethod
+    def integration(request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """The environment of one of the library's integrations, asked by a process that lacks it
+        (``{"op": "integration", "integration": "coacd"}``: ``cad.mujoco.decompose``'s, ``cad.engine.hulls``): made
+        here on first need when it is not, as the ``cad`` command's integrations are
+        (``integration_env.made``), each line of its making a ``log`` frame, then ``{"ok": true, "python"}``, or
+        ``{"failed"}`` in one line."""
+        from cad_server._internal import integration_env
+
+        try:
+            python = integration_env.made(str(request.get("integration") or ""),
+                                          lambda line: send({"log": line}))
+        except integration_env.Failed as failed:
+            send({"failed": str(failed)})
+            return
+        send({"ok": True, "python": python})
+
+    @staticmethod
+    def environment() -> dict[str, str]:
+        """The environment of the client that started the daemon, as near as the daemon can tell:
+        its own, without the engine's folder its starter put first on ``PYTHONPATH``
+        (``client.start``), so a caller's run shapes the interpreter as the standby's does."""
+        env = dict(os.environ)
+        root = engine_root()
+        rest = [item for item in env.get("PYTHONPATH", "").split(os.pathsep) if item and item != root]
+        if rest:
+            env["PYTHONPATH"] = os.pathsep.join(rest)
+        else:
+            env.pop("PYTHONPATH", None)
+        return env
+
+    def hold(self, reader: Any, send: Callable[[dict[str, Any]], None], host: Any = None, holder: Any = None) -> None:
+        """A hold on the engine (``{"op": "hold", "host": ..., "holder": ...}``): answered, then kept until
+        its client goes (its end of file), and counted in ``status`` (``holders``).
+        ``host``, the agent host the holder serves (its MCP server says it), is counted in ``status``
+        (``hosts``): the ``cad`` command in that host's shell runs this installation. ``holder``, the
+        name an MCP server holds with and opens its sessions under: once its client is gone -- a
+        server that exits, or one killed before it could say goodbye -- those sessions end
+        (``serve.Server.on_hold_end``)."""
+        host = host if isinstance(host, str) and 0 < len(host) <= 64 else None
+        holder = holder if isinstance(holder, str) and 0 < len(holder) <= 64 else None
+        with self.busy_lock:
+            self.holders += 1
+            if host:
+                self.hosts[host] = self.hosts.get(host, 0) + 1
+        try:
+            send({"ok": True})
+            while reader.read(4096):
+                pass  # a holder says nothing more: whatever it sends is read and dropped
+        finally:
+            with self.busy_lock:
+                self.holders -= 1
+                if host:
+                    self.hosts[host] -= 1
+                    if not self.hosts[host]:
+                        del self.hosts[host]
+            server = self.server
+            if holder and server is not None:
+                try:
+                    server.on_hold_end(holder)
+                except Exception:  # noqa: BLE001 - what the sessions could not end, their idle hour ends
+                    pass
+            self.touch()
+
+    def connected(self, worker: Process) -> bool:
+        """A page watching any model document this worker built keeps its memo warm. A file a page
+        watches keeps no worker, whichever model's run wrote it: a file names no model."""
+        server = self.server
+        return server is not None and any(self.builders.get(ident) is worker for ident in server.watched())
+
+    def progressed(self, _worker: Process, frame: dict[str, Any]) -> None:
+        """A worker's progress frame (``progress.py``): a build's wakes the pages waiting on the model
+        document it builds (``serve.Server.building``). An export's or a snapshot's is the request's,
+        never its document's build, and reaches its caller alone; a file a build writes is no document
+        of the build's: a page serving it follows its bytes, and hears nothing of the run."""
+        server = self.server
+        if server is not None and frame.get("kind") == "build":
+            documents = self.models.paths(_worker, frame.get("job"))
+            if documents:
+                server.building(frame, documents)
+
+    def _built(self, worker: Process, answer: dict[str, Any], *, verb: bool = False) -> None:
+        """A request of ``worker`` answered: each model document it built is built no longer, and
+        one whose model failed says what failed, and where (``serve.Server.built``); a file it wrote
+        is told nothing.
+        ``verb``: an export, a snapshot or a result asked of a document, whose failure -- a pose
+        refused, a draw that failed, the worker gone -- is the request's, never its document's
+        build: no document is marked failed by it (the worker's progress frame is its last
+        build's, not this request's)."""
+        self.models.register(worker, answer)
+        done = answer.get("done")
+        reports = done.get("reports") if isinstance(done, dict) else done
+        for root in reports if isinstance(reports, list) else []:
+            # Each document the run built: a check of it asked at a generation now gone stops at once
+            # (``checks_runner.Runner.built``); a run that changed nothing kept its generation, and stops none.
+            for report in [root, *(root.get("child_models") or {}).values()]:
+                if report.get("ok") and report.get("id"):
+                    self.checks.built(str(report["id"]))
+        server = self.server
+        if server is None or (verb and "failed" in answer):
+            return
+        outcomes: dict[str, Any] = {}
+        for report in reports if isinstance(reports, list) else []:
+            frame = report.get("progress") or {}
+            failed = None if report.get("ok") else {"model": report.get("model"), "error": report.get("error"),
+                                                    "reportable": _reportable(report), "progress": frame}
+            for ident in self.models.paths(worker, report.get("model")):
+                outcomes[ident] = failed
+            # Each child model the run built is a document of its own, built as its own row says: its
+            # body's progress marked it building, and only this marks it built (or failed).
+            for identity, child in (report.get("child_models") or {}).items():
+                if child.get("id"):
+                    outcomes[child["id"]] = None if child.get("ok") else {
+                        "model": identity, "error": child.get("error"), "reportable": _reportable(child),
+                        "progress": frame}
+        if "failed" in answer:
+            frame = worker.progress or {}
+            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report; but one the
+            # engine stopped past the ceiling on one process, whose model is the one to change (``_overran``).
+            reportable = not getattr(worker, "overran", None)
+            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": reportable,
+                               "progress": frame}
+                        for path in [*outcomes, *self.models.paths(worker, frame.get("job"))]}
+        if outcomes:
+            server.built(outcomes)
+        if not verb:
+            # Each document the build made that an inspection has measured: its new parts measured once
+            # its worker has settled, so the inspection after the edit finds them; one never inspected is
+            # left alone (``serve.Server.measure_later``).
+            server.measure_later([ident for ident, failed in outcomes.items() if failed is None],
+                                 settled=lambda: (self.supervisor.free_for(worker) or 0.0) >= MEASURE_IDLE)
+
+    @staticmethod
+    def _counted(request: dict[str, Any], told: dict[str, Any], began: float) -> None:
+        """A build this daemon answered, counted for telemetry once its answer is sent -- never before it, and
+        never on the network: one line kept in the spool, by the consent of the person who asked
+        (``request["env"]``, ``engine_telemetry.answered``). A request it answered nothing to counts nothing."""
+        if "answer" not in told:
+            return
+        from cad_server._internal import engine_telemetry
+
+        engine_telemetry.answered(told["answer"], told.get("seconds", time.monotonic() - began), request.get("env"),
+                                  fresh=told.get("fresh"), died=told.get("died"), unavailable=told.get("unavailable"))
+
+    @staticmethod
+    def _where(error: Exception, worker: Process | None) -> str:
+        """A worker's failure, and where its build was when it failed: said on its first line, before
+        any stderr tail (``Process._gone``)."""
+        from cad.engine.progress import describe
+
+        frame = worker.progress if worker is not None else None
+        if not frame:
+            return str(error)
+        head, tail, detail = str(error).partition(WORKER_STDERR)
+        return f"{head}, at {frame.get('job')}: {describe(frame)}{tail}{detail}"
+
+    @staticmethod
+    def contracted(request: dict[str, Any]) -> None:
+        """An order that names the Python it comes from (``contract.interpreter``: a build, a handle's
+        shape, a shape handed over), its worker contract checked against this server's
+        (``contract.refusal``): ``ValueError`` in that one line, naming which side to update and to what
+        release, when they differ. An order that names none (a script in the base, ``cad run``'s) is of
+        the server's own environment."""
+        if "interpreter" not in request:
+            return
+        said = contract_refusal(request["interpreter"])
+        if said is not None:
+            raise ValueError(said)
+
+    def caller(self, request: dict[str, Any]) -> tuple[str | None, str | None]:
+        """The Python a build's script is built in, and the key of its worker's environment: its contract
+        checked first (``contracted``); then ``(None, None)`` -- the server's own environment, the base its
+        kernel processes run in -- for an order that names no Python, or one whose environment is that base
+        (a checkout's or an installation's own, which carries the kernel); else the executable the order
+        names, its caller's, and the key ``Supervisor.lease`` keeps its worker by (``python_key``): the
+        environment, as the system resolves its folder, and the release of cad in it. So ``python``,
+        ``python3`` and ``python3.14`` of one environment share one warm worker, which runs the first of them
+        to ask; and another release of cad there, under one contract, gets a fresh one, never the warm
+        worker that holds the code of the release before."""
+        self.contracted(request)
+        named = request.get("interpreter")
+        if named is None:
+            return None, None
+        executable, prefix = named.get("executable"), named.get("prefix")
+        if not (isinstance(executable, str) and os.path.isabs(executable) and isinstance(prefix, str) and prefix):
+            raise ValueError("a build names the Python it comes from by an absolute executable and its environment")
+        try:
+            base = _places.kernel(make=False)
+        except Exception:  # noqa: BLE001 - no base to tell it from: the caller's own Python, whatever it is
+            base = None
+        if base is not None and base.get("prefix") and _same_place(str(base["prefix"]), prefix):
+            return None, None
+        return executable, f"{os.path.normcase(os.path.realpath(prefix))}\0{named.get('release')}"
+
+    def lease(self, script: str, environment: dict[str, str], cwd: str | None = None,
+              loading: Callable[[str], None] | None = None, python: str | None = None,
+              python_key: str | None = None) -> Process:
+        """The warm worker of a script (by its path, and the caller's ``python`` and its environment's key
+        where its build named one: ``caller``) or of the documents no worker built (``documents``), for one
+        request: waiting its turn, started when none is alive (``Supervisor.lease``); ``loading`` as there.
+        ``release`` it after."""
+        return self.supervisor.lease("worker", script, environment, cwd, loading, python=python,
+                                     python_key=python_key)
+
+    def release(self, worker: Process) -> None:
+        self.supervisor.release(worker)
+
+    def behind(self, key: str, send: Callable[[dict[str, Any]], None],
+               python_key: str | None = None) -> tuple[Process, float] | None:
+        """A build request that will wait for the build of its script already running (a rerun
+        after a client its shell's time limit killed: that build goes on): said to its client at
+        once, on stderr, and the running build's progress frames sent on to it until its own turn
+        (``Supervisor.follow``). The worker and how long its build had run; None when none runs.
+        Nothing is cancelled."""
+        found = self.supervisor.follow("worker", key, send, "build", python_key)
+        if found is None:
+            return None
+        worker, began = found
+        ago = max(0.0, time.time() - began)
+        send({"log": f"waiting for the build of {Path(worker.label).name} started {ago:.0f} s ago",
+              "stream": "waiting"})
+        if worker.progress:
+            send({"progress": worker.progress})  # where it is now: the next frame may be a while
+        return worker, ago
+
+    def provenance(self, ident: str, key: str, kind: str, ordinal: int) -> dict[str, Any] | None:
+        """What made one element of a served document (by its id), asked of the worker that built
+        it (a ``where`` question, ``build.made_by``): None for a document no live worker built -- one
+        served cold."""
+        worker = self.builders.get(ident)
+        if worker is None or not self.supervisor.holds(worker):
+            return None
+        answer = worker.question({"op": "where", "doc": ident, "key": key, "kind": kind, "ordinal": ordinal})
+        return None if answer is None else answer.get("where")
+
+    def serve(self, request: dict[str, Any]) -> Any:
+        """The daemon's server, started on the first request that needs one."""
+        from cad.engine.serve import MESHES, Server, memory_budget
+
+        started = False
+        with self.serving:
+            if self.refusal is not None:
+                raise self.refusal  # stopping: its port is another's
+            if self.server is None:
+                host = request.get("host") or "127.0.0.1"
+                try:
+                    self.server, where = bind(
+                        host, int(request["port"]) if request.get("port") else self.port,
+                        lambda port, token: Server(port=port, touch=self.touch,
+                                                   provenance=self.provenance, cache=MESHES, isolated=True, host=host,
+                                                   http_factory=HTTP_FACTORY, budget=memory_budget(), token=token))
+                except PortHeld as refusal:
+                    if request.get("port") and request.get("op") == "http":
+                        # An updater handing the pages' port on (``{"op": "http", "port"}``: 0.11.10's helper) to a
+                        # server that serves none yet, the port still held (the old server not gone yet): bound as if
+                        # no port were asked -- the default, or the next free -- and answered with that address, never
+                        # ``failed``, which 0.11.10's helper answers by stopping this server.
+                        self.server, where = bind(
+                            host, self.port,
+                            lambda port, token: Server(port=port, touch=self.touch, provenance=self.provenance,
+                                                       cache=MESHES, isolated=True, host=host,
+                                                       http_factory=HTTP_FACTORY, budget=memory_budget(),
+                                                       token=token))
+                    elif request.get("port"):
+                        # The request's own port (``cad viewer --port``): that request is refused,
+                        # and the engine -- the builds and warm workers of its other clients -- runs
+                        # on, unbound, for the next request that serves.
+                        raise
+                    else:
+                        # An engine whose own port is held (``cad server start --port``, its
+                        # ``CAD_ENGINE_PORT``) can never serve: it says why and stops, once the
+                        # request that found it has its answer (``_serve``).
+                        self.refusal = refusal
+                        _note(str(refusal))
+                        raise
+                self.port_source, self.port_because = where["source"], where.get("because", "")
+                self.port_notice = where.get("notice", "")
+                if self.port_notice and request:
+                    request["_notice"] = self.port_notice  # said by the client whose request bound it (``_serve``)
+                elif self.port_notice:
+                    self.unsaid = self.port_notice  # bound for a build's page: that build's answer says it
+                # One pressure signal: under it the server trims its documents and the supervisor its
+                # processes.
+                self.server.pressure = self.pressure
+                self.server.pressed = lambda: self.supervisor.shed(True)
+                self.server.lost = self.models.rebuild
+                self.server.revive = self.models.adopt
+                self.server.leaving = self.models.leaving
+                self.server.delete = self.models.delete
+                # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
+                self.server.parameters = self.models.live
+                self.server.set_parameters = self.setting.set
+                self.server.preview_parameters = self.previewing.preview
+                # The viewer's update button: ``cad update``, asked from the page (``update``).
+                self.server.update = lambda begin=True: self.update({"op": "update", **({} if begin else {"begin": False})})
+                application = getattr(self.server.http, "app", None)
+                if application is not None:
+                    application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
+                self.server.start()
+                started = True
+            elif request.get("port") and int(request["port"]) != self.server.port and request.get("op") == "http" \
+                    and not (request.get("host") and request["host"] != self.server.http.server_address[0]):
+                self._take_port(int(request["port"]))  # an updater handing the pages' port on
+            elif ((request.get("port") and int(request["port"]) != self.server.port)
+                  or (request.get("host") and request["host"] != self.server.http.server_address[0])):
+                raise ValueError("the installation's engine already serves another host/port; stop it before changing its bind")
+            server = self.server
+        if started:
+            self.models.attach(server)  # the documents taken up from the cache before it ran: registered with it
+        return server
+
+    def resume(self, port: int) -> bool:
+        """Pages served at once on ``port``, where the server this one replaced served them (``resumed``), with the
+        user's page token, so a page open in a browser reconnects by itself. Where ``port`` cannot be taken (another
+        process took it), nothing is bound -- the engine binds on the first request that serves, as any start does --
+        and its log says why. Whether it was."""
+        try:
+            self.serve({"port": port})
+        except Exception as error:  # noqa: BLE001 - a start never fails for it: it runs as one with no pages before
+            print(f"cad: pages were on port {port} before this server started, and are not served there again: {error}",
+                  file=sys.stderr, flush=True)
+            return False
+        self.port_source = "handed"
+        return True
+
+    def _take_port(self, port: int) -> None:
+        """Under ``serving``, the server serving pages on another port already: ``port`` taken too, a second listener
+        of the same application with the same page token, and made the server's own from now on -- what ``status``
+        says, the port the next start comes back to (the engine's record) and the one a later update hands on --,
+        the port it served on before kept as well, so a page open on either works. That is what an updater asks
+        (``{"op": "http", "port"}``: 0.11.10's switch helper through the flat door, the bridge taking a server of
+        0.11.10's place): the port pages were on before the update, which they reload into. Where ``port`` cannot be taken (another process holds it, 0.11.10's own server still among
+        them), the ask is answered with the address the server serves (never ``failed``: 0.11.10's helper would stop
+        the server for it). Any other request naming another port (``cad viewer --port``) is refused as before."""
+        server = self.server
+        host = server.http.server_address[0]
+        listener = next((each for each in self.listeners if each.server_address[1] == port), None)
+        if listener is None:
+            try:
+                if _answers(host, port):  # a listener on every interface lets a loopback bind through
+                    import errno
+
+                    raise OSError(errno.EADDRINUSE, os.strerror(errno.EADDRINUSE))
+                listener = ALSO_FACTORY(server, host, port)
+            except OSError as error:
+                print(f"cad: pages stay on port {server.port}: port {port} cannot be taken too "
+                      f"({error.strerror or error})", file=sys.stderr, flush=True)
+                return
+        else:
+            self.listeners.remove(listener)
+        from cad.engine.serve import reachable_host
+
+        self.listeners.append(server.http)
+        server.http, server.port = listener, port
+        server.url = f"http://{reachable_host(host)}:{port}"
+        default = getattr(getattr(listener, "app", None), "_default", None)
+        if default is not None:
+            default.port = port
+        self.port_source, self.port_because, self.port_notice = "handed", "", ""
+        from cad_server.engine import registry
+
+        held = registry.current()
+        if held is not None:
+            try:  # the port pages were on, which the next start comes back to: none kept for the default
+                held.put_engine(NAME, {} if port == default_port() else {"port": port})
+            except OSError:
+                pass
+
+    def document(self, ident: str) -> tuple[dict[str, Any], bytes]:
+        """What the document ``ident`` is while this engine holds it, as an export reads it, and the
+        bytes it carries: a model a live worker holds (``{"script", "function", "held"}``, read from
+        that worker, never built); one whose worker is gone but whose whole document the server
+        holds (``{"document", "name"}``, its xbf bytes after it: the documents worker reads them as
+        an on-disk xbf, and no worker of its script starts); a file this engine serves or served
+        (``{"path"}``). Refused (``Models.not_held``), naming its state and the command that
+        builds it again, for any other id: the engine runs nothing. A model document held on disk
+        alone (the engine's cache) is its cache file's bytes, read as a held document's."""
+        self.models.prune()
+        record = self.models.held(ident)
+        server = self.server
+        if record is not None:
+            self.models.cache.touch(ident)  # a read: its idle timer starts again
+            worker = record["worker"]
+            if worker is not None and self.supervisor.holds(worker):
+                # Asked of the worker that built it (``via``: a child model's is its parent's script's).
+                return {"script": record["source"]["script"], "function": record["source"]["name"], "held": ident,
+                        "via": worker.label, **({"python_key": worker.python_key} if worker.python_key else {})}, b""
+            held = self.held_document(ident)
+            if held is not None:
+                source, data = held
+                # Historical caches did not persist the folder relative closure paths used.
+                # Keep the known identity/source anchor without inventing that missing base.
+                return {**source, "origin": {"kind": "document", "id": ident,
+                                             "script": record["source"]["script"], "closure_base": None}}, data
+        if server is not None and ident in server.served and not isinstance(server.served[ident].path, str):
+            return {"path": str(server.served[ident].path)}, b""
+        known = server.file_of(ident) if server is not None else None
+        if known is not None:
+            return {"path": known}, b""
+        raise self.models.not_held(ident)
+
+    def held_document(self, ident: str) -> tuple[dict[str, Any], bytes] | None:
+        """A model document the server holds whole and no worker does, as an export reads it: its
+        source and its xbf bytes -- in memory, else its cache file's. ``ValueError`` for one held for
+        viewing alone (its worker exited before it was drained, and no cache file has it), naming the
+        command that builds it again. None when it is not held."""
+        server = self.server
+        doc = None
+        if server is not None:
+            with server.load_lock:
+                doc = server.served.get(ident)
+        if doc is None or doc.xbf is None:
+            data = self.models.disk_bytes(ident)
+            if data is not None:
+                with self.models.lock:
+                    record = self.models.records.get(ident)
+                return {"document": ident, "name": record["source"]["name"] if record else ident}, data
+        if doc is None:
+            return None
+        if doc.xbf is None:
+            with self.models.lock:
+                record = self.models.records.get(ident)
+            name = record["source"]["name"] if record else ident
+            raise ValueError(f"{name} ({ident}) is held for viewing only: its worker exited before the engine "
+                             f"took it whole; run `{self.models.command(ident)}` to build it again")
+        return {"document": ident, "name": doc.structure.get("name") or ident}, doc.xbf
+
+    def _checks_folder(self) -> Any:
+        """The engine's registry, in whose cache folder the kept checks' results are written under its lock of
+        their document (``checks.Disk``), or None: no cache folder."""
+        held = self.models.cache.registry()
+        return None if held is None or held.cache is None else held
+
+    def _check_version(self, ident: str) -> str | None:
+        """Model document ``ident``'s generation, as its record has it -- one held on disk alone taken up
+        first; None for no record."""
+        self.models.adopt(ident)
+        with self.models.lock:
+            record = self.models.records.get(ident)
+        return None if record is None else str(record["version"])
+
+    def _durable(self, ident: str, version: str | None) -> tuple[str, str] | None:
+        """Model document ``ident``'s version that outlives the engine, while its generation is ``version``: its
+        revision, its build closure's key (``models.revision``), with its id; None for a build with no key (a
+        token of its own), or another generation."""
+        with self.models.lock:
+            record = self.models.records.get(ident)
+        if record is None or version is None or str(record["version"]) != version:
+            return None
+        from cad_server.engine.models import durable
+
+        revision = record.get("revision")
+        return (ident, revision) if durable(revision) else None
+
+    def _check_document(self, ident: str) -> tuple[dict[str, Any], bytes]:
+        """Document ``ident`` as a checks process reads it (``checks_runner.Runner``'s ``read``): a file's path,
+        or a model's whole document as xbf bytes (``{"document", "name"}``) -- the server's or the cache's, else
+        the bytes its worker's ``result`` gives (protocol 1's, which every release answers): one short request of
+        that worker, as its drain asks, so a check never runs there. A worker retired meanwhile is no refusal:
+        the document is read once more, from the server or the cache that holds it now. ``ValueError``
+        (``Models.not_held``) for a document the engine does not hold."""
+        for attempt in (1, 2):
+            source, payload = self.document(ident)
+            if "script" not in source:
+                return source, payload
+            with self.models.lock:
+                record = self.models.records.get(ident)
+            data = self.models.held_bytes(ident, str(record["version"])) if record is not None else None
+            if data is not None:
+                return {"document": ident, "name": source["function"]}, data
+            python_key = source.get("python_key")
+            key = canonical(source.get("via") or source["script"])
+            owner = self.supervisor.live("worker", key, python_key)
+            try:
+                if owner is None:
+                    raise self.models.not_held(ident)
+                worker = self.lease(key, owner.environment, None, python=owner.python, python_key=python_key)
+                try:
+                    answer = worker.request({"id": 1, "op": "result", "script": source["script"],
+                                             "name": source["function"], "whole": True}, lambda _message: None)
+                except Gone as error:
+                    raise ValueError(str(error)) from None
+                finally:
+                    self.release(worker)
+                if "failed" in answer:
+                    raise ValueError(str(answer["failed"]))
+            except ValueError:
+                if attempt == 2:
+                    raise
+                continue
+            done, returned = answer["done"], answer.get("payload", b"")
+            start = sum(int(size) for _key, size in done["shapes"])
+            return {"document": ident, "name": source["function"]}, returned[start:start + int(done.get("xbf") or 0)]
+        raise self.models.not_held(ident)
+
+    def _routed(self, request: dict[str, Any]) -> tuple[str, str | None, str | None]:
+        """The worker a request goes to (its key), the folder that worker starts in, and the key of the
+        Python it runs: that of the caller's one a held document's worker was started in (``via``'s
+        ``python_key``), else None, the server's own (a build's own is ``caller``'s)."""
+        source = request.get("source") or {}
+        if "document" in source:
+            return "documents", request.get("cwd"), None  # a held document's bytes: no worker of its script
+        if "path" in source:
+            return "documents", request.get("cwd"), None  # a file, read as a file: no model's worker
+        # A script's worker is keyed by its canonical path: a process key, not a document's id. A held
+        # document is asked of the worker that built it (``via``, in the Python it runs), whatever script
+        # defines its model.
+        holder = source if source.get("via") else request
+        python_key = holder.get("python_key") if holder.get("via") else None
+        return (canonical(holder.get("via") or request.get("script") or source["script"]), None,
+                python_key if isinstance(python_key, str) else None)
+
+    def _call(self, request: dict[str, Any], order: dict[str, Any], send: Callable[[dict[str, Any]], None],
+              payload: bytes = b"") -> None:
+        """An export or a result asked of the worker the request routes to (with ``payload``, the
+        bytes its source carries, after its line); its answer sent."""
+        with self.busy_lock:
+            self.busy += 1
+        try:
+            key, cwd, python_key = self._routed(request)
+            python = None
+            if python_key is not None:
+                # A document asked of the worker of the caller's Python that built it: that one alone,
+                # never another of its script (the server's own, of another Python), which holds no build
+                # of it. Gone, the document is not held there: refused as not held, and only a build
+                # starts a worker in a caller's Python.
+                owner = self.supervisor.live("worker", key, python_key)
+                if owner is None:
+                    named = (request.get("source") or {}).get("held") or request.get("held")
+                    send(refused(self.models.not_held(named)) if isinstance(named, str) else
+                         {"failed": f"the worker that built it in its own Python is gone: run {Path(key).name} "
+                                    "again"})
+                    return
+                python = owner.python
+            for attempt in (1, 2):
+                worker = None
+                try:
+                    environment = request.get("env") or {}
+                    # An export runs in its caller's environment (``worker.adopt``), as a build does.
+                    ordered = {**order, "env": environment} if environment and order.get("op") == "export" else order
+                    if request.get("expected") or (request.get("source") or {}).get("held"):
+                        # Viewer exports and a document named by its id borrow the held document's
+                        # worker, including its environment: another caller's environment must not
+                        # evict it (a different one starts a fresh worker, which holds nothing).
+                        held = self.supervisor.live("worker", key, python_key)
+                        environment = held.environment if held else self.environment()
+                        ordered = order
+                        if held is None and "script" in request["source"]:
+                            named = request["source"].get("held")
+                            send(refused(self.models.not_held(named)) if isinstance(named, str) else
+                                 {"failed": "The viewed model is no longer held. Reopen it before exporting."})
+                            return
+                    worker = self.lease(key, environment, cwd, python=python, python_key=python_key)
+                    expected = request.get("expected") or {}
+                    if "modelRevision" in expected and "document" not in request["source"]:
+                        # The lease excludes a rebuild: validate the generation here. A run that
+                        # changed nothing kept it (``Models.register``); any other is a new one.
+                        with self.models.lock:
+                            model = self.models.records.get(expected.get("id") or "")
+                            matches = (model is not None and model["worker"] is worker
+                                       and model["version"] == expected["modelRevision"])
+                        if not matches:
+                            send({"failed": "The source changed. Open Export again to use the displayed revision."})
+                            return
+                    answer = worker.request(ordered, send, payload)
+                    held = (request.get("source") or {}).get("document")
+                    if held and answer.get("kind") == UNREADABLE:
+                        # The bytes a held document was read from (its cache file's) do not read.
+                        answer = refused(self.models.unreadable(str(held), str(answer.get("failed"))))
+                    returned = answer.pop("payload", b"")
+                    if returned:
+                        import base64
+
+                        answer["payload"] = base64.b64encode(returned).decode("ascii")
+                    if not request.get("expected"):
+                        self._built(worker, answer, verb=True)
+                    send(answer)
+                    return
+                except Gone as error:
+                    # One that exited mid-request is not asked again, nor one that never said it was ready.
+                    if attempt == 2 or error.during or error.unready:
+                        failed = {"failed": self._where(error, worker), **_unstarted(error), **_overran(worker)}
+                        if worker is not None and not request.get("expected"):
+                            self._built(worker, failed, verb=True)
+                        send(failed)
+                        return
+                except RuntimeError as error:
+                    if not _no_kernel(error):
+                        raise
+                    # No kernel environment to start the worker in: its line, and its type.
+                    send({"failed": str(error), **failed_type(error)})
+                    return
+                finally:
+                    if worker is not None:
+                        self.release(worker)
+        finally:
+            with self.busy_lock:
+                self.busy -= 1
+                self.worked = time.monotonic()
+            self.touch()
+
+    def handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """One request, answered through ``send``. One that serves -- binding the HTTP server, a
+        launch, a page's read -- counts in ``status``'s ``busy`` until it is answered, as builds and
+        draws do: a drain for an update waits for it (``drain``)."""
+        if request.get("op") not in SERVING:
+            return self._handle(request, send)
+        with self.busy_lock:
+            self.busy += 1
+        try:
+            self._handle(request, send)
+        finally:
+            with self.busy_lock:
+                self.busy -= 1
+                self.worked = time.monotonic()
+            self.touch()
+
+    def _handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        self.touch()
+        op = request.get("op")
+        if op == "reattach":
+            # A worker's models with nothing to take up, before it reads their cache (``build._reattach``).
+            sources = request.get("models")
+            if not isinstance(sources, list) or not all(
+                    isinstance(row, dict) and isinstance(row.get("script"), str) and isinstance(row.get("name"), str)
+                    for row in sources):
+                send(refused(ValueError("reattach takes models: [{script, name, ...}]")))
+                return
+            try:
+                send({"ok": True, "lines": self.models.reattach(sources, request.get("pid"))})
+            except (OSError, ValueError) as error:
+                send(refused(error))
+            return
+        if op == "models":
+            send({"ok": True, "models": self.models.listing()})
+            return
+        if op == "delete":
+            # ``cad delete`` (``cli.delete``): each id deleted by the one deletion (``models.delete``).
+            deleted = [self.models.delete(str(ident)) for ident in request.get("ids") or []]
+            for ident in request.get("ids") or []:
+                self.checks.store.forget(f"model:{ident}")
+                self.checks.built(str(ident))  # a check of it measures a document that is gone: stopped
+            send({"ok": True, "deleted": [found for found in deleted if found is not None]})
+            return
+        if op == "model_info":
+            self.models.prune()
+            ident = str(request.get("id"))
+            with self.models.lock:
+                record = self.models.records.get(ident)
+            if record is None:
+                self.models.adopt(ident)  # held on disk (the engine's cache), after a restart
+                with self.models.lock:
+                    record = self.models.records.get(ident)
+            if record is None:
+                send(refused(self.models.not_held(ident)))
+            else:
+                model = {key: record.get(key) for key in ("id", "source", "program", "builtAt", "version", "files",
+                                                          "kind", "python", "with")}
+                model["state"] = self.models.state(ident)
+                # On disk in the engine's cache, at its revision: a restart reopens it as last built.
+                model["cached"] = (self.models.where(ident) or "").endswith("disk")
+                if model["state"] == "held":
+                    model["held"] = self.models.where(ident)
+                lost = self.models.rebuild(ident)
+                if lost is not None:
+                    model["rebuild"] = lost["rebuild"]
+                send({"model": model})
+            return
+        if op == "document":
+            # What an id names while this engine holds it (``document``), asked without building.
+            try:
+                send({"ok": True, "document": self.document(str(request.get("id")))[0]})
+            except ValueError as error:
+                send(refused(error))
+            return
+        if op == "state":
+            # What the engine knows of a document by its id: held or not, and what builds it again.
+            ident = str(request.get("id"))
+            self.models.prune()
+            lost = self.models.rebuild(ident)
+            state = self.models.state(ident) if lost is None else lost["state"]
+            held = {"held": self.models.where(ident)} if state == "held" else {}
+            send({"ok": True, "state": state, **held,
+                  **({"rebuild": lost["rebuild"], "error": lost["error"]} if lost else {})})
+            return
+        if op == "export" and request.get("check") is not None:
+            # A manufacturing check (``checks_runner``): no worker's, so it counts toward no drain.
+            try:
+                return self.checks.check(request, send, request.get("_gone"))
+            finally:
+                self.touch()
+        payload = b""
+        if op == "export" and "id" in (request.get("source") or {}):
+            ident = str(request["source"]["id"])
+            try:
+                cached = self.models.cache.registry()
+                if cached is not None:
+                    original = cached.cache.path(self.models.cache.inside(ident)).resolve()
+                    if any(Path(path).resolve() == original for path in request["destinations"]):
+                        from cad.engine.export import ExportRefused
+
+                        raise ExportRefused("export to a different path; the engine's cached document is preserved")
+                source, payload = self.document(ident)
+            except ValueError as error:
+                send(refused(error))
+                return
+            expected = request.get("expected") or {}
+            if "document" in source and "modelRevision" in expected:
+                # The viewer's export of a model whose worker is gone reads the whole document the
+                # server holds, at the revision the page shows: checked here, as no worker holds it.
+                with self.models.lock:
+                    record = self.models.records.get(ident)
+                served = self.server.served.get(ident) if self.server is not None else None
+                if served is None and self.server is not None and self.server.holds(ident):
+                    served = self.server.document(ident)  # held on disk: read again to check its revision
+                if (record is None or served is None or record["version"] != expected["modelRevision"]
+                        or served.structure.get("exportRevision") != expected.get("digest")):
+                    send({"failed": "The source changed. Open Export again to use the displayed revision."})
+                    return
+            request = {**request, "source": source}
+        if op == "export" and "script" in (request.get("source") or {}) and not request["source"].get("held") \
+                and not request.get("expected"):
+            # A model is exported by its call's document (``api._called``): never built by an export.
+            send(refused(ValueError("an export reads a document: call the model, then export its handle or id")))
+            return
+        if op == "export":
+            # A model's picture is drawn in its worker: told the engine's X display with it (``display.py``), started
+            # now where it is an Xvfb of the engine's own, never for a build that draws nothing.
+            shown = display.environment() if request.get("draw") or request.get("draw_still") else {}
+            order = {"id": 1, "op": "export", "source": request["source"], "destinations": request["destinations"],
+                     "cwd": request.get("cwd"),
+                     "draw": request.get("draw"), "draw_still": request.get("draw_still"),
+                     "expected": request.get("expected"), "original": request.get("original"),
+                     **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {}),
+                     **({"angle": request["angle"]} if request.get("angle") is not None else {}),
+                     **({"zero": request["zero"]} if request.get("zero") is not None else {}),
+                     **({"display": shown} if shown else {})}
+            return self._call(request, order, send, payload)
+        if op == "result" and "id" in request:
+            # A handle's shape (``api.Document.shape``): the document its id names, as the engine
+            # holds it -- asked of the worker that holds it, or read from the bytes the engine holds --
+            # and never built.
+            ident = str(request["id"])
+            try:
+                self.contracted(request)  # its shapes are read in its caller's Python
+                source, payload = self.document(ident)
+            except ValueError as error:
+                send(refused(error))
+                return
+            if "document" in source:
+                order = {"id": 1, "op": "result", "document": True, "name": source["name"], "cwd": request.get("cwd")}
+            elif "script" in source:
+                order = {"id": 1, "op": "result", "script": source["script"], "name": source["function"],
+                         "cwd": request.get("cwd")}
+            else:
+                send({"failed": f"{ident} is a file's document: xbf.read or step.read reads its shape"})
+                return
+            return self._call({**request, "source": source}, order, send, payload)
+        if op == "result":
+            order = {"id": 1, "op": "result", "script": request["script"], "name": request["name"],
+                     "cwd": request.get("cwd")}
+            return self._call(request, order, send)
+        if op == "shape":
+            # A shape handed over (``api.hand_over``): held as a drained document is, nothing to run; its
+            # document was written in its caller's Python, and is read in the server's.
+            try:
+                self.contracted(request)
+                handed = self.models.hand_over(request)
+                self.checks.built(str(request.get("id")))  # a check of the shape it replaces stops at once
+                send(handed)
+            except ValueError as error:
+                send(refused(error))
+            return
+        if op == "build":
+            # What the build's answer was, for telemetry once it is sent (``engine_telemetry.answered``).
+            began, told = time.monotonic(), {}
+            try:
+                # The Python the script is built in (its caller's, else the server's own), its worker
+                # contract checked before any worker starts.
+                python, python_key = self.caller(request)
+            except ValueError as error:
+                told.update(answer={"failed": str(error)}, seconds=time.monotonic() - began)
+                send(told["answer"])
+                self._counted(request, told, began)
+                return
+            with self.busy_lock:
+                self.busy += 1
+            first = contextlib.ExitStack()
+            try:
+                script = request["script"]
+                key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
+                # The script's turn (``parameters.Setting.building``): a set of it under way first, then this
+                # build before a set of it and before a page's preview of it (``parameters.Previewing``).
+                first.enter_context(self.setting.building(key, send))
+
+                def answered(payload: dict[str, Any], held: Any) -> None:
+                    # The worker and the script's turn are let go BEFORE the answer, so a caller that saves the
+                    # parameters the moment its build returns finds the script free (never ``busy``).
+                    if held is not None:
+                        self.release(held)
+                    first.close()
+                    send(payload)
+
+                for attempt in (1, 2):
+                    worker = None
+                    fresh = None
+                    ahead = self.behind(key, send, python_key) if attempt == 1 else None
+                    waited = time.monotonic()
+                    try:
+                        try:
+                            worker = self.lease(key, request.get("env") or {}, cwd,
+                                                lambda text: send({"log": text, "stream": "notice"}), python,
+                                                python_key)
+                        finally:
+                            if ahead is not None and send in ahead[0].followers:
+                                ahead[0].followers.remove(send)
+                        fresh = worker.requests == 0
+                        # Why a script that had a worker starts cold: the last one's retirement, said in the run's line.
+                        gone = self.supervisor.retirement("script", worker.label) if fresh else None
+                        order = {"id": 1, "op": "build", "script": script, "functions": request.get("functions"),
+                                 "cwd": request.get("cwd"), "verify": bool(request.get("verify")),
+                                 "profile": bool(request.get("profile")), "run": request.get("run")}
+                        if request.get("env"):
+                            order["env"] = request["env"]  # the run's own (``worker.adopt``)
+                        cached = self.models.cache.folder()
+                        if cached is not None:
+                            order["cache"] = cached  # what a fresh worker takes a model from, by its key
+                        answer = worker.request(order, send)
+                        from cad_server.engine.parameters import ran
+
+                        ran(worker, request, answer)  # the run its parameters' ``set`` builds again, and how it ended
+                        answer["worker"] = {"pid": worker.pid, "fresh": fresh}
+                        # This server's release, which a script run in its own Python says once a run
+                        # when it is another (``contract.notice``); and how that run was made, which the
+                        # documents' records say to build them again by (``models.Models.register``): in an
+                        # environment ``cad run`` made for the model's own packages, how it named them (the
+                        # requirements its ``--with`` was given, and a script's header's with the script);
+                        # else that Python.
+                        answer["release"] = version()
+                        if python is not None:
+                            interpreter = request.get("interpreter") or {}
+                            given = interpreter.get("with")
+                            if isinstance(given, list):
+                                answer["with"] = [item for item in given if isinstance(item, str)]
+                                if isinstance(interpreter.get("header"), dict):
+                                    answer["header"] = interpreter["header"]
+                            else:
+                                answer["python"] = python
+                        if gone is not None:
+                            for report in answer.get("done") or []:
+                                if isinstance(report, dict):
+                                    report["cold"] = gone
+                        if ahead is not None:
+                            # The build it waited for, the one its own replays: began how long before it asked.
+                            for report in answer.get("done") or []:
+                                if isinstance(report, dict):
+                                    report["waited"] = {"script": Path(ahead[0].label).name, "ago": round(ahead[1]),
+                                                        "seconds": round(time.monotonic() - waited, 1)}
+                        # The program that asked: what a document it built names to build it again.
+                        answer["program"] = request.get("program")
+                        self._built(worker, answer)
+                        told.update(answer=answer, fresh=fresh, seconds=time.monotonic() - began)
+                        held, worker = worker, None
+                        answered(answer, held)
+                        return
+                    except Gone as error:
+                        # A build is never run twice, nor waited for twice on a worker that never said
+                        # it was ready: refused in that one line.
+                        if attempt == 2 or error.during or error.unready:
+                            stopped = _overran(worker)
+                            failed = {"failed": self._where(error, worker), **_unstarted(error), **stopped}
+                            if worker is not None:
+                                self._built(worker, failed)
+                            # A worker that died under the build: its exit status, where the system said one.
+                            # One the engine stopped past the ceiling did not die: its build ran out of memory.
+                            told.update(answer=failed, fresh=fresh, seconds=time.monotonic() - began,
+                                        died=(error.code if error.code is not None else True)
+                                        if error.during and not stopped else None)
+                            held, worker = worker, None
+                            answered(failed, held)
+                            return
+                    except RuntimeError as error:
+                        if not _no_kernel(error):
+                            raise
+                        # No kernel environment to start the worker in: its line, and its type.
+                        told.update(answer={"failed": str(error), **failed_type(error)}, unavailable=error,
+                                    seconds=time.monotonic() - began)
+                        held, worker = worker, None
+                        answered(told["answer"], held)
+                        return
+                    finally:
+                        if worker is not None:
+                            self.release(worker)
+            finally:
+                first.close()
+                with self.busy_lock:
+                    self.busy -= 1
+                    self.worked = time.monotonic()
+                self.touch()
+                self._counted(request, told, began)
+        elif op == "serve":
+            server = self.serve(request)
+            named = str(request["path"])
+            try:
+                if not is_id(named):
+                    ident = server.add(Path(named))
+                elif self.models.held(named) is not None:
+                    server, ident = self.models.serve(named)
+                else:
+                    found, _payload = self.document(named)  # a file this engine knows by its id, or refused
+                    ident = server.add(Path(found["path"]))
+            except Exception as error:  # noqa: BLE001
+                from cad.engine.serve import NotHeld
+
+                # A document id the engine does not hold is a refusal: its state and the command
+                # that builds it again travel with it, and the caller raises it as its type.
+                send(refused(error) if isinstance(error, NotHeld) else {"failed": f"cannot serve {named}: {error}"})
+                return
+            app = getattr(server.http, "app", None)
+            token = app.token if app is not None else ""
+            send({"ok": True, "url": self.models.url(server, ident), "doc": ident, "token": token,
+                  "port": server.port})
+        elif op in ("viewer", "http"):
+            server = self.serve(request)
+            application = getattr(server.http, "app", None)
+            if application is None:
+                send({"failed": "this engine has no application host"})
+            else:
+                send(application.launch(request) if op == "viewer" else application.endpoint())
+        elif op == "read":
+            # A document's JSON read in the engine's own vocabulary (``/api/doc/<id>...``,
+            # ``cad/engine/serve.py``'s, which its HTTP API, ``/api/v1``, answers its pages from),
+            # answered in process: ``inspect``'s, through the door, so it needs no loopback socket of
+            # the client's.
+            route = str(request.get("route") or "")
+            if not route.startswith("/api/doc/"):
+                send({"failed": f"not a document read: {route!r}"})
+                return
+            # Asked with ``progress``, a read of the parts' facts says each part's as it comes in, on
+            # this request's channel ahead of its answer (``serve.Server.measure``): the summary's count.
+            counted = ((lambda done, total, key: send({"progress": {"done": done, "total": total, "key": key}}))
+                       if request.get("progress") else None)
+            status, body = self.serve(request).read(route, counted)
+            send({"ok": True, "status": status, "body": body.decode("utf-8")})
+        elif op == "draw":
+            self.draw(request, send)
+        elif op == "warm":
+            # The viewer at its launch: the server, its meshing processes and a STEP reader started
+            # while nobody waits, so a page's first document waits on none of them.
+            self.serve(request).warm()
+            send({"ok": True})
+        elif op == "status":
+            send(self.status())
+        elif op == "base":
+            self.base(request, send)
+        elif op == "integration":
+            self.integration(request, send)
+        elif op == "pid":
+            send({"ok": True, "pid": os.getpid()})  # who answers
+        elif op == "token":
+            # ``cad server --rotate-token`` (``rotate_token``): the page token read again, taken at once.
+            send(self.retoken())
+        elif op == "auto_update":
+            send(switch_auto_update(request))
+        elif op == "plugin_auto_update":
+            send(switch_plugin(request))
+        elif op == "update":
+            send(self.update(request))
+        elif op == "stop":
+            # ``drain``: an update's switch (``client.drain``; 0.11.11's and earlier's), which waits for what is in
+            # flight; else at once.
+            send({"ok": True, "draining": True} if request.get("drain") else {"ok": True})
+            if request.get("drain"):
+                self.drain()
+            else:
+                self.stopping.set()
+        else:
+            send({"failed": f"unknown request {op!r}"})
+
+    def update(self, request: dict[str, Any]) -> dict[str, Any]:
+        """``cad update`` (``{"op": "update"}``, ``"major": true`` for ``cad update --major``): judged
+        (``auto_update.asked``: PyPI asked now, this request's thread waiting), then, where a newer release is out or
+        PyPI could not say, the attempt underway joined, the release that is ready switched to, or the update begun at
+        once (``auto_update.begin``), whatever the switch says: it builds the release beside this one, and only its
+        switch waits for what is in flight (the server's ``drain``). ``{"ok": true, "updating", "from", "since"}``
+        (``updating``: the release it is for, or
+        null; ``since``: when the attempt that serves it began; ``higher``, where ``asked`` names a release of a higher
+        major), else what ``asked`` answers, or ``{"failed"}`` where it could not begin. ``{"op": "update", "begin":
+        false}`` begins nothing: ``{"ok": true, "version", "last", "waiting": null}``, this release and the last attempt
+        (``auto_update.last``), which ``cad update`` asks while it waits (``waiting``: what the releases before this
+        one say of an update not begun yet; none waits here)."""
+        from cad_server._internal import auto_update
+
+        if request.get("begin") is False:
+            return {"ok": True, "version": auto_update._version(), "last": auto_update.last(), "waiting": None}
+        judged = auto_update.asked(major=request.get("major") is True)
+        if "updating" not in judged:
+            return judged
+        found = auto_update.begin(judged["updating"], major=judged.get("major") is True)
+        if found is None:
+            return {"failed": f"the update could not begin, so cad {judged['from']} stays as it is"}
+        named = "the newest release" if found["release"] == auto_update.LATEST else f"cad {found['release']}"
+        print(f"cad: restarting this server on {named}, which is installed beside this cad, as `cad update` asked, "
+              "once nothing is in flight" if found.get("phase") == "switching" else
+              "cad: updating cad, as `cad update` asked: it is installed beside this cad, and this server restarts on "
+              "it once nothing is in flight", file=sys.stderr, flush=True)
+        return {**judged, "updating": found["release"], "since": found["at"]}
+
+    def retoken(self) -> dict[str, Any]:
+        """The user's page token read again from this server's data (``{"op": "token"}``, which ``cad server
+        --rotate-token`` asks every running server once it has written the new one: ``rotate_token``) and taken at
+        once by its HTTP application, every listener of it: a link or a browser session signed with the one before
+        is refused from now on. A server serving nothing yet takes it as it binds (``bind``). ``ValueError`` for a
+        token there that cannot be read (``Registry.token``)."""
+        from cad_server.engine import registry
+
+        held = registry.current()
+        token = held.token() if held is not None else None
+        if not token:
+            return {"failed": "this server keeps no page token to read again"}
+        with self.serving:
+            server = self.server
+            if server is not None:
+                server.token = token
+                application = getattr(server.http, "app", None)
+                if application is not None:
+                    application.retoken(token)
+        return {"ok": True}
+
+    def draw(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """A picture of a document (``{"op": "draw", "path", "still", "out"}``, a ``snapshot.Still``
+        and the picture's path): served, meshed by the daemon's pool, drawn by its render process;
+        answered with the PNG (base64) and what was drawn, or refused by name. Where it is goes to the
+        caller as it draws, a snapshot's progress frames (``progress.py``: ``scene`` while the
+        document is served, meshed and held by its render process, ``draw`` while the frame is drawn),
+        as a build's frames go to its caller."""
+        from cad.engine.progress import Progress
+        from cad_server.engine.renders import Refused, Renders, answer_png
+
+        with self.busy_lock:
+            self.busy += 1
+        said = Progress(lambda frame: send({"progress": frame}), kind="snapshot", job=Path(request["path"]).name,
+                        outputs=[request["out"]] if request.get("out") else [])
+        try:
+            server = self.serve(request)
+            with self.serving:
+                if self.renders is None:
+                    self.renders = Renders(server, self.supervisor)
+            try:
+                data, report = self.renders.draw(Path(request["path"]), request["still"], said)
+            except Refused as error:
+                send({"refused": str(error), **({"part": error.part} if error.part else {})})
+                return
+            except Exception as error:  # noqa: BLE001 - a picture that could not be drawn is the answer
+                # A render process's failure by the type it failed with (``renders._failed``), any other by its own.
+                raised = getattr(error, "raised", None)
+                send({"failed": f"{type(error).__name__}: {error}",
+                      **({"type": raised} if isinstance(raised, str) else failed_type(error))})
+                return
+            send({"ok": True, "report": report, "png": answer_png(data)})
+        finally:
+            said.close()
+            with self.busy_lock:
+                self.busy -= 1
+                self.worked = time.monotonic()
+            self.touch()
+
+    def status(self) -> dict[str, Any]:
+        """The daemon, its workers (each its script, its builds, its memory after its last build
+        in MiB, how long it has been busy or idle, and a busy one's last progress frame), its
+        standby (never a script's worker: its process, its memory, how long it has stood by), its
+        processes' memory against its cap, the builds waiting for a worker, the last retirements, and
+        what it serves and draws."""
+        from cad.engine.worker import rss_cap_mb
+
+        now = time.monotonic()
+        server = self.server
+        supervisor = self.supervisor
+        workers = [{"script": w.label, **({"python": w.python} if getattr(w, "python", None) else {}),
+                    "pid": w.pid, "builds": w.requests, "alive": w.alive() and not w.retired,
+                    "busy": w.leased, "rssMb": None if w.rss is None else round(w.rss),
+                    "seconds": round(now - (w.since if w.leased else w.used), 1),
+                    "progress": w.progress if w.leased else None} for w in supervisor.processes("worker")]
+        with supervisor.lock:
+            spare, readying = supervisor.standby("worker"), supervisor.readying("worker") is not None
+        standby = ({"pid": spare.pid, "rssMb": None if spare.rss is None else round(spare.rss),
+                    "seconds": round(time.time() - spare.started, 1)} if spare is not None
+                   else {"pid": None, "rssMb": None, "seconds": None, "starting": True} if readying else None)
+        # What uses it, which `cad server status` says: its holds, the documents pages watch, its builds and draws,
+        # and HTTP work underway.
+        return {"ok": True, "pid": os.getpid(), "version": version(), "installation": installation(),
+                "up": round(time.time() - self.born, 1),
+                "workers": workers, "standby": standby, "cap": supervisor.cap, "waiting": supervisor.waiting("worker"),
+                "rssMb": round(supervisor.resident()), "rssCapMb": rss_cap_mb(), "retired": list(supervisor.retired),
+                "idle": round(now - self.last, 1), "holders": self.holders, "hosts": dict(self.hosts),
+                "busy": self.busy, "prefix": sys.prefix,
+                "watched": 0 if server is None else len(server.watched()),
+                "active": server is not None and bool(server.clients_active()),
+                "serving": None if self.server is None else {"url": self.server.url, "port": self.server.port,
+                                                             "portSource": self.port_source,
+                                                             "portBecause": self.port_because,
+                                                             "portNotice": self.port_notice,
+                                                             "defaultPort": default_port(),
+                                                             "also": [each.server_address[1] for each in self.listeners],
+                                                             "documents": self.server.listing(every=True),
+                                                             "memory": self.server.memory()},
+                "models": self.models.listing(),
+                "cache": self.models.cache.status(),
+                "checks": self.checks.status(),
+                "identity": self.identity if self.identity and any(self.identity.values()) else None,
+                "renders": [] if self.renders is None else self.renders.status(),
+                "base": _making().status(),
+                "sessions": (self.server.http.app.sessions() if self.server is not None
+                             and hasattr(self.server.http, "app") else [])}
+
+    def watch(self) -> None:
+        seconds = tend_seconds()
+        self.caught_up(starting=True)  # nothing has run
+        while not self.stopping.wait(seconds):
+            self.tend()
+
+    def caught_up(self, *, starting: bool = False) -> None:
+        """What follows cad's own update, at the server's start and at each quiet tending (``tend``): at the start
+        (``starting``), the store tidied where no attempt is underway (``store.clean``: releases nothing runs or points
+        at but the one that is ready, ``auto_update.kept``, a pointer that means nothing); the install command run
+        once where cad is newer than the release it is up to date for and the person's switch says so
+        (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its lock),
+        then the last update attempt counted once, where it ended and nothing it waits for is underway
+        (``auto_update.report``). Never on a server that stops; never fails the server."""
+        if self.draining or self.stopping.is_set():
+            return
+        told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
+        try:
+            from cad_server._internal import auto_update, store
+
+            if starting and auto_update.underway() is None:
+                store.clean(keep=auto_update.kept())
+            self.catching.tend(told)
+            auto_update.report()
+        except Exception as error:  # noqa: BLE001 - the engine's tending never fails for what follows an update
+            told(f"what follows cad's update could not be looked after: {type(error).__name__}: {error}")
+
+    def reached_by(self, address: Path) -> None:
+        """Clients reach this engine at ``address`` from now on (``tend`` watches it)."""
+        self.address, self.address_id = address, _identity(address)
+
+    def tend(self) -> None:
+        """What the engine looks after, each ``TEND_SECONDS``: never the process, and nothing by how
+        long anything has been idle. A killed client's pipes are swept, and the processes' memory is
+        held to its cap and the system's pressure (``Supervisor.shed``: a worker's documents drained
+        first, so they stay held), and a busy one to the ceiling on one process (``Supervisor.overrun``);
+        the memory budget sends unwatched documents out of memory, least recently used
+        first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
+        once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
+        is due (``updates.refresh``), and cad's own update looked after where nothing is in flight (``auto_update.tend``,
+        told how long since the last command ended, ``worked``, and since anything at all was asked, ``last``, a page's
+        requests too): a release that is due got ready beside this one, nothing restarted; or this server drained and
+        the next release's started where one is ready and the moment is right (``auto_update.restart``);
+        then, BRIDGE-ONLY, the install
+        command run once where it is owed for a computer a shipped updater brought (``install_script.Carrier``), and
+        the bridge's part (``cli.setup.Tending``: such a server, once cad is installed globally, hands over to the
+        global cad's); then, where nothing is in flight, what follows cad's update (``caught_up``). The engine stops on
+        ``stop``, a terminate, another installation's
+        retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
+        folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
+        what it holds to the cache."""
+        if self.address is not None and _identity(self.address) != self.address_id:
+            self.stopping.set()
+            return
+        if self.door is not None:
+            self.door.sweep()
+        self.supervisor.shed(self.pressure.under())
+        self.supervisor.overrun()
+        self.models.prune()
+        self.previewing.expire()  # a page's previews nobody has read for a while (``parameters.Previewing``)
+        _send_counts()
+        if self.draining or self.stopping.is_set():
+            return
+        from cad_server import updates
+        from cad_server._internal import auto_update
+
+        updates.refresh()
+        now = time.monotonic()
+        working, ran, quiet_for = self.working(), self.worked != self.began, now - self.worked
+        begun = auto_update.tend(working=working, ran=ran, quiet_for=quiet_for, idle_for=now - self.last)
+        if begun:
+            named = ("the newest release" if begun.get("release") == auto_update.LATEST
+                     else f"cad {begun.get('release')}")
+            print(f"cad: installing {named} beside this cad: this server restarts on it as it next starts, once "
+                  "nothing has been asked of it for an hour, or with `cad update`" if begun.get("switch") is False else
+                  f"cad: restarting this server on {named}, which is installed beside this cad, once nothing is in "
+                  "flight", file=sys.stderr, flush=True)
+            return
+        told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
+        quiet = not working and (not ran or quiet_for >= auto_update.IDLE_SECONDS)
+        try:
+            self.handover.tend(version(), told)
+            self.bridge.tend(version(), told, quiet=quiet)
+        except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the install command
+            told(f"the install command's run could not be looked after: {type(error).__name__}: {error}")
+        if quiet:
+            self.caught_up()
+
+    def working(self) -> bool:
+        """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a
+        request that serves (``busy``), and the HTTP application's exports and agents' MCP calls
+        (``serve.Server.clients_working``). Open pages and held sessions are not: a page reconnects,
+        and a session is opened again on its next request."""
+        with self.busy_lock:
+            if self.busy:
+                return True
+        server = self.server
+        return server is not None and bool(server.clients_working())
+
+    def drain(self, then: Callable[[], None] | None = None) -> None:
+        """Stop once nothing is in flight (``working``), for an update: in the background, so the
+        request that asked for it is answered first. Its door (on Windows its port) closes once it is
+        idle, so no new connection reaches it, and what came in before that is waited for too; then
+        ``then`` (the update's switch helper, started) and the stop. A second drain joins the first."""
+        with self.busy_lock:
+            if self.draining:
+                return
+            self.draining = True
+
+        def wait() -> None:
+            while self.working() and not self.stopping.is_set():
+                time.sleep(0.05)
+            if self.door is not None:
+                self.door.close()
+            if self.listener is not None:
+                try:
+                    self.listener.close()
+                except OSError:
+                    pass
+            while self.working() and not self.stopping.is_set():
+                time.sleep(0.05)
+            # A check holds nothing of anyone's: none is waited for, and its callers are told to run it again.
+            self.checks.halt()
+            if then is not None:
+                try:
+                    then()
+                except Exception as error:  # noqa: BLE001 - the stop goes on: the next client starts current's engine
+                    print(f"cad: the update's switch could not start: {type(error).__name__}: {error}",
+                          file=sys.stderr, flush=True)
+            self.stopping.set()
+
+        threading.Thread(target=wait, name="cad-drain", daemon=True).start()
+
+    def shutdown(self) -> None:
+        from cad_server.engine import registry
+
+        self.checks.halt()  # every check answered that the engine stopped, its checks process killed
+        if self.checks.store.deleted in registry.FORGOTTEN:
+            registry.FORGOTTEN.remove(self.checks.store.deleted)
+        # The documents built or read in the last idle window, saved first, best effort (``cache``).
+        self.models.cache.final()
+        _halt()  # a making of the base under way: its uv goes with the engine
+        self.supervisor.stop()  # its workers, the standby and the render processes
+        display.stop()  # the Xvfb it started for their stills, if it did
+        for listener in self.listeners:  # the ports it serves pages on beside its own (``_take_port``)
+            try:
+                listener.shutdown()
+                listener.server_close()
+            except OSError:
+                pass
+        self.listeners = []
+        if self.server is not None:
+            self.server.stop()
+
+
+def _send_counts() -> None:
+    """What this daemon's builds and every command counted, sent once the spool has waited a window and no
+    sender has started within one, as a command starts it (``telemetry_send.start_if_due``: one read of the
+    spool's first line, a sender started detached, never waited on): where nothing else runs -- no CAD app, no
+    viewer page, no ``cad`` command, only ``python model.py`` -- nothing else would."""
+    from cad_server._internal import telemetry_send
+
+    telemetry_send.start_if_due()
+
+
+def _same_place(one: str, other: str) -> bool:
+    """Whether two paths name one folder, as the system resolves them."""
+    return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
+
+
+def _unstarted(error: Gone) -> dict[str, str]:
+    """A worker that never started -- it exited, or was given up, before it said it was ready -- answered by its
+    type, as the kernel environment that could not be made is: the engine could not start the process the work runs
+    in, which its caller counts as that (``no_kernel``), never as a refusal. One gone during the work (it died under
+    it) is said in its words alone, which say its exit status."""
+    return {} if error.during else failed_type(error)
+
+
+def _overran(worker: Process | None) -> dict[str, str]:
+    """A worker the engine stopped past the ceiling on one process (``Supervisor.overrun``) answered by a type, a
+    build out of memory's (``MemoryError``): a limit on the machine's memory reached, which telemetry counts as that
+    (``memory``) and its page does not offer to report -- never a worker that died under the work, nor a mistake
+    in cadgen's code. Nothing for any other worker."""
+    return {"type": "MemoryError"} if worker is not None and getattr(worker, "overran", None) else {}
+
+
+def _no_kernel(error: BaseException) -> bool:
+    """Whether ``error`` is the engine having no kernel environment to start a process in
+    (``serve.KernelProcessesUnavailable``): a request's answer, in its one line."""
+    from cad.engine.serve import KernelProcessesUnavailable
+
+    return isinstance(error, KernelProcessesUnavailable)
+
+
+# How long a connection to the Windows loopback port has to show its token: anyone on the machine can
+# connect there, so nothing more is read, or waited for, until it has.
+AUTH_SECONDS = 10.0
+
+
+def _admitted(daemon: Daemon, connection: socket.socket, stream: Any) -> int | None:
+    """On Windows, a connection's token shown, and the door protocol it speaks: the door's hello with
+    the token where a pair's id goes (``<token> <protocol>``, ``door.hello``), greeted on the
+    connection as the door greets (``door.greeting``, with this server's release). A peer without it -- a line
+    that is no such hello, 0.8's client's request among them -- is refused after a line of ``door.HELLO_LIMIT`` bytes
+    and ``AUTH_SECONDS`` at most, before a request is read or parsed. The protocol; None: refused."""
+    import hmac
+
+    from cad.engine import door
+
+    if not daemon.token:
+        return None
+    token = daemon.token.encode("ascii")
+    connection.settimeout(AUTH_SECONDS)
+    line = stream.readline(door.HELLO_LIMIT)
+    said = line.removesuffix(b"\n") if line.endswith(b"\n") else b""
+    ident, protocol = door.hello_id(said), door.hello_protocol(said)
+    if ident is None or protocol is None or not hmac.compare_digest(ident.encode("ascii"), token):
+        return None
+    stream.write(door.greeting(min(protocol, door.DOOR_PROTOCOL), version()))
+    stream.flush()
+    connection.settimeout(None)
+    return protocol
+
+
+def _watched(reader: Any, connection: socket.socket | None = None) -> threading.Event:
+    """Set once the client of a connection has hung up -- its end of file, which a client that sent its request
+    and reads its answer meets only by going -- read by a thread of its own on a duplicate of the connection
+    (``connection``'s socket on Windows, else the reader's descriptor), so the connection's own close never
+    meets it."""
+    gone = threading.Event()
+    try:
+        if connection is not None:
+            own: Any = connection.dup()
+            read = lambda: own.recv(1)  # noqa: E731
+            close = own.close
+        else:
+            fd = os.dup(reader.fileno())
+            read = lambda: os.read(fd, 1)  # noqa: E731
+            close = lambda: os.close(fd)  # noqa: E731
+    except (OSError, AttributeError, ValueError):
+        return gone  # no descriptor to watch: never said gone
+
+    def watch() -> None:
+        try:
+            if not read():
+                gone.set()
+        except OSError:
+            gone.set()
+        finally:
+            try:
+                close()
+            except OSError:
+                pass
+
+    threading.Thread(target=watch, name="cad-check-caller", daemon=True).start()
+    return gone
+
+
+def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOCOL,
+           connection: socket.socket | None = None) -> None:
+    """One connection: its request line, and every answer line the request sends. A hold keeps the
+    connection until its client goes. ``protocol``: the door protocol the client's hello spoke,
+    carried for the request's handling once a later protocol number changes what it may say."""
+    line = reader.readline()
+    if not line:
+        return
+    request = json.loads(line)
+    if WINDOWS and request.get("token") != daemon.token:
+        return
+    lock = threading.Lock()
+
+    def send(message: dict[str, Any]) -> None:
+        if "log" not in message and set(message) != {"progress"}:
+            if "_notice" in request:
+                message = {**message, "notice": request.pop("_notice")}  # its answer carries it: said once
+            elif daemon.unsaid and request.get("op") == "build":
+                notice, daemon.unsaid = daemon.unsaid, ""
+                message = {**message, "notice": notice}
+        with lock:
+            writer.write((json.dumps(message, separators=(",", ":")) + "\n").encode())
+            writer.flush()
+
+    if request.get("op") == "hold":
+        daemon.hold(reader, send, request.get("host"), request.get("holder"))
+        return
+    request.pop("_gone", None)
+    if request.get("op") == "export" and request.get("check") is not None:
+        # A manufacturing check's caller is watched for hanging up: a check no one waits for gives up its checks
+        # process to one someone does (``checks_runner.Runner.reap``).
+        request["_gone"] = _watched(reader, connection)
+    from cad_server._internal.base import TOLD
+
+    # An environment this request's kernel process waits on, made meanwhile: each line of its making said to the
+    # client, which says it as it comes (``base.kernel``, ``client._exchange``).
+    making = TOLD.set(lambda line: send({"log": line, "stream": "making"}))
+    try:
+        daemon.handle(request, send)
+    except ValueError as error:  # a request refused, in its words
+        send({"failed": str(error)})
+    except OSError as error:  # a failure: its words, and its type
+        send({"failed": str(error), **failed_type(error)})
+    finally:
+        TOLD.reset(making)
+        daemon.ended(request)  # a command's end; the server's own asks are none
+        if daemon.refusal is not None:
+            daemon.stopping.set()  # its answer sent: the engine whose port is another's stops
+
+
+def _serve_door(daemon: Daemon, ident: str, protocol: int) -> None:
+    """A connection through the door (POSIX): the hello's pair answered (``door.answer``) in the
+    protocol the hello spoke, the greeting naming this server's release."""
+    from cad.engine import door
+
+    def serve(reader: Any, writer: Any) -> None:
+        try:
+            _serve(daemon, reader, writer, protocol=protocol)
+        except (OSError, ValueError):
+            pass  # the client went, or sent no request
+
+    door.answer(engine_dir() / door.CLIENTS, ident, serve, protocol, version())
+
+
+def _serve_connection(daemon: Daemon, connection: socket.socket) -> None:
+    """A connection to the Windows loopback port: its token shown first, in its hello (``_admitted``),
+    then served."""
+    with connection:
+        stream = connection.makefile("rwb")
+        try:
+            protocol = _admitted(daemon, connection, stream)
+            if protocol is None:
+                return
+            _serve(daemon, stream, stream, protocol, connection)
+        except (OSError, ValueError):
+            pass
+        finally:
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+
+def _accept(daemon: Daemon, listener: socket.socket) -> None:
+    """Windows' main loop: each connection its port takes, served, until the daemon stops."""
+    while not daemon.stopping.is_set():
+        try:
+            connection, _address = listener.accept()
+        except socket.timeout:
+            continue
+        except OSError:
+            # An update's drain closed the port: it starts the switch helper next, on a daemon
+            # thread this process's exit would end, so the loop waits for the drain to stop it.
+            if daemon.draining:
+                daemon.stopping.wait()
+            break
+        connection.settimeout(None)
+        threading.Thread(target=_serve_connection, args=(daemon, connection), daemon=True).start()
+
+
+def _bind() -> socket.socket:
+    """Windows' listener: a loopback port (its port file names it, and the token a client shows)."""
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    return server
+
+
+def _can_listen() -> None:
+    """Raise when this process may not listen on a loopback port, as the engine's HTTP server
+    must: a sandbox that refuses sockets (macOS Seatbelt answers EPERM) would let a daemon make
+    its door and then fail every build, so none starts there. The port is bound and let go."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.bind(("127.0.0.1", 0))  # refused where listening would be: Seatbelt refuses the bind
+    finally:
+        probe.close()
+
+
+def let_go(held: Any, *, failed: bool = False) -> None:
+    """This daemon's files gone as it lets go of its lock: its port file and, unless it ``failed``
+    (its client reads why there), its failure note, then the lock file itself -- on POSIX removed
+    while it is still held, so no daemon starting meanwhile can take a lock on a file that is gone
+    (``lock`` takes the one the name names); on Windows, where a file open is never removed,
+    once it is let go. The door is gone already (``Door.close``)."""
+    _unmirror()
+    for path in (port_path(), *(() if failed else (failure_path(),))):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    _drop_lock(held, lock_path())
+
+
+def _mirrored() -> Path | None:
+    """The port file 0.10.0's clients read on Windows (``places.appdata_engine_dir``), else None."""
+    from cad.engine.places import appdata_engine_dir
+
+    folder = appdata_engine_dir()
+    return folder / f"{NAME}.port" if folder is not None else None
+
+
+def _mirror(port: int, token: str) -> None:
+    """For one release, this engine's port file written where 0.10.0's clients look for it too, on
+    Windows: a CAD app's server of 0.10.0 still running in an app not restarted since the update finds
+    this engine there, and starts none of its own beside it. Never over a 0.10.0 engine's own that
+    answers. Quiet: a client of this release never reads it."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        held = int(path.read_text(encoding="utf-8").split()[0])
+    except (OSError, ValueError, IndexError):
+        held = None
+    if held is not None and held != port and _answers("127.0.0.1", held):
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(f"{port} {token}\n", encoding="utf-8")
+        replace_atomic(temporary, path)
+    except OSError:
+        pass
+
+
+def _unmirror() -> None:
+    """The mirrored port file removed before this engine's own (``_mirror``), when it is a copy of it."""
+    _unmirror_of(port_path())
+
+
+def _unmirror_of(source: Path) -> None:
+    """The mirrored port file removed when it is a copy of the port file ``source``."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        if path.read_text(encoding="utf-8") == source.read_text(encoding="utf-8"):
+            path.unlink()
+    except OSError:
+        pass
+
+
+def _drop_lock(held: Any, path: Path) -> None:
+    """The lock ``held`` (on ``path``) let go, and its file removed (see ``let_go``)."""
+    if not WINDOWS and names(held, path):
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    held.close()
+    if WINDOWS:
+        try:
+            path.unlink()
+        except OSError:
+            pass  # another opened it meanwhile: its file now
+
+
+def _identity(path: Path) -> tuple[int, int] | None:
+    """The file at ``path`` (not a link it names): its device and inode, or None when there is none."""
+    try:
+        found = os.lstat(path)
+    except OSError:
+        return None
+    return found.st_dev, found.st_ino
+
+
+def resumed() -> int | None:
+    """The port the server before this one served pages on, as the client that stopped it noted it
+    (``places.pages_path``, ``client.sweep``): read and removed by the daemon that holds the lock now. None where none
+    was noted."""
+    path = pages_path()
+    try:
+        port = json.loads(path.read_text(encoding="utf-8")).get("port")
+    except (OSError, ValueError, AttributeError):
+        port = None
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    return port if type(port) is int and 0 < port < 65536 else None
+
+
+def _leaving() -> bool:
+    """Whether cad's own update is switching away from this release right now (``auto_update.leaving``). Never raises:
+    what cannot be told is no reason for a server not to start."""
+    try:
+        from cad_server._internal import auto_update
+
+        return auto_update.leaving()
+    except Exception:  # noqa: BLE001 - see above
+        return False
+
+
+def _restarted() -> dict[str, Any] | None:
+    """The switch to the release cad's own update made ready, begun as this server starts, where automatic updates
+    allow it (``auto_update.restart``, ``starting``): the attempt begun, its record ``switching`` with a fresh beat,
+    so the start stands aside for it (``_leaving``); else None. Never raises: what cannot be told is no reason for a
+    server not to start."""
+    try:
+        from cad_server._internal import auto_update
+
+        return auto_update.restart(quiet_for=0.0, idle_for=0.0, starting=True)
+    except Exception:  # noqa: BLE001 - see above
+        return None
+
+
+def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False,
+         rotated: bool = False) -> int:
+    """Run the engine here. ``port``: the HTTP port it must take (``cad server start --port``, which hands a server
+    it starts ``--port N`` in ``argv``); ``foreground`` (``cad server start --foreground``): its HTTP server bound
+    before anything else, so a port another process holds fails the command at once (``bind``). One started
+    detached binds on the first request that serves, which may name its own port (``cad viewer --port``) -- but where
+    the server it replaced served pages (``resumed``), it serves them there at once, as one in the foreground does,
+    unless a port is named (``Daemon.resume``). The release it starts as is recorded (``started``). It starts none
+    while cad's own update switches away from this release (``_leaving``): the next server is the update's to start.
+    Where cad's own update made a release ready, a detached start is that switch (``_restarted``), begun before this
+    server serves anything, and stands aside for it so; a start in the foreground, or one that names its port (``cad
+    server start --port``: the person's word for where this server serves, which the next release's server the
+    update starts would not take), is the person's own, and starts as it is: the other moments of the restart reach
+    it later."""
+    from cad.engine.serve import Pressure
+
+    if argv:
+        from cad_server._internal.cli_parser import parser
+
+        named = parser("cad server start")
+        named.add_argument("--port", type=int)
+        port = named.parse_args(argv).port
+    try:
+        Pressure.override(os.environ)
+    except ValueError as error:  # refused at the start, in its one line, before anything is held
+        _note(str(error))
+        return 1
+    bytecode(os.environ)  # its own (``client.start`` set it), or made here: a daemon run in the foreground
+    sys.pycache_prefix = os.environ.get("PYTHONPYCACHEPREFIX") or None
+    sys.dont_write_bytecode = sys.pycache_prefix is None
+    if not foreground and port is None:
+        begun = _restarted()
+        if begun is not None:
+            print(f"cad: cad {begun['release']} is installed beside this cad, so this start restarts on it: its server "
+                  "starts in a moment", file=sys.stderr)
+    if _leaving():
+        # cad's own update is between the server it drained and the next release's: this one starts none in its
+        # place, as where another daemon is up, and its starter waits for the server that answers (``client.start``).
+        if foreground:
+            print("cad: cad is updating itself, and its update starts the next release's server in a moment: "
+                  "`cad server status` says when it runs", file=sys.stderr)
+        return 0
+    try:
+        held = lock()
+    except OSError as error:
+        _note_failure(f"the engine server cannot take its lock in {engine_dir()}", error)
+        return 1
+    if held is None:
+        if foreground and rotated:  # ``cad server --rotate-token``: the server running took the new token, as asked
+            print("cad: the engine server is already running, and took the new token: `cad server status` says "
+                  "where it serves", file=sys.stderr)
+            return 0
+        if foreground:  # said, never a silent success that serves nothing it asked
+            print("cad: the engine server is already running: `cad server status` says where it serves, "
+                  "`cad server stop` stops it" + (f" (to serve on {port})" if port is not None else ""),
+                  file=sys.stderr)
+            return 1 if port is not None else 0
+        return 0  # another daemon is up
+    from cad_server._internal import started
+
+    started.note(version())
+    try:
+        listener = _bind() if WINDOWS else None
+        if listener is not None:
+            listener.listen(64)
+        else:
+            _can_listen()
+    except OSError as error:
+        _note_failure("the engine server cannot listen on a local port", error)
+        let_go(held, failed=True)
+        return 1
+    daemon = Daemon(port=port)
+
+    # And the records from before namespace/name identity brought to it, once (``identity.migrate``:
+    # JSON and file names, no XBF, independent of the closure's pass). It never keeps the engine
+    # from starting.
+    from cad.engine.identity import migrate
+
+    try:
+        daemon.identity = migrate(daemon.models.registry())
+    except Exception as error:  # noqa: BLE001
+        daemon.identity = {"filled": 0, "moved": 0, "skipped": [f"the pass failed: {type(error).__name__}: {error}"]}
+        print(f"cad: identity migration failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+    daemon.stand()
+    pages = resumed()  # taken whatever this start does with it: the next start's is the next stop's
+    try:  # a port named comes first (``--port``, else ``CAD_ENGINE_PORT``): the pages' port where it is that one
+        named = port if port is not None else environment_port()
+    except ValueError:
+        named = -1  # a CAD_ENGINE_PORT that names no port: refused as it binds, as before
+    served = pages is not None and named in (None, pages) and daemon.resume(pages)
+    if foreground and not served:
+        try:
+            daemon.serve({})
+        except ValueError as error:  # a port held (``PortHeld``, noted by ``serve``) or refused
+            if not isinstance(error, PortHeld):
+                _note(str(error))
+            daemon.shutdown()
+            if listener is not None:
+                listener.close()
+            let_go(held, failed=True)
+            return 1
+        for said in daemon.port_notice.splitlines():
+            print(f"cad: {said}", file=sys.stderr)  # the foreground server's terminal
+            daemon.unsaid = ""
+    if not WINDOWS:
+        import signal
+
+        # A terminate (a logout, ``kill``) stops the daemon as ``cad server stop`` does: its workers,
+        # pools, door and listener go with it. A client gone mid-answer is a write's BrokenPipeError.
+        signal.signal(signal.SIGTERM, lambda _signum, _frame: daemon.stopping.set())
+        signal.signal(signal.SIGPIPE, signal.SIG_IGN)
+    threading.Thread(target=daemon.watch, daemon=True).start()
+    failed = False  # its door could not be made: its note says why, and stays
+    daemon.listener = listener
+    try:
+        if listener is not None:
+            port = listener.getsockname()[1]
+            temporary = port_path().with_suffix(".tmp")
+            temporary.write_text(f"{port} {daemon.token}\n", encoding="utf-8")
+            replace_atomic(temporary, port_path())
+            _mirror(port, daemon.token)
+            daemon.reached_by(port_path())
+            listener.settimeout(0.5)
+            _accept(daemon, listener)
+        else:
+            from cad.engine.door import Door
+
+            try:
+                daemon.door = Door(door_path(), lambda ident, protocol: _serve_door(daemon, ident, protocol))
+                daemon.reached_by(door_path())
+            except OSError as error:
+                _note_failure(f"the engine server cannot make its door {door_path()}", error)
+                failed = True
+                return 1
+            daemon.stopping.wait()
+    finally:
+        if listener is not None:
+            listener.close()
+        if daemon.door is not None:
+            daemon.door.close()  # first: no hello is taken while the rest stops
+        daemon.shutdown()
+        # Its port file, its failure note but a failure's, and its lock: nothing of it stays behind.
+        let_go(held, failed=failed or daemon.refusal is not None)
+    return 1 if daemon.refusal is not None else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -4,20 +4,19 @@ import { IssuesLink, LegalPage, LegalSection } from "@/components/legal-page";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports) and its hourly version check, why, who receives it, how long it is kept, and your controls.",
+    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports), its install command's failure report, its hourly version check and its automatic updates, why, who receives it, how long it is kept, and your controls.",
   alternates: { canonical: "/privacy-policy" },
 };
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 31, 2026">
+    <LegalPage title="Privacy Policy" updated="November 19, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
           text-to-cad: the text-to-cad plugin and its skills, the text-to-cad software they run (the packages{" "}
           <code>cad</code>, <code>cad-server</code> and <code>cad-mcp</code>, named cadgen
-          before 0.9), the
-          step.parts part library they search, and this website, texttocad.dev. text-to-cad runs on
+          before 0.10), and this website, texttocad.dev. text-to-cad runs on
           your computer. Your prompts, models, drawings and files stay there, and we do not collect
           them.
         </p>
@@ -33,7 +32,7 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Telemetry: usage counts and crash reports, when it is on.</strong> text-to-cad’s
             long-running parts -- the CAD app that shows models in your agent app (the plugin’s{" "}
-            <code>cad</code> server) and the CAD viewer in your browser (<code>cad viewer</code>), and
+            <code>cad-mcp</code> server) and the viewer in your browser (<code>cad viewer</code>), and
             in earlier releases the build daemon that built models for them -- send to api.texttocad.dev,
             with what <code>cad</code> commands and model scripts counted, at most once every five
             minutes while you use them and once as each stops:
@@ -44,12 +43,8 @@ export default function PrivacyPolicyPage() {
                 clock, so that a batch sent again after a failed send is counted once;
               </li>
               <li>
-                which of them sent it, the text-to-cad version, where it was installed from (a plugin
-                directory, the Cursor Marketplace, GitHub, or a development install, as the plugin’s
-                CAD app names it and notes on your computer for the viewer and text-to-cad’s commands to
-                report too), your operating
-                system and processor type, and the name and version of your agent app and how it shows
-                CAD (or that it is the browser viewer);
+                which of them sent it, the text-to-cad version, your operating system and processor type, and which agent app ran it: its name and
+                version, and how it shows CAD (or that it is the browser viewer);
               </li>
               <li>
                 counts, added up over those five minutes: how many times each CAD tool was called and
@@ -74,11 +69,34 @@ export default function PrivacyPolicyPage() {
                 failed, again as one of a fixed set of words text-to-cad chooses from the kind of error and
                 whose code raised it (such as an error in your model’s code, a CAD operation the
                 geometry kernel could not do, a module or file that is not there, a picture that could
-                not be drawn, or a bug in text-to-cad) -- never the error’s message, your code or the path;
+                not be drawn, no graphics context to draw it in, or a bug in text-to-cad) -- never the error’s
+                message, your code or the path; for a snapshot request text-to-cad turned down, which part of
+                the request it turned down (such as the display mode, the clip, the camera or the size), as a
+                name from a fixed list -- never the value given;
                 how many times assemblies, mesh exports, posed joints, animations, engineering drawings
                 and Quick Edit were used; and how many of the CAD engine’s build workers started,
                 crashed or were retired (and, from earlier releases, how many builds were turned away for
                 want of memory);
+              </li>
+              <li>
+                when an earlier release of text-to-cad updates your computer to the current one, or text-to-cad
+                updates itself: whether that finished, and if it did not, which step failed and why, each as one
+                of a few fixed words, with how many tries it took and the version your computer came from; for
+                its own updates, also which installer it used (uv or pipx), whether you asked for the update,
+                and whether updating the plugin in your apps afterwards worked;
+              </li>
+              <li>
+                when text-to-cad installs or updates the plugin in your agent apps (<code>cad plugin install</code>,
+                which our install command and text-to-cad’s own updates run): who started the run (you, our install command or text-to-cad itself), how it ended
+                (well, with every app failed, stopped at its time limit, or not run because another run
+                was going), how many whole seconds it took, what your terminal was shown (whether the logo
+                was drawn, built up or still, and in full colour, 256 colours or none), how many agent apps it found on your
+                computer and how many of those failed, as numbers alone. It names an agent app only where
+                installing or updating the plugin there failed: which one, by text-to-cad’s own short name for
+                it (such as “claude” or “codex”), how many whole seconds it took, and why, as one of a few
+                fixed words (a command that did not answer in time, a command that failed, no network, a
+                mistake of text-to-cad’s own, or anything else) -- never the error’s message, a path, or the
+                app’s version or settings. Which agent apps you have installed is never sent;
               </li>
               <li>
                 crash reports, when text-to-cad’s own code fails unexpectedly: the error’s type (such as
@@ -98,29 +116,62 @@ export default function PrivacyPolicyPage() {
             <code>cad</code> command or model script sends nothing itself: it keeps what it counted (a
             build, an export, a snapshot, a drawing, a crash) on your computer for the next part of text-to-cad
             that sends; when nothing has sent it for five minutes, the next <code>cad</code> command
-            starts a short-lived sender in the background, which sends it and exits. Like any
+            starts a short-lived sender in the background, which sends it and exits; how such an update from
+            an earlier release went, and how a run that installed or updated the plugin in your agent apps
+            went, is sent by such a sender started right away. Like any
             request over the internet, each one also reaches our host with your IP address, the time
-            and a user agent (just “cadgen”, the software’s name before 0.9); see section 4 for what happens to them.
+            and a user agent that names text-to-cad’s software; see section 4 for what happens to them.
             Section 5 says when telemetry is on and how to turn it off.
           </li>
           <li>
-            <strong>The version check:</strong> at most once an hour, text-to-cad (the CAD app or the CAD viewer)
-            asks api.texttocad.dev which text-to-cad release is the
-            newest, so it can tell you when there is an update. The request carries no ID and nothing
-            about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory
-            or the Cursor Marketplace updates, and section 5 says how to turn it off. An update you ask
-            for (CAD’s update button, or <code>cad update</code>) asks again, then downloads the
-            release from PyPI, as the install command does.
+            <strong>The install command’s failure report:</strong> our install command (the script this
+            website serves) sends nothing itself when it ends with a text-to-cad that works: that
+            text-to-cad counts the run, as telemetry (above). When it fails where no working text-to-cad can
+            count the failure -- uv could not be installed, the script could not be downloaded or run,
+            text-to-cad could not be installed, nothing could run the step that installs the plugin, or the
+            script itself crashed -- it sends one report to api.texttocad.dev, once: a random ID made for
+            that one run and kept nowhere on your computer, so nothing links the report to an install ID
+            or to another run; the time by your computer’s clock; the stage that failed; an exit status;
+            your operating system and processor type; uv’s version; whether a person or text-to-cad ran the
+            command; and, for a crash, the error’s type and the function names and line numbers in our
+            install script where it happened -- never the error’s message, a path or a file name. Our
+            server adds the country the request comes from, which it works out from your IP address; it
+            keeps neither the address nor anything finer than the country (to refuse a flood of reports,
+            it counts those from one address for ten minutes, under a scrambled form of the address held
+            only in memory). Like any request, it reaches our host with your IP address, the time and the
+            user agent of the program that sent it (curl, wget, PowerShell or Python). When you run the
+            install command, it says in a line near its start that it may send this report, wherever it
+            could. When text-to-cad itself runs it (releases 0.11.12 and 0.11.13 do, and an earlier
+            release as it moves your computer to the current one), nobody reads what it prints, so it
+            says no such line: it then sends a report only if text-to-cad had already told you on that
+            computer what it sends, or you had said yes, and never for a failure before the script’s
+            Python part runs. Section 5 says when none is sent.
           </li>
           <li>
-            <strong>step.parts searches:</strong> when you ask your agent to find a part, the
-            step-parts skill sends your search terms and the parts you request to step.parts. Each
-            request includes standard metadata: your IP address, the time and the user agent.
+            <strong>The version check and automatic updates:</strong> at most once an hour, text-to-cad’s
+            software on your computer asks api.texttocad.dev which text-to-cad release is the newest. The
+            request carries no ID and nothing about you or your work; like any request, it reaches our host
+            with your IP address, the time and a user agent that names text-to-cad’s software. It is not
+            made in CI. Automatic updates are on unless you turned them off. While they are on, and the answer
+            names a newer release of the major version you have, text-to-cad downloads the newest such release
+            from the Python Package Index (PyPI) and installs it; a new major version is installed only when you
+            ask for it. Our install command, when you run it yourself, also brings a text-to-cad that is
+            already installed to the newest release of its major version, from PyPI. Where the plugin’s
+            automatic updates are on (our install command turns them on) and text-to-cad is newer than the
+            release the plugin in your agent apps was last brought up to date for, however it got newer,
+            text-to-cad then updates the plugin in your agent apps itself (<code>cad plugin install</code>): it
+            downloads
+            the plugin from GitHub and runs each agent app’s own install command. Releases 0.11.12 and
+            0.11.13 instead download our install script from this website and run it. When an earlier
+            release that updated itself brings your
+            computer to the current one, text-to-cad installs itself from PyPI the same way, and runs our
+            install script once if our install command set up your computer before. Section 5 says how to turn
+            the check and the updates off.
           </li>
           <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type
-            and country, through Vercel Web Analytics, which sets no cookies. Each request also
+            and country, and which product on the Shop page you click through to a store, through
+            Vercel Web Analytics, which sets no cookies. Each request also
             includes standard metadata: your IP address, the time and the user agent.
           </li>
         </ul>
@@ -132,12 +183,11 @@ export default function PrivacyPolicyPage() {
 
       <LegalSection title="2. How we use it">
         <ul>
-          <li>Search terms and part requests: only to return the parts and files you asked for.</li>
           <li>
-            Request metadata: only to deliver, secure and troubleshoot step.parts, api.texttocad.dev
-            and this website.
+            Request metadata: only to deliver, secure and troubleshoot api.texttocad.dev and this
+            website.
           </li>
-          <li>Page-view statistics: only to understand, in aggregate, how this website is used.</li>
+          <li>Page-view and Shop-click statistics: only to understand, in aggregate, how this website is used.</li>
           <li>Version checks: only to answer them; we keep nothing from them beyond our host’s request logs.</li>
           <li>
             Telemetry: only to understand, in aggregate, how many people use text-to-cad and how
@@ -145,8 +195,13 @@ export default function PrivacyPolicyPage() {
             takes, where in the world it is used, which features are used, which of the CAD views’ tools
             and settings are used and for how long (so we know which to improve and which matter
             less), which agent apps and
-            operating systems to support, and how often tools, builds and snapshots fail; and, from
+            operating systems to support, how often tools, builds and snapshots fail, and how often
+            installing the plugin fails and in which agent app; and, from
             crash reports, to find and fix the bugs behind them.
+          </li>
+          <li>
+            The install command’s failure reports: only to see, in aggregate, where installs fail before
+            text-to-cad works, and to fix that.
           </li>
         </ul>
         <p>
@@ -158,15 +213,20 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="3. Who receives it">
         <ul>
           <li>
-            <strong>Vercel Inc.</strong>, which hosts step.parts, this website and api.texttocad.dev
+            <strong>Vercel Inc.</strong>, which hosts this website and api.texttocad.dev
             and processes their requests for us, and <strong>PostHog, Inc.</strong>, which stores and
-            analyzes telemetry for us. PostHog never sees your IP address: only our server sends it
-            telemetry, with the country it worked out and PostHog’s own location lookup turned off.
+            analyzes telemetry and the install command’s failure reports for us. PostHog never sees your
+            IP address: only our server sends them to it, with the country it worked out and PostHog’s
+            own location lookup turned off.
           </li>
           <li>
             <strong>Services the software contacts directly</strong>, under their own privacy
-            policies. The agent app installs the pinned text-to-cad runtime from the Python Package Index
-            (PyPI) the first time it starts after an install or an update. Skills reach the
+            policies. Our install command and updates download text-to-cad from the Python Package Index
+            (PyPI), uv from its makers, Astral, when it is missing or too old, and the plugin from GitHub,
+            itself or through your agent apps’ own install commands, which it runs;{" "}
+            <code>cad update</code> asks PyPI which release is newest; some agent apps, such as Codex, also
+            download text-to-cad from PyPI themselves the first time they start it after an install or an
+            update, and install it if your computer has none. Skills reach the
             services you ask your agent to use, such as a fabrication service’s public specifications
             or your own printer on your local network. These requests send no personal data of ours;
             each service sees the request’s IP address, time and user agent.
@@ -178,10 +238,9 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="4. How long we keep it">
         <ul>
           <li>
-            Vercel, our host, records each request to step.parts, api.texttocad.dev and this website
+            Vercel, our host, records each request to api.texttocad.dev and this website
             in its request logs, with the IP address, time and user agent it arrived with. We use those
-            logs only to run and secure the services, and they are deleted within 30 days. step.parts
-            searches are kept only there.
+            logs only to run and secure the services, and they are deleted within 30 days.
           </li>
           <li>
             Website analytics are kept as aggregate page-view statistics. The visitor identifier
@@ -197,6 +256,12 @@ export default function PrivacyPolicyPage() {
             install ID; PostHog carries the deletion out in the background, which can take some days.
             If our server cannot be reached at that moment, text-to-cad asks again until it can.
           </li>
+          <li>
+            The install command’s failure reports are kept by PostHog in the same way and for as long. We
+            do not store IP addresses with them. A report carries no install ID and nothing that lasts
+            beyond its one run, so turning telemetry off cannot find one that was already sent; a
+            malformed report is logged as a malformed batch is, by the name of the rule it broke alone.
+          </li>
           <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>
         </ul>
       </LegalSection>
@@ -204,35 +269,40 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="5. Your choices and controls">
         <ul>
           <li>
-            The plugin works without contacting us, apart from the hourly version check. step.parts
-            receives a request only when you ask your agent to search for or download a part.
+            The plugin works without contacting us, apart from the hourly version check and, where
+            automatic updates are on, the downloads that install an update (section 1).
           </li>
           <li>
             <strong>Telemetry is on once text-to-cad has told you.</strong> The first <code>cad</code>{" "}
             command you or your agent run says, once, in its output, that text-to-cad sends usage stats and
-            crash reports and how to turn them off, and nothing is sent before that. If we ever send more than this
+            crash reports and how to turn them off, and nothing is sent before that but the install
+            command&rsquo;s failure report, which that command announces itself (below).{" "}
+            <code>cad plugin install</code>, which our install command runs, says it before it starts on
+            your apps. A command&rsquo;s help, and a
+            command whose answer is JSON for a program to read, say nothing of it: the next one does. If we ever send more than this
             policy describes, text-to-cad says so again before it does. Nothing is sent by default in CI or
             from a development install. Your choice is kept on your computer, as the{" "}
             <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and
-            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off also turns
-            off analytics in an earlier version still installed, and deletes what it sent. Nothing waits to
+            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off turns it
+            off in every version of text-to-cad on your computer, and asks our server to delete everything
+            stored under their install IDs. Nothing waits to
             send: what a command or a model script counts, and what any part of text-to-cad counted since its
             last send when it exits, wait in small files beside that setting until the next part of text-to-cad
             sends them, or a sender the next command starts once they have waited five minutes; turning
             telemetry off deletes those files too.
           </li>
           <li>
-            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry off</code>, use{" "}
-            <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
+            To turn telemetry off, run <code>cad telemetry off</code>, use{" "}
+            <strong>Telemetry</strong> in the menu of the CAD app or the viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links
-            the two. <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry on</code> turns it on, and{" "}
-            <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry status</code> shows the setting and your install ID.
+            the two. <code>cad telemetry on</code> turns it on, and{" "}
+            <code>cad telemetry status</code> shows the setting and your install ID.
           </li>
           <li>
             Setting <code>DO_NOT_TRACK=1</code> or <code>CAD_TELEMETRY=0</code> (<code>CADGEN_TELEMETRY=0</code>{" "}
-            before 0.9) where text-to-cad runs (your agent app’s environment, or the shell that runs a{" "}
+            before 0.10) where text-to-cad runs (your agent app’s environment, or the shell that runs a{" "}
             <code>cad</code> command or a model script) turns telemetry off for that process and the builds it
             asks for, whatever your setting says; <code>CAD_TELEMETRY=1</code> turns it on for that process the
             same way.
@@ -240,9 +310,21 @@ export default function PrivacyPolicyPage() {
             own, a viewer started in the background and the short-lived sender, go by your setting.
           </li>
           <li>
-            Setting <code>CAD_UPDATE_CHECK=0</code> (<code>CADGEN_UPDATE_CHECK=0</code> before 0.9) where text-to-cad
-            runs turns the hourly version check
-            off; CAD then never says when there is an update.
+            The install command’s failure report is not sent where <code>DO_NOT_TRACK=1</code> or{" "}
+            <code>CAD_TELEMETRY=0</code> is set where you run the command (for example{" "}
+            <code>curl -fsSL https://texttocad.dev/install.sh | DO_NOT_TRACK=1 sh</code>), where you turned
+            telemetry off on that computer before (<code>cad telemetry off</code>, which the install command
+            reads from text-to-cad’s settings file), or in CI. Set that way, the same variables also keep
+            the plugin’s install it runs from being counted. Where text-to-cad itself runs the install
+            command, no report is sent unless text-to-cad had told you first (section 1).
+          </li>
+          <li>
+            To turn automatic updates off, run <code>cad update auto off</code>;{" "}
+            <code>cad update auto on</code> turns them on again. <code>cad plugin update auto off</code> stops
+            text-to-cad from updating the plugin in your agent apps on its own (in releases 0.11.12 and
+            0.11.13, from running our install script on its own). Setting <code>CAD_UPDATE_CHECK=0</code> where
+            text-to-cad runs turns the hourly version check, and with it automatic updates, off for that
+            process.
           </li>
           <li>
             You can uninstall the plugin at any time. Deleting text-to-cad’s cache and state folders

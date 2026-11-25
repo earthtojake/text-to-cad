@@ -1,4 +1,4 @@
-# @text-to-cad/core
+# @cad/core
 
 The shared JavaScript half of text-to-cad: everything the distribution and its
 clients need to turn the meshes the engine made into pixels and motion.
@@ -12,9 +12,9 @@ this package's source nor supply ambient module declarations.
 helpers. Never React, ReactDOM, Electron, Next.js, UI or application source.
 Browser entry points never import Node-only code.
 
-**Consumers:** `@text-to-cad/ui`, the docs, web and CAD (`apps/mcp`) apps, and the parity
+**Consumers:** `@cad/ui`, the docs, web and CAD (`apps/mcp`) apps, and the parity
 bench's bundler.
-`@text-to-cad/core/client` communicates with `cad_server.viewer` over HTTP; this
+`@cad/core/client` communicates with `cad_server.viewer` over HTTP; this
 protocol relationship never imports Python or discovers an interpreter.
 
 ## The laws that live here
@@ -78,7 +78,7 @@ protocol relationship never imports Python or discovers an interpreter.
   of t, so scrub, loop and seek are free. Neither runs model code, resolves names or checks
   anything the server checked, and neither references the articulation player.
 - **One scene builder per file family, two callers**: a GLB, an STL or 3MF, a
-  robot description (URDF, SRDF, SDF) and an engine document (an `.xbf`, or a STEP,
+  robot description (URDF, SRDF) and an engine document (an `.xbf`, or a STEP,
   which opens as one) are each drawn by ONE builder here
   (`lib/render/glbScene.js`, `lib/render/meshScene.js`, `lib/urdf/robotScene.js`, over
   `lib/urdf/loadRobot.js` and `lib/urdf/robotParts.js`, and `lib/xbf/xbfScene.js`, over
@@ -173,7 +173,7 @@ Where the mechanism is written:
 
 ## Public modules and lifetimes
 
-Use `@text-to-cad/core/client`, `/common/*` and `/lib/*` exports.
+Use `@cad/core/client`, `/common/*` and `/lib/*` exports.
 Construct `createCadClient({ origin, fetch })` in a host. Its `exports` service
 (`client/exports.js`) asks the session's epoch, submits idempotent jobs, long-polls their
 status and names a ready job's file URL (`fileUrl`). It
@@ -182,10 +182,10 @@ inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
 (the web's pauses while its page is hidden). The client also carries what every
 CAD view asks of its server, so each host reaches it the same way: the model
 library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
-(`pick`), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), the
-update check (`version`) and what the page did for
+(`pick`), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), What's
+new (`whatsNew`) and what the page did for
 telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
-change is a POST with the viewer's guard header. A host reports its page's crashes
+change (POST, PUT, PATCH or DELETE) carries the viewer's guard header. A host reports its page's crashes
 with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` (a
 cancellation, an `AbortError`, is none) -- the
 error's type and its script frames, oldest first, never its message, a value or a
@@ -193,12 +193,12 @@ URL (`fileOf` names a script by its file's own name, `scriptFileOf` by default, 
 a frame in one of the page's own chunks also names its debug id, from the table the
 page's build wrote, `__cadChunkIds`) -- and sends each distinct one once a page, a few
 at most. A page's build stamps each chunk with the id its text and its source map decide
-(`@text-to-cad/core/chunk-ids`, a Node module the builds import), never the bundler's,
+(`@cad/core/chunk-ids`, a Node module the builds import), never the bundler's,
 which names the code alone: PostHog keeps one map an id. That map leads into the shared
 packages' `src/`, not their `dist/`: the build loads their modules with the maps their own
-builds wrote (`@text-to-cad/core/source-maps`), and fails if a chunk's map still ends in
+builds wrote (`@cad/core/source-maps`), and fails if a chunk's map still ends in
 compiled code. Each page's build also writes `THIRD_PARTY_LICENSES.txt` beside it
-(`@text-to-cad/core/third-party-licenses`): every `node_modules` package its chunks and its
+(`@cad/core/third-party-licenses`): every `node_modules` package its chunks and its
 workers' chunks hold, by name, version and declared licence, with the licence text the package
 ships, and a build fails on a bundled package that declares no licence. `dispose()` stops polling, aborts
 requests and disposes render sessions. Each render session owns its abort signal and
@@ -213,7 +213,7 @@ connection failures.
 Files are named by absolute path, and a document the engine holds by its id alone (a model's)
 by that id. The catalog holds the documents on screen, each row carrying its document's `id`,
 by which rows join: one file however its path is spelled (a symlink, a case variant) is one row.
-`resolveEntry(file)` reads one, asking by `?id=` for an id and by `?file=` for a path (one the
+`resolveEntry(file)` reads one, from `GET /api/v1/documents/<id>` for an id and `GET /api/v1/documents?path=` for a path (one the
 server lacks is an `isMissingFileError`, in the engine's words for an id it does not hold),
 `entryOf(file)` is the row the catalog has, and `createRenderSession({ file })` keeps the displayed
 file's entry current as polling refreshes it. A cancelled or older request
@@ -222,15 +222,15 @@ cannot overwrite a newer file revision. `folder(path)` lists one folder and
 
 `CadWorkspaceService` exposes a scoped `resources` provider and, where its host serves
 the engine, where the page reads a document the engine serves
-(`engineDocument`: an `.xbf`, or a STEP, read through the viewer at
-`/__cad/api/doc/<id>` with the client's own fetch). Its HTTP adapter owns the protocol; renderers
+(`engineDocument`: an `.xbf`, a STEP or a model, opened with `POST /api/v1/documents` and read
+at its kind's API, `/api/v1/documents/<kind>/<id>`, with the client's own fetch). Its HTTP adapter owns the protocol; renderers
 consume domain results and resource tickets. See [workspace services and resource
 transport](docs/workspace-resources.md) for worker transfer, nested dependencies,
 cache generations and the standalone static-HTTP default. No client reads model
 source or starts a source build.
 
 `createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
-Edit's files: `create(request)` posts its views and annotation to `POST /__cad/prompt-files`,
+Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,
 validates the packet without rendering and answers `{ inline: compactJson }` up to
 1024 UTF-8 bytes, otherwise writes one `.snapshot.json` and answers `{ snapshot: absolutePath }`.
 The client sends `acceptInline: true`; without this capability the server always saves
@@ -245,7 +245,7 @@ cannot replace either base.
 ## Working on core
 
 From the root workspace run `npm ci`, `npm run build:packages`,
-`npm test --workspace @text-to-cad/core` and `npm run check:boundaries`.
+`npm test --workspace @cad/core` and `npm run check:boundaries`.
 Rebuild compiled packages after shared edits; apps resolve `dist/` exports.
 
 The Node test runner collects `*.test.js` and `*.test.mjs` under `src/` and
@@ -260,11 +260,13 @@ canonical release versions during normal development.
 
 ## Portable prompt context
 
-`@text-to-cad/core/prompt` exports lightweight non-React bundle/reference types,
+`@cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
 person wrote, then `File:`, `References:` and, for a picture that travels as a file,
-its label and path. Text, typed resource
+its label and path. A context's `folders` (`{ start, home }`, which the host says) name every file in that
+message as `displayPath` does: relative to the workspace, else `~/`, so the person's home is never in it;
+its parts, and Copy References, keep the absolute path. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's
 optional `label` ("Annotation") names it in that message. Text ranges use
@@ -274,3 +276,10 @@ range as a CAD fragment. Apps own clipboard/draft delivery, MIME/size limits and
 acknowledged outcomes: `PromptContextPort.deliver` hands a context to its destination
 (`added`, `copied`) and `send`, where a host has a chat to post to, posts it as the
 person's message (`sent`); this package never submits a prompt or knows a session.
+
+Native KiCad board plots use the read-only payload contract in [plot-payload](docs/plot-payload.md).
+`lib/plot2d` draws its layers; `lib/board2d` handles picking and nets; `lib/board3d` stands the
+bare board in 3D (a slab cut to the outline, its faces `plot2d`'s own pictures of the two sides,
+three.js passed in, the sheet-to-world frame and the rays' picks; `lit`, the same board for a
+presentation render, its faces lit surfaces and its slab and parts casting shadows). File loading rereads
+the board's `plot`; no browser snapshot bundle is shipped.

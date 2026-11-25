@@ -1,133 +1,275 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useI18n } from "../i18n/index.js";
+import type { HostAlert } from "../file-viewer/types.js";
+import { updateAlert } from "./updateAlert.js";
 
-/** What a CAD app's server says when a newer text-to-cad is out (`cad_server/updates.py`): the release offered, and this install's. */
-export interface UpdateNotice {
-  /** The release offered. */
-  latest: string;
+/**
+ * What the update button shows, as the server says it (`GET /api/v1/server`'s `cadUpdate`:
+ * `cad_server/_internal/auto_update.py`'s `button`), or null where cad cannot update itself.
+ */
+export interface UpdateState {
   /** The release this install runs. */
   version: string;
+  /** The newer release of its own major the button offers, or null: the install is current (a higher major is never offered). */
+  latest: string | null;
+  /**
+   * `ready`: a release is installed beside this one and only the server's restart onto it is left (`ready` names it);
+   * `working`: an attempt that restarts the server is underway; `failed`: the last one did not install. An older
+   * server never says `ready`.
+   */
+  state: "idle" | "ready" | "working" | "failed";
+  /** While `ready`: the release installed and waiting, which a click restarts the server onto. */
+  ready?: string;
+  /** While `working`: `building` (the release installs beside this one), then `switching` (the server restarts onto it); none from an older server. */
+  phase?: "building" | "switching";
+  /** When the attempt began: what a failure is put away by. */
+  at?: number;
+  /** Whether a person asked for the attempt (the button, `cad update`), else cad's own automatic update. */
+  asked?: boolean;
+  /** Why it failed: one word of `auto_update_helper.CAUSES`. */
+  cause?: string;
+  /** The cause in the server's plain words, said where the page knows no words of its own for it. */
+  said?: string;
+  /** The helper's log of the attempt, where it kept one: its path on this computer. */
+  log?: string;
+  /** Who made this install, which a reinstall is told by: `uv` or `pipx`. */
+  installer?: string;
+  /** The person put the failure away (`dismiss`): every page keeps it behind its icon. */
+  dismissed?: boolean;
 }
 
-/** Where an update a click started is (`cad_server/_internal/update.py`): its last progress frame among the rest. */
-export interface UpdateState {
-  state: "idle" | "working" | "restarting" | "failed";
-  target?: string | null;
-  /** The update's progress frame (`cad/engine/progress.py`, kind `update`): its stage, counted of the four. */
-  progress?: { stage?: string; done?: number; total?: number | null } | null;
-  /** Why it failed, in one line. */
-  error?: string | null;
-}
-
-/** `GET /__cad/version` (and `POST /__cad/update`, which answers the same): the notice, the engine's release, the update's state. */
+/** `GET /api/v1/server`, and `POST /api/v1/local/update`'s answer: who the server is, and the update. */
 export interface UpdateReply {
-  notice: UpdateNotice | null;
   release?: string;
-  update?: UpdateState | null;
+  /** This start of the server: another one answering is a server that restarted. */
+  instance?: string;
+  cadUpdate?: UpdateState | null;
 }
 
-/** The host's call to its server: what `GET /__cad/version` answers. */
-export type UpdateCall = () => Promise<UpdateReply>;
+/** The host's calls to its server. */
+export interface UpdateCalls {
+  /** `GET /api/v1/server`, read afresh. */
+  read(): Promise<UpdateReply>;
+  /** `POST /api/v1/local/update` with `{}`: a person's update. A refusal throws, its body as `failure.payload`. */
+  start(): Promise<UpdateReply>;
+  /** `POST /api/v1/local/update` with `{dismiss: at}`: the failure put away, for every page. */
+  dismiss(at: number): Promise<UpdateReply>;
+}
 
-/** Where the update button is: offered (`idle`), installing (`working`, its share done), or restarting the engine. */
+/** Where the button is: offered (`idle`), installing (`working`, its stages done), or the server restarting. */
 export type UpdatePhase =
   | { phase: "idle" }
   | { phase: "working"; done: number; total: number }
-  | { phase: "restarting" };
+  /** `version`: the release a click on a ready one restarts onto, said while the server's answers name none. */
+  | { phase: "restarting"; version?: string };
 
-/** How often a page asks where an update it started is. */
+/** Why an update did not install, as its alert says it (`updateAlert`). */
+export interface UpdateFailure {
+  cause: string;
+  said?: string;
+  /** The attempt it is of: put away on the server by it. None for a refusal no attempt began from. */
+  at?: number;
+  /** The helper's log of the attempt. */
+  log?: string;
+  /** Who made this install: `uv` or `pipx`. */
+  installer?: string;
+  /** Put away: its card behind its icon in the navbar. */
+  dismissed?: boolean;
+}
+
+/** How often a page asks where an update it follows is. */
 export const UPDATE_POLL_MS = 500;
-const STAGES = 4;
+/** How often a page that is seen and follows no update reads the update's state again: a release made ready meanwhile shows. */
+export const UPDATE_READ_MS = 60_000;
+/**
+ * The ring's stages: building (the release installs beside this one: asked, and the server's `building` phase),
+ * switching (the server restarts onto it), and the server gone meanwhile; then the spinner, the server back and the
+ * page reloading.
+ */
+export const UPDATE_STAGES = 3;
+
+const refusalOf = (error: unknown): UpdateFailure => {
+  const payload = (error as { failure?: { payload?: Record<string, unknown> } } | null)?.failure?.payload;
+  const text = (value: unknown) => (typeof value === "string" && value ? value : undefined);
+  return { cause: text(payload?.cause) ?? "", said: text(payload?.error) ?? (error instanceof Error ? error.message : undefined),
+    ...(text(payload?.installer) ? { installer: text(payload?.installer) } : {}) };
+};
 
 /**
- * The update button's state, from the host's server: the notice the host already knew as the page
- * started (`initial`: a CAD app's launch carries it, the web page reads it with its server's
- * description), so the button draws with the page, and read again whenever the person comes back to
- * the page. `update()` is the click: the server updates (`start`, `POST /__cad/update`), and the page
- * asks where it is (`read`) until the engine restarts -- `working`, then `restarting`, which is the
- * host's to follow: the engine goes and comes back with the new release, and the page reloads into
- * it. A failed update the page followed is said once -- its one line, as the viewer's toast (an
- * export's: `sonner`), or to `onFailed` -- and the button is offered again; the engine keeps saying it
- * failed until the next click, and a page that comes back to it later says nothing. A page reloaded into
- * the engine its update restarted (`followed`: the host keeps that across the reload) follows it still:
- * it reads where the update ended once, and says a switch that failed and went back. A host that keeps
- * its page through the restart (a CAD card) reads the engine itself meanwhile and hands each answer of
- * its own release to `settle`: one that says the switch failed and went back ends the restart the same
- * way. A read that fails changes nothing; one while the engine restarts is the restart.
+ * The update button's state, from the host's server: what the host already read with the server's
+ * description (`initial`, so the button draws with the page; none: read once), read again whenever the
+ * person comes back to the page (its window focused, or the page shown again) and once a minute while the page
+ * is seen and follows no update (`UPDATE_READ_MS`), so a release made ready meanwhile shows by itself; never while
+ * the page is hidden, whose asking would keep the server from ever counting as left alone. `update()` is the click: the server
+ * begins a person's update (`start`), and the page asks where it is (`read`) until it ends -- building, then
+ * switching, then, the server gone while it restarts, still asking -- and once another start of the server answers
+ * (`instance`), the server restarted: `restarting`, and the host's `onRestarted` (a page reloads into
+ * it, once nothing it holds is unsaved). A click on a release that is `ready` has nothing left to install: it shows
+ * `restarting` at once and keeps it while the server switches, unless an answer says it is `building` a newer release
+ * after all (then the ring, as for any update). An automatic update the page finds underway is followed the
+ * same way. A failure is the viewer's alert (`alert`, `CadViewer`'s: `updateAlert`'s card, its Try again the
+ * click), from the server's record and so through a reload, until another attempt begins; put away (`dismiss`:
+ * its X or Escape) it stays behind its icon in the navbar, on every page and through a reload (the server
+ * keeps it put away), and the icon brings it back on this page (`reopen`). A refusal with no attempt (cad
+ * cannot update itself) is said the same way, on this page alone, until it is reloaded. A page loaded after
+ * it followed an update through the restart (`followed`: the release it was followed from, which the host
+ * keeps across the reload) shows the spinner while the update's end is still being written, then its failure -- or, on another release, that it is updated, once,
+ * as a toast (`restartForSkills`: a host app that reads a release's skills only in a new session
+ * suggests restarting it). A read that fails changes nothing, but while an update is followed it is the
+ * server gone for the install.
  */
-export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall },
-  initial: UpdateNotice | null,
-  { onFailed, followed = false }: { onFailed?: (error: string) => void; followed?: boolean } = {}) {
-  const [notice, setNotice] = useState<UpdateNotice | null>(initial);
+export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | undefined,
+  { instance, followed = null, onRestarted, restartForSkills = false }: { instance?: string; followed?: string | null;
+    onRestarted?: (reply: UpdateReply) => void; restartForSkills?: boolean } = {}) {
+  const [state, setState] = useState<UpdateState | null>(initial?.cadUpdate ?? null);
   const [phase, setPhase] = useState<UpdatePhase>({ phase: "idle" });
+  const [failure, setFailure] = useState<UpdateFailure | null>(null);
   const polling = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
-  // Whether this page follows an update (its click, or another page's it found running): its failure is said.
+  // Whether the page follows an update now: a read that fails is then the server gone for the install.
   const following = useRef(false);
+  // A page loaded after the restart its page before followed: the spinner until the update's end is written.
+  const after = useRef(Boolean(followed));
+  const restarted = useRef(false);
+  // The release a click on one that is ready restarts the server onto (the spinner throughout), else null.
+  const restart = useRef<string | null>(null);
+  // The start of the server the page follows, and the release it ran: a restart onto the same release is the update
+  // failed and the release before started again, which the page goes on following.
+  const server = useRef({ instance, version: initial?.release ?? initial?.cadUpdate?.version ?? "" });
+  // The person's own choice on the failure on screen, by its attempt: put away, or brought back from the navbar's icon
+  // (on this page alone: the server keeps a failure put away for every page).
+  const chosen = useRef<{ at?: number; dismissed: boolean } | null>(null);
   const { t } = useI18n();
-  const failed = useRef(onFailed);
-  failed.current = onFailed ?? (error => { toast.error(t("update.failed", { error })); });
+  const latest = useRef({ calls, onRestarted, restartForSkills, t, state });
+  latest.current = { calls, onRestarted, restartForSkills, t, state };
 
   const stopPolling = () => {
     if (polling.current !== null) clearTimeout(polling.current);
     polling.current = null;
   };
-  const apply = useCallback((reply: UpdateReply): UpdatePhase["phase"] => {
-    if (!alive.current) return "idle";
-    setNotice(reply.notice ?? null);
-    const update = reply.update;
+  /** An answer of the server's: whether the page goes on asking. */
+  const apply = useCallback((reply: UpdateReply): boolean => {
+    if (!alive.current || restarted.current) return false;
+    const mine = server.current;
+    const release = reply.release ?? reply.cadUpdate?.version ?? "";
+    if (following.current && mine.version && release && release !== mine.version) {
+      // A server of another release: the update installed it, and the page goes to it.
+      restarted.current = true;
+      following.current = false;
+      setPhase({ phase: "restarting", ...(restart.current ? { version: restart.current } : {}) });
+      latest.current.onRestarted?.(reply);
+      return false;
+    }
+    if (following.current && mine.instance && reply.instance && reply.instance !== mine.instance) {
+      // The release before, started again: the update failed, and says why once its end is written.
+      after.current = true;
+    }
+    // Another start of the server, or the first a host that read nothing before (a CAD card) hears from.
+    server.current = { instance: reply.instance ?? mine.instance, version: mine.version || release };
+    const update = reply.cadUpdate ?? null;
+    setState(update);
     if (update?.state === "working") {
       following.current = true;
-      const total = Number(update.progress?.total) || STAGES;
-      setPhase({ phase: "working", done: Math.min(Number(update.progress?.done) || 0, total), total });
-      return "working";
+      setFailure(null);
+      // A newer release than the one that was ready: it installs first, as any update does.
+      if (update.phase === "building") restart.current = null;
+      setPhase(restart.current !== null ? { phase: "restarting", version: restart.current } : after.current ? { phase: "restarting" }
+        : { phase: "working", done: update.phase === "building" ? 0 : 1, total: UPDATE_STAGES });
+      return true;
     }
-    if (update?.state === "restarting") {
-      setPhase({ phase: "restarting" });
-      return "restarting";
-    }
-    if (update?.state === "failed" && following.current) failed.current?.(update.error || "");
     following.current = false;
+    restart.current = null;
+    if (update?.state === "failed") {
+      const mine = chosen.current && chosen.current.at === update.at ? chosen.current.dismissed : undefined;
+      setFailure({ cause: update.cause ?? "", said: update.said, at: update.at,
+        ...(update.log ? { log: update.log } : {}), ...(update.installer ? { installer: update.installer } : {}), dismissed: mine ?? update.dismissed === true });
+    } else {
+      setFailure(current => (current && current.at === undefined ? current : null));
+      if (after.current && reply.release && reply.release !== followed) {
+        const { restartForSkills: skills, t: say } = latest.current;
+        toast.success(say(skills ? "update.updatedRestart" : "update.updated", { version: reply.release }));
+      }
+    }
+    after.current = false;
     setPhase({ phase: "idle" });
-    return "idle";
+    return false;
   }, []);
   const follow = useCallback(() => {
     stopPolling();
     polling.current = setTimeout(() => {
       polling.current = null;
-      void read().then(reply => { if (apply(reply) === "working") follow(); }, () => follow());
+      void latest.current.calls.read().then(reply => { if (apply(reply)) follow(); }, () => {
+        if (!alive.current || !following.current) return;
+        // The server gone while the update switches: the next stage, and asked again.
+        if (!after.current && restart.current === null) setPhase({ phase: "working", done: 2, total: UPDATE_STAGES });
+        follow();
+      });
     }, UPDATE_POLL_MS);
-  }, [read, apply]);
+  }, [apply]);
+  const read = useCallback(() => {
+    void latest.current.calls.read().then(reply => { if (apply(reply) && polling.current === null) follow(); }, () => {});
+  }, [apply, follow]);
   const update = useCallback(() => {
     following.current = true;
-    setPhase(current => current.phase === "idle" ? { phase: "working", done: 0, total: STAGES } : current);
-    void start().then(reply => { if (apply(reply) === "working") follow(); },
-      () => { if (alive.current) setPhase({ phase: "idle" }); });
-  }, [start, apply, follow]);
-  const refresh = useCallback(() => {
-    void read().then(reply => {
-      // A page opened while an update runs (another tab's click) follows it too.
-      if (apply(reply) === "working" && polling.current === null) follow();
-    }, () => {});
-  }, [read, apply, follow]);
-  // Where the update this page followed before its reload ended: read once, as the page loads.
-  const resumed = useRef(followed);
-  useEffect(() => {
-    if (!resumed.current) return;
-    resumed.current = false;
-    following.current = true;
-    refresh();
-  }, [refresh]);
-  // An answer the host read itself while the engine restarted: a switch that failed and went back ends the
-  // restart (said once, the button offered again); any other is the restart still going.
-  const settle = useCallback((reply: UpdateReply) => {
-    if (reply.update?.state === "failed") apply(reply);
+    after.current = false;
+    chosen.current = null;
+    const offered = latest.current.state;
+    restart.current = offered?.state === "ready" ? offered.ready ?? "" : null;
+    setFailure(null);
+    setPhase(restart.current !== null ? { phase: "restarting", version: restart.current }
+      : { phase: "working", done: 0, total: UPDATE_STAGES });
+    void latest.current.calls.start().then(reply => { if (apply(reply)) follow(); else following.current = false; }, error => {
+      if (!alive.current) return;
+      following.current = false;
+      restart.current = null;
+      setFailure(refusalOf(error));
+      setPhase({ phase: "idle" });
+    });
+  }, [apply, follow]);
+  const dismiss = useCallback(() => {
+    setFailure(current => {
+      if (!current) return current;
+      chosen.current = { at: current.at, dismissed: true };
+      if (current.at !== undefined) void latest.current.calls.dismiss(current.at).then(apply, () => {});
+      return { ...current, dismissed: true };
+    });
   }, [apply]);
+  const reopen = useCallback(() => {
+    setFailure(current => {
+      if (!current) return current;
+      chosen.current = { at: current.at, dismissed: false };
+      return { ...current, dismissed: false };
+    });
+  }, []);
+  // Where the page starts: what the host read, else read now; an update underway is followed from the start (and
+  // again where React's strict mode mounts the page a second time).
+  const begun = useRef(false);
+  const start = useRef(initial);
   useEffect(() => {
     alive.current = true;
-    window.addEventListener("focus", refresh);
-    return () => { alive.current = false; window.removeEventListener("focus", refresh); stopPolling(); };
-  }, [refresh]);
-  return { notice, phase, update, settle };
+    if (!begun.current) {
+      begun.current = true;
+      if (start.current) { if (apply(start.current)) follow(); } else read();
+    } else if (following.current && polling.current === null) follow();
+    const back = () => { if (!following.current) read(); };
+    // A tab shown again fires no window focus; a hidden one is never asked for.
+    const seen = () => { if (document.visibilityState !== "hidden") back(); };
+    const minute = setInterval(seen, UPDATE_READ_MS);
+    window.addEventListener("focus", back);
+    document.addEventListener("visibilitychange", seen);
+    return () => {
+      alive.current = false;
+      clearInterval(minute);
+      window.removeEventListener("focus", back);
+      document.removeEventListener("visibilitychange", seen);
+      stopPolling();
+    };
+  }, [read]);
+  const shown = Boolean(state?.latest) || state?.state === "ready" || phase.phase !== "idle";
+  const version = (state?.state === "ready" && state.ready) || (state?.latest ?? "");
+  const alert = useMemo<HostAlert | null>(() => failure ? { alert: updateAlert(failure, version, t),
+    dismissed: Boolean(failure.dismissed), onDismiss: dismiss, onReopen: reopen, ...(version ? { onRetry: update } : {}) } : null,
+  [failure, version, t, dismiss, reopen, update]);
+  return { state, phase, failure, alert, shown, update, dismiss, reopen };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Ruler } from "lucide-react";
-import { meshMeasurePick } from "@text-to-cad/core/lib/viewer/meshMeasure.js";
+import { meshMeasurePick } from "@cad/core/lib/viewer/meshMeasure.js";
 import { usePointerPick } from "../select/usePointerPick.js";
 import { useMeasureOverlay } from "./useMeasureOverlay.js";
 

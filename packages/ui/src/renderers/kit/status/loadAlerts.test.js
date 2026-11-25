@@ -16,6 +16,18 @@ test("a failed build is said over the model on screen: what was raised, the trac
   assert.deepEqual([alone.title, alone.blocking, alone.reason], ["Couldn’t build the model", undefined, "The build returned no diagnostic."]);
 });
 
+test("a failed build is reported only when the engine says it is CAD's own mistake; any other is the model's to correct", () => {
+  const error = "AssertionError: ('disconnected', 'PLYF01', 3)";
+  const alert = reportable => buildFailedAlert("XBF/demo.xbf", { model: "demo.py::demo", error, reportable }, true);
+  assert.equal(alert(false).reportable, false);
+  assert.equal(alert(false).recovery, "Correct the error in the model’s source: the view updates when a build succeeds.");
+  assert.equal(alert(true).reportable, undefined);
+  assert.equal(alert(true).recovery, "This error comes from CAD itself, not from the model’s code. Please report it with the details below.");
+  // A record that does not say (an engine before it) is reportable, as every failure was.
+  assert.equal(alert(undefined).reportable, undefined);
+  assert.equal(alert(undefined).recovery, "Correct the error in the model’s source: the view updates when a build succeeds.");
+});
+
 test("a request that failed says what it was doing in words, and keeps the client's name for it in the details", () => {
   const lost = failureAlert("741015b2", "Failed to fetch", { kind: "network", operation: "engine-document", detail: "Failed to fetch" });
   assert.equal(lost.message, "The browser lost contact with the viewer while loading the model for “741015b2”. Check that the viewer is running and this tab has the correct address, then reload.");

@@ -1,4 +1,0 @@
-interface:
-  display_name: "DXF"
-  short_description: "Generate and validate 2D DXF drawings."
-  default_prompt: "Use $dxf to create or edit the 2D drawing I describe as a build123d drawing script, export its DXF with the drawing checks, and show me the result."

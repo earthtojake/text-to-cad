@@ -1,0 +1,94 @@
+"""A saved KiCad board through the commands: ``cad <type> snapshot`` draws the file as it is now, and ``cad
+kicad_pcb drc`` on a machine without KiCad says how to get it.
+
+The board is the test board (``tests/python/support/kicad_board.py``), written fresh: no corpus model.
+DRC with a real KiCad is the KiCad suite's (``tests/python/packages/kicad``).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+from PIL import Image
+
+from tests.python.support.engine_daemon import isolate
+from tests.python.support.kicad_board import write_board
+
+CLI = [sys.executable, "-c", "from cad_server.cli import main; raise SystemExit(main())"]
+
+
+class NativeBoardCommands(unittest.TestCase):
+    def setUp(self) -> None:
+        isolate(self.addCleanup)
+        self._folder = tempfile.TemporaryDirectory(prefix="pcb-commands-")
+        self.addCleanup(self._folder.cleanup)
+        self.root = Path(self._folder.name)
+        self.board = write_board(self.root)
+
+    def test_snapshot_uses_the_current_native_file(self) -> None:
+        png = self.root / "cli.png"
+
+        def draw() -> bytes:
+            done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(png), "--width", "320", "--height",
+                                   "240", "--json"], env=dict(os.environ), capture_output=True, text=True,
+                                  encoding="utf-8", timeout=120)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            json.loads(done.stdout)
+            with Image.open(png) as image:
+                self.assertEqual(image.size, (320, 240))
+            return png.read_bytes()
+
+        first = draw()
+        self.board.write_text(self.board.read_text(encoding="utf-8").replace(
+            '(width 1) (layer "F.Cu") (net "VBUS")', '(width 3) (layer "F.Cu") (net "VBUS")'), encoding="utf-8")
+        self.assertNotEqual(draw(), first, "the board as it is now, never a picture of it kept from before")
+
+    def test_a_board_display_takes_board_modes_alone(self) -> None:
+        done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(self.root / "x.png"), "--display", "wireframe"],
+                              env=dict(os.environ), capture_output=True, text=True, encoding="utf-8", timeout=120)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("a board's modes are board, copper, assembly, placement", done.stderr)
+
+    def test_window_frames_a_box_its_shape_setting_the_side_not_given(self) -> None:
+        png = self.root / "window.png"
+        done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(png), "--window", "3,13,13,17",
+                               "--display", "copper", "--width", "400", "--json"],
+                              env=dict(os.environ), capture_output=True, text=True, encoding="utf-8", timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        report = json.loads(done.stdout)
+        self.assertEqual(([3, 13, 13, 17], "copper"), (report["boardDisplay"]["window"], report["boardDisplay"]["mode"]))
+        with Image.open(png) as image:
+            self.assertEqual(image.size, (400, 160))  # 10 x 4 mm: the height follows the window's shape
+        for argv, words in ((["--window", "3,13,13"], "--window is X0,Y0,X1,Y1, four numbers"),
+                            (["--window", "3,13,3,17"], "has no area"),
+                            (["--window", "3,13,13,17", "--camera", "top"], "takes no --camera")):
+            with self.subTest(argv=argv):
+                done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(png), *argv, "--json"],
+                                      env=dict(os.environ), capture_output=True, text=True, encoding="utf-8",
+                                      timeout=120)
+                self.assertEqual(done.returncode, 2, done.stderr)
+                answer = json.loads(done.stdout)
+                self.assertEqual("invalid_argument", answer["reason"])
+                self.assertIn(words, answer["error"])
+
+    def test_drc_without_kicad_fails_saying_how_to_install_it(self) -> None:
+        env = {**os.environ, "CAD_KICAD_CLI": str(self.root / "no-kicad-cli")}
+        done = subprocess.run([*CLI, "kicad_pcb", "drc", str(self.board), "--json"], env=env, capture_output=True, text=True,
+                              encoding="utf-8", timeout=60)
+        self.assertEqual(done.returncode, 1, done.stderr)
+        result = json.loads(done.stdout)
+        self.assertFalse(result["ok"])
+        [issue] = result["findings"]
+        self.assertEqual(issue["code"], "kicad_missing")
+        self.assertIn("CAD_KICAD_CLI names", issue["message"])
+        self.assertIn("cad[kicad]", issue["message"])
+
+
+if __name__ == "__main__":
+    unittest.main()

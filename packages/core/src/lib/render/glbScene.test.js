@@ -117,7 +117,15 @@ test("a GLB's nodes are what Select picks and Quick Edit names: `n<index>`, the 
   scene.object3D.updateMatrixWorld(true);
   const hit = scene.pick(new THREE.Ray(new THREE.Vector3(2000, 0, 5000), new THREE.Vector3(0, 0, -1)));
   assert.deepEqual([hit.id, hit.name, hit.point.map(Math.round)], ["n1", "part (n1)", [2000, 0, 500]]);
-  assert.deepEqual(scene.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12"]);
+  // Its card: its index, its triangles, the size it draws at in the file's metres, its authored material's name.
+  assert.deepEqual(scene.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12", "1 × 1 × 1 m"]);
+  // The hover tip's: its name alone, measuring nothing.
+  assert.deepEqual([scene.nameOf("n1"), scene.nameOf("n9")], ["part (n1)", ""]);
+  const named = nodeDocument();
+  named.lit.material.name = "steel";
+  const card = createGlbScene(THREE, named.document);
+  card.object3D.updateMatrixWorld(true);
+  assert.deepEqual(card.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12", "1 × 1 × 1 m", "steel"]);
   assert.deepEqual([scene.hasPart("n0"), scene.hasPart("n9"), scene.units], [true, false, { unit: "m", perWorld: 0.001 }]);
   assert.deepEqual([lit.userData.partId, unlit.userData.partId], ["n0", "n1"], "what Annotate hangs a mark on");
   // A pick lights its node; letting go puts back even what the look does not own (an unlit material).
@@ -145,4 +153,17 @@ test("a GLB of two nodes explodes them apart, its box following, and back to whe
   scene.setExplode(0);
   assert.deepEqual([lit.position.x, unlit.position.x, scene.bounds], [0, 2, document.restBounds]);
   scene.dispose();
+});
+
+test("a GLB's node tree is the view's panel's Model tab: every node under the one it hangs from, the ones that draw its parts", () => {
+  const { document, lit, unlit } = nodeDocument();
+  // A group node over the two: it draws nothing itself, so it is a branch to open, no part.
+  const group = new THREE.Group();
+  group.name = "assembly";
+  group.userData.gltfNode = 2;
+  document.scene.add(group);
+  group.add(lit, unlit);
+  const scene = createGlbScene(THREE, document);
+  const shape = nodes => nodes.map(({ id, label, part, children }) => [id, label, part, shape(children)]);
+  assert.deepEqual(shape(scene.nodeTree), [["n2", "assembly", null, [["n0", "part (n0)", "n0", []], ["n1", "part (n1)", "n1", []]]]]);
 });

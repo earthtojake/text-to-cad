@@ -59,9 +59,9 @@ test("buildRuntimeInitializationAlert falls back to a generic startup alert", ()
   const alert = buildRuntimeInitializationAlert(new Error("Unexpected renderer failure"));
 
   assert.equal(alert.blocking, true);
-  assert.equal(alert.summary, "CAD Viewer startup failed");
+  assert.equal(alert.summary, "Viewer startup failed");
   assert.equal(alert.message, "Unexpected renderer failure");
-  assert.match(alert.recovery, /^Reload or reopen CAD Viewer/);
+  assert.match(alert.recovery, /^Reload or reopen the viewer/);
   assert.match(alert.details, /^Unexpected renderer failure/);
 });
 

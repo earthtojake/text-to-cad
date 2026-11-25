@@ -9,7 +9,7 @@ test('the web catalog poll asks nothing while the page is hidden, and reads the 
   let revision = 'r1';
   const client = createWebCadClient({ document: page, fetch: async () => {
     reads += 1;
-    return { ok: true, status: 200, json: async () => ({ revision, entries: [{ file: 'part.step', hash: revision }] }) };
+    return { ok: true, status: 200, json: async () => ({ documents: [{ entry: { file: 'part.step', hash: revision }, revision }] }) };
   } });
   t.after(() => client.dispose());
   const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -36,6 +36,6 @@ test('a document page asks the server at its root, whichever document path it is
   });
   assert.equal(client.origin, '');
   await client.refresh({ file: '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab' });
-  assert.deepEqual(calls, ['/__cad/catalog?id=6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab']);
+  assert.deepEqual(calls, ['/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab']);
   client.dispose();
 });

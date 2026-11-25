@@ -59,7 +59,7 @@ export const PHOTOGRAPHIC_STUDIO_GROUND_DIFFUSE_WEIGHT = 0.25;
 export const PHOTOGRAPHIC_STUDIO_GROUND_EMISSIVE_INTENSITY = 0.85;
 // A near-black floor takes a little neutral light (`MIX` of white, in linear light) so its
 // contact shadow still has something to darken. It fades out by `BELOW` linear luminance:
-// any floor lighter than that keeps its own tone, or a dark studio's floor (#202226) would
+// any floor lighter than that keeps its own tone, or a dark studio's floor (#222222) would
 // read as a grey haze over the backdrop around the model.
 export const PHOTOGRAPHIC_STUDIO_GROUND_EMISSIVE_NEUTRAL_MIX = 0.02;
 export const PHOTOGRAPHIC_STUDIO_GROUND_EMISSIVE_NEUTRAL_BELOW = 0.005;

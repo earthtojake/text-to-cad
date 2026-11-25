@@ -1,4 +1,4 @@
-// One part's tessellation as cadgen's engine serves it (`GET /api/doc/<id>/part/<key>`): the
+// One part's tessellation as cadgen's engine serves it (`GET /api/v1/documents/<kind>/<id>/parts/<key>`): the
 // XBM2 wire format (`cad/engine/mesh.py`, `Mesh.to_bytes`). It is read the way the engine
 // writes it for: typed-array views over the fetched bytes, no parse and no copy. A face is a
 // range of the index buffer, an edge a range of the polyline buffer, a vertex a row of the

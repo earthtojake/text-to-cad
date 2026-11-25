@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createCadClient } from '@text-to-cad/core/client';
+import { createCadClient } from '@cad/core/client';
+import userEvent from '@testing-library/user-event';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createDxfRenderer } from '../../../dist/renderers/dxf/index.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
@@ -11,7 +12,7 @@ import LAYERED from './__fixtures__/layered.drawing.json';
 
 // The DXF tab's chrome and its answers to the host, mounted the way a host mounts it: the
 // FileViewer over the real DXF registration and a real CAD client, whose backend is a fetch that
-// answers with the committed `/__cad/drawing` payload. Only the canvas's 2D context and PNG
+// answers with the committed drawing payload (a DXF document's `drawing`). Only the canvas's 2D context and PNG
 // encoder are stand-ins — what is PAINTED is the browser suite's; what the tab offers, what the
 // cursor says and what a host is told are decided here, above the pixels.
 
@@ -20,7 +21,7 @@ const FILE = '/models/sample.dxf';
 // Every transform the drawing is painted at, and the layers it was painted without: the picture
 // itself is not jsdom's to draw.
 const painted = vi.hoisted(() => [] as Array<{ scale: number; offsetX: number; offsetY: number; hidden?: string[] }>);
-vi.mock('@text-to-cad/core/lib/drawing2d/index.js', async (importOriginal) => {
+vi.mock('@cad/core/lib/drawing2d/index.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return { ...actual, drawDrawing: (_ctx: unknown, _drawing: unknown, { transform, hiddenLayers }: { transform: any, hiddenLayers?: Set<string> }) => {
     painted.push({ ...transform, hidden: [...(hiddenLayers || [])] });
@@ -58,13 +59,16 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 /** One pane of the harness: a host, a workspace, host commands and a live binding, and the tab. */
 async function openDrawing(destinationKind = 'composer', notice: ReactNode = null, promptFiles?: any, { drawn = true } = {}) {
-  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
-    if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ entries: [{ kind: 'dxf', file: FILE, url: '/sample.dxf', hash: revision, bytes: 4096 }] });
+    if (url.pathname.endsWith('/api/v1/documents') && init?.method === 'POST') {
+      return new Response(JSON.stringify({ id: 'sample', kind: 'dxf', api: '/api/v1/documents/dxf/sample' }), { status: 201, headers: { 'content-type': 'application/json' } });
     }
-    if (url.pathname.endsWith('/__cad/server')) return json({ backend: 'cadgen' });
-    if (url.pathname.endsWith('/__cad/drawing')) return readDrawing();
+    if (url.pathname.endsWith('/api/v1/documents')) {
+      return json({ documents: [{ entry: { kind: 'dxf', file: FILE, url: '/sample.dxf', hash: revision, bytes: 4096 }, revision }] });
+    }
+    if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
+    if (url.pathname.endsWith('/api/v1/documents/dxf/sample/drawing')) return readDrawing();
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -137,22 +141,53 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
   return { pane, canvas, commands, request, delivered, refresh, tap, get controller() { return controller; }, dispose: () => client.dispose() };
 }
 
-it('Select is the hand, with the 3D views\' cursor: a drag pans under the arrow, a tap does not move the view', async () => {
-  const { canvas, dispose } = await openDrawing();
+it('Select draws the shared box on a plain drag, one solid blue box taking what it touches whichever way it is drawn, and a Shift drag pans, with the 3D views\' cursor; a tap does not move the view', async () => {
+  const drawing = await openDrawing();
+  const { canvas, dispose } = drawing;
   const cursor = () => ['cursor-default', 'cursor-grab', 'cursor-grabbing', 'cursor-pointer'].filter(name => canvas.classList.contains(name));
   expect(cursor()).toEqual(['cursor-default']);
-  // A secondary press is not a drag: it belongs to whatever the host puts on it.
+  // A secondary press that lets go where it went down is no drag: it opens the view's menu, the framing over bare paper.
   fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'mouse', button: 2, clientX: 600, clientY: 350 });
+  fireEvent.pointerUp(canvas, { pointerId: 2, pointerType: 'mouse', button: 2, clientX: 600, clientY: 350 });
   expect(cursor()).toEqual(['cursor-default']);
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Zoom to fit', 'Zoom to selection']);
+  fireEvent.keyDown(menu, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   const fitted = painted.at(-1)!;
-  fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 600, clientY: 350 });
-  fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 602, clientY: 350 });
+  const at = (x: number, y: number) => ({ clientX: x * fitted.scale + fitted.offsetX, clientY: fitted.offsetY - y * fitted.scale });
+  // A plain drag right to left across the red circle's rim (handle 33): the box, every viewer's, a solid
+  // blue outline while it is drawn, takes the circle it touches; the view stays.
+  const press = { pointerId: 1, pointerType: 'mouse', button: 0 };
+  const drag = (from: [number, number], to: [number, number]) => {
+    fireEvent.pointerDown(canvas, { ...press, ...at(...from) });
+    fireEvent.pointerMove(canvas, { ...press, ...at((from[0] + to[0]) / 2, (from[1] + to[1]) / 2) });
+    fireEvent.pointerMove(canvas, { ...press, ...at(...to) });
+    const { style } = canvas.parentElement!.querySelector<HTMLElement>('[data-box-select]')!;
+    const drawn = `${style.borderStyle} ${style.borderColor}`;
+    fireEvent.pointerUp(canvas, { ...press, ...at(...to) });
+    return drawn;
+  };
+  expect(drag([36, 42], [33, 39])).toBe('solid rgb(41, 121, 255)');
+  const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
+  await waitFor(() => expect(controller.readState().selectedEntities).toEqual(['33']));
   expect(painted.at(-1)).toEqual(fitted);
-  fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 630, clientY: 350 });
+  // The same box left to right looks the same and takes the same circle, after a tap on nothing lets go of it.
+  drawing.tap(80, 10);
+  await waitFor(() => expect(controller.readState().selectedEntities).toEqual([]));
+  expect(drag([33, 39], [36, 42])).toBe('solid rgb(41, 121, 255)');
+  await waitFor(() => expect(controller.readState().selectedEntities).toEqual(['33']));
+  // A Shift drag pans, as a right, middle, Ctrl or Cmd drag does: a press that wavers no further than a tap moves nothing.
+  const shift = { ...press, shiftKey: true };
+  fireEvent.pointerDown(canvas, { ...shift, clientX: 600, clientY: 350 });
+  fireEvent.pointerMove(canvas, { ...shift, clientX: 602, clientY: 350 });
+  expect(painted.at(-1)).toEqual(fitted);
+  fireEvent.pointerMove(canvas, { ...shift, clientX: 630, clientY: 350 });
   expect(cursor()).toEqual(['cursor-default']);
-  fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 630, clientY: 350 });
+  fireEvent.pointerUp(canvas, { ...shift, clientX: 630, clientY: 350 });
   expect(cursor()).toEqual(['cursor-default']);
   await waitFor(() => expect(painted.at(-1)!.offsetX).toBeCloseTo(fitted.offsetX + 30, 6));
+  expect(controller.readState().selectedEntities).toContain('33');
   // Resting on what a press would pick (the red circle's rim): the pointing hand, as over a part.
   const { scale, offsetX, offsetY } = painted.at(-1)!;
   fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 34 * scale + offsetX, clientY: offsetY - 40 * scale });
@@ -166,35 +201,48 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
   dispose();
 });
 
-it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure: no Display, no Preview, no view controls", async () => {
+it("a DXF's strip is Select (in hand), Draw and Measure, its zoom the corner's pill, no Preview; its Display card the Background alone, no rule and no Reset", async () => {
   const { pane, delivered, dispose } = await openDrawing();
   const inPane = within(pane);
   const strip = inPane.getByRole('group', { name: 'Interaction tools' });
-  expect(within(strip).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
+  expect(within(strip).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Draw', 'Measure']);
   expect(within(strip).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
+  // Tools alone, no rule: the drawing's zoom is the corner's pill (`ViewCorner.jsx`).
   expect(strip.querySelector('[data-strip-rule]')).toBeNull();
-  for (const name of ['Orbit', 'Position', 'Animation', 'Preview', 'Display', 'Display settings', 'Projection', 'Explode', 'Clip']) {
+  expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
+  for (const name of ['Orbit', 'Joints', 'Animation', 'Preview', 'Display settings', 'Projection', 'Explode', 'Clip']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
-  expect(pane.querySelectorAll('[data-view-controls] button')).toHaveLength(0);
-  // A drawing of one layer and no blocks has nothing for a Layers section to say: no sidebar.
-  expect(pane.querySelector('[data-file-sidebar-tools]')).toBeNull();
-  // Nothing is picked, drawn or measured yet: Quick Edit is not there, and nothing went anywhere.
-  expect(pane.querySelector('[data-quick-edit-box]')).toBeNull();
+  // Its view settings, the navbar's Display: its card the viewport's Background alone, Light; a choice is the person's.
+  expect([...pane.querySelectorAll('[data-navbar-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display']);
+  const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  await user.click(inPane.getByRole('button', { name: 'Display' }));
+  const card = document.querySelector<HTMLElement>('[data-display-settings-card]')!;
+  expect([[...card.querySelectorAll('[data-settings-row]')].map(row => [row.getAttribute('data-settings-row'), row.querySelector('[data-field-value]')!.textContent]),
+    card.querySelectorAll('[data-settings-rule]').length, within(card).queryByRole('button', { name: 'Reset' })]).toEqual([[['background', 'Light']], 0, null]);
+  // Its dropdown opened as a tap opens it, Dark chosen.
+  fireEvent.pointerDown(within(card).getByRole('button', { name: 'Background' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+  expect(screen.getAllByRole('menuitemradio').map(option => [option.textContent, option.getAttribute('data-state')])).toEqual([['Light', 'checked'], ['Dark', 'unchecked']]);
+  fireEvent.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
+  await waitFor(() => expect(inPane.getByRole('button', { name: 'Display' }).getAttribute('data-view-background')).toBe('dark'));
+  // A drawing always has its Layers (open, or its pill where the view starts it collapsed), one layer its one row.
+  expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).not.toBeNull();
+  // Nothing is picked, drawn or measured yet: Quick Edit is its one row, with no attachments, and nothing went anywhere.
+  expect([pane.querySelector('[data-quick-edit-box]') !== null, pane.querySelector('[data-quick-edit-context]')]).toEqual([true, null]);
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();
   expect(delivered).toHaveLength(0);
 
   // Measure in hand hangs no row under the strip; the drawing row has no placement.
   fireEvent.click(within(strip).getByRole('button', { name: 'Measure' }));
   expect(pane.querySelector('[data-cad-sub-toolbar]')).toBeNull();
-  fireEvent.click(within(strip).getByRole('button', { name: 'Pencil' }));
+  fireEvent.click(within(strip).getByRole('button', { name: 'Draw' }));
   expect(pane.querySelector('[data-annotation-controls]')).not.toBeNull();
   expect(inPane.queryByRole('button', { name: /Placement/ })).toBeNull();
   expect(pane.querySelector('[data-cad-annotation-overlay]')).not.toBeNull();
   dispose();
 });
 
-it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer, and a reference into the file', async () => {
+it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer (two of them one chip), and a reference into the file', async () => {
   const drawing = await openDrawing();
   const { pane, tap, dispose } = drawing;
   // The red circle (handle 33) at its rightmost point; Shift adds the bottom edge (handle 2F).
@@ -202,7 +250,12 @@ it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer, 
   const box = await waitFor(() => { const element = pane.querySelector('[data-quick-edit-box]'); expect(element).not.toBeNull(); return element as HTMLElement; });
   expect(within(box).getByText('Circle on 0')).toBeTruthy();
   tap(50, 0, { shiftKey: true });
-  await waitFor(() => expect(within(box).getByText('Line on 0')).toBeTruthy());
+  // Two references are one chip ("2 refs"), its list naming each.
+  await waitFor(() => expect(within(box).getByRole('button', { name: '2 refs' })).toBeTruthy());
+  fireEvent.click(within(box).getByRole('button', { name: '2 refs' }));
+  const list = await screen.findByRole('dialog', { name: '2 refs' });
+  expect([within(list).getByText('Circle on 0'), within(list).getByText('Line on 0')].every(Boolean)).toBe(true);
+  fireEvent.keyDown(list, { key: 'Escape' });
   const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
   const state = controller.readState();
   expect(state.selectedEntities).toEqual(['33', '2F']);
@@ -220,6 +273,60 @@ it('Select picks an entity by handle: lit, a Quick Edit chip by type and layer, 
   tap(80, 10);
   await waitFor(() => expect(controller.readState().selectedEntities).toEqual([]));
   expect(within(box).queryByText('Circle on 0')).toBeNull();
+  dispose();
+});
+
+// A finger has no Shift: its tap adds what it lands on and takes out what is picked, and on nothing it clears at once.
+// A tap that would take something out waits the double-click window, which a double-click drops: a double-click never
+// takes the selection away (`docs/viewer-ux.md`, "Selection and gestures").
+it("a finger's tap adds, and takes out what is picked once its window has passed; a double-click never takes the selection away", async () => {
+  const drawing = await openDrawing();
+  const { canvas, tap, dispose } = drawing;
+  const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
+  const entities = () => controller.readState().selectedEntities;
+  const finger = { pointerType: 'touch' };
+  tap(34, 40, finger);
+  tap(50, 0, finger);
+  expect(entities()).toEqual(['33', '2F']);
+  tap(34, 40, finger);
+  expect(entities()).toEqual(['33', '2F']);
+  await waitFor(() => expect(entities()).toEqual(['2F']));
+  tap(80, 10, finger);
+  expect(entities()).toEqual([]);
+  // A mouse: a double-click on the circle picks it with its first click; its second, which would take it out, waits,
+  // and the double-click drops it, so the circle stays picked and nothing is left waiting (Shift adds).
+  tap(34, 40);
+  tap(34, 40);
+  expect(entities()).toEqual(['33']);
+  const { scale, offsetX, offsetY } = painted.at(-1)!;
+  fireEvent.dblClick(canvas, { clientX: 34 * scale + offsetX, clientY: offsetY - 40 * scale });
+  tap(50, 0, { shiftKey: true });
+  expect(entities()).toEqual(['33', '2F']);
+  dispose();
+});
+
+// Escape, a step a press, in every view's order: what is under way, then the tool in hand goes down with what is
+// picked kept, and only then what is picked.
+it('Escape cancels a measurement under way, then puts the tool in hand down with the pick kept, then lets go of the pick', async () => {
+  const drawing = await openDrawing();
+  const { canvas, tap, dispose } = drawing;
+  const controller = await waitFor(() => { expect(drawing.controller).not.toBeNull(); return drawing.controller; });
+  const entities = () => controller.readState().selectedEntities;
+  const inHand = () => ['Select', 'Measure'].filter(name => screen.getByRole('button', { name, exact: true }).getAttribute('aria-pressed') === 'true');
+  const escape = () => fireEvent.keyDown(canvas, { key: 'Escape' });
+  tap(34, 40);
+  fireEvent.click(screen.getByRole('button', { name: 'Measure', exact: true }));
+  // A measurement's first end, let go: the next two ends measure afresh, the right edge's 60 mm.
+  tap(0, 0);
+  escape();
+  expect([inHand(), entities()]).toEqual([['Measure'], ['33']]);
+  tap(100, 0);
+  tap(100, 60);
+  await screen.findByRole('button', { name: 'Measurement 1: 60.00 mm' });
+  escape();
+  expect([inHand(), entities()]).toEqual([['Select'], ['33']]);
+  escape();
+  expect(entities()).toEqual([]);
   dispose();
 });
 
@@ -243,7 +350,7 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   await expect(controller.select({ selectors: ['h2F'] })).rejects.toThrow(/picked by a person in the viewer under Select/);
   await act(async () => { await controller.clearSelection(); });
   await expect(controller.setCamera({ position: [0, 0, 1], target: [0, 0, 0], up: [0, 1, 0] })).rejects.toThrow(/no camera to pose/);
-  await expect(controller.setDisplaySettings({ mode: 'wireframe' })).rejects.toThrow(/no Display settings/);
+  await expect(controller.setDisplaySettings({ mode: 'wireframe' })).rejects.toThrow(/one Display setting is its Background/);
 
   // What it CAN do: report itself, fit again, and hand over a PNG. No zoom command, no zoom readout.
   const state = controller.readState();
@@ -252,7 +359,8 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   expect(controller.setZoom).toBeUndefined();
 
   const fitted = painted.at(-1)!;
-  fireEvent.wheel(canvas, { deltaY: -Math.log(0.5) / 0.0015, clientX: 300, clientY: 300 });
+  // A mouse's wheel (in lines, as Firefox's counts: a trackpad's fine pixel steps would pan) zooms.
+  fireEvent.wheel(canvas, { deltaY: -Math.log(0.5) / 0.0015 / 16, deltaMode: 1, clientX: 300, clientY: 300 });
   await waitFor(() => expect(painted.at(-1)!.scale).toBeCloseTo(fitted.scale * 0.5, 6));
   await act(async () => { await controller.resetCamera(); });
   expect(painted.at(-1)).toEqual(fitted);
@@ -263,21 +371,81 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   dispose();
 });
 
-it('a drawing with layers and blocks has a Layers section: a layer hidden is not drawn, a block reference is picked from it', async () => {
+it('a drawing with layers and blocks has the docked panel and its Layers tab: a layer hidden is not drawn, a block reference is picked from it', async () => {
   readDrawing = () => json(LAYERED);
   const { pane, dispose } = await openDrawing();
-  const tile = await waitFor(() => within(pane.querySelector('[data-file-sidebar-tools]') as HTMLElement).getByRole('button', { name: 'Layers' }));
-  fireEvent.click(tile);
-  const list = await waitFor(() => { const element = pane.querySelector('[data-drawing-layers]'); expect(element).not.toBeNull(); return element as HTMLElement; });
+  // The view's panel, a board's: docked at the left, its search, then its one tab, Layers, its title.
+  const aside = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel]'); expect(element).not.toBeNull(); return element!; });
+  expect([aside.getAttribute('data-flat-panel'), aside.hidden, aside.getAttribute('aria-label')]).toEqual(['docked', false, 'Drawing panel']);
+  expect([within(aside).queryAllByRole('tab').length, aside.querySelector('[data-flat-panel-heading]')!.textContent]).toEqual([0, 'Layers']);
+  expect(within(aside).getByRole('tabpanel', { name: 'Layers' })).toBeTruthy();
+  const list = aside.querySelector<HTMLElement>('[data-drawing-layers]')!;
   expect([...list.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
     .toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']);
+  // The Model tree's rows: ONE glyph slot each. A layer's colour takes it; a layer with blocks under it has its
+  // chevron there, and its colour after its name; its block references hang a level under it, their slot a block's glyph.
+  const slots = (row: Element) => [...row.querySelectorAll('[data-tree-row-glyph]')];
+  for (const row of list.querySelectorAll('[data-tree-row]')) expect(slots(row)).toHaveLength(1);
+  const centre = list.querySelector('[data-layer-row="CENTRE"]')!;
+  expect([centre.firstElementChild!.getAttribute('data-layer-glyph'), centre.querySelector('[data-layer-glyph="mark"]')]).toEqual(['swatch', null]);
+  const hardwareRow = list.querySelector('[data-layer-row="HARDWARE"]')!;
+  expect([slots(hardwareRow)[0].querySelector('button')?.getAttribute('aria-label'), hardwareRow.querySelector('[data-layer-glyph="swatch"]')])
+    .toEqual(['Collapse HARDWARE', null]);
+  expect(hardwareRow.querySelector('[data-layer-glyph="mark"]')!.previousElementSibling!.textContent).toBe('HARDWARE');
+  const insertRow = list.querySelector('[data-insert-row="99"]')!.closest<HTMLElement>('[data-tree-row]')!;
+  expect([insertRow.style.paddingLeft, insertRow.querySelectorAll('[data-tree-guide]').length]).toEqual(['calc(var(--tree-row-pad, 5px) + 10px)', 1]);
   fireEvent.click(list.querySelector('[data-layer-visibility="CENTRE"]')!);
   await waitFor(() => expect(painted.at(-1)!.hidden).toEqual(['CENTRE']));
   // HARDWARE holds the two M5_NUT references; a click picks one, as a tap on the drawing would.
   const inserts = [...list.querySelectorAll('[data-insert-row]')];
   expect(inserts.map(row => row.getAttribute('data-insert-row'))).toEqual(['99', '9B']);
+  // Each its block's name, then its handle marked as one (the payload holds no insertion point).
+  expect(inserts.map(row => row.textContent)).toEqual(['M5_NUT#99', 'M5_NUT#9B']);
   fireEvent.click(inserts[0]);
   await waitFor(() => expect(within(pane.querySelector('[data-quick-edit-box]') as HTMLElement).getByRole('button', { name: 'Block M5_NUT on HARDWARE' })).toBeTruthy());
+
+  // The panel's search keeps the layers whose names match, and the blocks whose names do, under their layer.
+  fireEvent.click(within(aside).getByRole('button', { name: 'Search the drawing' }));
+  const search = within(aside).getByRole('textbox', { name: 'Search the drawing' });
+  const hits = (kind: string) => [...aside.querySelectorAll(`[data-flat-panel-hit] [data-${kind}-row]`)].map(row => row.getAttribute(`data-${kind}-row`));
+  fireEvent.change(search, { target: { value: 'nut' } });
+  await waitFor(() => expect(hits('layer')).toEqual(['HARDWARE']));
+  expect(hits('insert')).toEqual(['99', '9B']);
+  // The match lit in each hit's name, as the Model tree's search lights it.
+  expect([...aside.querySelectorAll('[data-insert-row="99"] [data-tree-filter-hit]')].map(hit => hit.textContent).join('')).toBe('NUT');
+  // A handle finds its reference, as it is shown or bare.
+  fireEvent.change(search, { target: { value: '#9b' } });
+  await waitFor(() => expect(hits('insert')).toEqual(['9B']));
+  fireEvent.change(search, { target: { value: 'zzz' } });
+  await waitFor(() => expect(aside.querySelector('[data-flat-panel-empty]')).not.toBeNull());
+  // The search decides the candidates; among them HARDWARE's chevron folds its hits, its own row staying, and
+  // the fold holds as the query is edited.
+  const hardware = () => aside.querySelector<HTMLElement>('[data-layer-row="HARDWARE"]')!;
+  fireEvent.change(search, { target: { value: 'nut' } });
+  fireEvent.click(await waitFor(() => within(hardware()).getByRole('button', { name: 'Collapse HARDWARE' })));
+  await waitFor(() => expect([hits('layer'), hits('insert')]).toEqual([['HARDWARE'], []]));
+  fireEvent.change(search, { target: { value: 'm5' } });
+  await waitFor(() => expect(within(hardware()).getByRole('button', { name: 'Expand HARDWARE' })).toBeTruthy());
+  expect([hits('layer'), hits('insert')]).toEqual([['HARDWARE'], []]);
+  // Cleared, the search's fold goes with it: the layer as the person left it, open. One they fold themselves
+  // is opened on its hits by a search, and shut again when it is cleared.
+  fireEvent.change(search, { target: { value: '' } });
+  await waitFor(() => expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(2));
+  fireEvent.click(within(hardware()).getByRole('button', { name: 'Collapse HARDWARE' }));
+  await waitFor(() => expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0));
+  fireEvent.change(search, { target: { value: 'nut' } });
+  await waitFor(() => expect(hits('insert')).toEqual(['99', '9B']));
+  fireEvent.change(search, { target: { value: '' } });
+  await waitFor(() => expect(within(hardware()).getByRole('button', { name: 'Expand HARDWARE' })).toBeTruthy());
+  expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0);
+
+  // Its toggle is the navbar's, and hidden it leaves nothing over the drawing; the toggle brings it back.
+  const navbar = pane.querySelector<HTMLElement>('[data-viewer-navbar]')!;
+  fireEvent.click(within(navbar).getByRole('button', { name: 'Hide panel' }));
+  await waitFor(() => expect(pane.querySelector<HTMLElement>('[data-flat-panel]')!.hidden).toBe(true));
+  expect(pane.querySelector('[data-flat-panel-pill], [data-inspector-pill]')).toBeNull();
+  fireEvent.click(within(navbar).getByRole('button', { name: 'Show panel' }));
+  await waitFor(() => expect(pane.querySelector<HTMLElement>('[data-flat-panel]')!.hidden).toBe(false));
   dispose();
 });
 
@@ -308,6 +476,27 @@ it('an unreadable drawing shows the server\'s own sentence, and an empty one say
   expect(said.textContent).toMatch(/no geometry in its modelspace/);
   expect(within(empty.pane).queryByRole('alert')).toBeNull();
   empty.dispose();
+});
+
+// Every file has its panel from the first frame: a drawing's Layers while it is read, its rows once it is in, the
+// panel open then as it is once the drawing is on screen.
+it('a drawing has its Layers from the first frame, open as it stays once the drawing is in', async () => {
+  let release = noop;
+  readDrawing = () => new Promise(resolve => { release = () => resolve(json(LAYERED)); });
+  const { pane, dispose } = await openDrawing('composer', null, undefined, { drawn: false });
+  const aside = await waitFor(() => { const element = pane.querySelector<HTMLElement>('aside[data-flat-panel]'); expect(element).not.toBeNull(); return element!; });
+  const toggle = () => pane.querySelector('[data-viewer-navbar] [data-navbar-panel]')!.getAttribute('aria-expanded');
+  const rows = () => [...aside.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row'));
+  const first = toggle();
+  // While it loads, the Layers' placeholder rows in a busy tabpanel, said as loading; gone as the layers arrive.
+  const placeholders = () => aside.querySelectorAll('[role="tabpanel"][aria-busy="true"] [data-tree-row-placeholder]').length;
+  expect([first, aside.querySelector('[data-flat-panel-heading]')!.textContent, pane.querySelector('[aria-busy="true"]') !== null, rows(), placeholders(),
+    within(aside).getByRole('status').textContent]).toEqual(['true', 'Layers', true, [], 6, 'Loading']);
+  await act(async () => { release(); });
+  await waitFor(() => expect(rows()).toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']));
+  expect([placeholders(), aside.querySelector('[aria-busy="true"]')]).toEqual([0, null]);
+  expect(toggle()).toBe(first);
+  dispose();
 });
 
 it('a rewritten drawing stays on screen while its next revision is read, and after one that will not read', async () => {
@@ -345,7 +534,7 @@ it('a measurement on a drawing is Measure\'s row\'s chip, and opens no Quick Edi
   tap(100, 0);
   const row = await screen.findByRole('toolbar', { name: 'Measurements' });
   expect(within(row).getByRole('button', { name: 'Measurement 1: 100.00 mm' })).toBeTruthy();
-  expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
+  expect(screen.getByRole('region', { name: 'Quick Edit' }).querySelector('[data-quick-edit-context]')).toBeNull();
   expect(promptFiles.create).not.toHaveBeenCalled();
   dispose();
 });

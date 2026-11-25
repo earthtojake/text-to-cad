@@ -3,15 +3,15 @@ import test from "node:test";
 
 import {
   normalizeStepClipSettings
-} from "@text-to-cad/core/lib/viewer/clipPlane.js";
+} from "@cad/core/lib/viewer/clipPlane.js";
 import {
   cloneThemePresetSettings,
   normalizeThemeSettings
-} from "@text-to-cad/core/lib/themeSettings.js";
+} from "@cad/core/lib/themeSettings.js";
 import {
   CAD_DISPLAY_MODE,
   normalizeDisplaySettings
-} from "@text-to-cad/core/lib/displaySettings.js";
+} from "@cad/core/lib/displaySettings.js";
 import {
   normalizeViewerRenderState
 } from "./renderState.js";
@@ -64,7 +64,7 @@ test("Inspect edge visibility does not revive legacy custom outline styling", ()
 });
 
 test("grouped View passes independent surface and edge choices through to the renderer", async () => {
-  const { resolveViewSceneSettings } = await import('@text-to-cad/core/common/sceneSettings.js');
+  const { resolveViewSceneSettings } = await import('@cad/core/common/sceneSettings.js');
   // Each mode, and Preview's look over the file's display (`preview`).
   for (const [mode, preview] of [['solid'], ['shaded'], ['parts'], ['xray'], ['hidden-line'], ['wireframe'], ['solid', true]]) {
     const resolved = resolveViewSceneSettings({ preview, display: { mode, grid: true } });
@@ -81,9 +81,9 @@ test("grouped View passes independent surface and edge choices through to the re
 // look from the same settings AFTER normalizing them here, so this pins that the two routes to
 // `resolveSceneSurfaceLook` land on one look for every preset, appearance and surface choice.
 test("the viewport and the parity page resolve one surface look from one setting", async () => {
-  const { resolveSceneSurfaceLook, resolveViewSceneSettings } = await import('@text-to-cad/core/common/sceneSettings.js');
-  const { headlessSceneDress } = await import('@text-to-cad/core/common/headlessScene.js');
-  const { EDGELESS_VIEW_FEATURES } = await import('@text-to-cad/core/common/viewSettings.js');
+  const { resolveSceneSurfaceLook, resolveViewSceneSettings } = await import('@cad/core/common/sceneSettings.js');
+  const { headlessSceneDress } = await import('@cad/core/common/headlessScene.js');
+  const { EDGELESS_VIEW_FEATURES } = await import('@cad/core/common/viewSettings.js');
   // Solid and Parts, or Preview (asked for on its own, `preview`) with its own part colours.
   const features = { ...EDGELESS_VIEW_FEATURES, modes: ['solid', 'parts'] };
   const looks = [];

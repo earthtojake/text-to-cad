@@ -1,49 +1,23 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { english, useI18n } from "@cad/ui/i18n";
 
-// The card of a Quick Edit chip (`robotReferences.jsx`): what a selected link or object IS. Its
-// heading names it, so the rows never repeat the name.
-//
-// A link reads back what the description says about it (its inertial properties, its
-// visual and collision geometry, its parent joint with limits and origin); a named
-// mesh object reads back the mesh facts a person uses to tell two objects of one link
-// apart. What names something else can be followed: a mesh path opens that file, a
-// link name selects that link. A click on any other value copies it.
+// What a selected link or object IS, as its Quick Edit chip's card reads it (`kit/inspector/ItemDetail.jsx`:
+// `robotReferences.jsx`): the thing in focus alone, its name the card's heading, so the rows never repeat
+// it, and a few key facts — never its child links, which the Links tree holds. A link reads its mass and
+// the joint that holds it to its parent (its name, its type, the parent link, which a press selects); a
+// named mesh object, its link and its size. A click on any other value copies it.
 
-function formatCount(value) {
-  return Number(value || 0).toLocaleString();
-}
-
-// Millimetres, to the precision the number deserves: a 0.4 mm feature keeps its
-// tenths, a 240 mm frame does not pretend to them.
-function formatMillimetres(value) {
-  const size = Number(value);
-  if (!Number.isFinite(size)) return "";
-  if (size >= 100) return size.toFixed(0);
-  if (size >= 10) return size.toFixed(1);
-  return size.toFixed(2);
-}
-
-// As written, without the noise of a float: 1.5707963 stays readable, 0 stays 0.
-function formatValue(value, digits = 4) {
+// A card's numbers, read at a glance: three significant figures, a number of four figures or more whole;
+// the description keeps every digit.
+const significant = value => {
   const number = Number(value);
   if (!Number.isFinite(number)) return "—";
-  const rounded = Number(number.toFixed(digits));
-  return String(Object.is(rounded, -0) ? 0 : rounded);
-}
+  return number.toLocaleString(undefined, Math.abs(number) >= 1000 ? { maximumFractionDigits: 0 } : { maximumSignificantDigits: 3 });
+};
+// A mass in kg as a card shows it: kg, or g under 10 g.
+const massText = kg => (Math.abs(kg) >= 0.01 ? `${significant(kg)} kg` : `${significant(kg * 1e3)} g`);
 
-const ANGULAR = new Set(["revolute", "continuous"]);
-const degrees = radians => `${formatValue((radians * 180) / Math.PI, 1)}°`;
-
-function Section({ label, children }) {
-  return <div className="mt-1 border-t border-sidebar-border/60 pt-1" aria-label={label}>{children}</div>;
-}
-
-const LINK_CLASS = "rounded-sm text-left text-sidebar-foreground underline decoration-muted-foreground/50 underline-offset-2 hover:decoration-current focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [overflow-wrap:anywhere]";
-const isZero = vector => vector.every(value => Math.abs(value) < 1e-12);
-const isUnit = vector => vector.every(value => Math.abs(value - 1) < 1e-12);
-const vectorText = (vector, digits = 4) => vector.map(value => formatValue(value, digits)).join("  ");
+const LINK_CLASS = "rounded-sm text-left text-foreground underline decoration-muted-foreground/50 underline-offset-2 hover:decoration-current focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring [overflow-wrap:anywhere]";
 
 /** Another link of the same robot: pressing it selects that link in the tree and the viewport. */
 function LinkName({ name, onSelect, selectable = true }) {
@@ -52,153 +26,40 @@ function LinkName({ name, onSelect, selectable = true }) {
   return <TooltipHint content={t("robot.selectLink")}><button type="button" className={LINK_CLASS} onClick={() => onSelect(name)} >{name}</button></TooltipHint>;
 }
 
-// What a primitive IS, in the description's own metres.
-function dimensions(entry) {
-  if (entry.type === "box" && entry.size) return `${entry.size.map(value => formatValue(value)).join(" × ")} m`;
-  if (entry.type === "cylinder" && entry.radius !== null && entry.length !== null) return `r ${formatValue(entry.radius)} · l ${formatValue(entry.length)} m`;
-  if (entry.type === "sphere" && entry.radius !== null) return `r ${formatValue(entry.radius)} m`;
-  return "";
-}
-
-// One visual or collision: the file or the primitive, then only what the description
-// bothered to say (a zero origin and a unit scale are the defaults, not facts). A mesh file
-// opens by the host path cadgen resolved for it; a reference it could not resolve to one
-// (a package:// URI) is text.
-function GeometryEntry({ entry, onOpenFile }) {
-  const { t } = useI18n();
-  const path = entry.filename ? entry.path : "";
-  const detail = [
-    entry.type !== "mesh" && dimensions(entry),
-    entry.scale && !isUnit(entry.scale) && `scale ${vectorText(entry.scale)}`,
-    entry.origin && !isZero(entry.origin.xyz) && `xyz ${vectorText(entry.origin.xyz)}`,
-    entry.origin && !isZero(entry.origin.rpy) && `rpy ${vectorText(entry.origin.rpy)}`,
-  ].filter(Boolean);
-  return <span className="block py-0.5">
-    <span className="flex min-w-0 items-baseline gap-1.5">
-      {entry.color && <TooltipHint content={entry.materialName || entry.color}><span className="size-2.5 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: entry.color }}  aria-hidden="true"/></TooltipHint>}
-      {entry.filename
-        ? path && onOpenFile
-          ? <TooltipHint content={t("robot.openFile")}><button type="button" className={LINK_CLASS} onClick={() => onOpenFile(path)} >{entry.filename}</button></TooltipHint>
-          : <span>{entry.filename}</span>
-        : <span>{entry.type}</span>}
-    </span>
-    {detail.map(line => <span key={line} className="block tabular-nums text-muted-foreground">{line}</span>)}
-  </span>;
-}
-
-function GeometryRows({ label, entries, onOpenFile }) {
-  const { t } = useI18n();
-  if (!entries) return null;
-  // Its files are links, which keep their own click: nothing to copy.
-  return <InfoRow label={label} copy={false}>
-    {entries.length
-      ? entries.map((entry, index) => <GeometryEntry key={`${entry.filename || entry.type}:${index}`} {...{ entry, onOpenFile }}/>)
-      : <span className="text-muted-foreground">{t("robot.none")}</span>}
-  </InfoRow>;
-}
-
-// The six terms the description writes, laid out as the symmetric tensor they are.
-function InertiaRows({ inertia }) {
-  const { t } = useI18n();
-  if (!inertia) return null;
-  const rows = [["ixx", "ixy", "ixz"], ["ixy", "iyy", "iyz"], ["ixz", "iyz", "izz"]];
-  const copy = rows.map(row => row.map(term => formatValue(inertia[term], 6)).join(", ")).join("; ");
-  return <InfoRow label={t("robot.inertia")} title={t("robot.inertiaHint")} copy={copy}>
-    {/* Three columns the panel's width: a value too long for its cell truncates (the whole of it
-        is its hint), never wrapping inside the number. */}
-    <span className="grid w-full grid-cols-3 gap-x-2 tabular-nums">
-      {rows.flatMap((row, r) => row.map((term, c) => {
-        const text = formatValue(inertia[term], 6);
-        return <TooltipHint key={`${r}${c}`} content={text} overflowOnly>
-          <span className={`min-w-0 truncate${c < r ? " text-muted-foreground" : ""}`} data-inertia-term={term}>{text}</span>
-        </TooltipHint>;
-      }))}
-    </span>
-  </InfoRow>;
-}
-
-function LimitRows({ joint }) {
-  const { t } = useI18n();
-  const limit = joint.limit;
-  if (!limit) return null;
-  const angular = ANGULAR.has(joint.type);
-  const unit = angular ? "rad" : "m";
-  const range = Number.isFinite(limit.lower) || Number.isFinite(limit.upper);
-  return <>
-    {range && <InfoRow label={t("robot.limits")} title={t(angular ? "robot.limitsRadians" : "robot.limitsMetres")} copy={`${formatValue(limit.lower)} … ${formatValue(limit.upper)} ${unit}`}>
-      <MonoValue>{`${formatValue(limit.lower)} … ${formatValue(limit.upper)} ${unit}`}</MonoValue>
-      {angular && Number.isFinite(limit.lower) && Number.isFinite(limit.upper) &&
-        <span className="block text-muted-foreground">{`${degrees(limit.lower)} … ${degrees(limit.upper)}`}</span>}
-    </InfoRow>}
-    {Number.isFinite(limit.effort) && <InfoRow label={t("robot.effort")}><MonoValue>{`${formatValue(limit.effort)} ${angular ? "N·m" : "N"}`}</MonoValue></InfoRow>}
-    {Number.isFinite(limit.velocity) && <InfoRow label={t("robot.velocity")}><MonoValue>{`${formatValue(limit.velocity)} ${angular ? "rad/s" : "m/s"}`}</MonoValue></InfoRow>}
-  </>;
-}
-
-export function RobotLinkDetails({ facts, onOpenFile, onSelectLink, hasLinkRow = () => true }) {
-  const { t } = useI18n();
+/**
+ * A link, as the frame reads a pick (`kit/inspector/inspect.js`'s `DetailItem`), from what the description
+ * says of it (`robotTree.js`'s `robotLinkFacts`): its mass, and its joint to its parent — name, type, and
+ * the parent link (pressing it selects that link, `onSelectLink`, where the tree has its row). Its hover
+ * tip's short kind is its parent joint's type ("Root link" for the root).
+ * @param {ReturnType<typeof import("./robotTree.js").robotLinkFacts>} facts
+ */
+export function robotLinkItem(facts, { onSelectLink = null, hasLinkRow = () => true, t = english } = {}) {
   const joint = facts.parentJoint;
-  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label={t("robot.linkDetails")}>
-    <InfoRow label={t("robot.type")}>{facts.isRoot ? t("robot.rootLink") : t("robot.link")}</InfoRow>
-    {facts.groups.length > 0 && <InfoRow label={t("robot.groups")} title={t("robot.groupsHint")}>{facts.groups.join(", ")}</InfoRow>}
-    {facts.endEffectors.length > 0 && <InfoRow label={t("robot.endEffector")}>{facts.endEffectors.join(", ")}</InfoRow>}
-    {(facts.mass !== null || facts.inertia) && <Section label={t("robot.inertial")}>
-      {facts.mass !== null && <InfoRow label={t("robot.mass")}><MonoValue>{`${formatValue(facts.mass, 4)} kg`}</MonoValue></InfoRow>}
-      {facts.centerOfMass && <InfoRow label={t("robot.centreOfMass")} title={t("robot.centreOfMassHint")}><CoordValue vector={facts.centerOfMass.xyz} digits={4}/></InfoRow>}
-      <InertiaRows inertia={facts.inertia}/>
-    </Section>}
-    <Section label={t("robot.geometry")}>
-      <GeometryRows label={t("robot.visuals")} entries={facts.visuals} onOpenFile={onOpenFile}/>
-      <GeometryRows label={t("robot.collisions")} entries={facts.collisions} onOpenFile={onOpenFile}/>
-    </Section>
-    {joint && <Section label={t("robot.parentJoint")}>
-      <InfoRow label={t("robot.joint")}>{joint.name}</InfoRow>
-      <InfoRow label={t("robot.jointType")}>{joint.type}</InfoRow>
-      <InfoRow label={t("robot.parent")} copy={onSelectLink && hasLinkRow(joint.parentLink) ? false : undefined}>{/* A frame-only root has no row to go to; it is still named. */}<LinkName name={joint.parentLink} onSelect={onSelectLink} selectable={hasLinkRow(joint.parentLink)}/></InfoRow>
-      {joint.axis && <InfoRow label={t("robot.axis")}><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
-      <LimitRows joint={joint}/>
-      {joint.mimic && <InfoRow label={t("robot.mimic")}><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
-      {/* A four-bar's crank follows its driver through the linkage cadgen solved: no formula to show, only the driver. */}
-      {joint.fourBar && <InfoRow label={t("robot.fourBarDriver")}><MonoValue>{joint.fourBar.driver}</MonoValue></InfoRow>}
-      {joint.origin && <>
-        <InfoRow label={t("robot.originXyz")} title={t("robot.originXyzHint")}><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
-        {!isZero(joint.origin.rpy) && <InfoRow label={t("robot.originRpy")} title={t("robot.originRpyHint")}><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}
-      </>}
-    </Section>}
-    {facts.childJoints.length > 0 && <Section label={t("robot.childJoints")}>
-      <InfoRow label={t("robot.children")} copy={onSelectLink ? false : undefined}><span className="flex flex-col items-start">
-        {facts.childJoints.map(child => <span key={child.name}><LinkName name={child.childLink} onSelect={onSelectLink}/><span className="text-muted-foreground">{` · ${child.name} · ${child.type}`}</span></span>)}
-      </span></InfoRow>
-    </Section>}
-  </div>;
+  const selectable = Boolean(onSelectLink) && joint && hasLinkRow(joint.parentLink);
+  return {
+    id: `link:${facts.name}`, pick: facts.name, kind: "solid", title: facts.name,
+    tip: joint ? joint.type : t("robot.rootLink"),
+    facts: [
+      ...(facts.mass !== null ? [{ label: t("robot.mass"), value: massText(facts.mass) }] : []),
+      ...(joint ? [
+        { label: t("robot.joint"), value: <>{joint.name}</> },
+        { label: t("robot.jointType"), value: <>{joint.type}</> },
+        // A frame-only root has no row to go to; it is still named.
+        { label: t("robot.parent"), copy: selectable ? false : undefined,
+          value: <LinkName name={joint.parentLink} onSelect={onSelectLink} selectable={hasLinkRow(joint.parentLink)}/> }
+      ] : [{ label: t("robot.type"), value: <>{t("robot.rootLink")}</> }])
+    ]
+  };
 }
 
-function ComponentDetails({ component }) {
-  const { t } = useI18n();
+/** A named mesh object, as the frame reads a pick: its link and its size. */
+export function robotComponentItem(component, t = english) {
   const size = component.sizeMillimetres;
-  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label={t("robot.componentDetails")}>
-    <InfoRow label={t("robot.type")}>{t("robot.meshObject")}</InfoRow>
-    <InfoRow label={t("robot.link")}>{component.link}</InfoRow>
-    {/* A cadgen mesh export groups an object BY colour, so it tells two rows of one link apart. */}
-    {component.color && <InfoRow label={t("robot.colour")}><span className="inline-flex items-baseline gap-1.5">
-      <span className="size-3 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: component.color }} aria-hidden="true"/>
-      <MonoValue>{component.color}</MonoValue>
-    </span></InfoRow>}
-    <InfoRow label={t("robot.triangles")}><MonoValue>{formatCount(component.triangleCount)}</MonoValue></InfoRow>
-    {size && <InfoRow label={t("robot.size")} title={t("robot.sizeHint")}><MonoValue>{`${size.map(formatMillimetres).join(" × ")} mm`}</MonoValue></InfoRow>}
-  </div>;
-}
-
-export default function RobotComponentDetails({ components, selectedIds }) {
-  const { t } = useI18n();
-  const selected = components.filter((component) => selectedIds.includes(component.id));
-  if (!selected.length) return null;
-  if (selected.length > 1) {
-    const triangles = selected.reduce((total, component) => total + component.triangleCount, 0);
-    return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label={t("robot.componentDetails")}>
-      <InfoRow label={t("robot.links")}>{[...new Set(selected.map((component) => component.link))].join(", ")}</InfoRow>
-      <InfoRow label={t("robot.triangles")}><MonoValue>{formatCount(triangles)}</MonoValue></InfoRow>
-    </div>;
-  }
-  return <ComponentDetails component={selected[0]} />;
+  return {
+    id: `object:${component.id}`, pick: component.id, kind: "solid", title: component.name || component.link, tip: component.link,
+    facts: [
+      { label: t("robot.link"), value: <>{component.link}</> },
+      ...(size ? [{ label: t("robot.size"), title: t("robot.sizeHint"), value: `${size.map(significant).join(" × ")} mm` }] : [])
+    ]
+  };
 }

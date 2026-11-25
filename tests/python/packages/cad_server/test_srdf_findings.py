@@ -270,7 +270,7 @@ class SrdfFindingsTests(unittest.TestCase):
                     candidate.rename(original)
 
     def test_unlistable_pair_directory_reports_no_pair(self) -> None:
-        from cad.srdf_validation import find_paired_urdf
+        from cad.srdf._validation import find_paired_urdf
         from cad_server.robot_payload import RobotReadError, paired_urdf_for_srdf
 
         with mock.patch.object(Path, "iterdir", side_effect=PermissionError("cannot list")):

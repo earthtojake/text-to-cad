@@ -4,14 +4,14 @@ import { serveXbfHarness } from '../harness/xbfScenario.mjs';
 
 // An engine document's Measure and Look at under real pointers, over core's bracket (a 40 x 20 x 4
 // plate on z = -2..2, a Ø6 peg 12 tall standing at x = 12): two presses take two faces whole and
-// read what they make, a step Undo takes back; a double-click on a face turns the view square to it
-// and picks nothing.
+// read what they make, a step Undo takes back; a double-click on a face turns the view square to it,
+// its first click's pick standing (a double-click never takes or puts back a selection).
 
 const unit = v => { const length = Math.hypot(...v); return v.map(c => c / length); };
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
-test('Measure takes two faces whole and reads them square across; a double-click looks square at a face and picks nothing', async (t) => {
+test('Measure takes two faces whole and reads them square across; a double-click looks square at a face, its first click\'s pick kept', async (t) => {
   const harness = await serveXbfHarness(t);
   const { page, pane, errors } = await harness.open();
   const controller = 'window.cadHarness.a.controller';
@@ -47,10 +47,14 @@ test('Measure takes two faces whole and reads them square across; a double-click
   await page.keyboard.press('ControlOrMeta+Shift+KeyZ');
   await row.getByText('⟂ 12.00 mm').waitFor();
 
-  // Select picking Faces (in an assembly, All takes a part whose row is shut whole); from up and off
+  // Select's Filter with Parts unticked, so a press takes faces (in an assembly, with every box ticked, a part
+  // whose row is shut is taken whole); ticking leaves the menu up, and Escape puts it away. From up and off
   // to the front-right, a double-click on the plate's front face.
   await pane.locator('[data-select-filter-trigger]').click();
-  await page.locator('[data-select-filter="faces"]').click();
+  await page.locator('[data-select-filter-row]').click();
+  await page.locator('[data-select-filter="parts"]').click();
+  await page.keyboard.press('Escape');
+  await page.locator('[role=menu]').first().waitFor({ state: 'detached' });
   const oblique = await view({ position: [60, -80, 70], target: [0, 0, 0], up: [0, 0, 1], orthographicHalfHeight: 30 });
   const front = oblique([5, -10, 0]);
   await page.mouse.dblclick(front.x, front.y);
@@ -60,7 +64,7 @@ test('Measure takes two faces whole and reads them square across; a double-click
     const toEye = live.position.map((value, axis) => value - live.target[axis]);
     return toEye[1] < 0 && Math.abs(toEye[0]) < 1e-3 * Math.hypot(...toEye) && Math.abs(toEye[2]) < 1e-3 * Math.hypot(...toEye);
   });
-  // And its first click's pick was put back: nothing is selected.
-  assert.deepEqual(await page.evaluate(`${controller}.readState().selected`), []);
+  // And its first click's pick stands: the face, and nothing else, is selected.
+  assert.deepEqual(await page.evaluate(`${controller}.readState().selected`), ['i0/face/6']);
   assert.deepEqual(errors, []);
 });

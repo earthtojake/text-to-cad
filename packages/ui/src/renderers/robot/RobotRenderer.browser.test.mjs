@@ -13,8 +13,8 @@ import { PNG } from 'pngjs';
 // as cadgen resolved them (`make_fixtures.py`; the Python suite holds the files current): a URDF of
 // primitives, the SRDF paired with it (a "home" state, a named pose, an end effector), a
 // long chain, a four-bar linkage cadgen closes, and the two cadgen refuses (their alerts are
-// `useRobotDocument.test.tsx`'s and `ViewportError.test.tsx`'s, an SDF's own section `SdfSection.test.tsx`'s: no GPU needed). This server answers `GET /__cad/robot` as the viewer's does, from
-// those files, so the page here is the page a CAD Viewer serves. Scene, pose store and handle adapter
+// `useRobotDocument.test.tsx`'s and `ViewportError.test.tsx`'s: no GPU needed). This server answers a robot document's `structure` as the viewer's does, from
+// those files, so the page here is the page a viewer serves. Scene, pose store and handle adapter
 // have unit tests; these are the flows a person actually uses.
 
 const FIXTURES = new URL('./__fixtures__/', import.meta.url);
@@ -25,8 +25,8 @@ const PAYLOADS = Object.fromEntries(DESCRIPTIONS.filter(name => existsSync(paylo
 const REFUSALS = JSON.parse(readFileSync(new URL('refusals.json', FIXTURES), 'utf8'));
 // A chain long enough that a per-pose cost proportional to the robot would show.
 // The strip with Select in hand: a robot's four tools (`robot/tools.js`).
-// The tools that can be in hand; Clip, a popover from its tile, is never one.
-const SELECT_IN_HAND = ['Select:true', 'Pencil:false', 'Shapes:false', 'Measure:false'];
+// The tools that can be in hand, Clip among them (a model effect, as Draw is a tool).
+const SELECT_IN_HAND = ['Select:true', 'Draw:false', 'Measure:false', 'Clip:false'];
 const CHAIN_LINKS = 30;
 // The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
 // GL (CI's SwiftShader) has fewer pixels to fill and a capture fewer to read.
@@ -43,15 +43,27 @@ before(async () => {
     const [, root, ...rest] = url.pathname.split('/');
     const name = rest.join('/');
     const json = (status, body) => { response.statusCode = status; response.setHeader('Content-Type', 'application/json'); response.end(body); };
+    if (url.pathname.endsWith('/api/v1/documents') && request.method === 'POST') {
+      // A file opened by its path: its document's reads are under its kind, by an id (here its name).
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        const file = String(JSON.parse(body || '{}').path || '').split('/').pop();
+        response.statusCode = 201;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ id: file, kind: file.split('.').pop(), api: `/api/v1/documents/${file.split('.').pop()}/${file}` }));
+      });
+      return;
+    }
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/__cad/catalog')) {
+    else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       const entry = file => ({ kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}-${revision}`, bytes: 1 });
-      json(200, JSON.stringify({ entries: DESCRIPTIONS.map(file => (file === 'arm.srdf' ? { ...entry(file), relations: { urdf: entry('arm.urdf') } } : entry(file))) }));
-    } else if (url.pathname.endsWith('/__cad/server')) json(200, JSON.stringify({ backend: 'cadgen' }));
-    else if (url.pathname.endsWith('/__cad/robot')) {
+      json(200, JSON.stringify({ documents: (DESCRIPTIONS.map(file => (file === 'arm.srdf' ? { ...entry(file), relations: { urdf: entry('arm.urdf') } } : entry(file)))).map(entry => ({ entry, revision: entry.hash })) }));
+    } else if (url.pathname.endsWith('/api/v1/server')) json(200, JSON.stringify({ backend: 'cadgen' }));
+    else if (url.pathname.endsWith('/structure')) {
       // As the viewer's route answers: the payload, or cadgen's refusal as a 400.
-      const file = String(url.searchParams.get('file') || '').replace(/^\/models\//, '');
+      const file = url.pathname.split('/').at(-2);
       if (PAYLOADS[file]) json(200, PAYLOADS[file]);
       else json(REFUSALS[file] ? 400 : 404, JSON.stringify({ error: REFUSALS[file] || `${file}: no such description` }));
     } else {
@@ -89,22 +101,31 @@ async function open(t, file, { panel = true } = {}) {
   const robot = {
     page, pane, tools, errors,
     tool: name => tools.getByRole('button', { name, exact: true }),
-    // The strip's tools (its buttons pressed or not, before the view's controls), and what Select's chevron says it picks.
-    toolNames: () => tools.getByRole('button').evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed') && !button.closest('[data-view-controls]'))
+    // The strip's tools (its buttons pressed or not), and what Select's chevron says it picks.
+    toolNames: () => tools.getByRole('button').evaluateAll(buttons => buttons.filter(button => button.hasAttribute('aria-pressed'))
       .map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
     filter: () => tools.locator('[data-select-filter-trigger]').getAttribute('aria-label'),
-    // Select's mode chosen from its chevron's menu ("all", "links" or "position"), which puts the menu away.
+    // Select's Filter ticked to `mode` ("all": Links and Position; "links" or "position" alone) from its chevron's
+    // menu, its one row, Filter, opening the boxes beside it; ticking leaves it up, and Escape puts it away.
     async filterTo(mode) {
       await tools.locator('[data-select-filter-trigger]').click();
-      const menu = page.locator('[role=menu][aria-label="Selection filter"]');
-      await menu.locator(`[data-select-filter="${mode}"]`).click();
+      const menu = page.locator('[role=menu][aria-label="Filter"]').first();
+      await page.locator('[data-select-filter-row]').click();
+      for (const id of ['links', 'position']) {
+        const box = page.locator(`[data-select-filter="${id}"]`);
+        const want = mode === 'all' || mode === id;
+        if ((await box.getAttribute('aria-checked')) !== String(want)) await box.click();
+        await page.locator(`[data-select-filter="${id}"][aria-checked="${want}"]`).waitFor();
+      }
+      await page.keyboard.press('Escape');
       await menu.waitFor({ state: 'detached' });
     },
     handles: async () => Object.fromEntries((await page.evaluate(() => window.__cadJointHandles())).map(handle => [handle.id, handle])),
     links: async () => Object.fromEntries((await page.evaluate(() => window.__robotLinks())).map(({ link, matrixWorld }) => [link, matrixWorld])),
     camera: () => page.evaluate(() => { const { position, target, zoom } = window.__cadCamera(); return [...position, ...target, zoom]; }),
     stats: () => page.evaluate(() => window.__robotPoseStats()),
-    jointField: (name, unit = 'deg') => page.getByLabel(`${name} value in ${unit}`, { exact: true }),
+    // A slide in metres is shown, and typed, in millimetres.
+    jointField: (name, unit = 'deg') => page.getByLabel(`${name} value in ${unit === 'm' ? 'mm' : unit}`, { exact: true }),
     // Select picking the joints' knobs alone (a press on the model picks nothing), or its links alone (no knobs).
     openPosition: () => robot.filterTo('position'),
     pickLinks: () => robot.filterTo('links'),
@@ -121,14 +142,34 @@ async function open(t, file, { panel = true } = {}) {
       };
       requestAnimationFrame(step);
     })),
-    // The file sidebar's tiles, and a section opened by its tile (one at a time), left open if it is.
-    tiles: () => pane.locator('[data-file-sidebar-tools] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    // The panel's tabs (Links, then Joints), and a tab opened (one at a time), the panel opened from its navbar toggle
+    // first if it is collapsed.
+    tiles: () => pane.locator('[data-flat-panel] [data-flat-panel-tab-name], [data-flat-panel] [data-flat-panel-heading]').evaluateAll(names => names.map(name => name.textContent)),
     async openSection(name) {
-      const tile = pane.getByRole('group', { name: 'File sidebar' }).getByRole('button', { name, exact: true });
-      if (await tile.getAttribute('aria-pressed') !== 'true') await tile.click();
-      await pane.locator(`[data-file-sidebar-tools] button[aria-pressed="true"][aria-label="${name}"]`).waitFor();
+      // The panel, open, or its toggle, once the view has drawn either.
+      await pane.locator('[data-navbar-panel="left"]').first().waitFor();
+      const pill = pane.locator('[data-navbar-panel="left"][aria-expanded="false"]');
+      if (await pill.count()) await pill.click();
+      // One tab is a title, not a tab: nothing to press.
+      await pane.locator('[data-flat-panel] [role=tab], [data-flat-panel] [data-flat-panel-heading]').first().waitFor();
+      // A tab's name says ", changed" while its state is off its default (Joints, posed); one that does not fit the head
+      // is ⋯'s item.
+      const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name: new RegExp(`^${name}(, changed)?$`) });
+      if (!await tab.count()) {
+        const more = pane.locator('[data-flat-panel] [data-flat-panel-more]');
+        if (await more.count()) {
+          await more.click();
+          const item = pane.page().locator('[data-flat-panel-more-menu] [data-flat-panel-more-tab]').filter({ hasText: name });
+          if (await item.count()) { await item.click(); await tab.waitFor(); return; }
+          await pane.page().keyboard.press('Escape');
+        }
+        await pane.locator('[data-flat-panel] [data-flat-panel-heading]').filter({ hasText: name }).waitFor();
+        return;
+      }
+      if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
+      await pane.locator('[data-flat-panel] [role=tab][aria-selected="true"]').filter({ hasText: name }).waitFor();
     },
-    // In and out of Preview, by Preview at the strip's end and Exit preview in Preview's bar, once its cover has lifted.
+    // In and out of Preview, by the navbar's Preview and Exit preview in Preview's bar, once its cover has lifted.
     // Exit preview is pressed as a person presses it, the bar it is on brought back (`harness/preview.mjs`).
     async preview(enter) {
       const press = pane.getByRole('button', { name: enter ? 'Preview' : 'Exit preview', exact: true });
@@ -138,8 +179,9 @@ async function open(t, file, { panel = true } = {}) {
     },
     // A joint set from the sidebar's Position section, whatever Select picks.
     async type(name, value, unit) {
-      await robot.openSection('Position');
-      await robot.jointField(name, unit).fill(String(value)); await robot.jointField(name, unit).press('Enter');
+      await robot.openSection('Joints');
+      const typed = unit === 'm' ? Math.round(value * 1e4) / 10 : value;
+      await robot.jointField(name, unit).fill(String(typed)); await robot.jointField(name, unit).press('Enter');
     },
     pressedRows: () => pane.locator('[aria-label="Robot tree area"] button[aria-pressed="true"]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     // The pressed rows once they read `wanted` (in any order), or the assertion naming what they did read.
@@ -154,35 +196,38 @@ async function open(t, file, { panel = true } = {}) {
     },
     // A selection is React state: it is on screen a render after whatever changed it.
     waitPressed: count => page.waitForFunction(wanted => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === wanted, count),
-    // The view's controls at the strip's end, after its rule: Projection, Display (the mode in hand), then Preview.
-    viewControls: () => tools.locator('[data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    // Display: its tile between Projection and Preview, the mode in hand; its menu, the modes and the Grid switch.
-    displayButton: () => tools.locator('[data-view-controls]').getByRole('button', { name: /^Display mode: / }),
+    // The view's controls: the navbar's (Display, Preview).
+    viewControls: () => pane.locator('[data-navbar-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label').split(':')[0])),
+    // Display: the navbar's, its card (Projection | Style, Background, Show grid) docked at the view's right edge.
     async openDisplay() {
-      await robot.displayButton().click();
+      await pane.locator('[data-navbar-view-controls] [data-display-settings]').click();
       await robot.displayPanel().waitFor();
     },
-    // Display's menu: a dropdown from the strip, portaled out of the viewer.
-    displayPanel: () => page.locator('[role=menu][aria-label="Display"]'),
+    displayPanel: () => page.locator('[data-display-settings-card]'),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
-    // The file sidebar's sections, top to bottom, the same way. A section draws no box of its own
-    // (`display: contents`): one not hidden is on screen.
-    sidebar: () => pane.locator('[data-cad-file-sidebar] [data-tool-panel]').evaluateAll(panels => panels
-      .filter(panel => !panel.closest('[hidden]')).map(panel => panel.getAttribute('aria-label'))),
+    // The view's panel's sections, top to bottom, by their accessible names: each one its panel offers a tab for.
+    sidebar: () => pane.locator('[data-flat-panel]').evaluateAll(panels => panels.flatMap(panel => [...panel.querySelectorAll('[data-tool-panel]')]
+      // A section with its tab, or the panel's one tab's title (both its id).
+      .filter(section => panel.querySelector(`#flat-panel-tab-${CSS.escape(section.getAttribute('data-flat-panel-section') || '')}`))
+      .map(section => section.getAttribute('aria-label')))),
     linksPanel: () => pane.locator('[data-tool-panel][aria-label="Links"]'),
     // What is selected is Quick Edit's to show: a chip each, by its name (`robotReferences.jsx`).
     chips: () => pane.locator('[data-quick-edit-refs] [data-quick-edit-ref] > button:first-child')
       .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    // A chip's card, what the description says of it: the pointer rests on the chip, and it opens beside it.
+    // What the description says of the one link selected: its row in its Quick Edit chip's list, its name, its kind and
+    // its key facts under it, the list opened by a press on the chip.
     async chipCard(label) {
-      await pane.locator('[data-quick-edit-refs]').getByRole('button', { name: label, exact: true }).hover();
-      const card = page.locator('[data-quick-edit-ref-card]').filter({ has: page.getByText(label, { exact: true }) });
+      const chip = pane.locator('[data-quick-edit-refs]').getByRole('button', { name: label, exact: true });
+      await chip.waitFor();
+      if (await chip.getAttribute('aria-expanded') !== 'true') await chip.click();
+      const card = page.locator(`[data-quick-edit-group-list] [data-quick-edit-group-member]`).filter({ has: page.getByRole('button', { name: label, exact: true }) });
       await card.waitFor();
       return card;
     },
-    position: () => pane.locator('[data-tool-panel][aria-label="Position controls"]'),
+    // Joints: the panel's tab after Links (its ToolPanel drawn as one).
+    position: () => pane.locator('[data-flat-panel] [data-flat-panel-section="position"]'),
     section: name => pane.getByRole('region', { name, exact: true }),
     settle: () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))),
     // The viewport's own pixels, without any chrome over them: what a host capture returns.
@@ -205,7 +250,7 @@ async function open(t, file, { panel = true } = {}) {
   };
   if (panel) {
     await pane.locator('[aria-busy="false"] canvas').first().waitFor();
-    // Its Links are the file sidebar's, opened by their tile.
+    // Its Links are the view's panel's, opened by their tab.
     await robot.openSection('Links');
     await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
     await robot.settled();
@@ -225,30 +270,26 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   const home = (-0.5 * 180) / Math.PI, raised = (-1.0 * 180) / Math.PI;
 
   // The robot opens in Select, its one tool, picking its links and showing its joints' knobs; its
-  // filter can pick Position's knobs alone. Its controls are the file sidebar's, under the Links,
+  // filter can pick Position's knobs alone. Its controls are the view's panel's, after the Links,
   // whatever Select picks; the tool stack holds nothing of a robot's.
   await page.waitForFunction(() => window.__cadJointHandles?.().length > 0);
   assert.deepEqual(await robot.toolNames(), SELECT_IN_HAND);
-  assert.equal(await robot.tool('Position').count(), 0, 'Position is no tool of its own');
+  assert.equal(await robot.tool('Joints').count(), 0, 'Joints is no tool of its own');
   await robot.openPosition();
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
   assert.equal(await robot.tool('Explode').count(), 0, 'a robot is posed, never exploded');
-  // Projection, Display and Preview are the view's controls, at the strip's end after its rule, for a robot as for any 3D file.
-  assert.deepEqual(await robot.viewControls(), ['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
-  assert.equal(await tools.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
-  assert.equal(await tools.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
-  assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'and nothing of the view in the navbar');
-  // Display is the tile beside Preview, shut as the file opens.
-  assert.equal(await robot.displayPanel().count(), 0, 'Display is never where a file opens');
-  assert.equal(await pane.getByRole('tab').count(), 0, 'no tabs');
-  assert.deepEqual([await robot.sidebar(), await robot.stack(), await robot.tiles()], [['Links', 'Position controls'], [], ['Links', 'Position']]);
-  // Its tile opens it in Links' place. Headed "Position", its Reset (idle at the default pose) and its X.
-  await robot.openSection('Position');
-  assert.equal(await robot.linksPanel().isVisible(), false, 'one section at a time');
-  const positionHeading = robot.position().locator('[data-sidebar-head]');
-  assert.equal((await positionHeading.getByRole('heading').innerText()).trim(), 'Position');
-  assert.deepEqual(await positionHeading.getByRole('button').evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.disabled])),
-    [['Reset position', true], ['Close position', false]], 'the heading is its Reset and its X');
+  // The navbar's View and Preview, for a robot as for any 3D file; no rule.
+  assert.deepEqual(await robot.viewControls(), ['Display', 'Preview']);
+  assert.equal(await tools.locator('[data-strip-rule]').count(), 0, 'no rule');
+  // Display's menu is shut as the file opens: nothing is over the model.
+  assert.equal(await robot.displayPanel().count(), 0, 'Display is never open over the model as a file opens');
+  // The panel holds the structure (Links), then Joints, a tab after it.
+  assert.deepEqual([await robot.sidebar(), await robot.stack(), await robot.tiles()], [['Links', 'Joint controls'], [], ['Links', 'Joints']]);
+  // Its tab opened, Links' page is put away (kept mounted); its Reset (idle at the default pose) in its actions row, last.
+  await robot.openSection('Joints');
+  assert.equal(await robot.linksPanel().isVisible(), false, 'one tab at a time');
+  assert.deepEqual(await robot.position().locator('[data-pose-actions]').getByRole('button', { name: 'Reset joints' }).evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.disabled])),
+    [['Reset joints', true]], 'its Reset, in the actions row');
   await robot.openPosition();
   // One knob per moving joint row of the articulation: no fixed joint; a mimic follower's knob
   // writes its leader. A slider exists per CONTROL, so the follower has none, nor the fixed joint.
@@ -260,22 +301,35 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   assert.equal(round6((await robot.handles()).shoulder.value), round6(home));
   assert.equal((await robot.handles()).lift.value, 0.1);
   const position = robot.position();
-  const poseSelect = position.locator('[data-tool-panel-body] [data-pose-row] [data-pose-menu]');
-  assert.equal(await poseSelect.getAttribute('aria-label'), 'Pose: Default');
-  // Compact joint rows: a small value field beside each slider, as wide as its text needs (a
-  // length "0 m" as a turn "0°"), never clipping it; rows 6px apart.
-  const fields = await position.locator('[data-position-control] input').evaluateAll(inputs => inputs.map(input => {
-    const box = input.getBoundingClientRect();
+  const poseSelect = position.locator('[data-pose-row] [data-pose-menu]');
+  assert.equal(await poseSelect.getAttribute('aria-label'), 'Position: Default');
+  // The slider control: its number field on the label's 28px line, 22 tall and as wide as its value (32 to 96), never
+  // clipping its number; the slider under them from the label's left edge to the right edge of the field's text (its
+  // content box: the field's outline hangs past the panel's inset by its own 6px and 1px edge, `SliderField.jsx`).
+  const fields = await position.locator('[data-slider-field] [data-slider-field-value-box]').evaluateAll(boxes => boxes.map(field => {
+    const box = field.getBoundingClientRect(), input = field.querySelector('input');
     return { value: input.value, width: box.width, height: box.height, fits: input.scrollWidth <= input.clientWidth };
   }));
-  assert.ok(fields.length >= 3 && fields.every(field => field.height <= 24 && field.width <= 80), `small value fields: ${JSON.stringify(fields)}`);
+  assert.ok(fields.length >= 3 && fields.every(field => field.height === 22 && field.width >= 32 && field.width <= 96), `small value fields: ${JSON.stringify(fields)}`);
   assert.ok(fields.every(field => field.fits), `every value fits its field: ${JSON.stringify(fields)}`);
-  const rowTops = await position.locator('[data-position-control]').evaluateAll(rows => rows.map(row => row.getBoundingClientRect()));
-  assert.ok(rowTops.slice(1).every((row, index) => Math.abs(row.top - rowTops[index].bottom - 6) <= 0.5),
-    `rows 6px apart: ${JSON.stringify(rowTops.slice(1).map((row, index) => row.top - rowTops[index].bottom))}`);
+  const lines = await position.locator('[data-slider-field]').evaluateAll(controls => controls.map(control => {
+    const label = control.querySelector('[data-slider-field-label]'), field = control.querySelector('[data-slider-field-value-box]');
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const track = control.querySelector('[data-slot=slider-track]').getBoundingClientRect();
+    const style = getComputedStyle(field);
+    const valueRight = field.getBoundingClientRect().right - parseFloat(style.paddingRight) - parseFloat(style.borderRightWidth);
+    return { label: range.getBoundingClientRect().left, valueRight, track: [track.left, track.right] };
+  }));
+  assert.ok(lines.every(line => Math.abs(line.track[0] - line.label) <= 0.5 && Math.abs(line.track[1] - line.valueRight) <= 0.5),
+    `each track runs from its label's left to its value's right: ${JSON.stringify(lines)}`);
+  const rowTops = await position.locator('[data-slider-field]').evaluateAll(rows => rows.map(row => row.getBoundingClientRect()));
+  // Each control 48px (its 28px line, its 12px slider, 8px under it), one after another.
+  assert.ok(rowTops.every(row => Math.abs(row.height - 48) <= 0.5) && rowTops.slice(1).every((row, index) => Math.abs(row.top - rowTops[index].bottom) <= 0.5),
+    `controls 48px, one after another: ${JSON.stringify(rowTops.map(row => row.height))}`);
   // A longer value widens its field rather than being cut.
   await robot.type('lift', 0.25, 'm');
-  assert.equal(await robot.jointField('lift', 'm').evaluate(input => [input.value, input.scrollWidth <= input.clientWidth].join()), '0.25 m,true');
+  assert.equal(await robot.jointField('lift', 'm').evaluate(input => [input.value, input.scrollWidth <= input.clientWidth].join()), '250,true');
   // Back to the value it opened at (the SRDF's home), so the pose is still the default.
   await robot.type('lift', 0.1, 'm');
   for (const heading of ['Pose', 'Joints', 'Kinematics']) {
@@ -337,7 +391,7 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   }));
   assert.deepEqual([...new Set(released)], [held]);
   assert.ok(sameCamera(await robot.camera(), framed), 'a knob drag never moves the camera');
-  assert.equal(await robot.jointField('shoulder').inputValue(), `${Math.round(held * 10) / 10}°`, 'the Position slider follows the knob');
+  assert.equal(await robot.jointField('shoulder').inputValue(), `${Math.round(held * 10) / 10}`, 'the Position slider follows the knob');
   assert.equal((await robot.handles()).lift.value, 0.1);
   // What the drag cost: one matrix per step (the joint that moved), and not one render of the renderer's surface.
   const dragged = await robot.stats();
@@ -395,7 +449,7 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
 
   // A typed value, a named pose and Default are each where the robot IS from the next frame on: none shows anything between.
   assert.deepEqual(await shoulderFrames(() => robot.type('shoulder', 35), 35), [-90, 35], 'a typed value jumps');
-  const choosePose = async (name) => { await poseSelect.click(); await page.locator('[role=menu][aria-label="Pose"]').getByRole('menuitemradio', { name, exact: true }).click(); };
+  const choosePose = async (name) => { await poseSelect.click(); await page.locator('[role=menu][aria-label="Position"]').getByRole('menuitemradio', { name, exact: true }).click(); };
   assert.deepEqual(await shoulderFrames(() => choosePose('raised'), round6(raised)), [35, round6(raised)], 'a named pose jumps');
   assert.equal((await robot.handles()).lift.value, 0.2);
   assert.equal((await robot.handles()).grip.value, 0.03, 'a named pose merges over the pose as it is');
@@ -414,8 +468,8 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   await robot.jointField('shoulder').click();
   await robot.settle();
   assert.deepEqual([await robot.toolNames(), await robot.filter(), await page.evaluate(() => window.__cadJointHandles().length)],
-    [SELECT_IN_HAND, 'Selection filter: Links', 0]);
-  assert.equal(await robot.jointField('shoulder').inputValue(), '-40°');
+    [SELECT_IN_HAND, 'Filter: Links', 0]);
+  assert.equal(await robot.jointField('shoulder').inputValue(), '-40');
   await robot.openPosition();
   const declaredHandles = JSON.parse(PAYLOADS['arm.srdf']).articulation.handles.map(handle => handle.id).sort();
   await page.waitForFunction(expected => JSON.stringify(window.__cadJointHandles().map(handle => handle.id).sort()) === JSON.stringify(expected), declaredHandles);
@@ -437,19 +491,39 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   // The antenna reaches away from the nod pivot; the visor sits on it.
   const antenna = [surface.x + nod.pivotX + (nod.x - nod.pivotX) * 2, surface.y + nod.pivotY + (nod.y - nod.pivotY) * 2];
   const visor = [surface.x + nod.pivotX, surface.y + nod.pivotY];
-  // Nothing: the backdrop right of the robot, clear of the file sidebar down the left and the view cube in the corner.
+  // Nothing: the backdrop right of the robot, clear of the view's panel down the left and the view cube in the corner.
   const backdrop = [surface.x + surface.width - 90, surface.y + surface.height / 2];
 
   // Picking Position alone, a press on the model picks nothing: a click on it is the camera's.
   await page.mouse.click(...onScreen(spots.lift).map((value, index) => value + (index ? 14 : 14)));
   await robot.settle();
   await robot.pressed([]);
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);
-  // Links is the sidebar's, whatever Select picks: on screen picking Position, and picking links.
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
+  // Links is the left panel's, whatever Select picks: on screen picking Position (opened over the model, the 800px
+  // view too narrow for it to push), and picking links.
+  await robot.openSection('Links');
   assert.equal(await robot.linksPanel().isVisible(), true);
   await robot.pickLinks();
   await robot.linksPanel().waitFor();
   await robot.pressed([]);
+  // Its rows stand on the panel's lines, as every list's do: the panel's search, opened from its icon in the head, has
+  // its icon in the first row's glyph box (its left and its width, so their centres too, to the half pixel), and the
+  // search's text starts on the rows' labels' line.
+  await pane.locator('[data-flat-panel] [data-flat-panel-search-open]').click();
+  await pane.locator('[data-flat-panel] [data-flat-panel-search] input').waitFor();
+  const head = await pane.locator('[data-flat-panel]').evaluate(panel => {
+    const icon = panel.querySelector('[data-flat-panel-search] svg').getBoundingClientRect();
+    const input = panel.querySelector('[data-flat-panel-search] input');
+    const row = panel.querySelector('[data-flat-panel-section]:not([hidden]) [data-tree-row]');
+    const slot = row.querySelector('[data-tree-row-glyph]').getBoundingClientRect();
+    const glyph = row.querySelector('[data-tree-row-glyph] svg').getBoundingClientRect();
+    const name = row.querySelector('[data-tree-row-glyph] ~ *').getBoundingClientRect();
+    return { icon: [icon.left, icon.width], slot: [slot.left, glyph.width], text: input.getBoundingClientRect().left + parseFloat(getComputedStyle(input).paddingLeft), name: name.left };
+  });
+  assert.ok(Math.abs(head.icon[0] - head.slot[0]) <= 0.5 && Math.abs(head.icon[1] - head.slot[1]) <= 0.5 && Math.abs(head.text - head.name) <= 0.5,
+    `the search icon in the rows' glyph box, its text on their labels' line: ${JSON.stringify(head)}`);
+  await pane.getByRole('button', { name: 'Close search', exact: true }).click();
+  await pane.locator('[data-flat-panel] [data-flat-panel-search]').waitFor({ state: 'detached' });
   // The tree: a frame-only root is elided, so the base leads it, pinned (no chevron of its own).
   assert.equal(await pane.getByRole('button', { name: 'Select base_footprint', exact: true }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Collapse base', exact: true }).count(), 0);
@@ -460,32 +534,34 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   assert.deepEqual(await robot.toolNames(), SELECT_IN_HAND);
   await robot.pressed(['Select upper_arm']);
   // What is selected is Quick Edit's: a chip for the link, by its name, and no panel comes with it.
-  // The chip's card, on a rest of the pointer, is what the description says of the link.
+  // The chip's list, on a press, is what the description says of the link: its row, its kind, its key facts.
   assert.deepEqual(await robot.chips(), ['upper_arm']);
-  assert.deepEqual([await robot.sidebar(), await robot.stack()], [['Links', 'Position controls'], []], 'no Reference panel under Links');
+  assert.deepEqual([await robot.sidebar(), await robot.stack()], [['Links', 'Joint controls'], []], 'no Reference panel under Links');
   const card = await robot.chipCard('upper_arm');
   await card.getByText('shoulder', { exact: true }).first().waitFor();
-  assert.match(await card.innerText(), /arm/, 'the SRDF planning group of the link');
-  assert.match(await card.innerText(), /^upper_arm\s+ID\s+upper_arm\s/, 'headed by the link\'s name, its id the name too');
-  // A link's facts are in the card's one face and size, never monospace, in compact rows; its ID, one
-  // monospace line, is the reference, not a fact.
-  assert.match(await card.locator('[data-chip-id]').evaluate(node => getComputedStyle(node).fontFamily), /mono/i, 'the ID in monospace');
-  const faces = await card.locator('[data-info-row]:not(:has([data-chip-id])) *').evaluateAll(nodes => [...new Set(nodes
+  assert.doesNotMatch(await card.innerText(), /Inertial|Geometry|Child joints/, 'the link alone, a few key facts');
+  // Its row names it, its kind after it; its facts follow (no Name row: the row is its name).
+  assert.match(await card.innerText(), /^upper_arm\s+Link\s/, 'headed by the link\'s name');
+  assert.doesNotMatch(await card.innerText(), /Name\s+upper_arm\s+ID\s/, 'no ID row');
+  // A link's facts are in one face and size (the muted 11/16), never monospace, in 16px lines.
+  const faces = await card.locator('[data-quick-edit-ref-facts] *').evaluateAll(nodes => [...new Set(nodes
     .filter(node => !node.childElementCount && node.textContent.trim())
     .map(node => `${getComputedStyle(node).fontFamily} | ${getComputedStyle(node).fontSize}`))]);
   assert.equal(faces.length, 1, `one face and size: ${faces.join(' / ')}`);
   assert.doesNotMatch(faces[0], /mono/i);
-  assert.ok((await card.locator('[data-info-row]').first().boundingBox()).height <= 19, 'a compact row');
+  assert.ok((await card.locator('[data-quick-edit-ref-facts] dt').first().boundingBox()).height <= 16, 'a 16px line');
+  await robot.openSection('Links');
   // Picking Position alone keeps the selection: Quick Edit still carries it, and the Links stay.
   await robot.openPosition();
   assert.equal(await robot.linksPanel().isVisible(), true, 'Links stay while Select picks Position');
   assert.deepEqual(await robot.chips(), ['upper_arm'], 'the selection stays while Select picks Position');
-  // Display is a dropdown over the viewer, never a panel: the sidebar stays as it is, and so does
-  // what Select picks; a second press puts it away.
+  // Display is a card over the viewer, never a panel of the sidebar's: the sidebar stays as it is, and so does
+  // what Select picks.
   await robot.openDisplay();
-  assert.deepEqual([await robot.sidebar(), await robot.stack()], [['Links', 'Position controls'], []]);
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);
-  await robot.displayButton().click();
+  assert.deepEqual([await robot.sidebar(), await robot.stack()], [['Links', 'Joint controls'], []]);
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: Position']);
+  // Put away by Escape.
+  await page.keyboard.press('Escape');
   await robot.displayPanel().waitFor({ state: 'detached' });
 
   // A viewport pick, Select picking links: the link is selected on the very next frame (no wait for
@@ -493,7 +569,7 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await robot.pickLinks();
   // The kept selection goes by its chip's X, so nothing is lit before the hover.
   await pane.getByRole('button', { name: 'Remove upper_arm', exact: true }).click();
-  await pane.locator('[data-quick-edit-box]').waitFor({ state: 'detached' });
+  await pane.locator('[data-quick-edit-context]').waitFor({ state: 'detached' });
   // (The viewport's own pixels: a page screenshot would also see the toolbar's hover state.)
   const still = (await robot.capture()).data;
   await page.mouse.move(...onScreen(spots.shoulder).map(value => value - 3));
@@ -513,6 +589,8 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   assert.deepEqual(await robot.pressedRows(), ['Select upper_arm_shell'], 'selected by the next frame');
   assert.deepEqual(await page.evaluate(() => (({ selectedLinks, selectedPartIds }) => [selectedLinks, selectedPartIds])(window.cadHarness.a.controller.readState())),
     [[], ['upper_arm:v1']]);
+  // (The 800px view overlays its panels, one at a time, and the press on the model put the right one away: Links back.)
+  await robot.openSection('Links');
   assert.equal(await pane.getByRole('button', { name: 'Collapse upper_arm', exact: true }).getAttribute('aria-expanded'), 'true', 'its link opens');
   assert.deepEqual(await robot.chips(), ['upper_arm_shell']);
   // The shared camera bar provides zoom framing for robots too.
@@ -531,21 +609,23 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 2);
   await robot.pressed(['Select box', 'Select upper_arm_shell']);
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedPartIds.sort(), ['carriage:v1', 'upper_arm:v1']);
-  assert.deepEqual((await robot.chips()).sort(), ['box', 'upper_arm_shell'], 'a chip each');
+  // Two references are one chip ("2 refs", `ReferenceChips.jsx`).
+  assert.deepEqual(await robot.chips(), ['2 refs'], 'one chip for both');
   // A link is still selected by its row, with what the description says about it.
+  await robot.openSection('Links');
   await pane.getByRole('button', { name: 'Select carriage', exact: true }).click();
   await robot.pressed(['Select carriage']);
-  assert.match(await (await robot.chipCard('carriage')).innerText(), /tool/, 'the end effector mounted on the link');
+  assert.match(await (await robot.chipCard('carriage')).innerText(), /Joint type/, 'the joint that holds the link');
+  await robot.openSection('Links');
   await page.keyboard.down('Shift'); await pane.getByRole('button', { name: 'Select upper_arm', exact: true }).click(); await page.keyboard.up('Shift');
   await robot.pressed(['Select carriage', 'Select upper_arm']);
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks.sort(), ['carriage', 'upper_arm']);
+  // No panel is ever over the model, so Escape means what it always means: it clears the selection, the Links kept.
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 0);
-  await page.keyboard.press('Escape');
-  await robot.settle();
-  assert.equal(await robot.linksPanel().isVisible(), true, 'a second Escape leaves Links where it is');
 
   // Named objects of a link's mesh select themselves, and Shift adds.
+  await robot.settle();
   await page.mouse.click(...visor);
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 1);
   await robot.pressed(['Select visor']);
@@ -564,18 +644,18 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   await page.mouse.click(...visor);
   await robot.pressed(['Select visor'], 'a press off the knobs picks');
 
-  // What names something else can be followed: a parent link selects it, a mesh path opens it,
-  // by the absolute path cadgen resolved for it beside the description.
+  // The parent link Details names can be followed: a press selects it.
+  await robot.openSection('Links');
   await pane.getByRole('button', { name: 'Select head', exact: true }).click();
   const headCard = await robot.chipCard('head');
-  await headCard.getByRole('button', { name: 'meshes/head.glb' }).click();
-  assert.deepEqual(await page.evaluate(() => window.cadHarness.opened), ['/models/meshes/head.glb']);
   await headCard.getByRole('button', { name: 'base', exact: true }).first().click();
   await robot.pressed(['Select base']);
-  // The search box heading Links finds a link by the joint that carries it.
-  await pane.getByRole('textbox', { name: 'Filter links', exact: true }).fill('nod');
+  await robot.openSection('Links');
+  // The panel's search, opened from its icon in the head, finds a link by the joint that carries it; its X closes it.
+  await pane.locator('[data-flat-panel] [data-flat-panel-search-open]').click();
+  await pane.getByRole('textbox', { name: 'Search the model', exact: true }).fill('nod');
   await pane.getByRole('list', { name: 'Link search results' }).getByRole('button', { name: 'Select head', exact: true }).waitFor();
-  await pane.getByRole('button', { name: 'Clear filter', exact: true }).click();
+  await pane.getByRole('button', { name: 'Close search', exact: true }).click();
   await pane.getByRole('list', { name: 'Robot links', exact: true }).waitFor();
 
   // Host commands: a robot has no faces or edges for a command to select, and says so; clearSelection clears the link selection.
@@ -617,8 +697,8 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   await robot.openDisplay();
   await page.evaluate(() => window.cadHarness.mounted(false));
   // It has gone before it comes back: a busy React can take the two calls in one render, and a view
-  // that never went keeps its sidebar open, for the press on its tile to close.
-  await pane.getByRole('group', { name: 'File sidebar' }).waitFor({ state: 'detached' });
+  // that never went keeps its panel open.
+  await pane.locator('[data-flat-panel]').waitFor({ state: 'detached' });
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(record => record?.renderer?.pose?.value?.jointValues?.nod === 12));
   const record = await page.evaluate(() => window.cadHarness.state.renderers[JSON.stringify(['/models/arm.urdf', 'robot'])]);
   assert.deepEqual([record.renderer.pose.value.jointValues.shoulder, record.renderer.pose.value.jointValues.lift], [25, 0.2]);
@@ -631,12 +711,12 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   // The tool is never saved, nor what it picks: the reloaded file opens in Select picking links and
   // knobs, Display shut, no section open.
   await robot.openSection('Links');
-  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: everything']);
+  assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Filter: everything']);
   await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).waitFor();
-  assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display shut');
-  await robot.openSection('Position');
+  assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display\'s card shut (it is kept nowhere)');
+  await robot.openSection('Joints');
   await robot.jointField('shoulder').waitFor();
-  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25°', '0.2 m', '12°']);
+  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25', '200', '12']);
   await page.waitForFunction(() => window.__cadJointHandles?.().find(handle => handle.id === 'shoulder')?.value === 25);
   const links = await robot.links();
   assert.equal(round6(translation(links.carriage)[2]), 0.35, 'and the robot on screen is in that pose');
@@ -644,14 +724,14 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   // A record written against another revision is not restored. (A new revision behind the mounted robot
   // keeps its pose only while its controls and named poses are unchanged: `RobotTools.test.tsx`.)
   await page.evaluate(() => window.cadHarness.mounted(false));
-  await pane.getByRole('group', { name: 'File sidebar' }).waitFor({ state: 'detached' });
+  await pane.locator('[data-flat-panel]').waitFor({ state: 'detached' });
   revision += 1;
   t.after(() => { revision = 1; });
   await page.evaluate(() => window.cadHarness.a.client.refresh());
   await page.evaluate(() => window.cadHarness.mounted(true));
-  await robot.openSection('Position');
+  await robot.openSection('Joints');
   await robot.jointField('shoulder').waitFor();
-  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue()], ['0°', '0 m'], 'a pose belongs to the description it was made on');
+  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue()], ['0', '0'], 'a pose belongs to the description it was made on');
   await robot.openSection('Links');
   await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).waitFor();
   assert.equal(await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).count(), 0, 'and so do its hidden visuals');
@@ -687,13 +767,13 @@ test('Preview draws the robot as it opens, and leaving it finds the tools view a
   await enterPreview();
   assert.deepEqual(await robot.links(), opening, 'Preview poses the robot as it opens');
   assert.ok((await robot.capture()).data.equals(authored), 'Preview draws the robot as it opens');
-  // Preview has no file sidebar (a robot has no routine, so no playbar either), and no navbar: its own
+  // Preview has no panel (a robot has no routine, so no playbar either), and no navbar: its own
   // bar holds only the file's name, its settings and the way out.
-  assert.equal(await pane.locator('[data-file-sidebar-room]').isHidden(), true, 'no file sidebar in Preview');
+  assert.equal(await pane.locator('[data-flat-panel]').isHidden(), true, 'no panel in Preview');
   assert.equal(await pane.locator('[data-preview-playbar]').count(), 0, 'no playbar for a file with no routine');
   assert.equal(await pane.locator('[data-viewer-navbar]').count(), 0, 'no navbar in Preview');
   assert.deepEqual(await pane.locator('[data-preview-bar] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Preview settings', 'Exit preview']);
+    ['Display', 'Exit preview']);
 
   // Leaving finds the tools view's work as it was left.
   await exitPreview();
@@ -707,15 +787,11 @@ test('a pose step costs the same on a long chain: one matrix, no component', asy
   const robot = await open(t, 'chain.urdf');
   const { page, pane } = robot;
   await robot.openPosition();
-  await robot.openSection('Position');
+  await robot.openSection('Joints');
   await page.waitForFunction(count => window.__cadJointHandles?.().length === count, CHAIN_LINKS - 1);
   await robot.settled();
   // What a step costs is counted, never timed: the matrices it writes and the renders it causes.
   // (Posing through React state and a re-placed part list rendered the renderer every step.)
-  // The file sidebar, its 29-joint Position section with it, floats over the chain's root on this
-  // viewport. This measures what a pose step costs, not the layout, so the sidebar is kept out of
-  // the pointer's way (still rendered: its slider rows are what a step must not re-render).
-  await page.addStyleTag({ content: '[data-testid="one"] [data-file-sidebar-room] { visibility: hidden !important; }' });
   const surface = await pane.locator('[data-cad-joint-handles]').boundingBox();
   const knob = (await robot.handles()).j0;
   const radius = Math.hypot(knob.x - knob.pivotX, knob.y - knob.pivotY), bearing = Math.atan2(knob.y - knob.pivotY, knob.x - knob.pivotX);

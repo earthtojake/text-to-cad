@@ -1,3 +1,5 @@
+import { DOUBLE_CLICK_WAIT_MS } from "../kit/viewport/touchGestures.js";
+
 /**
  * Which tap of a click sequence activates what it picked, and when: an engine document's Select
  * (`XbfRenderer.jsx`'s `XbfPick`), by the rules a STEP's Select kept.
@@ -12,17 +14,21 @@
  * changed before it isolates, leaves isolation or looks at a face or edge — the gesture ends as it did when
  * every click waited.
  *
- * The one tap that still waits is a tap under a tool a pick would leave (Explode, Clip: a pick
- * there takes up Select). It is held for the double-click window (`tap(..., { wait: true })`),
- * so a double-click under such a tool isolates and stays in the tool, the tool never having
- * changed hands; a lone click switches to Select once the window has passed, as it always has.
+ * A tap still waits the double-click window (`tap(..., { wait: true, waitMs })`) where what it does
+ * would have to be undone: one that would take a selection away (the thing selected pressed again:
+ * `XbfRenderer.jsx`'s `pickTakesAway`), so a double-click never shows the selection going and coming
+ * back. A press on empty space clears at once: what a double-click there does (fit, leave isolation)
+ * needs no selection. Explode and Clip stand over Select, so a tap under them picks as Select's does
+ * and the tool stays in hand. A lone click that waits acts once the window has passed. A finger's
+ * window is its double tap's.
  *
  * `tap(clickCount, referenceId, options, { wait })`: a press released within the tap slop;
  * `miss(clickCount)`: a press that was not one (a drag, a cancel, a chord), which for a fresh
  * gesture (count 1) forgets any earlier click; `double()`: the dblclick; `cancel()`: drop a
  * held tap.
  */
-export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = 220;
+// The kit's window, the one every selecting view's take-away click waits (`usePointerPick`).
+export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = DOUBLE_CLICK_WAIT_MS;
 
 export function createClickActivation({
   commit,
@@ -49,7 +55,7 @@ export function createClickActivation({
   }
 
   return {
-    tap(clickCount, referenceId, options, { wait = false } = {}) {
+    tap(clickCount, referenceId, options, { wait = false, waitMs = VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS } = {}) {
       drop();
       if (!doubleClick) {
         activated = true;
@@ -57,7 +63,7 @@ export function createClickActivation({
         return;
       }
       if (wait) {
-        hold(referenceId, options, VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS);
+        hold(referenceId, options, waitMs);
         return;
       }
       if (!(clickCount >= 2)) {

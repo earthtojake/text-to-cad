@@ -52,6 +52,7 @@ class Fake:
         self.cwd, self.standby = cwd, standby
         self.pid, self.requests, self.rss, self.started = next(_PIDS), 0, rss, time.time()
         self.leased, self.since, self.used, self.retired, self.stopped = False, 0.0, time.monotonic(), False, False
+        self.began, self.over, self.overran = None, None, None
         said.append(("launch", label))
 
     def alive(self) -> bool:
@@ -59,6 +60,10 @@ class Fake:
 
     def stop(self) -> None:
         self.said.append(("stop", self.label))
+        self.stopped = True
+
+    def kill(self, wait: bool = True) -> None:
+        self.said.append(("kill", self.label))
         self.stopped = True
 
     def adopt(self, key: str, label: str, environment: dict, cwd: str | None) -> None:
@@ -94,11 +99,41 @@ class SchedulingTest(unittest.TestCase):
             found.append(process)
         return found
 
+    def at_once(self, supervisor: Supervisor, lease):
+        """What ``lease()`` is granted, at once: on this thread a lease that would wait fails the test
+        rather than hang it (the grant decided as it was asked)."""
+        this, wait = threading.current_thread(), supervisor.lock.wait
+
+        def refused(*args, **kwargs):
+            if threading.current_thread() is this:
+                raise AssertionError("the lease waits: it was not granted at once")
+            return wait(*args, **kwargs)
+
+        supervisor.lock.wait = refused
+        try:
+            return lease()
+        finally:
+            supervisor.lock.wait = wait
+
     def standing(self, supervisor: Supervisor) -> Fake:
         supervisor.enable_standby("worker")
         supervisor.stand("worker", {})
         await_(lambda: supervisor.standby("worker") is not None, "the standby")
         return supervisor.standby("worker")
+
+    def test_a_process_retired_for_a_reason_goes_now_when_idle_and_as_its_lease_ends_when_busy(self) -> None:
+        supervisor = self.supervisor(4)
+        idle, busy = self.used(supervisor, "render", "a")[0], supervisor.lease("render", "b", {})
+        busy.state = {}
+        supervisor.retire(idle, "base")
+        supervisor.retire(busy, "base")
+        self.assertIn(("stop", "a"), self.said)
+        self.assertNotIn(("stop", "b"), self.said, "a lease holds it")
+        supervisor.release(busy)
+        self.assertIn(("stop", "b"), self.said)
+        self.assertEqual(supervisor.processes("render"), [])
+        supervisor.retire(idle, "base")  # no longer held: left alone
+        self.assertEqual(self.said.count(("stop", "a")), 1)
 
     def test_a_service_that_does_not_count_is_never_held_by_the_cap_nor_costs_a_counted_process(self) -> None:
         supervisor = self.supervisor(1)
@@ -165,6 +200,71 @@ class SchedulingTest(unittest.TestCase):
         self.assertFalse(busy.stopped or unmeasured.stopped)
         self.assertEqual([row["reason"] for row in supervisor.retired], ["RSS", "pressure"])
 
+    def test_a_busy_process_past_the_ceiling_is_killed_and_says_why(self) -> None:
+        supervisor = self.supervisor(8)
+        idle = self.used(supervisor, "worker", "idle.py")[0]
+        busy = supervisor.lease("worker", "busy.py", {})
+        calm = supervisor.lease("worker", "calm.py", {})
+        busy.began = calm.began = 1.0
+        held = {idle.pid: 90_000.0, busy.pid: 30_000.0, calm.pid: 2_000.0}
+        supervisor.measure = held.get
+        self.assertEqual(supervisor.overrun(), [], "no ceiling: nothing is killed")
+        supervisor.ceiling = lambda: 24_576.0
+        self.assertEqual(supervisor.overrun(), [], "one reading past it kills nothing")
+        self.assertEqual(supervisor.overrun(), [busy], "an idle one is shed's; a busy one under it goes on")
+        self.assertIn("stopped it at 29.3 GiB of memory, over the 24.0 GiB", busy.overran)
+        self.assertIn("(CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)", busy.overran)
+        self.assertIn(("kill", "busy.py"), self.said)
+        self.assertFalse(calm.stopped or idle.stopped)
+        supervisor.measure = lambda _pid: None
+        self.assertEqual(supervisor.overrun(), [], "a process the platform will not measure is never killed")
+
+    def test_two_readings_past_the_ceiling_during_one_request_kill_and_nothing_less(self) -> None:
+        supervisor = self.supervisor(8)
+        supervisor.ceiling = lambda: 1_000.0
+        busy = supervisor.lease("worker", "busy.py", {})
+        busy.began = 1.0
+        readings = iter([2_000.0, 500.0, 2_000.0])
+        supervisor.measure = lambda _pid: next(readings)
+        self.assertEqual([supervisor.overrun() for _ in range(3)], [[], [], []], "over, under, over: a peak")
+        busy.requests, busy.began = 1, 2.0  # its request answered, and another begun
+        supervisor.measure = lambda _pid: 2_000.0
+        self.assertEqual(supervisor.overrun(), [], "a reading in another request starts the count again")
+        self.assertNotIn(("kill", "busy.py"), self.said)
+        self.assertEqual(supervisor.overrun(), [busy], "two running, in one request")
+        self.assertIn(("kill", "busy.py"), self.said)
+
+    def test_a_process_let_go_while_it_was_measured_is_not_killed(self) -> None:
+        supervisor = self.supervisor(8)
+        supervisor.ceiling = lambda: 1_000.0
+        busy = supervisor.lease("worker", "busy.py", {})
+        busy.began = 1.0
+        supervisor.measure = lambda _pid: 2_000.0
+        self.assertEqual(supervisor.overrun(), [])
+
+        def answered(_pid: int) -> float:
+            busy.requests, busy.began = 1, None  # its request answers as it is read, and its lease lets it go
+            supervisor.release(busy)
+            return 2_000.0
+
+        supervisor.measure = answered
+        self.assertEqual(supervisor.overrun(), [])
+        self.assertFalse(busy.stopped, "idle now: not killed, its documents never drained")
+        self.assertEqual(supervisor.processes("worker"), [busy])
+
+    def test_the_ceiling_is_its_setting_none_at_zero_else_half_the_machine(self) -> None:
+        from cad.engine import worker
+
+        for given, expected in (("6000", 6000.0), ("0", None)):
+            with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_CEILING_MB": given}):
+                self.assertEqual(worker.memory_ceiling_mb(), expected, given)
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_CEILING_MB": "lots"}), \
+                mock.patch.object(worker, "_physical_mb", return_value=65_536.0):
+            self.assertEqual(worker.memory_ceiling_mb(), 32_768.0, "no number: the default, half the machine")
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_WORKER_CEILING_MB": ""}), \
+                mock.patch.object(worker, "_physical_mb", return_value=4_096.0):
+            self.assertEqual(worker.memory_ceiling_mb(), 4_096.0, "at least 4 GiB")
+
     def test_a_count_cap_victim_is_the_lowest_ranked_idle_process(self) -> None:
         kept = Service("kept", ("{python}",), "kernel", "lease", WORDS, rank=4, noted=("script", "builds"))
         supervisor = self.supervisor(2, (WORKERS, kept))
@@ -208,9 +308,169 @@ class SchedulingTest(unittest.TestCase):
 
     def test_a_declaration_is_refused_by_what_it_does_not_offer(self) -> None:
         for change, said in ((dict(env="parent"), "env is 'parent'"), (dict(environment="python3"), "absolute path"),
-                             (dict(concurrency=2), "concurrency is 2"), (dict(stderr="drop"), "stderr is 'drop'")):
+                             (dict(concurrency=2), "concurrency is 2"), (dict(stderr="drop"), "stderr is 'drop'"),
+                             (dict(interpreter="caller"), "interpreter is 'caller'")):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, said):
                 dataclasses.replace(WORKERS, **change)
+
+    def caller_s(self, cap: int) -> tuple[Supervisor, list]:
+        """A supervisor whose workers a lease may start in its caller's Python, and what it launched."""
+        supervisor = self.supervisor(cap, (dataclasses.replace(WORKERS, interpreter="lease"), RENDERS))
+        started: list = []
+
+        def launch(service, key, label, environment, cwd, standby, python=None):
+            started.append((label, python))
+            return Fake(self.said, service, key, label, environment, cwd, standby)
+
+        supervisor.launch = launch
+        return supervisor, started
+
+    def test_a_key_leased_in_its_caller_s_environment_is_a_process_of_its_own_and_never_the_standby(self) -> None:
+        supervisor, started = self.caller_s(4)
+        spare = self.standing(supervisor)
+        base = supervisor.lease("worker", "a.py", {})
+        self.assertIs(base, spare, "the server's own Python: the standby, taken")
+        await_(lambda: supervisor.standby("worker") is not None, "another standby")
+        theirs = supervisor.lease("worker", "a.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
+        self.assertIsNot(theirs, base)
+        self.assertIsNotNone(supervisor.standby("worker"), "a lease in its caller's Python takes no standby")
+        other = supervisor.lease("worker", "a.py", {}, python="/other/bin/python", python_key="/other 0.10.0")
+        for process in (base, theirs, other):
+            supervisor.release(process)
+        self.assertEqual(started[-2:], [("a.py", "/venv/bin/python"), ("a.py", "/other/bin/python")])
+        # One environment's, whatever spelling of its Python asks: the process its first lease started.
+        self.assertIs(supervisor.lease("worker", "a.py", {}, python="/venv/bin/python3", python_key="/venv 0.10.0"),
+                      theirs)
+        self.assertEqual(len(started), 4, "no process started for another spelling of one environment's Python")
+        self.assertIs(supervisor.live("worker", "a.py", "/other 0.10.0"), other)
+        self.assertIs(supervisor.live("worker", "a.py"), base)
+        self.assertFalse(any(process.stopped for process in (base, theirs, other)))
+        self.assertEqual(list(supervisor.retired), [], "no environment replaced another's process")
+        with self.assertRaisesRegex(ValueError, "a render runs its own environment's Python"):
+            supervisor.lease("render", "doc", {}, python="/venv/bin/python")
+
+    def test_a_lease_in_its_caller_s_python_makes_room_at_the_cap_with_an_idle_worker_before_the_standby(self) -> None:
+        supervisor, started = self.caller_s(2)
+        spare = self.standing(supervisor)
+        idle, = self.used(supervisor, "worker", "a.py")  # the standby, taken
+        await_(lambda: supervisor.standby("worker") is not None, "another standby: the cap is full")
+        standby = supervisor.standby("worker")
+        self.assertIs(idle, spare)
+        theirs = supervisor.lease("worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
+        self.assertTrue(idle.stopped, "the idle worker made room")
+        self.assertIs(supervisor.standby("worker"), standby, "the standby stays for the server's own builds")
+        self.assertFalse(standby.stopped)
+        self.assertEqual([row["reason"] for row in supervisor.retired], ["LRU"])
+        supervisor.release(theirs)
+
+    def test_waiting_at_the_cap_a_lease_in_its_caller_s_python_holds_up_no_build_in_the_server_s_own(self) -> None:
+        supervisor, _started = self.caller_s(2)
+        busy = supervisor.lease("worker", "a.py", {})
+        self.standing(supervisor)
+        standby = supervisor.standby("worker")
+        got: list = []
+        theirs = threading.Thread(target=lambda: got.append(supervisor.lease(
+            "worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")), daemon=True)
+        theirs.start()
+        await_(lambda: supervisor.waiting("worker") == 1, "the caller's lease to wait for the busy worker")
+        self.assertFalse(standby.stopped, "a busy worker will be free: the standby stays")
+        # A build in the server's own Python behind it takes the standby the waiting one cannot.
+        self.assertIs(self.at_once(supervisor, lambda: supervisor.lease("worker", "c.py", {})), standby)
+        supervisor.release(busy)
+        theirs.join(5)
+        self.assertTrue(got and busy.stopped, "the caller's lease took the slot of the worker once it was free")
+
+    def test_at_a_cap_of_one_a_lease_in_its_caller_s_python_takes_the_standby_s_slot_and_it_stands_again(self) -> None:
+        # The standby is all that holds the cap: the slot is the lease's, never a wait on nothing.
+        supervisor, started = self.caller_s(1)
+        spare = self.standing(supervisor)
+        theirs = self.at_once(supervisor, lambda: supervisor.lease("worker", "b.py", {}, python="/venv/bin/python",
+                                                                   python_key="/venv 0.10.0"))
+        self.assertTrue(spare.stopped, "the standby retired for its slot")
+        self.assertEqual((started[-1], list(supervisor.retired)), (("b.py", "/venv/bin/python"), []), "unnoted")
+        # A build in the server's own Python behind it waits for that worker to be free, then takes its slot.
+        got: list = []
+        behind = threading.Thread(target=lambda: got.append(supervisor.lease("worker", "a.py", {})), daemon=True)
+        behind.start()
+        await_(lambda: supervisor.waiting("worker") == 1, "the build behind it to wait for the slot")
+        supervisor.release(theirs)
+        behind.join(5)
+        self.assertTrue(got and theirs.stopped, "the idle worker made room")
+        self.assertIsNone(supervisor.standby("worker"), "no room for the standby while a worker holds the slot")
+        # The slot free again (the worker over its memory cap): the standby owed stands again.
+        got[0].retired = True
+        supervisor.release(got[0])
+        await_(lambda: supervisor.standby("worker") is not None, "the standby owed, standing again")
+
+    def test_the_standby_owed_stands_again_in_the_latest_binding_a_build_asked_for(self) -> None:
+        supervisor, _started = self.caller_s(1)
+        supervisor.enable_standby("worker")
+        supervisor.stand("worker", {"PYTHONPATH": "/old"})
+        await_(lambda: supervisor.standby("worker") is not None, "the standby")
+        theirs = self.at_once(supervisor, lambda: supervisor.lease("worker", "b.py", {}, python="/venv/bin/python",
+                                                                   python_key="/venv 0.10.0"))
+        supervisor.release(theirs)
+        # A build of another binding takes the slot; the standby it would stand finds none, and stays owed.
+        build = self.at_once(supervisor, lambda: supervisor.lease("worker", "a.py", {"PYTHONPATH": "/new"}))
+        self.assertIsNone(supervisor.standby("worker"))
+        build.retired = True
+        supervisor.release(build)
+        await_(lambda: supervisor.standby("worker") is not None, "the standby owed, standing again")
+        self.assertEqual(supervisor.standby("worker").environment, {"PYTHONPATH": "/new"},
+                         "the binding the latest build asked for, never the one it was retired in")
+
+    def test_a_build_s_worker_is_its_environment_s_and_its_release_s_whatever_spelling_names_its_python(self) -> None:
+        from cad.engine import contract
+        from cad_server.engine.daemon import Daemon
+
+        engine = Daemon(cap=1)
+        self.addCleanup(engine.shutdown)
+        folder = Path(tempfile.mkdtemp(prefix="caller-venv-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, True)
+        venv, alias = folder / "venv", folder / "alias"
+        (venv / "bin").mkdir(parents=True)
+        if os.name != "nt":
+            alias.symlink_to(venv, target_is_directory=True)
+
+        def order(executable: str, prefix: Path, release: str) -> dict:
+            return {"interpreter": {"executable": executable, "prefix": str(prefix), "release": release,
+                                    "contract": dict(contract.CONTRACT)}}
+
+        python, key = engine.caller(order(str(venv / "bin" / "python"), venv, "0.10.0"))
+        self.assertEqual(python, str(venv / "bin" / "python"), "the Python it runs: the one this build names")
+        spelled = [engine.caller(order(str(venv / "bin" / name), venv, "0.10.0"))[1] for name in ("python3", "python3.14")]
+        self.assertEqual(spelled, [key, key], "one environment, one key, whatever spelling of its Python")
+        if os.name != "nt":
+            self.assertEqual(engine.caller(order(str(alias / "bin" / "python"), alias, "0.10.0"))[1], key,
+                             "its folder as the system resolves it")
+        self.assertNotEqual(engine.caller(order(str(venv / "bin" / "python"), venv, "0.10.1"))[1], key,
+                            "another release of cad there, under one contract: a worker of its own")
+        self.assertEqual(engine.caller({}), (None, None), "an order that names no Python: the server's own")
+
+    def test_a_held_document_whose_own_python_s_worker_is_gone_is_not_held_and_asked_of_no_other(self) -> None:
+        from cad_server.engine.daemon import Daemon
+
+        engine = Daemon(cap=2)
+        self.addCleanup(engine.shutdown)
+        asked: list = []
+
+        class Worker(Fake):
+            def request(self, message, sink=None, payload=b""):
+                asked.append(message)
+                return {"done": {"files": []}}
+
+        engine.supervisor.launch = lambda service, key, label, environment, cwd, standby, **kw: Worker(
+            [], service, key, label, environment, cwd, standby)
+        base = engine.lease("/w/a.py", {})  # the script's worker in the server's own Python
+        engine.release(base)
+        ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
+        sent: list = []
+        engine.handle({"op": "export", "destinations": ["/w/a.step"], "source": {
+            "script": "/w/a.py", "function": "a", "held": ident, "via": "/w/a.py",
+            "python_key": "/venv\x000.10.0"}}, sent.append)
+        self.assertEqual(asked, [], "never asked of the server's own worker of its script")
+        self.assertEqual(sent[0]["state"], "unsaved")
+        self.assertIn(ident, sent[0]["failed"])
 
 
 # The child a protocol test starts: the frames as a service's process sends them, by request.
@@ -355,6 +615,74 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(self.start(self.service()).request({"op": "cap"}), {"done": "none given"},
                          "a process no supervisor started is told none: its own environment's")
 
+    def test_a_child_past_the_ceiling_mid_request_is_killed_by_its_measured_memory_and_says_why(self) -> None:
+        from cad.engine.worker import footprint_mb
+
+        supervisor = Supervisor(1, (self.service(),), ceiling=lambda: 1.0, measure=footprint_mb)
+        self.addCleanup(supervisor.stop)
+        process = supervisor.lease("child", "doc", {}, label="/w/doc.xbf")
+        self.assertGreater(footprint_mb(process.pid) or 0.0, 1.0, "the system counts a live child's memory")
+        failed: list = []
+
+        def slow() -> None:
+            try:
+                process.request({"op": "slow"})
+            except Gone as error:
+                failed.append(error)
+
+        asking = threading.Thread(target=slow, daemon=True)
+        asking.start()
+        await_(lambda: process.op == "slow", "the slow request to run")
+        self.assertEqual(supervisor.overrun(), [], "a first reading past it")
+        self.assertEqual(supervisor.overrun(), [process])
+        asking.join(30)
+        self.assertEqual(len(failed), 1, "the request failed")
+        self.assertTrue(failed[0].during)
+        self.assertIn("the child doc.xbf exited (", str(failed[0]), "said as a child gone mid-request is")
+        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB, read when the engine starts)",
+                      str(failed[0]), "the request's error says why")
+        supervisor.release(process)
+
+    def test_a_child_stopped_before_its_request_is_written_says_why_as_one_stopped_mid_request(self) -> None:
+        """A request counts as running from before it is written, so the kill can land first and the
+        write find the pipe gone. It still fails as stopped mid-request, saying why, so it is not tried
+        again on a fresh process as a pipe that broke before a request is."""
+        from cad.engine.worker import footprint_mb
+
+        supervisor = Supervisor(1, (self.service(),), ceiling=lambda: 1.0, measure=footprint_mb)
+        self.addCleanup(supervisor.stop)
+        process = supervisor.lease("child", "doc", {}, label="/w/doc.xbf")
+        writing, written = threading.Event(), process._write
+        go_on = threading.Event()
+
+        def held(message: dict, payload: bytes = b"") -> None:
+            writing.set()
+            go_on.wait(30)
+            written(message, payload)
+
+        process._write = held
+        failed: list = []
+
+        def slow() -> None:
+            try:
+                process.request({"op": "slow"})
+            except Gone as error:
+                failed.append(error)
+
+        asking = threading.Thread(target=slow, daemon=True)
+        asking.start()
+        self.assertTrue(writing.wait(30), "the request to be on its way")
+        self.assertEqual(supervisor.overrun(), [], "a first reading past it")
+        self.assertEqual(supervisor.overrun(), [process])
+        process.popen.wait(timeout=30)
+        go_on.set()
+        asking.join(30)
+        self.assertEqual(len(failed), 1, "the request failed")
+        self.assertTrue(failed[0].during)
+        self.assertIn("the child doc.xbf exited (", str(failed[0]))
+        self.assertIn("one process may hold (CAD_ENGINE_WORKER_CEILING_MB", str(failed[0]), "the error says why")
+        supervisor.release(process)
+
     def test_an_answer_that_says_retire_retires_its_process_once_let_go(self) -> None:
         supervisor = Supervisor(1, (self.service(),))
         self.addCleanup(supervisor.stop)
@@ -417,7 +745,9 @@ class ProtocolTest(unittest.TestCase):
         sent: list = []
         engine.handle({"op": "build", "script": "/w/a.py", "env": {}}, sent.append)
         self.assertEqual(launched, ["a.py"], "asked once")
-        self.assertEqual(sent, [{"failed": "the worker for a.py did not start: it never said it was ready in 300 s"}])
+        # In that line, and as what it is: a process that did not start, which its caller counts as such.
+        self.assertEqual(sent, [{"failed": "the worker for a.py did not start: it never said it was ready in 300 s",
+                                 "type": "cad_server.engine.supervisor.Gone"}])
 
     def test_with_no_ready_seconds_a_silent_child_holds_its_lease_while_it_lives(self) -> None:
         import signal

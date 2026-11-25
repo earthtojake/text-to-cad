@@ -3,7 +3,7 @@
 // (`tabRecord.ts`), its versioning and its normalization, and hands hosts the pieces:
 // `settings` for the renderers' preferences, `files` for the file views, and one hook that
 // turns both into `FileViewer`'s controlled state.
-export { createTabStore, memoryTabRecord } from './tabStore.js';
+export { PAGE_FILE_LIMIT, createTabStore, memoryTabRecord } from './tabStore.js';
 export type { SettingsSource, TabRecordStorage, TabStore } from './tabStore.js';
 export { TAB_FILE_LIMIT, TAB_RECORD_VERSION, defaultTabRecord, normalizeAppearance, normalizeTabSettings, parseTabFileKey, readTabRecord, tabFileKey } from './tabRecord.js';
 export type { Appearance, LibraryLayout, TabRecord, TabSettings, ToolStackLayout } from './tabRecord.js';

@@ -1,14 +1,14 @@
 """The regular display modes' look: one frozen record that both renderers draw by.
 
 ``occt.py`` draws it on OCCT's PBR raster (``finish.py``; X-ray on its Phong program), the engine
-serves it as JSON (``GET /api/look``, its environment at ``GET /api/look/environment``:
-``serve.py``), and the CAD Viewer draws an engine document's regular modes by it through three's
+serves it as JSON (``GET /api/v1/look``, its environment at ``GET /api/v1/look/environment``:
+``serve.py``), and the viewer draws an engine document's regular modes by it through three's
 physical materials (core's ``lib/xbf/xbfLook.js``). Preview's photographic look is not here.
 
 **The light.** One key, a directional light at ``intensity`` (radiance: a white surface facing it
 reflects ``intensity / pi``), and one environment, ``studio.hdr`` beside this module, lighting
 every surface at ``environment.intensity``. Nothing else: no ambient term, no fill, no shadow
-(X-ray apart: its own model, below). The environment is the CAD Viewer's neutral studio (the one
+(X-ray apart: its own model, below). The environment is the viewer's neutral studio (the one
 an authored finish reflected), baked once by ``scripts/look/bake-environment.mjs`` as a 512 x 256
 equirectangular Radiance image in the document's frame: rows from +Z (the top row) to -Z, columns once around +Z from -X through +Y, +X
 and -Y; a pixel is ``m / 255 * 2 ** (e - 128)``, as three's HDRLoader decodes it. Both renderers
@@ -66,8 +66,8 @@ half-float target and encoded once, the edges drawn over them after, as OCCT dra
 over the model; core's ``lib/viewer/sceneRig.js``). The two order the faces apart: three sorts
 each part back to front, OCCT draws them as displayed.
 
-A drawing (a DXF, ``drawing.py``) has no light: ``DRAWING`` is the viewer's DXF pane's look, its paper
-and its ink (the pen ACI 7 draws in) for the light and the dark appearance (core's ``lib/appTheme.js``),
+A drawing (a DXF, ``drawing.py``) has no light: ``DRAWING`` is the viewer's DXF pane's look in its light
+theme, as every snapshot is (core's ``lib/appTheme.js``): its paper and its ink (the pen ACI 7 draws in),
 its lines one pixel wide, the drawing fitted within the pane's margin.
 
 Edges are unlit lines in their class's colour, 1 px; Hidden line's faces are unlit in the
@@ -146,16 +146,12 @@ class Grid:
 
 @dataclass(frozen=True)
 class Drawing:
-    """The look of a drawing: paper and ink by appearance, the lines' width, the fit's margin (pixels)."""
+    """The look of a drawing: its paper and its ink, the lines' width, the fit's margin (pixels)."""
 
-    light: tuple[str, str]
-    dark: tuple[str, str]
+    paper: str
+    ink: str
     line_width: float
     margin: float
-
-    def paper(self, appearance: str) -> tuple[str, str]:
-        """``(paper, ink)`` for ``light`` or ``dark``."""
-        return self.dark if appearance == "dark" else self.light
 
 
 @dataclass(frozen=True)
@@ -179,7 +175,7 @@ class Look:
 
     @property
     def environment_path(self) -> Path:
-        """The environment's image, which ``GET /api/look/environment`` serves."""
+        """The environment's image, which ``GET /api/v1/look/environment`` serves."""
         return Path(__file__).resolve().parent / self.environment.file
 
     def edge(self, line: str) -> str:
@@ -189,13 +185,13 @@ class Look:
         return next(mode for mode in self.modes if mode.name == name)
 
     def json(self) -> dict[str, Any]:
-        """The record as ``GET /api/look`` serves it (camelCase, as the structure is); the
-        environment's image is ``GET /api/look/environment``."""
+        """The record as ``GET /api/v1/look`` serves it (camelCase, as the structure is); the
+        environment's image is ``GET /api/v1/look/environment``."""
         return {
             "version": self.version, "backdrop": self.backdrop,
             "lights": [{"name": light.name, "direction": list(light.direction), "intensity": light.intensity}
                        for light in self.lights],
-            "environment": {"url": "/api/look/environment", "intensity": self.environment.intensity},
+            "environment": {"url": "/api/v1/look/environment", "intensity": self.environment.intensity},
             "colourPower": self.colour_power,
             "plain": {"metallic": self.plain.metallic, "roughness": self.plain.roughness, "ior": self.plain.ior},
             "brdf": self.brdf, "tone": self.tone, "exposure": self.exposure, "fill": self.fill,
@@ -233,4 +229,4 @@ LOOK = Look(
                     specular=0.08, shininess=0.35),
 )
 
-DRAWING = Drawing(light=("#ffffff", "#171717"), dark=("#27292d", "#fafafa"), line_width=1.0, margin=16.0)
+DRAWING = Drawing(paper="#ffffff", ink="#171717", line_width=1.0, margin=16.0)

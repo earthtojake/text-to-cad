@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 const badgeVariants = cva(
   "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-md border px-2 py-0.5 text-xs whitespace-nowrap transition-colors [&>svg]:size-3",
@@ -14,9 +14,9 @@ const badgeVariants = cva(
         "destructive-outline":
           "border-destructive/45 bg-destructive/10 text-destructive dark:border-red-400/40 dark:text-red-300",
         outline: "text-foreground",
-        warning: "border-amber-500/45 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+        warning: "border-warning/45 bg-warning/10 text-warning-foreground",
         "warning-outline":
-          "border-amber-500/45 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+          "border-warning/45 bg-warning/10 text-warning-foreground",
       },
     },
     defaultVariants: {

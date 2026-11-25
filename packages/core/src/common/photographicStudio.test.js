@@ -70,7 +70,7 @@ function configuration(overrides = {}) {
 
 test("only a near-black floor takes the neutral lift: a dark studio's floor keeps its own tone", () => {
   const emissive = groundColor => applyPhotographicStudio(THREE, runtime(), configuration({ groundColor })).ground.material.emissive.toArray();
-  assert.deepEqual(emissive("#202226"), new THREE.Color("#202226").toArray(), "no grey haze over a dark backdrop");
+  assert.deepEqual(emissive("#222222"), new THREE.Color("#222222").toArray(), "no grey haze over a dark backdrop");
   assert.deepEqual(emissive("#000000"), new THREE.Color("#000000").lerp(new THREE.Color(0xffffff), PHOTOGRAPHIC_STUDIO_GROUND_EMISSIVE_NEUTRAL_MIX).toArray(),
     "black takes the whole lift, so its shadow still shows");
 });
@@ -396,7 +396,7 @@ test("the physical floor carries a soft contact shadow fitted to the rest placem
 
 test("the floor and its shadow are dithered: a dark floor's shallow gradients round to grain, not bands", () => {
   const value = runtime();
-  const state = applyPhotographicStudio(THREE, value, configuration({ color: "#202226" }));
+  const state = applyPhotographicStudio(THREE, value, configuration({ color: "#222222" }));
   const shader = {
     uniforms: {},
     vertexShader: "#include <common>\nvoid main() {\n#include <fog_vertex>\n}",
@@ -418,7 +418,7 @@ test("a snapshot's render scale spreads the floor's dither, and a viewer's floor
   // A snapshot at render scale 2 averages four drawn pixels into each pixel it keeps, which
   // quiets one level of noise to half of one and lets the kept pixels band again.
   const snapshot = runtime();
-  const state = applyPhotographicStudio(THREE, snapshot, configuration({ color: "#202226" }), { ditherScale: 2 });
+  const state = applyPhotographicStudio(THREE, snapshot, configuration({ color: "#222222" }), { ditherScale: 2 });
   assert.equal(state.ground.material.defines?.STUDIO_DITHER_SCALE, "2.0000", "the floor's noise is drawn twice as wide");
   assert.equal(state.contactShadow.layer.material.defines?.STUDIO_DITHER_SCALE, "2.0000", "and its shadow's");
   const shader = {
@@ -433,10 +433,10 @@ test("a snapshot's render scale spreads the floor's dither, and a viewer's floor
   // A viewer shows its pixels as drawn and passes no scale: nothing is defined, so its
   // programs, and its pixels, are the ones they always were; a scale back at 1 is that again.
   const viewer = runtime();
-  const viewerState = applyPhotographicStudio(THREE, viewer, configuration({ color: "#202226" }));
+  const viewerState = applyPhotographicStudio(THREE, viewer, configuration({ color: "#222222" }));
   assert.equal(viewerState.ground.material.defines?.STUDIO_DITHER_SCALE, undefined);
   assert.equal(viewerState.contactShadow.layer.material.defines?.STUDIO_DITHER_SCALE, undefined);
-  applyPhotographicStudio(THREE, snapshot, configuration({ color: "#202226" }), { ditherScale: 1 });
+  applyPhotographicStudio(THREE, snapshot, configuration({ color: "#222222" }), { ditherScale: 1 });
   assert.equal(state.ground.material.defines?.STUDIO_DITHER_SCALE, undefined);
   assert.equal(state.contactShadow.layer.material.defines?.STUDIO_DITHER_SCALE, undefined);
   disposePhotographicStudio(snapshot);
@@ -552,10 +552,10 @@ test("the floor has no edge: it fades out from the model to its rim, with its re
 
 test("the backdrop is a studio sweep in the background colour, never a flat fill, and is drawn behind everything", () => {
   const value = runtime();
-  const state = applyPhotographicStudio(THREE, value, configuration({ color: "#202226" }));
+  const state = applyPhotographicStudio(THREE, value, configuration({ color: "#222222" }));
   const backdrop = state.backdrop.object;
   assert.equal(backdrop.parent, state.group);
-  assert.equal(value.scene.background.getHexString(), "202226", "the clear under it is the colour, as before");
+  assert.equal(value.scene.background.getHexString(), "222222", "the clear under it is the colour, as before");
   const material = backdrop.material;
   assert.equal(material.depthWrite, false, "it writes no depth: the frame's occlusion never darkens it");
   assert.equal(material.depthTest, false);
@@ -566,7 +566,7 @@ test("the backdrop is a studio sweep in the background colour, never a flat fill
   assert.equal(new THREE.Raycaster(new THREE.Vector3(0, 0, 5), new THREE.Vector3(0, 0, -1)).intersectObject(backdrop).length, 0, "never picked");
   // The colour in display values, as a clear writes it; a dark one shaded more than a light one.
   const [r, g, b] = material.uniforms.uColor.value.toArray();
-  assert.deepEqual([r, g, b].map((channel) => Math.round(channel * 255)), [0x20, 0x22, 0x26]);
+  assert.deepEqual([r, g, b].map((channel) => Math.round(channel * 255)), [0x22, 0x22, 0x22]);
   const darkShade = material.uniforms.uShape.value.y;
   assert.equal(material.uniforms.uShape.value.x, PHOTOGRAPHIC_STUDIO_BACKDROP.lift);
   applyPhotographicStudio(THREE, value, configuration({ color: "#ffffff" }));

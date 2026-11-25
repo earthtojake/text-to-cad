@@ -1,26 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { unavailablePromptContext } from '@text-to-cad/core/prompt';
-import type { CadWorkspaceService } from '@text-to-cad/core/client';
+import { unavailablePromptContext } from '@cad/core/prompt';
+import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import type { FileViewerState } from '../file-viewer/types.js';
 import { createLiveRegistry, type LiveRegistry } from '../host/liveRegistry.js';
 import type { ViewerHost } from '../host/types.js';
 import { THUMBNAIL_SIZE } from '../library/thumbnails.js';
+import { VIEWER_MOBILE_BREAKPOINT } from '../file-viewer/responsive.js';
+import { createBoardRenderer } from '../renderers/board/index.js';
 import { createDxfRenderer } from '../renderers/dxf/index.js';
 import { createGlbRenderer } from '../renderers/glb/index.js';
 import { createMeshRenderer } from '../renderers/mesh/index.js';
 import { createRobotRenderer } from '../renderers/robot/index.js';
+import { createSchematicRenderer } from '../renderers/schematic/index.js';
 import type { CadPreferenceSource } from '../renderers/workspace/index.js';
 import { createXbfRenderer } from '../renderers/xbf/index.js';
 import { createCadFileSource } from './catalog.js';
 
 /**
  * The CAD renderers over one client, reading the tab's preferences, bound to one live registry. A STEP
- * is drawn as an `.xbf` is, from what the cadgen engine serves of it (`renderers/xbf`).
+ * is drawn as an `.xbf` is, from what the engine serves of it (`renderers/xbf`).
  */
 export function cadRenderers(client: CadWorkspaceService, preferences: CadPreferenceSource, live: LiveRegistry['binding']) {
   return [
     createDxfRenderer({ client, preferences, live }),
+    createBoardRenderer({ client, preferences, live }),
+    createSchematicRenderer({ client, preferences, live }),
     createGlbRenderer({ client, preferences, live }),
     createMeshRenderer({ client, preferences, live }),
     createRobotRenderer({ client, preferences, live }),
@@ -41,6 +46,9 @@ const OUT_OF_SIGHT: CSSProperties = {
   position: 'fixed', left: 0, top: 0, width: THUMBNAIL_SIZE.width, height: THUMBNAIL_SIZE.height,
   opacity: 0, pointerEvents: 'none', zIndex: -1, overflow: 'hidden',
 };
+// Its layout, pinned to the one its fixed size always gave it (a picture is drawn as it always was): never measured, and
+// never said to the page, whose own viewer alone sets the page's type (`data-viewer-layout`: a phone's a step up).
+const PICTURE_LAYOUT = THUMBNAIL_SIZE.width < VIEWER_MOBILE_BREAKPOINT ? 'mobile' : 'desktop';
 const NOT_SAVED: FileViewerState = {};
 // A model that has not settled by then is not a cheap one to picture: it keeps its placeholder.
 const SETTLE_WITHIN_MS = 30_000;
@@ -58,7 +66,20 @@ export function OffscreenPicture({ source, host, preferences, onDone }: {
   onDone(kept: boolean): void;
 }) {
   const live = useMemo(() => createLiveRegistry(), []);
-  const renderers = useMemo(() => cadRenderers(source.client, preferences, live.binding), [source.client, preferences, live]);
+  // A picture is the light viewport's, whatever the person's Background: a card's picture never follows a setting of the view.
+  const pictured = useMemo<CadPreferenceSource>(() => {
+    // One snapshot per snapshot of the tab's: `useSyncExternalStore` needs the same object until it changes.
+    let from: ReturnType<CadPreferenceSource['getSnapshot']> | null = null, light: ReturnType<CadPreferenceSource['getSnapshot']> | null = null;
+    return {
+      getSnapshot() {
+        const now = preferences.getSnapshot();
+        if (now !== from) { from = now; light = { ...now, viewportBackground: 'light' }; }
+        return light!;
+      },
+      subscribe: preferences.subscribe, update: preferences.update
+    };
+  }, [preferences]);
+  const renderers = useMemo(() => cadRenderers(source.client, pictured, live.binding), [source.client, pictured, live]);
   const files = useMemo(() => createCadFileSource(source.client, { id: `picture:${source.file}` }), [source]);
   const viewerHost = useMemo<ViewerHost>(() => ({
     files, clipboard: host.clipboard, promptContext: unavailablePromptContext, navigation: { openFile() {} },
@@ -88,6 +109,6 @@ export function OffscreenPicture({ source, host, preferences, onDone }: {
   }, [finish]);
   return <div aria-hidden="true" inert data-offscreen-picture="" style={OUT_OF_SIGHT}>
     <FileViewer file={source.file} host={viewerHost} renderers={renderers} state={state} onStateChange={setState}
-      onError={() => finish(false)} />
+      layout={PICTURE_LAYOUT} onError={() => finish(false)} />
   </div>;
 }

@@ -1,12 +1,12 @@
 # FileViewer
 
-`@text-to-cad/ui/file-viewer` exports the complete file view: one file by its
-absolute path, under the navbar (or alone, `chrome: "bare"`), with the name menu its name opens
+`@cad/ui/file-viewer` exports the complete file view: one file by its
+absolute path, under the navbar, with the name menu its name opens
 (Models and Files), renderer loading, and the loading and error pages.
 It imports no concrete renderer. Applications compose registrations from the
-separate `@text-to-cad/ui/renderers/*` entry points and their own
+separate `@cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)). A CAD host composes
-`CadViewer` (`@text-to-cad/ui/cad-viewer`), which is this component with the five
+`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the six
 CAD renderers, the home and the standard error pages ([viewer host](viewer-host.md)).
 
 ```tsx
@@ -27,7 +27,7 @@ path is absolute and `/`-separated (`/a/b.step`, `C:/a/b.step`); containment and
 authorization remain in the host service. The host controls navigation
 (`navigation.openFile(path)` where the view can show another file, and `home()` where it
 has a home; a view that shows one file alone has neither, and no name menu) and keeps
-`FileViewerState` in its tab store (`@text-to-cad/ui/tab-store`; `useTabViewerState`
+`FileViewerState` in its tab store (`@cad/ui/tab-store`; `useTabViewerState`
 derives it): `renderers`, under encoded `[file path, renderer ID]` keys, each the
 file's view.
 
@@ -52,15 +52,21 @@ and matching do not load the component.
 `prepare` returns `{ data, dispose? }`. FileViewer opens a file's document when the
 file is shown, and again only on `reload`: a renderer follows its file's changes
 itself (every CAD renderer loads the next revision behind what is on screen). A CAD
-file's controls are its own, over the viewport: its tool strip, the tool in hand's
-sub-toolbar, and its file sidebar
-([the design system](settings-ui.md#the-file-sidebar-and-the-tool-stack)); the view's
-controls (Projection, Display, Preview) end its strip, and in Preview its own bar holds
-Preview's, the navbar hidden: nothing of the view is the navbar's.
+file's controls are its own, over the viewport: its tool strip and the tool in hand's
+sub-toolbar, with its panel docked beside it
+([the panel](viewer-ux.md#the-panel)); the view's
+controls (Display, whose card holds a 3D view's Projection, and Preview) stand at the navbar's right end, portalled
+into its view slot, and in Preview its own bar holds
+Preview's, the navbar hidden.
 
 Below 600px of its own width FileViewer is mobile (`useViewerMobile`). The width is a
 breakpoint boolean, never a pixel value, so a resize within one layout does not
-re-render the renderer.
+re-render the renderer. Its root says which (`data-viewer-layout`), and the page's stylesheet reads it: a phone's
+type and touch targets a step up, page-wide, so a menu portalled out of the view matches it. Only the page's own
+viewer says so. A viewer that is not the page's (a library card's picture, drawn out of sight at 480px:
+`OffscreenPicture.tsx`) pins its layout (`layout="mobile"` or `"desktop"`), measures nothing and carries no
+`data-viewer-layout`, and the page-wide rules ignore anything inside `[data-offscreen-picture]`, so Home's type never
+changes while its cards get their pictures.
 
 A renderer is handed, besides its document: `onNavigationActionsChange`, for its
 nav-row actions (`FileNavigationAction`, with an optional shorter `hint`), hidden
@@ -77,14 +83,15 @@ cleanup, while it still belongs to the same source.
 
 The navbar is drawn over every file from the moment one is asked for, and over the
 host's home — only its logo and menu, without Back to home, Back and Forward where the
-host keeps the view's history, and the host's update and actions, where they stand over
+host keeps the view's history, and the host's actions, where they stand over
 a file — never for a `compact` view (a
-picture: the home's thumbnails), never where the host asks for the view alone
-(`chrome: "bare"`, `FileViewerProps.chrome`; the default is `"page"`: the CAD app hands
-`"bare"` to its file handler alone, whose host's file tree is its navigation), and not while a renderer says its
-Preview is up (`RendererViewProps.onPreviewChange`): the CAD viewer's Preview draws its own
+picture: the home's thumbnails), and not while a renderer says its
+Preview is up (`RendererViewProps.onPreviewChange`): the viewer's Preview draws its own
 bar in its place and gives it back as it closes. Over a file, left to right:
 
+- the view's panel toggle, where the file has a panel (`panelToggles.js`, said by the view's frame): the strip's
+  28px tile, the same neutral button open or shut, which shows and hides the panel (`⌘\` or `Ctrl+\`), a mouse
+  resting on it peeking the collapsed panel over the view;
 - the text-to-cad "C" logo (named Menu, with no chevron; the same 16px mark over the home),
   which opens the app menu
   (`navigation/AppMenu.jsx`): Back to home where the host has a home
@@ -98,18 +105,23 @@ bar in its place and gives it back as it closes. Over a file, left to right:
 - the open file's name, alone (no glyph; its chevron where it opens the name menu): a
   button that opens the name menu where the view can show another document, and plain text
   otherwise;
-- the ⋯ file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
-  manager, each only where the host's `fileActions` can do it, and no ⋯ where it can do
-  none.
+- the ⋯ file menu: Copy path; Open in, a submenu of Browser (`fileActions.perform.browser`)
+  and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
+  host's own items (`fileMenuItems`: the viewer's Export submenu). Each only where the
+  host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
+  model's act on its script, `sourceFile`, and it has neither where none is named; a source moved
+  or deleted, `sourceMissing`, draws what opens it disabled with its reason), and no ⋯
+  where there is nothing. The menu and its submenus are shadcn's own width.
 
 The logo, Back and Forward, the name (where it opens the name menu) and the ⋯ are one kind of control: transparent
 at rest, the same accent background while the pointer is on it and while its menu is open, a
 pointer cursor, and no tooltip.
 
-At the right, only what a host or a file adds: the host's update button, a renderer's
-actions, and last the host's own (`navbarActions`: the web viewer's Export). A renderer's own
-view controls are never here: a 3D view's Projection, Display and Preview end its tool strip,
-and Preview's settings and Exit preview are Preview's bar's.
+At the right, only what a host or a file adds: a renderer's actions; the view's own controls, Display (the plain
+cube, whose card holds how the picture is drawn, a 3D view's Projection among it) and a 3D view's or a board's Preview,
+which the view portals into the navbar's view slot (`navbarSlots.js`); and last, outermost, the host's own
+(`navbarActions`: the CAD app's Full size, inline). Back and Forward are a desktop row's alone: a phone's has no room
+for them. Preview's settings and Exit preview are Preview's bar's.
 
 The name menu is a popover under the file's name, a fixed 17.5rem wide and never resized. It
 floats over the view, so opening it resizes nothing, and it is built anew on each opening. Two
@@ -141,7 +153,7 @@ in through `source.search`: the client waits 150 ms after the last keystroke and
 aborts the search before it, and each match shows its path below the folder, the
 subfolders muted before the name. An answer that is `truncated` adds "Stopped early.
 Keep typing to narrow the search." The viewer server bounds both reads
-(`GET /__cad/folder`, `/__cad/search`): hidden and build folders are left out of each,
+(`GET /api/v1/local/folder`, with `q` a search): hidden and build folders are left out of each,
 and a search stops at 200 results, about 1.5 s or depth 24, walking a folder it reaches
 twice once. A pick opens the file through `navigation.openFile` and closes the popover.
 Up and Down move between the filter and the rows; Escape closes it like any popover.

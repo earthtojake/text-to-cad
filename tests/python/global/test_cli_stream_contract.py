@@ -69,9 +69,11 @@ def setUpModule() -> None:
     (root / "src" / "plate.py").write_text(DRAWING_SOURCE, encoding="utf-8")
     PART = str(root / "src" / "part.py")
     DRAWING = str(root / "src" / "plate.py")
-    # The builds below run on an engine daemon of this module's own, never the developer's.
+    # The builds below run on an engine daemon of this module's own, never the developer's: its state
+    # folder registers this interpreter as the installation whose engine the builds start.
     ENGINE = str(root / "engine")
-    WATCHED.update(engine_daemon.watched({}, unittest.addModuleCleanup))
+    WATCHED.update(engine_daemon.watched({"CAD_STATE_DIR": str(root / "state")}, unittest.addModuleCleanup))
+    engine_daemon.start(_env())
 
 
 def tearDownModule() -> None:
@@ -115,7 +117,7 @@ ROBOT_URDF = """<?xml version="1.0"?>
 def run(*args: str) -> subprocess.CompletedProcess:
     # Every verb lives behind the one cadgen front door.
     return subprocess.run([sys.executable, "-m", "cad_server.cli", *args], cwd=REPO, capture_output=True, text=True,
-                          check=False, env=_env())
+                          encoding="utf-8", check=False, env=_env())
 
 
 @functools.cache
@@ -131,7 +133,7 @@ def run_export_json() -> subprocess.CompletedProcess:
     built = run_script(PART)
     assert built.returncode == 0, built.stderr
     step = Path(PART).parent.parent / "STEP" / "part.step"
-    return run("export", str(step), str(step.with_suffix(".glb")), "--json")
+    return run("step", "export", str(step), str(step.with_suffix(".glb")), "--json")
 
 
 class StdoutIsTheResultTests(unittest.TestCase):

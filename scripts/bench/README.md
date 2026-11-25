@@ -1,84 +1,13 @@
 # Benchmarks
 
-Manual commands that measure cadgen and the CAD Viewer. None of them runs in CI:
+Manual commands that measure the viewer's pictures against OCCT's and the manufacturing
+checks. None of them runs in CI:
 what they write goes under an ignored `tmp/` folder, never into the tree
 (`AGENTS.md`), and only their pure helpers are tested
 (`tests/python/global/test_bench_helpers.py`). Performance numbers come from one
 batch, run once every change it measures is in the branch, on a quiet machine:
 numbers taken under other work's load, or by agents benching beside each other,
 do not compare.
-
-## The corpus batch
-
-`corpus_bench.py` builds each model in `corpus.json` with the xbf engine, cold to
-warm, and times every step:
-
-```sh
-.venv/bin/python scripts/bench/corpus_bench.py --dry-run         # the config and the interpreter, checked
-.venv/bin/python scripts/bench/corpus_bench.py --max-load 16     # every model; each step waits for load <= 16 and no other busy cadgen build
-.venv/bin/python scripts/bench/corpus_bench.py --model l_bracket # one; repeat --model for more
-```
-
-A model in `corpus.json` names its project folder (`root`, relative to this repository),
-working folder (`cwd`, within that project), import folders (`pythonpath`, within the
-project), and `targets`: Python scripts relative to `cwd`. Each script runs with its
-own `__main__` control flow in a separate client process. `document` selects a model
-that those calls actually built, as `script.py::function` relative to `cwd`. It does
-not execute that function. The selected report supplies the document's actual id;
-missing, failed or ambiguous selections fail the step. `xbf` names a separate export
-destination, independent of the selected function's name. `edit` is `{file, from, to}`,
-with `from` occurring exactly once; `needs` lists required inputs. `note` describes the
-case. `comparison_note` records a workload difference that prevents a build speedup
-comparison with the recorded baseline.
-
-The models, smallest first, are `l_bracket`, `planetary_gear`, `qdd`, `motorbike`,
-`case`, `juno`, `movement`, `tom`, `hypercar` and `f1`. Tom stays in its own repository:
-its default root is `../tom-cad`. A worktree or isolated clone may have no such sibling;
-give `--config` a copy of `corpus.json` with the relative path to the external checkout
-or copied checkout. `--dry-run` checks configuration, files, edits and the selected
-interpreter's cadgen import (`--cadgen-src`), without building anything. It does not
-infer calls from source or promise that a script calls the selected model.
-
-Each project is copied into a fresh output folder. Source stays unchanged except for
-the configured edit and its revert. Local Git metadata, virtual environments,
-`node_modules`, scratch directories and XBF/DXF outputs are excluded at every level;
-pinned inputs such as `STEP/imported` are retained. A symlink is refused, so a copied
-edit or output cannot write through it into the original checkout. Files use APFS
-clones where available. An existing output folder is refused.
-
-Every model gets private engine, state, cache and launcher directories. The door is
-under a fresh batch folder in `--engine-dir`; the other three directories are under
-`<out>/runtime/<model>`. The engine uses a free port, no standby worker, telemetry off,
-and a browser stub that records any attempted launch in `<out>/browser-requests.log`.
-The batch never stops another batch's engine or clears its cache. Steps are:
-
-- `cold`: a fresh daemon and empty private document cache;
-- `noop`: the unchanged script, on the same daemon;
-- `edit`, `revert`: the configured edit, then the file's original bytes;
-- `restart`: stop successfully, then run with the private document cache retained;
-- `restart-cold`: stop successfully, remove only that private cache's `documents/`,
-  then run again. Bytecode stays warm; declared or exported files are never cache inputs;
-- `export`: explicitly export the selected document id to `xbf`, recording bytes and
-  translation time separately from build walls;
-- `serve`, `mesh-cold`, `mesh-warm`, `structure`: serve that model id, mesh every part
-  (`POST /api/doc/<id>/mesh`), mesh again after dropping those meshes on the now-warm
-  pool, then read the page's structure. No file is substituted for the model document;
-- `snapshot-first`, `snapshot`: draw that document id twice with `cad snapshot --json`.
-
-The small measurement driver runs the target with Python's `runpy` and records reports
-returned by `api.build_script` when the script's explicit model calls reach it. It
-introduces no model call, decorator or export. A build wall covers interpreter startup,
-the whole script and report capture; `wall_api` sums its calls' engine round trips.
-Rows include timings, memo counts, bodies run/replayed/loaded, cache source/reason,
-declared files and worker memory. HTTP and command result shapes are checked; a failed
-step records its error and ends that model. Failure to stop preserves its working files.
-
-The batch writes `tmp/bench/corpus-<time>/` (`--out` selects another fresh folder):
-`rows.jsonl`, appended after every step; `table.md`, updated after each model; snapshots;
-and private runtime state. The first row records the commit, interpreter, platform and
-configuration. `--keep` retains source copies with the edit reverted. The normal exit
-stops each private daemon. These are manual measurements, not CI tests; the global
-suite tests the pure configuration, copy, selection, aggregation and comparison helpers.
 
 ## Viewer against OCCT, mode by mode
 
@@ -92,8 +21,8 @@ display modes. Each `--doc NAME=PATH` (an `.xbf`, built first) is drawn in Solid
 Shaded, Parts, X-ray, Hidden line and Wireframe at iso and front (`--modes`,
 `--cameras`, `--size`) twice, both from the engine daemon's meshes
 (`CAD_ENGINE_DIR` picks the daemon): by OCCT, whose look is the reference
-(`cad/engine/render/look.py`) and which `cad snapshot` draws with; and by the
-viewer's own scene code, `@text-to-cad/core`'s headless renderer, which the bench
+(`cad/engine/render/look.py`) and which `cad <type> snapshot` draws with; and by the
+viewer's own scene code, `@cad/core`'s headless renderer, which the bench
 builds at the start of each run (`scripts/bundle/lib/snapshot_runtime.sh`, into the
 ignored `tmp/bench/snapshot-page`; the wheel does not carry it), then loads in a
 headless Chromium and drives itself. Per picture pair it prints the silhouettes' IoU, the
@@ -112,3 +41,38 @@ its own studio drawn without the model, and its IoU is n/a. `--only chromium` ke
 the OCCT pictures already there while the viewer's side is tuned (`--only occt`, the
 viewer's). OCCT's offscreen drawing is proven on macOS; on Linux it needs an X
 server (Xvfb on a machine with no screen).
+
+## Manufacturing checks on real parts
+
+```sh
+.venv/bin/python scripts/bench/dfm_bench.py --root models --limit 40                      # every process
+.venv/bin/python scripts/bench/dfm_bench.py --root "$KICAD_3DMODELS" --limit 60 --process printing
+.venv/bin/python scripts/bench/dfm_bench.py --dry-run --root models                           # the files, smallest first
+```
+
+`dfm_bench.py` runs `cad.step.dfm` for each process (`cnc`, `sheet`, `molding`, `printing`, or the
+`--process` given) on every STEP file under each `--root`, smallest first, `--limit` of them, in this
+process (the checkout's environment holds both integrations). A worktree holds no built model, so point
+`--root` at a checkout whose models are built, or at any folder of STEP files (KiCad's 3D models). It
+writes `tmp/bench/dfm-<time>/rows.jsonl` (each check's wall time, `ok`, findings by severity, failing rule
+ids, families not measured, faces and parts; a check that raised records its error) and `table.md`, per
+process: parts, median, p95 and max seconds, what raised or could not measure, and the most frequent
+failing rules. Its table and file order are the pure helpers the global suite tests.
+
+## The skills, A/B
+
+`skill_ab.py` lays out an A/B test of the skills: the same tasks done once with the skills of a Git
+ref and once with the working tree's, each by a fresh agent that reads only its own copy.
+
+```sh
+.venv/bin/python scripts/bench/skill_ab.py --base main                    # every task
+.venv/bin/python scripts/bench/skill_ab.py --base main --task cad-part    # one; repeat --task for more
+```
+
+It writes one folder per task and skill set under `tmp/skill-ab` (`--out` names another): a copy of
+the skills, the task's fixtures, an `env.sh` for a server of the run's own, and a `BRIEF.md` to hand
+an agent. It runs no agent and grades nothing. `runs.tsv` says which folder had which skills and what
+each task expects; keep it from the agents. The tasks are `skill_ab/tasks/*.md` (a request and its
+objective answer) and their fixtures `skill_ab/fixtures/`; a STEP a task needs is built from its
+model when the runs are laid out, never committed. How to run and grade one is
+[Writing a skill](../../docs/contributing/writing-a-skill.md#test-a-large-change-ab).

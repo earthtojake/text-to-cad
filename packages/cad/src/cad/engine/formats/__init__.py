@@ -21,7 +21,7 @@ and a still reads them through it (``render/occt.py`` ``camera_in_millimetres``,
 | ``.stl`` | ``stl.py`` (numpy) | one part, its numbers as millimetres |
 | ``.3mf`` | ``threemf.py`` (zip + XML) | its objects placed by its build, each triangle's colour, its unit |
 | ``.glb`` | ``glb.py`` (OCCT's ``RWGltf_CafReader``) | its node tree, meshes, materials and textures |
-| ``.urdf``, ``.sdf``, ``.srdf`` | ``robot.py`` (XML) | the link meshes placed by forward kinematics |
+| ``.urdf``, ``.srdf`` | ``robot.py`` (XML) | the link meshes placed by forward kinematics |
 | ``.dxf`` | ``dxf.py`` (text) | lines, arcs, circles, polylines, splines, ellipses, solids |
 
 A conversion reads a mesh file with these readers' numpy halves and no kernel
@@ -39,17 +39,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
-import numpy as np
-
 if TYPE_CHECKING:  # a reader's module loads no kernel until it reads (the viewer resolves a robot's meshes here)
+    import numpy as np
+
     from cad.engine.mesh_format import Mesh
 
 __all__ = ["DRAWING", "Foreign", "FormatError", "KINDS", "MESHES", "Part", "Placed", "ROBOTS", "assemble", "files_of",
            "read", "stale"]
 
-KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".dxf": "dxf"}
+KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".srdf": "srdf", ".dxf": "dxf",
+         ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch"}
 MESHES = (".stl", ".3mf", ".glb")
-ROBOTS = (".urdf", ".sdf", ".srdf")
+ROBOTS = (".urdf", ".srdf")
 DRAWING = ".dxf"
 
 
@@ -124,6 +125,8 @@ def stale(files: dict[str, Any]) -> bool:
 
 
 def _column_major(matrix: np.ndarray) -> list[float]:
+    import numpy as np
+
     return [float(value) for value in np.asarray(matrix, float).T.reshape(-1)]
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,79 +15,98 @@ export const jsonTargets = [
   { path: ".claude-plugin/plugin.json", fields: [["version"]] },
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
   { path: ".cursor-plugin/plugin.json", fields: [["version"]] },
+  { path: ".grok-plugin/plugin.json", fields: [["version"]] },
   { path: "gemini-extension.json", fields: [["version"]] },
-  { path: "plugin.json", fields: [["version"]] },
+  { path: ".antigravity-plugin/plugin.json", fields: [["version"]] },
+  { path: ".kimi-plugin/plugin.json", fields: [["version"]] },
+  { path: ".devin-plugin/plugin.json", fields: [["version"]] },
+  { path: ".muse-plugin/plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
+  { path: ".muse-plugin/marketplace.json", fields: [], pluginEntries: ["text-to-cad"] },
 ];
 
-// The five distributions released together: the library, the server, the shim and the aliases.
+// The four projects released together: cad (the library, the server and the shim) and its three aliases.
 export const tomlTargets = [
   "packages/cad/pyproject.toml",
-  "packages/cad-server/pyproject.toml",
-  "packages/cad-mcp/pyproject.toml",
+  "packages/aliases/cad-server/pyproject.toml",
+  "packages/aliases/cad-mcp/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
-  "packages/aliases/text-to-cad/pyproject.toml",
 ];
 
-// A requirement pinning one of the three distributions at a release: the library (`cad==`, with its
-// build123d extra or not), the server (`cad-server==`) and the shim (`cad-mcp==`). The name stands
-// alone: `cad` at the end of another name (`text-to-cad==`) pins no distribution of the release.
-export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
+// The development environment's lock (uv.lock, beside the root pyproject.toml): it records the version of cad, the
+// workspace's one member, and `uv sync --locked` refuses a lock whose cad is not the pyproject's. Its entry is
+// stamped as the pyproject is, so a release needs no `uv lock` of its own.
+export const lockTargets = [{ path: "uv.lock", name: "cad", source: "packages/cad" }];
 
-// Every skill that runs the server names the version its installation registers as
-// (`cad +<version>`, run by the `cad` command it writes, and "it says <version> is not
-// installed") and the command that installs it (`uvx ... --from cad-server==<version> cad doctor`),
-// in its SKILL.md and in its setup guide (references/setup.md). Its other references are history, and
-// keep the releases they name.
-function skillLaunchTargets() {
-  const skills = path.join(repoRoot, "skills");
-  if (!existsSync(skills)) {
-    return [];
+// The release written into a file the release does not stamp by a version field: cad as a requirement
+// (`cad==X`, with an extra or not: the aliases', each skill's setup block) or as uvx runs it (`cad@X`: Codex's
+// server line). `cad` stands alone (`my-cad==` is another name, `text-to-cad@earthtojake` a plugin) and the
+// version is three dotted numbers, so a pattern such as `Bash(... cad==*)`, `cad@latest`, or a number with no
+// `cad==` or `cad@` before it (the setup block's fixed "older than 0.11.12") is never touched.
+const releaseName = String.raw`\d+\.\d+\.\d+(?:[0-9A-Za-z.+_-]*[0-9A-Za-z])?`;
+export const pinPattern = new RegExp(String.raw`(?<![\w.-])(cad(?:\[[a-z0-9_,.-]+\])?(?:==|@))(${releaseName})`, "g");
+
+// Files that name the release that way: the aliases, which require cad at their own release, and the line
+// Codex runs to start the CAD app's server (`cad@X mcp`). A file may also be a TOML target (those pyprojects);
+// its pin is stamped on top of that change, not over it.
+export const pinTargets = [
+  "packages/aliases/cad-server/pyproject.toml",
+  "packages/aliases/cad-mcp/pyproject.toml",
+  "packages/aliases/cadgen/pyproject.toml",
+  "codex.mcp.json",
+];
+
+// Each skill's setup block names the cad it was written for, `cad==X`; no command names a version. Every
+// Markdown file under `skills/` is stamped in place by `pinPattern`, and one at least must name it
+// (tests/python/global/test_skill_requirements.py holds the block).
+export const skillsDir = "skills";
+
+function skillDocuments(dir = skillsDir) {
+  let entries;
+  try {
+    entries = readdirSync(repoPath(dir), { withFileTypes: true });
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
   }
-  return readdirSync(skills, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .flatMap((entry) => ["SKILL.md", "references/setup.md"].map((file) => `skills/${entry.name}/${file}`))
-    .filter((relative) => existsSync(path.join(repoRoot, relative)))
-    .filter((relative) => /(?<![\w.-])cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==|\bcad(?:\.cmd)? \+\d/.test(readFileSync(path.join(repoRoot, relative), "utf8")))
-    .sort();
+  return entries
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap((entry) => {
+      const relative = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        return entry.name === "__pycache__" ? [] : skillDocuments(relative);
+      }
+      return entry.isFile() && entry.name.endsWith(".md") ? [relative] : [];
+    });
 }
 
-// Files that pin a release by a requirement string rather than a version field: the commands the
-// agent apps run to start the CAD app's transport (`cad-mcp==`), the install page's Claude Desktop
-// config and the command it says the installer runs, every skill's install command and `cad +<version>`,
-// and the distributions that pin the library at their own release (the server, the aliases). A file may
-// also be a JSON or TOML target (the Gemini extension, those pyprojects); its pin is stamped on top of that
-// change, not over it.
-export const pinTargets = [
-  "packages/cad-server/pyproject.toml",
-  "packages/aliases/cadgen/pyproject.toml",
-  "packages/aliases/text-to-cad/pyproject.toml",
-  "codex.mcp.json",
-  "claude.mcp.json",
-  "cursor.mcp.json",
-  "mcp.json",
-  "gemini-extension.json",
-  "docs/install.md",
-  // The turn-off command the privacy policy prints, the plugin's own launch line. The README and
-  // the docs site's homepage pin nothing: a target without a pin is refused.
-  "apps/docs/src/app/privacy-policy/page.tsx",
-  ...skillLaunchTargets(),
-];
-
-// The one-line installer's scripts carry the release they were published with, which each installs
-// when the version feed cannot be read. Neither is a pin target: each runs `cad-server==$version`,
-// a variable a pin's stamp would overwrite.
-export const bootstrapTargets = [
-  { path: "scripts/install/install.sh", pattern: /^(CAD_VERSION=")([^"\n]*)(")$/m },
-  { path: "scripts/install/install.ps1", pattern: /^([ \t]*\$CadVersion = ")([^"\n]*)(")$/m },
-];
+function syncSkillTargets(version) {
+  const documents = skillDocuments();
+  const changes = [];
+  let named = 0;
+  for (const relativePath of documents) {
+    const text = readRequiredText(relativePath);
+    named += [...text.matchAll(new RegExp(pinPattern.source, "g"))].length;
+    const stamped = text.replace(new RegExp(pinPattern.source, "g"), (_, prefix) => `${prefix}${version}`);
+    if (stamped !== text) {
+      changes.push({ path: relativePath, labels: ["the release the skill was written for"], text: stamped });
+    }
+  }
+  if (documents.length > 0 && named === 0) {
+    throw new Error(`no skill under ${skillsDir}/ names the release it was written for (cad==<version>)`);
+  }
+  return changes;
+}
 
 function usage() {
   console.log(`Usage:
   scripts/release/sync-version.mjs [--check]
 
 Synchronizes duplicate package and plugin metadata versions from the canonical
-VERSION file. Release preparation edits that file, then
+VERSION file, and the release named as cad==<version> or cad@<version> (the aliases, Codex's server line, each
+skill's setup block). Release preparation edits that file, then
 stamps derived metadata from it; the bundle script and the Publish Release
 workflow re-check the same metadata before production output is written.
 
@@ -230,49 +249,39 @@ function syncTomlTarget(relativePath, version) {
   };
 }
 
-// A skill runs its version by the `cad` command (`cad +0.8.0`), and says it in the
-// command's refusal ("it says 0.8.0 is not installed").
-export const skillVersionPattern = /(\bcad(?:\.cmd)? \+|it says )(\d[^\s`"'\\)]*)/g;
-
-function syncPinTarget(relativePath, version, text = readRequiredText(relativePath)) {
-  const pin = new RegExp(pinPattern.source, "g");
-  const matches = [...text.matchAll(pin)];
-  const named = [...text.matchAll(skillVersionPattern)];
-  if (matches.length === 0 && named.length === 0) {
-    throw new Error(`${relativePath} must pin cad[-server|-mcp]==<version> or run cad +<version>`);
-  }
-  const labels = [];
-  if (!matches.every((match) => match[2] === version)) {
-    labels.push("release pin");
-  }
-  if (!named.every((match) => match[2] === version)) {
-    labels.push("cad +<version>");
-  }
-  if (labels.length === 0) {
-    return null;
-  }
-  return {
-    path: relativePath,
-    labels,
-    text: text
-      .replace(pin, (_, prefix) => `${prefix}${version}`)
-      .replace(skillVersionPattern, (_, prefix) => `${prefix}${version}`),
-  };
-}
-
-function syncBootstrapTarget(target, version) {
+function syncLockTarget(target, version) {
   const text = readRequiredText(target.path);
-  const matches = [...text.matchAll(new RegExp(target.pattern.source, "gm"))];
+  const escape = (value) => value.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const entry = new RegExp(
+    String.raw`^(\[\[package\]\]\r?\nname = "${escape(target.name)}"\r?\nversion = ")([^"]+)("\r?\nsource = \{ editable = "${escape(target.source)}" \})`,
+    "gm");
+  const matches = [...text.matchAll(entry)];
   if (matches.length !== 1) {
-    throw new Error(`${target.path} must stamp exactly one fallback version (${target.pattern.source})`);
+    throw new Error(`${target.path} must hold exactly one entry for ${target.name}, editable from ${target.source}`);
   }
   if (matches[0][2] === version) {
     return null;
   }
   return {
     path: target.path,
-    labels: ["fallback version"],
-    text: text.replace(target.pattern, (_, before, _stale, after) => `${before}${version}${after}`),
+    labels: [`${target.name} version`],
+    text: text.replace(entry, (_, head, _old, tail) => `${head}${version}${tail}`),
+  };
+}
+
+function syncPinTarget(relativePath, version, text = readRequiredText(relativePath)) {
+  const pin = new RegExp(pinPattern.source, "g");
+  const matches = [...text.matchAll(pin)];
+  if (matches.length === 0) {
+    throw new Error(`${relativePath} must name cad==<version> or cad@<version>`);
+  }
+  if (matches.every((match) => match[2] === version)) {
+    return null;
+  }
+  return {
+    path: relativePath,
+    labels: ["release pin"],
+    text: text.replace(pin, (_, prefix) => `${prefix}${version}`),
   };
 }
 
@@ -338,8 +347,8 @@ function main() {
       changes.push(change);
     }
   }
-  for (const target of bootstrapTargets) {
-    const change = syncBootstrapTarget(target, version);
+  for (const target of lockTargets) {
+    const change = syncLockTarget(target, version);
     if (change) {
       changes.push(change);
     }
@@ -354,6 +363,8 @@ function main() {
       changes.push(change);
     }
   }
+
+  changes.push(...syncSkillTargets(version));
 
   if (options.check) {
     if (changes.length > 0) {

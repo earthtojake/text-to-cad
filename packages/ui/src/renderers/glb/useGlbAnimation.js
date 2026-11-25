@@ -2,8 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import * as THREE from "three";
 import {
   advanceAnimationElapsed, animationNowMs, clampAnimationElapsed, clampAnimationSpeed
-} from "@text-to-cad/core/common/animationClock.js";
-import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "@text-to-cad/core/lib/render/glbAnimationRuntime.js";
+} from "@cad/core/common/animationClock.js";
+import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "@cad/core/lib/render/glbAnimationRuntime.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 
@@ -45,7 +45,7 @@ export function useGlbAnimation(document, requestRender) {
     stateRef.current = next;
     setState(next);
   }, []);
-  // At rest for every document, before anything (an Autoplay) plays it.
+  // At rest for every document, before the person plays it.
   // Every clip opens looping: a clip is its motion once (a cadgen GLB's is), and the player repeats it.
   useLayoutEffect(() => {
     clock.resetAnimationClock();

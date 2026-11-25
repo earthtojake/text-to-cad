@@ -1,28 +1,29 @@
 import { createViewportBuffer } from "./viewportBuffer.js";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { isEditableTarget, prefersCoarsePointer } from "./dom.js";
 import {
   isWebGlContextCreationError,
   isSoftwareWebGlRenderer,
   runtimeErrorMessage
-} from "@text-to-cad/core/lib/viewer/webglSupport.js";
+} from "@cad/core/lib/viewer/webglSupport.js";
 import {
   createCadWebGlRenderer
-} from "@text-to-cad/core/common/webglRenderer.js";
-import { fitCameraDepthToBounds } from "@text-to-cad/core/common/renderOptions.js";
+} from "@cad/core/common/webglRenderer.js";
+import { fitCameraDepthToBounds } from "@cad/core/common/renderOptions.js";
 import { CAMERA_TOUCH, touchCamera } from "../camera/cameraTouch.js";
 import { keepOrthographicEyeOutside } from "../camera/orthographicEye.js";
 import {
   screenSpaceLineDeviceResolution
-} from "@text-to-cad/core/common/renderEdges.js";
-import { renderWithSceneRig } from "@text-to-cad/core/lib/viewer/sceneRig.js";
+} from "@cad/core/common/renderEdges.js";
+import { renderWithSceneRig } from "@cad/core/lib/viewer/sceneRig.js";
 import {
   resolveInteractionPixelRatioCap
-} from "@text-to-cad/core/lib/viewer/renderQuality.js";
+} from "@cad/core/lib/viewer/renderQuality.js";
 import { updateOrbitControls } from "../camera/orbitControls.js";
 import { guardedOrbitControls } from "../camera/orbitControlsPointers.js";
-import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@text-to-cad/core/lib/viewer/perfMarks.js";
+import { turnSense, turntableOrbitControls } from "../camera/turntable.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@cad/core/lib/viewer/perfMarks.js";
 import { viewerDepthSettings, viewerLogarithmicDepthBuffer } from "./renderDepthPolicy.js";
 import { createZoomPivotReanchor } from "../camera/zoomPivotReanchor.js";
 import { createFramePresentation } from "./framePresentation.js";
@@ -253,8 +254,9 @@ export function useViewerRuntime({
       container.innerHTML = "";
       container.appendChild(renderer.domElement);
 
-      // Its pointerup is guarded against a mouse or pen left among touches (`orbitControlsPointers.js`).
-      const controls = new (guardedOrbitControls(OrbitControls))(camera, renderer.domElement);
+      // It turns as a turntable that goes over the top (`turntable.js`), and its pointerup is guarded
+      // against a mouse or pen left among touches (`orbitControlsPointers.js`).
+      const controls = new (turntableOrbitControls(guardedOrbitControls(OrbitControls)))(camera, renderer.domElement);
       // three's controls write `cursor: auto` inline on the canvas when they (re)connect, and
       // `auto` does not inherit: it would pin the arrow over every tool's cursor (Select's
       // pointer, Pose's grab, Measure's crosshair), which the tools set on the viewport host.
@@ -354,7 +356,10 @@ export function useViewerRuntime({
           up: 0,
           down: 0
         },
-        lastFrameTime: 0
+        lastFrameTime: 0,
+        // The sideways sense of the arrows held together (`turntable.js`'s `turnSense`): picked as the
+        // first goes down, held until the last is up, as a drag holds its own.
+        sense: 1
       };
       const screenSpaceLineMaterials = new Set();
 
@@ -839,6 +844,9 @@ export function useViewerRuntime({
           return;
         }
 
+        if (!keyboardOrbitState.pressedKeys.size) {
+          keyboardOrbitState.sense = turnSense(runtimeRef.current?.camera, runtimeRef.current?.controls?.target);
+        }
         keyboardOrbitState.pressedKeys.add(command.keyId);
         keyboardOrbitState.directionCounts[command.direction] += 1;
         keyboardOrbitState.lastFrameTime = 0;
@@ -849,7 +857,8 @@ export function useViewerRuntime({
         applyOrbitDelta(
           runtimeRef.current,
           (command.direction === "right" ? 1 : command.direction === "left" ? -1 : 0) * KEYBOARD_ORBIT_NUDGE_RAD,
-          (command.direction === "down" ? 1 : command.direction === "up" ? -1 : 0) * KEYBOARD_ORBIT_NUDGE_RAD
+          (command.direction === "down" ? 1 : command.direction === "up" ? -1 : 0) * KEYBOARD_ORBIT_NUDGE_RAD,
+          keyboardOrbitState.sense
         );
         emitPerspectiveChange(runtimeRef.current);
         requestRender();

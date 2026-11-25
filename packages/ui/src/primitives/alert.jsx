@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 const alertVariants = cva(
   "relative grid w-full gap-1 rounded-md border px-4 py-3 text-sm shadow-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5",
@@ -11,7 +11,7 @@ const alertVariants = cva(
         destructive:
           "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
         warning:
-          "border-chart-5/45 bg-chart-5/10 text-foreground [&>svg]:text-chart-5",
+          "border-warning/45 bg-warning/10 text-foreground [&>svg]:text-warning",
       },
     },
     defaultVariants: {

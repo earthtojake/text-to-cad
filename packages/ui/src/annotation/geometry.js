@@ -1,29 +1,25 @@
 import { getStrokePoints } from "perfect-freehand";
-import { FILL_ANALYSIS_MAX_DIMENSION, FILL_CONNECT_GAP_PX, findFillRegion, pairNearbyBoundaryEndpoints } from "@text-to-cad/core/lib/annotation/fillRegion.js";
+import { pointInPolygon, polygonTouchesBox, polylineTouchesBox } from "@cad/core/lib/viewer/boxSelect.js";
 
 // Ink on the screen: what each Annotate tool puts down, as marks in CSS pixels from the viewport's
-// top-left — a stroke (a polyline of a width), an area (a filled polygon:
-// a fill), or a text mark (words, on a flat rectangle) — before `kit/tools/annotate/annotation3d.js` projects them
-// into the model; and the ink already in the model, projected back onto the screen, to hit-test
-// (the eraser, select) and to bound a fill. Pure: no DOM, no WebGL.
+// top-left — a stroke (a polyline of a width) or a text mark (words, on a flat rectangle) — before
+// `kit/tools/annotate/annotation3d.js` projects them into the model; and the ink already in the model,
+// projected back onto the screen, to hit-test (the eraser, select). Pure: no DOM, no WebGL.
 
 /** Strokes are split so no segment is longer than this, so a projected one can follow a curved surface. */
 export const ANNOTATION_SEGMENT_PX = 6;
 const ELLIPSE_SEGMENTS = 72;
-/** A fill is translucent, so it marks an area without hiding the model or the ink under it. */
-export const FILL_OPACITY = 0.35;
 
 /**
  * @typedef {{ x: number, y: number }} ScreenPoint
- * @typedef {{ color: string, width: number }} AnnotationStyle  `width`: the
- *   stroke's weight (1, 2, 4, 6), in CSS pixels on screen.
+ * @typedef {{ color: string, width: number }} AnnotationStyle  `width`: the stroke's weight (1, 2, 4, 6), in CSS
+ *   pixels on screen. Every stroke the tools put down is solid.
  * @typedef {{ kind: "stroke", id: string, points: ScreenPoint[], closed: boolean, color: string,
  *   width: number, opacity: number, widths?: number[], group?: string }} ScreenStroke
  *   `widths`: the pen's, each point's width as a share of `width` (its pressure). `group`: the
  *   marks drawn as one thing (an arrow's line and its head), which are erased, picked and moved together.
- * @typedef {{ kind: "area", id: string, outline: ScreenPoint[], color: string, opacity: number }} ScreenArea
  * @typedef {{ kind: "text", id: string, corners: ScreenPoint[], text: string, color: string, fontPx: number }} ScreenText
- * @typedef {(ScreenStroke | ScreenArea | ScreenText) & { placement?: "surface" | "space" }} ScreenMark  `placement`:
+ * @typedef {(ScreenStroke | ScreenText) & { placement?: "surface" | "space" }} ScreenMark  `placement`:
  *   where it lies once put down — on the model (the default) or in space (`annotation3d.js`).
  */
 
@@ -174,9 +170,9 @@ export function textMark(text, at, { width, height }, { color, fontPx }) {
 }
 
 /** Every screen point a mark lies on: what is projected to decide where it goes. */
-export const markPoints = mark => (mark.kind === "stroke" ? mark.points : mark.kind === "area" ? mark.outline : mark.corners);
+export const markPoints = mark => (mark.kind === "stroke" ? mark.points : mark.corners);
 
-// ---- ink on the screen: hit-testing and fill --------------------------------------------------
+// ---- ink on the screen: hit-testing ------------------------------------------------------------
 
 /**
  * Ink already in the model as it falls on the screen now: each item's points projected (`screen`),
@@ -190,32 +186,7 @@ function segmentDistance(point, a, b) {
   const t = length ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length)) : 0;
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
 }
-function inside(point, polygon) {
-  let hit = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const a = polygon[i], b = polygon[j];
-    if ((a.y > point.y) !== (b.y > point.y) && point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x) hit = !hit;
-  }
-  return hit;
-}
-
-/**
- * A point inside a closed outline on the screen, where a fill of it is seeded: its centroid, or, for
- * an outline that does not hold its centroid (a crescent), the middle of the first span inside it
- * along the centroid's row. Null for an outline with nothing inside.
- */
-export function interiorPoint(polygon) {
-  if (polygon.length < 3) return null;
-  const centre = { x: polygon.reduce((sum, p) => sum + p.x, 0) / polygon.length, y: polygon.reduce((sum, p) => sum + p.y, 0) / polygon.length };
-  if (inside(centre, polygon)) return centre;
-  const crossings = [];
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const a = polygon[i], b = polygon[j];
-    if ((a.y > centre.y) !== (b.y > centre.y)) crossings.push(a.x + ((centre.y - a.y) * (b.x - a.x)) / (b.y - a.y));
-  }
-  crossings.sort((a, b) => a - b);
-  return crossings.length >= 2 ? { x: (crossings[0] + crossings[1]) / 2, y: centre.y } : null;
-}
+const inside = (point, polygon) => pointInPolygon(point.x, point.y, polygon);
 
 /** How far a point is from a piece of ink on the screen: 0 inside an area or a text mark. */
 export function annotationDistance(point, ink) {
@@ -240,46 +211,13 @@ export function annotationAt(point, inks, radius = 6) {
 }
 
 /**
- * The area a fill pressed at `seed` covers: the region the ink on the screen closes around it
- * (stroke ends near each other joined, as an annotation rarely closes exactly), as an area mark — or
- * `null` when no ink bounds it. The ink is rasterised at most `FILL_ANALYSIS_MAX_DIMENSION` pixels
- * a side, around the ink there is.
+ * The ink a box under Select takes (`@cad/core/lib/viewer/boxSelect.js`, in the inks' pixels): any it
+ * touches, even in part -- a stroke along its line at its drawn width, an area or a text mark anywhere
+ * over what it covers. In drawing order; `withGroups` adds what was drawn with it.
  */
-export function fillMarkAt(seed, inks, color) {
-  const outlines = inks.filter(ink => ink.kind === "stroke" && ink.points.length);
-  if (!outlines.length) return null;
-  const all = outlines.flatMap(ink => ink.points);
-  const pad = 12;
-  const minX = Math.min(...all.map(p => p.x)) - pad, minY = Math.min(...all.map(p => p.y)) - pad;
-  const maxX = Math.max(...all.map(p => p.x)) + pad, maxY = Math.max(...all.map(p => p.y)) + pad;
-  if (seed.x < minX || seed.x > maxX || seed.y < minY || seed.y > maxY) return null;
-  const scale = Math.min(1, FILL_ANALYSIS_MAX_DIMENSION / Math.max(maxX - minX, maxY - minY, 1));
-  const width = Math.max(3, Math.ceil((maxX - minX) * scale)), height = Math.max(3, Math.ceil((maxY - minY) * scale));
-  const toMask = point => [(point.x - minX) * scale, (point.y - minY) * scale];
-  const ink = new Uint8Array(width * height);
-  const line = (mask, from, to, radius) => {
-    const steps = Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]), 1);
-    const r = Math.max(1, Math.ceil(radius));
-    for (let step = 0; step <= steps; step += 1) {
-      const x = Math.round(from[0] + (to[0] - from[0]) * step / steps), y = Math.round(from[1] + (to[1] - from[1]) * step / steps);
-      for (let dy = -r; dy <= r; dy += 1) for (let dx = -r; dx <= r; dx += 1) {
-        if (dx * dx + dy * dy <= r * r && x + dx >= 0 && y + dy >= 0 && x + dx < width && y + dy < height) mask[(y + dy) * width + x + dx] = 1;
-      }
-    }
-  };
-  for (const outline of outlines) {
-    const path = outline.closed ? [...outline.points, outline.points[0]] : outline.points;
-    for (let index = 1; index < path.length; index += 1) line(ink, toMask(path[index - 1]), toMask(path[index]), (outline.width * scale) / 2);
-  }
-  const ends = outlines.filter(outline => !outline.closed && outline.points.length >= 2)
-    .flatMap(outline => [outline.points[0], outline.points[outline.points.length - 1]].map(point => ({ point: toMask(point), strokeId: outline.id, allowSelfConnect: true })));
-  const region = findFillRegion(gapPx => {
-    const mask = ink.slice();
-    for (const [from, to] of pairNearbyBoundaryEndpoints(ends, gapPx)) line(mask, from, to, 1);
-    return mask;
-  }, width, height, toMask(seed), { gapPx: FILL_CONNECT_GAP_PX * scale });
-  if (!region) return null;
-  // The region's points come back normalised to the mask's size (`normalizePolygonPoints`).
-  const outline = region.points.map(point => ({ x: minX + (point.x * width) / scale, y: minY + (point.y * height) / scale }));
-  return outline.length >= 3 ? { kind: "area", id: annotationId(), outline, color, opacity: FILL_OPACITY } : null;
+export function annotationsInBox(box, inks) {
+  const radius = ink => (ink.kind === "stroke" ? ink.width / 2 : 0);
+  return inks.filter(ink => (ink.kind !== "stroke" && ink.points.length >= 3
+    ? polygonTouchesBox(box, ink.points)
+    : polylineTouchesBox(box, ink.points, { closed: ink.closed || ink.kind !== "stroke", radius: radius(ink) })));
 }

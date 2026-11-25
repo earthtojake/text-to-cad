@@ -1,6 +1,7 @@
 """Kinematics: build123d's joints harvested into the xbf's mechanism (AP242's links, pairs,
 ground and configurations) and read back; a chain's links and a prismatic pair; a pair the
-built tree contradicts refused by name; ``posed`` by a configuration's name and by joint values
+built tree contradicts refused by name, and a child that ``connect_to`` turned at its joint's zero though
+it was built where it stands; ``posed`` by a configuration's name and by joint values
 placing a part where the closed form and the sampler say, a model of its own whose STEP carries no
 mechanism and whose xbf keeps it at the asked values; what a pose names wrong refused by name; a
 mechanism state outside its joint's range failing the build in one line, one on a bound built; the structure's ``kinematics`` the same from the file and from the
@@ -28,11 +29,12 @@ import numpy as np
 from cad.engine import build as engine_build
 from cad.engine import document, mechanism
 from cad.engine.serve import Server
+from tests.python.support.http_listener import listener
 from tests.python.support import opengl
 
 HINGE = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import step, xbf
 
 
@@ -56,7 +58,7 @@ CONNECT = 'base.joints["elbow"].connect_to(arm.joints["mount"], angle=30)'
 
 CHAIN = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import xbf
 
 
@@ -88,7 +90,7 @@ def lift():
 # model's own turning it to {turned} degrees.
 CAR = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import xbf
 
 
@@ -195,7 +197,7 @@ def _sampled(path: Path, pose: Any) -> list:
 
 # A posed file is a model of its own: the hinge at a state, never an export's option.
 POSED = """
-from cad.ap242 import posed
+from cad.build123d import posed
 from cad.engine import step, xbf
 from hinge import hinge
 
@@ -338,7 +340,7 @@ class HingeTest(_Folder):
 
     def test_a_document_is_served_at_a_pose_and_a_bad_pose_is_refused(self) -> None:
         self.hinge()
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         ident = server.add(self.folder / "XBF/hinge.xbf")
@@ -369,7 +371,7 @@ class HingeTest(_Folder):
         from cad.engine import serve
 
         self.hinge()
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         ident = server.add(self.folder / "XBF/hinge.xbf")
@@ -585,7 +587,7 @@ class NestedTest(_Folder):
         self.assertEqual({pair.label: pair.links for pair in found.pairs}, {"mount": (0, 1), "spin": (1, 2)})
         # ``posed`` moves the sub-assembly and the plate inside it once, as the sampler does.
         self.build("mounted_up", """
-from cad.ap242 import posed
+from cad.build123d import posed
 from cad.engine import xbf
 from mounted import mounted
 
@@ -669,7 +671,79 @@ def bike():
 """
 
 
+# Two links read turned, as a STEP's leaves are, the lower built where it stands and connected at 0: a
+# RigidJoint on a Plane of the axis takes its X from the world's Z, the hinge's frame from the link's own.
+ZERO = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/elbow.xbf")
+def elbow():
+    turn = bd.Rot(30, 40, 50)
+    upper = turn * bd.Box(100, 20, 20)
+    upper.label = "upper"
+    lower = turn * bd.Pos(100, 0, 0) * bd.Box(100, 20, 20)
+    lower.label = "lower"
+    axis = bd.Axis((50, 0, 0), (0, 1, 0)).located(turn)
+    hinge = bd.RevoluteJoint("elbow", upper, axis=axis, angular_range=(-90, 90))
+    bd.RigidJoint("elbow", lower, {at})
+    hinge.connect_to(lower.joints["elbow"], angle=0)
+    return bd.Compound(children=[upper, lower], label="elbow")
+"""
+
+
+# A wheel built at the origin, put on its axle by joint (its RigidJoint's Z turned onto the axle's X), and
+# an arm connected twice: each a placement build123d's joints make, which the zero check leaves alone.
+PLACED = """
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf("XBF/placed.xbf")
+def placed():
+    base = bd.Box(10, 40, 40)
+    base.label = "base"
+    wheel = bd.Cylinder(15, 4)
+    wheel.label = "wheel"
+    bd.RevoluteJoint("axle", base, axis=bd.Axis.X)
+    bd.RigidJoint("axle", wheel, bd.Location())
+    base.joints["axle"].connect_to(wheel.joints["axle"])
+    arm = bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+    arm.label = "arm"
+    bd.RevoluteJoint("elbow", base, axis=bd.Axis((0, 0, 20), (0, 0, 1)), angular_range=(-10, 120))
+    bd.RigidJoint("elbow", arm, bd.Location((0, 0, 20)))
+    base.joints["elbow"].connect_to(arm.joints["elbow"], angle=30)
+    base.joints["elbow"].connect_to(arm.joints["elbow"], angle=60)
+    return bd.Compound(children=[base, wheel, arm], label="placed")
+"""
+
+
 class RefusalTest(_Folder):
+    def test_a_child_turned_at_its_joint_s_zero_is_refused_and_one_at_the_joint_s_own_frame_stays(self) -> None:
+        import build123d as bd
+
+        report = self.build("elbow", ZERO.format(at="bd.Plane(origin=axis.position, z_dir=axis.direction).location"),
+                            ok=False)
+        self.assertRegex(report["error"], r"joint 'elbow' turns elbow/lower by 2\d\.\d+ deg at its zero, moving its "
+                                          r"parts up to \d+(\.\d+)? mm: its RigidJoint stood at the joint's origin")
+        self.assertIn("Build the RigidJoint at the frame the joint places it at, upper.joints['elbow'].location",
+                      report["error"])
+        self.assertFalse((self.folder / "XBF/elbow.xbf").exists(), "a refused document is not written")
+        # At the hinge's own frame the lower link stays where it was built, as built 0.
+        self.build("elbow", ZERO.format(at="hinge.location"))
+        loaded = document.Loaded(self.folder / "XBF/elbow.xbf")
+        self.assertEqual(loaded.mechanism.as_built, {"elbow": (0.0,)})
+        lower = next(instance for instance in loaded.structure()["instances"] if instance["path"].endswith("lower"))
+        built = mechanism._numpy(bd.Rot(30, 40, 50) * bd.Pos(100, 0, 0))
+        np.testing.assert_allclose(np.array(lower["matrix"]).reshape(4, 4).T, built, atol=1e-9)
+
+    def test_a_child_put_on_its_joint_and_one_connected_twice_are_placements(self) -> None:
+        self.build("placed", PLACED)
+        found = document.Loaded(self.folder / "XBF/placed.xbf").mechanism
+        self.assertEqual(found.as_built["axle"], (0.0,))
+        self.assertAlmostEqual(found.as_built["elbow"][0], 60.0, places=6)
+
     def test_a_child_frame_at_the_revolute_s_own_frame_is_joint_zero(self) -> None:
         # A rigid frame made of the world datum turns about the axis from the revolute's own by the
         # angle between their X's: outside a narrow range, no value of the pair, and refused.
@@ -775,7 +849,7 @@ BENCH = """
 import math
 
 import build123d as bd
-from cad.ap242 import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
+from cad.build123d import configuration_sequence, gear_pair, mechanism_state, rack_and_pinion_pair, screw_pair
 from cad.engine import xbf
 
 

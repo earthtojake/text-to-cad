@@ -1,24 +1,44 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { SHOP_LINK_PREFIX, shopLinks } from "./src/lib/shop-links";
 
 const repoRoot = path.resolve(process.cwd(), "../..");
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   outputFileTracingRoot: repoRoot,
-  transpilePackages: ["@text-to-cad/core"],
+  transpilePackages: ["@cad/core"],
   images: { remotePatterns: [{ hostname: "www.skills.sh", protocol: "https" }] },
   turbopack: { root: repoRoot },
   // texttocad.dev/install: the short link to the install box in the hero (`#install`). Temporary, so
   // it can move.
   async redirects() {
-    return [{ source: "/install", destination: "/#install", permanent: false }];
+    return [
+      { source: "/install", destination: "/#install", permanent: false },
+      // The reference's page of commands was /docs/reference/commands before it was generated.
+      { source: "/docs/reference/commands", destination: "/docs/reference/cli", permanent: true },
+      { source: "/docs/reference/commands.md", destination: "/docs/reference/cli.md", permanent: true },
+      // The Shop's links to stores (src/lib/shop-links.ts). Temporary, so a store's address can change.
+      ...Object.entries(shopLinks).map(([slug, destination]) => ({
+        source: `${SHOP_LINK_PREFIX}${slug}`,
+        destination,
+        permanent: false,
+      })),
+    ];
   },
-  // texttocad.dev/install.sh and /install.ps1: the one-line installer, copied into public/ from
-  // scripts/install/ as the site builds (scripts/install-scripts.mjs). Plain text, so `irm` hands
-  // PowerShell a string and a browser shows the script; kept five minutes, so a release reaches
-  // everyone soon after it deploys.
+  // /docs/<page>.md, and /docs.md for /docs itself: a page of the documentation as Markdown, for an
+  // agent (app/docs-md).
+  async rewrites() {
+    return [
+      { source: "/docs.md", destination: "/docs-md" },
+      { source: "/docs/:path(.+)\\.md", destination: "/docs-md/:path" },
+    ];
+  },
+  // texttocad.dev/install.sh and /install.ps1: the one-line installer, and /install.py, the program
+  // both download from beside themselves, copied into public/ from scripts/install/ as the site builds
+  // (scripts/install-scripts.mjs). Plain text, so `irm` hands PowerShell a string and a browser shows
+  // the script; kept five minutes, so a release reaches everyone soon after it deploys.
   async headers() {
-    return ["/install.sh", "/install.ps1"].map((source) => ({
+    return ["/install.sh", "/install.ps1", "/install.py"].map((source) => ({
       source,
       headers: [
         { key: "Content-Type", value: "text/plain; charset=utf-8" },

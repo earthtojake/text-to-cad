@@ -6,9 +6,9 @@ set -euo pipefail
 #   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]
 #
 # --select picks one group instead of all of them:
-#   cadgen   the packages' suites: the library's, the server's (the CAD Viewer backend included)
+#   cadgen   the packages' suites: the library's, the server's (the viewer backend included)
 #            and the shim's (92% of the time)
-#   viewer   the CAD Viewer backend alone (tests/python/packages/cad_server/viewer)
+#   viewer   the viewer backend alone (tests/python/packages/cad_server/viewer)
 #   skills   every skill's suite
 #   all      cad + skills (the default)
 #
@@ -17,6 +17,10 @@ set -euo pipefail
 #
 # PATHs narrow the group to the test files at or under them (repo-relative); CI passes
 # the files and directories a change selected.
+#
+# CAD_TEST_SHARD=I/N runs shard I of N (from 1) of each suite's selected files: sorted by
+# path, the k-th (from 0) is shard k%N+1's, so the N shards run every file exactly once,
+# and a shard that none falls to passes. CI splits a long suite across jobs by it.
 
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
@@ -48,9 +52,18 @@ esac
 
 failed_suites=()
 
+# A suite in which a file hung (unittest_files.py's HUNG_EXIT, 3) ends the run even so: what hung
+# one suite's file likely hangs the next's, and each would wait out its guard to the job's timeout.
 run_suite() {
+  local status=0
   if [ "$KEEP_GOING" -eq 1 ]; then
-    run_python_unittest "$@" || failed_suites+=("$1")
+    run_python_unittest "$@" || status=$?
+    if [ "$status" -eq 3 ]; then
+      printf '\n==> A FILE HUNG in: %s. No further suite runs.\n' "$1" >&2
+      exit 1
+    elif [ "$status" -ne 0 ]; then
+      failed_suites+=("$1")
+    fi
   else
     run_python_unittest "$@"
   fi
@@ -72,7 +85,7 @@ fi
 # The backend alone, for a pull request that only moves the Viewer's client: nothing under
 # apps/web is read by any other package test.
 if [ "$SELECT" = "viewer" ]; then
-  run_suite "CAD Viewer backend Python tests" "tests/python/packages/cad_server/viewer" "${PACKAGE_SOURCES[@]}"
+  run_suite "Viewer backend Python tests" "tests/python/packages/cad_server/viewer" "${PACKAGE_SOURCES[@]}"
 fi
 
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then

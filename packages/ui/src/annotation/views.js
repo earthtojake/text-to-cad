@@ -3,7 +3,7 @@
  * `display.mode` and `display.grid`, `display.clip` and `display.exploded`, `display.hidden` and
  * `display.isolated`, `kinematics` or `jointValues`, `animation`, `selection.hide` and
  * `selection.focus`, and the picture's `width` and `height`), so the prompt's views file is a job
- * `cad snapshot --annotation PACKET --camera authored` draws as it was.
+ * `cad <type> snapshot --annotation PACKET --camera authored` draws as it was.
  *
  * @typedef {{
  *   camera: { position: number[], target: number[], up: number[], orthographicHalfHeight: number },
@@ -27,7 +27,7 @@ const filled = value => Boolean(value) && typeof value === "object" && Object.ke
  * parts or hides them — Clip when it is on, the one motion on screen (Explode, the pose, or a
  * routine's kept frame: `{clip, time}`), the parts hidden and isolated. A renderer whose parts are
  * named by refs (an engine document's: as Copy Prompt copies them) gives them as `hidden` and
- * `isolated`, which the view's display says as `cad snapshot --display` takes them; one whose
+ * `isolated`, which the view's display says as `cad <type> snapshot --display` takes them; one whose
  * parts are not gives `hide` and `focus`, its `selection`.
  *
  * @param {{ camera: PromptView["camera"], display?: PromptView["display"], width: number, height: number } | null} viewport
@@ -72,6 +72,12 @@ const direction = camera => {
   const length = Math.hypot(...d) || 1;
   return d.map(value => value / length);
 };
+// Which way is up on the screen: the camera's up square to its view. A camera's `up` may be the world's
+// or its screen's own (the orbit leaves its own: `kit/camera/turntable.js`), the same picture either way.
+const screenUp = (camera, look) => {
+  const along = camera.up.reduce((sum, value, index) => sum + value * look[index], 0);
+  return camera.up.map((value, index) => value - along * look[index]);
+};
 const key = value => JSON.stringify(value ?? null);
 
 /**
@@ -86,7 +92,7 @@ export function sameView(a, b) {
   const [da, db] = [direction(a.camera), direction(b.camera)];
   const cos = Math.min(1, Math.max(-1, da.reduce((sum, value, index) => sum + value * db[index], 0)));
   if (Math.acos(cos) * 180 / Math.PI >= SAME_TURN_DEGREES) return false;
-  const [ua, ub] = [a.camera.up, b.camera.up];
+  const [ua, ub] = [screenUp(a.camera, da), screenUp(b.camera, db)];
   const upCos = ua.reduce((sum, value, index) => sum + value * ub[index], 0) / ((Math.hypot(...ua) * Math.hypot(...ub)) || 1);
   if (Math.acos(Math.min(1, Math.max(-1, upCos))) * 180 / Math.PI >= SAME_TURN_DEGREES) return false;
   const [ha, hb] = [a.camera.orthographicHalfHeight, b.camera.orthographicHalfHeight];

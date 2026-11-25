@@ -1,6 +1,6 @@
 import {
   articulationHandles, controlWriteForHandle, handleRowValue
-} from "@text-to-cad/core/common/articulation.js";
+} from "@cad/core/common/articulation.js";
 import { armOffset, normalize, subtract, wrapTurn } from "../kit/tools/pose/jointHandleMath.js";
 
 // What the Position tool can take hold of on a robot, as the kit's plain handle list
@@ -39,7 +39,7 @@ export function robotPosableHandles(robot) {
  *
  * @param {typeof import("three")} THREE
  * @param {object} robot  The payload.
- * @param {ReturnType<typeof import("@text-to-cad/core/lib/urdf/robotScene.js").createRobotScene>} scene
+ * @param {ReturnType<typeof import("@cad/core/lib/urdf/robotScene.js").createRobotScene>} scene
  */
 export function prepareRobotJointHandles(THREE, robot, scene) {
   const articulation = robot?.articulation || null;
@@ -67,7 +67,7 @@ export function prepareRobotJointHandles(THREE, robot, scene) {
  *
  * @param {typeof import("three")} THREE
  * @param {ReturnType<typeof prepareRobotJointHandles>} prepared
- * @param {ReturnType<typeof import("@text-to-cad/core/lib/urdf/robotScene.js").createRobotScene>} scene
+ * @param {ReturnType<typeof import("@cad/core/lib/urdf/robotScene.js").createRobotScene>} scene
  * @param {Record<string, number>} values  The pose store's control values.
  * @param {(id: string, value: number) => void} onControlChange  The pose store's one write path.
  */

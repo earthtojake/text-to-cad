@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { build } from "esbuild";
 import { chromium } from "playwright";
+import en from "../i18n/locales/en.js";
 
 let server, browser, temporary, page;
 before(async () => {
@@ -87,4 +88,127 @@ test("the renderer is not re-rendered by the frame's own chrome: a navbar action
   await page.setViewportSize({ width: 1240, height: 800 });
   await settle();
   assert.equal(await page.evaluate(() => window.harness.renders["root-a"]), before, "no renderer render for its own navbar action, or a width that does not cross the breakpoint");
+});
+
+// A library card's picture is drawn by a viewer of its own, out of sight at 480 × 360 (`OffscreenPicture.tsx`). That viewer
+// is under the phone breakpoint, and the page's type once followed it: Home's text grew a step while its cards got pictures.
+test("the update button is the navbar's outermost control, and a failed update is the viewer's alert card, centred over the view, until its X or Escape", async () => {
+  await reset();
+  await waitPayload("root-a notes");
+  await page.evaluate(() => window.harness.update("failed"));
+  const navbar = pane().locator("[data-viewer-navbar]");
+  const button = navbar.locator("[data-update]");
+  await button.waitFor();
+  const controls = await navbar.evaluate((row) => [...row.querySelectorAll("button")].map((node) => node.getBoundingClientRect().right));
+  const [row, box] = await Promise.all([navbar.boundingBox(), button.boundingBox()]);
+  assert.equal(Math.max(...controls), box.x + box.width, "the last of the row's controls, outermost");
+  assert.ok(row.x + row.width - (box.x + box.width) <= 16, `at the row's right end: ${JSON.stringify([row, box])}`);
+  // The one alert card, centred over what is under the navbar, as a view's card is over the view.
+  const card = pane().locator("[data-host-alert] [role=alert]");
+  await card.waitFor();
+  const [at, body] = await Promise.all([card.boundingBox(), payload().evaluate((element) => element.closest(".overflow-hidden").parentElement.getBoundingClientRect().toJSON())]);
+  assert.ok(Math.abs(at.x + at.width / 2 - (body.x + body.width / 2)) <= 1 && Math.abs(at.y + at.height / 2 - (body.y + body.height / 2)) <= 1,
+    `centred over the view: ${JSON.stringify([body, at])}`);
+  assert.ok(at.y >= row.y + row.height, "under the navbar");
+  assert.equal(await card.getByRole("heading").textContent(), "Couldn’t update to 0.9.1");
+  assert.deepEqual((await card.innerText()).split("\n").filter(Boolean), ["Couldn’t update to 0.9.1",
+    en["update.cause.in_use"], "Details", en["update.retry"]]);
+  await payload().click();
+  await settle();
+  assert.ok(await card.isVisible(), "a press elsewhere leaves it");
+  await page.keyboard.press("Escape");
+  await card.waitFor({ state: "detached" });
+  // Put away: its icon, first of the right-hand controls, brings it back; its X puts it away again.
+  const icon = navbar.getByRole("button", { name: "Couldn’t update to 0.9.1" });
+  const right = await navbar.evaluate((row) => [...row.lastElementChild.querySelectorAll("button")].map((node) => node.getAttribute("aria-label")));
+  assert.equal(right[0], "Couldn’t update to 0.9.1", `the first of them: ${right}`);
+  await icon.click();
+  await card.waitFor();
+  await card.getByRole("button", { name: "Dismiss" }).click();
+  await card.waitFor({ state: "detached" });
+  assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => ["dismiss", "reopen", "update"].includes(event))), ["dismiss", "reopen", "dismiss"]);
+  await page.evaluate(() => window.harness.update("none"));
+});
+
+test("the update button is the navbar's top-right corner, over a file and over the home, at every width: its two looks, their hints, and a click that acts at once", async () => {
+  await reset();
+  await waitPayload("root-a notes");
+  const navbar = pane().locator("[data-viewer-navbar]");
+  const button = navbar.locator("[data-update]");
+  const box = (locator) => locator.evaluate((node) => node.getBoundingClientRect().toJSON());
+  for (const width of [1600, 1280, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.evaluate((next) => { document.querySelector("#root > div").style.width = `${next}px`; }, width);
+    for (const where of ["home", "file"]) {
+      await page.evaluate((path) => window.harness.open(path), where === "home" ? null : "/work/notes.txt");
+      if (where === "home") await navbar.locator("[data-navbar-home-right]").getByRole("button", { name: "Open", exact: true }).waitFor();
+      else await waitPayload("root-a notes");
+      for (const [state, tip, after] of [["behind", "Update", "working"], ["ready", "Restart to update", "restarting"]]) {
+        await page.evaluate((next) => window.harness.update(next), state);
+        await navbar.locator(state === "ready" ? '[data-update="ready"]' : '[data-update=""]').waitFor();
+        await settle();
+        const [row, at, pad, rights] = [await box(navbar), await box(button), await navbar.evaluate((node) => parseFloat(getComputedStyle(node).paddingRight)),
+          await navbar.evaluate((node) => [...node.querySelectorAll("button")].map((control) => control.getBoundingClientRect().right))];
+        const where_ = `${where} at ${width}, ${state}`;
+        assert.equal(Math.max(...rights), at.right, `the navbar's last control: ${where_}`);
+        assert.ok(Math.abs(row.right - pad - at.right) <= 0.5, `on the row's right end, less its padding: ${where_} ${JSON.stringify([row, pad, at])}`);
+        if (where === "home") {
+          // The home's own controls end on the grid's column where it is narrower than the row, else short of the button.
+          const end = (await box(navbar.locator("[data-navbar-home-right]"))).right;
+          const column = width - (Math.max(0, (width - 1128) / 2) + 24);
+          if (width > 600) assert.ok(Math.abs(end - column) <= 1, `the search and Open end on the column: ${where_} ${end} ${column}`);
+          else assert.ok(end <= at.left - 8, `short of the button: ${where_}`);
+        }
+        // Its hint under a resting pointer. A hover the hint did not take is tried again, as a person moves the pointer
+        // again: three hovers, each awaited, and the place and state said where none was taken.
+        const hint = page.locator('[data-slot="tooltip-content"]');
+        for (let tries = 1; ; tries += 1) {
+          await page.mouse.move(1, 790);
+          await button.hover();
+          try {
+            await hint.waitFor({ timeout: 3000 });
+            break;
+          } catch (error) {
+            if (tries === 3) throw new Error(`no hint after three hovers: ${where_}`, { cause: error });
+          }
+        }
+        assert.equal(await page.getByRole("tooltip").textContent(), tip, `its hint: ${where_}`);
+        await page.mouse.move(1, 790);
+        await hint.waitFor({ state: "detached" });
+      }
+      // A click acts at once: the restart's spinner, or the ring.
+      for (const [state, after] of [["ready", "restarting"], ["behind", "working"]]) {
+        await page.evaluate((next) => window.harness.update(next), state);
+        await button.click();
+        await navbar.locator(`[data-update="${after}"]`).waitFor();
+        assert.equal(await page.locator('[role="dialog"]').count(), 0, "nothing opens");
+      }
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => { document.querySelector("#root > div").style.width = "1000px"; window.harness.update("none"); window.harness.open("/work/notes.txt"); });
+});
+
+test("a viewer drawn out of sight for a picture never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
+  await reset();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await settle();
+  const type = () => page.evaluate(() => ({ xs: getComputedStyle(document.documentElement).getPropertyValue("--cad-text-xs").trim(),
+    name: getComputedStyle(document.querySelector('[data-testid="primary"] [data-file-name]')).fontSize,
+    layouts: [...document.querySelectorAll("[data-viewer-layout]")].map((node) => node.getAttribute("data-viewer-layout")) }));
+  const desktop = await type();
+  assert.deepEqual(desktop.layouts, ["desktop"]);
+  // As OffscreenPicture draws it: pinned, it neither measures nor carries the attribute the page's stylesheet reads.
+  await page.evaluate(() => window.harness.picture("pinned"));
+  await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").waitFor({ state: "attached" });
+  await settle();
+  assert.deepEqual(await type(), desktop, "a pinned picture viewer leaves the page as it was");
+  assert.equal(await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").getAttribute("data-viewer-pinned-layout"), "mobile");
+  // And a viewer in the picture's box that measured itself a phone's is still not the page's.
+  await page.evaluate(() => window.harness.picture("measured"));
+  await page.getByTestId("picture").locator('[data-viewer-layout="mobile"]').waitFor({ state: "attached" });
+  await settle();
+  const measured = await type();
+  assert.deepEqual([measured.xs, measured.name], [desktop.xs, desktop.name], "a phone-sized viewer out of sight never sets the page's type");
+  await page.evaluate(() => window.harness.picture("none"));
 });

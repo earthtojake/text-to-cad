@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Every word the CAD Viewer and the CAD app show reads through the locale files
+// Every word the viewer and the CAD app show reads through the locale files
 // (`packages/ui/src/i18n/locales`, English first): a person reading Japanese never meets an
 // English label the code spelled itself. This check reads the three source trees that draw them
 // (packages/ui/src, apps/web/src, apps/mcp/src; tests and test harnesses aside) and refuses:
@@ -50,7 +50,7 @@ const TOASTS = /^toast(?:\.(?:success|error|warning|info|loading|message))?$/;
 // Not language: what reads the same in every locale.
 export const NON_LANGUAGE = new Set([
   // Formats and file kinds.
-  'STEP', 'STP', 'STL', '3MF', 'GLB', 'glTF', 'DXF', 'XBF', 'SDF', 'URDF', 'SRDF', 'PNG', 'SVG', 'JSON', 'PDF',
+  'STEP', 'STP', 'STL', '3MF', 'GLB', 'glTF', 'DXF', 'XBF', 'URDF', 'SRDF', 'PNG', 'SVG', 'JSON', 'PDF',
   // Brands and products.
   'CAD', 'GitHub', 'Discord', 'text-to-cad', 'cadgen', 'Codex', 'Claude', 'WebGL',
   // Units and symbols.
@@ -189,13 +189,17 @@ export async function checkUiStrings(repo, { allowlist = UI_STRINGS_ALLOWLIST, r
 // What stays as written, one line each: [file, text on the line or the literal, why].
 export const UI_STRINGS_ALLOWLIST = [
   ['packages/ui/src/annotation/views.js', 'current view', "a view's name in the prompt the agent reads, not on screen"],
-  ['packages/ui/src/renderers/kit/tools/quick-edit/quickEditPrompt.js', 'Snapshot (cad snapshot --annotation)', "a file's label in the prompt the agent reads"],
+  ['packages/ui/src/renderers/kit/tools/quick-edit/quickEditPrompt.js', 'Snapshot (${})', "a file's label in the prompt the agent reads"],
   ['packages/ui/src/file-viewer/navigation/NavbarLinks.jsx', 'Feedback:', "the title of the GitHub issue Feedback opens, for the project's own tracker"],
-  ['packages/ui/src/export/ExportControls.tsx', 'font-normal! leading-4!', "Sonner's class names for a toast's title, no words"],
+  ['packages/ui/src/export/ExportControls.tsx', 'font-normal! leading-(--cad-leading-xs)!', "Sonner's class names for a toast's title, no words"],
   ['packages/ui/src/renderers/kit/camera/viewportCameraKit.js', 'Jump to', "each view's English name; `viewPlaneTitle` says it on screen from its sides"],
   ['packages/ui/src/renderers/kit/status/ViewUpdateStatus.jsx', 'Meshing parts', "the status vocabulary's counted meshing line, said by its key (`statusLabels.js`)"],
   ['packages/ui/src/renderers/xbf/xbfMenus.js', 'Viewer', "the empty-space menu descriptor's own name, never drawn"],
   ['apps/mcp/src/host/bridge.ts', 'is not supported', "a JSON-RPC error to the host, not to a person"],
+  ['packages/ui/src/export/formats.ts', 'Gerbers', "a fabrication file format's own name, as KiCad and every fab write it"],
+  ['packages/ui/src/export/formats.ts', 'BOM', "a fabrication file's own name, as KiCad and every assembler write it"],
+  ['packages/ui/src/export/formats.ts', 'ODB++', "a fabrication file format's own name"],
+  ['packages/ui/src/export/formats.ts', 'IPC-2581', "a fabrication file format's standard's name"],
 ];
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveSceneQuality } from '@text-to-cad/core/common/sceneSettings.js';
+import { resolveSceneQuality } from '@cad/core/common/sceneSettings.js';
 import { previewSceneQuality, previewViewScene } from './previewViewScene.js';
 
 const scene = quality => ({

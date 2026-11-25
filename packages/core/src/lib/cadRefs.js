@@ -1,6 +1,6 @@
 // Two kinds of ref. Every document the engine draws -- an `.xbf`, a STEP (`.step`, `.stp`), a
 // document the engine holds by its id -- is named in the engine's own grammar, at the end of this
-// module ("The engine's grammar"), the one `cad inspect` and `select` read. Any other file the
+// module ("The engine's grammar"), the one `cad <type> inspect` and `select` read. Any other file the
 // viewer draws (a robot description, a mesh, a drawing) names what is picked by its renderer's own
 // name for it, a plain label a selector (`robot.urdf#upper_arm`, `bracket.dxf#h2F`, `part.glb#glb:3`).
 //
@@ -8,8 +8,9 @@
 // blank. The prefix sits LEFT of the '#' so it can never collide with the selectors on the right.
 // JSON-quote paths containing whitespace or delimiters: `"my robot.urdf"#base_link`.
 const CAD_TOKEN_RE = /^\s*("(?:[^"\\\r\n]|\\.)*"|[^#"\s]*)#([^\s]*)/;
-// A label: what a robot, mesh or drawing renderer names a pick by.
-const LABEL_SELECTOR_RE = /^[A-Za-z_][A-Za-z0-9_:]*$/;
+// A label: what a robot, mesh or drawing renderer names a pick by -- dot-separated where it is a place in
+// a file's tree (a 3MF's `o2.1`, a GLB node's `o1.1.2`: `render/meshScene.js`, `render/glbScene.js`).
+const LABEL_SELECTOR_RE = /^[A-Za-z_][A-Za-z0-9_:]*(?:\.[A-Za-z0-9_:]+)*$/;
 
 // An element's name, in the engine's grammar: its kind (`f:`, `e:`, `v:`) and its derivation from
 // the features that made it -- an atom (the n-th element of its kind a feature made,
@@ -44,7 +45,7 @@ export function isOccurrenceToken(value) {
 
 /**
  * Whether `selector` is a selector of a file the engine does not draw: a label (`upper_arm`, `h2F`,
- * `glb:3`), as its renderer names a pick.
+ * `glb:3`, a 3MF's `o2.1`), as its renderer names a pick.
  */
 export function isLabelSelector(selector) {
   return typeof selector === "string" && LABEL_SELECTOR_RE.test(selector);
@@ -97,9 +98,9 @@ export function buildCadRefToken({ cadPath = "", selector = "", selectors } = {}
 // ---- The engine's grammar -----------------------------------------------------------------------
 //
 // A document the engine draws (an `.xbf`, a STEP, a document by its id) is named as the engine names
-// it, in the grammar `cad inspect` and `select` read: cad/engine/refs.py's `parse`, mirrored
+// it, in the grammar `cad <type> inspect` and `select` read: cad/engine/refs.py's `parse`, mirrored
 // here case for case. The `refCases` of cadRefs.parity.json are asserted against both parsers, and
-// its `spellingCases` against `spellEngineRefs` here and the resolution `cad inspect` runs there.
+// its `spellingCases` against `spellEngineRefs` here and the resolution `cad <type> inspect` runs there.
 //   REF      = [FILE "#"] SELECTOR ("," SELECTOR)*     a bare ELEMENT after an owner is that owner's
 //   SELECTOR = OWNER | [OWNER "/"] ELEMENT              no OWNER: the document's root
 //   OWNER    = SEGMENT ("/" SEGMENT)*                   an occurrence's path, or its last segments
@@ -349,7 +350,7 @@ function engineSegmentOf(text) {
 }
 
 /**
- * The canonical refs of a served engine document's occurrences and elements, as `cad inspect`
+ * The canonical refs of a served engine document's occurrences and elements, as `cad <type> inspect`
  * answers them and `select` labels what it selects (`refs.owner_text`, `refs.path_text`): an
  * occurrence by its label where that names it alone in the document (`palm`), else by its path from
  * the root, each segment its label numbered among the siblings that share it (`hand/finger.2`); an

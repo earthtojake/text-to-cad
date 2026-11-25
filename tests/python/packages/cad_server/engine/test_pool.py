@@ -577,7 +577,7 @@ class DaemonPoolTest(unittest.TestCase):
         served = self.cli("serve", "XBF/a.xbf")
         self.assertEqual(served.returncode, 0, served.stderr)
         url = urlsplit(served.stdout.strip())
-        version = f"{url.scheme}://{url.netloc}/api/doc/{url.path.strip('/')}/version?wait=0"
+        version = f"{url.scheme}://{url.netloc}/api/v1/documents/{url.path.strip('/')}/version?wait=0"
         token = parse_qs(url.query)["token"][0]
         with urllib.request.urlopen(urllib.request.Request(version, headers={"Authorization": "Bearer " + token}),
                                     timeout=60) as response:  # a page's sync: the file is watched now
@@ -591,6 +591,8 @@ class DaemonPoolTest(unittest.TestCase):
         # The runners' standby is off; and the host's memory pressure, which keeps a standby from
         # starting, is no part of this test (``CAD_ENGINE_PRESSURE``).
         env = {**self.env, "CAD_ENGINE_WORKERS": "", "CAD_ENGINE_STANDBY": "1", "CAD_ENGINE_PRESSURE": "0"}
+        self.cli("stop")
+        engine_daemon.start(env)  # what the server reads of its environment, it reads as it starts
 
         def standby(besides: int | None = None) -> dict:
             found: dict = {}

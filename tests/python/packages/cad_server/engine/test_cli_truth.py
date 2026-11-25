@@ -169,7 +169,7 @@ class VerbsTest(unittest.TestCase):
         self.assertEqual(closure.returncode, 1)
         self.assertEqual(closure.stderr, "python -m cad_server.engine inspect: box.step holds no build closure: a STEP file "
                                          "carries none, only an .xbf does; inspect the model's document by its id for "
-                                         "its closure, or name a ref in the file (cad inspect box.step REF)\n")
+                                         "its closure, or name a ref in the file (cad step inspect box.step REF)\n")
         summary = self.cli("inspect", "box.step")
         self.assertEqual(summary.returncode, 0, summary.stderr)
         self.assertEqual(summary.stdout.splitlines()[-1], "closure     none: a STEP file carries none, only an .xbf "
@@ -217,7 +217,7 @@ class MeshTest(unittest.TestCase):
                                          "ref to name and no build closure (only an .xbf carries one); inspect reads "
                                          "nothing more of it: `cad viewer rotor.stl` shows it, and the document it "
                                          "was exported from, inspected, tells the rest\n")
-        self.assertIn("`cad inspect rotor.glb` alone tells its nodes, meshes and animations",
+        self.assertIn("`cad glb inspect rotor.glb` alone tells its nodes, meshes and animations",
                       inspect("rotor.glb", "rotor").stderr)
 
 

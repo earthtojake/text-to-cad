@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Assert the five distributions' wheels carry what they must, and only their own packages: the library's,
-# the server's and the shim's, and the aliases' (cadgen, text-to-cad), which carry nothing but the library
-# at the release.
+# Assert the four projects' wheels carry what they must, and only their own packages: cad's (the library,
+# the server and the shim), and its aliases' (cad-server, cad-mcp, cadgen), which carry nothing but cad at
+# the release and the commands each shipped until 0.11.11 (cad-server's `cad`, cad-mcp's `cad-mcp`).
 #
-# The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
+# The server ships JavaScript it serves (the viewer's built client, the CAD app page) and
 # non-Python data it reads (collation.json); the library ships the page `serve` shows a document
 # in and the environment image its look lights with.
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of
@@ -16,7 +16,9 @@ set -euo pipefail
 # code 0).
 #
 # So: build each in clean scratch, require the paths, keep each wheel to its own top-level
-# packages, and compare every runtime file's bytes with the bundled source. Reusing setuptools'
+# packages, and compare every runtime file's bytes with the bundled source. The release builds each wheel
+# from its sdist (`python -m build`), so each is built that way too and must hold exactly the files of the
+# wheel built from source: a file the sdist leaves out (the .pth, the runtime) ships missing otherwise. Reusing setuptools'
 # build/lib can retain obsolete hashed viewer chunks even after the source bundle removed them.
 # The viewer client is NOT committed (scripts/bundle/cadgen-runtime.sh --viewer writes it
 # right before the build), so this is the only gate proving it made the wheel.
@@ -37,41 +39,51 @@ if [ -z "$PYTHON_BIN" ]; then
   fi
 fi
 
-# Paths each wheel must carry. The Python a wheel must actually contain is listed beside the asset
+# Paths cad's wheel must carry. The Python a wheel must actually contain is listed beside the asset
 # globs: a packages.find regression that dropped any of it would produce a wheel whose console script
 # dies at import. This is the ONLY packaging gate the publish job runs -- test-installed.sh covers the
 # same ground far better but runs in test.yml, not at publish.
-LIBRARY_REQUIRED=(
+REQUIRED=(
   "cad/__init__.py"
   # The library's earlier import name, an alias of it.
   "cadgen/__init__.py"
-  # `import build123d` made lazy at interpreter start: the finder, and the .pth at the root of
-  # site-packages that installs it.
+  # What every interpreter of the environment runs as it starts, from the .pth at the root of site-packages: the
+  # release it runs (the module at the root beside it, which reads the pointer to a release cad's update keeps), then
+  # `import build123d` made lazy (the finder).
+  "cad.pth"
+  # The same two steps for Python 3.15 and later, which ignore the .pth file's import lines where this is beside it.
+  "cad.start"
+  "_cad_release.py"
   "cad/_internal/lazy_kernel.py"
-  "cad-lazy-kernel.pth"
-  # The robot validators' library: a packaging regression here would ship a server whose
-  # `urdf validate` cannot import.
-  "cad/urdf_source.py"
-  "cad/srdf_validation.py"
-  "cad/findings.py"
+  # The document types and their registry, and the robot checks' library: a packaging regression
+  # here would ship a server whose `cad urdf validate` cannot import.
+  "cad/registry.py"
+  "cad/_internal/document_type.py"
+  "cad/_internal/aliases.py"
+  "cad/_internal/programs.py"
+  "cad/urdf/_source.py"
+  "cad/srdf/_validation.py"
+  "cad/_internal/findings.py"
+  "cad/kicad_pcb/__init__.py"
+  "cad/kicad/_program.py"
+  # The blender integration: what a render script imports (cad.blender.load), in place of a helper a skill shipped.
+  "cad/blender/__init__.py"
+  "cad/blender/_scene.py"
   # The engine's library half: the worker every build runs in, and the client every command reaches
   # the server by.
   "cad/engine/__init__.py"
   "cad/engine/worker.py"
   "cad/engine/client.py"
   "cad/engine/places.py"
-  # The engine's data: the page `serve` shows a document in and the environment image its look
-  # lights the display modes with.
-  "cad/engine/page/index.html"
-  "cad/engine/page/viewer.js"
+  # The engine's data: the environment image its look lights the display modes with.
   "cad/engine/render/studio.hdr"
-)
-SERVER_REQUIRED=(
+  # The server, and the `cad` command's code.
   "cad_server/__init__.py"
   "cad_server/assets.py"
   "cad_server/cli/__init__.py"
   "cad_server/cli/viewer.py"
-  "cad_server/cli/urdf_validate.py"
+  "cad_server/cli/urdf.py"
+  "cad_server/cli/document_types.py"
   "cad_server/viewer/__init__.py"
   "cad_server/viewer/__main__.py"
   "cad_server/viewer/main.py"
@@ -81,9 +93,44 @@ SERVER_REQUIRED=(
   # engine, and every build fails.
   "cad_server/engine/daemon.py"
   "cad_server/engine/cli.py"
+  "cad_server/cli/server.py"
+  "cad_server/cli/cache.py"
   "cad_server/_internal/engine_daemon.py"
-  # Its README: the mechanisms the package's laws name.
+  # cad's own update: the switches and their command, and the worker the update runs as a module
+  # (auto_update.HELPER): without the file no cad ever updates itself.
+  "cad_server/_internal/auto_update.py"
+  "cad_server/_internal/auto_update_helper.py"
+  "cad_server/cli/auto_update.py"
+  # The releases the update keeps beside the installed one, and the check a release runs of itself before it counts.
+  "cad_server/_internal/store.py"
+  "cad_server/_internal/selftest.py"
+  # The install command as the bridge's install mode runs it, once (`install_script`); and `cad plugin`, its command:
+  # `cad plugin install`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
+  # the rule it runs by), and which the install command hands the agent apps to.
+  "cad_server/_internal/install_script.py"
+  "cad_server/_internal/plugin_catch_up.py"
+  "cad_server/cli/plugin.py"
+  # What those two run: the plugin in the agent apps, every module of it, each imported before a run begins. A
+  # wheel without one is a cad whose `cad plugin install` dies at import, and with it every run of the install
+  # command, which gets PyPI's newest cad and hands over to it.
+  "cad_server/plugin/__init__.py"
+  "cad_server/plugin/computer.py"
+  "cad_server/plugin/source.py"
+  "cad_server/plugin/apps.py"
+  "cad_server/plugin/terminal.py"
+  "cad_server/plugin/run.py"
+  # What the updaters and launchers of 0.10.0 to 0.11.11 run in a release they bring: `cad setup
+  # --engine-update`, the records their switch starts a server by, and the module their `cad` command runs.
+  "cad_server/cli/setup.py"
+  "cad_server/_internal/installations.py"
+  "cad_server/_internal/proxy.py"
+  # The script Open in starts a person's Blender with on a GLB or an STL (apps.BLENDER_SCRIPT).
+  "cad_server/_internal/open_in_blender.py"
+  # Its README and the pages it indexes: the mechanisms the package's laws name. Two pages stand for the folder,
+  # which the package data takes whole.
   "cad_server/engine/README.md"
+  "cad_server/engine/docs/architecture.md"
+  "cad_server/engine/docs/wire-format.md"
   "cad_server/_runtime/viewer/index.html"
   # Each page's third-party notice, written by its build: the wheel redistributes what they inline.
   "cad_server/_runtime/viewer/THIRD_PARTY_LICENSES.txt"
@@ -93,19 +140,9 @@ SERVER_REQUIRED=(
   "cad_server/_runtime/mcp/shell.html"
   "cad_server/_runtime/mcp/app.js"
   "cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt"
-  # The agent-app plugin the server writes into the plugin folder: its manifests (in folders a glob
-  # skips, being dot folders) and its skills; the plugin check below holds all of it to the repository's.
-  "cad_server/_runtime/plugin/.claude-plugin/plugin.json"
-  "cad_server/_runtime/plugin/.claude-plugin/marketplace.json"
-  "cad_server/_runtime/plugin/.codex-plugin/plugin.json"
-  "cad_server/_runtime/plugin/.cursor-plugin/plugin.json"
-  "cad_server/_runtime/plugin/skills/cad/SKILL.md"
-)
-SHIM_REQUIRED=(
   # The stdio transport an agent app starts: the standard library alone.
   "cad_mcp/__init__.py"
   "cad_mcp/shim.py"
-  "cad_mcp/engine.py"
   "cad_mcp/protocol.py"
 )
 
@@ -115,8 +152,9 @@ BUILD_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/wheel-build.XXXXXX")"
 trap 'rm -rf "$BUILD_SCRATCH"' EXIT
 
 # check PROJECT DISTRIBUTION TOP REQUIRED...: build packages/PROJECT's wheel, and hold it to the paths it
-# must carry and to TOP, the top-level entries it may hold beside its dist-info (its packages, its .pth;
-# none for an alias).
+# must carry and to TOP, the top-level entries it may hold beside its dist-info (its packages, its .pth and module;
+# none for an alias); then build it as the release does, its sdist and a wheel from that, which must hold
+# the same files.
 check() {
   local project="$1" distribution="$2" top="$3"
   local label="${project//\//-}"
@@ -179,35 +217,65 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
     printf '%s\n' "$shipped_goldens" >&2
     exit 1
   fi
+
+  # The release's way: the sdist, and the wheel built from it (`python -m build`, no flag).
+  local released="$BUILD_SCRATCH/released-$label"
+  "$PYTHON_BIN" -m build --outdir "$released" "$BUILD_SCRATCH/$project" >"$OUT_DIR/$label-sdist-build.log" 2>&1 || {
+    echo "The $project sdist, or the wheel built from it, failed:" >&2
+    tail -40 "$OUT_DIR/$label-sdist-build.log" >&2
+    exit 1
+  }
+  local from_sdist=("$released/$distribution"-[0-9]*.whl)
+  "$PYTHON_BIN" -c "
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as zf:
+    sys.stdout.write('\n'.join(sorted(zf.namelist())) + '\n')
+" "${from_sdist[0]}" > "$OUT_DIR/$label-sdist-contents.txt"
+  if ! diff -u "$listing" "$OUT_DIR/$label-sdist-contents.txt" >&2; then
+    echo "The $project wheel built from its sdist differs from the one built from source (above):" >&2
+    echo "the sdist leaves out what the wheel needs; check MANIFEST.in and the package data." >&2
+    exit 1
+  fi
 }
 
-# An alias, packages/aliases/PROJECT: its dist-info alone, and the library at the release (a project that
-# declares the earlier name gets the library it names), its extras the library's `build123d` extra under
-# each name it keeps (`build123d`, and for cadgen `kernel` too, its 0.8 spelling).
+# An alias, packages/aliases/PROJECT: its dist-info alone, and cad at the release (a project that declares
+# the alias gets cad), its extras cad's `build123d` extra under each name it keeps (`build123d`, and for
+# cadgen `kernel` too, its 0.8 spelling), and the commands it shipped until 0.11.11, each the entry point cad
+# runs (cad-server's `cad`, which cad declares too, the same script; cad-mcp's `cad-mcp`): uv makes a tool only of
+# the commands of the package it names, so a uv tool installed as cad-server keeps its `cad` at an upgrade.
 check_alias() {
-  local project="$1" distribution="$2" extras="$3"
+  local project="$1" distribution="$2" extras="$3" scripts="$4"
   check "aliases/$project" "$distribution" ""
-  "$PYTHON_BIN" - "$wheel" "$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")" "$extras" <<'PY'
-import sys, zipfile
+  "$PYTHON_BIN" - "$wheel" "$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")" "$extras" "$scripts" <<'PY'
+import configparser, sys, zipfile
 
-wheel, version, extras = sys.argv[1], sys.argv[2], sys.argv[3].split()
+wheel, version, extras, scripts = sys.argv[1], sys.argv[2], sys.argv[3].split(), sys.argv[4].split()
 with zipfile.ZipFile(wheel) as archive:
-    metadata = [archive.read(name).decode() for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+    names = archive.namelist()
+    metadata = [archive.read(name).decode() for name in names if name.endswith(".dist-info/METADATA")]
+    points = [archive.read(name).decode() for name in names if name.endswith(".dist-info/entry_points.txt")]
 requires = [line for text in metadata for line in text.splitlines() if line.startswith("Requires-Dist:")]
 wanted = [f"Requires-Dist: cad=={version}",
           *(f'Requires-Dist: cad[build123d]=={version}; extra == "{extra}"' for extra in extras)]
 if requires != wanted:
-    sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release and its build123d extra "
+    sys.exit(f"{wheel} requires {requires or 'nothing'}, not cad at the release and its build123d extra "
              f"({wanted}) alone")
+parser = configparser.ConfigParser(delimiters=("=",))
+parser.optionxform = str
+for text in points:
+    parser.read_string(text)
+declared = dict(parser["console_scripts"]) if parser.has_section("console_scripts") else {}
+wanted = dict(script.split("=", 1) for script in scripts)
+if {name: target.strip() for name, target in declared.items()} != wanted:
+    sys.exit(f"{wheel} declares the commands {declared}, not {wanted}")
 PY
 }
 
-check cad cad "cad|cadgen|cad-lazy-kernel\.pth" "${LIBRARY_REQUIRED[@]}"
-check cad-mcp cad_mcp "cad_mcp" "${SHIM_REQUIRED[@]}"
-check_alias cadgen cadgen "build123d kernel"
-check_alias text-to-cad text_to_cad build123d
-# The server's last: the runtime checks below read its wheel and listing.
-check cad-server cad_server "cad_server" "${SERVER_REQUIRED[@]}"
+check_alias cad-server cad_server "" "cad=cad_server.cli:main"
+check_alias cad-mcp cad_mcp "" "cad-mcp=cad_mcp.shim:main"
+check_alias cadgen cadgen "build123d kernel" ""
+# cad's last: the runtime checks below read its wheel and listing.
+check cad cad "cad|cadgen|cad_server|cad_mcp|cad\.pth|cad\.start|_cad_release\.py" "${REQUIRED[@]}"
 
 # The server's runtime. A nested-glob failure usually loses MANY files at once rather than one, so
 # report the count too: it distinguishes "one file moved" from "package-data is not matching".
@@ -219,17 +287,13 @@ runtime_count="$(grep -c '^cad_server/_runtime/' "$listing" || true)"
 expected_runtime="$("$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-outputs | sed 's|.*/||' | sort -u)"
 shipped_runtime="$(sed -n 's|^cad_server/_runtime/\([^/]*\).*|\1|p' "$listing" | sort -u)"
 if [ "$shipped_runtime" != "$expected_runtime" ]; then
-  echo "The server wheel's cad_server/_runtime holds $(echo $shipped_runtime); the bundler builds $(echo $expected_runtime)." >&2
+  echo "The cad wheel's cad_server/_runtime holds $(echo $shipped_runtime); the bundler builds $(echo $expected_runtime)." >&2
   echo "Rebuild it with scripts/bundle/bundle.sh, which removes what no stage builds." >&2
   exit 1
 fi
 
-"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$REPO_ROOT/packages/cad-server"
-# The skills and the plugin's files ship in the server's wheel: byte for byte the repository's, at this commit.
-plugin_files=()
-while IFS= read -r plugin_file; do plugin_files+=("$plugin_file"); done < <("$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-plugin-files)
-"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" plugin "$wheel" "$REPO_ROOT" "${plugin_files[@]}"
-echo "The five wheels carry their own packages (the aliases none, only the library at the release); the server's carries its runtime ($runtime_count entries under cad_server/_runtime)."
+"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$REPO_ROOT/packages/cad"
+echo "The four wheels carry their own packages (the aliases none, only cad at the release), each the same built from its sdist; cad's carries its runtime ($runtime_count entries under cad_server/_runtime)."
 if [ "$KEEP_WHEEL" != "1" ]; then
   rm -rf "$OUT_DIR"
 fi

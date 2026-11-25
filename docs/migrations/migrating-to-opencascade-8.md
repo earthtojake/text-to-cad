@@ -121,7 +121,7 @@ original-file download keeps the original XBF bytes, and ordinary current-format
 XBF-to-XBF translation remains refused. Unsupported formats or failed conversions preserve
 original bytes and cache records and give a clear error. Explicitly running model source
 still checks its build key and rebuilds normally when it differs. See the
-[persisted-document policy](../../packages/cadgen/README.md#the-design-laws).
+[persisted-document policy](../../packages/cad/README.md#the-design-laws).
 
 OCP 8.0.1 also leaves `XCAFDoc_VisMaterialPBR.EmissiveFactor` unbound. To set it, put emission
 in `XCAFDoc_VisMaterialCommon.EmissiveColor`, call `ConvertToPbrMaterial()`, then set the other

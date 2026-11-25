@@ -8,6 +8,10 @@ export interface CadEntry {
   name?: string;
   /** The file to browse from; null for a document with no file of its own (a model's). */
   sourcePath?: string | null;
+  /** A model's script, the file that builds it (its envelope's `source.path`), where the engine names one. */
+  script?: string;
+  /** Whether the document's source (a model's script, a file) is on disk now (its envelope's `source.present`). */
+  sourcePresent?: boolean;
   kind?: string;
   format?: string;
   sourceFormat?: string;
@@ -17,8 +21,23 @@ export interface CadEntry {
   bytes?: number;
   [key: string]: unknown;
 }
+/**
+ * One app Open in offers for a file: its id (`POST /api/v1/local/open`'s `app`) and its name (a KiCad's says its
+ * version). `refuses: 'newer'`: it cannot open this file, which a newer version saved, and an open with it is a 400.
+ */
+export interface CadOpenInApp { id: string; name: string; refuses?: 'newer' }
+/**
+ * One of a document's files, as Open in lists it: `source` (a model's script, a file document's file)
+ * or `export:<format>` (a file a model's last build wrote); its kind, its file's name, whether it is
+ * on disk now, and the detected apps that take it.
+ */
+export interface CadOpenInTarget { target: string; kind: string; name: string; present: boolean; apps: CadOpenInApp[]; default?: boolean }
+/** `GET /api/v1/local/open-in`: a document's files and their apps, and which file manager this computer has. */
+export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'finder' | 'explorer' | 'files' }
 export interface CadServerInfo {
   autoReload?: boolean;
+  /** The release the engine runs. */
+  release?: string;
   identityToken?: string;
   /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;
@@ -28,14 +47,39 @@ export interface CadServerInfo {
   platform?: string;
   /** The person's home folder, `/`-separated: where the explorer starts with nowhere else to. */
   home?: string;
-  /** The engine process answering (`os.getpid()`): another pid after the engine was gone is a new engine, which reloads the page. */
+  /** The engine process answering (`os.getpid()`). */
   pid?: number;
-  /** The release the engine runs: another one answering after an update reloads the page into it. */
-  release?: string;
+  /** This start of the engine, a random token: another one answering after the engine was gone is a new engine, which reloads the page. */
+  instance?: string;
+  /** What the update button shows (`auto_update.button`: `@cad/ui/update`'s `UpdateState`), null where cad cannot update itself. */
+  cadUpdate?: CadUpdateState | null;
   [key: string]: unknown;
 }
-/** A model in the library every CAD view shares (`GET /__cad/recents`): times in seconds. */
+/** What `GET /api/v1/server` says of cad's own update, for the update button (`cad_server/_internal/auto_update.py`'s `button`). */
+export interface CadUpdateState {
+  version: string;
+  latest: string | null;
+  state: 'idle' | 'working' | 'failed';
+  /** While `working`: `building` (the release installs beside this one), then `switching` (the server restarts onto it); none from an older server. */
+  phase?: 'building' | 'switching';
+  at?: number;
+  asked?: boolean;
+  cause?: string;
+  said?: string;
+  installer?: string;
+}
+/**
+ * A model in the library every CAD view shares (`GET /api/v1/documents`): times in seconds. The API
+ * names a row's document kind `kind` and its record's `record`; the client hands the library the
+ * record's as `kind`, the document's as `documentKind`.
+ */
 export interface CadRecent {
+  /** The document's id: its page is `/<id>`, its picture `thumbnail()`'s. */
+  id: string;
+  /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`). */
+  api?: string;
+  /** The document's kind (`model`, `step`, `xbf`, `stl`, ...). */
+  documentKind?: string;
   path: string; name: string; folder: string;
   /** Identity namespace: the script folder in 0.8; a file’s folder for an opened file. */
   namespace?: string;
@@ -46,35 +90,28 @@ export interface CadRecent {
   /** When its record was first made: a model's first run, a file's first open; null for a record from before the engine kept it. */
   created: number | null;
   pinned: boolean; missing: boolean;
-  /** The picture's name, for `thumbnail()`, and when it was taken. */
+  /** The picture's name (its content's), and when it was taken. */
   thumbnail: string | null; pictured: number | null;
+  /** A file's size on disk, in bytes; null once it is gone, and for a document built from code (its script is never read). */
+  size?: number | null;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */
   script?: string;
 }
-/** Whether the person's usage stats are sent (`/__cad/analytics`; nothing asks): `reason` says who decided. */
-export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
-/** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`): the release offered, and this install's. */
-export interface CadUpdateNotice { latest: string; version: string }
-/** Where an update the update button started is (`cad_server/_internal/update.py`). */
-export interface CadUpdateState {
-  state: 'idle' | 'working' | 'restarting' | 'failed';
-  target?: string | null;
-  progress?: { kind?: string; stage?: string; done?: number; total?: number | null } | null;
-  error?: string | null;
-}
-/** `GET /__cad/version`, and `POST /__cad/update`'s answer: the notice, the engine's release, the update's state. */
-export interface CadVersion { notice: CadUpdateNotice | null; release?: string; update?: CadUpdateState | null }
+/** Whether the person's usage stats are sent (`/api/v1/settings`' `telemetry`; nothing asks): `reason` says who decided. */
+export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
+/** What's new (`/api/v1/settings`' `whats_new`): the releases, by their minor (`0.11`), whose notes the person has seen, and the one the engine runs. */
+export interface CadWhatsNew { seen: string[]; release: string | null }
 export interface CadCatalog {
   entries: CadEntry[];
   /** Why an id asked for has no row: the engine holds no such document (its words name the command that builds it again). */
   missing?: string;
   [key: string]: unknown;
 }
-/** One folder's subfolders and CAD files (`GET /__cad/folder`). */
+/** One folder's subfolders and CAD files (`GET /api/v1/local/folder`). */
 export interface CadFolder { path: string; entries: { name: string; kind: 'directory' | 'file' }[]; truncated: boolean }
-/** The CAD files nested under a folder whose path below it holds the query (`GET /__cad/search`). */
+/** The CAD files nested under a folder whose path below it holds the query (`GET /api/v1/local/folder?q=`). */
 export interface CadSearch { path: string; results: string[]; truncated: boolean }
 export interface CadCatalogSnapshot {
   entries: CadEntry[];
@@ -91,7 +128,7 @@ export interface CadCatalogSnapshot {
 }
 export interface CadRequestOptions { signal?: AbortSignal }
 /**
- * What `GET /__cad/drawing` answers: a drawing's modelspace, flattened to the
+ * What `GET /api/v1/documents/dxf/<id>/drawing` answers: a drawing's modelspace, flattened to the
  * five primitive shapes ezdxf reduces every entity to and its text, placed, in
  * DXF coordinates with y UP. `color: null` is the default pen, painted with the
  * theme's foreground; `bounds: null` is a drawing with nothing in it. See
@@ -127,28 +164,56 @@ export interface CadDrawingPayload {
   [key: string]: unknown;
 }
 /**
- * What `GET /__cad/xbf` answers: the engine serving a cadgen engine document (`engine`, its origin),
- * the document's id there (`doc`) and its API URL (`url`, `<engine>/api/doc/<doc>`).
- */
-/**
- * Where a page reads a document the cadgen engine serves (an `.xbf`, a STEP): its id, its API URL
- * through the viewer (`/__cad/api/doc/<id>`, on the client's origin), and the fetch every read
- * of it is made with (the client's own: the CAD app's travels over its tunnel).
+ * Where a page reads a document the engine serves (an `.xbf`, a STEP, a model): its id, its
+ * kind, its kind's API URL (`/api/v1/documents/<kind>/<id>`, on the client's origin), and the fetch
+ * every read of it is made with (the client's own: the CAD app's travels over its tunnel).
  */
 export interface CadEngineDocument {
   doc: string;
+  kind: string;
   url: string;
   fetch: typeof fetch;
 }
 /**
- * What `GET /__cad/robot` answers: a URDF, SDF or SRDF resolved by cadgen into the articulation
+ * What a save of a model's parameters answers (`POST /api/v1/documents/model/<id>/parameters`): each
+ * value the engine wrote into the script (one equal to the script's is not written, and not listed),
+ * with the script's absolute path and the line it is on, and the models it built again.
+ */
+export interface CadParametersSaved {
+  id: string;
+  written: { name: string; from: number; to: number; file: string; line: number }[];
+  rebuilt: string[];
+}
+/**
+ * What a preview of a model's parameters answers (`POST /api/v1/documents/model/<id>/preview`): the model
+ * built at those values for this page alone, nothing written -- its own id and the URL its structure and
+ * parts are read at (a document's routes), its version, the document version it was built against
+ * (`basis`), the values it differs from the document by, the build's seconds and how its memo went. `preview:
+ * null`: the values are the document's (the page's previews let go). `superseded`: a newer request of the
+ * same document took its place before it built.
+ */
+export interface CadParametersPreview {
+  id: string;
+  preview?: { id: string; url: string; version: string; basis: string | null; values: Record<string, number>;
+    seconds: number | null; memo: Record<string, number> | null } | null;
+  superseded?: boolean;
+}
+/**
+ * A save or a preview the engine refused, as `setModelParameters` and `previewModelParameters` raise it: the
+ * engine's message, its `code` (`no_worker`, `unknown_parameter`, `not_writable`, `not_a_number`,
+ * `out_of_range`, `script_changed`, `busy`, `build_failed`), what to do about it (`hint`), for `not_writable`
+ * the parameter's `reason`, and for `build_failed` the build's whole words (`detail`).
+ */
+export interface CadParametersRefusal extends Error { code: string; hint: string; reason?: string; detail?: string }
+/**
+ * What `GET /api/v1/documents/<urdf|srdf>/<id>/structure` answers: a URDF or an SRDF resolved by the server into the articulation
  * the page plays (`common/articulation.js`), the visuals it draws (each at its rest placement,
  * with its colour and the URL of the mesh it draws), and what the description says about its
- * links and joints, as written. See `packages/cad-server/src/cad_server/robot_payload.py`.
+ * links and joints, as written. See `packages/cad/src/cad_server/robot_payload.py`.
  */
 export interface CadRobotPayload {
   schemaVersion: number;
-  kind: 'urdf' | 'sdf' | 'srdf';
+  kind: 'urdf' | 'srdf';
   name: string;
   root: string;
   articulation: Record<string, unknown>;
@@ -156,7 +221,8 @@ export interface CadRobotPayload {
   joints: Record<string, unknown>[];
   visuals: { id: string; link: string; label: string; placement: number[]; color: string; mesh: { format: string; url: string } }[];
   srdf: Record<string, unknown> | null;
-  sdf: Record<string, unknown> | null;
+  /** Always null: schema 2 names it, and the document type it described is gone. */
+  sdf: null;
   [key: string]: unknown;
 }
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */
@@ -200,40 +266,76 @@ export interface CadWorkspaceService {
    * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
    */
   changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
-  /** Keep a model's picture in the library. */
+  /** Keep a model's picture in the library: the light viewport's, which the home shows in both themes. */
   keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
-  /** A library picture, by the name the library gives it, as a data URL; null when there is none. */
-  thumbnail(name: string, options?: CadRequestOptions): Promise<string | null>;
+  /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
+  thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
+  /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
+  thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
   /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;
+  /** Open in: the document's files and the apps this computer has for each (`GET /api/v1/local/open-in?id=`). */
+  openInApps(id: string, options?: CadRequestOptions): Promise<CadOpenInApps>;
+  /** Open one of the document's files (`target`, from `openInApps`) in one of its apps, or `"default"`, the OS's own (`POST /api/v1/local/open`). */
+  openIn(id: string, target: string, app: string): Promise<void>;
   /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
   consent(share?: boolean): Promise<CadConsent>;
   /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */
   language(locale?: string | null): Promise<{ locale: string | null }>;
-  /** Whether a newer text-to-cad is out (the update button's notice, or null), the release the engine runs and where an update is. */
-  version(): Promise<CadVersion>;
-  /** The update button's click: the engine updates in the background, and answers as `version` does. */
-  startUpdate(): Promise<CadVersion>;
+  /** What's new: the releases whose notes the person has seen and the one the engine runs (null from a server before it); with `seen`, releases to add to them. */
+  whatsNew(seen?: readonly string[]): Promise<CadWhatsNew | null>;
+  /** A fresh link (`<expires>.<mac>`) for the page's own address, and when it expires (Unix seconds). */
+  link(): Promise<{ link: string; expires: number }>;
   /**
    * What the page did -- a person touched it, sent a Quick Edit, used its controls, or the page crashed (`crashOf`) --
    * noted by the server and sent only with consent. Never fails.
    */
   reportActivity(activity: CadActivity): void;
+  /** The update button's click: a person's update of cad (`POST /api/v1/local/update`); refused (409) where cad cannot update itself. */
+  startUpdate(): Promise<Pick<CadServerInfo, 'release' | 'instance' | 'cadUpdate'>>;
+  /** A failed update put away for every page, by its attempt's start (`at`). */
+  dismissUpdate(at: number): Promise<Pick<CadServerInfo, 'release' | 'instance' | 'cadUpdate'>>;
+  /**
+   * A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files.
+   * A `.kicad_sch`'s: `sheet` (a sheet's path, `/` the root) draws that sheet's page alone, `index: false` leaves the
+   * hierarchy's index out (the viewer reads it with the first sheet it shows).
+   */
+  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
+  /**
+   * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
+   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
+   */
+  boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
-  /** `GET /__cad/robot`: a robot description resolved for the page (`cad_server.robot_payload`). */
+  /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
   robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
   /**
-   * `GET /__cad/xbf`: where the page reads a document the cadgen engine serves (an `.xbf`, a STEP),
+   * `POST /api/v1/documents`: where the page reads a document the engine serves (an `.xbf`, a STEP, a model),
    * through this server (`lib/xbf/xbfDocument.js`), once the engine holds it. A host without an
    * engine leaves it out, and the xbf renderer says it cannot open the file.
    */
   /** `onProgress` hears each frame of the engine's import of the file while it reads it (a STEP's), as the build frames are shaped. */
   engineDocument?(file: string, options?: CadRequestOptions & { onProgress?(frame: Record<string, unknown>): void }): Promise<CadEngineDocument>;
-  /** Whether the engine holds a read of the document now (`GET /__cad/xbf?held=1`), asked without starting one. */
+  /** Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one. */
   engineHolds?(file: string, options?: CadRequestOptions): Promise<boolean>;
+  /**
+   * `POST /api/v1/documents/model/<id>/parameters`: new values for a model's declared parameters, by
+   * name, each a finite number. The engine rewrites them in the model's script and builds it again,
+   * and answers once that build has ended; a refusal rejects with a `CadParametersRefusal`. The one
+   * call of a view that changes a design. A host that cannot make it leaves it out, and its views
+   * show a model's parameters without a way to save them.
+   */
+  setModelParameters?(id: string, values: Record<string, number>, options?: CadRequestOptions): Promise<CadParametersSaved>;
+  /**
+   * `POST /api/v1/documents/model/<id>/preview`: the model at other values of its declared parameters, for
+   * this page alone (`page`, the page's own token): the engine builds it in the model's worker and writes
+   * nothing; the page reads the preview's structure and parts as a document's. `{}` lets the page's previews
+   * go. A host that cannot make it leaves it out, and its views show a value only once it is saved.
+   */
+  previewModelParameters?(id: string, values: Record<string, number>, options: CadRequestOptions & { page: string }): Promise<CadParametersPreview>;
   readonly resources: CadResourceProvider;
   createRenderSession(options?: { file?: string }): CadRenderSession;
   dispose(): void;
@@ -267,12 +369,14 @@ export interface CadPageCrash {
 export interface CadActivity {
   touched?: boolean;
   quickEdit?: boolean;
-  /** The view's controls a person used since the last report (`@text-to-cad/ui`'s `usage/controls.js`). */
+  /** The view's controls a person used since the last report (`@cad/ui`'s `usage/controls.js`). */
   controls?: { control: string; count: number; seconds: number }[];
   crash?: CadPageCrash;
 }
 
-export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original';
+/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad kicad_pcb export --to`). */
+export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
+  | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf' | 'svg' | 'netlist';
 export interface ExportSource { doc: string; revision: string }
 /** One export: `epoch` is the session's (`ExportService.epoch`), `''` until the page has asked it. */
 export interface ExportRequest { requestId: string; epoch: string; source: ExportSource; format: ExportFormat }
@@ -291,4 +395,22 @@ export interface ExportService {
   status(id: string, sequence?: number, signal?: AbortSignal): Promise<ExportJob>;
   /** Where the browser downloads a ready job's file: the session's own origin, never a token. */
   fileUrl(id: string): string;
+}
+
+/** One model of a board's 3D models table: a STEP the engine serves by its document id, or why there is none. */
+export type CadBoardModel =
+  | { file: string; document: string; api: string; stamp: string; missing?: undefined }
+  | { file: string; missing: "not-found" | "vrml-only" | "outside" | "too-large" | "not-step" | "embedded" | "too-many" | string };
+
+export interface CadPlotPayload {
+  schemaVersion: number;
+  kind: string;
+  /** What wrote the file (`"pcbnew 10.99"`), for wording only. */
+  generator?: string;
+  /** The board's connections still to make, each drawn as a ratsnest line. */
+  unrouted: number | null;
+  sheets: { name: string; width: number; height: number; background: string; layers: { id: string; kind: string; side: string; items: Record<string, unknown>[] }[] }[];
+  /** The board's index, in sheet millimetres: what the board view's tools point with. */
+  board?: Record<string, unknown>;
+  [key: string]: unknown;
 }

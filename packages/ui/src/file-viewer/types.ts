@@ -13,6 +13,16 @@ export interface FileMetadata extends FileEntry {
    * `path`. Null for a document with no file of its own (a model's, by its id): no file menu.
    */
   navigationPath?: string | null;
+  /**
+   * For a document with no file of its own (`navigationPath: null`), the file it is built from (a
+   * model's script): what its file menu's Copy path and file manager act on. Its Files never start there.
+   */
+  sourceFile?: string;
+  /**
+   * The document's source (its file, a model's script) was moved or deleted: the file menu keeps
+   * Copy path (where it was) and draws what opens the source disabled, saying why.
+   */
+  sourceMissing?: boolean;
   size: number;
   extension: string;
   mime?: string;
@@ -20,7 +30,7 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-/** A document of the host's library, as the name menu's Recent lists it (`@text-to-cad/ui/library`'s rows). */
+/** A document of the host's library, as the name menu's Recent lists it (`@cad/ui/library`'s rows). */
 export interface RecentDocument {
   /** A file's absolute path, a model's id: what `navigation.openFile` opens. */
   path: string;
@@ -32,9 +42,35 @@ export interface RecentDocument {
   updated?: number | null;
   missing?: boolean;
 }
+/**
+ * One app Open in offers for a file: its id (what `openApp` names) and its name, as drawn (a KiCad's says its
+ * version). `refuses: "newer"`: it cannot open this file, which a newer version saved (a KiCad's), so it is drawn disabled.
+ */
+export interface OpenInApp { id: string; name: string; refuses?: 'newer' }
+/**
+ * One of a document's files Open in lists: `source` (a model's script, a file document's file) or
+ * `export:<format>` (a file a model's last build wrote), its kind, its file's name, whether it is on
+ * disk now, and the apps this computer has that take it (in the host's order).
+ */
+export interface OpenInTarget { target: string; kind: string; name: string; present: boolean; apps: readonly OpenInApp[]; default?: boolean }
+/** A document's files and their apps (`GET /api/v1/local/open-in`'s answer, for a CAD host). */
+export interface OpenInFiles { targets: readonly OpenInTarget[]; fileManager?: string }
 export interface FileActions {
   platform?: Platform;
-  perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
+  /**
+   * Each action the host can perform on a document, by its path (a model's: its id) and, where the
+   * caller knows it, its document's id: `copy-path`, `copy-link` (its page with a fresh link, to the
+   * clipboard), `reveal`, `browser`.
+   */
+  perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }) => void | Promise<void>>>;
+  /**
+   * Open in's apps, where the host can open a document's files in this computer's apps: the files
+   * and their apps for the document on screen (asked as its file menu opens, never before; null or a
+   * failure, and the menu is as without), and one opened in one of them -- `app` an app's id, or
+   * `"default"`, the OS's own handler. Both or neither.
+   */
+  apps?: (entry: Pick<FileEntry, "path" | "kind">, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
+  openApp?: (entry: Pick<FileEntry, "path" | "kind">, target: string, app: string) => void | Promise<void>;
 }
 /**
  * The files a view reads, by absolute path (`/`-separated): one file's metadata, one folder's
@@ -50,7 +86,7 @@ export interface FileSource {
 export interface FileViewerState {
   /**
    * Each file's view under `JSON.stringify([file path, renderer id])`: what the host's tab store
-   * holds (`@text-to-cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
+   * holds (`@cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
    */
   renderers?: Record<string, JsonValue>;
 }
@@ -82,6 +118,41 @@ export interface FileNavigationAction {
   active?: boolean;
   onInvoke: () => void | Promise<void>;
 }
+/**
+ * An alert as the viewer's alert card reads it (`renderers/kit/status/ViewerAlertCard.jsx`): its colour (`severity`),
+ * its title and short name (`summary`), the words under it, the whole diagnostic (`details`, English, as it is
+ * reported), whether it has Retry (`reload`, and `retryLabel` where that is said otherwise), whether Report Issue is
+ * offered (`reportable: false`: no issue of the project's) and whether the person can work on under it (`blocking:
+ * false`: it can be put away).
+ */
+export interface ViewerAlert {
+  severity: "error" | "warning";
+  kind?: string;
+  title: string;
+  summary?: string;
+  message?: string;
+  reason?: string;
+  recovery?: string;
+  details?: string;
+  reload?: boolean;
+  retryLabel?: string;
+  reportable?: boolean;
+  blocking?: boolean;
+}
+
+/**
+ * A host's own alert (`CadViewer`'s `alert`: a failed update of cad), which the viewer shows in its alert card, with
+ * the X, the navbar's icon and Retry a file's has. Its dismissal is the host's (`dismissed`: put away; `onDismiss`, by
+ * the X or Escape; `onReopen`, by the navbar's icon), so it can outlast a page; `onRetry`, the card's Retry.
+ */
+export interface HostAlert {
+  alert: ViewerAlert;
+  dismissed: boolean;
+  onDismiss(): void;
+  onReopen(): void;
+  onRetry?(): void;
+}
+
 /** An on/off setting of the host's own, in a Settings section it names (the CAD apps' Telemetry). */
 export interface AppSetting {
   id: string;
@@ -157,11 +228,40 @@ export interface RendererRegistration {
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
-  /** Additive host actions at the navbar right, and persistent feedback below it. */
+  /** Additive host actions at the navbar right (the CAD app's Full size), and persistent feedback below it. */
   navbarActions?: ReactNode;
+  /**
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind or an update is
+   * underway: the navbar's last control, outermost, over every file and over the home.
+   */
+  update?: ReactNode;
+  /**
+   * The host's own alert (`CadViewer`'s `alert`: a failed update of cad), wherever the navbar is -- over every file and
+   * over the home: its card (`card`, the viewer's alert card), centred over what is under the navbar, held back while
+   * a file's own card is up or the file would not open; and, put away, its icon (`action`), drawn among the navbar's
+   * right-hand controls first, after a file's own put-away card's.
+   */
+  alert?: { card?: ReactNode; action?: FileNavigationAction | null } | null;
+  /**
+   * The host's own items at the end of the file's ⋯ menu, after Copy path and Open in: menu items or
+   * submenus (`DropdownMenuItem`, `DropdownMenuSub`), the viewer's Export. Over a document only.
+   */
+  fileMenuItems?: ReactNode;
   overlay?: ReactNode;
   /** The file on screen, by its absolute path; null shows the host's home. */
   file: string | null;
+  /**
+   * The file's name where the host knows it before the file is read (a CAD host's catalog row): the
+   * navbar's name while the file opens. Without it a file is named by its path's last segment, and a
+   * document named by its id is never named by the id: the name's place is empty until it is known.
+   */
+  name?: string;
+  /**
+   * The file's own path where the host knows it before the file is read (a document named by its id: the path its
+   * catalog row gives, or the id of a model's): where the tab keeps its view, read for the panel's toggle until the
+   * view is up.
+   */
+  filePath?: string | null;
   host: ViewerHost;
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
@@ -175,11 +275,6 @@ export interface FileViewerProps {
    * the host's links (`host.links`).
    */
   appSettings?: readonly AppSetting[];
-  /**
-   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), first among the navbar's
-   * controls, while the host's install is behind; nothing otherwise.
-   */
-  update?: ReactNode;
   /** The view's own history, where the host keeps one: Back and Forward after the navbar's logo, over a file and on the home. */
   history?: ViewerHistory;
   /**
@@ -198,14 +293,15 @@ export interface FileViewerProps {
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**
-   * The chrome around the view: `"page"` (the default) draws the navbar over every file and over the
-   * home; `"bare"` draws none, the view alone, for a host whose own frame is the navigation (the CAD
-   * app's file handler). The renderer's own controls over the viewport are the same either way.
+   * The viewer's layout pinned, for a viewer that is not the page's own (a picture drawn out of sight,
+   * `OffscreenPicture.tsx`): neither measured nor said to the page, so its size never changes the page's.
+   * Unset (the page's viewer): measured from its own width (`responsive.js`), and its root carries
+   * `data-viewer-layout`, which the page's stylesheet reads (a phone's type a step up: `styles/globals.css`).
    */
-  chrome?: "page" | "bare";
+  layout?: "desktop" | "mobile";
   onError?: (error: Error) => void;
   presentation?: {
-    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward, the update and the host's actions there. */
+    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward and the host's actions there. */
     home?: ReactNode;
     loading?: ReactNode;
     /**

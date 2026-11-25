@@ -1,5 +1,5 @@
 """Explode: where each instance of a document stands when its parts are moved apart, as the viewer
-moves them. A port, operation for operation, of the viewer's layout (``@text-to-cad/core``
+moves them. A port, operation for operation, of the viewer's layout (``@cad/core``
 ``lib/viewer/explodedView.js``) and of the records an xbf scene hands it (``lib/xbf/xbfScene.js``
 through ``lib/viewer/sceneExplode.js``), so a still and the viewer explode a document alike, and no
 node runs at render time.
@@ -18,7 +18,7 @@ along their longest axis, overlapping siblings are pushed further out along thei
 levels play over overlapping windows of the 0..1 amount, each smoothstepped. An offset of 1e-6 or
 less is none. The arithmetic is the JavaScript's, in its order, and ``Math.hypot`` is V8's
 (``js_hypot``), so the same records give the same doubles. One golden made by the viewer's own scene
-(``@text-to-cad/core``'s ``lib/xbf/__fixtures__/explode.json``) holds both renderers to one layout.
+(``@cad/core``'s ``lib/xbf/__fixtures__/explode.json``) holds both renderers to one layout.
 """
 
 from __future__ import annotations

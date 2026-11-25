@@ -21,11 +21,12 @@ Usage:
 
 Makes this branch a release. Sets VERSION to the next major, minor or patch
 version after the one on BASE (or to X.Y.Z, which must be greater), then stamps
-the derived metadata and every pin of the release's own from it (sync-version.mjs:
-package, plugin and lockfile versions, the five pyproject.toml files and their
-cad== pins, the plugin server configs, each skill's launch command, the
-installers' fallback). The pull request that carries the change releases that version when
-it merges: Publish Release runs on the merge.
+the derived metadata and every mention of the release's own from it
+(sync-version.mjs: package, plugin and lockfile versions, the four
+pyproject.toml files, the aliases' cad==<version> requirement, Codex's server
+line, cad@<version>, and the cad==<version> each skill's Setup block names).
+The pull request that carries the change releases that version when it merges:
+Publish Release runs on the merge.
 
 The bump is relative to BASE, not to this branch, so running it again after
 BASE moves (another pull request released first) moves the bump with it, and
@@ -157,11 +158,14 @@ case "$TARGET" in
   major|minor|patch) next_version="$(bump_version "$base_version" "$TARGET")" ;;
   *)
     validate_semver "$TARGET"
+    refuse_unavailable_version "$TARGET" || exit 1
     version_greater "$TARGET" "$base_version" ||
       die "$TARGET is not greater than $base_version, the version on $BASE"
     next_version="$TARGET"
     ;;
 esac
+
+refuse_unavailable_version "$next_version" || exit 1
 
 echo "Release: $base_version ($BASE) -> $next_version"
 if [ "$DRY_RUN" -eq 1 ]; then

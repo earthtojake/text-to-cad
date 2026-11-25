@@ -34,11 +34,11 @@ with ``{"pose": NAME | {joint or coupling: value}}`` serves the document at that
 its own (``<id>~<digest>``): its structure's instances where the mechanism places them,
 every other route the document's; what the pose names wrong is refused by name (400).
 The structure carries the document's mechanism as ``kinematics`` (``mechanism.block``),
-from which a page poses it itself. ``GET /api/look`` is the look the regular display modes
+from which a page poses it itself. ``GET /api/v1/look`` is the look the regular display modes
 draw a document in (``render/look.py``), which a page lights and dresses its scene by, and
-``GET /api/look/environment`` the image its environment is. ``/`` is a page that shows
-one (``page/``), with three.js served from a ``node_modules`` folder (``--three``, or the
-nearest one above the working directory).
+``GET /api/v1/look/environment`` the image its environment is (the paths the record names, the
+engine's API's own). The server binds no listener of its own: these routes are answered in
+process (``route``), and reached over HTTP only through the daemon's listener, which relays them.
 
 **A file follows its disk.** A file is read once, when it is first served, and again whenever
 its modification time or size is not what was read: they are compared each time the document is
@@ -51,7 +51,13 @@ key the new version shares with the old keeps its tessellation (one cache, by ke
 times the memory of what it makes and its allocator keeps most of it, so the server never
 parses a ``.step``/``.stp`` itself: a reader process of its own does (``_read_foreign``, one
 read per process, the next one started and warm meanwhile) and answers the structure and each
-part's shape bytes, which are all the server keeps. The read is held by the file's bytes
+part's shape bytes, which are all the server keeps. Reads asked while one is under way (a board's
+part models, many small files at once) are read beside it, by at most ``READERS - 1`` helper
+processes, each of which reads up to ``HELPER_READS`` files before it goes (a warm reader parses a
+small file in a tenth of the time a fresh one takes to start): only files of at most
+``HELPER_BYTES`` (what a parse leaves in a helper's memory stays small), never under memory
+pressure, and the helpers go once no read has been under way for ``HELPERS_LINGER`` seconds; a
+larger file waits for the one reader, as every read did before. The read is held by the file's bytes
 (``FOREIGN_HELD`` of them): the same bytes served again -- the file touched, copied, or put
 back -- are not parsed again while the server lives, and their parts' keys (and so their
 meshes) are the same. A STEP is read outside the server's lock, so every other document is
@@ -87,7 +93,6 @@ import hashlib
 import itertools
 import json
 import math
-import mimetypes
 import os
 import sys
 import tempfile
@@ -95,7 +100,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
@@ -103,13 +108,11 @@ from urllib.parse import parse_qs, unquote, urlparse
 from cad.engine.atomic_replace import replace_atomic
 from cad.engine.render.look import LOOK
 
-__all__ = ["FactCache", "MeshCache", "NotHeld", "PARALLEL_BYTES", "Pressure", "Served", "Server", "find_three",
-           "memory_budget"]
+__all__ = ["FactCache", "MeshCache", "NotHeld", "PARALLEL_BYTES", "Pressure", "Served", "Server", "memory_budget"]
 
 from cad.engine.addresses import document_id, key as document_key
 from cad.engine.ids import canonical, file_id, is_id
 
-PAGE = Path(__file__).resolve().parent / "page"
 # A part whose shape bytes reach this is meshed with the kernel's face parallelism inside
 # its pool process: measured one part at a time on two large documents, parts above it
 # meshed 1.1-1.5x faster with it and parts below it no faster, some slower. (A whole
@@ -131,20 +134,13 @@ FOREIGN = (".step", ".stp")
 # How many STEP reads are held by their bytes: a read a served document holds stays in memory
 # with it whatever this says; past it, the least recently served read goes.
 FOREIGN_HELD = 8
-
-
-def find_three(start: Path | None = None) -> Path | None:
-    """The ``three`` package folder: ``CAD_ENGINE_THREE``, else the nearest
-    ``node_modules/three`` above ``start`` (the working directory) or above this file."""
-    override = os.environ.get("CAD_ENGINE_THREE")
-    if override:
-        return Path(override)
-    for base in (Path(start or os.getcwd()).resolve(), Path(__file__).resolve()):
-        for folder in (base, *base.parents):
-            candidate = folder / "node_modules" / "three"
-            if (candidate / "build" / "three.module.js").is_file():
-                return candidate
-    return None
+# Reads at once (the module docstring): the reader and its helpers, at most four and never all of
+# the machine's cores; the largest file a helper reads, how many it reads before it goes, and how
+# long the helpers stay once no read is under way.
+READERS = max(1, min(4, (getattr(os, "process_cpu_count", os.cpu_count)() or 2) - 1))
+HELPER_BYTES = 8 << 20
+HELPER_READS = 16
+HELPERS_LINGER = 10.0
 
 
 class MeshCache:
@@ -471,13 +467,23 @@ class NotHeld(ValueError):
 
 
 class KernelProcessesUnavailable(RuntimeError):
-    """The engine could not start the processes its kernel work runs in. Python refused what a
-    process pool needs: on Windows, most often the loader refusing ``_multiprocessing.pyd``
-    (``DLL load failed while importing ...``). It is a ``RuntimeError``, as ``api.EngineError`` is,
-    and not the ``ImportError`` it wraps: no model is missing a module. Its message carries the
-    original error's type and words, and ``__cause__`` the error itself. There is no in-process
-    fallback, because kernel work never runs in the engine's threads (law 20). Nothing remembers
-    the failure: the next request tries again."""
+    """The engine could not start the processes its kernel work runs in: the environment they run in
+    could not be made (``places.kernel``), or Python refused what a process pool needs -- on Windows,
+    most often the loader refusing ``_multiprocessing.pyd`` (``DLL load failed while importing ...``).
+    It is a ``RuntimeError``, as ``api.EngineError`` is, and not the ``ImportError`` it wraps: no model
+    is missing a module. Its message carries the original error's type and words, and ``__cause__`` the
+    error itself; ``cause`` is a word saying which failure it was, never read from the words (``pool``:
+    the pool refused; else the word the server gave the environment's failure). There is no in-process
+    fallback, because kernel work never runs in the engine's threads (law 19). A refused pool is tried
+    again by the next request; a failed making of the environment is remembered by the server that made
+    it, which says what clears it."""
+
+    def __init__(self, message: str = "", cause: str = "other") -> None:
+        super().__init__(message)
+        self.cause = cause
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return type(self), (str(self), self.cause)
 
 
 def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoolExecutor:
@@ -500,13 +506,31 @@ def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoo
     except (ImportError, OSError, NotImplementedError, ValueError) as error:
         where = "" if found["own"] else f" in {found['python']}"
         raise KernelProcessesUnavailable(
-            f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})") from error
+            f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})",
+            "pool") from error
 
 
 # The import path the pool's processes start with when they run another environment's Python than this
 # one (``_spawn_in``): that environment's own, as its marker records it.
 _SPAWN_PATH: list[str] | None = None
 _PREPARATION: Callable[[str], dict[str, Any]] | None = None
+
+
+def _end(pool: concurrent.futures.ProcessPoolExecutor) -> None:
+    """A process pool shut down now: its queued jobs cancelled and each of its processes ended, a busy one
+    too. ``ProcessPoolExecutor.terminate_workers`` from Python 3.14; before it (the packages' floor is 3.11), the
+    same steps here: the processes noted, the pool shut down without waiting, each one still alive terminated."""
+    if hasattr(pool, "terminate_workers"):
+        pool.terminate_workers()
+        return
+    processes = list((getattr(pool, "_processes", None) or {}).values())
+    pool.shutdown(wait=False, cancel_futures=True)
+    for process in processes:
+        try:
+            if process.is_alive():
+                process.terminate()
+        except (ValueError, ProcessLookupError):
+            continue  # exited already
 
 
 def _spawn_in(context: Any, python: str, path: Any) -> Any:
@@ -589,7 +613,7 @@ def exit_with_parent() -> None:
         parent.join()
         os._exit(0)
 
-    threading.Thread(target=watch, name="cadgen-parent-watch", daemon=True).start()
+    threading.Thread(target=watch, name="cad-parent-watch", daemon=True).start()
 
 
 def _ready() -> bool:
@@ -675,7 +699,7 @@ class Mesher:
                 return job.future
             self._queued[priority].append(job)
             if self._dispatcher is None:
-                self._dispatcher = threading.Thread(target=self._dispatch, name="cadgen-pool-dispatch", daemon=True)
+                self._dispatcher = threading.Thread(target=self._dispatch, name="cad-pool-dispatch", daemon=True)
                 self._dispatcher.start()
             self._wake.notify_all()
         return job.future
@@ -731,7 +755,7 @@ class Mesher:
             job.future.cancel()
         self._inline.shutdown(wait=False, cancel_futures=True)
         if self._processes is not None:
-            self._processes.terminate_workers()  # shut down, its queued jobs cancelled, and each process ended
+            _end(self._processes)  # shut down, its queued jobs cancelled, and each process ended
 
 
 def _triangles(data: bytes) -> int:
@@ -970,7 +994,7 @@ def reachable_host(host: str) -> str:
 
 
 class Server:
-    def __init__(self, port: int = 0, three: str | None = None, touch: Callable[[], None] = lambda: None,
+    def __init__(self, port: int = 0, touch: Callable[[], None] = lambda: None,
                  host: str = "127.0.0.1", mesh_mode: str | None = None,
                  provenance: Callable[[str, str, str, int], dict[str, Any] | None] | None = None,
                  cache: MeshCache | None = None, isolated: bool = False, http_factory=None,
@@ -1026,24 +1050,36 @@ class Server:
         # the engine holds of it and then its record and its cached document; None for a server of
         # its own (a test's), whose application deletes the record alone.
         self.delete: Callable[[str], dict[str, Any] | None] | None = None
+        # What the live worker that built a model document recorded of its parameters at the generation served
+        # (the daemon's ``models.Models.live``: where each is spelled in the code), else None; and their ``set``,
+        # which writes them into the model's script and builds it again (the daemon's ``parameters.Setting``),
+        # None for a server of its own (a test's), whose documents no daemon built.
+        self.parameters: Callable[[str, Any], dict[str, Any] | None] = lambda _ident, _version: None
+        self.set_parameters: Callable[[str, Any], dict[str, Any]] | None = None
+        # A page's look at a model at other values of its parameters (the daemon's ``parameters.Previewing``),
+        # None for a server of its own; and the previews it made, each held here for the page that asked
+        # (``keep_preview``), by an id of its own (``<id>~preview-<token>``) that no listing, no version and no
+        # export names, read at the document's read routes and nothing else, and when each was last read.
+        self.preview_parameters: Callable[[str, Any, Any], dict[str, Any]] | None = None
+        # A person's update of cad from the viewer's update button (the daemon's ``Daemon.update``, as ``cad update``
+        # asks it; ``False``: begun nothing, where one waits to begin), None for a server of its own (a test's).
+        self.update: Callable[[bool], dict[str, Any]] | None = None
+        self.previews: dict[str, Served] = {}
+        self.preview_reads: dict[str, float] = {}
         if budget is not None:
             self.cache.cap = None
             self.cache.grown = self._grown
         self.isolated = isolated
         self.mesher = Mesher("processes" if isolated else mesh_mode,
                              workers=1 if isolated and (mesh_mode or os.environ.get("CAD_ENGINE_MESH")) == "inline" else None)
-        self.three = Path(three) if three else find_three()
         self.touch = touch
         self.clients_active = lambda: False
         self.on_close = lambda: None
         # A hold's client gone (``Daemon.hold``), by the name it held with: its MCP sessions end.
         self.on_hold_end: Callable[[str], None] = lambda _holder: None
-        # What an update's drain waits for beside the daemon's own work (``daemon.Daemon.working``): the
-        # application's exports and agents' MCP calls in flight, as the distribution's application says.
+        # What a drain waits for beside the daemon's own work (``daemon.Daemon.working``): the application's
+        # exports and agents' MCP calls in flight, as the distribution's application says.
         self.clients_working: Callable[[], bool] = lambda: False
-        # The daemon's drain for an update (``daemon.Daemon.drain``): ``retire(then)`` stops the engine once
-        # nothing is in flight, ``then`` first (the switch's helper started); the daemon sets it.
-        self.retire: Callable[..., None] = lambda then=None: None
         self.provenance = provenance
         self.load_lock = threading.RLock()
         self.changed = threading.Condition()
@@ -1064,6 +1100,11 @@ class Server:
         self.foreign_reads: dict[str, concurrent.futures.Future] = {}
         self.foreign_lock = threading.Lock()
         self.reader: concurrent.futures.ProcessPoolExecutor | None = None
+        # The reader's helpers while reads come at once (``_reading``), the reads under way in the
+        # reader and in all, and the let-go of the helpers the last read's end set off.
+        self.helpers: concurrent.futures.ProcessPoolExecutor | None = None
+        self.reading = {"reader": 0, "all": 0}
+        self.helpers_idle: threading.Timer | None = None
         # A served STEP being read again in the background, and one whose file could not be read
         # as it stands (by its state): it is read again once the file changes.
         self.rereading: set[str] = set()
@@ -1071,38 +1112,29 @@ class Server:
         # Per served document (its id), its build: the last progress frame of the build writing it
         # now, the last build of it that failed, and a count that moves with either (``build_of``).
         self.builds: dict[str, dict[str, Any]] = {}
-        server = self
-
-        class Handler(BaseHTTPRequestHandler):
-            protocol_version = "HTTP/1.1"
-
-            def log_message(self, *args: Any) -> None:
-                pass
-
-            def do_GET(self) -> None:  # noqa: N802
-                server.touch()
-                server.route(self, "GET")
-
-            def do_POST(self) -> None:  # noqa: N802
-                server.touch()
-                server.route(self, "POST")
-
-        try:
-            self.http = (http_factory(self, host, port) if http_factory is not None
-                         else ThreadingHTTPServer((host, port), Handler))
-        except BaseException:
-            self.mesher.stop()  # a listener that could not bind leaves no meshing pool behind
-            raise
-        self.http.daemon_threads = True
-        self.port = self.http.server_address[1]
-        self.url = f"http://{reachable_host(host)}:{self.port}"
+        # The listener a page reads the server over: the daemon's (``http_factory``, the engine's one
+        # authenticated listener), or none -- a server of its own (a render process's, a test's)
+        # binds nothing and is read in process (``route``, ``document``, ``read``).
+        self.http: Any = None
+        self.port: int | None = None
+        self.url: str | None = None
+        if http_factory is not None:
+            try:
+                self.http = http_factory(self, host, port)
+            except BaseException:
+                self.mesher.stop()  # a listener that could not bind leaves no meshing pool behind
+                raise
+            self.http.daemon_threads = True
+            self.port = self.http.server_address[1]
+            self.url = f"http://{reachable_host(host)}:{self.port}"
         self.thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
-        self.thread.start()
+        if self.http is not None:
+            self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
+            self.thread.start()
         if self.budget is not None:
-            threading.Thread(target=self._pressured, name="cadgen-memory-pressure", daemon=True).start()
+            threading.Thread(target=self._pressured, name="cad-memory-pressure", daemon=True).start()
 
     def _pressured(self) -> None:
         """The pressure poller: each ``PRESSURE_PERIOD`` (or when woken), the system's signal; under
@@ -1136,13 +1168,17 @@ class Server:
         self.pressure.wake.set()
         if self.thread is not None:  # shutdown waits for a loop that runs
             self.http.shutdown()
-        self.http.server_close()
+        if self.http is not None:
+            self.http.server_close()
         self.on_close()
         self.mesher.stop()
         with self.foreign_lock:
-            reader, self.reader = self.reader, None
-        if reader is not None:
-            reader.terminate_workers()  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
+            pools, self.reader, self.helpers = (self.reader, self.helpers), None, None
+            if self.helpers_idle is not None:
+                self.helpers_idle.cancel()
+        for pool in pools:
+            if pool is not None:
+                _end(pool)  # as the mesher's (``Mesher.stop``): a reader loading the kernel too
 
     # --- documents -------------------------------------------------------------------
 
@@ -1202,6 +1238,41 @@ class Server:
                 doc.xbf, doc._size = xbf, None  # counted again, its xbf bytes with it
                 self.model_versions[ident] = version
         self._grown()
+
+    def keep_preview(self, ident: str, structure: dict[str, Any], shapes: dict[str, bytes]) -> None:
+        """A preview of a model at other values (``parameters.Previewing``), held for the page that asked
+        under its own id: its structure and its parts' shape bytes, never the model's document, its
+        version or its record; its parts meshed by their keys as every part is (``MeshCache``)."""
+        with self.load_lock:
+            self.previews[ident] = Served(ident, ident, structure, None, dict(shapes),
+                                          {p["key"]: p["name"] for p in structure["prototypes"]})
+
+    def drop_previews(self, idents: Any) -> None:
+        """Previews let go (``parameters.Previewing``): what a page reads of them from now on is not found."""
+        with self.load_lock:
+            for ident in idents:
+                self.previews.pop(ident, None)
+                self.preview_reads.pop(ident, None)
+                self.inspected.discard(ident)  # measured once (``measure``): nothing measures it again
+
+    def preview_read(self, ident: str) -> float:
+        """When a page last read preview ``ident`` (``time.monotonic``), 0 for never."""
+        with self.load_lock:
+            return self.preview_reads.get(ident, 0.0)
+
+    def preview_shapes(self, ident: str, held: Any = ()) -> dict[str, bytes]:
+        """The shape bytes by key a next preview of model ``ident`` need not be sent again: the model's
+        document's where this server holds it, and those of the previews ``held``."""
+        found: dict[str, bytes] = {}
+        with self.load_lock:
+            sources = [self.served.get(ident)] + [self.previews.get(one) for one in held]
+        for doc in sources:
+            if doc is None:
+                continue
+            for key, shape in list(doc.shapes.items()):
+                if isinstance(shape, (bytes, bytearray)) and key not in found:
+                    found[key] = bytes(shape)
+        return found
 
     def has(self, ident: str, version: int, whole: bool = False) -> bool:
         """Whether a model's document is held at ``version`` (``whole``: with its xbf bytes)."""
@@ -1388,6 +1459,53 @@ class Server:
                 self.reader = _process_pool(1, initializer=_reader_ready, max_tasks_per_child=1)
             return self.reader
 
+    def _helpers(self) -> concurrent.futures.ProcessPoolExecutor:
+        """The reader's helpers (the module docstring): ``READERS - 1`` processes, started as reads
+        need them, each gone after ``HELPER_READS`` reads."""
+        with self.foreign_lock:
+            if self.helpers is not None and getattr(self.helpers, "_broken", False):
+                self.helpers.shutdown(wait=False, cancel_futures=True)
+                self.helpers = None
+            if self.helpers is None:
+                self.helpers = _process_pool(max(1, READERS - 1), initializer=_reader_ready,
+                                             max_tasks_per_child=HELPER_READS)
+            return self.helpers
+
+    def _reading(self, size: int) -> str:
+        """Where a read of a file of ``size`` bytes goes, counted as under way: the reader when it is
+        free, a file too large for a helper, or under memory pressure; else a helper."""
+        under = READERS > 1 and size <= HELPER_BYTES and self.pressure.under()
+        with self.foreign_lock:
+            lane = "helpers" if READERS > 1 and self.reading["reader"] and size <= HELPER_BYTES and not under else "reader"
+            if lane == "reader":
+                self.reading["reader"] += 1
+            self.reading["all"] += 1
+            if self.helpers_idle is not None:
+                self.helpers_idle.cancel()
+                self.helpers_idle = None
+        return lane
+
+    def _read_done(self, lane: str) -> None:
+        """A read's end: once none is under way, the helpers go ``HELPERS_LINGER`` seconds later unless
+        another read comes first."""
+        with self.foreign_lock:
+            if lane == "reader":
+                self.reading["reader"] -= 1
+            self.reading["all"] -= 1
+            if self.reading["all"] or self.helpers is None or self.stopping.is_set():
+                return
+            self.helpers_idle = threading.Timer(HELPERS_LINGER, self._let_helpers_go)
+            self.helpers_idle.daemon = True
+            self.helpers_idle.start()
+
+    def _let_helpers_go(self) -> None:
+        with self.foreign_lock:
+            if self.reading["all"]:
+                return
+            helpers, self.helpers, self.helpers_idle = self.helpers, None, None
+        if helpers is not None:
+            helpers.shutdown(wait=False, cancel_futures=True)
+
     def _foreign(self, path: Path, ident: str | None = None) -> tuple[dict[str, Any], tuple]:
         """The read of the STEP at ``path`` and the file state it is of: held by the file's
         bytes, else read by a reader process -- once, however many ask for it meanwhile. With
@@ -1414,13 +1532,17 @@ class Server:
             last = self._import_frame(path, started, "read", f"{path.name} ({_megabytes(stat[1])})")
             self.importing(ident, last)
         try:
+            lane = self._reading(stat[1])
             try:
-                future = self._readers().submit(_read_foreign, str(path), digest, counts)
+                pool = self._readers() if lane == "reader" else self._helpers()
+                future = pool.submit(_read_foreign, str(path), digest, counts)
                 read, last = self._await_import(future, ident, path, started, counts, last)
             except concurrent.futures.BrokenExecutor:  # the reader died mid-read
                 with self.foreign_lock:
-                    self.reader = None  # the next read starts a reader afresh
+                    setattr(self, lane, None)  # the next read starts one afresh
                 raise ValueError(f"the STEP reader exited reading {path.name}") from None
+            finally:
+                self._read_done(lane)
         except BaseException as error:
             with self.foreign_lock:
                 self.foreign_reads.pop(digest, None)
@@ -1581,8 +1703,20 @@ class Server:
 
     def structure(self, doc: Served) -> dict[str, Any]:
         """The document's structure, each part held with the faces its mesher left
-        without triangles (``unmeshed``, ordinals) and ``BRepCheck``'s verdict on each."""
+        without triangles (``unmeshed``, ordinals) and ``BRepCheck``'s verdict on each, and the
+        parameters it records (``parameters.served``: ``[]`` for none), each said writable only where
+        the live worker that built a model's document recorded where the code spells its value."""
+        from cad.engine import parameters
+
         found = dict(doc.structure)
+        model = doc.ident in self.model_loaders
+        live = None
+        if model:
+            try:
+                live = self.parameters(doc.ident, doc.version)
+            except Exception:  # noqa: BLE001 - what no worker can say is said not writable, never a failed read
+                live = None
+        found["parameters"] = parameters.served(doc.structure.get("parameters"), model=model, live=live)
         found["prototypes"] = prototypes = []
         for prototype in doc.structure["prototypes"]:
             unmeshed = self.cache.unmeshed(prototype["key"])
@@ -1607,7 +1741,8 @@ class Server:
 
     def built(self, outcomes: dict[str, dict[str, Any] | None]) -> None:
         """Builds that answered: per model document they built (its id), None when its model built,
-        else what failed (``{"model", "error", "progress"}``). Those served are built
+        else what failed (``{"model", "error", "reportable", "progress"}``; ``reportable``: a mistake in
+        cadgen's own code, the daemon's ``_reportable``). Those served are built
         no longer; their pages are woken."""
         hit = False
         with self.load_lock:
@@ -1868,7 +2003,7 @@ class Server:
                 with self.load_lock:
                     self.measuring.difference_update(known)
 
-        thread = threading.Thread(target=measure, name="cadgen-measure-later", daemon=True)
+        thread = threading.Thread(target=measure, name="cad-measure-later", daemon=True)
         thread.start()
         return thread
 
@@ -1950,20 +2085,16 @@ class Server:
                 if handler.command != "HEAD":
                     handler.wfile.write(body)
                 return
-            if not parts or (len(parts) == 1 and is_id(parts[0])):
-                return self.file(handler, PAGE / "index.html")  # ``/<id>``: the document's page
-            if parts[0] == "page" and len(parts) == 2:
-                return self.file(handler, PAGE / parts[1])
-            if parts[0] == "three" and self.three is not None:
-                target = (self.three / "/".join(parts[1:])).resolve()
-                if self.three.resolve() in target.parents:
-                    return self.file(handler, target)
             if parts == ["api", "docs"]:
                 return self.json(handler, self.listing())
-            if parts == ["api", "look"]:
+            # The look, at the paths its record advertises (``LOOK.json``'s ``environment.url``): the
+            # engine's API's own, which the daemon's listener relays as they are.
+            if parts == ["api", "v1", "look"]:
                 return self.json(handler, LOOK.json())
-            if parts == ["api", "look", "environment"]:
+            if parts == ["api", "v1", "look", "environment"]:
                 return self.send(handler, 200, LOOK.environment_path.read_bytes(), "image/vnd.radiance")
+            if len(parts) >= 3 and parts[:2] == ["api", "doc"] and "~preview-" in parts[2]:
+                return self._preview_route(handler, parts, query)
             ident, pose = self.poses.get(parts[2], (parts[2], None)) if len(parts) >= 3 else ("", None)
             if parts[:2] == ["api", "doc"] and ident and not self.holds(ident) and is_id(ident):
                 self.revive(ident)  # a document the engine's cache holds, after a restart
@@ -2040,6 +2171,42 @@ class Server:
         except Exception as error:  # noqa: BLE001 - a request's failure is its answer
             self.error(handler, 500, f"{type(error).__name__}: {error}")
 
+    def _preview_route(self, handler: BaseHTTPRequestHandler, parts: list[str], query: dict) -> None:
+        """A read of a preview (``keep_preview``): its structure, a part's buffer, a part's groups, facts and
+        volume, and its parts' facts -- what a page draws and measures; never a version, a pose, a mesh run,
+        an export or anything that changes what is held. One let go, or never made, is not found."""
+        with self.load_lock:
+            doc = self.previews.get(parts[2])
+            if doc is not None:
+                self.preview_reads[parts[2]] = time.monotonic()
+        if doc is None:
+            return self.error(handler, 404, "no such preview: the page's values were saved, reset, or changed since")
+        if len(parts) == 3:
+            from cad.engine.mesh_format import TESSELLATION
+
+            if getattr(handler, "prefetch", True):
+                self.prefetch(doc)
+            return self.json(handler, {**self.structure(doc), "tessellation": TESSELLATION})
+        if len(parts) == 4 and parts[3] == "volumes":
+            given = (query.get("keys") or [""])[0]
+            keys = [key for key in given.split(",") if key] if given else None
+            if keys is not None and any(key not in doc.shapes for key in keys):
+                return self.error(handler, 404, "no such part")
+            return self.json(handler, self.measure(doc, keys))
+        if len(parts) >= 5 and parts[3] == "part":
+            key = parts[4]
+            if key not in doc.shapes:
+                return self.error(handler, 404, "no such part")
+            if len(parts) == 5:
+                return self.part(handler, doc, key)
+            if len(parts) == 7 and parts[5] in ("face", "edge", "vertex") and parts[6].isdigit():
+                return self.fact(handler, doc, key, parts[5], int(parts[6]))
+            if len(parts) == 6 and parts[5] == "groups":
+                return self.json(handler, self.topology(key, self.shape_of(doc, key)).groups())
+            if len(parts) == 6 and parts[5] == "volume":
+                return self.json(handler, self.measure(doc, [key])[key])
+        return self.error(handler, 404, "not found")
+
     def posed(self, doc: Served, pose: Any) -> dict[str, Any]:
         """The document's structure, at ``pose`` where one is given: its instances where the
         mechanism places them there (``mechanism.posed_structure``)."""
@@ -2115,14 +2282,6 @@ class Server:
 
     # --- responses -------------------------------------------------------------------
 
-    def file(self, handler: BaseHTTPRequestHandler, path: Path) -> None:
-        if not path.is_file():
-            return self.error(handler, 404, "not found")
-        kind = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        if path.suffix == ".js":
-            kind = "text/javascript"
-        self.send(handler, 200, path.read_bytes(), kind)
-
     def read(self, path: str, counted: Callable[[int, int, str], None] | None = None) -> tuple[int, bytes]:
         """A document read (``GET /api/doc/<id>...``) answered in process, as a page would be
         answered over HTTP: its status and body -- but for the structure's, which meshes nothing
@@ -2170,8 +2329,8 @@ class Server:
         handler.send_header("Content-Type", kind)
         handler.send_header("Content-Length", str(len(data)))
         handler.send_header("Cache-Control", "max-age=31536000, immutable" if cache else "no-store")
-        # No Access-Control-* header: the engine's own page (``page/``) reads it from its origin, and
-        # the viewer's relay of these routes answers every other page (``cad_server.viewer.engine_app``).
+        # No Access-Control-* header: the viewer's relay of these routes answers every page
+        # (``cad_server.viewer.engine_app``).
         handler.end_headers()
         if handler.command != "HEAD":
             handler.wfile.write(data)

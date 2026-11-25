@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { ROBOT_TOOL, ROBOT_TOOL_MODES } from "./tools.js";
 
-test("a robot opens in Select, beside Pencil, Shapes and Measure (Clip is a popover, never in hand): the tool in hand is never saved, so there is nothing to restore into", () => {
+test("a robot opens in Select, beside Draw's pencil and shapes modes and Measure (Clip, a model effect, is no mode): the tool in hand is never saved, so there is nothing to restore into", () => {
   assert.equal(ROBOT_TOOL_MODES.defaultMode, ROBOT_TOOL.SELECT);
   assert.deepEqual(Object.values(ROBOT_TOOL), ["select", "pencil", "shapes", "measure"]);
   assert.equal(ROBOT_TOOL_MODES.normalize("pose"), ROBOT_TOOL.SELECT, "Position is Select's filter, not a tool");

@@ -1,15 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
-import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
-import { createSurfaceLook } from "@text-to-cad/core/lib/viewer/surfaceLook.js";
-import { releaseGeometry, shareGeometry } from "@text-to-cad/core/lib/render/sharedGeometry.js";
-import { createPromptContext, referencePart, textPart } from "@text-to-cad/core/prompt";
+import { EDGELESS_VIEW_FEATURES } from "@cad/core/common/viewSettings.js";
+import { createSurfaceLook } from "@cad/core/lib/viewer/surfaceLook.js";
+import { releaseGeometry, shareGeometry } from "@cad/core/lib/render/sharedGeometry.js";
+import { createPromptContext, referencePart, textPart } from "@cad/core/prompt";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { SHELL_TOOL, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { createToolModes } from "../kit/tools/toolModes.js";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
-import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
+import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
+import { ROW_NAME_UNDER_ACTIONS, TREE_ROW_NAME_CLASS, TreeRowActions, TreeRowGlyph, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
 
 // TEST SCAFFOLDING. This renderer is never registered in a product: it exists so
 // the shell's own tools can be driven in a real browser under a frame that is
@@ -32,7 +33,7 @@ import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
 // COMPILED package. When STEP moves onto the shell, delete this and drive those
 // cases through STEP.
 
-// Pencil and Shapes and nothing else: with no tool taken up, "" is the mode, exactly as the
+// Draw's two modes (`pencil`, `shapes`) and nothing else: with no tool taken up, "" is the mode, exactly as the
 // shell records for a renderer that hands over no tools at all.
 const HARNESS_TOOL_MODES = createToolModes({ defaultMode: "", modes: { [SHELL_TOOL.PENCIL]: {}, [SHELL_TOOL.SHAPES]: {} } });
 // A file with a tool stack (`panel*.harness`) opens in Select, as STEP and robots do: the tool
@@ -188,7 +189,7 @@ function HarnessSurface({ view, data }) {
   ]), [picked]);
 
   // `panel*.harness` stands in for a file whose sidebar is full: a tree far taller than any
-  // viewer and a Reference, each a section of the file sidebar; a retained effect — "Keep" keeps a
+  // viewer and a Reference, each a tab of the view's panel; a retained effect — "Keep" keeps a
   // small panel in the tool stack, highlighted, whatever tool is up — and "Pose", a tool that adds
   // a Position section to the sidebar while it is up.
   const [kept, setKept] = useState(false);
@@ -197,6 +198,14 @@ function HarnessSurface({ view, data }) {
   const [filter, setFilter] = useState("");
   // `panel-short.harness` turns the heights round: a tree of two rows and a Reference of many.
   const short = view.file.name.startsWith("panel-short");
+  // `panel-box.harness` adopts Select's Box select: the shell takes the ink in a box, and hands the
+  // box on for the renderer's own picks, which it notes (`data-harness-box`). Its "model" is the
+  // view's right half from x = 500: a drag from there is the camera's, as a drag on a model is.
+  const [boxed, setBoxed] = useState("");
+  const boxSelect = useMemo(() => (view.file.name.startsWith("panel-box")
+    ? { enabled: true, mayStart: event => event.clientX < 500,
+      onBox: box => setBoxed(`${box.additive ? "+" : ""}${box.client.left},${box.client.top},${box.client.right},${box.client.bottom}`) }
+    : null), [view.file.name]);
   const [treeRows, referenceRows] = short ? [2, 40] : [120, 8];
   const selectTool = shell.tools.own({ id: SELECT_TOOL, label: "Select", icon: <span aria-hidden="true">S</span> });
   const keepTool = { id: "keep", label: "Keep", icon: <span aria-hidden="true">K</span>, active: kept, disabled: shell.idle,
@@ -205,12 +214,31 @@ function HarnessSurface({ view, data }) {
     onSelect: () => setPosing(value => !value) };
   const rows = (count, name) => <ul className="px-2 py-1">{Array.from({ length: count }, (_, index) =>
     <li key={index} className="flex h-6 items-center">{name} {index + 1}</li>)}</ul>;
-  // The file sidebar: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
-  const sidebar = withPanel ? <>
+  // A tree's rows as every tree draws them (`primitives/tree-row.jsx`): a glyph, a name and two actions, Isolate and Hide.
+  const realRows = (count, name) => <ul className="py-1">{Array.from({ length: count }, (_, index) => <li key={index}>
+    <TreeRowSurface dense depth={0} actions={2} className="group/row">
+      <TreeRowGlyph><span className="size-3 rounded-sm bg-muted-foreground/40" /></TreeRowGlyph>
+      <span className={`${TREE_ROW_NAME_CLASS} ${ROW_NAME_UNDER_ACTIONS.hover}`}><TreeRowLabel>{name} {index + 1}</TreeRowLabel></span>
+      <TreeRowActions>{["Isolate", "Hide"].map(action => <button key={action} type="button" aria-label={`${action} ${name} ${index + 1}`}
+        className="grid h-5 w-4 place-items-center rounded"><svg className="size-3" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4" fill="currentColor" /></svg></button>)}
+      </TreeRowActions>
+    </TreeRowSurface>
+  </li>)}</ul>;
+  // The view's panel: a tree, a Reference and, while posing, Position; the tool stack: the kept panel.
+  // `panel-qdd.harness` is the qdd actuator's four tabs, in English: Model, Params, Joints and Motion (a mechanism's);
+  // `panel-qdd-three.harness` the widest three of them a model can have, Model, Params and Motion.
+  const qdd = view.file.name.startsWith("panel-qdd");
+  const three = view.file.name.startsWith("panel-qdd-three");
+  const sidebar = qdd ? <>
+      <ToolPanel id="tree" title="Model" label="Harness tree" fit="tree" collapsible={false}>{realRows(12, "Row")}</ToolPanel>
+      <ToolPanel id="parameters" title="Params" label="Harness parameters" fit="details">{rows(4, "Param")}</ToolPanel>
+      {three ? null : <ToolPanel id="position" title="Joints" label="Harness position" fit="details" collapsible={false}>{rows(4, "Joint")}</ToolPanel>}
+      <ToolPanel id="animation" title="Motion" label="Harness animation" fit="details">{rows(2, "Clip")}</ToolPanel>
+    </> : withPanel ? <>
       <ToolPanel id="tree" label="Harness tree" fit="tree" resizable collapsible={false}
         header={<TreeFilterInput label="Filter tree" placeholder="Search…" value={filter} onChange={setFilter} dense className="px-0 shadow-none" />}>{rows(treeRows, "Row")}</ToolPanel>
       <ToolPanel id="reference" title="Reference" label="Harness reference" fit="details" resizable>{rows(referenceRows, "Fact")}</ToolPanel>
-      {posing ? <ToolPanel id="position" title="Position" label="Harness position" fit="details" resizable collapsible={false}>{rows(30, "Joint")}</ToolPanel> : null}
+      {posing ? <ToolPanel id="position" title="Joints" label="Harness position" fit="details" resizable collapsible={false}>{rows(30, "Joint")}</ToolPanel> : null}
     </> : null;
   const toolPanels = kept ? <ToolPanel id="kept" title="Kept" label="Kept controls" onClose={() => setKept(false)}><div className="h-16 px-2">Kept</div></ToolPanel> : null;
 
@@ -220,20 +248,22 @@ function HarnessSurface({ view, data }) {
   const previewView = useMemo(() => ({ scene: previewScene, animation: data.previewAnimation ?? null, onCameraSettled }),
     [previewScene, data.previewAnimation, onCameraSettled]);
 
-  // Its test controls sit at the bottom centre, clear of the view cube (bottom-right) and the file sidebar (down the left).
+  // Its test controls sit at the bottom centre, just above Quick Edit's bar (always there: its measured top,
+  // `--cad-quick-edit-reserve`), clear of the view cube (top-right) and the view's panel (down the left).
   return <RendererShell shell={shell} tools={withPanel ? [selectTool, ...shell.tools.drawing, keepTool, poseTool] : shell.tools.drawing}
     previewView={previewView}
     toolPanels={toolPanels} sidebar={sidebar} references={references} onClearReferences={() => setPicked("")}
     contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     frameProvider={frame => <HarnessFrameContext.Provider value={`frame:${stage}`}>{frame}</HarnessFrameContext.Provider>}
-    onCanvasPointerDown={() => setPutDown(`put down @${stage}`)}
-    viewportOverlay={viewport => <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 -translate-x-1/2 text-xs" data-harness-overlay>
+    onCanvasPointerDown={() => setPutDown(`put down @${stage}`)} boxSelect={boxSelect}
+    viewportOverlay={viewport => <div className="pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 text-xs" style={{ bottom: "var(--cad-quick-edit-reserve, 8px)" }} data-harness-overlay>
       <span data-harness-camera-settles>{settleLabel}</span>
       <span data-harness-menu-note>{picked}</span>
       <span data-harness-menu-open>{menuUp ? "up" : ""}</span>
       <span data-harness-runtime>{runtimeEvents.join(" ")}</span>
       <span data-harness-shadows>{shadowReception}</span>
       <span data-harness-put-down>{putDown}</span>
+      <span data-harness-box>{boxed}</span>
       <FrameContextNote />
       <button type="button" className="pointer-events-auto" data-harness-arrive="partial"
         onClick={() => { scene.arrive(false); viewport.commitScene(); }}>partial</button>

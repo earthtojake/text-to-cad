@@ -7,23 +7,23 @@ import {
   getProportionalLightingScopeRadius,
   getLightingScopeRadius,
   getSceneScaleSettings
-} from "@text-to-cad/core/lib/viewer/sceneScale.js";
+} from "@cad/core/lib/viewer/sceneScale.js";
 import {
   applyRuntimeModelBounds
-} from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+} from "@cad/core/lib/viewer/modelRuntime.js";
 import {
   THEME_FLOOR_MODES
-} from "@text-to-cad/core/lib/themeSettings.js";
+} from "@cad/core/lib/themeSettings.js";
 import {
   getStageFloorSize,
   createStageFloorPlane,
   createStageFloorGlowPlane,
   createStageShadowPlane
-} from "@text-to-cad/core/lib/viewer/stageTheme.js";
+} from "@cad/core/lib/viewer/stageTheme.js";
 import {
   updateOriginAxis as updateStageOriginAxis,
   updateGridHelper as updateStageGridHelper
-} from "@text-to-cad/core/lib/viewer/stageGrid.js";
+} from "@cad/core/lib/viewer/stageGrid.js";
 import {
   disposeSceneObject
 } from "../viewport/sceneObjects.js";

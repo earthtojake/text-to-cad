@@ -1,4 +1,4 @@
-"""The URDF/SRDF/SDF VALIDATION family in cadgen must stay stdlib-pure.
+"""The URDF/SRDF VALIDATION family in cadgen must stay stdlib-pure.
 
 These modules are deliberately extraction-ready: robot-description validation is a
 text/XML problem, not a CAD-kernel problem, and keeping the family free of
@@ -9,7 +9,7 @@ pass, because the test environment has the kernel installed.
 
 Static check over the AST (not an import-time sys.modules probe) so an offending
 import is caught even when it is lazy, conditional, or function-local. Drawing a robot
-is the engine's (`cad snapshot` draws one), outside this family.
+is the engine's (`cad <type> snapshot` draws one), outside this family.
 """
 
 from __future__ import annotations
@@ -23,43 +23,77 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # Where each package of the family lives: the library's and the server's source trees.
 LIBRARY_SRC = REPO_ROOT / "packages" / "cad" / "src"
-SERVER_SRC = REPO_ROOT / "packages" / "cad-server" / "src"
+SERVER_SRC = REPO_ROOT / "packages" / "cad" / "src"
 OURS = ("cad", "cad_server", "cadgen")
 
 FAMILY = [
     LIBRARY_SRC / "cad" / name for name in (
-        "urdf_source.py",
-        "srdf_source.py",
-        "srdf_validation.py",
-        "sdf_source.py",
-        "sdf_validation.py",
-        "sdf_external.py",
-        "findings.py",
-        "xml_common.py",
-        # The public namespaces the CLIs are shells over (packages/cad/README.md, law 6).
-        # They are the family's front door now, so they inherit its purity rule.
-        "urdf.py",
-        "srdf.py",
-        "sdf.py",
+        "urdf/_source.py",
+        "srdf/_source.py",
+        "srdf/_validation.py",
+        "_internal/findings.py",
+        "_internal/xml_common.py",
+        # The document types the CLIs are shells over (packages/cad/README.md). They are the
+        # family's front door now, so they inherit its purity rule.
+        "urdf/__init__.py",
+        "srdf/__init__.py",
+        "_internal/document_type.py",
+        "_internal/aliases.py",
+        "registry.py",
         "_internal/validation_door.py",
         "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
+        "engine/urdf_source.py",  # the URDF (and SRDF) reader: the stills' and the payload's, stdlib only
+        "engine/robot_model.py",  # the one articulation the readers make
     )
-] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf_validate.py", "srdf_validate.py", "sdf_validate.py")]
+] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py")]
 
 # Heavy roots that would break extraction-readiness. The packages themselves are allowed only
 # for the family's own light members (findings, xml_common, and each other).
 FORBIDDEN_ROOTS = {"OCP", "build123d", "numpy", "ocp_tessellate", "ezdxf", "playwright"}
 ALLOWED_CADGEN = {
-    "cad.findings",
-    "cad.xml_common",
-    "cad.urdf_source",
-    "cad.srdf_source",
-    "cad.srdf_validation",
-    "cad.sdf_source",
-    "cad.sdf_validation",
-    "cad.sdf_external",
+    "cad._internal.findings",
+    "cad._internal.xml_common",
+    "cad.urdf._source",
+    "cad.srdf._source",
+    "cad.srdf._validation",
+    "cad.engine.urdf_source",  # the URDF reader, in the engine
+    "cad.engine.robot_model",  # the articulation every reader of a robot makes
+    # MuJoCo's compile (the mujoco integration's): imported in the function that compiles, never by a
+    # read, and itself imports mujoco only inside that function.
+    "cad.mujoco._compile",
     "cad_server.cli",  # shared CLI plumbing, itself lazy
     "cad.results",  # the typed line protocol: dataclasses and pathlib only
+    "cad.registry",  # the document types and integrations: stdlib only
+    "cad._internal.document_type",  # cad.<type> as one object, every name loaded on first use
+    "cad.engine.ids",  # what a document id is: re and os alone
+    "cad.engine.addresses",  # a FILE#REF's file and ref, and a document's key: os, pathlib and cad.engine.ids alone
+    # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
+    # is imported in the function that measures.
+    "cad._internal.manufacturing",
+    # A B-rep type's interference check (no robot type's): its options and its result, stdlib only; the engine
+    # measures it.
+    "cad._internal.interference",
+    # A B-rep type's stress study (no robot type's): its signature and options, stdlib only; the kernel, netgen
+    # and CalculiX are imported in the function that studies.
+    "cad._internal.fea.operation",
+    # A mechanism's joint stops (no robot type's): its signature and options, stdlib only; the kernel and the sweep
+    # (``cad.engine.ranges``, numpy) are imported in the function that sweeps.
+    "cad._internal.ranges",
+    "cad._internal.aliases",  # the earlier spellings: stdlib only
+    # A model's parameters (no robot type's): ``cad.model.param``, loaded on first use, and what a Save
+    # checks and writes, stdlib only.
+    "cad.engine.parameters",
+    "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
+    # Reached only when a decorator or an engine operation is called (``cad.step.export``,
+    # ``cad urdf snapshot``), never by a check: imported in the function that dispatches to it.
+    "cad.engine",
+    "cad.engine.api",
+    "cad.engine.model",
+    "cad_server.engine.cli",
+    # The producers the registry gathers: matchers that read type names, stdlib only.
+    "cad.build123d._producers",
+    "cad.kicad._producers",
+    "cad_server.cli.document_types",  # every type's commands, from the registry
     "cad._internal.validation_door",  # findings -> ValidationResult, stdlib only
     "cad_server._internal.cli_from_function",  # argparse over a signature, stdlib only
     # A mesh reference's scheme and local file, read the same way by the engine's stills
@@ -116,7 +150,7 @@ class ImportCost(unittest.TestCase):
 
     def test_the_namespaces_import_without_the_heavy_stack(self) -> None:
         code = (
-            "import sys, cad.urdf, cad.srdf, cad.sdf;"
+            "import sys, cad.urdf, cad.srdf;"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY_AT_IMPORT!r} if m in sys.modules))"
         )
         proc = subprocess.run(

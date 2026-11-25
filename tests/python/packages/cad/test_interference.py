@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from build123d import Compound, Pos, Solid
-from cad.geometry import GeometryError, overlap_volume
+from cad.build123d._geometry import GeometryError, overlap_volume
 
 
 class OverlapVolumeTests(unittest.TestCase):

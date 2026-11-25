@@ -1,17 +1,17 @@
-import { normalizeExplodedViewSettings } from "@text-to-cad/core/lib/displaySettings.js";
-import { clipAmount, clipAtForAmount, clipAxisBounds, normalizeStepClipSettings } from "@text-to-cad/core/lib/viewer/clipPlane.js";
+import { normalizeExplodedViewSettings } from "@cad/core/lib/displaySettings.js";
+import { clipAmount, clipAtForAmount, clipAxisBounds, normalizeStepClipSettings } from "@cad/core/lib/viewer/clipPlane.js";
 import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
+} from "@cad/ui/primitives/dropdown-menu";
 import { DropdownMenu as MenuPrimitive } from "radix-ui";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
-import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.js";
+import { parseFileSheetNumberInput } from "../../inspector/FileSheet.js";
+import { SliderField } from "../../inspector/SliderField.jsx";
 import { useControlUsage } from "../../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const AXES = Object.freeze(["x", "y", "z"]);
 
@@ -22,9 +22,9 @@ function formatNumber(value, digits = 2) {
 
 // These controls read the resolved scene's Clip and Explode groups. Public display
 // validation belongs to the settings store; resolved scene groups are not a saved display.
-// Persistent model effects are separate from Display and its presets. Clip and Explode are drawn
-// alike: the amount in the panel's heading, one row for a body — Explode's a slider, Clip's the
-// axis it cuts along (whose dropdown holds Clip's settings too) and then its slider.
+// Persistent model effects are separate from Display (the card the view's Display button, the plain cube, opens) and
+// its styles. Clip and Explode are tools of the strip, drawn alike in the row under it (`ModelTools.jsx`): what leads
+// it (Explode's name; Clip's axis, whose dropdown holds Clip's settings too), then its slider, the amount beside it.
 //
 // Clip's view holds where its plane stands (`at`, millimetres); the panel shows the share of the
 // model it cuts away, measured on `bounds` — the model at rest, the box the plane is placed in.
@@ -34,7 +34,7 @@ function clipState(viewSettings, bounds) {
   return { clip, range: max - min, amount: clipAmount(clip, bounds) * 100 };
 }
 
-/** How far Clip cuts, for its panel's heading. */
+/** How far Clip cuts, as its row reads it beside the slider. */
 export function clipSummary(viewSettings, bounds) {
   return `${formatNumber(clipState(viewSettings, bounds).amount, 0)}%`;
 }
@@ -43,7 +43,7 @@ const AXIS_OPTIONS = Object.freeze(AXES.map(value => ({ value, label: value.toUp
 
 // An axis's button: the app menu's Theme buttons (24px square, its radius, the menu's type), the axis in
 // hand in the accent a highlighted item wears, the others in the item's own colour.
-const AXIS_ITEM_CLASS = "grid size-6 cursor-default place-items-center rounded-sm text-tiny leading-4 text-foreground outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground";
+const AXIS_ITEM_CLASS = "grid size-icon-button cursor-default place-items-center rounded-sm text-xs leading-(--cad-leading-xs) text-foreground outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-accent data-[state=checked]:text-accent-foreground";
 
 // A press in this menu keeps it open: an axis as each setting does, so several change in one go.
 const keepOpen = event => event.preventDefault();
@@ -76,7 +76,7 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
       <ToolbarButton tooltip={false} label={t("clip.axisCurrent", { axis: clip.axis.toUpperCase() })} data-clip-axis={clip.axis}
-        className="w-auto shrink-0 gap-0.5 px-1 text-tiny aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground">
+        className="w-auto shrink-0 gap-0.5 px-1 text-xs aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground">
         {clip.axis.toUpperCase()}<ChevronDown className="size-2.5 opacity-60" aria-hidden="true" />
       </ToolbarButton>
     </DropdownMenuTrigger>
@@ -84,8 +84,8 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
     <DropdownMenuContent align="start" sideOffset={4} collisionPadding={8}
       className={cn(FLOATING_SURFACE_CLASS, "w-max min-w-0 data-[state=closed]:animate-none!")}>
       {/* As narrow as its settings: first the axes, a compact group of the Theme row's buttons in a row
-          as tall as an item; a rule; then the settings, Display's checkbox items, with no glyphs. */}
-      <div className="flex min-h-7 items-center px-1 py-0.5" data-clip-axis-row="">
+          as tall as an item; a rule; then the settings, the menu's checkbox items (their check at the right), with no glyphs. */}
+      <div className="flex min-h-control items-center px-1 py-0.5" data-clip-axis-row="">
         <MenuPrimitive.RadioGroup value={clip.axis} onValueChange={choose} aria-label={t("clip.axis")} className="flex items-center gap-0.5">
           {AXIS_OPTIONS.map(option => <MenuPrimitive.RadioItem key={option.value} value={option.value} onSelect={keepOpen}
             className={AXIS_ITEM_CLASS} data-clip-axis-option={option.value}>{option.label}</MenuPrimitive.RadioItem>)}
@@ -104,32 +104,33 @@ function ClipAxisSelect({ viewSettings, onViewSettingsPatch, bounds }) {
   </DropdownMenu>;
 }
 
-// Clip's controls: its axis, then one slider, which applies the cut as it leaves zero and removes it
-// at zero. `className` lays them out where they sit, and `sliderClassName` draws the slider.
-export function CrossSectionControls({ viewSettings, onViewSettingsPatch, bounds, className = "flex min-w-0 items-center gap-2 px-2 py-1",
-  sliderClassName = FILE_SHEET_PRECISION_SLIDER_CLASSES }) {
+// Clip's controls: the slider control on one line (`SliderField`, `inline`), its axis as its label,
+// then the slider, which applies the cut as it leaves zero and removes it at zero, then the share it
+// cuts away, typed as well as dragged.
+export function CrossSectionControls({ viewSettings, onViewSettingsPatch, bounds, className }) {
   const { clip, range, amount } = clipState(viewSettings, bounds);
   const controls = useControlUsage();
   const { t } = useI18n();
-  return <div className={className}>
-    <ClipAxisSelect viewSettings={viewSettings} onViewSettingsPatch={onViewSettingsPatch} bounds={bounds} />
-    <Slider thumbProps={{ "aria-label": t("clip.amount") }} value={[amount]} min={0} max={100}
-      step={0.1} disabled={!range}
-      onValueChange={([value]) => { controls.changed("clip_amount"); onViewSettingsPatch({ clip: {
-        enabled: value > 0, at: clipAtForAmount(clip, bounds, value / 100)
-      } }); }}
-      className={sliderClassName} />
-  </div>;
+  const write = value => { controls.changed("clip_amount"); onViewSettingsPatch({ clip: {
+    enabled: value > 0, at: clipAtForAmount(clip, bounds, value / 100)
+  } }); };
+  const text = clipSummary(viewSettings, bounds);
+  return <SliderField inline className={className} label={<ClipAxisSelect viewSettings={viewSettings} onViewSettingsPatch={onViewSettingsPatch} bounds={bounds} />}
+    name={t("clip.amount")} value={amount} min={0} max={100} step={0.1} disabled={!range} onValueChange={write}
+    text={text} textLabel={t("render.valueOf", { name: t("clip.amount") })}
+    onTextCommit={draft => { if (draft !== text) write(parseFileSheetNumberInput(draft, { fallback: amount, min: 0, max: 100 })); }} />;
 }
 
-// Explode's control: one slider, which applies the effect as it leaves zero and removes it at zero.
-// `className` draws it where it sits (its sub-toolbar's slider).
-export function ExplodeControls({ viewSettings, onViewSettingsPatch, className = FILE_SHEET_PRECISION_SLIDER_CLASSES }) {
+// Explode's control: the slider control on one line, `label` leading it (its name), then the slider,
+// which applies the effect as it leaves zero and removes it at zero, then the amount, typed as well.
+export function ExplodeControls({ viewSettings, onViewSettingsPatch, label = null, className }) {
   const exploded = normalizeExplodedViewSettings(viewSettings?.exploded);
   const controls = useControlUsage();
   const { t } = useI18n();
-  return <Slider thumbProps={{ "aria-label": t("explode.amount") }}
-    value={[exploded.enabled ? exploded.amount * 100 : 0]} min={0} max={100} step={1}
-    onValueChange={([amount]) => { controls.changed("explode_amount"); onViewSettingsPatch({ exploded: { amount: amount / 100, enabled: amount > 0 } }); }}
-    className={className} />;
+  const amount = exploded.enabled ? Math.round(exploded.amount * 100) : 0;
+  const write = value => { controls.changed("explode_amount"); onViewSettingsPatch({ exploded: { amount: value / 100, enabled: value > 0 } }); };
+  const text = `${amount}%`;
+  return <SliderField inline className={className} label={label} name={t("explode.amount")} value={exploded.enabled ? exploded.amount * 100 : 0}
+    min={0} max={100} step={1} onValueChange={write} text={text} textLabel={t("render.valueOf", { name: t("explode.amount") })}
+    onTextCommit={draft => { if (draft !== text) write(parseFileSheetNumberInput(draft, { fallback: amount, min: 0, max: 100, integer: true })); }} />;
 }

@@ -1,20 +1,34 @@
 /** Package-owned contracts for the shared navigation primitives. */
-import type { ComponentType, ElementType, ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { FileSource } from "../types.js";
 
 /* -------------------------------------------------------------------- */
 /* The file menu                                                         */
 /* -------------------------------------------------------------------- */
 
-/** What the ⋯ after the file's name can offer. */
-export type EntryAction = "copy-path" | "reveal";
+/** What a host can do with a document: its path copied, a link to its page copied, its file shown in the file manager, its page opened in the browser. */
+export type EntryAction = "copy-path" | "copy-link" | "reveal" | "browser";
 export type Platform = "darwin" | "win32" | "linux";
-export type EntryMenuItem = { action: EntryAction; label: string };
+/** One item; Open in's say whether they can open now (`enabled`) and why not (`reason`, their hint). */
+export type EntryMenuItem = { action: EntryAction; label: string; enabled?: boolean; reason?: string };
 
 export const ENTRY_ACTIONS: readonly EntryAction[];
-/** The menu for the file on screen: the actions the host can perform, in a fixed order. */
+/** A home card's actions: Copy path, Copy link, then Reveal in the file manager, each where the host can do it. */
 export function entryMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string) => string): EntryMenuItem[];
 export function revealLabel(platform: Platform, t?: (key: string) => string): string;
+/** Open in's groups, in order; the drawing parts them with separators. */
+export type OpenInGroup = "places" | "source" | "exports" | "default";
+/** One place Open in opens the document in; an app's (`action: "app"`) names the file (`target`) and the app (`app`, or `"default"`). */
+export type OpenInEntry = { action: EntryAction | "app"; label: string; enabled: boolean; reason?: string; group: OpenInGroup; target?: string; app?: string };
+/**
+ * The navbar's Open in: Browser and the file manager by its name (Finder, File Explorer, File manager), each where the
+ * host can do it; then, from the host's answer (`files`), the source's apps, each present export's apps as "App (file)",
+ * and Default app. What opens the source is disabled, with its reason, while it was moved or deleted; an app that
+ * refuses its file (`refuses`: a KiCad older than the file's format) is disabled, saying so.
+ */
+export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string, params?: Record<string, unknown>) => string,
+  state?: { sourceMissing?: boolean; files?: import("../types.js").OpenInFiles | null }): OpenInEntry[];
+export function fileManagerName(platform: Platform, t?: (key: string) => string): string;
 
 /* -------------------------------------------------------------------- */
 /* The explorer                                                          */
@@ -41,16 +55,15 @@ export function folderTrail(path: string): { name: string; path: string }[];
 /** The folder holding `path`. */
 export function parentFolder(path: string): string;
 
-/** The one empty state, used by every pane in both apps. */
+/** The one status screen, used by every full-area state in both apps: quiet, a 22rem column centred in the area. */
 export const EmptyState: ComponentType<{
-  icon: ElementType;
   title: string;
   description?: string;
   action?: ReactNode;
   className?: string;
-  /** `warn` is for a missing prerequisite, not an idle state. */
-  tone?: "muted" | "warn";
 }>;
+/** A status screen's action: the panel's small quiet button. */
+export const StatusAction: ComponentType<import("react").ButtonHTMLAttributes<HTMLButtonElement>>;
 
 export function fuzzyMatch(
   needle: string,
@@ -60,7 +73,10 @@ export function fuzzyMatch(
 /**
  * The one navbar, over a file and over a host's home (with no file, history or Back to home). Left: the logo, which opens the app's menu
  * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
- * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯. Right: `update`, `trailing` (the file's actions), then `actions`.
+ * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯ (Copy path, Open in, then
+ * the host's own items: the viewer's Export). Over a file with a panel, the panel's toggle comes
+ * first, before the logo. Right: `trailing` (the file's actions), then `actions`, then `update`, outermost.
+ * Back and Forward are a desktop row's alone: a phone's has no room for them.
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the app menu's Back to home. */
@@ -79,12 +95,28 @@ export const ViewerNavbar: ComponentType<{
   explorer?: { source: Pick<FileSource, "list" | "search">; folder?: string | null; onOpen: (path: string) => void; onFolderChange?: (folder: string) => void } | null;
   /** The name menu's Recent: the host's library, in the explorer's style, a row opening its document. */
   recent?: { list(): Promise<readonly import("../types.js").RecentDocument[]>; onOpen: (path: string) => void } | null;
-  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; onAction: (action: EntryAction, path: string) => void } | null;
+  /**
+   * The ⋯ after the name: Copy path, then Open in (Browser, and the file manager by its name), each
+   * where `capabilities` has it, then `items` (the host's own: the viewer's Export submenu). None
+   * where it would be empty.
+   */
+  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; sourceMissing?: boolean;
+    /** The host's apps for the document's files, asked each time the menu opens. */
+    apps?: (options: { signal: AbortSignal }) => Promise<import("../types.js").OpenInFiles | null>;
+    onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => void; items?: ReactNode } | null;
   trailing?: ReactNode;
-  /** The host's update button, first among the controls, while its install is behind. */
-  update?: ReactNode;
-  /** The host's own actions (the web viewer's Export), last in the row. */
+  /** The host's own actions (the CAD app's Full size, inline). */
   actions?: ReactNode;
+  /** The host's update button (`@cad/ui/update`), last and outermost. */
+  update?: ReactNode;
+  /**
+   * The view's panel toggle (`../panelToggles.js`, said by its frame): the row's first control, before the logo, the
+   * same neutral button open or shut (`aria-expanded` says which).
+   */
+  panels?: import("../panelToggles.js").PanelToggles | null;
+  /** Over the home: the two places its controls go ("Recent" and its count; the search and Open), on the grid's column (`../navbarSlots.js`). */
+  homeSlots?: { left(element: HTMLElement | null): void; right(element: HTMLElement | null): void } | null;
+  viewSlot?: ((element: HTMLElement | null) => void) | null;
   className?: string;
 }>;
 
@@ -104,7 +136,7 @@ export const AppMenu: ComponentType<{
 }>;
 
 /**
- * A file's icon. The nine formats the CAD Viewer renders get its own
+ * A file's icon. The nine formats the viewer renders get its own
  * per-format glyphs; everything else is one lucide table.
  */
 export const FileIcon: ComponentType<{ path: string; className?: string; strokeWidth?: number }>;

@@ -39,7 +39,7 @@ MAX_RENDER_FORMAT_CHECKS = 0
 MAX_FORMAT_PREDICATE_CALLS = 0
 
 RENDER_FORMAT_MEMBER = re.compile(
-    r"RENDER_FORMAT\.(?:STEP|STL|THREE_MF|GLB|DXF|URDF|SRDF|SDF)\b"
+    r"RENDER_FORMAT\.(?:STEP|STL|THREE_MF|GLB|DXF|URDF|SRDF)\b"
 )
 FORMAT_PREDICATE = re.compile(r"\b(?:isMeshRenderFormat|isRobotRenderFormat)\s*\(")
 
@@ -75,7 +75,7 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             MAX_RENDER_FORMAT_CHECKS,
             "viewer client gained RENDER_FORMAT identity checks "
             f"({total} > {MAX_RENDER_FORMAT_CHECKS}). Gate on a capability from "
-            "@text-to-cad/core/lib/renderCapabilities instead of on the format's identity. "
+            "@cad/core/lib/renderCapabilities instead of on the format's identity. "
             f"Heaviest files: {worst}",
         )
 

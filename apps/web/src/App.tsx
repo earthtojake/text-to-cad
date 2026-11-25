@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { CadViewer, createCadFileSource, normalizePath } from '@text-to-cad/ui/cad-viewer';
-import { createCadFileActions } from '@text-to-cad/ui/catalog';
-import type { ModelLibrarySource } from '@text-to-cad/ui/library';
-import { createLiveRegistry, type ViewerHost } from '@text-to-cad/ui/host';
-import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
-import { cadApiUrl, createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@text-to-cad/core/client';
+import { CadViewer, createCadFileSource, normalizePath } from '@cad/ui/cad-viewer';
+import { createCadFileActions } from '@cad/ui/catalog';
+import type { ModelLibrarySource } from '@cad/ui/library';
+import { createLiveRegistry, type ViewerHost } from '@cad/ui/host';
+import type { TabStore, Appearance } from '@cad/ui/tab-store';
+import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
+import { reloadWhenClean } from './host/reloadWhenClean.js';
 import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
-import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
-import { english, translator, useLanguage } from '@text-to-cad/ui/i18n';
-import { UpdateButton, reloadWhenClean, useUpdate, type UpdateNotice } from '@text-to-cad/ui/update';
+import { UpdateButton, useUpdate, type UpdateCalls } from '@cad/ui/update';
+import { useAnalyticsConsent } from '@cad/ui/consent';
+import { english, translator, useLanguage } from '@cad/ui/i18n';
+import { useWhatsNew } from '@cad/ui/whats-new';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
@@ -39,19 +41,17 @@ export function useTabAppearance(tabStore: TabStore): { preference: Appearance; 
 const DOCUMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
- * The CAD Viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
+ * The viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
  * or a file's, which the server registers when it is opened), or the home (`/`): the models opened
  * before. A file opened by its path (from Files, or the home's Open) is asked for its id first, and shown by it. The browser's own history is the way back:
  * showing a document or the home is a new entry.
  */
-export default function App({ client, server, tabStore, notice = null, language: chosenLanguage = null }: { client: CadClient; server: CadServerInfo; tabStore: TabStore; notice?: UpdateNotice | null; language?: string | null }) {
+export default function App({ client, server, tabStore, language: chosenLanguage = null }: { client: CadClient; server: CadServerInfo; tabStore: TabStore; language?: string | null }) {
   // Another process answering on this page's port: never loaded into the tab (a dev server's restart
   // alone is followed), and said as the engine being gone.
   const [foreign, setForeign] = useState(false);
-  // An engine of another release that admits this page's credential is an update: reloaded into, once
-  // the page has nothing unsaved.
   useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true,
-    identityToken: String(info.identityToken || ''), release: String(info.release || '') }), () => ({ ok: false })),
+    identityToken: String(info.identityToken || '') }), () => ({ ok: false })),
     follow: Boolean(import.meta.env?.DEV), onForeign: () => setForeign(true), reload: () => { reloadWhenClean(() => window.location.reload()); } });
   const downloads = useMemo(() => createBrowserDownloads(), []);
   const source = useMemo(() => createCadFileSource(client), [client]);
@@ -59,10 +59,12 @@ export default function App({ client, server, tabStore, notice = null, language:
   const sayRef = useRef<(key: string, params?: Record<string, unknown>) => string>(english);
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
     (key, params) => sayRef.current(key, params)), []);
-  // The file menu: the file's path to the clipboard, and Reveal in the file manager of the machine the
-  // server runs on, labeled for its platform.
+  // The file menu: the file's path to the clipboard, Reveal in the file manager of the machine the
+  // server runs on, labeled for its platform, Copy link, and Open in's apps there (the server's own table).
   const fileActions = useMemo(() => createCadFileActions({ platform: server.platform, clipboard: browserClipboard,
-    reveal: path => client.reveal(path) }), [server.platform, client]);
+    reveal: path => client.reveal(path), openIn: client,
+    // Copy link: this page's own origin, and a fresh link from the server.
+    link: { origin: () => window.location.origin, client } }), [server.platform, client]);
   // A copied Quick Edit's annotation, saved by the server beside it on this machine.
   const promptFiles = useMemo(() => createHttpPromptFiles({ origin: client.origin }), [client]);
   // The view on screen, for the library's pictures of what was opened.
@@ -99,13 +101,29 @@ export default function App({ client, server, tabStore, notice = null, language:
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
-  // Once the catalog has the document: the page is named after it alone ("bracket.step", "juno";
-  // the home is "text-to-cad"), and the library every CAD view
+  // The document's name, never its id: the catalog's row of it (which the boot asks for with the
+  // server's description, `main.tsx`, so a document's page has it from its first frame where the server
+  // answers in time), else the name it had when it was shown before or on the home's card it was
+  // opened from; else none yet, its place in the navbar empty until the catalog answers. A file
+  // opened by its path and not found is named by its path's last segment.
+  const names = useRef(new Map<string, string>());
+  const catalogName = useSyncExternalStore(client.subscribe,
+    () => String((file ? client.entryOf?.(normalizePath(file)) : null)?.name || ''), () => '');
+  if (file && catalogName) names.current.set(file, catalogName);
+  const name = catalogName || names.current.get(file) || '';
+  // The file the catalog has on screen, by its own path (a model's document by its id): `onShown`.
+  const [shownPath, setShownPath] = useState<string | null>(null);
+  // The page is named after it alone ("bracket.step", "juno"; a file with no name of its own, after its
+  // path's last segment); the home, or a document whose name is not known yet, is "text-to-cad".
+  useEffect(() => {
+    const fileName = (path: string | null) => (path && !DOCUMENT_ID.test(path) ? normalizePath(path).split('/').pop() || '' : '');
+    document.title = name || fileName(shownPath) || fileName(file) || 'text-to-cad';
+  }, [name, shownPath, file]);
+  // Once the catalog has the document, the library every CAD view
   // shares says it was opened now: a file joins it (counted, as a code, for analytics), and a model,
   // known by its id alone and in it since its run, has its opened time.
   const shown = useCallback((path: string | null) => {
-    const entry = path ? client.entryOf?.(path) : null;
-    document.title = path ? String(entry?.name || path.split('/').pop()) : 'text-to-cad';
+    setShownPath(path);
     if (path) void client.changeRecents({ action: 'open', path }).catch(() => {});
   }, [client]);
   // The home: the library every CAD view shares, and Open with the desktop's chooser where the
@@ -113,8 +131,12 @@ export default function App({ client, server, tabStore, notice = null, language:
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: name => Promise.resolve(cadApiUrl('/__cad/thumbnail', { origin: client.origin, params: { name } })),
-    open: async entry => { await show(entry.path); },
+    thumbnail: model => Promise.resolve(client.thumbnailUrl(model)),
+    open: async entry => {
+      // The card's name is the document's until the catalog says it.
+      for (const key of [entry.id, normalizePath(entry.path)]) if (key && entry.name) names.current.set(key, entry.name);
+      await show(entry.path);
+    },
     ...(server.pick ? { pick: async () => { const picked = await client.pick(); if (picked) await show(picked); } } : {}),
   }), [client, server.pick, show]);
   const appearance = useTabAppearance(tabStore);
@@ -128,21 +150,40 @@ export default function App({ client, server, tabStore, notice = null, language:
   const { locale, language } = useLanguage(client.language, { preferred: navigator.languages ?? [navigator.language], initial: chosenLanguage });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   sayRef.current = translator(locale);
-  // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
+  // The usage stats text-to-cad sends (its telemetry), the same as the CAD app's: nothing asks here (a
   // cad command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
-  // A newer text-to-cad, as the CAD app says it (`cad_server/updates.py`): the update button, an icon first
-  // in the navbar while this install is behind, from the notice read with the server's description
-  // (`main.tsx`). A click updates; while the engine restarts for it, the page asks for its engine back
-  // often and says nothing of its going, and reloads into the new release once it answers -- or into the
-  // release before, should the switch fail and go back, which the page reloaded there says: the tab notes
-  // that its page followed the update through the restart (`followedUpdate`).
+  // What's new: once after a release with notes is installed, over the home or a file's view, kept
+  // seen in the person's settings for every CAD view (`@cad/ui/whats-new`).
+  const whatsNew = useWhatsNew(client.whatsNew);
+  // cad's own update, as the update button (`@cad/ui/update`): the blue icon, outermost in the navbar, while this
+  // install is behind, from what the server said as the page started (`main.tsx`). A click updates; meanwhile, and
+  // through an automatic update the page finds underway, the page asks where it is, says nothing of the server's
+  // going while the release installs, and reloads into the server that comes back on the new release, once nothing
+  // on it is unsaved. The tab notes the release it followed the update from (`followedUpdate`), so the page loaded
+  // after the restart says it is updated, or, the update failed and the release before started again, why. A
+  // failure is the viewer's alert (`updater.alert`, the card every error is said in), from the server's record, so
+  // through a reload too; put away, it stays behind its icon in the navbar, for every page.
   const [followed] = useState(() => followedUpdate());
   useEffect(() => { forgetFollowedUpdate(); }, []);
-  const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice, { followed });
-  const restarting = updater.phase.phase === 'restarting';
-  useEffect(() => { if (restarting) noteFollowedUpdate(); }, [restarting]);
+  const reloading = useRef(false);
+  const reload = useCallback(() => {
+    if (reloading.current) return;
+    reloading.current = true;
+    reloadWhenClean(() => window.location.reload());
+  }, []);
+  const updateCalls = useMemo<UpdateCalls>(() => ({ read: () => client.serverInfo({ fresh: true }),
+    start: () => client.startUpdate(), dismiss: at => client.dismissUpdate(at) }), [client]);
+  const updater = useUpdate(updateCalls, server, { instance: server.instance, followed,
+    onRestarted: () => { noteFollowedUpdate(String(server.release || '')); reload(); } });
+  // The server gone for the install, or back and restarting: the page that reloads after it follows it still.
+  const away = updater.phase.phase === 'restarting' || (updater.phase.phase === 'working' && updater.phase.done >= 2);
+  const updating = updater.phase.phase !== 'idle';
+  useEffect(() => {
+    if (away) noteFollowedUpdate(String(server.release || ''));
+    else if (!updating) forgetFollowedUpdate();
+  }, [away, updating, server.release]);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -165,21 +206,25 @@ export default function App({ client, server, tabStore, notice = null, language:
     environment: { colorScheme: appearance.colorScheme, locale, platform: keyboardPlatform() },
   }), [downloads, client, source, fileActions, promptContext, promptFiles, links, appearance.colorScheme, locale]);
   // The engine gone under the page: said over it, which stays as it was for the engine's return.
-  const engineGone = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineGone, () => false) || foreign;
+  // An update's restart is the button's to say: the server going for it is no notice of its own.
+  const engineGone = (useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineGone, () => false) && !updating) || foreign;
   const readRefused = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineRefused, () => false);
   // Asked again, at the same address with the same token, until an engine answers: a new one reloads the page.
   // An engine that refuses the token runs: the page's link was replaced, which the last ask says once it has asked.
-  const askedRefused = useEngineReconnect(engineGone, { pid: server.pid, release: String(server.release || ''), fast: restarting,
-    reload: () => { reloadWhenClean(() => window.location.reload()); },
+  const askedRefused = useEngineReconnect(engineGone, { instance: server.instance, reload,
     ask: () => client.serverInfo({ fresh: true }).then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;
-  return <div className="relative flex h-svh flex-col overflow-hidden">{engineGone && !restarting ? <EngineStopped locale={locale} refused={refused} /> : null}
+  return <div className="fixed inset-0 flex flex-col overflow-hidden">{engineGone ? <EngineStopped locale={locale} refused={refused} /> : null}
     {/* The engine gone, its notice is the page's one: what is under it (a view's own "can't reach"
-        card among it) is out of reach and unheard until it is back. An update's restart says nothing. */}
-    <div className="min-h-0 flex-1" inert={(engineGone && !restarting) || undefined} aria-hidden={(engineGone && !restarting) || undefined}>
-    <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={next => { void show(next); }} onShown={shown}
+        card among it) is out of reach and unheard until it is back, and out of sight: the page is a stacking
+        context of its own (`isolate`), so no layer of a view's (its tool strip and Quick Edit's bar stand at
+        `z-50`, over the view's panels) paints over the notice. The view stays mounted under it, as it was. */}
+    <div className="isolate min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
+    <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} name={name} onShow={next => { void show(next); }} onShown={shown}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
-      update={updater.notice || updater.phase.phase !== 'idle' ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : null}
-      colorScheme={colorScheme} language={language} />
+      colorScheme={colorScheme} language={language}
+      update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} onUpdate={updater.update} /> : null}
+      alert={updater.alert}
+      whatsNew={engineGone || updating ? undefined : { entry: whatsNew.entry, onDismiss: whatsNew.dismiss }} />
   </div></div>;
 }

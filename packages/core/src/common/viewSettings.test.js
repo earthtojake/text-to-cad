@@ -222,11 +222,11 @@ test("light Preview separates a white background from the gray floor", () => {
 
 test("dark Preview is a charcoal studio, not a black void: background and floor share one charcoal", () => {
   const view = resolveViewSettings({ appearance: "dark" }, PREVIEW);
-  assert.equal(view.background.color, "#202226");
-  assert.equal(view.floor.color, "#202226");
+  assert.equal(view.background.color, "#222222");
+  assert.equal(view.floor.color, "#222222");
   const scene = resolveViewSceneSettings({ display: { appearance: "dark" }, ...PREVIEW });
-  assert.equal(scene.render.configuration.backdrop.color, "#202226");
-  assert.equal(scene.render.configuration.backdrop.groundColor, "#202226");
+  assert.equal(scene.render.configuration.backdrop.color, "#222222");
+  assert.equal(scene.render.configuration.backdrop.groundColor, "#222222");
 });
 
 test("the floor is matte until Glossy is chosen, and a snapshot's Preview is the viewer's at its defaults", () => {

@@ -1,0 +1,25 @@
+# Files written on request (cad <type> export, exports.py): reproducible from the code.
+/STEP/
+/STL/
+/GLB/
+/3MF/
+/DXF/
+/tmp/
+__pycache__/
+# The board's fabrication outputs (cad kicad_pcb export, cad kicad_sch export).
+/fab/
+# The 3D models src/vendor_parts.py writes for the footprints that name them (${KIPRJMOD}/macropad.3dshapes).
+/macropad.3dshapes/
+# KiCad's local settings beside a board it opened.
+*.kicad_prl
+fp-info-cache
+# The KiCad project build.py writes (cad run build.py): build output, made again from scripts/. The library
+# tables (fp-lib-table, sym-lib-table) are the source: no script writes them.
+/macropad.kicad_pcb
+/macropad.kicad_pro
+/macropad.kicad_dru
+/macropad.kicad_sch
+/usb_power.kicad_sch
+/mcu.kicad_sch
+/keys.kicad_sch
+/macropad.pretty/
