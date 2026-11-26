@@ -42,8 +42,11 @@ RECEIPT = '[tool]\nrequirements = [{ name = "cad" }]\nentrypoints = [{ name = "c
 SPARED = """import importlib.machinery, json, os, site, sys, sysconfig, types
 from unittest import mock
 
+# Only the packages folders: on Windows `getsitepackages` names `sys.prefix` too, whose `DLLs` holds the standard
+# library's own compiled modules.
 packages = tuple(os.path.normcase(os.path.realpath(folder)) + os.sep for folder in {
-    *site.getsitepackages(), sysconfig.get_paths()["purelib"], sysconfig.get_paths()["platlib"]})
+    *site.getsitepackages(), sysconfig.get_paths()["purelib"], sysconfig.get_paths()["platlib"]}
+    if os.path.basename(os.path.normpath(folder)).lower() in ("site-packages", "dist-packages"))
 seen = []
 
 
@@ -467,7 +470,8 @@ class FindUvTest(Case):
                 found = self.find({"PATH": str(self.bin), "HOME": str(home), **environ})
                 self.assertEqual(found, str(folder / "uv"), "before the one on PATH")
                 (folder / "uv").unlink()
-        self.assertEqual(self.find({"PATH": str(self.bin), "HOME": str(home)}), str(self.uv))
+        self.assertEqual(os.path.normcase(self.find({"PATH": str(self.bin), "HOME": str(home)})),
+                         os.path.normcase(str(self.uv)), "else the one on PATH (Windows spells its suffix as PATHEXT does)")
 
     def test_none_found_is_one_line_that_names_the_fix(self) -> None:
         from cad_server._internal import base
@@ -1244,7 +1248,7 @@ class HelperCommandTest(Case):
         self.assertEqual((options["env"]["KEEP"], options["env"]["CAD_STATE_DIR"]), ("1", str(self.state)),
                          "the state folder, the same for everything it runs")
         self.assertEqual(options["start_new_session" if os.name != "nt" else "creationflags"],
-                         True if os.name != "nt" else 0x08000000 | 0x00000200)
+                         True if os.name != "nt" else 0x08000000 | 0x00000200 | 0x01000000)  # and out of the app's job
         self.assertEqual((auto_update.last()["outcome"], auto_update.last()["phase"]), ("underway", "switching"))
         self.assertEqual(json.loads(line[-1])["prefix"], str(self.tool), "the environment it updates, from outside")
         (self.state / auto_update.RECORD).unlink()
