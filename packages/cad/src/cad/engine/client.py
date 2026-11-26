@@ -255,19 +255,17 @@ def _spawn(port: int | None) -> subprocess.Popen:
     nothing of the command that started it, and that command, and on Windows its ``cad.exe``, exits as soon as
     the server answers. ``port``: the HTTP port it must take. The engine's folder is first on its ``PYTHONPATH``
     only where this environment would not find it -- a source tree --, so no process the daemon starts in the
-    base inherits it; never the stored release this process runs, which the server takes by itself as it starts
-    (``places.handed``)."""
+    base inherits it. On Windows, from inside an app package, it starts outside it (``places.outside_package``)."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
     root, path = places.engine_root(), env.get("PYTHONPATH", "")
     inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
-    if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep) \
-            and places.handed(root):
+    if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
         env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
     places.bytecode(env)
-    return subprocess.Popen([sys.executable, "-P", "-m", DAEMON_MODULE, *(["--port", str(port)] if port is not None
-                                                                         else [])],
-                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
-                            cwd=_working_folder(), **places.detached())
+    return places.outside_package([sys.executable, "-P", "-m", DAEMON_MODULE,
+                                   *(["--port", str(port)] if port is not None else [])],
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  env=env, cwd=_working_folder(), **places.detached())
 
 
 def _working_folder() -> str | None:
@@ -319,10 +317,9 @@ def start(port: int | None = None) -> str:
     for until its door answers. Starts at the same moment end with one server, by the daemon's lock, and none of them
     stops the server another of them started (``make_way``): each says it ran or joined it. While cad's own update
     switches away from this release (``LEAVING``: the daemon launched stood aside for it, or this start became the
-    switch to a release that was ready) it launches nothing and takes no exit of what it launched for a failure: a
-    daemon launched then runs whichever release the pointer names at that instant, and one of a release whose server
-    does not start would fail this start a moment before the update goes back. It waits for the server the update
-    starts, the next release's or, gone back, this one's. What was done, in one line. ``ConnectionError`` in one line
+    update) it launches nothing and takes no exit of what it launched for a failure: a daemon launched then would run
+    from files uv is replacing, and one that fails would fail this start a moment before the update starts its own.
+    It waits for the server the update starts, the next release's or, where its repair went back, this one's. What was done, in one line. ``ConnectionError`` in one line
     where it could not be: room not made (``make_way``), a server that did not start (its note,
     ``places.failure_path``), and one of an older release that a start at the same moment started
     (``OtherRelease``)."""
@@ -351,7 +348,7 @@ def start(port: int | None = None) -> str:
         code = process.poll()
         if code is not None and _leaving():
             # The next server is the update's to start: nothing is launched, how the daemon launched before left
-            # says nothing of now (it stood aside, or ran the release the pointer named at that instant), and the
+            # says nothing of now (it stood aside, or ran from files being replaced), and the
             # second a daemon is given before another is launched begins once the switch has ended.
             stood_by = waited = True
             began = time.monotonic()

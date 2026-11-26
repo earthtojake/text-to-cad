@@ -14,7 +14,6 @@ import os
 import shutil
 import sys
 import tempfile
-import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -213,56 +212,77 @@ class WindowsTest(Folders):
         self.assertEqual(places.adopt_earlier(), [], "once")
 
 
-class StoredTest(unittest.TestCase):
-    """The release cad's update keeps beside the installed one, where this process runs it (``places.stored``), and
-    whether a process this one starts must be handed the engine's folder (``places.handed``): never the stored
-    release, which every process of the environment takes by itself as it starts."""
+class OutsidePackageTest(unittest.TestCase):
+    """On Windows, from inside an app package, the server and cad's update start outside it (``places.outside_package``):
+    a go-between started with the desktop app policy that breaks its children away; elsewhere, and where that start
+    fails, ``subprocess.Popen`` as before. Windows' calls are a stand-in here."""
 
-    def setUp(self) -> None:
-        scratch = tempfile.TemporaryDirectory(prefix="stored-")
-        self.addCleanup(scratch.cleanup)
-        self.root = Path(scratch.name).resolve()
-        self.release, self.source = self.root / "store" / "1.0.1-tag", self.root / "checkout" / "src"
-        self.release.mkdir(parents=True)
-        self.source.mkdir(parents=True)
-        self.enterContext(mock.patch.dict(sys.modules))
+    def test_not_packaged_starts_as_popen_does(self) -> None:
+        with mock.patch.object(places, "packaged", return_value=False), \
+                mock.patch.object(places, "_breakaway") as breakaway, \
+                mock.patch.object(places.subprocess, "Popen", return_value="started") as popen:
+            self.assertEqual(places.outside_package(["cad"], env={"A": "1"}, cwd="here", creationflags=8,
+                                                    stdin=-3), "started")
+        breakaway.assert_not_called()
+        popen.assert_called_once_with(["cad"], env={"A": "1"}, cwd="here", creationflags=8, stdin=-3)
+        self.assertFalse(places.packaged() if os.name != "nt" else False, "never packaged off Windows")
 
-    def bootstrap(self, stored: str | None) -> None:
-        sys.modules["_cad_release"] = types.SimpleNamespace(STORED=stored)  # type: ignore[assignment]
+    def test_packaged_starts_the_go_between_with_the_breakaway_policy(self) -> None:
+        with mock.patch.object(places, "packaged", return_value=True), \
+                mock.patch.object(places, "_breakaway", return_value="between") as breakaway, \
+                mock.patch.object(places.subprocess, "Popen") as popen:
+            self.assertEqual(places.outside_package(["py", "-m", "daemon"], env={"A": "1"}, cwd="here",
+                                                    creationflags=0x08000200, stdin=-3), "between")
+        popen.assert_not_called()
+        breakaway.assert_called_once_with(["py", "-m", "daemon"], env={"A": "1"}, cwd="here", flags=0x08000200)
+        kernel = Kernel()
+        started = places._breakaway(["py", "-m", "daemon"], env={"A": "1"}, cwd="here", flags=0x08000200,
+                                    kernel=kernel)
+        self.assertEqual(started.pid, 4321)
+        self.assertEqual(kernel.policy, (places.PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY,
+                                         places.DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE))
+        self.assertEqual(kernel.flags, 0x08000200 | places.EXTENDED_STARTUPINFO_PRESENT
+                         | places.CREATE_UNICODE_ENVIRONMENT)
+        self.assertIn(places.BETWEEN.splitlines()[1], kernel.line.replace('\\"', '"'), "the go-between")
+        self.assertIn('"argv": ["py", "-m", "daemon"]', kernel.line.replace('\\"', '"'))
+        self.assertEqual((kernel.environment[:5], kernel.cwd), ("A=1\0\0", "here"), "the block ends in two nulls")
 
-    def test_read_of_the_bootstrap_as_it_ran_and_never_imported(self) -> None:
-        sys.modules.pop("_cad_release", None)
-        self.assertIsNone(places.stored())
-        self.assertNotIn("_cad_release", sys.modules)
-        self.assertTrue(places.handed(str(self.source)))
-        self.bootstrap(None)
-        self.assertIsNone(places.stored())
-        self.bootstrap("")
-        self.assertIsNone(places.stored())
-        self.bootstrap(str(self.release))
-        self.assertEqual(places.stored(), str(self.release))
+    def test_a_failed_breakaway_starts_as_popen_does_and_never_raises_past_it(self) -> None:
+        with mock.patch.object(places, "packaged", return_value=True), \
+                mock.patch.object(places, "_breakaway", side_effect=OSError(5, "refused")), \
+                mock.patch.object(places.subprocess, "Popen", return_value="started") as popen:
+            self.assertEqual(places.outside_package(["cad"], creationflags=8), "started")
+        popen.assert_called_once_with(["cad"], env=None, cwd=None, creationflags=8)
 
-    def test_handed_but_where_the_folder_is_the_stored_release(self) -> None:
-        self.bootstrap(None)
-        self.assertTrue(places.handed(str(self.release)), "nothing stored runs: a folder outside is a source tree")
-        self.bootstrap(str(self.release))
-        self.assertFalse(places.handed(str(self.release)))
-        self.assertFalse(places.handed(str(self.release) + os.sep))
-        self.assertTrue(places.handed(str(self.source)))
-        with mock.patch.object(places, "engine_root", return_value=str(self.release)):
-            self.assertFalse(places.handed(), "the engine's folder, by default")
-        with mock.patch.object(places, "engine_root", return_value=str(self.source)):
-            self.assertTrue(places.handed())
 
-    @unittest.skipIf(os.name == "nt", "a symbolic link to a folder needs a privilege on Windows")
-    def test_the_stored_release_is_known_through_a_symbolic_link_either_way(self) -> None:
-        link = self.root / "linked"
-        os.symlink(self.release, link, target_is_directory=True)
-        self.bootstrap(str(link))
-        self.assertFalse(places.handed(str(self.release)))
-        self.bootstrap(str(self.release))
-        self.assertFalse(places.handed(str(link)))
-        self.assertTrue(places.handed(str(self.source)))
+class Kernel:
+    """kernel32 as ``places._breakaway`` calls it: what it was handed, kept."""
+
+    def __init__(self) -> None:
+        self.policy = self.flags = self.line = self.environment = self.cwd = None
+
+    def InitializeProcThreadAttributeList(self, buffer, count, flags, size):  # noqa: N802 - Windows' names
+        return buffer is not None
+
+    def UpdateProcThreadAttribute(self, buffer, flags, attribute, value, size, previous, returned):  # noqa: N802
+        import ctypes
+
+        self.policy = (attribute.value, ctypes.cast(value, ctypes.POINTER(ctypes.c_uint32)).contents.value)
+        return True
+
+    def CreateProcessW(self, application, line, process, thread, inherit, flags, environment, cwd, startup, info):  # noqa: N802
+        import ctypes
+
+        self.flags, self.line, self.cwd = flags, line.value, cwd
+        self.environment = ctypes.wstring_at(ctypes.addressof(environment), len(environment)) if environment else None
+        info._obj.hProcess, info._obj.dwProcessId = 7, 4321
+        return True
+
+    def DeleteProcThreadAttributeList(self, buffer):  # noqa: N802
+        pass
+
+    def CloseHandle(self, handle):  # noqa: N802
+        return True
 
 
 if __name__ == "__main__":

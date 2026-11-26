@@ -15,7 +15,7 @@ engine and the same installation by the same rules, from the standard library al
   marker naming the installation of a process that runs in the base (``HOME``), and the current one the
   clients of 0.11.11 and earlier start (``current``).
 - **Starting a process** of the engine's: with no window on Windows (``windowless``), outliving its
-  starter (``detached``), its bytecode kept in the cache folder (``bytecode``), and on the Python of the
+  starter (``detached``), on Windows outside any app package (``outside_package``: the server and cad's update), its bytecode kept in the cache folder (``bytecode``), and on the Python of the
   environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's base,
   the library with its ``build123d`` extra).
 """
@@ -38,9 +38,9 @@ from typing import Any, Callable
 __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
-           "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "handed", "home", "installation",
-           "kernel", "lock", "lock_path", "make_engine_dir", "port_path", "registered", "run_with", "state_dir",
-           "stored", "windowless"]
+           "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation",
+           "kernel", "lock", "lock_path", "make_engine_dir", "outside_package", "packaged", "port_path", "registered",
+           "run_with", "state_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -645,26 +645,6 @@ def engine_root() -> str:
     return str(Path(__file__).resolve().parent.parent.parent)
 
 
-def stored() -> str | None:
-    """The folder of the release cad's update keeps beside the installed one, where this process runs it: the
-    environment's pointer named it as this interpreter started (``_cad_release.STORED``). None where the process runs
-    its environment's own packages. Asked of ``sys.modules``, never imported: that module acts as an interpreter
-    starts, and only then."""
-    return getattr(sys.modules.get("_cad_release"), "STORED", None) or None
-
-
-def handed(root: str | None = None) -> bool:
-    """Whether a process this interpreter starts must be handed the engine's folder (``root``: ``engine_root``) on
-    ``PYTHONPATH`` to import this engine. Not where that folder is the stored release this process runs
-    (``stored``): every process of the environment takes it as it starts, by the same pointer, and one handed it on
-    ``PYTHONPATH`` would import it beside the environment's own packages and hold no mark of running it."""
-    kept = stored()
-    if kept is None:
-        return True
-    root = engine_root() if root is None else root
-    return os.path.normcase(os.path.realpath(root)) != os.path.normcase(os.path.realpath(kept))
-
-
 # Windows' process creation flags, by number: ``subprocess`` names them on Windows alone.
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
@@ -703,6 +683,138 @@ def detached() -> dict[str, Any]:
     if os.name == "nt":
         return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
+
+
+# Windows: ``GetCurrentPackageFullName``'s answer for a process no app package started (APPMODEL_ERROR_NO_PACKAGE); and
+# what ``outside_package`` hands ``CreateProcessW``: the attribute that sets a process's desktop app policy, the policy
+# that starts its children outside the package, and the flags of a start with an attribute list and a wide
+# environment block.
+NO_PACKAGE = 15700
+PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY = 0x00020012
+DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE = 0x1
+EXTENDED_STARTUPINFO_PRESENT = 0x00080000
+CREATE_UNICODE_ENVIRONMENT = 0x00000400
+# How long the go-between ``outside_package`` starts waits for the process it starts, so a start that fails at once
+# (a daemon that cannot take its lock) says its exit status to its starter as a direct start would.
+BETWEEN_SECONDS = 5.0
+# The go-between: run by this interpreter, isolated, it starts the command it is handed (JSON: ``argv``, ``flags``),
+# detached, its streams the null device, and ends with its exit status, or 0 once ``wait`` seconds have passed.
+BETWEEN = ("import json, subprocess, sys\n"
+           "told = json.loads(sys.argv[1])\n"
+           "child = subprocess.Popen(told['argv'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, "
+           "stderr=subprocess.DEVNULL, creationflags=told['flags'])\n"
+           "try:\n    sys.exit(child.wait(told['wait']))\n"
+           "except subprocess.TimeoutExpired:\n    sys.exit(0)\n")
+
+
+def packaged() -> bool:
+    """Whether this process runs inside a Windows app package (an MSIX app such as a desktop app from the Store, or a
+    process one started): ``GetCurrentPackageFullName`` says a package. False elsewhere, and where it cannot be
+    asked."""
+    if not WINDOWS:
+        return False
+    try:
+        import ctypes
+
+        length = ctypes.c_uint32(0)
+        return ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None) != NO_PACKAGE
+    except (AttributeError, OSError):
+        return False
+
+
+class Started:
+    """The go-between ``outside_package`` started, as much of ``subprocess.Popen`` as a starter asks of it: ``pid``,
+    ``poll``."""
+
+    def __init__(self, handle: Any, pid: int, kernel: Any) -> None:
+        self.handle, self.pid, self.kernel, self.returncode = handle, pid, kernel, None
+
+    def poll(self) -> int | None:
+        import ctypes
+        from ctypes import wintypes
+
+        handle = wintypes.HANDLE(self.handle)
+        if self.returncode is None and self.kernel.WaitForSingleObject(handle, 0) == 0:
+            code = wintypes.DWORD(0)
+            self.kernel.GetExitCodeProcess(handle, ctypes.byref(code))
+            self.returncode = code.value
+            self.kernel.CloseHandle(handle)
+        return self.returncode
+
+
+def outside_package(command: list[str], *, env: dict[str, str] | None = None, cwd: str | None = None,
+                    creationflags: int = 0, **options: Any) -> Any:
+    """``command`` started as ``subprocess.Popen(command, ..., **options)`` starts it -- but on Windows, from inside an
+    app package (``packaged``), outside it: inside one, new files under AppData land in the app's private copy while
+    deletes are real, so a server or an update started there would leave cad broken for every other program. A
+    go-between (``BETWEEN``, this interpreter) is started with ``CreateProcessW`` and the desktop app policy that
+    starts its children outside the package, and it starts ``command`` (``_breakaway``); its streams and the
+    command's are the null device. Where that start fails, ``command`` is started as it would be elsewhere (cad's
+    update then refuses by itself). The process started, or the go-between: what ``poll`` and ``pid`` are asked of.
+    Raises only as ``subprocess.Popen`` does."""
+    if packaged():
+        try:
+            return _breakaway(command, env=env, cwd=cwd, flags=creationflags)
+        except Exception:  # noqa: BLE001 - started as elsewhere: what runs there refuses what it must not do
+            pass
+    return subprocess.Popen(command, env=env, cwd=cwd, creationflags=creationflags, **options)
+
+
+def _breakaway(command: list[str], *, env: dict[str, str] | None, cwd: str | None, flags: int,
+               kernel: Any = None) -> Started:
+    """The go-between started (``outside_package``) by ``CreateProcessW`` with an attribute list whose desktop app
+    policy (``PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY``) is ``DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE``, ``flags``
+    and ``EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT``, inheriting no handle. ``kernel``: kernel32
+    (a test's stand-in). ``OSError`` where a call fails."""
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = kernel or ctypes.WinDLL("kernel32", use_last_error=True)
+
+    class STARTUPINFOW(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("lpReserved", wintypes.LPWSTR), ("lpDesktop", wintypes.LPWSTR),
+                    ("lpTitle", wintypes.LPWSTR), ("dwX", wintypes.DWORD), ("dwY", wintypes.DWORD),
+                    ("dwXSize", wintypes.DWORD), ("dwYSize", wintypes.DWORD), ("dwXCountChars", wintypes.DWORD),
+                    ("dwYCountChars", wintypes.DWORD), ("dwFillAttribute", wintypes.DWORD),
+                    ("dwFlags", wintypes.DWORD), ("wShowWindow", wintypes.WORD), ("cbReserved2", wintypes.WORD),
+                    ("lpReserved2", ctypes.c_void_p), ("hStdInput", wintypes.HANDLE),
+                    ("hStdOutput", wintypes.HANDLE), ("hStdError", wintypes.HANDLE)]
+
+    class STARTUPINFOEXW(ctypes.Structure):
+        _fields_ = [("StartupInfo", STARTUPINFOW), ("lpAttributeList", ctypes.c_void_p)]
+
+    class PROCESS_INFORMATION(ctypes.Structure):  # noqa: N801 - Windows' name
+        _fields_ = [("hProcess", wintypes.HANDLE), ("hThread", wintypes.HANDLE), ("dwProcessId", wintypes.DWORD),
+                    ("dwThreadId", wintypes.DWORD)]
+
+    def check(ok: Any) -> None:
+        if not ok:
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    size = ctypes.c_size_t(0)
+    kernel.InitializeProcThreadAttributeList(None, 1, 0, ctypes.byref(size))  # asks the size: fails, as it should
+    attributes = ctypes.create_string_buffer(size.value or 64)
+    check(kernel.InitializeProcThreadAttributeList(attributes, 1, 0, ctypes.byref(size)))
+    try:
+        policy = wintypes.DWORD(DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE)
+        check(kernel.UpdateProcThreadAttribute(attributes, 0, ctypes.c_size_t(PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY),
+                                               ctypes.byref(policy), ctypes.sizeof(policy), None, None))
+        started = STARTUPINFOEXW()
+        started.StartupInfo.cb = ctypes.sizeof(STARTUPINFOEXW)
+        started.lpAttributeList = ctypes.cast(attributes, ctypes.c_void_p)
+        told = json.dumps({"argv": command, "flags": flags, "wait": BETWEEN_SECONDS})
+        line = ctypes.create_unicode_buffer(subprocess.list2cmdline([sys.executable, "-I", "-c", BETWEEN, told]))
+        block = None
+        if env is not None:
+            block = ctypes.create_unicode_buffer("".join(f"{name}={value}\0" for name, value in env.items()) + "\0")
+        process = PROCESS_INFORMATION()
+        check(kernel.CreateProcessW(None, line, None, None, False,
+                                    flags | EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, block, cwd,
+                                    ctypes.byref(started), ctypes.byref(process)))
+    finally:
+        kernel.DeleteProcThreadAttributeList(attributes)
+    kernel.CloseHandle(process.hThread)
+    return Started(process.hProcess, process.dwProcessId, kernel)
 
 
 def bytecode(env: dict[str, str]) -> dict[str, str]:
