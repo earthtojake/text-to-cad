@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # One self-contained browser gate for the viewer's format and camera
-# contracts. It runs exactly what CI runs. The project, the engine daemon, the
-# Viewer, and the browser are all owned by this process.
+# contracts, and for a model shared by `cad share` and opened, with no engine
+# running, from the share service. It runs exactly what CI runs. The project, the
+# engine daemon, the Viewer, the share service and the browser are all owned by
+# this process.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -38,7 +40,7 @@ while [ "$#" -ne 0 ]; do
       fi
       if [ "$1" = "--out" ]; then out_dir="$2"; else only_gate="$2"; fi
       shift 2 ;;
-    # --only: one gate while working on it: format, camera.
+    # --only: one gate while working on it: format, camera, prompt, share.
     *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2; exit 2 ;;
   esac
 done
@@ -60,8 +62,10 @@ export CAD_STATE_DIR="$project/state"
 # test's own daemon, one part meshed at a time, stopped on the way out.
 export CAD_ENGINE_DIR="$project/engine" CAD_ENGINE_MESH=inline CAD_CACHE_DIR="$project/no-0.7-store"
 export CAD_VIEWER_DIST="$RUNTIME"
+share_pidfile="$project/share.pid"
 cleanup() {
   "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
+  if [ -f "$share_pidfile" ]; then kill "$(cat "$share_pidfile")" 2>/dev/null || true; fi
   rm -rf "$project" "$log"
 }
 trap cleanup EXIT
@@ -223,11 +227,108 @@ cat > "$project/smoke.urdf" <<'URDF'
 </robot>
 URDF
 
+# The share gate's model: one part whose width is a parameter, built by the engine into its .xbf beside its script, in
+# a dot-directory a project's page skips. A share carries the .xbf and the files that made it.
+mkdir -p "$project/.share"
+cat > "$project/.share/plate.py" <<'PLATE'
+import build123d as bd
+from cad import model
+
+width = model.param("width", 40.0, min=20, max=80, unit="mm")
+
+
+@model
+def plate():
+    body = bd.Box(width, 30, 6) - bd.Pos(width / 4, 0, 0) * bd.Cylinder(4, 10)
+    body.label = "plate"
+    return body
+
+
+if __name__ == "__main__":
+    plate()
+PLATE
+if ! (cd "$project/.share" && "$PYTHON" plate.py) >"$log" 2>&1 || [ ! -f "$project/.share/plate.xbf" ]; then
+  echo "FAIL: the share fixture's model did not build" >&2
+  sed 's/^/    /' "$log" >&2
+  exit 1
+fi
+
+# The share fixture's model by its document id, its .xbf's: the prompt gate copies a Quick Edit of it from the
+# engine's page, and the share gate compares the shared page's with it.
+plate_id="$("$PYTHON" -c 'import sys; from cad.engine.ids import file_id; print(file_id(sys.argv[1]))' \
+  "$project/.share/plate.xbf")"
+
+# The share gate's share: the model, shared by its .xbf with `cad share --yes` as a person's agent shares one,
+# against this checkout's share service run locally (apps/share/serve.mjs: the Worker itself, over Node's http, with
+# stand-ins for its bucket and limiter), which serves the bundled client too. The command runs while the
+# engine runs, since the engine makes the bundle it uploads; the gate opens what it printed, the engine stopped.
+share_args=()
+if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
+  node "$REPO_ROOT/apps/share/serve.mjs" --port 0 --assets "$RUNTIME" >"$project/share.origin" 2>"$project/share.log" &
+  echo "$!" >"$share_pidfile"
+  for _ in $(seq 1 300); do
+    [ -s "$project/share.origin" ] && break
+    kill -0 "$(cat "$share_pidfile")" 2>/dev/null || break
+    sleep 0.1
+  done
+  share_origin="$(head -1 "$project/share.origin" 2>/dev/null || true)"
+  if [[ "$share_origin" != http://* ]]; then
+    echo "FAIL: the share service did not start" >&2
+    sed 's/^/    /' "$project/share.log" >&2
+    exit 1
+  fi
+  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli share .share/plate.xbf --yes --json) \
+       >"$project/share.json" 2>"$log"; then
+    echo "FAIL: cad share did not share the fixture's model" >&2
+    sed 's/^/    /' "$project/share.json" "$log" >&2
+    exit 1
+  fi
+  # And again, unchanged and by its document's id, as an agent shares after each edit: the same file, the same
+  # link, and nothing but the commit travels. The person's yes is this computer's now, so the command no longer
+  # asks for it.
+  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli share "$plate_id" --json) \
+       >"$project/share-again.json" 2>"$log"; then
+    echo "FAIL: cad share did not share the fixture's model again" >&2
+    sed 's/^/    /' "$project/share-again.json" "$log" >&2
+    exit 1
+  fi
+  # The files that made it, as an agent on another computer takes them from the link (a state and a cache of
+  # their own: no record of this share): `cad fork` downloads the zip the service makes of them and writes them
+  # into a folder, the same bytes as the script that built the model and its .xbf. On this computer, which shared
+  # it, the same command downloads nothing and says where its files already are.
+  view_link="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["view"])' "$project/share.json")"
+  if ! (cd "$project" && CAD_STATE_DIR="$project/elsewhere/state" CAD_CACHE_DIR="$project/elsewhere/cache" \
+          CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli fork "$view_link" "$project/forked" --json) \
+       >"$project/fork.json" 2>"$log" || ! cmp -s "$project/.share/plate.py" "$project/forked/plate.py" \
+     || ! cmp -s "$project/.share/plate.xbf" "$project/forked/plate.xbf"; then
+    echo "FAIL: cad fork did not write the shared model's files" >&2
+    sed 's/^/    /' "$project/fork.json" "$log" >&2
+    exit 1
+  fi
+  if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli fork "$view_link" --json) \
+       >"$project/fork-here.json" 2>"$log" \
+     || ! "$PYTHON" -c 'import json,sys; sys.exit(json.load(open(sys.argv[1])).get("local") is not True)' "$project/fork-here.json"; then
+    echo "FAIL: cad fork of this computer's own share did not say where its files are" >&2
+    sed 's/^/    /' "$project/fork-here.json" "$log" >&2
+    exit 1
+  fi
+  share_args=(--share "$project/share.json" --share-again "$project/share-again.json")
+fi
+
 (cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"
 url="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["apiUrl"])' "$log")"
 export VIEWER_TEST_TOKEN="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$log")"
-e2e_args=(--dir "$project" --url "$url")
-[ -n "$out_dir" ] && e2e_args+=(--out "$out_dir")
-[ -n "$only_gate" ] && e2e_args+=(--only "$only_gate")
+e2e_args=(--dir "$project" --url "$url" --plate "$plate_id" --prompt "$project/prompt-local.txt")
+# (An empty array expanded under `set -u` is an error in the bash macOS ships, hence the `+`.)
+shared_args=(--prompt "$project/prompt-local.txt" ${share_args[@]+"${share_args[@]}"})
+[ -n "$out_dir" ] && e2e_args+=(--out "$out_dir") && shared_args+=(--out "$out_dir")
+[ -n "$only_gate" ] && e2e_args+=(--only "$only_gate") && shared_args+=(--only "$only_gate")
 echo "  [setup] $(( $(date +%s) - started_at ))s to fixtures, viewer and port"
-node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${e2e_args[@]}"
+if [ "$only_gate" != share ]; then
+  node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${e2e_args[@]}"
+fi
+# The share gate runs with no engine: the server is stopped first, and the page has only the share service.
+if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
+  "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
+  node "$REPO_ROOT/tests/browser/viewer-e2e.mjs" "${shared_args[@]}"
+fi

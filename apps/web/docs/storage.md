@@ -78,7 +78,11 @@ never written again.
 ## localStorage
 
 Nothing goes in localStorage: a value that depends on a file, a tab or a person's
-choice belongs in the tab record.
+choice belongs in the tab record. One exception: a shared view bundle's page has no server to keep
+the person's own settings (`settings.json`, the same for every CAD view where there is an
+engine), so it keeps the one it has, the language chosen in the app menu, in this browser's
+localStorage, under `text-to-cad:language` (`src/host/browserLanguage.js`): the same for every
+share this browser opens, as the server's is for every view.
 
 ## The library's pictures
 

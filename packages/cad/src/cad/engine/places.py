@@ -231,10 +231,11 @@ def _said_no(settings: Path) -> dict[str, Any] | None:
 
 
 def cache_dir() -> Path:
-    """Where cad caches what it can make again -- what it derived of a document (``documents/<id>/...``), hulls,
-    MJCF assets, integrations' homes, the kernel environments, the engine's bytecode --: the platform's cache
-    location, which the system and the person treat as disposable -- wiping it loses no state, the library
-    stays in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made absolute once, and written back, so
+    """Where cad caches what it can make again -- what it derived of a document (``documents/<id>/...``, a shared
+    file's last view bundle among it), hulls, MJCF assets, integrations' homes, the kernel environments, the engine's
+    bytecode --: the platform's cache location, which the system and the person treat as disposable -- wiping it
+    loses no state, the library and the shares' records stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a
+    relative one made absolute once, and written back, so
     a worker after a ``chdir`` names the same folder), else ``$XDG_CACHE_HOME/cad`` when set, else
     ``~/.cache/cad`` -- on Windows too, out of the local application data an app package virtualizes
     (``APPDATA_STATE``). An earlier release's cache (named for cadgen, or 0.10.0's on Windows) is not read: it

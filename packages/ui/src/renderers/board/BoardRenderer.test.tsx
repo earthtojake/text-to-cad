@@ -74,6 +74,8 @@ const noop = () => {};
 const FILE = '/models/blinky.kicad_pcb';
 const KEY = JSON.stringify([FILE, 'board']);
 let copied: string[] = [];
+// The snapshot packet a copied Quick Edit carries inline.
+const packetOf = (message: string | undefined) => JSON.parse(/```json\n(.*)\n```/.exec(String(message))![1]);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const UNREADABLE = 'broken.kicad_pcb is not a KiCad board: a .kicad_pcb starts with (kicad_pcb ...)';
 let readPlot: () => Response | Promise<Response> = () => json(BOARD);
@@ -110,7 +112,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); while (restores.length) restores.pop()!(); });
 
 /** One pane: a host, a workspace with one board, a live binding, and the tab. */
-async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any, models = null as any } = {}) {
+async function open(name = 'blinky.kicad_pcb', { strict = false, locale = "en", state = { renderers: {} } as any, models = null as any } = {}) {
   const file = `/models/${name}`;
   let revision = 'one';
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -138,7 +140,6 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
   const preferences = createCadPreferences();
   const renderers = [createBoardRenderer({ client, live, preferences })];
   const host = {
-    promptFiles,
     files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 400, extension: 'kicad_pcb' }) },
     navigation: { openFile: noop },
     environment: { colorScheme: 'light', locale },
@@ -563,8 +564,7 @@ it('a locked footprint is no pick until Locked items is ticked, but for its pads
 });
 
 it("a drag under Select draws the shared box: over bare board it names the area on the working layer, over the board's items it takes what it touches; the other drags pan as the 3D views' do; a jittered click is a click", async () => {
-  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
-  const view = await open('blinky.kicad_pcb', { promptFiles });
+  const view = await open('blinky.kicad_pcb');
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
@@ -632,9 +632,8 @@ it("a drag under Select draws the shared box: over bare board it names the area 
   note.textContent = 'Keep this clear.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#R1.1', '#F.Cu@x25y1..x35y11']);
   await waitFor(() => expect(copied.at(-1)).toContain(`${FILE}#F.Cu@x25y1..x35y11`));
+  expect(packetOf(copied.at(-1)).references).toEqual(['#R1.1', '#F.Cu@x25y1..x35y11']);
   // A box that starts on R1 is a box all the same. It takes what it touches, even in part, as the filter
   // does (the part, its pads, the track into it), in place of the rest, whichever way it is drawn.
   const drag = (from: [number, number], to: [number, number]) => {
@@ -967,8 +966,7 @@ it('a preset chooses the layers; the side (Flip) and the pours are kept through 
 });
 
 it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens no Quick Edit; a note on a pick carries the view and its Display", async () => {
-  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
-  const { pane, dispose } = await open('blinky.kicad_pcb', { promptFiles });
+  const { pane, dispose } = await open('blinky.kicad_pcb');
   await opened(pane);
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));
   // A little off each pad's centre: the ends land on the centres.
@@ -985,11 +983,14 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   note.textContent = 'Move this pad.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  const request = promptFiles.create.mock.calls[0][0] as any;
-  expect(request).not.toHaveProperty('measurements');
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, others: 'shown', zones: 0.6, tracks: 1 } })]);
-  expect(request.views[0].camera).toMatchObject({ up: [0, 1, 0] });
+  await waitFor(() => expect(copied.at(-1)).toContain('Snapshot JSON (`cad kicad_pcb snapshot --job`)'));
+  const packet = packetOf(copied.at(-1));
+  expect(JSON.stringify(packet)).not.toContain('measurements');
+  // A board's view is its plan view: no 3D framing to pin, its picture by its label.
+  expect(packet.jobs).toEqual([expect.objectContaining({ display: { mode: 'board', side: 'top', poured: true, others: 'shown', zones: 0.6, tracks: 1 },
+    outputs: [expect.objectContaining({ label: 'current view' })] })]);
+  expect(packet.jobs[0]).not.toHaveProperty('output');
+  expect(packet.jobs[0].camera).toMatchObject({ up: [0, 1, 0] });
   dispose();
 });
 

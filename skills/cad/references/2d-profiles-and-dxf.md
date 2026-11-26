@@ -191,6 +191,6 @@ its INSERT). Its packet's views are plan-view cameras and its ink is in drawing 
 the sheet. Draw what the person saw, each view with their ink on it, before editing:
 
 ```bash
-cad dxf snapshot --job tmp/panel.snapshot.json            # every view, into the paths its jobs name
-cad dxf snapshot DXF/panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
+cad dxf snapshot --job '<packet>'                          # every view, each with the ink
+cad dxf snapshot DXF/panel.dxf tmp/view.png --annotation '<packet>' --camera authored
 ```

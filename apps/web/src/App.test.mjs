@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {EngineStopped} from './EngineStopped.tsx'; export {createWebCadClient} from './host/cadClient.js'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@cad/ui/cad-viewer'; export {autoReloadOptions} from './host/useViewerAutoReload.js'; export {createTabStore} from '@cad/ui/tab-store'; export {sessionTabRecord, TAB_RECORD_KEY} from './persistence/tabRecord.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {default as BundleApp} from './BundleApp.tsx'; export {sharePromptSubject} from './host/share.js'; export {EngineStopped} from './EngineStopped.tsx'; export {createWebCadClient} from './host/cadClient.js'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@cad/ui/cad-viewer'; export {autoReloadOptions} from './host/useViewerAutoReload.js'; export {createTabStore} from '@cad/ui/tab-store'; export {sessionTabRecord, TAB_RECORD_KEY} from './persistence/tabRecord.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output, loader: { '.css': 'empty', '.svg': 'dataurl' },
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
@@ -31,7 +31,8 @@ await build({
     });
   } }],
 });
-const { App, EngineStopped, createWebCadClient, act, createElement, createRoot, snapshot, autoReloadOptions, createTabStore, sessionTabRecord, TAB_RECORD_KEY } = await import(pathToFileURL(output).href);
+const { App, BundleApp, sharePromptSubject, EngineStopped, createWebCadClient, act, createElement, createRoot, snapshot, autoReloadOptions, createTabStore, sessionTabRecord,
+  TAB_RECORD_KEY } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 // Each file's document id, as the server derives it from the file's canonical path.
@@ -400,6 +401,31 @@ test('the notice says the page reconnects, and how to start the engine', async (
     await act(() => root.render(createElement(EngineStopped, { locale: 'en', refused: true })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       "This link no longer works.Ask your agent to open the model again and use the new link.");
+  } finally {
+    await act(() => root.unmount());
+    dom.window.close();
+  }
+});
+
+test("a share's page hands the viewer what its prompts name the model by, and nothing in its navbar", async () => {
+  const id = 'AbCdEfGhIjKlMnOpQrSt_-';
+  const dom = new JSDOM('<div id="root"></div>', { url: `https://cad.example/${id}` });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  // A view bundle's service, as far as its host reads it: its one document.
+  const client = { manifest: { document: { id: '1024a2f2-2b65-5151-8299-282973f2a9fc', kind: 'model', name: 'bracket', version: 'v1' } },
+    file: '1024a2f2-2b65-5151-8299-282973f2a9fc' };
+  const subject = sharePromptSubject(id);
+  const root = createRoot(window.document.getElementById('root'));
+  const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
+  try {
+    await act(() => root.render(createElement(BundleApp, { client, tabStore, promptSubject: subject })));
+    assert.deepEqual(snapshot().host.promptSubject, { resource: { kind: 'url', url: `https://cad.example/${id}` } });
+    // What the page offers of the files is its prompt's line: no host action in the navbar, and no file menu.
+    assert.deepEqual(['fullSize', 'navbarActions'].filter(name => name in snapshot()), []);
+    assert.equal(snapshot().host.fileActions, undefined);
   } finally {
     await act(() => root.unmount());
     dom.window.close();

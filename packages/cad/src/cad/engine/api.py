@@ -687,6 +687,30 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
                     row.get("robot")) for row in done["files"]]
 
 
+def bundle(path: Any, folder: Any) -> dict[str, Any]:
+    """The view bundle of the CAD file at ``path`` -- what its page reads, written down (the engine's **View
+    bundle**) -- into ``folder``, by the running server, which writes it from the answers it gives that page, over
+    the bundle the folder holds: what was done (``{"path", "document", "files", "bytes", "written", "removed"}``).
+    ``cad share``'s step: only a server writes one. A model's ``.xbf`` is the model a live worker holds, else the
+    file, the same document."""
+    from cad.engine.export import ExportRefused
+    from cad.registry import type_of
+
+    found = Path(os.fspath(path)).resolve()
+    if type_of(found) is None:
+        raise ExportRefused(f"{found.name} is no CAD file: a view bundle is written of a file the viewer opens")
+    if not found.is_file():
+        raise ExportRefused(f"no document {found}")
+    try:
+        done = _ask({"op": "bundle", "path": str(found), "folder": str(Path(os.fspath(folder)).resolve())})["done"]
+    except EngineError as error:
+        if str(error).startswith("unknown request"):  # a server of a release before the bundle
+            raise Outdated("the CAD server running writes no view bundle: it is older than this library. Update cad "
+                           "and run it again") from None
+        raise
+    return done
+
+
 def _called(source: Any, daemon: bool) -> Any:
     """A ``Model`` source through the engine is its call's document: the model is built as a call
     of it builds -- its run, its program, its ``.xbf`` and the served documents with it, so
@@ -841,8 +865,8 @@ def _outside(measures: dict[str, Any], why: str) -> None:
         pass
 
 
-def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,
-             grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
+def snapshot(source: Any = None, out: Any = None, *, job: Any = None, folder: Any = None, display: Any = None,
+             camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
              height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
              measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]:
     """Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh
@@ -857,13 +881,16 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     was (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the
     model lit in a studio, in its materials, on a floor with its shadow, in perspective.
 
-    ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
-    ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
-    object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
-    and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
-    of its outputs (``snapshot.job_pictures``). ``source`` is then drawn in place of every job's
-    input; a flag given overrides every job. Every request is checked before anything renders, and
-    a picture that fails writes none of the job's, leaving every output as it was.
+    ``job`` is every picture a job names (``cad <type> snapshot --job``), a list of ``Drawn``: a
+    Quick Edit packet (the JSON a Quick Edit's message carries, a file of it, or its object), a job
+    or a list of jobs, each job a view drawn as it was -- its camera, display, hidden and isolated
+    parts, pose, the packet's ink and dimensions -- at its output settings, into each of its outputs
+    (``snapshot.job_pictures``): at its path, or, naming none, in ``folder`` (the current folder when
+    it is None) as ``<its input's stem>-<its label>.png``; ``out`` is one picture's, refused with a job.
+    ``source`` is then drawn in
+    place of every job's input; a flag given overrides every job. Every request is checked before
+    anything renders, and a picture that fails writes none of the job's, leaving every output as it
+    was.
 
     Where each picture is goes, frame by frame, to ``progress`` (``progress.py``: ``scene`` while the
     document is served, meshed and its scene made, ``draw`` while the frame is drawn, ``write`` as
@@ -873,23 +900,23 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
 
     frames, bar = progressing.sink(progress)
     try:
-        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
-                         width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
+        return _pictured(source, out, job=job, folder=folder, display=display, camera=camera, grid=grid, preview=preview,
+                         pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                          measurements=measurements, progress=frames)
     finally:
         if bar is not None:
             bar.close()
 
 
-def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
-              width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
+def _pictured(source: Any, out: Any, *, job: Any, folder: Any, display: Any, camera: Any, grid: bool, preview: bool,
+              pose: Any, width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
         if out is not None:
-            raise TypeError("snapshot() takes out or job, not both: a job's outputs name its pictures")
-        return _job(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose, width=width,
-                    height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
+            raise TypeError("snapshot() takes out for one picture: a job's pictures go to folder")
+        return _job(job, source, folder, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
+                    width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                     measurements=measurements, progress=progress)
     if source is None or out is None:
         raise TypeError(f"snapshot() missing required argument: {'source' if source is None else 'out'!r}")
@@ -973,16 +1000,17 @@ def _whole(source: Any) -> None:
                           part="source")
 
 
-def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
+def _job(job: Any, source: Any, folder: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
          width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
          measurements: Any, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
-    """``snapshot(job=...)``: every picture the job names (see ``snapshot``)."""
+    """``snapshot(job=...)``: every picture the job names, one that names no path in ``folder`` (see
+    ``snapshot``)."""
     from cad.engine import snapshot as drawing
 
     _heard("source", os.fspath(source) if source is not None else drawing.job_input(job))
-    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
-                                    width=width, height=height, size_profile=size_profile, annotation=annotation,
-                                    measurements=measurements)
+    pictures = drawing.job_pictures(job, source, folder=folder, display=display, camera=camera, grid=grid,
+                                    preview=preview, pose=pose, width=width, height=height, size_profile=size_profile,
+                                    annotation=annotation, measurements=measurements)
     return [Drawn(Path(found["output"]), found["width"], found["height"], found)
             for found in drawing.draw_pictures(pictures, daemon=daemon, progress=progress)]
 

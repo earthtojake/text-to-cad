@@ -29,7 +29,7 @@ VIEWER = re.compile(r"`?cad viewer")
 
 
 class ShowTheModelTest(unittest.TestCase):
-    def test_the_cad_app_first_then_the_app_s_own_browser_pane_then_the_link(self) -> None:
+    def test_the_cad_app_first_then_the_app_s_own_browser_pane_then_the_link_then_a_share(self) -> None:
         # The skills are every host's: Codex and Cursor have the CAD app, Claude does not. The section shows with
         # `cad_show` where the agent's tools include it; else the agent OPENS the page in the app's own browser pane
         # where it has a tool for that (the Claude desktop app); only with neither does it give the link alone. An
@@ -38,7 +38,13 @@ class ShowTheModelTest(unittest.TestCase):
         self.assertIn("1. `cad_show` among your tools", text)
         self.assertIn("2. A tool that opens a page in the app's own browser pane", text)
         self.assertIn("open the page there yourself", text)
-        self.assertIn("3. Neither: give the person the link", text)
+        self.assertIn("3. Neither, and the person is at this computer: give them the link", text)
+        # A person not at this computer (a cloud sandbox's, or one on a phone) opens no link of its: the model is
+        # shared, and the share's view link given, again after each change, the first share agreed to first.
+        self.assertIn("4. They are not (you run in a cloud sandbox, or they are on a phone): share it, `cad share FILE`",
+                      text)
+        self.assertIn("share it again after each change", text)
+        self.assertIn("run it again with\n   `--yes` once they have", text)
         self.assertIn("The page follows every run", text)
         self.assertRegex(text, r"`cad viewer")
         # Of the app's tools, only `cad_show` is named, and outside the section only beside `cad viewer` or as a

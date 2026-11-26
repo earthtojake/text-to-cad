@@ -6,8 +6,9 @@ The built client ships inside the same wheel. `cad viewer [FILE ...]` opens the
 engine's one page and exits; a FILE that is a folder is opened as a project, on the home. The page addresses every
 document by path, `/<uuid>`: a model's id, or a file's id once a launcher (or the page itself) registers it, derived
 from the file's canonical path. `/` is the home, and each place on it has its own address: `/` Recents,
-`/?view=pinned` Starred, `/?project=<id>` a project's page. Python scripts are never documents. There
-is no hosted deployment.
+`/?view=pinned` Starred, `/?project=<id>` a project's page. Python scripts are never documents. The same client also
+shows a shared model's view bundle with no engine behind it, from the share service that serves it ([A shared view
+bundle](#a-shared-view-bundle)).
 
 This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
@@ -33,7 +34,9 @@ this app. The Python wheel consumes only the production build.
 ```text
 src/
   App.tsx               the CadViewer's browser host: URL, history, addresses, title, appearance, the file menu and the library
-  main.tsx              host/client bootstrap and cleanup
+  BundleApp.tsx         the host of a shared view bundle: its document alone, with no engine
+  SharePage.tsx         a shared view bundle's pages that are no view: why it did not open, and its delete page
+  main.tsx              host/client bootstrap and cleanup, and the choice between the engine's page and a share's (`/<share>`)
   StartingView.tsx      the page while it asks its server what it is: the app's own frame, inert
   host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
@@ -164,6 +167,50 @@ A page closing never stops the engine, and no timer does: it runs until `cad ser
 until cad's own update restarts it on a newer release while nothing uses it.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
+
+## A shared view bundle
+
+A share service keeps a view bundle sealed, as a manifest and the packs its files lie in, with the files that
+made it in the same packs (a model's `.xbf`, its code and the files its build read; a file document's file), which
+it serves
+as a zip (`/<id>.zip`, what `cad fork` downloads), and serves this same built client, its `index.html` at `/<id>`
+and its files beside it (the build's asset URLs are relative, so `./assets/…` resolves to `/assets/…` from
+`/<id>`). `main.tsx` chooses the share mode first, at start-up, from the address alone (`readShareAddress`,
+`@cad/core/client`): a path that is exactly one share id (22 base64url characters). Any other address is the
+engine's page, as above; the engine's ids never have a share id's form.
+
+- `/<id>`, whatever follows it but a delete secret (a key an earlier link carried is passed over): the page
+  reads the share's manifest (`/v1/shares/<id>`, never from a cache) and its view's packs
+  (`/v1/shares/<id>/packs/<pack id>`, as the browser's cache keeps them: a pack never changes) from its own
+  origin (`src/host/share.js`), opens them with the key the id gives (`openShare`), fetching every pack of the
+  view ahead and none that only the files that made it lie in, and shows the bundle (`BundleApp`, titled by the
+  document's name) with only the host ports that need no engine: the clipboard, this build's links, the tab's
+  appearance and the person's language, which this browser keeps (`src/host/browserLanguage.js`,
+  [storage](docs/storage.md#localstorage)). It asks nothing of `/api/`: no server description, address link,
+  library, Recents, telemetry, What's new, crash report or version to wait on, and no Export, Open in, Reveal or
+  Copy path; parameters read as an `.xbf`'s do ("Edit these in the script."). What a bundle-backed view leaves
+  out, and why, is [the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A prompt from it (Quick Edit's, a screenshot's) names the model by
+  the share's link, not by the model's id on the computer it was shared from, which means nothing to an agent on
+  another: `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>` (as Copy Reference and a chip copy
+  it) and its snapshot packet's `input` (`sharePromptSubject`, the host's `promptSubject`). Its Quick Edit carries
+  the views and the ink as the engine's page's does: for the same views, selection, ink and words the two pages'
+  prompts differ in the file's address alone. A
+  404 says
+  "This shared model has expired or was deleted.", and that a share lasts 7 days after it was last shared, so
+  whoever shared it can share it again; a manifest that does not open or is not one, or a file not as it
+  says, says the link is damaged; a bundle it does not read says so; anything else (no network, a refusal, a
+  pack that did not come) says so, with Retry (`SharePage.tsx`).
+- `/<id>#delete=<secret>`: a status screen that asks to delete the shared model (the link stops working for
+  everyone) and whose one action sends `DELETE /v1/shares/<id>` with `Authorization: Bearer <secret>`; then
+  it is deleted, already gone (404) or not this share's link (403). A secret the link cuts short is never sent.
+
+The id is the link: whoever has it opens the model, and the page keeps it nowhere but the address it came in.
+The secret is read from the address once, at start-up, and written nowhere: not to the address or its
+history, storage, a log, or any request but the DELETE's header. The page asks its own origin alone.
+It runs under the service's content security policy (`default-src 'self'`, `script-src 'self'
+'wasm-unsafe-eval'`, `connect-src 'self' data: blob:`, `worker-src 'self' blob:`, …) once that policy also
+allows `index.html`'s two inline scripts by their hashes (the first paint's appearance, and the build's chunk
+ids): they change with the build, so the service computes them from the `index.html` it serves.
 
 ## Behaviours worth knowing before concluding something is broken
 
@@ -298,9 +345,13 @@ on Linux and Windows. Compare a baseline and a refactor on the same backend.
 
 From the repository root, `scripts/test/test-viewer-browser.sh` exercises the
 bundled client's format and camera contracts through the real backend, with fresh
-temporary fixtures and a private server/cache; it runs exactly what CI runs
-(picking and kinematics run on every PR in the `packages/ui` browser specs).
-`--only format|camera` runs one gate, and `--out /tmp/viewer-review` retains
+temporary fixtures and a private server/cache, then, with that engine stopped, the model
+`cad share` shared by its `.xbf`, then shared again unchanged by its id (the same link, no file sent again),
+opened from the share service's own Worker under its content security policy (the model on screen, a face's
+facts from its table, read-only parameters, its packs served immutable, no request for `/api/`; an unknown id
+gone; deleted, then gone; with no request off the origin and the secret in the DELETE's header alone); it runs
+exactly what CI runs (picking and kinematics run on every PR in the `packages/ui` browser specs).
+`--only format|camera|prompt|share` runs one gate, and `--out /tmp/viewer-review` retains
 screenshots and bounded failure diagnostics; the runner cleans up its project and
 processes on exit.
 
@@ -395,11 +446,11 @@ setting has no effect. The prompt destination is the clipboard, so Quick Edit of
 text goes through the clipboard port's `writeText`, which takes pending text: a
 `ClipboardItem` holding the promise, so the write starts inside the gesture, or the
 text itself once it arrives where the browser takes no pending item. At the press,
-the server prepares a packet through the host's `promptFiles` (`createHttpPromptFiles`,
-over `/api/v1/local/prompt-files`), with the shared annotation, the current view and distinct
-drawn views (Measure's measurements are the person's: a packet carries none). Up to 1024 bytes of compact UTF-8 JSON goes directly
-into the prompt; larger packets are written as `.snapshot.json` and named by absolute path.
-No snapshot is written while drawing or typing, and no image is rendered.
+the page makes the snapshot packet (`snapshotPacket`, `@cad/core/prompt`) of the current view and the distinct
+drawn views, with the annotation (Measure's measurements are the person's: a packet carries none), and the prompt
+carries it inline and whole, whatever its size, after the references. The host's `promptFiles`
+(`createHttpPromptFiles`) says only the folders the prompt names this machine's files from. Nothing is written,
+and no image is rendered.
 
 ### The home
 

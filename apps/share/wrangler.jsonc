@@ -1,0 +1,52 @@
+// The share service's Worker (README.md). No route or custom domain is attached here: the owner
+// attaches the domain to the deployed Worker (README.md, "Set-up, once"), and its workers.dev
+// address stays on beside it.
+{
+  "name": "cad-share",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "preview_urls": false,
+
+  // The viewer's built client, copied here by `npm --prefix apps/share run build` (build.mjs) and
+  // never committed, with the `_headers` build.mjs writes. A path that is a file is served as it is,
+  // with no Worker, but for HTML, which the Worker answers so that it carries the page's security
+  // headers. Every path that is no file, `/`, a share's page `/<id>` and its zip `/<id>.zip` among
+  // them, reaches the Worker, as does the API.
+  "assets": {
+    "directory": "./viewer",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": ["/v1/*", "/*.html"]
+  },
+
+  // The shares, each under s/<name>/, the name its id derives: its owner, its sealed manifest and its
+  // sealed packs.
+  "r2_buckets": [
+    { "binding": "SHARES", "bucket_name": "cad-shares" }
+  ],
+
+  // Per client address and Cloudflare location: commits and deletes, 10 a minute; pack uploads and
+  // zips, 60 a minute.
+  "ratelimits": [
+    { "name": "LIMITER", "namespace_id": "47201", "simple": { "limit": 10, "period": 60 } },
+    { "name": "LIMITER_PACKS", "namespace_id": "47202", "simple": { "limit": 60, "period": 60 } }
+  ],
+
+  // A pack, 8 MiB; a share manifest, 16 MiB; the packs a share's manifest names, 256 MiB; a share's
+  // life after its last commit, 7 days.
+  "vars": {
+    "MAX_PACK_BYTES": "8388608",
+    "MAX_MANIFEST_BYTES": "16777216",
+    "MAX_SHARE_BYTES": "268435456",
+    "EXPIRY_DAYS": "7"
+  },
+
+  // The Worker logs nothing of a request; Cloudflare's own record of each one is off too, so
+  // nothing keeps who fetched which share.
+  "observability": {
+    "enabled": true,
+    "logs": { "invocation_logs": false }
+  }
+}

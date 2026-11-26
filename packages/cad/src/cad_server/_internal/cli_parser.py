@@ -13,6 +13,10 @@ speaks the failure contract (``cli_errors``).
 - **Its checks are the command line's too.** ``checks`` run on what it read, before anything else does --
   a document type's file of another type, an input that is not there -- and a ``Failure`` one raises is said
   as a usage error is, with the exit status of its class.
+- **Its screens read the words first.** ``screens`` take the command line's words before argparse reads them,
+  for what a shell did to them that argparse would misread or refuse in other words (Windows PowerShell 5.1's
+  JSON with its double quotes taken out, split at its spaces), and a ``Failure`` one raises is said as a
+  check's is.
 
 Every parser of the ``cad`` command's is made here; a policy test holds that none is made otherwise.
 """
@@ -35,15 +39,17 @@ _SUGGESTS = sys.version_info >= (3, 14)
 
 class Parser(argparse.ArgumentParser):
     """``argparse.ArgumentParser`` under the failure contract (see the module); ``checks`` each take the
-    parsed namespace and raise ``Failure`` for one they refuse."""
+    parsed namespace and raise ``Failure`` for one they refuse; ``screens``, the command line's words before
+    they are read, the same."""
 
     def __init__(self, *args: Any, checks: Iterable[Callable[[argparse.Namespace], None]] = (),
-                 **kwargs: Any) -> None:
+                 screens: Iterable[Callable[[list[str]], None]] = (), **kwargs: Any) -> None:
         kwargs.setdefault("allow_abbrev", False)
         if _SUGGESTS:
             kwargs.setdefault("suggest_on_error", True)
         super().__init__(*args, **kwargs)
         self.checks = list(checks)
+        self.screens = list(screens)
         self._tokens: list[str] = []
 
     if not _SUGGESTS:
@@ -61,6 +67,11 @@ class Parser(argparse.ArgumentParser):
 
     def parse_known_args(self, args: Sequence[str] | None = None, namespace: Any = None) -> Any:  # type: ignore[override]
         self._tokens = list(sys.argv[1:] if args is None else args)
+        for screen in self.screens:
+            try:
+                screen(list(self._tokens))
+            except Failure as failure:
+                self.fail(failure, as_json=self.answers_json())
         return super().parse_known_args(args, namespace)
 
     def parse_args(self, args: Sequence[str] | None = None, namespace: Any = None) -> Any:  # type: ignore[override]

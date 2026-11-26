@@ -104,7 +104,7 @@ function MeshSurface({ view, data }) {
   // Select picks a 3MF's objects and an STL's bodies.
   const strip = [shell.tools.own({ id: MESH_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select, icon: SELECT_ICON }), ...sceneTools.tools];
   // The picked objects or bodies, as references (`model.3mf#o2.1`, `model.stl#b2`).
-  const { references, chips } = useSceneReferences({ scene, selection, resource: shell.frame.resource });
+  const { references, chips } = useSceneReferences({ scene, selection, resource: shell.frame.resource, subject: host.promptSubject });
   const resourcePath = shell.frame.resource?.path;
   const nameObject = useCallback(reference => {
     const id = reference?.resource?.path === resourcePath && reference.target?.kind === "cad-selector" ? reference.target.selectors[0] : "";
@@ -120,7 +120,7 @@ function MeshSurface({ view, data }) {
   const viewportRef = useRef(null);
   const contextMenuItems = scene && !previewing && shell.toolMode === MESH_TOOL.SELECT ? press => sceneMenuEntries({
     press, viewport: viewportRef.current, scene, selected: selectionRef.current.selected, t,
-    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])]),
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])], host.promptSubject),
     onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
     onSelect: (hit, selected) => selection.select(hit.id, { multiSelect: selected }),
     viewer: () => shellRef.current?.frame.viewerRef.current || null

@@ -20,7 +20,8 @@ files of the folder it is in; the search (⌘K) reaches the whole project on scr
 documents: no view opens one, and no project lists one.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
-`promptContext`, the optional `promptFiles`, `navigation` (the optional `openFile(path)` and
+`promptContext`, the optional `promptFiles` (the folders a message names this computer's files from), the optional
+`promptSubject` (what a prompt names the document on screen by: [Prompt handoff](#prompt-handoff)), `navigation` (the optional `openFile(path)` and
 `home()`), the optional `links` (the app menu's), the optional `usage`
 (`used(feature)`: what the person used, for the host's telemetry to count, never what
 they made; absent, nothing is counted; and `controls(counts)`: which of the view's controls a
@@ -81,11 +82,11 @@ are for reading and maintaining the contracts.
 
 | Contract | Definition | Public entry point |
 | --- | --- | --- |
-| `ViewerHost`, `ClipboardPort`, `PromptFiles` (a Quick Edit's views and annotations, saved as JSON), `usage` | [Host types](../src/host/types.ts) | `@cad/ui/host` |
+| `ViewerHost`, `ClipboardPort`, `PromptFiles` (the folders a Quick Edit's message names files from), `usage` | [Host types](../src/host/types.ts) | `@cad/ui/host` |
 | `FileSource` (`stat`, and `list` and `search` where the host has them), `FileActions`, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@cad/ui/file-viewer` |
-| `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@cad/core/prompt` |
-| `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`; `setModelParameters`, the Params tab's Save, and `previewModelParameters`, the model drawn at its drafts before a Save, each optional: a host that cannot carry one leaves it out, and the tab shows values without Save, or a value only once it is saved), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@cad/core/client` |
-| `createHttpPromptFiles` (the viewer server's `PromptFiles`: `POST /api/v1/local/prompt-files`, writes JSON and returns paths) | [Prompt files](../../core/src/client/promptFiles.js) | `@cad/core/client` |
+| `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts, `formatPromptMessage` (the one message a Quick Edit is) and `snapshotPacket` (its snapshot packet, made in the page) | [Prompt types](../../core/src/prompt/types.ts) | `@cad/core/prompt` |
+| `CadWorkspaceService` (the catalog of the files on screen, and what a renderer reads of a document; `projectFolder`, the folder of its project a document is in; `setModelParameters`, the Params tab's Save, and `previewModelParameters`, the model drawn at its drafts before a Save, each optional: a host that cannot carry one leaves it out, and the tab shows values without Save, or a value only once it is saved), `CadClient` (the HTTP one, `createCadClient` (`{ origin, fetch, … }`), with what only a server and its engine answer: the library, the projects, the person's settings), `openViewBundle` (the same service over a view bundle: [below](#a-view-bundles-host)), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@cad/core/client` |
+| `createHttpPromptFiles` (the viewer server's `PromptFiles`: its workspace and the person's home, from `GET /api/v1/server`) | [Prompt files](../../core/src/client/promptFiles.js) | `@cad/core/client` |
 | `createModelRenderer` and its `XbfRendererOptions` (a model, held or its `.xbf`, and a STEP), `LiveViewBinding`, `LiveViewController` | [Model registration](../src/renderers/xbf/index.ts) | `@cad/ui/renderers/xbf` |
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@cad/ui/renderers/workspace` |
@@ -263,6 +264,48 @@ renders in Codex (the sidebar, a tab beside each thread and a file handler) and 
 Claude Desktop and other MCP Apps hosts, shows it in the view that asked or, from the
 home, launches it.
 
+## A view bundle's host
+
+A view bundle (a share's view, which `cad share` has the server write) is one document's answers, written
+down: a host shows it with no engine behind the page, through `openViewBundle(source)` (`@cad/core/client`),
+the second implementation of `CadWorkspaceService`, whose source is a share's packs or the files held in the
+page. The view is `CadViewer` with no `library`: one document and nothing else. Every
+tool computed in the page works as over an engine (the display styles, Explode, Clip, Select and selection by
+name, Measure, whose exact values are the part's table of facts, the joints, poses and motions, Draw and
+Preview). What needs an engine is left out where it is read, by the capability each already rests on, so a
+tool the document cannot use is absent, never drawn disabled:
+
+- **Parameters** are read only, as an `.xbf` opened as a file shows them ("Edit these in the script."): the
+  bundle's engine document is read as the document written down, and the service has no
+  `setModelParameters` or `previewModelParameters`.
+- **No next version**: its engine document is `final`, so the view reads it once and waits on nothing.
+- **No Export**: the service has no `exports` and the host no `downloads`.
+- **No home, Recents, projects, Open, Open in, Reveal, Copy path or Copy link**: no `library`, a file source
+  that only reads its one document (`createCadFileSource`), no `projectFolder` to step through, and no
+  `fileActions`, so the navbar draws no ⋯.
+- **Quick Edit** keeps Copy alone (the clipboard is the destination; no composer, no `send`), and carries its
+  snapshot packet as every page does (the page makes it); with no `promptFiles`, its message names its file by
+  the host's `promptSubject` (below).
+- **The person's settings** are the host's to keep where it can: the web keeps the language in the
+  browser ([storage](../../../apps/web/docs/storage.md)); there is no Telemetry and no What's new.
+
+## A shared view bundle's host
+
+A shared view bundle is a view bundle a share service keeps, sealed, for anyone with its link, which is the
+share's address alone, beside the files that made it (a model's `.xbf`, its code and the files its build read; a
+file document's file), which `cad fork <link>` gets. Its host is the view bundle's host above, unchanged: the web's
+share mode (`/<id>`, [apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens it with
+`openShare(id, service)` (`@cad/core/client`), which reads the share's manifest from the page's own origin, then
+each file of the view from the packs it lies in, fetched once each and kept by the browser (never a pack only the
+files that made it lie in), and hands them to `openViewBundle` as a lazy source, and shows that service.
+Everything a bundle's view keeps and leaves out stays as it is. What the share adds lives in the host alone:
+its prompts' subject (`promptSubject`): the share's link, `<origin>/<id>`, for the model, so a prompt says
+`File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>` (which Copy Reference and a chip copy too) and its
+snapshot packet's `input` the link, and nothing else of it differs from the engine's page's for the same views,
+selection, ink and words; the share's status screens (gone, damaged, a format it does not read, a
+failure with Retry) and its delete page (`/<id>#delete=<secret>`). The delete secret never reaches the viewer: no
+port, URL, storage or log carries it.
+
 ## Adding a shared feature
 
 1. Implement reusable interaction and presentation in UI, with cross-consumer
@@ -312,17 +355,25 @@ asynchronous capture. Blob URLs are delivery leases, never portable identity.
 A reference contains a workspace-file identity (the file's absolute path,
 `/`-separated: `/a/b.step`, `C:/a/b.step`; validation rejects any other spelling), a
 `cad-model` identity (a document the engine holds by its id alone: `path` is the id), or an
-HTTP(S) URL plus a tagged
+HTTP(S) URL (a document by its link, a shared model's page) plus a tagged
 selection: `whole-resource`, `text-range`, or `cad-selector`. Text positions are
 zero-based UTF-16 with an exclusive end. CAD selectors use the engine's
-grammar, validated by core, not STEP entity numbers. Preserve a revision when available;
-references do not promise to survive edits. Shared serialization handles quoting.
+grammar, validated by core, not STEP entity numbers; a link's are either the engine's or a renderer's labels (its
+file's kind is not in it), written as the engine writes them, which leaves a label as it is. Preserve a revision when
+available; references do not promise to survive edits. Shared serialization handles quoting.
 
-`formatPromptMessage(context, { attachmentPath, folders })` is the one
+Where an agent reading a prompt could not reach the document as the view names it, the host says what its prompts
+name it by (`promptSubject`): `resource` stands for the document on screen in a Quick Edit's and a screenshot's
+prompt, as their file, in each reference into it, whose target it keeps, and as a Quick Edit's snapshot packet's
+`input`, and in what Copy Reference and a chip copy (a pick still named in its file's own grammar, or not at all).
+Without it a prompt names the document as the view does. The web's share mode names a shared model by its link
+([below](#a-shared-view-bundles-host)).
+
+`formatPromptMessage(context, { attachmentText, attachmentPath, folders })` is the one
 message a Quick Edit is, whether sent, queued or copied: what the person wrote;
 then `File: <path>`; then `References:` and one reference per line; then each
-JSON file by its label and path (the views' `.snapshot.json`, an
-`.annotation.json`), where `attachmentPath` says where it was saved. Every path in it is
+attachment, inline where `attachmentText` gives its text (a Quick Edit's snapshot packet), else by its label and
+path, where `attachmentPath` says where it was saved. Every path in it is
 named by the context's `folders` (`displayPath`): relative to the workspace the agent
 works in (`start`), else from `~/`, else as it is, so an agent app that shows the message
 verbatim never shows the person's home. Quick Edit asks `host.promptFiles.folders()` at
@@ -354,27 +405,26 @@ they do not transfer Promise or Blob values across native IPC.
 
 Quick Edit is the shared, host-neutral note to the agent
 ([Quick Edit](viewer-ux.md#quick-edit)), and its buttons are what the host can carry out.
-Copy, Queue and Send carry the words and references, with a snapshot packet captured
+Copy, Queue and Send carry the words and references, with a snapshot packet made
 at the press when the displayed revision matches the saved input. If the viewer
 retains a previous revision, Quick Edit keeps the note and
 references available and explicitly says they describe that displayed revision; the
 saved file may differ. It omits replay jobs rather than naming that saved file as the
-picture on screen. The packet, when available, includes the current view plus distinct drawn views
+picture on screen. The packet includes the current view plus distinct drawn views
 with remaining ink; an equivalent drawn entry uses the exact current framing.
-Shared input and inline annotation ([annotation](annotation.md)) appear once; measurements
-are the person's and never go. Each job may override shared fields. Projection and lens are preserved.
-Packets up to 1024 bytes of compact UTF-8 JSON are inlined; larger packets are
-written as one temporary `.snapshot.json` and named by path. Hosts use
-`resolvePromptMessage` to resolve an attachment's optional `inlineText` before its
-path, keeping destination binding inside the gesture. Drawing, selecting and typing
-keep data in memory. Nothing renders at the press. The agent saves inline JSON to
-a temporary file, then draws a view the ink was drawn in with
-`cad <type> snapshot <document> <out.png> --annotation <file> --camera authored`.
+The input and the annotation ([annotation](annotation.md)) appear once; measurements
+are the person's and never go. Projection and lens are preserved. The page makes it, the same code for every
+host (`snapshotPacket`, `@cad/core/prompt`: a job per view, its picture named by its label alone, shortened to
+what each view could show), and the message carries it inline and whole, whatever its size, after the
+references: ``Snapshot JSON (`cad <type> snapshot --job`):`` over its compact JSON in a `json` block. Nothing is
+written and no path is named. Hosts use `resolvePromptMessage` to resolve its `inlineText`, which waits for the
+folders the message names files by, keeping destination binding inside the gesture. Drawing, selecting and typing
+keep data in memory. Nothing renders at the press. The agent hands the packet to `cad <type> snapshot --job` as
+it is (or on standard input, `-`), which draws each view with the ink over it.
 **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
-inside the gesture while the files are still being made; its references name their
-files by absolute path, as copied references do (below), and every file is named by
-its path, since text carries no file (without `promptFiles`, a prompt carries none). **Queue** is there where the
+inside the gesture while the folders are still being asked; its references name their
+files by absolute path, as copied references do (below), where the host says no folders. **Queue** is there where the
 destination is a composer (`destination.kind === "composer"`): `deliver`, the
 context for the person's next message. **Send** is there where the prompt port
 has `send`. The context is built at the press, from what is live then; a changed
@@ -396,18 +446,11 @@ mode, an axis), a file's or a part's name. Only a person's act counts: what a re
 or the agent does through the live surface is not. Both apps hand it to their server (`reportActivity({ controls })`), which
 sends it with the rest of its telemetry, only with the person's yes.
 
-`ViewerHost.promptFiles` is a `PromptFiles`: `create({ name, input, views, annotation })`
-answers `{ inline: compactJson }` or `{ snapshot: absolutePath }`, and `read(path)` fetches JSON. `createHttpPromptFiles({ origin, fetch })` from
-`@cad/core/client` posts to `POST /api/v1/local/prompt-files`, which validates the packet in memory and returns inline JSON or writes the larger
-snapshot and returns its path with HTTP 200. The client advertises `acceptInline: true`;
-requests without it always receive a saved path, so already-open clients remain compatible. There is no render worker
-or polling endpoint. Guarded `GET /api/v1/local/prompt-files/<name>` serves JSON only.
-The files
-are scratch in the system's temporary directory and outlive the viewer until the
-system clears them. The response and persisted snapshot name input and output
-files by absolute path; annotation data is inline, so replay works from another
-working folder. Both apps pass one; the MCP app's
-reaches the server through its tunnel.
+`ViewerHost.promptFiles` is a `PromptFiles`: `folders()` answers the workspace a message names this computer's
+files from and the person's home. `createHttpPromptFiles({ origin, fetch })` from `@cad/core/client` reads them from
+the viewer server's description (`GET /api/v1/server`'s `start` and `home`). Both apps pass one; the MCP app's
+reaches the server through its tunnel. A view bundle's host and a share's pass none: the page they show has no
+computer's files to name.
 
 ## App-specific interfaces
 

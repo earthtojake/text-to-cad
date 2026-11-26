@@ -9,7 +9,7 @@ browser gates defend against cross-origin requests:
   re-resolves to loopback and the browser treats us as same-origin. Skipped when
   bound non-loopback, matching Jupyter's ``allow_remote_access``.
 * Every request that changes something -- a POST, PUT, PATCH or DELETE (``CHANGING_METHODS``:
-  the model library, a person's settings, a prompt's files) -- requires an ``x-cad-viewer``
+  the model library, a person's settings, an export) -- requires an ``x-cad-viewer``
   header. A cross-origin POST whose params ride the query string is otherwise a no-preflight
   "simple request"; a custom header forces a preflight instead.
 
@@ -218,14 +218,14 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
                  500: "this is a bug in the CAD server: report it with the error"}
 # A part's elements, as their routes name them and as the engine's reads do.
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
-_ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
+_ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /elements, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
 # A model's own: its parameters set in its script, and a look at other values of them (a preview), for one built
 # from code; its source, for its .xbf opened from disk.
 _MODEL_ROUTES = _ENGINE_ROUTES + ", POST parameters, POST preview (built from code), source (its .xbf)"
 # What a preview (``<id>~preview-<token>``, the engine's ``parameters.Previewing``) is read at: what a page draws
 # and measures of it, nothing else.
-_PREVIEW_ROUTES = "structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure"
+_PREVIEW_ROUTES = "structure, parts/<key> (/faces|edges|vertices/<ordinal>, /elements, /groups, /volume), measure"
 PREVIEW_MARK = "~preview-"
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
@@ -297,7 +297,6 @@ class CadApp:
 
         from .drawings import DrawingRenders
         from .plots import BoardAnswers
-        from .prompt_files import PromptFiles
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -306,7 +305,6 @@ class CadApp:
         # The engine's documents (an .xbf, a STEP): each served off the request, and the page's
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
-        self.prompt_files = PromptFiles()
         self._exports = None
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
         # Whether this computer has a chooser for the home's Import (``POST /api/v1/local/pick``), and whether
@@ -970,7 +968,7 @@ class CadApp:
             part = f"{doc}/part/{rest[1]}"
             if len(rest) == 2:
                 return self._methods(request, {"GET": lambda: self._relay(request, response, part, query)})
-            if len(rest) == 3 and rest[2] in ("groups", "volume"):
+            if len(rest) == 3 and rest[2] in ("groups", "elements", "volume"):
                 return self._methods(request, {"GET": lambda: self._relay(request, response, f"{part}/{rest[2]}")})
             if len(rest) == 4 and rest[2] in _ELEMENTS and rest[3].isascii() and rest[3].isdigit():
                 return self._methods(request, {"GET": lambda: self._relay(
@@ -1180,16 +1178,11 @@ class CadApp:
 
     def _local(self, request, response, rest) -> None:
         """``/api/v1/local``: what a local engine does on this computer -- a folder's entries, files by path,
-        Quick Edit's files, Reveal, Open in, the clipboard, Import's chooser, the page's link, the page's activity."""
-        route = rest[0] if rest else ""
+        Reveal, Open in, the clipboard, Import's chooser, the page's link, the page's activity."""
         if rest == ["folder"]:
             return self._methods(request, {"GET": lambda: self._handle_folder(response, request.query)})
         if rest == ["files"]:
             return self._methods(request, {"GET": lambda: self._handle_file(response, request.query)})
-        if rest == ["prompt-files"]:
-            return self._methods(request, {"POST": lambda: self._create_prompt_files(request, response)})
-        if route == "prompt-files" and len(rest) == 2 and rest[1]:
-            return self._methods(request, {"GET": lambda: self._handle_prompt_files_get(request, response, rest[1])})
         if rest == ["reveal"]:
             return self._methods(request, {"POST": lambda: self._reveal(request, response)})
         if rest == ["open-in"]:
@@ -1205,13 +1198,6 @@ class CadApp:
         if rest == ["activity"] and self.analytics is not None:
             return self._methods(request, {"POST": lambda: self._activity(request, response)})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
-
-    def _create_prompt_files(self, request, response) -> None:
-        from .prompt_files import MAX_BODY_BYTES
-
-        self._limit(request, MAX_BODY_BYTES)
-        status, body = self.prompt_files.create(request.body())
-        send_json(response, status, body)
 
     def _reveal(self, request, response) -> None:
         from .reveal import reveal_path
@@ -1621,16 +1607,6 @@ class CadApp:
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
-
-    def _handle_prompt_files_get(self, request, response, name):
-        """Read a prompt JSON file; every request carries the viewer guard."""
-        if not request.header(POST_GUARD_HEADER):
-            raise ApiError(403, f"missing {POST_GUARD_HEADER} header", f"send '{POST_GUARD_HEADER}: 1'")
-        found = self.prompt_files.file(name)
-        if found is None:
-            raise ApiError(404, f"no prompt file {name}", "a prompt's files are read by the name its packet gives")
-        data, content_type = found
-        response.send_bytes(200, data, content_type, RAW_FILE_HEADERS)
 
     def _handle_file(self, response, query):
         """``GET /api/v1/local/files?path=<abs>``: a CAD file's bytes, by absolute path (a robot's link

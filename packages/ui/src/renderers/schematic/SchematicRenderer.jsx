@@ -487,8 +487,8 @@ function SchematicSurface({ view, data }) {
     capture,
     thumbnail
   };
-  // A note's packet names no references: `cad kicad_sch snapshot --job` lights none yet (a board's alone does), and the
-  // prompt-files route refuses them for any file but a board. The note itself still names every pick.
+  // A note's packet names no references: `cad kicad_sch snapshot --job` lights none yet (a board's alone does), and
+  // refuses a packet that names them. The note itself still names every pick.
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: SCHEMATIC_LIVE,

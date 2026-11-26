@@ -211,13 +211,13 @@ def _note(said: str, denied: bool = False) -> None:
 
 # The requests that serve (``Daemon.serve``: the HTTP server bound on the first), each counted busy
 # while it is underway (``Daemon.handle``).
-SERVING = frozenset({"serve", "viewer", "http", "read", "warm"})
+SERVING = frozenset({"serve", "viewer", "http", "read", "warm", "bundle"})
 # The requests that are no command's, which the last command's time (``Daemon.worked``) never counts
 # (``Daemon.ended``): who answers, a page token read again, an app's hold, cad's own update or the plugin's switched,
-# or cad's update asked for (``cad update``, and its looks while it waits). Besides these, any request marked
+# cad's update asked for (``cad update``, and its looks while it waits), or what sharing keeps written for ``cad share``. Besides these, any request marked
 # ``internal`` (what one server asks another) and an ``http`` that names a port (an updater handing the pages' port on,
 # 0.11.10's among them) are not counted either.
-UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_update", "update"})
+UNCOUNTED = frozenset({"pid", "token", "hold", "auto_update", "plugin_auto_update", "update", "share"})
 # The type a worker answers bytes of a held document that do not read with (``build.Unreadable``),
 # as ``worker.refusal`` names it.
 
@@ -1627,6 +1627,8 @@ class Daemon:
                        if request.get("progress") else None)
             status, body = self.serve(request).read(route, counted)
             send({"ok": True, "status": status, "body": body.decode("utf-8")})
+        elif op == "bundle":
+            self.bundle(request, send)
         elif op == "draw":
             self.draw(request, send)
         elif op == "warm":
@@ -1649,6 +1651,12 @@ class Daemon:
             send(switch_auto_update(request))
         elif op == "plugin_auto_update":
             send(switch_plugin(request))
+        elif op == "share":
+            # What ``cad share`` and ``cad fork`` keep -- the agreement, the setting, a share's record, a fork's --
+            # written for them, as a switch is (``switch_auto_update``): a sandboxed shell may not write the state folder.
+            from cad_server import sharing
+
+            send(sharing.answer(request))
         elif op == "update":
             send(self.update(request))
         elif op == "stop":
@@ -1660,6 +1668,30 @@ class Daemon:
                 self.stopping.set()
         else:
             send({"failed": f"unknown request {op!r}"})
+
+    def bundle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """``{"op": "bundle", "path", "folder"}`` (``api.bundle``, ``cad share``'s step): the view bundle of the CAD
+        file at ``path`` (a model's ``.xbf`` is the model a live worker holds, else the file) written into ``folder``
+        by the page's own application, from what it answers a page (its ``bundle``: ``viewer/bundle.py``).
+        Answered ``{"done": {...}}``: the folder, its document and what was written; a refusal as its type
+        (``refused``), anything else ``failed`` in its words."""
+        path, folder = request.get("path"), request.get("folder")
+        if not (isinstance(path, str) and os.path.isabs(path) and isinstance(folder, str) and os.path.isabs(folder)):
+            send(refused(ValueError("bundle takes a file's path and a folder, each absolute")))
+            return
+        try:
+            application = getattr(self.serve(request).http, "app", None)
+            if application is None:
+                send({"failed": "this engine has no application host"})
+                return
+            began = time.monotonic()
+            done = application.bundle(path, folder, version())
+        except ValueError as error:
+            send(refused(error))
+        except (OSError, RuntimeError) as error:
+            send({"failed": str(error), **failed_type(error)})
+        else:
+            send({"ok": True, "done": {**done, "seconds": round(time.monotonic() - began, 4)}})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
         """``cad update`` (``{"op": "update"}``, ``"major": true`` for ``cad update --major``): judged

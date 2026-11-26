@@ -972,10 +972,18 @@ def operations_of(document_type: str) -> tuple[str, ...]:
 def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, attribute: str) -> argparse.ArgumentParser:
     """``parser`` (the command's, ``cad_server._internal.cli_parser``) with the check that the source it reads
     as ``attribute`` is the type's and is there (``_refuse_other_type``): a source of another type, and a file
-    that is not there, are the command line's failures, said the same for every type before anything runs."""
+    that is not there, are the command line's failures, said the same for every type before anything runs. A source
+    that is a share's link is this computer's copy of it from then on, and refused where it has none
+    (``engine.cli.linked``)."""
 
     def check(parsed: argparse.Namespace) -> None:
         source = getattr(parsed, attribute, None)
+        if isinstance(source, str):
+            from cad_server.engine.cli import linked
+
+            # A share's link: this computer's copy of it, the file it shared or its fork's (``engine.cli.linked``).
+            source = linked(source)
+            setattr(parsed, attribute, source)
         if source is not None:
             _refuse_other_type(document_type, operation, str(source))
 

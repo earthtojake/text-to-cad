@@ -58,9 +58,9 @@ MIRRORS: dict[str, tuple[str, str]] = {
     **{f"{document_type} ranges": (f"cad.{document_type}", "ranges") for document_type in ("model", "step")},
 }
 
-# The engine snapshot's options (``cad.engine.snapshot``).
-SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "preview", "camera", "width", "height",
-                      "size_profile", "pose", "annotation", "measurements", "json"})
+# The engine snapshot's options (``cad.engine.snapshot``): ``out_folder`` is ``--out DIR``, a job's folder.
+SNAPSHOT = frozenset({"document", "out", "job", "out_folder", "display", "grid", "preview", "camera", "width",
+                      "height", "size_profile", "pose", "annotation", "measurements", "json"})
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An adapter has no
 # generated parser to compare against a signature, so the declaration IS the contract, and a
@@ -118,6 +118,11 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
     # line) is not a function signature to mirror.
     "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
+    # A file shared by its link, or the words status, on, off and delete with the file or link it deletes: the
+    # person's agreement (--yes, which a delete asks too) and an upload this process makes mirror no function.
+    "share": frozenset({"target", "link", "yes", "json"}),
+    # A share's files written into a folder: a download this process makes, and a folder it writes, mirror no function.
+    "fork": frozenset({"link", "folder", "json"}),
 }
 
 # Commands that own their command line outright and mirror no function.

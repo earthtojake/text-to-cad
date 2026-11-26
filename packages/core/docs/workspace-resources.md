@@ -13,6 +13,17 @@ the engine still reads the file, and the fetch every read of it is made with. Th
 HTTP implementation owns request encoding and cancellation. UI consumes the
 resulting tickets and never supplies a same-origin transport fallback.
 
+The service a renderer needs is `CadWorkspaceService`; what only a viewer's server with its engine
+answers (the server's description, the library and its pictures, the projects, the person's
+settings, Open in and Reveal, KiCad's plots) is the HTTP client's, `CadClient`. A view bundle's service
+(`openViewBundle`, `client/bundle.js`) is the other implementation: one document read from a bundle's
+files, through a source that answers the bytes of a path (a share's packs, or files held in the page),
+with no request per element and nothing that needs an engine: no `exports`, no
+`setModelParameters` or `previewModelParameters`, and its engine document `final`. Its resources read
+the bundle's own paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb` and
+`meshes/<sha256>.<format>`), resolve a mesh's neighbours inside the bundle alone, and hand a worker
+bytes, a copy of its own.
+
 `service.resources` owns JSON, byte and size reads, dependency resolution
 and worker tickets. Pass it as `{ resources }` to render loaders, peeks and robot
 loads. Relative references and URDF mesh references are resolved by the

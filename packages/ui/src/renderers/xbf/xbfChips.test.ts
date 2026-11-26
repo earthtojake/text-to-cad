@@ -72,6 +72,21 @@ it('a model the engine holds by its id is referenced by that id, in the engine g
   expect(result.current.references).toEqual([{ resource, target: { kind: 'cad-selector', selectors: ['kit/hand/finger.2/face 7'] } }]);
 });
 
+it("where the host's prompts name the file otherwise (a shared model's link), its chips copy that name; its references and a view's refs stay the file's", () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const resource = { kind: 'cad-model', path: id };
+  const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+  const subject = { resource: { kind: 'url', url: link } };
+  expect(xbfCopyText({ scene, tree, resource, ids: ['i0', 'i2/face/7', 'i4/edge/2'], subject }).split('\n'))
+    .toEqual([`${link}#palm`, `${link}#kit/hand/finger.2/face 7`, `${link}#"M3/M4 screw"/e:screw.body.2`]);
+  const { result } = renderHook(() => useXbfSelectionChips({ scene, tree, resource, selectedIds: ['i2/face/7'],
+    facts: new Map(), onRemove: () => {}, onHover: () => {}, subject }));
+  expect(result.current.chips.map((chip: any) => chip.copy)).toEqual([`${link}#kit/hand/finger.2/face 7`]);
+  expect(result.current.references).toEqual([{ resource, target: { kind: 'cad-selector', selectors: ['kit/hand/finger.2/face 7'] } }]);
+  // What a prompt's view hides and isolates by is the file's own, for the engine on this computer to read.
+  expect(xbfNodeRefs({ scene, tree, resource, ids: ['i0'] })).toEqual([`${id}#palm`]);
+});
+
 it('a view hides and isolates by the refs Copy Prompt copies, a hidden assembly by its own', () => {
   const resource = at('/work/XBF/kit.xbf');
   const refs = (ids: string[]) => xbfNodeRefs({ scene, tree, resource, ids });

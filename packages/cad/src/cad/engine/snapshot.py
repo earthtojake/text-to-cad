@@ -46,8 +46,8 @@ refused by name before anything renders: ``parts`` and ``exploded`` for a file t
 part, ``--pose`` for a mesh, and every display setting for a drawing. ``--display
 exploded=0.6`` (or ``display.exploded``) moves the parts apart as the viewer's Explode does, by its
 amount (0.5 unless one is given). ``--annotation FILE`` draws the viewer's annotation over the
-model (its ink on the parts it was drawn on, wherever they stand): an annotation file, or the Quick
-Edit packet that carries one (a ``.snapshot.json``). ``--measurements FILE`` draws Measure's
+model (its ink on the parts it was drawn on, wherever they stand): an annotation, or the Quick
+Edit packet that carries one, as JSON or a file of it. ``--measurements FILE`` draws Measure's
 dimensions. A camera object's lengths (``position``, ``target``, ``orthographicHalfHeight``), a
 measurement's points and the ink are in the viewer's scene coordinates, as a Quick Edit packet
 carries them -- a document's and a GLB's millimetres, a robot's metres, a 3MF's declared unit --
@@ -64,10 +64,11 @@ a slide is in the file's unit, a document's millimetres or a robot's metres. An 
 configuration, joint or coupling, a value out of range and a mechanism that is not a tree are
 refused by name before anything renders.
 
-``--job PACKET`` replays a Quick Edit packet (the ``.snapshot.json`` the viewer writes) or a job
-file in its words (``job_pictures``): every output of every job drawn, each job a view with its
-own camera, display (its hidden and isolated parts among it), pose (``jointValues``, or ``motion``: a
-configuration sequence at a time, ``{"name", "at"}``) and, a
+``--job PACKET`` replays a Quick Edit packet (the JSON a Quick Edit's message carries) or a job
+file in its words (``job_pictures``): every output of every job drawn -- at its path, or, naming
+none, in the folder given (``--out``) as ``<its input's stem>-<its label>.png`` --, each job a view
+with its own camera, display (its hidden and isolated parts among it), pose (``jointValues``, or
+``motion``: a configuration sequence at a time, ``{"name", "at"}``) and, a
 robot's, the visuals it hid (``selection.hide``), a board's, what its prompt named lit
 (``references``: board references, ``render/board_refs.py``), the packet's ink and dimensions over each, at
 the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``, ``background``,
@@ -84,6 +85,7 @@ import functools
 import json
 import math
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass, field
@@ -94,7 +96,7 @@ from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "drawable_here",
            "job_input", "job_pictures", "no_gl", "options", "parse_annotation", "parse_camera", "parse_display",
-           "parse_measurements", "parse_pose",
+           "parse_job", "parse_measurements", "parse_pose",
            "parse_references", "picture_path", "refusing", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
@@ -121,11 +123,13 @@ CAMERA_KEYS = frozenset({"preset", "name", "position", "target", "up", "directio
 LENS_KEYS = ("projection", "focalLength")
 # ``--camera authored``: the view the annotation's ink was drawn in, exactly (``authored``).
 AUTHORED = "authored"
-# The Quick Edit packets an annotation file is looked for beside (``cad_server.viewer`` writes them).
+# The Quick Edit packets an annotation file is looked for beside: each saved as a file of this name.
 PACKETS = "*.snapshot.json"
 # The viewer's annotation file (``@cad/core`` ``common/annotation.js``) and Measure's marks.
 ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
 MARK_KINDS = ("stroke", "area", "text")
+# What a mark's ``touches`` objects hold, as a packet before refs alone wrote them (a part, and its ref where one).
+TOUCH_KEYS = frozenset({"part", "ref"})
 MARK_MAX = 8192  # a still's annotation holds at most this many marks
 TEXT_MAX_CHARS, TEXT_MAX_LINES = 10000, 256  # a text mark's words
 FONT_PX_MAX, STROKE_WIDTH_MAX = 512.0, 256.0  # a mark sizes a raster from these; bound them
@@ -139,8 +143,8 @@ SIZE_PROFILES = {
 }
 DEFAULT_SIZE = SIZE_PROFILES["diagnostic"]
 MAX_SIDE = 8192
-# ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
-# view, its outputs the pictures it writes, its output settings how they are framed and finished.
+# ``--job``: a Quick Edit packet (the JSON its message carries), a job, or a list of jobs; each job a view, its
+# outputs the pictures it writes, its output settings how they are framed and finished.
 PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
 JOB_KEYS = frozenset({"input", "camera", "display", "preview", "jointValues", "selection", "annotation", "measurements",
                       "output", "outputs", "references"})
@@ -510,8 +514,8 @@ def _color(value: Any) -> bool:
 
 
 def _packet(found: Any) -> bool:
-    """A Quick Edit packet: an annotation and the views it was drawn in -- the ``.snapshot.json``
-    the viewer writes (``jobs``), or the request it posts (``views``)."""
+    """A Quick Edit packet: an annotation and the views it was drawn in -- a packet (``jobs``), or the
+    request a viewer of an earlier release posted for one (``views``)."""
     return isinstance(found, dict) and isinstance(found.get("annotation"), dict) and (
         isinstance(found.get("jobs"), list) or isinstance(found.get("views"), list))
 
@@ -520,7 +524,11 @@ def _packet(found: Any) -> bool:
 def parse_annotation(value: Any) -> dict[str, Any] | None:
     """``--annotation``: the viewer's annotation (its file's path, its JSON, or a Quick Edit packet
     that carries it), checked where a still reads it: its marks and each part's placement. The page
-    and the stills draw it; neither refuses it after this."""
+    and the stills draw it; neither refuses it after this. A mark as a packet carries it shortened
+    reads as the whole one: no ``id``, its ``opacity`` 1 and ``closed`` false where it gives none,
+    an area's points its outline alone where it gives no ``outline`` count (and no ``triangles``,
+    which no still reads), and what it was drawn over (``touches``) its refs in the file, or the
+    ``{part, ref}`` objects a packet held before."""
     if value is None:
         return None
     found = _load(value, "--annotation")
@@ -555,12 +563,36 @@ def parse_annotation(value: Any) -> dict[str, Any] | None:
         if text is not None and (not isinstance(text, str) or len(text) > TEXT_MAX_CHARS
                                  or text.count("\n") + 1 > TEXT_MAX_LINES):
             raise SnapshotRefused(f"{at}.text is at most {TEXT_MAX_CHARS} characters on {TEXT_MAX_LINES} lines")
-        for key, high in (("fontPx", FONT_PX_MAX), ("width", STROKE_WIDTH_MAX)):
+        for key, high in (("fontPx", FONT_PX_MAX), ("width", STROKE_WIDTH_MAX), ("opacity", 1.0)):
             value = mark.get(key)
             if value is not None and not (isinstance(value, (int, float)) and not isinstance(value, bool)
                                           and math.isfinite(value) and 0 <= value <= high):
                 raise SnapshotRefused(f"{at}.{key} is a number from 0 to {high:g}")
+        _mark_shape(mark, len(points) // 3, at)
     return found
+
+
+def _mark_shape(mark: dict[str, Any], count: int, at: str) -> None:
+    """What a still reads of a mark's shape beside its points, where the mark gives it: ``closed`` a stroke's loop,
+    ``widths`` the pen's share of its width at each point, ``outline`` how many of an area's points are its outline
+    (all of them where it gives none); and ``touches``, what it was drawn over, which no still draws: refs in the file
+    (``head_shell/f:...``), or ``{part, ref}`` objects."""
+    if mark.get("closed") is not None and not isinstance(mark["closed"], bool):
+        raise SnapshotRefused(f"{at}.closed is true or false")
+    widths = mark.get("widths")
+    if widths is not None and (not _numbers(widths) or len(widths) != count):
+        raise SnapshotRefused(f"{at}.widths are a number for each of its {count} points")
+    outline = mark.get("outline")
+    if outline is not None and (isinstance(outline, bool) or not isinstance(outline, int) or not 1 <= outline <= count):
+        raise SnapshotRefused(f"{at}.outline counts the points of an area's outline: 1 to its {count}")
+    touches = mark.get("touches")
+    if touches is not None and not (isinstance(touches, list) and all(
+            isinstance(touch, str) or (isinstance(touch, dict) and set(touch) <= TOUCH_KEYS
+                                       and isinstance(touch.get("part"), str)
+                                       and isinstance(touch.get("ref"), (str, type(None))))
+            for touch in touches)):
+        raise SnapshotRefused(f"{at}.touches lists what it was drawn over: refs in the file "
+                              "(head_shell/f:build_head.helmet~5df450b1dd03), or {part, ref} objects")
 
 
 @refusing("measurements")
@@ -601,8 +633,8 @@ class View:
 
 
 def _view_of(packet: dict[str, Any], label: str) -> View | None:
-    """The view ``label`` names in a packet: a job whose output carries the label (the
-    ``.snapshot.json``), or a view of the label (the request the viewer posts)."""
+    """The view ``label`` names in a packet: a job whose output carries the label, or a view of the
+    label (the request an earlier viewer posted for a packet)."""
     def size(width: Any, height: Any) -> tuple[int, int] | None:
         return (int(width), int(height)) if isinstance(width, int) and isinstance(height, int) else None
 
@@ -626,9 +658,9 @@ def authored(camera: Any, annotation: dict[str, Any] | None, source: Any, docume
     the view it came from. ``authored`` is the view the annotation's ink was drawn in: a mark names
     its view by label alone ("view 1", the last mark's), and the view is a job of the Quick Edit
     packet that carried the annotation -- ``source`` itself when it is one (``--annotation`` given a
-    ``.snapshot.json``), else the newest packet beside the annotation file that draws ``document``.
-    Anything else is itself, fitted. Refused by name when the marks name no view or no packet holds
-    it."""
+    packet), else the newest packet saved beside the annotation file (``PACKETS``) that draws
+    ``document``. Anything else is itself, fitted. Refused by name when the marks name no view or no
+    packet holds it."""
     if camera != AUTHORED:
         return camera, False, None
     if annotation is None:
@@ -660,7 +692,7 @@ def authored(camera: Any, annotation: dict[str, Any] | None, source: Any, docume
             return parse_camera(view.camera), False, view
     where = f"beside {Path(source).name} " if beside is not None else ""
     raise SnapshotRefused(f"--camera authored: the annotation's ink was drawn in {label!r}, and no Quick Edit packet "
-                          f"(.snapshot.json) {where}holds that view of {document.name}: give the packet as --annotation")
+                          f"{where}holds that view of {document.name}: give the packet as --annotation")
 
 
 @refusing("pose")
@@ -1115,11 +1147,18 @@ def by_id(document: Any) -> bool:
     return is_id(os.fspath(document))
 
 
+@refusing("job")
+def parse_job(value: Any) -> Any:
+    """``--job``: a Quick Edit packet, a job or a list of jobs, as given -- the object itself, its JSON,
+    or the path of a file of it -- read, and checked when it is drawn (``job_pictures``)."""
+    return _load(value, "--job")
+
+
 def job_input(job: Any) -> str | None:
     """The file a job draws, as it names it (its first job's, else the packet's), for whoever
     counts what was drawn; None where it names none, or cannot be read."""
     try:
-        found = _load(job, "--job")
+        found = parse_job(job)
     except SnapshotRefused:
         return None
     first = found[0] if isinstance(found, list) and found else found
@@ -1199,10 +1238,32 @@ def _job_size(output: dict[str, Any], settings: dict[str, Any], flags: tuple[Any
     return SIZE_PROFILES[settings["sizeProfile"]] if settings.get("sizeProfile") else DEFAULT_SIZE
 
 
+_SLUG = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _slug(text: str) -> str:
+    """``text`` as a file's name takes it: each run of anything but a letter, a digit, ``.``, ``-`` and ``_`` one
+    ``-``, none at either end, 48 characters at most."""
+    return _SLUG.sub("-", text).strip("-.")[:48].strip("-.")
+
+
+def _unnamed_output(folder: Path, document: Path, label: Any, job: int, taken: set[Path]) -> Path:
+    """Where an output that names no path is written: ``<the input's stem>-<its label>.png`` in ``folder``, each a
+    slug (``_slug``; the label lower-cased, ``view-<n>`` for the ``n``-th job's output with none), and ``-2``, ``-3``
+    ... after it where an earlier output of the packet is written there already (``taken``)."""
+    stem = _slug(stem_of(document)) or "snapshot"
+    base = f"{stem}-{(_slug(label.lower()) if isinstance(label, str) else '') or f'view-{job + 1}'}"
+    out, count = folder / f"{base}.png", 1
+    while out in taken:
+        count += 1
+        out = folder / f"{base}-{count}.png"
+    return out
+
+
 @refusing("job")
-def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: Any = None, grid: bool = False,
-                 preview: bool = False, pose: Any = None, width: int | None = None, height: int | None = None,
-                 size_profile: str | None = None, annotation: Any = None,
+def job_pictures(job: Any, source: Any = None, *, folder: Any = None, display: Any = None, camera: Any = None,
+                 grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
+                 height: int | None = None, size_profile: str | None = None, annotation: Any = None,
                  measurements: Any = None) -> list[tuple[Path, Path, Still]]:
     """Every picture a job names (``--job``: a Quick Edit packet, a job, or a list of jobs), each
     ``(the file drawn, the picture written, what it shows)``, checked before anything renders.
@@ -1211,10 +1272,17 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
     isolated among it, and -- a robot's -- the visuals its ``selection`` hid), its pose
     (``jointValues``), Preview, the ink and dimensions over it (its own, else the packet's), and its
     output settings (``_settings``); each of its ``outputs`` a picture at its ``path`` (a folder
-    gives a name in it: ``picture_path``) and size. ``source`` is drawn in place of every job's
-    input; a flag given overrides every job: the display, the grid, the camera, Preview, the pose,
-    the ink, the dimensions, and the size of every output."""
-    given = _load(job, "--job")
+    gives a name in it: ``picture_path``), or, naming none, in ``folder`` (the current folder by
+    default) by its input and its label (``_unnamed_output``), at its size. ``source`` is drawn in
+    place of every job's input; a flag given overrides every job: the display, the grid, the
+    camera, Preview, the pose, the ink, the dimensions, and the size of every output."""
+    given = parse_job(job)
+    into = Path(os.fspath(folder)).expanduser() if folder is not None else Path.cwd()
+    if into.exists() and not into.is_dir():
+        raise SnapshotRefused(f"--out {os.fspath(folder)} is a file: it names the folder pictures are written into",
+                              part="out")
+    into = into.resolve()
+    taken: set[Path] = set()
     if isinstance(given, dict) and isinstance(given.get("jobs"), list):
         unknown = sorted(set(given) - PACKET_KEYS)
         if unknown:
@@ -1294,13 +1362,17 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         for o, output in enumerate(outputs):
             at_output = f"{where}.outputs[{o}]"
             output = {"path": output} if isinstance(output, str) else output
-            if not isinstance(output, dict) or not output.get("path"):
-                raise SnapshotRefused(f"{at_output} is a path, or an object with a path")
+            if not isinstance(output, dict) or (output.get("path") is not None and not isinstance(output["path"], str)):
+                raise SnapshotRefused(f"{at_output} is a path, or an object of {', '.join(sorted(OUTPUT_KEYS))}")
             unknown = sorted(set(output) - OUTPUT_KEYS)
             if unknown:
                 raise SnapshotRefused(f"{at_output} has no {', '.join(unknown)}; an output takes "
                                       f"{', '.join(sorted(OUTPUT_KEYS))}")
-            out = picture_path(output["path"], document, at=at, job=(j, len(jobs)), output=(o, len(outputs)))
+            if output.get("label") is not None and not isinstance(output["label"], str):
+                raise SnapshotRefused(f"{at_output}.label is the view's name, a string")
+            out = (picture_path(output["path"], document, at=at, job=(j, len(jobs)), output=(o, len(outputs)))
+                   if output.get("path") else _unnamed_output(into, document, output.get("label"), j, taken))
+            taken.add(out)
             _checked(document, out)
             size = _job_size(output, settings, sizes, at_output)
             if max(size) * scale > 2 * MAX_SIDE:

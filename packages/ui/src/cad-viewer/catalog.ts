@@ -1,4 +1,4 @@
-import type { CadEntry, CadWorkspaceService } from '@cad/core/client';
+import type { CadClient, CadEntry, CadWorkspaceService } from '@cad/core/client';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { documentPage } from '@cad/core/lib/documentPages.js';
 import type { ClipboardPort } from '../host/types.js';
@@ -80,12 +80,12 @@ export function createCadFileActions({ platform, clipboard, reveal, openIn, link
    * file's document (`entryOf`). The link copied is `<origin>/<document id>?token=<fresh link>`, the
    * page's own address. Without it, no Copy link.
    */
-  link?: { origin: string | (() => string); client: Pick<CadWorkspaceService, 'link' | 'entryOf'> };
+  link?: { origin: string | (() => string); client: Pick<CadClient, 'link' | 'entryOf'> };
   /**
    * Open in's apps, through a CAD client (`openInApps`, `openIn`): a document is asked for by its id,
    * a file's from the client's row of it (`entryOf`).
    */
-  openIn?: Pick<CadWorkspaceService, 'openInApps' | 'openIn' | 'entryOf'>;
+  openIn?: Pick<CadClient, 'openInApps' | 'openIn' | 'entryOf'>;
 }): FileActions {
   const clientOf = openIn?.entryOf ? openIn : link?.client;
   const idOf = (path: string, given?: string) => given || (isDocumentId(path) ? path : String(clientOf?.entryOf?.(normalizePath(path))?.id || '') || null);

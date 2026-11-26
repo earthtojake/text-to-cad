@@ -7,7 +7,7 @@ import { english } from '@cad/ui/i18n';
 const MAX_ITEMS = 24;
 const METHOD_NOT_FOUND = -32601;
 
-/** One text block naming the handoff's JSON files by path. */
+/** One text block: the message, a Quick Edit's snapshot packet inline in it. */
 type Block = { type: 'text'; text: string; _meta?: { 'openai/title': string } };
 
 /** What this host's chat takes from a view: context for the next message (Queue), and a message now (Send). */
@@ -33,8 +33,8 @@ const baseName = (path: string) => path.split(/[\\/]/).pop() || path;
  * into the composer's model context for the person's next message. The host replaces that context
  * on every update, so the port keeps what this view has queued and sends all of it; when the host
  * clears the context (the message went, or the chip was removed) it starts again. `send`, where the
- * host takes messages, posts the context as the person's message now. The text names each
- * JSON file by its saved path (`part.path`); its bytes never travel in the message.
+ * host takes messages, posts the context as the person's message now. The text is the message every
+ * host makes (`resolvePromptMessage`): a Quick Edit's snapshot packet inline in it, and no file's bytes beside it.
  */
 export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHostContext' | 'hostContext'>, { reach, t = english }: {
   reach: ChatReach;

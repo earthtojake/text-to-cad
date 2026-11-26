@@ -68,6 +68,6 @@ say:
   +Y, `right` from +X, `left` from -X, `top` from +Z, `bottom` from -Z, `iso` from above at a corner.
   A robot facing +X, as ROS lays one out (REP 103: X forward, Y left), shows its face to `--camera
   right` and its right side to `--camera front`.
-- A Quick Edit packet from the viewer (inline JSON, saved to a temporary `.snapshot.json`, or its
-  path) is drawn again as it was, pose and ink included, with `--job <packet>`. `--annotation
-  <packet> --camera authored` draws its ink in its view over another pose or display.
+- A Quick Edit packet from the viewer (inline JSON in the prompt) is drawn again as it was, pose
+  and ink included, with `--job '<packet>'`. `--annotation '<packet>' --camera authored` draws its
+  ink in its view over another pose or display.

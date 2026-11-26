@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { formatPromptReference } from "@cad/core/prompt";
+import { subjectReference } from "../kit/shell/promptContext.js";
 import { isLabelSelector } from "@cad/core/lib/cadRefs.js";
 import { robotComponentItem, robotLinkItem } from "./LinkDetails.jsx";
 import { buildRobotTree, robotLinkFacts, robotLinkNodeId } from "./robotTree.js";
@@ -64,12 +65,14 @@ export function useRobotInspect({ selection, describe, tip = null, enabled = tru
  * chips (`kit/tools/quick-edit/ReferenceChips.jsx`): a link or an object each, its card what the
  * description says of it (`describe`: a link's inertial, geometry and joints;
  * an object's link, triangles and size), lit in the view while the pointer rests on it, dropped from
- * the selection by its X. A click on a chip copies its link's reference (`/path/robot.urdf#upper_arm`).
+ * the selection by its X. A click on a chip copies its link's reference (`/path/robot.urdf#upper_arm`), the file
+ * named as the host's prompts name it (`subject`, its `promptSubject`: a shared model's link).
  *
  * @param {{ robot: object | null, components?: object[], selection: ReturnType<typeof import("./useLinkSelection.js").useLinkSelection>,
- *   resource: import("@cad/core/prompt").ResourceRef | null, describe: (id: string) => object | null }} options
+ *   resource: import("@cad/core/prompt").ResourceRef | null, describe: (id: string) => object | null,
+ *   subject?: import("../../host/types.js").PromptSubject | null }} options
  */
-export function useRobotReferences({ robot, components = EMPTY, selection, resource, describe }) {
+export function useRobotReferences({ robot, components = EMPTY, selection, resource, describe, subject = null }) {
   const { selectedLinkNames, selectedComponentIds, selectLink, select, hoverLink, hover } = selection;
   return useMemo(() => {
     const objects = components.filter(component => selectedComponentIds.includes(component.id));
@@ -77,7 +80,7 @@ export function useRobotReferences({ robot, components = EMPTY, selection, resou
     const reference = name => resource?.kind === "workspace-file" && isLabelSelector(String(name || ""))
       ? { resource: { ...resource }, target: { kind: "cad-selector", selectors: [name] } } : null;
     const references = names.map(reference).filter(Boolean);
-    const copy = name => { const value = reference(name); return value ? { copy: formatPromptReference(value) } : {}; };
+    const copy = name => { const value = reference(name); return value ? { copy: formatPromptReference(subjectReference(value, resource, subject)) } : {}; };
     const chips = [
       ...selectedLinkNames.map(name => ({ key: `link:${name}`, label: name, glyph: "solid", group: "link", ...copy(name),
         detail: robot ? describe(name) : null,
@@ -89,5 +92,5 @@ export function useRobotReferences({ robot, components = EMPTY, selection, resou
         onHover: on => hover(on ? component.id : "") })),
     ];
     return { references, chips };
-  }, [robot, components, selectedLinkNames, selectedComponentIds, resource, describe, selectLink, select, hoverLink, hover]);
+  }, [robot, components, selectedLinkNames, selectedComponentIds, resource, subject, describe, selectLink, select, hoverLink, hover]);
 }

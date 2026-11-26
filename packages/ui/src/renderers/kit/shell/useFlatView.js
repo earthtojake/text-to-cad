@@ -24,8 +24,8 @@ import { useWhenSettled } from "./useWhenSettled.js";
  * Measurements are the person's alone: Measure's row lists them, and they never go to Quick Edit.
  *
  * `useFlatHandover` is what goes out of the view: Quick Edit's props (its references and chips, the
- * annotation, and the prompt's views and files: the views with ink, the one on screen and the
- * annotation file, as `host.promptFiles` writes them), the keys (Escape lets go of picked ink and what is under
+ * annotation, and what the prompt's snapshot packet is made of: the views with ink, the one on screen and the
+ * annotation), the keys (Escape lets go of picked ink and what is under
  * way, then puts the tool in hand down, then lets go of what is picked; Delete deletes what Select picked, ⌘Z walks
  * the history, a tool's letter takes it up and F fits, ⌘\ shows or hides the
  * view's panel and / opens it on its search (`panelControl`, which the frame fills in), the copy key copies
@@ -148,23 +148,21 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   }, [captureKey, ready, promptAvailable, workspace.acknowledgeCommand]);
 
   // ---- Quick Edit ------------------------------------------------------------
-  // A note carries the views with annotation ink as JSON files — the window on screen as a plan-view
-  // camera, which a snapshot job frames again, and the annotation.
+  // A note carries a snapshot packet of the views with annotation ink and the one on screen — the window on screen as
+  // a plan-view camera, which a snapshot job frames again — and the annotation, made in the page at the press.
   const promptFile = useCallback(() => (resourceRef.current?.kind === "workspace-file" ? resourceRef.current.path : null), []);
   const annotationNow = useCallback(() => documentRef.current(annotationRef.current.items), []);
   const viewNow = useCallback(() => currentViewRef.current(), []);
   const quickEditPrompt = useMemo(() => ({
-    views: () => (host.promptFiles && promptFile() ? promptViews(viewNow(), annotationRef.current.views, annotationRef.current.items) : []),
-    files: (views, picked = []) => {
+    snapshot: (picked = []) => {
       const input = promptFile();
-      if (!host.promptFiles || !input || !views.length) return null;
+      const views = input ? promptViews(viewNow(), annotationRef.current.views, annotationRef.current.items) : [];
+      if (!views.length) return null;
       // What the prompt names in this file, in the order the box holds it, as the renderer says it.
       const named = packetReferences ? packetReferences(picked, input) : [];
-      return host.promptFiles.create({ name: input.split("/").pop(), input, views, annotation: annotationNow(),
-        ...(named.length ? { references: named } : {}) });
+      return { views, annotation: annotationNow(), ...(named.length ? { references: named } : {}) };
     },
-    read: path => host.promptFiles.read(path),
-  }), [host.promptFiles, promptFile, viewNow, annotationNow, packetReferences]);
+  }), [promptFile, viewNow, annotationNow, packetReferences]);
   const forgetAnnotation = annotation.forget;
   const quickEditAnnotation = useMemo(() => (annotating || annotation.hasAnnotation
     ? { present: annotation.hasAnnotation, clear: forgetAnnotation } : null), [annotating, annotation.hasAnnotation, forgetAnnotation]);

@@ -68,7 +68,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     reveal: path => client.reveal(path), openIn: client,
     // Copy link: this page's own origin, and a fresh link from the server.
     link: { origin: () => window.location.origin, client } }), [server.platform, client]);
-  // A copied Quick Edit's annotation, saved by the server beside it on this machine.
+  // How a Quick Edit names this machine's files: from the folder the server was last launched in, else from `~/`.
   const promptFiles = useMemo(() => createHttpPromptFiles({ origin: client.origin }), [client]);
   // The view on screen, for the library's pictures of what was opened.
   const live = useMemo(() => createLiveRegistry(), []);
