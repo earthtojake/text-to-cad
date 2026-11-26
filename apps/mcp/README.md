@@ -489,6 +489,10 @@ is updated, once, and suggests restarting the host app, which reads a release's 
 card whose shell is from before `reload` says CAD was updated instead. A failed update is the viewer's alert card,
 as in the browser (`CadViewer`'s `alert`), from the server's record; its X puts it away on the server, through
 `cad_http`, behind its icon in the navbar.
+The project's notices for this cad (`cadNotices` in the same answer) are said in that card too, one at a time,
+after a failure on screen, as in the browser: their words as text, Learn more to their link (opened through the
+host), and Dismiss, which the card's frame keeps (`host/dismissedNotices.ts`, its local storage; a frame that keeps
+nothing shows it again in the next view).
 
 ## Protocol migration
 
