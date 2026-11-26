@@ -1241,8 +1241,11 @@ class Commands:
 
     def call(self) -> None:
         while True:
-            done = self.box.run([self.box.cad(), "server", "status"], check=False, timeout=60)
-            if done.returncode == 0:
+            try:
+                done = self.box.run([self.box.cad(), "server", "status"], check=False, timeout=60)
+            except OSError:  # on Windows an update moves uv's bin cad.exe aside for a moment: the call fails at once
+                done = None
+            if done is not None and done.returncode == 0:
                 self.ran.append(time.time())
             if self.done.wait(self.every):
                 return
