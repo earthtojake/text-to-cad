@@ -452,7 +452,8 @@ class ViewBundleTest(unittest.TestCase):
     def test_a_parts_table_holds_what_asking_for_each_element_answers(self) -> None:
         # The live answer of one element is its row of the table and two things of its document, which a
         # table, named by the part's geometry alone, leaves out: whether the face is meshed, and -- of a
-        # model's document -- what made it, which is served live and never written.
+        # model's document -- what made it, which is served live and never written. A pick checks its face too,
+        # where a table checks only the faces its mesh left without triangles.
         for name in ("model", "step"):
             folder, api = self.out / name, self.api(name)
             structure = put_back(folder)
@@ -469,8 +470,10 @@ class ViewBundleTest(unittest.TestCase):
                         self.assertTrue(table[plural])
                         for ordinal, facts in table[plural].items():
                             live = json.loads(self.live(f"{part}/{plural}/{ordinal}"))
+                            checked = kind != "face" or int(ordinal) in prototype["unmeshed"]
                             self.assertEqual(set(live) - set(facts),
-                                             ({"meshed"} if kind == "face" else set()) | ({"made_by"} if name == "model" else set()))
+                                             ({"meshed"} if kind == "face" else set()) | ({"made_by"} if name == "model" else set())
+                                             | (set() if checked else {"check"}))
                             self.assertEqual({field: live[field] for field in facts}, facts)
                             if kind == "face":
                                 self.assertIs(live["meshed"], int(ordinal) not in prototype["unmeshed"])

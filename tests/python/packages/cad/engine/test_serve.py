@@ -644,7 +644,7 @@ class PartTableTest(unittest.TestCase):
             def __init__(self, data: bytes) -> None:
                 self.data = data
 
-            def elements(self) -> dict:
+            def elements(self, unmeshed=()) -> dict:
                 made.append(self.data)
                 return kernel_table(self.data)
 
@@ -664,7 +664,7 @@ class PartTableTest(unittest.TestCase):
         self.assertEqual(table("k3"), answered(kernel_table(b"seven")))
         table("k1")
         self.assertEqual(made, [b"one", b"three", b"seven"], "an edit makes the new part's alone")
-        self.assertEqual(server.memory()["facts"], sum(len(key) + len(answered(kernel_table(data))) for key, data in
+        self.assertEqual(server.memory()["facts"], sum(len(serve._held(key)) + len(answered(kernel_table(data))) for key, data in
                                                        (("k1", b"one"), ("k2", b"three"), ("k3", b"seven"))),
                          "held under the budget, counted with the parts' facts as the JSON they answer")
         server.trim(0)
@@ -706,7 +706,7 @@ class PartTableTest(unittest.TestCase):
             # Both parts' tables are under way at once, each one job in the facts queue.
             one, two = sorted(jobs_by(2), key=lambda job: job[1])
             self.assertEqual([(fn, args, priority) for fn, args, priority, _future in (one, two)],
-                             [(serve._table, ("k1", b"one"), FACT), (serve._table, ("k2", b"three"), FACT)])
+                             [(serve._table, ("k1", b"one", ()), FACT), (serve._table, ("k2", b"three", ()), FACT)])
             one[3].set_result(answered(kernel_table(b"one")))
             two[3].set_exception(RuntimeError("the kernel refused the part"))
             answers = [found.result(30) for found in asked]

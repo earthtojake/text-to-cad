@@ -1973,9 +1973,11 @@ class Server:
             self._measured(keys, None, error)
             return
         if not self.isolated:
+            from cad.engine.mesh import measured
+
             for key, data in parts:
                 try:
-                    facts = self.topology(key, data).measured()  # its faces' boxes, kept from its table if made
+                    facts = measured(data)
                 except BaseException as error:  # noqa: BLE001 - the kernel's refusal is the asker's answer
                     self._measured([key], None, error)
                     continue
