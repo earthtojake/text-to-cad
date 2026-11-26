@@ -122,8 +122,9 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
    * Its `update()` serves a new version of the document, as a build that changed none of its parts
    * writes one, and settles once the page shows it. `part`: the plate alone, a part file. `hold`: the
    * structure held back until its `release()`, the view as it is before the file arrives. `width`: the page's.
+   * `project`: the bracket in a project, between two other documents of its folder (`harness/index.tsx`).
    */
-  const open = async ({ timeout = 30000, part = false, hold = false, width = VIEWPORT.width } = {}) => {
+  const open = async ({ timeout = 30000, part = false, hold = false, width = VIEWPORT.width, project = false } = {}) => {
     if (part || served.structure === plate) served = { version: VERSION, structure: part ? plate : initial };
     if (hold) held = [];
     const page = await browser.newPage({ viewport: { ...VIEWPORT, width }, deviceScaleFactor: 1 });
@@ -133,7 +134,7 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
     page.on('pageerror', error => errors.push(error.message));
     // No Worker: what a worker would build is built on the main thread, as for a host without one.
     await page.addInitScript(() => { window.Worker = undefined; });
-    await page.goto(`http://127.0.0.1:${server.address().port}/?file=${FILE}`);
+    await page.goto(`http://127.0.0.1:${server.address().port}/?file=${FILE}${project ? '&project=1' : ''}`);
     const update = async () => {
       const next = JSON.parse(initial);
       next.version = `${VERSION}-${(updates += 1)}`;

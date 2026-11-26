@@ -11,6 +11,7 @@ import { copiedQuickEdit, createQuickEditContext, pastedLines, quickEditSelectio
 import { insertAtCaret, markSelectedPills, noteText, pasteNodes, selectPillAt } from "./noteEditor.js";
 import ReferenceChips from "./ReferenceChips.jsx";
 import { useControlUsage } from "../../../../usage/controls.js";
+import { useProjectKey } from "../../../../file-viewer/projectKeys.js";
 import { useI18n } from "@cad/ui/i18n";
 
 const EMPTY = Object.freeze([]);
@@ -140,13 +141,16 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
   // Opening for the person takes the keyboard: now, and again once the press that opened it has
   // finished, since a view that keeps its own keys focuses itself as a pick lands. A field the
   // person has moved to since keeps it. On a phone a pick leaves the keyboard down: the note is a tap away.
+  // The keyboard is lent (`lent`) until the person writes in the note, presses in it or leaves it: till then
+  // its `[` and `]` are still the view's, the folder's previous and next document (`projectKeys.js`).
+  const lent = useRef(false);
   const takeKeyboard = useCallback(() => {
     if (docked) return;
     const focus = () => {
       const note = field.current;
       const active = document.activeElement;
       const typing = active && active !== note && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
-      if (note && active !== note && !typing) note.focus({ preventScroll: true });
+      if (note && active !== note && !typing) { lent.current = true; note.focus({ preventScroll: true }); }
     };
     focus();
     setTimeout(focus, 0);
@@ -277,8 +281,10 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     readNote(note);
   };
 
-  // A click on a pill selects it whole, as a double-click does a word: a Backspace takes it.
+  // A click on a pill selects it whole, as a double-click does a word: a Backspace takes it. Any press in the note
+  // is the person's own: the keyboard is no longer lent.
   const onNoteMouseDown = event => {
+    lent.current = false;
     if (event.button !== 0 || event.shiftKey) return;
     const note = event.currentTarget;
     if (!event.target?.closest?.("[data-quick-edit-note-ref]")) return;
@@ -287,8 +293,15 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
     selectPillAt(note, event.target);
   };
 
+  const projectKey = useProjectKey();
   const onKeyDown = event => {
     const target = event.currentTarget;
+    // A note a pick lent the keyboard to, still empty: `[` and `]` step through the folder, as in the view.
+    if (lent.current && !written && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat && !event.nativeEvent.isComposing
+      && projectKey(event.nativeEvent)) {
+      event.preventDefault();
+      return;
+    }
     const copyKey = event.key.toLowerCase() === "c" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
     if (copyKey && (target.ownerDocument.getSelection?.()?.isCollapsed ?? true)) {
       if (onCopy?.()) event.preventDefault();
@@ -364,7 +377,7 @@ export default function QuickEdit({ resource, references = EMPTY, chips = null, 
               // What a person types (and its placeholder) at the chrome's UI size, as a field's text is, docked or floating;
               // the size before the 20px lines: cn() lets a later font size drop an earlier leading.
               "min-h-[max(2rem,var(--cad-control))] text-ui leading-5")}
-            onInput={event => readNote(event.currentTarget)} onKeyDown={onKeyDown} onPaste={onPaste} onMouseDown={onNoteMouseDown} />
+            onInput={event => { lent.current = false; readNote(event.currentTarget); }} onBlur={() => { lent.current = false; }} onKeyDown={onKeyDown} onPaste={onPaste} onMouseDown={onNoteMouseDown} />
         </ScrollArea>
         <div className="absolute flex items-center gap-1" style={{ right: scrolling ? SCROLLBAR_LANE_PX : 0, bottom: "calc((max(2rem, var(--cad-control)) - var(--cad-control)) / 2)" }} data-quick-edit-actions="">{ctas()}</div>
       </div>

@@ -34,6 +34,10 @@ const homePresentation = showHome ? { home: <ModelLibrary library={homeLibrary a
 // default mesh) is `/models/arm.urdf`.
 const requested = new URLSearchParams(location.search).get('file') || 'part.stl';
 const file = requested.startsWith('/') ? requested : `/models/${requested}`;
+// `?project=1`: the first pane's file is in a project, between two other documents of its folder, as a host's is,
+// so `[` and `]` have somewhere to go (the host records the file asked for in `opened`).
+const project = new URLSearchParams(location.search).get('project') === '1' ? { id: 'harness', name: 'harness', root: '/models', onShow() {},
+  documents: [{ path: '/models/before.step', name: 'before.step' }, { path: file, name: file.split('/').pop()! }, { path: '/models/after.step', name: 'after.step' }] } : null;
 // The host's theme: dark, as the viewer opens, unless `?scheme=light` asks for the light one.
 const colorScheme = new URLSearchParams(location.search).get('scheme') === 'light' ? 'light' as const : 'dark' as const;
 // The language the panes read in (`?locale=ja`): English unless asked.
@@ -146,7 +150,7 @@ function App() {
   return <div className="dark" style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <Pictures />
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} presentation={homePresentation} /></ExportContext.Provider>}
+      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} presentation={homePresentation} project={project} /></ExportContext.Provider>}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={onOtherStateChange} />

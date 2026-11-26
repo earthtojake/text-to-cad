@@ -555,7 +555,10 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
   copies it. Why one chip: a chip per kind crowded the note and said no more than a count.
 - **The keyboard**: on a desktop the note takes it after the person's own pick in the view (within 1.5s of their
   press) or their first ink stroke; never for an agent's selection, and never on a phone, where it would raise the
-  keyboard. Escape in a written note gives the focus back to the view; in an empty note it also does the viewer's.
+  keyboard. Until the person writes in the note or presses in it, `[` and `]` there are still the view's (the folder's
+  previous and next document); after that, a bracket is typed. Why: a pick lends the keyboard, and the person who has
+  not taken it up is still moving through the folder. Escape in a written note gives the focus back to the view; in an
+  empty note it also does the viewer's.
 - **What goes**: the note, the file's path, the references one a line, and a snapshot of the view and any views with
   ink, made only when Copy, Queue or Send is pressed. Params' saved values add a line ([Parameters](#parameters)).
 

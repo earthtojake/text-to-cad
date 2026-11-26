@@ -9,7 +9,8 @@ import { createContext, useCallback, useContext, useRef } from "react";
  * in project, Next in project). The view's own keys reach them (`useProjectKey`), so they are single keys under the
  * rule every single key keeps (`kit/shell/useViewerShortcuts.js`):
  * no ⌘, Ctrl or Alt, no repeat, never in a text field, only while this viewer has the keyboard; and the view leaves
- * them in Preview.
+ * them in Preview. One field passes them on: Quick Edit's note, while a pick has lent it the keyboard and the person
+ * has neither written in it nor pressed in it (`QuickEdit.jsx`).
  *
  * @typedef {{ previous: (() => void) | null, next: (() => void) | null }} ProjectNeighbours
  */
