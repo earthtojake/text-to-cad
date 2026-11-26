@@ -162,7 +162,8 @@ class _Bundle:
     def nested(self, prefix: str, roots: list[str]) -> _Bundle:
         """A bundle of its own at ``prefix`` in this one (``documents/<id>/``), whose document comes from ``roots`` too:
         its files staged with this one's and kept by the same rules, by their paths in it."""
-        inner = _Bundle(self.app, self.folder, self.stage, {}, self.release, [*self.roots, *roots], self.prefix + prefix)
+        inner = _Bundle(self.app, self.folder, self.stage, {}, self.release, [*self.roots, *roots],
+                        self.prefix + prefix)
         inner.kept, inner.staged = self.kept, self.staged
         return inner
 
@@ -222,7 +223,8 @@ class _Bundle:
         """Whether the folder holds ``path`` already as an earlier writing by this release left it (its
         manifest's digest is the file's): a content-named file, kept and asked of no one."""
         entry = self.kept.get(self.prefix + path)
-        if entry is None or _file_digest(self.folder / (self.prefix + path)) != (entry.get("sha256"), entry.get("bytes")):
+        found = _file_digest(self.folder / (self.prefix + path)) if entry is not None else None
+        if entry is None or found != (entry.get("sha256"), entry.get("bytes")):
             return False
         self.files[path] = {"bytes": entry["bytes"], "sha256": entry["sha256"], "type": entry.get("type") or ""}
         return True

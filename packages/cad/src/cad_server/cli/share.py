@@ -51,7 +51,8 @@ DEFAULT_PROG = "cad share"
 ACTIONS = ("status", "on", "off", "delete")
 DESCRIPTION = (
     "Share a file: anyone with its link opens it in the hosted viewer, and downloads the files that made it (the "
-    "link's .zip, which `cad import` writes into a folder), with no sign-in, until 7 days after its last share. FILE is "
+    "link's .zip, which `cad import` writes into a folder), with no sign-in, until 7 days after its last share. "
+    "FILE is "
     "a CAD file the viewer opens, or a document id; a model is shared by its .xbf. What goes is the file, the files "
     "that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf "
     "records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's "
@@ -406,8 +407,8 @@ def _notes(sources: Any, kind: str, name: str) -> list[str]:
         if paths:
             lines.append(f"{said[0].upper()}{said[1:]}: {', '.join(paths)}")
     if sources.unseen:
-        lines.append("Its build read a file cad could not see, which the share does not hold: an import may not rebuild "
-                     "it without that file")
+        lines.append("Its build read a file cad could not see, which the share does not hold: an import may not "
+                     "rebuild it without that file")
     if kind == "model" and sources.entry is None:
         lines.append(f"Its .xbf alone went: no build closure names the code that made {name} (a shape a program "
                      "handed over, or a file exported from another)")

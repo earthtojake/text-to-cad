@@ -33,9 +33,9 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   and one that names none commits again, once. A connection that cannot be made, or an answer that is not the
   service's (a proxy's refusal: no JSON ``error``), is ``Unreachable``; the service's own refusal is ``Refused``, with
   its ``error`` and ``hint``;
-- **an import** (``import_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``import_record``): a share's zip read as
-  the service makes one, one folder of files, and written into a folder through one made beside it, refusing any
-  entry that would land outside it; nothing of it is run; the shared file found among them (a model's ``.xbf``, a
+- **an import** (``import_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``import_record``): a share's zip
+  read as the service makes one, one folder of files, and written into a folder through one made beside it, refusing
+  any entry that would land outside it; nothing of it is run; the shared file found among them (a model's ``.xbf``, a
   file document's file), which the library keeps with the link it came from;
 - **a share's link as a document's name** (``document_link``, ``copy_of``, ``local``): wherever cad takes a
   document, a share's view link of the service this computer shares with or of cad.fun names this computer's copy of
@@ -1084,8 +1084,8 @@ def parse_link(link: str) -> tuple[str, str, str | None] | None:
 
 
 def import_link(text: str, service: str) -> tuple[str, str] | None:
-    """What ``cad import`` takes, as ``(origin, id)``: a share's view link (``<origin>/<id>``, whatever its fragment), its
-    files' link (``<origin>/<id>.zip``), or its id alone, of the share service at ``service``; None for anything
+    """What ``cad import`` takes, as ``(origin, id)``: a share's view link (``<origin>/<id>``, whatever its fragment),
+    its files' link (``<origin>/<id>.zip``), or its id alone, of the share service at ``service``; None for anything
     else."""
     from urllib.parse import urlsplit
 
@@ -1239,7 +1239,8 @@ def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]],
                     while chunk := source.read(1 << 20):
                         size, total = size + len(chunk), total + len(chunk)
                         if total > IMPORT_BYTES:
-                            raise Damaged(f"its files are more than the {IMPORT_BYTES // 1024 ** 3} GiB an import writes")
+                            raise Damaged(f"its files are more than the {IMPORT_BYTES // 1024 ** 3} GiB an import "
+                                          "writes")
                         out.write(chunk)
             except (FileExistsError, NotADirectoryError):
                 raise Damaged(f"two of its files are one file on this computer: {path}") from None
@@ -1327,8 +1328,8 @@ def _root_sheet(folder: Path, sheets: list[str]) -> str | None:
 
 
 def import_record(origin: str, ident: str, file: Path | str) -> dict[str, Any]:
-    """What the library keeps of an import (``change``'s ``imported``): the share's view link, and the file it wrote that
-    the share is of (``shared_file``'s, absolute), whose entry the link is kept in, so the link names it here
+    """What the library keeps of an import (``change``'s ``imported``): the share's view link, and the file it wrote
+    that the share is of (``shared_file``'s, absolute), whose entry the link is kept in, so the link names it here
     (``copy_of``)."""
     return {"link": f"{origin}/{ident}", "path": os.path.abspath(file)}
 
@@ -1446,8 +1447,8 @@ def library_path() -> Path:
 
 
 def _held(service: Any, share: Any) -> bool:
-    """Whether ``share`` is one of an entry's ``shares`` as ``record_of`` keeps it, at ``service``: its view link of that
-    origin, its two keys, its expiry, and where the files that made it are."""
+    """Whether ``share`` is one of an entry's ``shares`` as ``record_of`` keeps it, at ``service``: its view link of
+    that origin, its two keys, its expiry, and where the files that made it are."""
     link = parse_link(share["link"]) if isinstance(share, dict) and isinstance(share.get("link"), str) else None
     return (link is not None and link[2] is None and isinstance(service, str) and link[0] == service
             and all(isinstance(share.get(name), str) and _SECRET.fullmatch(share[name]) for name in ("write", "delete"))

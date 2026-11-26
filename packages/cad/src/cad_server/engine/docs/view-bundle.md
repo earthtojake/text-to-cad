@@ -45,16 +45,16 @@ previewed, an export and everything under `/api/v1/local` need an engine. A bund
 stood, so its reader offers none of them, and reads a parameter's `writable` as said of the engine that
 answered.
 
-`<key>`, `<tessellation>`, `<digest>`, `<model id>` and a sheet's `<path>` are path segments: ASCII letters, digits, `.`, `_` and `-` as
-they are, every other byte `~` and its two hex digits (a STEP part's key `step-0a1b-0:1:2` is
-`step-0a1b-0~3A1~3A2`, a schematic's sheet `/Power/` is `~2FPower~2F`), so a segment is a file name on every
-system and reads the same in a URL as on a disk.
+`<key>`, `<tessellation>`, `<digest>`, `<model id>` and a sheet's `<path>` are path segments: ASCII letters,
+digits, `.`, `_` and `-` as they are, every other byte `~` and its two hex digits (a STEP part's key
+`step-0a1b-0:1:2` is `step-0a1b-0~3A1~3A2`, a schematic's sheet `/Power/` is `~2FPower~2F`), so a segment is a
+file name on every system and reads the same in a URL as on a disk.
 
 **A board's 3D models, each a bundle of its own.** A board's page stands each part on the STEP its table names
 by a document id (`models.json`, the answer as it is), which it reads as an engine document: its structure and its
-parts' buffers. So each STEP the table names is a bundle of its own in the board's, at `documents/<model id>/`: its own
-`manifest.json` (its document a `step`) and the files a page reads of a STEP, by every rule here (its structure,
-its parts' buffers and tables, its measures, the look), none of it the picture a page kept. The board's manifest
+parts' buffers. So each STEP the table names is a bundle of its own in the board's, at `documents/<model id>/`: its
+own `manifest.json` (its document a `step`) and the files a page reads of a STEP, by every rule here (its
+structure, its parts' buffers and tables, its measures, the look), none of it the picture a page kept. The board's manifest
 lists them too, at their paths below that folder, so a share holds them and a reader resolves the model's id to
 them. A STEP the engine will not open has no bundle, and its part stands as a block, as on the engine's page. A
 model the table finds in KiCad's 3D library is in the view as any is; it is no file of a share (**Sharing**).
