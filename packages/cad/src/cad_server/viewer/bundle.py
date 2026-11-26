@@ -221,11 +221,15 @@ class _Bundle:
 
     def holds(self, path: str) -> bool:
         """Whether the folder holds ``path`` already as an earlier writing by this release left it (its
-        manifest's digest is the file's): a content-named file, kept and asked of no one."""
+        manifest's digest is the file's): a content-named file, kept and asked of no one, and read, so its time is
+        set to now (``places.used``: a part's mesh the cache keeps longest is the one read last)."""
+        from cad.engine.places import used
+
         entry = self.kept.get(self.prefix + path)
         found = _file_digest(self.folder / (self.prefix + path)) if entry is not None else None
         if entry is None or found != (entry.get("sha256"), entry.get("bytes")):
             return False
+        used(self.folder / (self.prefix + path))
         self.files[path] = {"bytes": entry["bytes"], "sha256": entry["sha256"], "type": entry.get("type") or ""}
         return True
 

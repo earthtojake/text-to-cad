@@ -72,9 +72,11 @@ can lose one of the two changes (an open's time, a pin), and nothing is corrupte
 set aside as `library.json.unreadable`, said once on stderr, and started again.
 
 **A file's note.** What was last seen of a file is the cache's, `documents/<id>/note.json` with `picture.png`
-beside it in the cache folder (`library.Notes`): `{schema, version, parts?, pictured?}`. `version` is the file's
-when the note was written (`mtime_ns-size`, `state.file_version`), and a note is read only while it is the file's
-version now: a file that changed has no count and no picture until one is in hand again, which replaces the note
+beside it in the cache folder (`library.Notes`): `{schema, path, version, parts?, pictured?}`. `path` is the file's
+canonical path, the one its id is of, so a folder whose file is gone is known without the library: `cad cache prune`
+removes it (one an earlier build wrote names none, and goes once nothing in it was written for a month). `version` is
+the file's when the note was written (`mtime_ns-size`, `state.file_version`), and a note is read only while it is
+the file's version now: a file that changed has no count and no picture until one is in hand again, which replaces the note
 whole. It is filled only with what the engine already holds, and nothing is ever read to fill one: a file's
 part occurrences from the read the engine made because a page opened it (an `.xbf`, a STEP), from a build's facts
 or a hand-over's structure as it registers, and from the document an export wrote an `.xbf` from

@@ -112,10 +112,15 @@ cad_server/
   whether this cad is a global install and by which installer, whether that installer is found, the last
   attempt; on Windows, a uv folder in an app's private copy of AppData). It changes nothing. Exit 1 when the
   kernel is installed and does not load; `--json` gives the report as one document.
-- **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
-  removes what this release cannot use (environments made for other releases, and the release folders
-  0.11.11 and earlier left), `clean` removes all of it, refused while the server runs. Nothing else of cad
-  deletes a past release's files.
+- **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder; `prune`
+  removes what no file and no release needs -- environments made for other releases, the release folders
+  0.11.11 and earlier left, a file's folder once its file is gone (its note names the file), one whose note
+  names none (an earlier build's) once nothing in it was written for 30 days, and, past 1 GiB, the meshes cad
+  keeps by geometry (a shared file's part meshes, a part's hulls) used longest ago -- each said, with what it
+  freed; `clean` removes all of it, refused while the server runs. `prune` runs beside a server: it keeps what is
+  in use (an environment a process runs from, a file's folder while it is being shared) and says so. The cap is
+  about what the CAD kernel's environment takes, so meshes never cost more than the kernel; each is made again
+  when it is next needed. Nothing else of cad deletes a past release's files.
 - **`cad update`**: cad, and only cad, updated now to the newest release of its major version on PyPI, by the
   server that runs, or by the command itself where none runs (below), even with automatic updates off; where a
   release of a higher major is out, one more line names it. **`cad update --major`**: the newest release of all,
@@ -324,9 +329,10 @@ The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in th
 files a person opened, starred, built, shared or imported, a shared file's entry with each share of it and an
 imported file's with the link it came from), the page token and port, the telemetry spool and the feed's last answer. The cache
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: what the engine derived of a
-document (a file's count and picture, `documents/<id>/note.json`; a board's plots, kept checks; a shared file's last
-view bundle, `documents/<id>/view/`), the environments, bytecode and the integrations' private homes, all made again
-on demand. A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
+document (a file's count and picture, `documents/<id>/note.json`, which names the file; a board's plots, kept checks;
+a shared file's last view bundle, `documents/<id>/view/`), the environments, bytecode, parts' hulls and the
+integrations' private homes, all made again on demand. A file's folder goes with its file, and the meshes are held to
+a size, the least recently used first, a read counting as a use (`cad cache prune`). A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
 is in the local application data, which Windows virtualizes for every process an app package (the Claude
 desktop app) starts. A release reads what the release before wrote and migrates it on first touch, once
 (`cad_server.engine.library`); nothing in the cache is converted.

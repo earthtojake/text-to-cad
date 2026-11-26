@@ -158,7 +158,11 @@ whose bytes are still what its manifest says, asking the engine for nothing of t
 files whose bytes changed, then the manifest, last, then removes the files the earlier manifest named and
 this one does not. So after an edit of one part a bundle costs that part's mesh and table, and a folder
 whose manifest names a file holds it. Those moves are one file at a time: a bundle read while it is written
-over can hold a root file newer than its manifest says, until the manifest lands.
+over can hold a root file newer than its manifest says, until the manifest lands. A file it keeps it reads, and
+sets its access time (`places.used`): `cad cache prune` holds the part meshes of every bundle, with the parts'
+hulls, to a size, the least recently used first, and removes a bundle with its file's folder once the file is
+gone; a part's mesh a bundle no longer holds is the engine's to make again at its next writing, as a part never
+asked is.
 
 A folder that holds anything but a bundle is refused before anything is asked, as is a file the engine
 does not read, and a type no bundle is made of. A document that changes while it is read (a model built

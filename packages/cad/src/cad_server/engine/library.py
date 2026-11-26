@@ -29,8 +29,10 @@ file is this user's alone to read or write (0600 where the system has modes), si
 ``<cache>/documents/<id>/note.json`` (``places.cache_dir``) is what was last seen of the file of that id, with
 ``picture.png`` beside it::
 
-    {"schema": 1, "version": "1764000000123456789-20480", "parts": 3, "pictured": 1764000100.5}
+    {"schema": 1, "path": "/abs/arm.xbf", "version": "1764000000123456789-20480", "parts": 3, "pictured": 1764000100.5}
 
+``path`` is the file's canonical path, the one its id is of, so that the folder's file is known without the
+library: ``cad cache prune`` removes the folder of a file that is gone (a note an earlier build wrote names none).
 ``version`` is the file's (``state.file_version``) when the note was written, and a note is read only while it
 is the file's version now: a file that changed has no count and no picture until one is in hand again (a page
 opens it, a run builds it), which replaces the note whole. Nothing is read to fill one. The cache folder
@@ -393,7 +395,8 @@ class Notes:
         inside = f"{DOCUMENTS}/{ident}"
         with self._lock(ident):
             old = self._kept(ident)
-            note = {**(old if old.get("version") == version else {}), "schema": SCHEMA, "version": version, **fields}
+            note = {**(old if old.get("version") == version else {}), "schema": SCHEMA, "path": found,
+                    "version": version, **fields}
             try:
                 if png is not None:
                     self.cache.write(f"{inside}/{PICTURE}", png)

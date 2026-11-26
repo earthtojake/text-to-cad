@@ -838,7 +838,7 @@
   },
   {
    "command": "cad cache prune",
-   "summary": "remove what this release of cad cannot use",
+   "summary": "remove what no file and no release of cad needs",
    "usage": "cad cache prune",
    "description": 80
   },
@@ -1259,7 +1259,7 @@
   "narrate the target on stderr.",
   "cad's cache: what cad makes again when it needs it (environments, bytecode, meshes it derived). Never your documents or settings.",
   "Print where cad's cache is.",
-  "Remove what this release of cad cannot use: environments made for other releases, and the release folders of 0.11.11 and earlier.",
+  "Remove what no file and no release of cad needs: environments made for other releases; the release folders of 0.11.11 and earlier; the cache's folder of a file that is gone, and of a file no note names once unused for 30 days; and, past 1.0 GB, the meshes cad keeps by geometry (shared files' part meshes, parts' hulls) used longest ago: about what the CAD kernel takes, each made again when next needed. What is in use stays: an environment a process runs from, a file's folder while it is being shared.",
   "Remove all of cad's cache, and what prune removes; cad makes it again as it needs it. Refused while the cad server runs.",
   "Report this cad: its release, its data and cache folders and what `cad cache prune` would free, the CAD kernel environment and the integrations', and the server. It changes nothing. Exit 1 when the CAD kernel is installed and does not load.",
   "the same report",

@@ -243,6 +243,18 @@ def cache_dir() -> Path:
     return _cache_dir(CACHE, appdata=False)
 
 
+def used(path: str | os.PathLike) -> None:
+    """A file of the cache folder read: its access time set to now, its modification time kept, so that what goes
+    first where the cache is held to a size is what was used longest ago -- the later of its last read and its last
+    write (``cad cache prune``: the meshes kept by the geometry they are of) -- while what tells a file written again
+    by its modification time (a view bundle's writer) still can. Two calls that write no byte of the file; one that
+    cannot be touched (gone meanwhile, another user's) keeps its times."""
+    try:
+        os.utime(path, ns=(time.time_ns(), os.stat(path).st_mtime_ns))
+    except OSError:
+        pass
+
+
 def earlier_cache_dir() -> Path:
     """Where the releases before 0.10 kept their cache (``EARLIER_CACHE``, by ``cache_dir``'s rule), or the folder
     ``CAD_CACHE_DIR`` names: where what they left behind is looked for (``cad doctor``)."""

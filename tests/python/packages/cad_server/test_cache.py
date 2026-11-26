@@ -1,13 +1,17 @@
-"""``cad cache dir | prune | clean`` (``cad_server.cli.cache``): where cad's cache is; what this release cannot use
-removed (environments of other releases, the release folders of 0.11.11 and earlier but the current one); all of it
-removed, refused while a server runs. Data -- the documents the engine keeps there, the state folder -- is never
-touched, nor a folder a process runs from, and each says what it removed and the disk that freed."""
+"""``cad cache dir | prune | clean`` (``cad_server.cli.cache``): where cad's cache is; what no file and no release
+needs removed (environments of other releases, the release folders of 0.11.11 and earlier but the current one, a
+file's folder once its file is gone, or once unwritten for a month where its note names no file, and the meshes kept
+by geometry past their cap, the least recently used first); all of it removed, refused while a server runs. The state
+folder is never touched, nor a folder a process runs from, nor a file's folder while it is being shared, and each says
+what it removed and the disk that freed."""
 
 from __future__ import annotations
 
 import io
 import json
 import os
+import re
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -123,6 +127,128 @@ class CacheTest(unittest.TestCase):
         self.assertFalse(base.folder().exists(), "the environments' folder, its locks with it")
         self.assertTrue(out.endswith(" freed\n"), out)
         self.assertTrue(all(path.exists() for path in kept), "data and another program's folder stay")
+
+    def note(self, name: str, *, gone: bool = False) -> Path:
+        """A file of the work folder, its note written as the engine writes one (``library.Notes``, which names the
+        file), and the file then deleted where ``gone``: its folder of the cache."""
+        from cad.engine.ids import file_id
+        from cad_server.engine.library import Notes
+
+        path = self.root / "work" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"solid")
+        Notes(self.cache).count(path, 2)
+        if gone:
+            path.unlink()
+        return self.cache / "documents" / file_id(path)
+
+    @staticmethod
+    def aged(folder: Path, days: float) -> None:
+        """Every entry of ``folder``, and it, last read and written ``days`` ago."""
+        when = time.time() - days * 86400
+        for path in sorted(folder.rglob("*"), reverse=True) + [folder]:
+            os.utime(path, (when, when))
+
+    def test_prune_removes_a_files_folder_once_its_file_is_gone_and_one_naming_no_file_once_unused(self) -> None:
+        """A note names its file (``library.Notes``): its folder goes once the file is gone, a shared file's view and
+        where its share's files are with it. One whose note names no file (an earlier build's), or with no note, goes
+        once nothing in it was written for ``UNUSED_DAYS``. A file that is there keeps its folder, however old."""
+        here, gone = self.note("here.stl"), self.note("gone.stl", gone=True)
+        for name in ("view/manifest.json", "view/parts/k/t.xbm", "stored.json", "share.lock"):
+            (gone / name).parent.mkdir(parents=True, exist_ok=True)
+            (gone / name).write_bytes(b"x" * 4096)
+        self.aged(here, 400)
+        earlier, fresh, bare = (self.cache / "documents" / ident for ident in (
+            "22222222-2222-5222-8222-222222222222", "33333333-3333-5333-8333-333333333333",
+            "44444444-4444-5444-8444-444444444444"))
+        for folder in (earlier, fresh):  # a note of an earlier build: no path
+            folder.mkdir(parents=True)
+            (folder / "note.json").write_text(json.dumps({"schema": 1, "version": "1-2", "parts": 3}), encoding="utf-8")
+        (bare / "checks").mkdir(parents=True)
+        (bare / "checks" / "a.json").write_text("{}", encoding="utf-8")
+        self.aged(earlier, cache.UNUSED_DAYS + 1)
+        self.aged(bare, cache.UNUSED_DAYS + 1)
+        self.aged(fresh, cache.UNUSED_DAYS - 1)
+        theirs = self.cache / "documents" / "notes"  # no document's id: not cad's to judge
+        theirs.mkdir(parents=True)
+        code, out, err = _run("prune")
+        self.assertEqual((code, err), (0, ""))
+        lines = out.splitlines()
+        named = f"what the cache kept of a file no note names, unwritten for {cache.UNUSED_DAYS} days"
+        self.assertEqual(sorted(lines[:-1]), sorted([
+            f"removed {gone} (what the cache kept of {self.root / 'work' / 'gone.stl'}, which is gone)",
+            f"removed {earlier} ({named})", f"removed {bare} ({named})"]))
+        self.assertRegex(lines[-1], r"^3 removed, \d+\.\d KB freed$")
+        self.assertFalse(any(path.exists() for path in (gone, earlier, bare)))
+        self.assertTrue(all(path.is_dir() for path in (here, fresh, theirs)))
+        self.assertEqual(json.loads((here / "note.json").read_text(encoding="utf-8"))["path"],
+                         str(self.root / "work" / "here.stl"), "a note names its file")
+        self.assertEqual(_run("prune"), (0, "nothing removed\n", ""))
+
+    def test_a_files_folder_being_shared_is_kept_with_its_meshes_and_said(self) -> None:
+        """A share of the file holds its folder's lock while it is made (``sharing.held``): prune leaves the folder,
+        and its view bundle's meshes, as they are, and says so, rather than refuse to run beside a server."""
+        from cad_server import sharing
+
+        gone = self.note("gone.stl", gone=True)
+        shared = self.note("shared.step")
+        mesh = shared / "view" / "parts" / "k" / "t.xbm"
+        mesh.parent.mkdir(parents=True)
+        mesh.write_bytes(b"m" * 8192)
+        with mock.patch.object(cache, "MESH_BYTES", 0), sharing.held(gone), sharing.held(shared):
+            code, out, err = _run("prune")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(sorted(out.splitlines()), sorted([f"kept {gone}: a share of its file is being made",
+                                                          f"kept {shared}: a share of its file is being made",
+                                                          "nothing removed"]))
+        self.assertTrue(gone.is_dir() and mesh.is_file())
+
+    def test_prune_holds_the_meshes_to_their_cap_the_least_recently_used_first(self) -> None:
+        """The meshes kept by geometry -- a view bundle's part meshes, a part's hulls -- are held to ``MESH_BYTES``: past
+        it the ones used longest ago go, used meaning read as well as written (``places.used``: a read sets a file's
+        access time, its modification time kept, which a bundle's writer and a hull's reader each do)."""
+        import numpy as np
+
+        from cad.engine import hulls, places
+        from cad_server.viewer import bundle
+
+        shared = self.note("shared.step")
+        old, read, new = (shared / "view" / "parts" / key / "t.xbm" for key in ("old", "read", "new"))
+        hull = self.cache / "hulls" / ("a" * 64 + ".npz")
+        hull.parent.mkdir(parents=True)
+        hulls._write(hull, [(np.zeros((4, 3), dtype=np.float32), np.zeros((2, 3), dtype=np.uint32))])
+        for path in (old, read, new):
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"m" * 8192)
+        for path, days in ((old, 9), (read, 8), (hull, 7), (new, 1)):
+            when = time.time() - days * 86400
+            os.utime(path, (when, when))
+        written = read.stat().st_mtime_ns
+        # Read since it was written: a bundle written again keeps it as it is, and its access time says it was used.
+        entry = {"sha256": bundle._digest(read.read_bytes()), "bytes": 8192}
+        writer = bundle._Bundle(None, shared / "view", shared / "stage", {"format": bundle.FORMAT, "made": {
+            "release": "r"}, "files": {"parts/read/t.xbm": entry}}, "r", [])
+        self.assertTrue(writer.holds("parts/read/t.xbm"))
+        self.assertEqual(read.stat().st_mtime_ns, written, "a read changes no modification time")
+        self.assertGreater(read.stat().st_atime, time.time() - 60, "a read is a use")
+        hull_written = hull.stat().st_mtime_ns
+        self.assertIsNotNone(hulls._read(hull))
+        self.assertEqual((hull.stat().st_mtime_ns, hull.stat().st_atime > time.time() - 60), (hull_written, True))
+        places.used(self.root / "nowhere")  # a file gone meanwhile keeps nothing from going on
+        disk = {path: cache._disk(os.lstat(path)) for path in (old, read, hull, new)}  # as this system allots it
+        self.assertEqual(cache.meshes()[1], sum(disk.values()), "every mesh counted")
+        cap = disk[read] + disk[hull]  # room for the two used last
+        with mock.patch.object(cache, "MESH_BYTES", cap):
+            over, _held = cache.meshes()
+            code, out, err = _run("prune")
+        self.assertEqual([path for path, _disk in over], [old, new], "used longest ago first: the old, then the new")
+        self.assertEqual((code, err), (0, ""))
+        self.assertTrue(out.startswith("removed 2 meshes last used "), out)
+        freed, held = re.escape(cache.size(disk[old] + disk[new])), re.escape(cache.size(cap))
+        self.assertRegex(out, rf"\({freed}\): the meshes cad keeps by geometry are held to {held}, the least recently "
+                              rf"used going first\n2 removed, {freed} freed\n$")
+        self.assertFalse(old.exists() or new.exists() or old.parent.exists())
+        self.assertTrue(read.is_file() and hull.is_file())
 
     def test_what_a_removal_frees_counts_no_file_another_link_keeps(self) -> None:
         env = self.environment("theirs00", OTHER, 8192)

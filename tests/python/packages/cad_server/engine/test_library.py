@@ -21,7 +21,7 @@ from tests.python.support.paths import add_sources
 
 add_sources()
 
-from cad.engine.ids import derived_id, file_id  # noqa: E402
+from cad.engine.ids import canonical, derived_id, file_id  # noqa: E402
 from cad_server.engine import library as library_module  # noqa: E402
 from cad_server.engine.library import Library, Notes  # noqa: E402
 from cad_server.engine.state import file_version  # noqa: E402
@@ -151,14 +151,15 @@ class LibraryTest(unittest.TestCase):
         folder = self.cache / "documents" / ident
         self.assertEqual(sorted(os.listdir(folder)), ["note.json", "picture.png"])
         self.assertEqual(set(json.loads((folder / "note.json").read_text(encoding="utf-8"))),
-                         {"schema", "version", "parts", "pictured"})
+                         {"schema", "path", "version", "parts", "pictured"})
         # The file written again: the note says nothing of it, and the next fill replaces it whole.
         arm.write_bytes(b"another, longer")
         second = file_version(arm)
         self.assertEqual((notes.read(ident, second), notes.png(ident, second)), ({}, None))
         notes.count(arm, 5)
+        # It names its file, the one its id is of: what is pruned of a file that is gone is known without the library.
         self.assertEqual(json.loads((folder / "note.json").read_text(encoding="utf-8")),
-                         {"schema": 1, "version": second, "parts": 5})
+                         {"schema": 1, "path": canonical(arm), "version": second, "parts": 5})
         self.assertFalse((folder / "picture.png").exists(), "the picture of the version before went with its note")
 
     def test_the_records_of_0_11_17_are_carried_once_and_removed(self) -> None:
