@@ -18,6 +18,7 @@ import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
 import { followedUpdate, forgetFollowedUpdate, loadNextRelease } from './host/release';
+import { frameNoticeDismissals } from './host/dismissedNotices.js';
 import type { Launch, Server } from './host/server';
 import { createViewSync } from './host/sync';
 import { createTunnelClient, createTunnelFetch, TUNNEL_ORIGIN } from './host/tunnel';
@@ -307,7 +308,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const [stale, setStale] = useState(false);
   const updateCalls = useMemo<UpdateCalls>(() => ({ read: () => client.serverInfo({ fresh: true }),
     start: () => client.startUpdate(), dismiss: at => client.dismissUpdate(at) }), [client]);
-  const updater = useUpdate(updateCalls, { release: version, cadUpdate: initial.cadUpdate ?? null }, { followed, restartForSkills: true,
+  const updater = useUpdate(updateCalls, { release: version, cadUpdate: initial.cadUpdate ?? null }, { followed, restartForSkills: true, notices: frameNoticeDismissals,
     onRestarted: () => { if (!loadNextRelease(version)) setStale(true); } });
   const updating = updater.phase.phase !== 'idle';
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
