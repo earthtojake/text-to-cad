@@ -441,16 +441,14 @@ jobs:
   # cad's updates rehearsed end to end, each on a private computer of its own (scripts/test/rehearse-update.py): this
   # tree published as releases no index holds (wheels uv reads beside the index, a local version feed), real uv, real
   # servers and the real install command; this build's servers there tend themselves every 2 s, not every 30 s
-  # (CAD_ENGINE_TEND_SECONDS). cad updating itself through the store, uv's tool never changed (`self`: by itself the
-  # release got ready with nothing restarted, at once while a page asks and a command runs all along, then the server
-  # restarted on it at its next start, by the button or by a typed `cad update` with PyPI reachable or not, never by
-  # itself at a tending however long it was ready, nor with automatic updates off or a feed that names it no more; typed with and without a server
-  # running, after a start that serves at once, switched off, back by itself from a release whose server cannot start
-  # (typed, or at the start that switched to it ready, then held back), a ready release damaged before its restart
-  # built again, past an installed one whose server cannot, untouched by a release uv cannot install or
-  # one that fails its own check, inside its major and never to a new major (named, with the migration guides), installed by
-  # pipx, while three callers run `cad` every 50 ms, while files of it are held open, after a person's own reinstall
-  # and upgrade, after its worker was stopped midway, and from 0.11.17's update in place); and the bridge from the real shipped releases on PyPI (`bridge`: 0.11.11's update button and automatic
+  # (CAD_ENGINE_TEND_SECONDS). cad updating itself in place by the computer's own uv (`self`): at the server's next
+  # start once the feed as last read names a newer release, by the viewer's button and a typed `cad update` (PyPI
+  # reachable or not, with and without a server running), never in the background however busy the server, nor with
+  # automatic updates off; back by itself from a release whose server cannot start, then held back; untouched by one uv
+  # cannot install; through a source file held open and an upgrade stopped past its RECORD (the repair); while three
+  # callers run `cad` every 50 ms; never against a person's own pin, never across a major; after its worker was stopped
+  # midway; from 0.11.17's own update in place; and the install command repairing a cad that does not start while a
+  # process runs from its environment. And the bridge from the real shipped releases on PyPI (`bridge`: 0.11.11's update button and automatic
   # update into this build, through its server's run of the install command in install mode to the uv tool's server,
   # and the same where that run fails; a computer with no receipt of our
   # installer, whose server installs cad with uv itself and runs no install command, by the button and by a typed
@@ -459,7 +457,7 @@ jobs:
   # and on Windows of 0.10.0, which this build takes over. Each checks the end state (uv's cad in the bin folder, its
   # server answering, the records 0.11.11's clients read naming it, the switches as the route leaves them, nothing of
   # a past release deleted) and that no file of the runner's own home moved. Measured with uv's cache warm: `self`
-  # about 7 minutes on a 4-core Linux machine (its twenty routes; sixteen routes took under 4 there), `bridge` about 8 on macOS; a fresh runner adds 0.11.11's first setup, which downloads its kernel.
+  # under 2.5 minutes on a 4-core Linux machine (its thirteen routes, from a cold uv cache too), `bridge` about 8 on macOS; a fresh runner adds 0.11.11's first setup, which downloads its kernel.
   # Before a release ships (a full run), nightly, and on a change to the installers, the rehearsal or the code of this
   # build it runs. Two shards a system, each on a runner of its own (the routes take the true default port, one at a
   # time): 1/2 cad updating itself and the oldest releases' bridges, 2/2 the bridge from 0.11.11 and 0.10.4's. Whole,
@@ -493,7 +491,7 @@ jobs:
 
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.
-      - name: cad updating itself through the store (ready, then restarted at a start, by the button, typed, offline, never by itself however busy; typed, typed with no server, at a start, switched off, back from a server that cannot start, past one, unbuildable, unrunnable, damaged, inside its major, by pipx, called all along, held open, reinstalled, stopped midway, from 0.11.17)
+      - name: cad updating itself in place (at a start, by the button, typed, never in the background, back from a server that cannot start, uninstallable, held open and repaired, called all along, pinned, inside its major, stopped midway, from 0.11.17; the install command's repair)
         if: matrix.shard == '1/2'
         timeout-minutes: 30
         run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
