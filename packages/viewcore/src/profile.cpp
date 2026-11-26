@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "core.hpp"
 #include "json.hpp"
 
 namespace vc::profile {
@@ -33,6 +34,9 @@ Scope::~Scope() {
 std::string dump_and_reset() {
   Json j;
   j.open().key("switches").open_list();
+#ifdef VC_FACTS_V1
+  j.str("VC_FACTS_V1");
+#endif
 #ifdef VC_SHARED_PART
   j.str("VC_SHARED_PART");
 #endif

@@ -12,4 +12,7 @@ export { createViewBundleClient, openViewBundle, readViewBundleManifest, viewBun
 export { deriveShareBits, isShareSecret, openShare, readShareAddress,
   SHARE_DAMAGED, SHARE_FORMAT, SHARE_ID_PATTERN, SHARE_PREFETCH, SHARE_UNAVAILABLE, SHARE_UNSUPPORTED } from './share.js';
 
+export { connectViewCoreWorkers, createViewCoreFetch, openViewCoreDocument, viewCoreStructure, viewCoreTree,
+  VIEW_CORE_SYNTHESIZED, VIEW_CORE_TESSELLATION } from './viewcore.js';
+
 export * from './exports.js';

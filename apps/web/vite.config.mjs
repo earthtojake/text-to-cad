@@ -11,6 +11,7 @@ import { thirdPartyLicenses } from "@cad/core/third-party-licenses";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
 import { resolveServerFsAllow } from "./scripts/serverFsAllow.mjs";
+import { viewCoreAssetsPlugin } from "./scripts/viewcoreAssets.mjs";
 import {
   normalizeServerLifetimeMs,
   scheduleProcessShutdown,
@@ -205,6 +206,8 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
     packageSourceMaps(["@cad/core", "@cad/ui"]),
     chunkIdsPlugin(),
     licenses.plugin(),
+    // Prototype: the view core beside the page, where one is built (`?viewcore=N`).
+    viewCoreAssetsPlugin(repoRoot),
   ],
   resolve: { alias: { "@": viewerClientRoot }, dedupe: ["react", "react-dom", "three", "lucide-react"] },
   build: {

@@ -4,6 +4,7 @@ import { createCrashReporter, openShare, readShareAddress } from '@cad/core/clie
 import { createTabStore } from '@cad/ui/tab-store';
 import { I18nProvider, resolveLocale } from '@cad/ui/i18n';
 import { createWebCadClient } from './host/cadClient.js';
+import { viewCoreWorkers, withViewCore } from './host/viewcore.js';
 import { keepAddressLink } from './host/addressLink.js';
 import { reloadOnStaleBuild } from './host/staleBuild.js';
 import { browserLanguage } from './host/browserLanguage.js';
@@ -41,7 +42,9 @@ else startEngine(element);
 function startEngine(element: HTMLElement) {
   // The catalog is read every two seconds while the tab is seen: a hidden tab asks nothing and is read
   // again the moment it is shown (`host/cadClient.js`).
-  const client = createWebCadClient();
+  // Prototype: `?viewcore=N` reads a model's .xbf in the page, by the view core in N Workers (`host/viewcore.js`).
+  const workers = viewCoreWorkers();
+  const client = workers ? withViewCore(createWebCadClient(), { workers }) : createWebCadClient();
   // The address keeps a working link, so it opens this page in another browser on this machine too.
   const stopAddressLink = keepAddressLink({ fetchLink: () => client.link() });
   // The page's crashes -- an error nothing caught, or one a view's boundary caught -- told to this

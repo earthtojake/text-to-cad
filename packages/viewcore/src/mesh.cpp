@@ -86,7 +86,7 @@ double deflection(const TopoDS_Shape& shape) {
   return std::max(value, 1e-4);
 }
 
-std::string mesh_bytes(const std::string& data) {
+std::string mesh_bytes(const std::string& data, std::set<int>* unmeshed) {
   TopoDS_Shape shape;
   VC_TIMED(read, shape = read_shape(data));
   double linear = 0;
@@ -335,6 +335,7 @@ std::string mesh_bytes(const std::string& data) {
     put_u32(out, first);
     put_u32(out, face_count[row]);
     first += face_count[row];
+    if (unmeshed && !face_count[row]) unmeshed->insert(face_rows[row].ordinal);
   }
   for (uint32_t v : edge_table) put_u32(out, v);
   for (float v : lines) put_f32(out, v);

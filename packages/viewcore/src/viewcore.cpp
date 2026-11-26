@@ -60,22 +60,22 @@ T guarded(T fallback, F&& call) {
   return fallback;
 }
 
-// The part's topology kept for its picks (and, under VC_SHARED_PART, for its whole table, groups and measures too).
+// The part's topology kept for its picks and, under VC_SHARED_PART (the default), its whole table, groups and measures.
 static vc::Topology& kept(vc::Part& p) {
   if (!p.topology) p.topology = std::make_unique<vc::Topology>(p.bytes);
   return *p.topology;
 }
 
-// As cad does, each whole-part answer reads its own shape from the bytes, unless VC_SHARED_PART.
+// A whole-part answer from the part's one topology (VC_SHARED_PART), or from its own read (VC_FACTS_V1).
 template <typename F>
 static uint8_t* with_topology(int32_t doc, int32_t index, uint32_t* out_len, F&& answer) {
   vc::Part& p = part(doc, index);
   vc::Json out;
 #if defined(VC_SHARED_PART)
-  answer(kept(p), out);
+  answer(kept(p), out, p);
 #else
   vc::Topology topology(p.bytes);
-  answer(topology, out);
+  answer(topology, out, p);
 #endif
   return result(out.out, out_len);
 }
@@ -123,7 +123,11 @@ uint8_t* vc_shape_bytes(int32_t doc, int32_t index, uint32_t* out_len) {
 uint8_t* vc_mesh(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
     VC_SCOPE(mesh_rest);
-    return result(vc::mesh_bytes(part(doc, index).bytes), out_len);
+    vc::Part& p = part(doc, index);
+    std::set<int> unmeshed;
+    std::string body = vc::mesh_bytes(p.bytes, &unmeshed);
+    p.unmeshed = unmeshed;  // what the part's whole table checks
+    return result(body, out_len);
   });
 }
 
@@ -145,14 +149,15 @@ uint8_t* vc_fact(int32_t doc, int32_t index, int32_t kind, int32_t ordinal, uint
 uint8_t* vc_groups(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
     VC_SCOPE(groups_rest);
-    return with_topology(doc, index, out_len, [](vc::Topology& t, vc::Json& out) { t.groups(out); });
+    return with_topology(doc, index, out_len, [](vc::Topology& t, vc::Json& out, vc::Part&) { t.groups(out); });
   });
 }
 
 uint8_t* vc_elements(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
     VC_SCOPE(elements_rest);
-    return with_topology(doc, index, out_len, [](vc::Topology& t, vc::Json& out) { t.elements(out); });
+    return with_topology(doc, index, out_len,
+                         [](vc::Topology& t, vc::Json& out, vc::Part& p) { t.elements(out, p.unmeshed); });
   });
 }
 

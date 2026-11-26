@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,19 @@
 #include <TopoDS_Shape.hxx>
 
 #include "json.hpp"
+
+// The facts' rules, version 2 (cad's mesh.FACTS_VERSION): a part's shape read once for all its facts, its box the union
+// of its faces' boxes, areas, centroids and volumes integrated adaptively to VC_GPROP_EPS, and a face's checker
+// verdict in the whole table only for a face its mesh left without triangles. -DVC_FACTS_V1 measures version 1's rules
+// (each answer its own read, the part's own optimal box, fixed Gauss points, every face checked).
+#ifndef VC_FACTS_V1
+#define VC_SHARED_PART
+#define VC_UNION_BOX
+#ifndef VC_GPROP_EPS
+#define VC_GPROP_EPS 1e-3
+#endif
+#define VC_CHECK_UNMESHED
+#endif
 
 namespace vc {
 
@@ -57,18 +71,20 @@ struct Topology {
   void encode();
   const ShapeMap& solid_map();
   const Bnd_Box& face_box(int ordinal);
-  void face(Json& out, int ordinal);
+  void face(Json& out, int ordinal, bool checked = true);  // a pick's face says its checker's verdict
   void edge(Json& out, int ordinal);
   void vertex(Json& out, int ordinal);
   void groups(Json& out);
-  void elements(Json& out);
+  // The whole table; under VC_CHECK_UNMESHED a face says its verdict only if its mesh left it without triangles.
+  void elements(Json& out, const std::set<int>& unmeshed);
 };
 
 // mesh.measured; `shared` (VC_SHARED_PART) is the part's topology, read once for its facts too.
 void measured(Json& out, const std::string& data, Topology* shared = nullptr);
 
 // --- the mesh (mesh.cpp)
-std::string mesh_bytes(const std::string& data);  // mesh.mesh_shape(data, parallel=False).to_bytes()
+// mesh.mesh_shape(data, parallel=False).to_bytes(); `unmeshed`, the faces it left without triangles.
+std::string mesh_bytes(const std::string& data, std::set<int>* unmeshed = nullptr);
 
 // --- the document (document.cpp)
 struct Part {
@@ -80,7 +96,8 @@ struct Part {
   std::map<int, std::string> face_names, edge_names, vertex_names;
   std::map<int, Rgba> face_colors;
   std::string bytes;  // shape_bytes(shape), made once on open (the key is its digest)
-  std::unique_ptr<Topology> topology;  // made on the first pick
+  std::unique_ptr<Topology> topology;  // made on the first pick (or whole-part answer)
+  std::set<int> unmeshed;              // the faces its mesh left without triangles, once meshed
 };
 
 struct Instance {

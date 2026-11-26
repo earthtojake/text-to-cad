@@ -4,14 +4,16 @@
 //   request  { id, op, ...args }
 //   reply    { id, ok: true, result, ms }  |  { id, ok: false, error }
 // ops:
-//   init   { url }                       -> { compileMs, fetchMs, instantiateMs, memoryBytes, occt }
+//   init   { url } | { module }          -> { compileMs, fetchMs, instantiateMs, memoryBytes, occt }
+//          (`module`: a WebAssembly.Module the page compiled once, for several workers)
 //   open   { bytes: Uint8Array }         -> { doc }            (bytes is transferred in)
 //   structureBytes|shapeBytes|mesh|groupsBytes|elementsBytes|measureBytes  { doc, part } -> Uint8Array
 //   factBytes { doc, part, kind, ordinal } -> Uint8Array
 //   structure|groups|elements|measure|fact -> parsed JSON (same args as the *Bytes forms)
 //   close  { doc }
 //   memory {}                            -> { memoryBytes }
-// `ms` is the time the worker spent in the call.
+// `ms` is the time the worker spent in the call. Once its handler is set the worker says so, once: { ready: true }
+// (a page waits for it before its first request, so none is sent to a worker still loading its modules).
 import { Core } from "./viewcore.js";
 
 let core = null;
@@ -24,7 +26,7 @@ const JSONOPS = new Set(["structure", "groups", "elements", "measure", "fact"]);
 async function handle(m) {
   switch (m.op) {
     case "init": {
-      core = await Core.load(m.url);
+      core = await Core.load(m.module || m.url);
       return { compileMs: core.compileMs, fetchMs: core.fetchMs, instantiateMs: core.instantiateMs,
                memoryBytes: core.memoryBytes, occt: core.occtVersion };
     }
@@ -60,3 +62,5 @@ self.onmessage = async (e) => {
     self.postMessage({ id: m.id, ok: false, error: String(err && err.message || err) });
   }
 };
+
+self.postMessage({ ready: true });

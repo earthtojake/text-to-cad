@@ -5,9 +5,8 @@
 // only by a profiling build) answers the seconds and counts so far as JSON and starts again. Without VC_PROFILE the
 // macros are the bare statement.
 //
-// The cheaper variants, each its own define, all off by default (each changes an answer; tools/profile.py measures
-// them): VC_SHARED_PART, VC_NO_CHECK, VC_NO_FACE_BOX, VC_PLAIN_BOX, VC_OPTIMAL_BOX, VC_UNION_BOX, VC_GPROP_EPS=<eps>
-// (see topology.cpp and viewcore.cpp).
+// Measurement switches, all off by default (each changes an answer; tools/profile.py measures them): VC_FACTS_V1 (the
+// facts' first rules, core.hpp), VC_NO_CHECK, VC_NO_FACE_BOX, VC_PLAIN_BOX, VC_OPTIMAL_BOX, VC_GPROP_EPS=<eps>.
 #pragma once
 
 #ifdef VC_PROFILE

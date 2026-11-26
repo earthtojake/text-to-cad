@@ -303,7 +303,7 @@ Topology::Topology(const std::string& data) {
   });
 }
 
-// The regularity encoded on the part and its edges' faces mapped (edge(), and groups() under VC_SHARED_PART).
+// The regularity encoded on the part and its edges' faces mapped, once (edge(), and groups() under VC_SHARED_PART).
 void Topology::encode() {
   if (encoded) return;
   VC_TIMED(edge_encode, BRepLib::EncodeRegularity(shape, 1e-3));  // as the mesher classes edges
@@ -325,7 +325,7 @@ static void in_range(const char* kind, int ordinal, int extent) {
                             std::to_string(extent) + ")");
 }
 
-void Topology::face(Json& out, int ordinal) {
+void Topology::face(Json& out, int ordinal, bool checked) {
   in_range("face", ordinal, faces.Extent());
   const TopoDS_Face face = TopoDS::Face(faces.FindKey(ordinal));
   std::optional<BRepAdaptor_Surface> surface;
@@ -350,7 +350,7 @@ void Topology::face(Json& out, int ordinal) {
   put_box(out, box);
 #endif
 #if !defined(VC_NO_CHECK)
-  out.key("check").str(check(face));
+  if (checked) out.key("check").str(check(face));
 #endif
   VC_TIMED(face_adaptor, {
     if (type == GeomAbs_Cylinder) {
@@ -543,9 +543,15 @@ void Topology::groups(Json& out) {
   out.close();
 }
 
-void Topology::elements(Json& out) {
+void Topology::elements(Json& out, const std::set<int>& unmeshed) {
   out.open().key("faces").open();
-  for (int ordinal = 1; ordinal <= faces.Extent(); ++ordinal) face(out.key(ordinal), ordinal);
+  for (int ordinal = 1; ordinal <= faces.Extent(); ++ordinal) {
+#if defined(VC_CHECK_UNMESHED)
+    face(out.key(ordinal), ordinal, unmeshed.count(ordinal) > 0);
+#else
+    face(out.key(ordinal), ordinal);
+#endif
+  }
   out.close().key("edges").open();
   for (int ordinal = 1; ordinal <= edges.Extent(); ++ordinal) edge(out.key(ordinal), ordinal);
   out.close().key("vertices").open();
