@@ -317,8 +317,10 @@ class TabServerTest(_Session):
         self.assertEqual({key: opened[key] for key in ("protocol", "page", "model", "surface")},
                          {"protocol": 9, "page": "viewer", "model": self.bracket, "surface": "agent"})
         # No tolerance: the page reads each part's one display mesh by its key.
-        self.assertEqual(sorted(opened), ["model", "page", "pick", "platform", "protocol", "surface",
+        self.assertEqual(sorted(opened), ["model", "page", "pick", "pickAny", "platform", "protocol", "surface",
                                           "version"])
+        # One chooser of a file or a folder where the computer has one (a Mac's): the home's Import is one button.
+        self.assertEqual(opened["pickAny"], opened["pick"] and sys.platform == "darwin")
         # The thread's tab reopens on what the thread last opened.
         self.assertEqual(self.launch("cad_tab")["model"], self.bracket)
         refused = self.call("cad_open", {"source": "parts/bracket.stl"})

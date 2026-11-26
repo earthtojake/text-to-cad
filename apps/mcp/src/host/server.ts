@@ -29,6 +29,8 @@ export interface Launch {
   projects?: { id: string; name: string; root: string; created: number | null; opened: number | null; missing: boolean }[];
   /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
+  /** Whether one chooser there takes a file or a folder (a Mac's): the home's Import is then one button. */
+  pickAny?: boolean;
   /**
    * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
    * `_reach`): `browser`, the viewer's page of what the launch shows, with its link

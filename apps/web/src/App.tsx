@@ -144,7 +144,8 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   }, [client]);
   // The home: the projects (a project's page is one folder of it, read from the server) and the library every CAD view
   // shares, and Import with the desktop's chooser where the server's computer has one -- a file, shown, or a folder,
-  // opened as a project. A card's picture is the server's, by its token.
+  // opened as a project; where one chooser takes either (`pickAny`: a Mac's), that one too. A card's picture is the
+  // server's, by its token.
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
@@ -165,7 +166,16 @@ export default function App({ client, server, tabStore, language: chosenLanguage
         return { ...await client.openProject(folder), folder };
       },
     } : {}),
-  }), [client, server.pick, show]);
+    ...(server.pick && server.pickAny ? {
+      importAny: async () => {
+        const chosen = await client.pick({ any: true });
+        if (!chosen) return null;
+        if (!chosen.folder) { await show(chosen.path); return { file: chosen.path }; }
+        if (!client.openProject) return null;
+        return { ...await client.openProject(chosen.path), folder: chosen.path };
+      },
+    } : {}),
+  }), [client, server.pick, server.pickAny, show]);
   const appearance = useTabAppearance(tabStore);
   const changeColorScheme = useCallback((value: string) => tabStore.settings.update({ appearance: value as Appearance }), [tabStore]);
   // The app menu's Theme row (the menu Settings' cog opens, in the sidebar's foot).

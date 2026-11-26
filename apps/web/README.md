@@ -409,7 +409,9 @@ at its right, the search and, where the server's computer has a chooser (`pick` 
 the desktop's own chooser (`POST /api/v1/local/pick`, `cad_server._internal.picker`) and shows the file picked, and
 Folder…, which opens it for a folder and opens that folder as a project (`POST /api/v1/projects`), whose page is
 shown with a line saying what came of it ("heart-tag is now a project. Nothing was written to the folder.", or that
-the folder is inside a project already, which is the one opened).
+the folder is inside a project already, which is the one opened). Where one chooser takes either (`pickAny`: a Mac's
+open panel, as VS Code's "Open…" is there), Import is one button opening it (`{any: true}`): a file chosen is shown,
+a folder opened as a project, as File… and Folder… do.
 
 The home's sidebar is the viewer's panel over the home ([the panel](../../packages/ui/docs/viewer-ux.md#the-panel)):
 the navbar's toggle, after the logo, shows and hides it (⌘\ or Ctrl+\ too), pinned it pushes the place and collapsed it leaves nothing,

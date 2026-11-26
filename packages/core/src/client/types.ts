@@ -46,6 +46,8 @@ export interface CadServerInfo {
   start?: string;
   /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
+  /** Whether one chooser there takes a file or a folder (a Mac's open panel): `pick({ any: true })`, and Import is one button. */
+  pickAny?: boolean;
   /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
   platform?: string;
   /** The person's home folder, `/`-separated: a path in it is said from `~`, and it is no project. */
@@ -292,9 +294,12 @@ export interface CadWorkspaceService {
   thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
   /**
    * Import: the file the person picks with the desktop's chooser -- or the folder (`folder`), the chooser
-   * opening in `start` where one is named -- by its absolute path, or null.
+   * opening in `start` where one is named -- by its absolute path, or null. With `any`, the one chooser of a file
+   * or a folder where the server's computer has one (`CadServerInfo.pickAny`: a Mac's): whichever was chosen and
+   * whether it is a folder, or null.
    */
-  pick(options?: { folder?: boolean; start?: string | null }): Promise<string | null>;
+  pick(options: { any: true }): Promise<{ path: string; folder: boolean } | null>;
+  pick(options?: { folder?: boolean; start?: string | null; any?: false }): Promise<string | null>;
   /** The projects, the latest activity first (`GET /api/v1/projects`). */
   projects?(options?: CadRequestOptions): Promise<CadProject[]>;
   /**

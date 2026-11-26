@@ -15,6 +15,7 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -226,10 +227,12 @@ class ServerInfo(HttpLayerTestCase):
         # Where the explorer starts with nowhere else to: the person's home folder, spelled with "/".
         self.assertEqual(info["home"], os.path.expanduser("~").replace(os.sep, "/"))
         self.assertIsInstance(info["pick"], bool)
+        # One chooser of a file or a folder (a Mac's), where the computer has a chooser: Import is then one button.
+        self.assertEqual(info["pickAny"], info["pick"] and sys.platform == "darwin")
         # The release the engine runs: a page that reconnects to another reloads into it.
         self.assertEqual(info["release"], cad_server.__version__)
         self.assertEqual(list(info), ["app", "release", "identityToken", "platform", "user", "home",
-                                      "start", "pick", "port", "pid", "instance", "kinds"])
+                                      "start", "pick", "pickAny", "port", "pid", "instance", "kinds"])
         self.assertEqual(headers["cache-control"], "no-store")
         # This start of the engine: a page that sees another one reloads. One per process, so it is
         # the same at every ask.
@@ -461,10 +464,10 @@ class Pick(HttpLayerTestCase):
         os.makedirs(folder)
         self.assertEqual(self.pick({"folder": True, "start": self.fixture.root}, return_value=folder),
                          (200, {"path": folder.replace(os.sep, "/")}))
-        self.assertEqual(self.asked, mock.call(folder=True, start=self.fixture.root))
+        self.assertEqual(self.asked, mock.call(folder=True, start=self.fixture.root, either=False))
         # A folder gone since the page named it: the chooser starts where it would.
         self.pick({"folder": True, "start": os.path.join(self.fixture.root, "gone")}, return_value=None)
-        self.assertEqual(self.asked, mock.call(folder=True, start=None))
+        self.assertEqual(self.asked, mock.call(folder=True, start=None, either=False))
         part = os.path.join(self.fixture.root, "part.step")
         Path(part).write_bytes(b"x")
         status, answer = self.pick({"folder": True}, return_value=part)
@@ -509,6 +512,57 @@ class Pick(HttpLayerTestCase):
         status, answer = self.pick(side_effect=PickerFailed("no chooser here"))
         self.assertEqual((status, answer["error"]), (500, "no chooser here"))
         self.assertEqual(self.fixture.request("POST", "/api/v1/local/pick")[0], 403, "a page from another site cannot open it")
+
+    def test_one_chooser_of_either_answers_a_folder_or_a_cad_file_and_says_which_where_the_desktop_has_one(self):
+        folder = os.path.join(self.fixture.root, "gearbox")
+        os.makedirs(folder)
+        part = os.path.join(self.fixture.root, "gear.step")
+        Path(part).write_bytes(b"x")
+        with mock.patch("cad_server._internal.picker.takes_either", return_value=True):
+            self.assertEqual(self.pick({"any": True}, return_value=folder), (200, {"path": folder.replace(os.sep, "/"), "folder": True}))
+            self.assertEqual(self.asked, mock.call(folder=False, start=None, either=True))
+            self.assertEqual(self.pick({"any": True}, return_value=part), (200, {"path": part.replace(os.sep, "/"), "folder": False}))
+            self.assertEqual(self.pick({"any": True}, return_value=None), (200, {"cancelled": True}))
+            # A file is checked as the file chooser's answer is: a kind CAD opens.
+            status, answer = self.pick({"any": True}, return_value=os.path.join(self.fixture.root, "notes.txt"))
+            self.assertEqual((status, answer["hint"]), (400, "choose a CAD file, or a folder"))
+            self.assertIn("notes.txt is not one", answer["error"])
+            status, answer = self.pick({"any": True}, side_effect=PickerFailed("no chooser here"))
+            self.assertEqual((status, answer["hint"]), (500, "open it with `cad viewer <file>` or `cad viewer <folder>` instead"))
+            # Either, or a folder: never both; and a flag is a flag.
+            for payload in ({"any": True, "folder": True}, {"any": "yes"}, {"any": 1}):
+                with self.subTest(payload=payload):
+                    self.assertEqual(self.pick(payload, return_value=part)[0], 400)
+            # The other two forms are as they were.
+            self.assertEqual(self.pick({}, return_value=part), (200, {"path": part.replace(os.sep, "/")}))
+            self.assertEqual(self.pick({"folder": True, "any": False}, return_value=folder), (200, {"path": folder.replace(os.sep, "/")}))
+            self.assertEqual(self.asked, mock.call(folder=True, start=None, either=False))
+        # Where the desktop's choosers take one or the other (Windows', Linux's), there is no chooser of either: said,
+        # and none is opened.
+        with mock.patch("cad_server._internal.picker.takes_either", return_value=False):
+            status, answer = self.pick({"any": True}, return_value=part)
+            self.assertEqual((status, answer["error"]), (400, "This computer's chooser takes a file or a folder, not either in one."))
+            self.assertIsNone(self.asked)
+
+    def test_only_a_macs_chooser_takes_either_and_the_others_refuse_to_be_asked(self):
+        from cad_server._internal import picker
+
+        found = {"zenity": "/usr/bin/zenity", "kdialog": None, "powershell.exe": "C:/ps.exe", "pwsh.exe": None}
+        with mock.patch.object(picker.executables, "find", side_effect=found.get), \
+                mock.patch.dict(os.environ, {"DISPLAY": ":0"}):
+            with mock.patch.object(picker.sys, "platform", "darwin"):
+                self.assertTrue(picker.takes_either())
+                argv, _, structured = picker._command(either=True)
+                self.assertEqual((argv[-2:], structured), (["either", ""], True))
+                # One open panel that takes a file or a folder, titled Import.
+                self.assertIn("mode === 'either' ? 'Import'", argv[-3])
+                self.assertIn("panel.canChooseDirectories = mode !== 'file';", argv[-3])
+                self.assertIn("panel.canChooseFiles = mode !== 'folder';", argv[-3])
+            for platform in ("linux", "win32"):
+                with self.subTest(platform=platform), mock.patch.object(picker.sys, "platform", platform):
+                    self.assertFalse(picker.takes_either())
+                    with self.assertRaises(PickerFailed):
+                        picker._command(either=True)
 
     def test_a_second_open_while_one_is_up_says_so(self):
         opened, release, answers = threading.Event(), threading.Event(), []

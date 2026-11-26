@@ -67,7 +67,8 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     if (url === '/api/v1/settings' && init.body) guards.push(init.headers?.['x-cad-viewer']);
     const telemetry = init.body ? { share: false, reason: 'choice', policy: 'p' } : { share: false, reason: 'untold', policy: 'p' };
     const reply = isCatalog(url, init) ? catalogOf(url)
-      : url === '/api/v1/documents' ? { documents: [] } : url === '/api/v1/local/pick' ? { path: '/m/picked.step' }
+      : url === '/api/v1/documents' ? { documents: [] }
+      : url === '/api/v1/local/pick' ? (JSON.parse(init.body).any ? { path: '/m/one.step', folder: false } : { path: '/m/picked.step' })
       : url === '/api/v1/local/link' ? { link: '1767225600.abc', expires: 1767225600 }
       : url !== '/api/v1/settings' ? { ok: true }
       : { language: { locale: null }, telemetry, whats_new: { seen: init.body ? ['0.11'] : [], release: '0.11' } };
@@ -80,7 +81,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const viewer = () => snapshot();
   try {
     const historyAtStart = window.history.length;
-    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, platform: 'darwin' }, tabStore })));
+    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, pickAny: true, platform: 'darwin' }, tabStore })));
     // The document the URL names, as it names it; the host's file menu and links; the tab's store
     // for everything the viewer keeps.
     assert.equal(viewer().file, ONE);
@@ -187,6 +188,13 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.ok(libraryCalls.some(([url]) => url === '/api/v1/local/pick'));
     assert.equal(viewer().file, PICKED);
     assert.equal(new URL(window.location.href).pathname, `/${PICKED}`);
+    // Where one chooser takes a file or a folder (the server's `pickAny`: a Mac's), Import's one chooser: a file chosen is
+    // shown here, as one picked with File is.
+    let chosen;
+    await act(async () => { chosen = await viewer().library.importAny(); });
+    assert.deepEqual(chosen, { file: '/m/one.step' });
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/pick').map(([, body]) => body), [{}, { any: true }]);
+    assert.equal(viewer().file, ONE);
     // The way home (the navbar's logo) leads to the bare URL: the home is a step of the browser's history, as a file is,
     // so the browser's Back and Forward walk between them (the page hands no history of its own).
     const beforeHome = window.history.length;

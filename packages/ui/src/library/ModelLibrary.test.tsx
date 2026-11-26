@@ -99,6 +99,58 @@ it('ends its bar in Import where the host has a chooser -- a file, or a folder o
   expect(reports.flat()).toEqual([{ control: 'home_pick', count: 2, seconds: 0 }, { control: 'home_import_folder', count: 1, seconds: 0 }]);
 });
 
+// Where the system's chooser takes a file or a folder in one (a Mac's open panel), Import is one button that opens it, as
+// VS Code's "Open…" is there; elsewhere it stays the menu of File… and Folder… (above).
+it("is one Import button where one chooser takes either: a folder chosen is opened as a project, a file shown, each counted as File's and Folder's are", async () => {
+  const press = async (button: HTMLElement) => { await act(async () => { fireEvent.click(button); }); };
+  const reports: { control: string; count: number; seconds: number }[][] = [];
+  let listed: LibraryProject[] = [];
+  const gear = project('p2', 'gear', { root: '/w/gear' });
+  const folders = hosted([gear], [file(gear, 'part_0.stl'), file(gear, 'STEP/gear.step')]);
+  // What the one chooser answers in turn, as a host hands it on: a file (which the host has shown), a cancel, a folder
+  // made a project, and a folder inside it.
+  const answers = [{ file: '/w/loose.step' }, null, { project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: true, folder: '/w/gear' },
+    { project: { id: 'p2', name: 'gear', root: '/w/gear' }, made: false, folder: '/w/gear/STEP' }];
+  const importAny = vi.fn(async () => { const answer = answers.shift()!; if (answer && 'project' in answer) listed = [gear]; return answer; });
+  const pick = vi.fn(async () => {}), importFolder = vi.fn(async () => null);
+  const places: unknown[] = [];
+  const view = render(<ControlUsageProvider report={counts => reports.push(counts)}>
+    <ModelLibrary library={library([], { folder: folders.folder, projects: async () => listed, pick, importFolder, importAny })} onPlaceChange={next => places.push(next)} />
+  </ControlUsageProvider>);
+  await screen.findByText('Nothing here yet');
+  // The bar's Import: the outline button, its folder icon and its word, with no chevron and no menu (its size, as drawn,
+  // is the browser spec's).
+  const bar = document.querySelector('[data-library-bar]')!;
+  const button = within(bar as HTMLElement).getByRole('button', { name: 'Import', exact: true });
+  expect([button.getAttribute('data-variant'), button.textContent, button.getAttribute('aria-haspopup'),
+    [...button.querySelectorAll('svg')].map(svg => svg.getAttribute('class')?.match(/lucide-[\w-]+/)?.[0])]).toEqual(['outline', 'Import', null, ['lucide-folder-open']]);
+  // The welcome's two ways in are that one button too.
+  const welcome = document.querySelector<HTMLElement>('[data-library-empty]')!;
+  expect([within(welcome).getAllByRole('button').map(node => node.textContent), screen.queryByRole('button', { name: 'Import file' }), screen.queryByRole('button', { name: 'Import folder' })])
+    .toEqual([['Import'], null, null]);
+  // A file chosen: the host shows it; the home goes nowhere and says nothing.
+  await press(button);
+  expect([importAny.mock.calls.length, screen.queryByRole('menu'), places, document.querySelector('[data-library-note]')]).toEqual([1, null, [], null]);
+  // Cancelled: nothing.
+  await press(within(welcome).getByRole('button', { name: 'Import' }));
+  expect([importAny.mock.calls.length, places]).toEqual([2, []]);
+  // A folder chosen: opened as a project, its page shown with a line saying what came of it, as Folder's is.
+  await press(button);
+  expect(await screen.findByText('gear is now a project. Nothing was written to the folder.')).toBeTruthy();
+  expect(places).toEqual([{ view: 'project', project: 'p2' }]);
+  await screen.findByRole('button', { name: 'Open part_0.stl' });
+  // A folder inside a project: the project's page, at that folder.
+  await press(within(document.querySelector('[data-library-bar]') as HTMLElement).getByRole('button', { name: 'Import', exact: true }));
+  expect(await screen.findByText('STEP is inside gear, which is already a project.')).toBeTruthy();
+  expect(places.at(-1)).toEqual({ view: 'project', project: 'p2', path: 'STEP' });
+  // The sidebar's +, by Projects, stays the folder chooser; File… alone is never asked for.
+  await press(screen.getByRole('button', { name: 'Open a folder as a project' }));
+  expect([importAny.mock.calls.length, importFolder.mock.calls.length, pick.mock.calls.length]).toEqual([4, 1, 0]);
+  view.unmount();
+  // Counted by what was chosen, by File's and Folder's names (and the +, Folder's); a cancel counts nothing.
+  expect(reported(reports)).toEqual({ home_pick: 1, home_import_folder: 3 });
+});
+
 it('opens and stars through the host, and with nothing yet says how a file gets here', async () => {
   render(<ModelLibrary library={library([])} onLayoutChange={() => {}} />);
   // The bar keeps its search with nothing to list yet, and the place no layout switch; the page welcomes: the

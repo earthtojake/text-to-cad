@@ -208,6 +208,28 @@ it("the home's projects came with its launch; a project's folder is read through
   expect([server.asked('/api/v1/local/pick'), server.asked('/api/v1/projects')]).toEqual([[{ folder: true, start: '/work/tag' }], [{ path: '/work/tag/STL' }]]);
 });
 
+it("where the launch says one chooser takes a file or a folder (a Mac's), Import's one chooser: a folder opened as a project, a file shown in place; none where it does not", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const project = { id: 'p1', name: 'tag', root: '/work/tag', created: 1, opened: 1, missing: false };
+  const answers = [{ path: '/work/tag/STL', folder: true }, { path: '/work/tag/a.step', folder: false }, { cancelled: true }];
+  server.answers['/api/v1/local/pick'] = () => new Status(200, answers.shift());
+  server.answers['/api/v1/projects'] = () => new Status(200, { project, made: false });
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, pickAny: true, projects: [project] }} />);
+  const importAny = viewer.props!.library!.importAny!;
+  // A folder: opened as a project, answered as Import's Folder answers.
+  expect(await importAny()).toEqual({ project, made: false, folder: '/work/tag/STL' });
+  // A file: shown in place, as Import's File shows one.
+  await act(async () => { expect(await importAny()).toEqual({ file: '/work/tag/a.step' }); });
+  expect(viewer.props!.file).toBe('/work/tag/a.step');
+  // Cancelled: nothing.
+  expect(await importAny()).toBeNull();
+  expect([server.asked('/api/v1/local/pick'), server.asked('/api/v1/projects')]).toEqual([[{ any: true }, { any: true }, { any: true }], [{ path: '/work/tag/STL' }]]);
+  cleanup();
+  // A computer whose choosers take one or the other: File and Folder alone.
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, pickAny: false }} />);
+  expect([typeof viewer.props!.library!.pick, typeof viewer.props!.library!.importFolder, viewer.props!.library!.importAny]).toEqual(['function', 'function', undefined]);
+});
+
 it("the host's file handler keeps the file it opened: a show sent to it changes nothing, and gives it no home", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const replies: ((reply: { events: unknown[] }) => void)[] = [];

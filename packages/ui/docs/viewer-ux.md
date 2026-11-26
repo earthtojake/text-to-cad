@@ -156,8 +156,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
 
 #### Projects
 
-- A folder becomes a project only when a person or an agent opens it as one: Import's Folder on the home (the navbar's
-  Import, or the "+" by Projects in the sidebar), a standalone document's Import its folder as a project, or
+- A folder becomes a project only when a person or an agent opens it as one: a folder imported on the home (the
+  navbar's Import, or the "+" by Projects in the sidebar), a standalone document's Import its folder as a project, or
   `cad viewer <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
   forgets it, and nothing on disk changes.
 - **A project is its folder, linked.** Its page lists what is in the folder now, so a file another tool drops in
@@ -175,9 +175,15 @@ chrome that floats over the picture. The home is the navbar over the library: it
 
 #### The home
 
-- The same navbar: the logo (which goes to Recents), the sidebar's toggle, and at the right the search and Import (where
-  the host has a chooser: File…, Folder…). No ⋯, and no "Home" after the toggle: the place's title says where the
-  person is, and the logo is the way home, so a name there said it twice. The search narrows the place on screen.
+- The same navbar: the logo (which goes to Recents), the sidebar's toggle, and at the right the search and Import,
+  where the host has a chooser. No ⋯, and no "Home" after the toggle: the place's title says where the person is, and
+  the logo is the way home, so a name there said it twice. The search narrows the place on screen.
+- **Import is the system's own chooser.** Where one chooser takes a file or a folder (a Mac's open panel), Import is
+  one button that opens it, with no chevron and no menu: a folder chosen is opened as a project, a file is shown.
+  Where the system has no such chooser (Windows' and Linux's take a file or a folder, never both), Import is a menu of
+  File… and Folder…. The "+" by Projects is the folder chooser everywhere. Why: it is how VS Code does it, "Open…" for
+  both on a Mac and "Open File…" and "Open Folder…" elsewhere; a menu in front of a chooser that takes either was a
+  choice the system's own dialog already offers.
 - **One place at a time** (`library/ModelLibrary.tsx`, the `.cad-library` rules): Recents (the default: every document
   opened lately, across projects), Starred, or one folder of a project. Why: each is a question a person asks ("what
   was I on?", "what is in this folder?"), and one list answers one question. A document in no project is found in
@@ -189,8 +195,9 @@ chrome that floats over the picture. The home is the navbar over the library: it
   sets its width, and on a phone it is a sheet ([The panel](#the-panel)). Its rows are the panel's rows on the panel's
   16px inset, in the home's body size, not the panel's step: it is a page's navigation, as Figma's and Drive's
   sidebars are their body size. Why: one sidebar to learn, not two that look alike and differ.
-  - Recents; Starred (lucide's star); "Projects", with a "+" that is Import's Folder (where the host has a chooser),
-    over one row a project (its folder glyph and name, the latest activity first; one whose folder is gone muted). No
+  - Recents; Starred (lucide's star); "Projects", with a "+" that opens the system's folder chooser (where the host
+    has a chooser; on a Mac too, where Import is one button: a "+" by Projects makes a project), over one row a
+    project (its folder glyph and name, the latest activity first; one whose folder is gone muted). No
     row has a count, as Figma's and Drive's sidebars have none: a count is a number nobody acts on, and a project's
     would read every folder of it on every read of the sidebar.
   - The place on screen is marked as an open tab is (the accent fill, medium weight) and said (`aria-current`), a
@@ -355,17 +362,20 @@ chrome that floats over the picture. The home is the navbar over the library: it
   the host, once typing rests, for every file anywhere below the folder on screen whose path below it holds every
   word, and lists them flat, with no folders, each saying where it is below that folder. Why: a search is the one place
   a person wants every level at once, and it is the one place they are flattened.
-- **After Import's Folder** the home goes to that project's page, at the folder chosen where it is inside the
-  project, with a line saying what came of it (made, already a project, or inside another). **After Remove from CAD** it goes to Recents and says so.
+- **After a folder is imported** (Import's Folder, a folder in its one chooser, or the "+") the home goes to that
+  project's page, at the folder chosen where it is inside the project, with a line saying what came of it (made,
+  already a project, or inside another). A file imported is shown, as a document is opened. **After Remove from CAD**
+  it goes to Recents and says so.
 - **Every state stands where its content will**: placeholder cards or rows while the list is read, placeholder rows
   where the projects will be; "No projects yet." under Projects; one muted line, where the place's first row would
   stand, in a place with nothing to list (an empty folder, nothing starred, a project whose folder is gone, one no
   longer in CAD, a folder that could not be read: the path above it still leads back up), and under a folder's last
-  file when the host listed only part of it. What came of an Import's Folder or a Remove from CAD, and an action that
+  file when the host listed only part of it. What came of a folder imported or a Remove from CAD, and an action that
   failed, are a line there too, the failure in the destructive colour: no box, no tint. With nothing at all yet,
   Recents shows the C mark (two controls tall, with no stage under it: it is a mark, not a picture), "Nothing here
-  yet" in the body's size at medium weight (the title's size is the page's title's alone), one muted line, Import file
-  and Import folder, and the formats the viewer opens, muted, 16px apart in a column centred in the place.
+  yet" in the body's size at medium weight (the title's size is the page's title's alone), one muted line, the ways
+  in (Import, one button, where the system's chooser takes either; else Import file and Import folder), and the
+  formats the viewer opens, muted, 16px apart in a column centred in the place.
 - **On a phone and in a narrow home** nothing of the place's own changes: the same 16px inset, one card across on a
   phone, as many as fit elsewhere; Import is its icon in a navbar under 480px. The sidebar is collapsed there until the
   person opens it (the panel's rule, from 872px down), and a phone's is the sheet. The width is the home's, never the
@@ -1051,3 +1061,5 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   Drive's and Box's lead at theirs.
 - **A card for a file the viewer does not open.** Its picture's space held only a glyph on an empty gradient, a
   picture's room with no picture in it; it is a folder's compact tile, after the cards.
+- **A File… and Folder… menu in front of a chooser that takes either.** A Mac's open panel takes a file or a folder,
+  so the menu asked what the system's own dialog asks; Import there is one button, as VS Code's "Open…" is.

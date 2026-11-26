@@ -491,12 +491,14 @@ test('the person\'s settings are read once by all that read them, until one chan
 test('the library, Open, Reveal and the person\'s settings are guarded requests to the viewer\'s routes, as any host reaches them', async (t) => {
   const calls = [];
   const thumbnail = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  // The one chooser of either's answers, in turn: a folder, a cancel, a file.
+  const either = [{ path: '/models/arm', folder: true }, { cancelled: true }, { path: '/models/picked.step', folder: false }];
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
     const path = new URL(url).pathname;
     calls.push([path, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
     if (path.endsWith('/thumbnail')) return new Response(path.includes('/d1/') ? thumbnail : null, { status: path.includes('/d1/') ? 200 : 404 });
     if (path === '/api/v1/local/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
-    if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
+    if (path === '/api/v1/local/pick') return Response.json(JSON.parse(options.body).any ? either.shift() : { path: '/models/picked.step' });
     if (path === '/api/v1/local/link') return Response.json({ link: '1700000000.mac', expires: 1700000000 });
     if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file', size: 2048 }] });
     if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
@@ -514,6 +516,9 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   assert.equal(await client.thumbnail({ id: 'd2', thumbnail: 'none.png' }), null);
   assert.equal(await client.pick(), '/models/picked.step');
   assert.equal(await client.pick({ folder: true, start: '/models' }), '/models/picked.step');
+  // The one chooser of a file or a folder (a Mac's): whichever was chosen, and whether it is a folder; null for a cancel.
+  assert.deepEqual([await client.pick({ any: true }), await client.pick({ any: true }), await client.pick({ any: true })],
+    [{ path: '/models/arm', folder: true }, null, { path: '/models/picked.step', folder: false }]);
   await client.reveal('/models/a.step');
   await assert.rejects(client.reveal('/models/gone.step'), /no longer there/);
   assert.deepEqual(await client.consent(), { share: true }, 'the settings\' telemetry');
@@ -533,6 +538,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
     ['/api/v1/documents/d1/thumbnail', 'GET', null, null], ['/api/v1/documents/d2/thumbnail', 'GET', null, null],
     ['/api/v1/local/pick', 'POST', '1', {}], ['/api/v1/local/pick', 'POST', '1', { folder: true, start: '/models' }],
+    ...[0, 1, 2].map(() => ['/api/v1/local/pick', 'POST', '1', { any: true }]),
     ['/api/v1/local/reveal', 'POST', '1', { path: '/models/a.step' }], ['/api/v1/local/reveal', 'POST', '1', { path: '/models/gone.step' }],
     ['/api/v1/settings', 'GET', null, null],
     ['/api/v1/settings', 'PUT', '1', { telemetry: { share: true } }], ['/api/v1/settings', 'PUT', '1', { telemetry: { share: false } }],

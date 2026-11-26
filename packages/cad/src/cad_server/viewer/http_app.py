@@ -293,7 +293,7 @@ class CadApp:
     issue_link = None
 
     def __init__(self, *, host: str, port: int, dist_dir: str = "", start: str | None = None, identity: str | None = None, documents=None):
-        from cad_server._internal.picker import available
+        from cad_server._internal.picker import available, takes_either
 
         from .drawings import DrawingRenders
         from .plots import BoardAnswers
@@ -309,8 +309,10 @@ class CadApp:
         self.prompt_files = PromptFiles()
         self._exports = None
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
-        # Whether this computer has a chooser for the home's Import (``POST /api/v1/local/pick``).
+        # Whether this computer has a chooser for the home's Import (``POST /api/v1/local/pick``), and whether
+        # one chooser takes a file or a folder there (a Mac's: ``{"any": true}``), so Import is one button.
         self.pick = available()
+        self.pick_any = self.pick and takes_either()
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -370,6 +372,8 @@ class CadApp:
             # The folder of the most recent launch, its relative files' folder. Not a boundary.
             "start": self.start,
             "pick": self.pick,
+            # Whether that chooser takes a file or a folder in one (a Mac's): the home's Import is one button.
+            "pickAny": self.pick_any,
             "port": self.port,
             "pid": os.getpid(),
         }
@@ -1450,34 +1454,44 @@ class CadApp:
     def _handle_pick(self, request, response):
         """Import's chooser: the desktop's own, held open for as long as the person takes (one at a time:
         the picker refuses a second while one is open). A file, or with ``{"folder": true, "start"?}`` a
-        folder, the chooser starting at ``start`` (an absolute folder) where one is named."""
-        from cad_server._internal.picker import PickerFailed
+        folder, the chooser starting at ``start`` (an absolute folder) where one is named; or with
+        ``{"any": true}``, where the desktop's one chooser takes either (``pickAny``: a Mac's), whichever the
+        person chose, answered with whether it is a folder."""
+        from cad_server._internal.picker import PickerFailed, takes_either
 
         self._limit(request, 8192)
         payload = json.loads(request.body() or b"{}")
-        if type(payload) is not dict or not set(payload) <= {"folder", "start"} or type(payload.get("folder", False)) is not bool:
-            raise ValueError("a pick is {} for a file, or {\"folder\": true, \"start\"?: a folder's absolute path}")
-        folder = payload.get("folder", False)
+        if type(payload) is not dict or not set(payload) <= {"folder", "start", "any"} \
+                or any(type(payload.get(flag, False)) is not bool for flag in ("folder", "any")) \
+                or (payload.get("folder") and payload.get("any")):
+            raise ValueError("a pick is {} for a file, {\"folder\": true, \"start\"?: a folder's absolute path} for a "
+                             "folder, or {\"any\": true} for either")
+        folder, either = payload.get("folder", False), payload.get("any", False)
+        if either and not takes_either():
+            raise ApiError(400, "This computer's chooser takes a file or a folder, not either in one.",
+                           "ask for a file ({}) or a folder ({\"folder\": true}); `pickAny` in /api/v1/server says which it has")
         # A file's chooser starts where the desktop last left it: ``start`` is the folder chooser's alone.
         start = absolute_path(payload["start"]) if folder and payload.get("start") is not None else None
         if start is not None and not os.path.isdir(start):
             start = None  # gone since the page named it: the chooser starts where it would
         try:
-            chosen = self.picker.choose(folder=folder, start=start)
+            chosen = self.picker.choose(folder=folder, start=start, either=either)
         except PickerFailed as failure:
-            command = "`cad viewer <folder>`" if folder else "`cad viewer <file>`"
+            command = "`cad viewer <file>` or `cad viewer <folder>`" if either else "`cad viewer <folder>`" if folder else "`cad viewer <file>`"
             raise ApiError(500, str(failure), f"open it with {command} instead") from None
         if chosen is None:
             response.send_json(200, {"cancelled": True})
-        elif folder:
+            return
+        # One chooser of either: a folder is a folder's answer, anything else a file's.
+        chose_folder = folder or (either and os.path.isdir(chosen))
+        if chose_folder:
             if not os.path.isdir(chosen):
                 raise ApiError(400, f"{chosen} is not a folder", "choose a folder")
-            response.send_json(200, {"path": to_posix_path(os.path.abspath(chosen))})
         elif extension_of(chosen) not in VIEWER_EXTENSIONS:
             raise ApiError(400, f"CAD opens {_CAD_EXTENSIONS} files; {os.path.basename(chosen)} is not one.",
-                           "choose a CAD file")
-        else:
-            response.send_json(200, {"path": to_posix_path(os.path.abspath(chosen))})
+                           "choose a CAD file, or a folder" if either else "choose a CAD file")
+        answer = {"path": to_posix_path(os.path.abspath(chosen))}
+        response.send_json(200, {**answer, "folder": chose_folder} if either else answer)
 
     # --- usage stats (telemetry) --------------------------------------------
 

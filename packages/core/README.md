@@ -183,8 +183,9 @@ starts no download; the host hands that URL to the browser. Construction is
 inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
 (the web's pauses while its page is hidden). The client also carries what every
 CAD view asks of its server, so each host reaches it the same way: the model
-library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
-(`pick`), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), What's
+library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Import
+(`pick`: a file, `{ folder: true }` a folder, `{ any: true }` either where the server's
+`pickAny` says one chooser takes both), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), What's
 new (`whatsNew`) and what the page did for
 telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
 change (POST, PUT, PATCH or DELETE) carries the viewer's guard header. A host reports its page's crashes

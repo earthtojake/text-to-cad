@@ -7,6 +7,9 @@ anything itself, and never runs a shell. Every file can be chosen -- none is gre
 out -- and the server says which kinds CAD opens when one it cannot is picked. A
 folder is chosen the same way (``folder``), the chooser opening where it is asked
 to (``start``): a standalone document's folder, so the person picks the level.
+A Mac's open panel also takes either in one (``either``), as VS Code's "Open…" does
+there; Windows' and Linux's choosers take a file or a folder, never both, so they
+have no such chooser (``takes_either``).
 A path given to a chooser goes as an argument or as base64, never as code.
 """
 
@@ -23,19 +26,20 @@ from cad.engine import executables
 
 TIMEOUT_SECONDS = 600
 
-# Its arguments: ``file`` or ``folder``, then the folder it starts in (or nothing).
+# Its arguments: ``file``, ``folder`` or ``either`` (one panel taking a file or a folder), then the folder it
+# starts in (or nothing).
 _MAC_SCRIPT = r"""
 ObjC.import('AppKit');
 function run(argv) {
-  const folder = argv[0] === 'folder';
+  const mode = argv[0];
   const app = $.NSApplication.sharedApplication;
   app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
   app.activateIgnoringOtherApps(true);
   const panel = $.NSOpenPanel.openPanel;
-  panel.title = folder ? 'Import folder' : 'Import file';
+  panel.title = mode === 'either' ? 'Import' : mode === 'folder' ? 'Import folder' : 'Import file';
   panel.prompt = 'Import';
-  panel.canChooseDirectories = folder;
-  panel.canChooseFiles = !folder;
+  panel.canChooseDirectories = mode !== 'file';
+  panel.canChooseFiles = mode !== 'folder';
   panel.canCreateDirectories = false;
   panel.allowsMultipleSelection = false;
   if (argv[1]) panel.directoryURL = $.NSURL.fileURLWithPathIsDirectory(argv[1], true);
@@ -88,13 +92,24 @@ class PickerFailed(Exception):
     """The chooser could not run, or answered with nothing usable."""
 
 
-def _command(folder: bool = False, start: str | None = None) -> tuple[list[str], dict[str, str], bool]:
-    """The chooser's argv, extra environment, and whether it answers in JSON: of a file, or of a folder
-    (``folder``), opening in the folder ``start`` where one is named. Every chooser by its absolute path
-    (``executables.find``), never one a PATH entry relative to the working folder names."""
+def takes_either() -> bool:
+    """Whether this computer has one chooser that takes a file or a folder (a Mac's open panel): the home's Import
+    is then one button. Windows' ``OpenFileDialog`` and ``FolderBrowserDialog``, and zenity's and kdialog's file
+    and folder choosers, each take one or the other."""
+    return sys.platform == "darwin"
+
+
+def _command(folder: bool = False, start: str | None = None, either: bool = False) -> tuple[list[str], dict[str, str], bool]:
+    """The chooser's argv, extra environment, and whether it answers in JSON: of a file, of a folder (``folder``),
+    or of either in one (``either``, a Mac's alone: ``takes_either``), opening in the folder ``start`` where one is
+    named. Every chooser by its absolute path (``executables.find``), never one a PATH entry relative to the
+    working folder names."""
     title = "Import folder" if folder else "Import file"
     if sys.platform == "darwin":
-        return ["/usr/bin/osascript", "-l", "JavaScript", "-e", _MAC_SCRIPT, "folder" if folder else "file", start or ""], {}, True
+        mode = "either" if either else "folder" if folder else "file"
+        return ["/usr/bin/osascript", "-l", "JavaScript", "-e", _MAC_SCRIPT, mode, start or ""], {}, True
+    if either:
+        raise PickerFailed("This computer's chooser takes a file or a folder, not either in one.")
     if sys.platform == "win32":
         shell = executables.find("powershell.exe") or executables.find("pwsh.exe")
         if shell:
@@ -127,13 +142,13 @@ class FilePicker:
     def __init__(self) -> None:
         self._busy = threading.Lock()
 
-    def choose(self, *, folder: bool = False, start: str | None = None) -> str | None:
-        """The chosen file's (or ``folder``'s) absolute path, or ``None`` when the person cancels; the
-        chooser opens in the folder ``start`` where one is named."""
+    def choose(self, *, folder: bool = False, start: str | None = None, either: bool = False) -> str | None:
+        """The chosen file's (or ``folder``'s, or with ``either`` whichever the person chose) absolute path, or
+        ``None`` when the person cancels; the chooser opens in the folder ``start`` where one is named."""
         if not self._busy.acquire(blocking=False):
             raise PickerFailed("A file chooser is already open.")
         try:
-            argv, extra, structured = _command(folder, start)
+            argv, extra, structured = _command(folder, start, either)
             try:
                 done = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=TIMEOUT_SECONDS, env={**os.environ, **extra})
             except subprocess.TimeoutExpired as error:

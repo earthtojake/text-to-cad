@@ -156,7 +156,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     ...(client.projectFolder ? { folder: (project: string, options: { path?: string; q?: string }) => client.projectFolder!(project, options) } : {}),
     removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
     // Import, with the desktop's chooser where this computer has one: a file it picks is shown in place, a folder
-    // opened as a project.
+    // opened as a project; where one chooser takes either (`pickAny`: a Mac's), that one too.
     ...(launch.pick ? {
       pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); },
       importFolder: async (start?: string) => {
@@ -165,7 +165,16 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
         return { ...await client.openProject(folder), folder };
       },
     } : {}),
-  } : undefined, [client, homed, launch.pick, navigate]);
+    ...(launch.pick && launch.pickAny ? {
+      importAny: async () => {
+        const chosen = await client.pick({ any: true });
+        if (!chosen) return null;
+        if (!chosen.folder) { navigate(normalizePath(chosen.path)); return { file: chosen.path }; }
+        if (!client.openProject) return null;
+        return { ...await client.openProject(chosen.path), folder: chosen.path };
+      },
+    } : {}),
+  } : undefined, [client, homed, launch.pick, launch.pickAny, navigate]);
   // Back and Forward, wherever the view can go elsewhere: not a file handler's, which shows its file alone.
   const viewerHistory = useMemo(() => homed ? {
     canGoBack: history.index > 0, canGoForward: history.index < history.entries.length - 1, back, forward,

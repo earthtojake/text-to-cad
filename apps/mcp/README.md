@@ -251,7 +251,8 @@ the launch's `_meta` first (`host/capability.ts`).
   over the same route as the file menu's Open in › Browser, below). The server opens a document's page by its name
   and nothing else, so a project's page is not offered there (`places: false`).
 - **A view moves within its project.** A document in a project (a folder a person opened as one: the home's
-  Import › Folder, a standalone document's Import its folder as a project, `cad viewer <folder>`) has the project's
+  Import › Folder, or a folder chosen in Import where it is one button, a Mac's, whose one chooser takes either; a
+  standalone document's Import its folder as a project; `cad viewer <folder>`) has the project's
   name before its own in the navbar, which goes to that project's page on the home at the document's folder (the
   document just left ringed there, Escape the way back), and `[` and `]` step through that folder's files; a press
   shows the document in place. A tab, a card and the web viewer do the same, and

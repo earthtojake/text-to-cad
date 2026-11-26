@@ -196,14 +196,16 @@ _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
-    """A launch with what the page needs to start on it alone: this server's version and platform, and whether
-    this computer has a file chooser for the home's Open."""
+    """A launch with what the page needs to start on it alone: this server's version and platform, whether
+    this computer has a file chooser for the home's Import, and whether one chooser takes a file or a folder
+    there (a Mac's: Import is then one button)."""
     from cad_server import __version__
-    from cad_server._internal.picker import available
+    from cad_server._internal.picker import available, takes_either
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
+    launch["pickAny"] = launch["pick"] and takes_either()
     return launch
 
 

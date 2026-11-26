@@ -121,6 +121,8 @@ export interface ImportedProject {
   /** The folder the person chose, `/`-separated. */
   folder: string;
 }
+/** What came of Import's one chooser of either (`importAny`): a file, which the host has shown, or a folder opened as a project. */
+export type ImportedFileOrProject = { file: string } | ImportedProject;
 
 // A file's format as people name it, by its extension; one not here is its extension, upper case. An xbf is not here:
 // it is the engine's own document saved as a file, what a model's page shows, so it is a model (`isModel`), named as
@@ -212,6 +214,14 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
    * a project; null when the person cancels. A host on a computer with no chooser has none.
    */
   importFolder?(start?: string): Promise<ImportedProject | null>;
+  /**
+   * Import with the desktop's one chooser of a file or a folder, where its computer has one (a Mac's open panel, as
+   * VS Code's "Open…" is there): a file chosen is shown, as `pick` shows one (`{ file }`, its path), and a folder
+   * opened as a project, answered as `importFolder` answers; null when the person cancels. Where a host has it, the
+   * home's Import is one button opening it, and its welcome's too; elsewhere Import is File… and Folder…. Windows' and
+   * Linux's choosers take one or the other, so a host there has none.
+   */
+  importAny?(): Promise<ImportedFileOrProject | null>;
   /** Remove from CAD: the project forgotten, nothing in its folder. The projects as they now are. */
   removeProject?(project: LibraryProject): Promise<readonly LibraryProject[]>;
 }
@@ -515,8 +525,9 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
 /**
  * The host's home: every document the viewer knows, one place at a time, to open again. The viewer's navbar is over it
  * (the logo, the sidebar's toggle, the host's update and Full size, as over a file), holding at its right end the
- * search and, where the host has a chooser, Import (its File and its Folder); with no navbar they stand in a bar of the
- * page's own. Neither names the home: the place's title says where the person is, and the logo is the way home. The
+ * search and, where the host has a chooser, Import (one button where one chooser takes a file or a folder, a Mac's:
+ * `importAny`; else its File and its Folder); with no navbar they stand in a bar of the page's own. Neither names the
+ * home: the place's title says where the person is, and the logo is the way home. The
  * page is on the page's colour (`--background`), full width. It is drawn as Figma's and Drive's file browsers are:
  * three sizes (a title, one body size told apart by weight and colour, and a chip's step), places with no counts,
  * tabs with no counts, a card's line its activity alone, and no list of "files in no folder".
@@ -723,21 +734,34 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // Import, at the navbar's right end: the host's chooser of a file (shown as it is chosen) or of a folder (opened as a
   // project, whose page is shown at the folder chosen, with a line saying what came of it), where its computer has one.
   const importFile = library.pick ? () => { usage.used("home_pick"); setError(""); setNote(null); void current.current.pick?.().catch(fail); } : null;
+  // A folder chosen, opened as a project: that project's page, at the folder chosen where it is inside the project.
+  const arrive = ({ project, made, folder }: ImportedProject) => {
+    const inside = below(folder, project.root);
+    const next = projectFolder(project.id, inside && inside !== slashed(folder) ? inside : "");
+    setArriving(project.id);
+    setNote({ at: placeKey(next), text: made ? t("home.projectMade", { name: project.name })
+      : !inside ? t("home.projectAgain", { name: project.name })
+        : t("home.projectInside", { name: folder.split("/").filter(Boolean).pop() ?? folder, project: project.name }) });
+    show(next);
+    return refresh();
+  };
   const importFolder = library.importFolder ? () => {
     usage.used("home_import_folder");
     setError("");
     setNote(null);
-    void current.current.importFolder?.().then(imported => {
-      if (!imported) return;
-      const { project, made, folder } = imported;
-      const inside = below(folder, project.root);
-      const next = projectFolder(project.id, inside && inside !== slashed(folder) ? inside : "");
-      setArriving(project.id);
-      setNote({ at: placeKey(next), text: made ? t("home.projectMade", { name: project.name })
-        : !inside ? t("home.projectAgain", { name: project.name })
-          : t("home.projectInside", { name: folder.split("/").filter(Boolean).pop() ?? folder, project: project.name }) });
-      show(next);
-      return refresh();
+    void current.current.importFolder?.().then(imported => (imported ? arrive(imported) : undefined)).catch(fail);
+  } : null;
+  // Import with the one chooser of a file or a folder, where the host's computer has one (a Mac's): a file is shown by
+  // the host, as File's is, and a folder opened as a project, as Folder's is. Counted by what was chosen, by the names
+  // File and Folder are counted by; a chooser cancelled counts nothing.
+  const importAny = library.importAny ? () => {
+    setError("");
+    setNote(null);
+    void current.current.importAny?.().then(imported => {
+      if (!imported) return undefined;
+      if ("file" in imported) { usage.used("home_pick"); return undefined; }
+      usage.used("home_import_folder");
+      return arrive(imported);
     }).catch(fail);
   } : null;
   // A change answers the library as it now is; a project's page, whose rows say whether each is starred, reads its folder again.
@@ -1016,17 +1040,20 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {recentShown.map(item => entry(item, true, <>{name(item)}{columns(item, recentWhere(item))}</>))}</ul></div>
     : <ul ref={setRecentGrid} className={GRID_CLASS} aria-labelledby={recentLabel}>{recentShown.map(card)}</ul>;
   // Import, the host's chooser of a file or a folder: the scale's outline button, neutral as every control of the row is
-  // (never a filled primary), its chevron a dropdown's.
-  const importMenu = importFile || importFolder ? <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild>
-      <Button variant="outline" size="control" className="cad-library-pick" aria-label={t("home.import")}>
-        <FolderOpen aria-hidden="true" /><span>{t("home.import")}</span><ChevronDown className="size-3 opacity-60" aria-hidden="true" /></Button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" className="min-w-40">
-      {importFile ? <DropdownMenuItem onSelect={importFile}>{t("home.importFile")}</DropdownMenuItem> : null}
-      {importFolder ? <DropdownMenuItem onSelect={importFolder}>{t("home.importFolder")}</DropdownMenuItem> : null}
-    </DropdownMenuContent>
-  </DropdownMenu> : null;
+  // (never a filled primary). Where one chooser takes either (`importAny`: a Mac's, as VS Code's "Open…" is there) it
+  // is that button alone, opening it; elsewhere a menu of its two choosers, File… and Folder…, its chevron a dropdown's.
+  const importLabel = <><FolderOpen aria-hidden="true" /><span>{t("home.import")}</span></>;
+  const importMenu = importAny ? <Button variant="outline" size="control" className="cad-library-pick" aria-label={t("home.import")} onClick={importAny}>{importLabel}</Button>
+    : importFile || importFolder ? <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="control" className="cad-library-pick" aria-label={t("home.import")}>
+          {importLabel}<ChevronDown className="size-3 opacity-60" aria-hidden="true" /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-40">
+        {importFile ? <DropdownMenuItem onSelect={importFile}>{t("home.importFile")}</DropdownMenuItem> : null}
+        {importFolder ? <DropdownMenuItem onSelect={importFolder}>{t("home.importFolder")}</DropdownMenuItem> : null}
+      </DropdownMenuContent>
+    </DropdownMenu> : null;
   // The places, as the sidebar's rows list them (`LibraryPlaces.jsx`): Recents, Starred, then each project.
   const fixed = (view: "recents" | "pinned", Icon: PlaceRow["Icon"]): PlaceRow => ({ place: { view }, key: view, label: t(PLACE_NAMES[view]), Icon });
   const places = {
@@ -1108,18 +1135,20 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // The place with nothing to list says why, in a line.
   const nothing = place.view === "project" ? t("home.projectEmpty") : place.view === "pinned" ? t("home.starredEmpty") : t("home.recentsEmpty");
   // Nothing at all yet: the C mark, two controls tall, the welcome's title (the body's size at medium weight: the title's
-  // size is the page's title's alone), one muted line 4px under it, then 16px apart the two ways in and the formats the
-  // viewer opens, muted; a column centred in the place.
+  // size is the page's title's alone), one muted line 4px under it, then 16px apart the ways in (Import, where one
+  // chooser takes either; else Import file and Import folder) and the formats the viewer opens, muted; a column centred
+  // in the place.
   const welcome = <div className="flex flex-col items-center gap-4 p-4 text-center" data-library-empty="">
     <img src={logo} alt="" draggable={false} className="block size-[calc(var(--cad-control)*2)] select-none" />
     <div className="flex flex-col gap-1">
       <h2 className="m-0 font-medium text-foreground">{t("home.emptyTitle")}</h2>
       <p className="m-0 text-muted-foreground">{t("home.emptyBody")}</p>
     </div>
-    {importFile || importFolder ? <div className="flex flex-wrap justify-center gap-2">
-      {importFile ? <Button variant="outline" size="control" onClick={importFile}><FolderOpen aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
-      {importFolder ? <Button variant="outline" size="control" onClick={importFolder}><Folder aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
-    </div> : null}
+    {importAny ? <Button variant="outline" size="control" onClick={importAny}>{importLabel}</Button>
+      : importFile || importFolder ? <div className="flex flex-wrap justify-center gap-2">
+        {importFile ? <Button variant="outline" size="control" onClick={importFile}><FolderOpen aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
+        {importFolder ? <Button variant="outline" size="control" onClick={importFolder}><Folder aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
+      </div> : null}
     <p className="m-0 text-muted-foreground" aria-hidden="true">{WELCOME_FORMATS}</p>
   </div>;
   // A place with nothing to list, or nothing that matches, says so in one muted line, where its first row would stand.

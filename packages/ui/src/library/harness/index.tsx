@@ -19,8 +19,10 @@ import { ModelLibrary, type LibraryFolder, type LibraryModel, type LibraryProjec
 // it (`{"open":false,"width":320}`), `?state=empty` a library with nothing in it yet (the welcome), `?state=reading` one
 // whose list never answers (the placeholders), `?state=failing` one whose documents do not open (the error's line),
 // `?state=partial` a host that lists only part of each folder, `?actions=0` a host that can do nothing with a file,
-// `?recents=many` six more of gearbox's files below its top opened lately (its Recent then holds more than a row).
-// What the home asked its host to open in an app is on `window.homeOpenedIn`. What the home asks its host to keep of the sidebar is on `window.homePanel`, as
+// `?recents=many` six more of gearbox's files below its top opened lately (its Recent then holds more than a row),
+// `?chooser=one` a host whose computer has one chooser of a file or a folder (a Mac's), so Import is one button.
+// The choosers Import asked the host for (`file`, `folder`, `any`; each answers as if cancelled) are on
+// `window.homeChoosers`. What the home asked its host to open in an app is on `window.homeOpenedIn`. What the home asks its host to keep of the sidebar is on `window.homePanel`, as
 // written, the links it asked its host to open on `window.homeOpened`, and the folders it asked for on
 // `window.homeFolders`.
 const params = new URLSearchParams(location.search);
@@ -93,9 +95,11 @@ const MORE = params.get("recents") === "many" ? TREE.slice(7, 13).map((entry, in
 const RECENTS = [TREE[2], TREE[0], TREE[6], ...MORE, ...["bracket.step", "hinge.step", "layered.dxf", "arm.urdf", "pair.glb"]
   .map((name, index) => row(`/home/me/parts/${name}`, index + 3, { pinned: index === 0 }))];
 const never = new Promise<never>(() => {});
+const chose = (chooser: "file" | "folder" | "any") => { const page = window as unknown as { homeChoosers?: string[] }; (page.homeChoosers ??= []).push(chooser); return null; };
 const library = { list: () => state === "reading" ? never : Promise.resolve(state === "empty" ? [] : RECENTS), change: async () => RECENTS, thumbnail: async () => null,
   open: async () => { if (state === "failing") throw new Error("The file could not be opened."); },
-  projects: async () => state === "empty" ? [] : PROJECTS, folder, removeProject: async () => PROJECTS, pick: async () => {}, importFolder: async () => null };
+  projects: async () => state === "empty" ? [] : PROJECTS, folder, removeProject: async () => PROJECTS,
+  pick: async () => { chose("file"); }, importFolder: async () => chose("folder"), ...(params.get("chooser") === "one" ? { importAny: async () => chose("any") } : null) };
 // A host with addresses: a document's page by its id, a place's on the home.
 const navigation = params.get("links") === "0" ? undefined : {
   hrefOf: (target: NavigationTarget) => "document" in target ? (target.document.startsWith("/") ? null : `/${target.document}`)

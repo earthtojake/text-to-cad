@@ -379,10 +379,12 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       // Its one picture, the light viewport's, which the home shows in both themes.
       return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`, { origin, params: { v: model.thumbnail } });
     },
-    pick({ folder = false, start = null } = {}) {
-      // A file, or a folder (opening in `start` where one is named): the person's answer, or null.
-      const body = folder ? { folder: true, ...(start ? { start } : {}) } : {};
-      return request(`${API}/local/pick`, { method: 'POST', headers: JSON_POST, body, operation: 'pick' }).then((reply) => reply.path ?? null);
+    pick({ folder = false, start = null, any = false } = {}) {
+      // A file, or a folder (opening in `start` where one is named): the person's answer, or null. With `any`, the one
+      // chooser of either where the server's computer has one (its `pickAny`): whichever was chosen, `{ path, folder }`.
+      const body = any ? { any: true } : folder ? { folder: true, ...(start ? { start } : {}) } : {};
+      return request(`${API}/local/pick`, { method: 'POST', headers: JSON_POST, body, operation: 'pick' })
+        .then((reply) => !reply.path ? null : any ? { path: reply.path, folder: reply.folder === true } : reply.path);
     },
     // The projects (`GET /api/v1/projects`): folders a person opened as one, the latest activity first.
     projects({ signal } = {}) {

@@ -504,6 +504,54 @@ test("the kinds' tabs wrap on a narrow page, and at a phone's scale every tab an
   } finally { await phone.context.close(); }
 });
 
+test("Import is one button opening the system's chooser where it takes a file or a folder, else a menu of File… and Folder…; the + by Projects is the folder chooser", async () => {
+  // Where the system's chooser takes either (a Mac's, as VS Code's "Open…" is there): one button, its icon and its word
+  // with no chevron, padded alike at both ends, the control tall; a press opens that chooser, and no menu.
+  const one = await home("chooser=one");
+  try {
+    const { page } = one;
+    const button = page.getByRole("button", { name: "Import", exact: true });
+    const [at, icon, word] = [await box(button), await box(button.locator("svg")), await box(button.locator("span"))];
+    assert.deepEqual([await button.locator("svg").count(), at.height, ...(await style(button, "paddingLeft", "paddingRight")), icon.x - at.x, Math.round(at.right - word.right),
+      await button.getAttribute("aria-haspopup")], [1, 28, "8px", "8px", 9, 9, null]);
+    await button.click();
+    await page.waitForFunction(() => window.homeChoosers?.length === 1);
+    assert.deepEqual([await page.evaluate(() => window.homeChoosers), await page.getByRole("menu").count()], [["any"], 0]);
+    // The + by Projects is the folder chooser there too.
+    await page.getByRole("button", { name: "Open a folder as a project" }).click();
+    await page.waitForFunction(() => window.homeChoosers?.length === 2);
+    assert.deepEqual(await page.evaluate(() => window.homeChoosers), ["any", "folder"]);
+  } finally { await one.context.close(); }
+  // Where it does not (Windows', Linux's): a menu of File… and Folder…, a dropdown's chevron after the word.
+  const two = await home();
+  try {
+    const { page } = two;
+    const button = page.getByRole("button", { name: "Import", exact: true });
+    assert.deepEqual([await button.locator("svg").count(), await button.getAttribute("aria-haspopup")], [2, "menu"]);
+    await button.click();
+    const menu = page.getByRole("menu");
+    assert.deepEqual(await menu.getByRole("menuitem").allTextContents(), ["File…", "Folder…"]);
+    await menu.getByRole("menuitem", { name: "Folder…" }).click();
+    await page.waitForFunction(() => window.homeChoosers?.length === 1);
+    assert.deepEqual(await page.evaluate(() => window.homeChoosers), ["folder"]);
+  } finally { await two.context.close(); }
+  // The welcome's ways in are the same: one Import where one chooser takes either, else Import file and Import folder.
+  for (const [query, names] of [["state=empty&chooser=one", ["Import"]], ["state=empty", ["Import file", "Import folder"]]]) {
+    const { context, page } = await home(query, undefined, { waitFor: "[data-library-empty]" });
+    try {
+      assert.deepEqual(await page.locator("[data-library-empty]").getByRole("button").allTextContents(), names, query);
+    } finally { await context.close(); }
+  }
+  // In a navbar under 480px (a phone's), the one button is its icon alone, a finger's 36px square, still named.
+  const phone = await home("chooser=one", { width: 390, height: 844 });
+  try {
+    await phone.page.locator('[data-viewer-layout="mobile"]').waitFor();
+    await still(phone.page);
+    const at = await box(phone.page.getByRole("button", { name: "Import", exact: true }));
+    assert.deepEqual([at.width, at.height], [36, 36]);
+  } finally { await phone.context.close(); }
+});
+
 // What the home is drawn with (`docs/design-system.md`): the spacing scale, the tokens' radii and the type scale's steps,
 // read from what is drawn, never from a class.
 const px = (locator, ...names) => style(locator, ...names);
