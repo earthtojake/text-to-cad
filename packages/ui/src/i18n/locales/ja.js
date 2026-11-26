@@ -289,7 +289,6 @@ export default {
   "home.importFolderButton": "フォルダーを読み込む",
 
 
-  "home.standalone": "単独のドキュメント",
 
 
   "home.projectActionsAria": "プロジェクト {name} の操作",
@@ -298,7 +297,7 @@ export default {
   "home.projectRemove": "CAD から削除",
 
 
-  "home.projectRemoved": "{name} を削除しました。ディスク上は何も変わっておらず、そのドキュメントは単独に戻りました。",
+  "home.projectRemoved": "{name} を削除しました。ディスク上は何も変わっていません。",
 
 
   "home.projectMade": "{name} をプロジェクトにしました。フォルダーには何も書き込んでいません。",
@@ -323,7 +322,7 @@ export default {
   "home.place.recents": "最近",
 
 
-  "home.place.pinned": "ピン留め",
+  "home.place.starred": "スター付き",
 
 
   "home.project": "プロジェクト",
@@ -354,10 +353,9 @@ export default {
   "home.recentsEmpty": "最近開いたものはありません。",
 
 
-  "home.pinnedEmpty": "ピン留めしたものはまだありません。ドキュメントをピン留めすると、ここに表示されます。",
+  "home.starredEmpty": "スターを付けたものはまだありません。ファイルにスターを付けると、ここに表示されます。",
 
 
-  "home.standaloneEmpty": "単独のドキュメントはありません。すべてのドキュメントがプロジェクトに入っています。",
 
 
 
@@ -416,9 +414,8 @@ export default {
   "home.fileUnavailable": "ファイルを利用できません",
   "home.actionsAria": "{name} の操作",
   "home.menuOpen": "開く",
-  "home.pin": "ピン留め",
-  "home.unpin": "ピン留めを外す",
-  "home.removeFromRecents": "最近から外す",
+  "home.star": "スターを付ける",
+  "home.unstar": "スターを外す",
   "home.kindsAria": "表示",
   "home.kind.all": "すべて",
   "home.kind.models": "3Dモデル",
@@ -426,7 +423,6 @@ export default {
   "home.kind.boards": "基板",
   "home.kind.schematics": "回路図",
   "home.kind.robots": "ロボット",
-  "home.kindCount": "{kind}、{count}件",
   "home.columnName": "名前",
   "home.columnKind": "種類",
   "home.columnSize": "サイズ",

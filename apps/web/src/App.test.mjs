@@ -234,8 +234,8 @@ test('each place of the home has its own address: a step in the history, kept by
     assert.deepEqual([snapshot().place, address(), window.history.length], [{ view: 'pinned' }, '/?view=pinned&token=1800000000.mac', length + 1]);
     await act(async () => { snapshot().onShow('', { view: 'pinned' }); await tick(); });
     assert.equal(window.history.length, length + 1, 'the place on screen is no navigation at all');
-    await act(async () => { snapshot().onShow('', { view: 'standalone' }); await tick(); });
-    assert.equal(address(), '/?view=standalone&token=1800000000.mac');
+    await act(async () => { snapshot().onShow('', { view: 'project', project: 'p1', path: 'v3' }); await tick(); });
+    assert.equal(address(), '/?project=p1&path=v3&token=1800000000.mac');
     // The home with no place named is Recents, at the bare address.
     await act(async () => { snapshot().onShow(''); await tick(); });
     assert.deepEqual([snapshot().place, address(), window.history.length], [{ view: 'recents' }, '/?token=1800000000.mac', length + 3]);
@@ -253,8 +253,8 @@ test('each place of the home has its own address: a step in the history, kept by
     const { hrefOf, openBeside } = snapshot().host.navigation;
     assert.equal(hrefOf({ document: TWO }), `/${TWO}?token=1800000000.mac`);
     assert.equal(hrefOf({ document: '/m/folder/two.step' }), null);
-    assert.deepEqual(['recents', 'pinned', 'standalone'].map(view => hrefOf({ home: { view } })),
-      ['/?token=1800000000.mac', '/?view=pinned&token=1800000000.mac', '/?view=standalone&token=1800000000.mac']);
+    assert.deepEqual(['recents', 'pinned'].map(view => hrefOf({ home: { view } })),
+      ['/?token=1800000000.mac', '/?view=pinned&token=1800000000.mac']);
     assert.equal(hrefOf({ home: { view: 'project', project: 'p1' } }), '/?project=p1&token=1800000000.mac');
     // Open in new tab: that address, in a tab of this browser cut off from this page.
     await openBeside.open({ home: { view: 'project', project: 'p1' } });

@@ -96,16 +96,17 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
   'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
-  // The home: a kind's chip (`home_kind_<kind>`, All's `home_kind_all`); `home_pick` is Import's File (its Open,
-  // before), `home_import_folder` its Folder; `home_delete` a card's Remove from Recents (no view asks first now, so
-  // none sends `home_delete_cancel`, nor a long place's Show more, `home_project_more`: older releases do); and a
-  // project's menu.
+  // The home: a kind's tab (`home_kind_<kind>`, All's `home_kind_all`); `home_pick` is Import's File (its Open,
+  // before), `home_import_folder` its Folder; `home_pin` and `home_unpin` a card's Star and Unstar (the words they
+  // shipped with); and a project's menu. No view sends `home_delete` (a card's Remove from Recents, gone with it),
+  // `home_delete_cancel` or a long place's Show more, `home_project_more`: older releases do.
   'home_search', 'home_kind_all', 'home_kind_models', 'home_kind_drawings', 'home_kind_boards', 'home_kind_schematics', 'home_kind_robots',
   'home_layout_grid', 'home_layout_list',
   'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
   'home_import_folder', 'home_project_copy_path', 'home_project_reveal', 'home_project_remove', 'home_project_more',
-  // The home's places (a row of its sidebar: pinned, peeking or a phone's sheet), its Sort, a document's and a project's Open
-  // in new tab (or Open in browser), and the way back to the document just left (its button, or Escape).
+  // The home's places (a row of its sidebar: pinned, peeking or a phone's sheet; Starred is `home_place_pinned`, and no
+  // view sends `home_place_standalone`, the place that is gone), its Sort, a document's and a project's Open in new tab
+  // (or Open in browser), and the way back to the document just left (its button, or Escape).
   'home_place_recents', 'home_place_pinned', 'home_place_standalone', 'home_place_project',
   'home_sort_activity', 'home_sort_name', 'home_sort_kind', 'home_open_new_tab', 'home_project_open_new_tab', 'home_back',
 ]));

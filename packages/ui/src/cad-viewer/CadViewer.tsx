@@ -89,7 +89,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   onShow(file: string, place?: HomeLocation): void;
   /**
    * The place of the home on screen, where the host keeps it (the web's address, the CAD app's history): Recents,
-   * Pinned, Standalone or a project's page. Without it this component keeps its own, from Recents.
+   * Starred or a project's page. Without it this component keeps its own, from Recents.
    */
   place?: HomeLocation;
   /** The home is on screen at `place`, named as the person reads it ("Recents", a project's name): a host titles its page with it. */
@@ -145,7 +145,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
 const reportError = (error: Error) => console.error(error);
 const isPlace = (value: unknown): value is HomeLocation => {
   const view = (value as { view?: unknown } | null | undefined)?.view;
-  return view === 'recents' || view === 'pinned' || view === 'standalone'
+  return view === 'recents' || view === 'pinned'
     || (view === 'project' && typeof (value as { project?: unknown }).project === 'string'
       && ['string', 'undefined'].includes(typeof (value as { path?: unknown }).path));
 };
@@ -240,14 +240,6 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     setOwnPlace(next);
     latest.current.onShow('', next);
   }, []);
-  // The person's home folder (the server's): the home says a project's folder from `~` in it.
-  const [homeFolder, setHomeFolder] = useState<string | null>(null);
-  useEffect(() => {
-    if (!homed) return undefined;
-    const controller = new AbortController();
-    void Promise.resolve().then(() => client.serverInfo({ signal: controller.signal })).then(info => { if (typeof info.home === 'string' && info.home) setHomeFolder(info.home); }, () => {});
-    return () => controller.abort();
-  }, [client, homed]);
   // What only the host knows of navigation: a target's address and how to open one beside this view. A view with no
   // home has neither.
   const hrefOf = host.navigation?.hrefOf, openBeside = host.navigation?.openBeside;
@@ -312,7 +304,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} sort={sort} onSortChange={changeSort}
       fileActions={host.fileActions} place={place} onPlaceChange={home} onPlaceShown={placeShown} from={origin} onBack={back} navigation={links}
-      home={homeFolder} panel={libraryPanel ?? null} onPanelChange={changeLibraryPanel} /> : undefined,
+      panel={libraryPanel ?? null} onPanelChange={changeLibraryPanel} /> : undefined,
     // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
     // A document named by its id that the engine does not hold says so, in the engine's words; a file that is not
@@ -321,7 +313,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
       ? <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
         title={isDocumentId(path) ? t("file.notHeld") : t("file.missing")} description={isDocumentId(path) ? message : undefined} />
       : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
-  }), [library, layout, changeLayout, sort, changeSort, path, host.fileActions, place, home, placeShown, origin, back, links, homeFolder, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
+  }), [library, layout, changeLayout, sort, changeSort, path, host.fileActions, place, home, placeShown, origin, back, links, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
   // The search of every document (⌘K, and Search documents in a document's ⋯), over a document and the home alike,
   // where the host has a library (`search/`).
   const search = useDocumentSearch();

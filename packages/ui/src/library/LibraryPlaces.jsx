@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
 import { treeKey } from "../primitives/tree-keys.js";
-import { TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowDetail, TreeRowGlyph, TreeRowHeading, TreeRowLabel, TreeRowSurface, TreeRowsLoading } from "../primitives/tree-row.jsx";
+import { TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_NAME_CLASS, TreeRowGlyph, TreeRowHeading, TreeRowLabel, TreeRowSurface, TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { useI18n } from "../i18n/index.js";
 import { cn } from "../lib/utils.js";
 
@@ -11,18 +11,17 @@ import { cn } from "../lib/utils.js";
 // phone's sheet), in the design system's own parts: the panel's rows on the panel's surface (`primitives/tree-row.jsx`).
 
 /**
- * @typedef {{ view: "recents" | "pinned" | "standalone" } | { view: "project", project: string, path?: string }} Place
- * @typedef {object} PlaceRow  One place as its row draws it.
+ * @typedef {{ view: "recents" | "pinned" } | { view: "project", project: string, path?: string }} Place
+ * @typedef {object} PlaceRow  One place as its row draws it: its glyph and its name, and no count, as Figma's and
+ *   Drive's sidebars have none.
  * @property {Place} place
  * @property {string} key  The place as one word (`placeKey`): what marks the row of the place on screen.
  * @property {string} label
- * @property {number} [count]  Its documents (Pinned's, Standalone's; a project's row has none); none is not said.
  * @property {import("react").ComponentType<any>} Icon
  * @property {boolean} [missing]  A project whose folder is gone: drawn muted.
  * @typedef {object} PlacesProps
- * @property {readonly PlaceRow[]} lead  Recents and Pinned.
+ * @property {readonly PlaceRow[]} lead  Recents and Starred.
  * @property {readonly PlaceRow[]} projects  One a project, the latest activity first: its glyph and its name.
- * @property {PlaceRow} standalone
  * @property {string} current  The key of the place on screen.
  * @property {(place: Place) => void} onVisit
  * @property {(() => void) | null} [onAddProject]  Import's Folder, where the host has a chooser: the "+" by Projects.
@@ -46,15 +45,15 @@ export const plainClick = event => event.button === 0 && !event.metaKey && !even
 
 /**
  * A way to a place, as a row of the list primitive (`primitives/tree-row.jsx`): its glyph in the row's slot, then its
- * name (the first to give way, whole in a hint) and, where it has one, its count on the right line. A link where the
- * place has an address (`href`): a plain click is `onPress`, in this view, and the browser's own ways open it in a new
- * tab; a button otherwise. `active`: the place on screen, marked as an open tab is (the accent fill, medium weight) and
- * said (`aria-current`). The sidebar's places are these, and so is a folder on a project's page.
+ * name (the first to give way, whole in a hint). A link where the place has an address (`href`): a plain click is
+ * `onPress`, in this view, and the browser's own ways open it in a new tab; a button otherwise. `active`: the place on
+ * screen, marked as an open tab is (the accent fill, medium weight) and said (`aria-current`). The sidebar's places are
+ * these.
  *
- * @param {{ href?: string | null, label: string, Icon: import("react").ComponentType<any>, count?: number, active?: boolean, missing?: boolean,
+ * @param {{ href?: string | null, label: string, Icon: import("react").ComponentType<any>, active?: boolean, missing?: boolean,
  *   onPress(): void, className?: string } & Record<string, unknown>} props
  */
-export function PlaceLink({ href = null, label, Icon, count = 0, active = false, missing = false, onPress, className, ...props }) {
+export function PlaceLink({ href = null, label, Icon, active = false, missing = false, onPress, className, ...props }) {
   return <TooltipHint content={label} overflowOnly side="right">
     <TreeRowSurface as={href ? "a" : "button"} href={href ?? undefined} type={href ? undefined : "button"} dense depth={0}
       data-missing={missing || undefined} aria-current={active ? "page" : undefined}
@@ -64,23 +63,22 @@ export function PlaceLink({ href = null, label, Icon, count = 0, active = false,
       <TreeRowGlyph><Icon className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} aria-hidden="true" /></TreeRowGlyph>
       <span className={cn(TREE_ROW_NAME_CLASS, "pointer-events-none")}>
         <TreeRowLabel className="flex-1">{label}</TreeRowLabel>
-        {count ? <TreeRowDetail className="flex-none tabular-nums">{count}</TreeRowDetail> : null}
       </span>
     </TreeRowSurface>
   </TooltipHint>;
 }
 
 /**
- * The places: Recents and Pinned, "Projects" with its "+" over one row a project, then Standalone, on the panel's
- * 16px inset (the surface's: its one type size, its rows hanging 8px past the inset). A row is the panel's row: its
- * glyph, its name (the first to give way, whole in a hint) and, for Pinned and Standalone, its count on the right line. The place on screen is
- * marked as an open tab is (the accent fill, medium weight) and said (`aria-current`). A row is a link where the host
- * gives the place an address (`hrefOf`): a plain click shows it here, and the browser's own ways open it in a new tab.
- * Up and Down move between the rows, Home and End to the first and the last (`primitives/tree-keys.js`).
+ * The places: Recents and Starred, then "Projects" with its "+" over one row a project, on the panel's 16px inset (the
+ * surface's: its rows hanging 8px past the inset). A row is the panel's row: its glyph and its name (the first to give
+ * way, whole in a hint), with no count. The place on screen is marked as an open tab is (the accent fill, medium
+ * weight) and said (`aria-current`). A row is a link where the host gives the place an address (`hrefOf`): a plain
+ * click shows it here, and the browser's own ways open it in a new tab. Up and Down move between the rows, Home and
+ * End to the first and the last (`primitives/tree-keys.js`).
  *
  * @param {PlacesProps} props
  */
-export function PlacesList({ lead, projects, standalone, current, onVisit, onAddProject = null, loading = false, note = null, hrefOf = null, footed = false }) {
+export function PlacesList({ lead, projects, current, onVisit, onAddProject = null, loading = false, note = null, hrefOf = null, footed = false }) {
   const { t } = useI18n();
   const walk = event => {
     const rows = [...event.currentTarget.querySelectorAll("[data-place]")];
@@ -90,7 +88,7 @@ export function PlacesList({ lead, projects, standalone, current, onVisit, onAdd
     rows[move.focus]?.focus();
   };
   const row = entry => <li key={entry.key} className="min-w-0">
-    <PlaceLink href={hrefOf?.(entry.place) ?? null} label={entry.label} Icon={entry.Icon} count={entry.count} active={entry.key === current} missing={entry.missing}
+    <PlaceLink href={hrefOf?.(entry.place) ?? null} label={entry.label} Icon={entry.Icon} active={entry.key === current} missing={entry.missing}
       onPress={() => onVisit(entry.place)} data-place={entry.key} />
   </li>;
   return <nav className={placesClass(footed)} aria-label={t("home.placesAria")} onKeyDown={walk} data-library-places="">
@@ -106,6 +104,5 @@ export function PlacesList({ lead, projects, standalone, current, onVisit, onAdd
         : note ? <TreeRowHeading as="p" className="m-0" data-library-places-note="">{note}</TreeRowHeading>
           : <ul className={LIST_CLASS} aria-label={t("home.projects")}>{projects.map(row)}</ul>}
     </div>
-    <ul className={LIST_CLASS}>{row(standalone)}</ul>
   </nav>;
 }

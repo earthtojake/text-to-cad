@@ -1,14 +1,15 @@
 /**
  * What a page shows, in its address. A document, in the path: `/<id>` -- a document's id (`cad.engine.ids`), its
  * file's, which the server derives from its canonical path and knows once a launcher, the page or a folder's listing
- * has named it. The home, at `/`, at a place on it its query names: `/` Recents, `/?view=pinned`, `/?view=standalone`,
- * `/?project=<id>` a project's page at its top, `&path=<folder>` at a folder of it (below its root, `/`-separated). A
- * path that names no id is the home, and a query that names no place is Recents.
+ * has named it. The home, at `/`, at a place on it its query names: `/` Recents, `/?view=pinned` Starred (the word its
+ * address shipped with), `/?project=<id>` a project's page at its top, `&path=<folder>` at a folder of it (below its
+ * root, `/`-separated). A path that names no id is the home, and a query that names no place is Recents, as is one that
+ * names a place there is no more (`?view=standalone`, the documents in no project: they are in Recents).
  */
 import { documentOfPage, documentPage } from "@cad/core/lib/documentPages.js";
 
 /** The places of the home the query's `view` names; Recents is the home with none. */
-const VIEWS = new Set(["pinned", "standalone"]);
+const VIEWS = new Set(["pinned"]);
 /** The query's parameters that name a place: a document's page carries none of them. */
 const PLACE_PARAMETERS = ["view", "project", "path"];
 
@@ -18,13 +19,13 @@ export function readDocumentId(pathname = window.location.pathname) {
 }
 
 /**
- * @typedef {{ view: "recents" | "pinned" | "standalone" } | { view: "project", project: string, path?: string }} HomePlace
+ * @typedef {{ view: "recents" | "pinned" } | { view: "project", project: string, path?: string }} HomePlace
  *   A place on the home (`@cad/ui/host`'s `HomeLocation`).
  */
 
 /**
- * The place on the home the URL's query names: a project's page (at the folder `path` names, its top with none), Pinned
- * or Standalone; Recents for anything else.
+ * The place on the home the URL's query names: a project's page (at the folder `path` names, its top with none) or
+ * Starred; Recents for anything else.
  * @param {string} [search]
  * @returns {HomePlace}
  */
@@ -34,7 +35,7 @@ export function readHomePlace(search = window.location.search) {
   const path = (query.get("path") ?? "").replace(/^\/+|\/+$/g, "");
   if (project) return path ? { view: "project", project, path } : { view: "project", project };
   const view = query.get("view");
-  return { view: view === "pinned" || view === "standalone" ? view : "recents" };
+  return { view: view === "pinned" ? view : "recents" };
 }
 
 /** The file a developer's build opens by default (`VIEWER_DEFAULT_FILE`, an absolute path), or null. */

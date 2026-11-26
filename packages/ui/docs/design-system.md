@@ -377,7 +377,7 @@ Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md
   as a different surface beside the cards.
 - **A row with a picture** (a document in the search's results and in the Home's list) is the control + 16 tall (44px;
   a phone's 52) with a row's corners, its picture the control + 4 tall at 3:2, 8px before its name. The Home's has
-  columns after the name, 16px apart, and its pin and ⋯ (small icon buttons, 4px apart) over its right end.
+  columns after the name, 16px apart, and its star and ⋯ (small icon buttons, 4px apart) over its right end.
 - **Settings rows.** `PanelSelectRow` is a `FieldLabel` and a `ValueDropdown`, the control tall, the dropdown at least
   half the row and 6rem. `PanelSwitchRow` is an optional 16px icon, the label and the switch at the right end; the
   whole row is the switch's label. A parameter with no range is `FileSheetSettingRow`, its field in a 5.5rem column.
@@ -421,8 +421,8 @@ the playback scrubber import the slider primitive. Why: no site brings its own s
 
 - **A pill** (`Pill`) is the panel's tab pill: the control tall, 6px in at each side, `rounded-md`, `text-ui`. The one
   on is `bg-accent` with the foreground at medium weight; the others muted, with `bg-accent/50` under the pointer. It is
-  as wide as its name at medium weight, so turning one on moves nothing; a count follows its name 4px on, muted,
-  regular and tabular. A row of pills (`PillGroup`) is a labelled group of toggles (`aria-pressed`), one on, 4px apart,
+  as wide as its name at medium weight, so turning one on moves nothing, and it has no count, as Figma's and Drive's
+  tabs have none. A row of pills (`PillGroup`) is a labelled group of toggles (`aria-pressed`), one on, 4px apart,
   hanging 6px past its line so the words stand on it, and wrapping where the row is short: the Home's kinds. The panel's head
   draws its tabs at the same measures ([The panel's head](#the-panels-head)).
 - **A segmented control** (`SegmentedControl`) is one choice of two (or a few) ways to show the same thing, side by

@@ -13,8 +13,8 @@ use [backend.md](./backend.md) for that interface.
 ## The URL
 
 The URL's path names the document, `/<id>` (`src/client/workbench/fileParam.js`); the bare
-path is the home, and its query names the place on it: none (Recents), `?view=pinned`, `?view=standalone` or
-`?project=<id>`, a project's page. So the place is the address's, never storage's: a reload stays on it, Back and
+path is the home, and its query names the place on it: none (Recents), `?view=pinned` (Starred) or
+`?project=<id>`, a project's page; anything else, an old `?view=standalone` among them, is Recents. So the place is the address's, never storage's: a reload stays on it, Back and
 Forward walk the places, and a new tab opens at one. No query parameter names a file: a developer's default file
 (`VIEWER_DEFAULT_FILE`, an absolute path set at build time) is resolved to its id through
 the catalog, and `writeDocumentId` keeps whatever query the page carries.

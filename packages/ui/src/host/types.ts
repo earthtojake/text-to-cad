@@ -71,11 +71,11 @@ export interface DownloadPort {
   remember?(value: ExportRecord[]): void;
 }
 /**
- * A place on the host's home: the documents opened lately across every project (`recents`), the pinned ones, the
- * documents in no project (`standalone`), or one project's page, by the project's id: one folder of it, `path` below
- * its root (`/`-separated; none, or `""`, its root).
+ * A place on the host's home: the documents opened lately across every project (`recents`), the starred ones
+ * (`pinned`), or one project's page, by the project's id: one folder of it, `path` below its root (`/`-separated; none,
+ * or `""`, its root).
  */
-export type HomeLocation = { view: 'recents' | 'pinned' | 'standalone' } | { view: 'project'; project: string; path?: string };
+export type HomeLocation = { view: 'recents' | 'pinned' } | { view: 'project'; project: string; path?: string };
 /** What a link or Open in new tab names: a document, by its id (one whose row carries none: its path), or a place on the home. */
 export type NavigationTarget = { document: string } | { home: HomeLocation };
 export interface ViewerHost {

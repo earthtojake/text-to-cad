@@ -28,8 +28,7 @@ while that server runs.
   running its script writes the file again. The states `unsaved` and `detached` are gone, and no
   message names a command that builds a document again.
 - **`cad delete` is removed.** It is answered as any unknown command is. cad has no copy of a
-  document to delete: to be rid of one, delete its file. To take a file off the viewer's lists and
-  leave it on disk, use Remove from Recents on its card. The rule that keeps a command the skills used working for
+  document to delete: to be rid of one, delete its file. The rule that keeps a command the skills used working for
   30 days was waived for this one by the repository's owner.
 - **A run takes a model from its `.xbf` whenever the file holds the model's key**, whoever wrote
   the file last. 0.11 built again when the file was not the one the server had written.

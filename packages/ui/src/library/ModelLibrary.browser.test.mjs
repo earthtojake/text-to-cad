@@ -65,11 +65,11 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
     assert.deepEqual(lead, ["home", "left", "Home"]);
     // The navbar's row over it is the row over a file: its own 8px a side, on no centred column.
     assert.deepEqual(await style(page.locator("[data-viewer-navbar]"), "paddingLeft", "paddingRight"), ["8px", "8px"]);
-    // Its rows are the panel's: 28px, the panel's one type size, their glyph on the 16px inset and their count ending on it.
+    // Its rows are the panel's: 28px, the panel's one type size, their glyph on the 16px inset, and no count (Figma's
+    // and Drive's sidebars have none): Starred is its name alone, with lucide's star.
     const pinned = sidebar.locator('[data-place="pinned"]');
-    assert.deepEqual([(await box(pinned)).height, ...(await style(pinned, "fontSize", "lineHeight"))], [28, "12px", "16px"]);
-    assert.equal((await box(pinned.locator("svg"))).x, 16);
-    assert.equal(Math.round((await box(pinned.locator("span >> text=2"))).right), 232 - 1 - 16);
+    assert.deepEqual([(await box(pinned)).height, ...(await style(pinned, "fontSize", "lineHeight")), await pinned.textContent()], [28, "12px", "16px", "Starred"]);
+    assert.equal((await box(pinned.locator("svg.lucide-star"))).x, 16);
     // The place on screen is marked as an open tab is: the accent fill at medium weight.
     const recents = sidebar.locator('[data-place="recents"]');
     assert.deepEqual([await recents.getAttribute("aria-current"), ...(await style(recents, "backgroundColor", "fontWeight"))], ["page", await token(page, "--accent"), "500"]);
@@ -91,25 +91,25 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
       const { width, height } = node.getBoundingClientRect(); return [Math.round(width), Math.round(height), getComputedStyle(node).backgroundColor]; }));
     assert.deepEqual([(await box(layout)).height, (await box(layout)).width, ...(await style(layout, "backgroundColor"))], [28, 64, await token(page, "--muted")]);
     assert.deepEqual(faces, [[28, 24, await token(page, "--background")], [28, 24, "rgba(0, 0, 0, 0)"]]);
-    // The kinds' chips, a row of their own 8px under the heading row and 16px over the cards: the panel's tab pills,
-    // their words on the place's line, All on.
+    // The kinds' tabs, a row of their own 8px under the heading row and 16px over the cards: the panel's tab pills,
+    // their words on the place's line, All on; each its word alone, with no count (Figma's and Drive's tabs have none).
     const kinds = page.getByRole("group", { name: "Show" });
-    const chips = await kinds.getByRole("button").evaluateAll((nodes) => nodes.map((node) => [node.getAttribute("aria-label"), node.getAttribute("aria-pressed"),
+    const chips = await kinds.getByRole("button").evaluateAll((nodes) => nodes.map((node) => [node.querySelector(":scope > span > span:not([aria-hidden])").textContent, node.getAttribute("aria-pressed"),
       Math.round(node.getBoundingClientRect().height), getComputedStyle(node).paddingLeft]));
-    assert.deepEqual(chips, [["All, 8", "true", 28, "6px"], ["3D models, 6", "false", 28, "6px"], ["Drawings, 1", "false", 28, "6px"], ["Robots, 1", "false", 28, "6px"]]);
+    assert.deepEqual(chips, [["All", "true", 28, "6px"], ["3D models", "false", 28, "6px"], ["Drawings", "false", 28, "6px"], ["Robots", "false", 28, "6px"]]);
     const row = await box(kinds);
     assert.deepEqual([row.x, row.y], [232 + 16 - 6, toolbar.bottom + 8]);
-    assert.deepEqual(await style(kinds.getByRole("button", { name: "All, 8" }), "backgroundColor", "fontWeight"), [await token(page, "--accent"), "400"]);
+    assert.deepEqual(await style(kinds.getByRole("button", { name: "All", exact: true }), "backgroundColor", "fontWeight"), [await token(page, "--accent"), "400"]);
     assert.equal((await box(page.locator(".cad-library-card").first())).y, row.bottom + 16);
-    await kinds.getByRole("button", { name: "Drawings, 1" }).click();
+    await kinds.getByRole("button", { name: "Drawings", exact: true }).click();
     assert.deepEqual(await page.locator(".cad-library-card .cad-library-open").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label"))), ["Open layered.dxf"]);
-    await kinds.getByRole("button", { name: "All, 8" }).click();
+    await kinds.getByRole("button", { name: "All", exact: true }).click();
     // Cards at least 200px a column, filling the place's width: five across beside the sidebar at 1440px.
     const cards = await page.locator(".cad-library-card").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()).map(({ x, width }) => [x, width]));
     assert.deepEqual([cards.every(([, width]) => width >= 200), new Set(cards.slice(0, 5).map(([x]) => x)).size], [true, 5], "every card at least 200px, five across");
     assert.equal(cards[0][0], 232 + 16);
-    // Recents says each card's project before its facts.
-    assert.match(await page.getByRole("link", { name: "Open housing.xbf", exact: true }).locator("[data-library-status]").textContent(), /^gearbox Â· /);
+    // A card's line is its activity alone, as Figma's: no project before it.
+    assert.match(await page.getByRole("link", { name: "Open housing.xbf", exact: true }).locator("[data-library-status]").textContent(), /^(Viewed|Edited) \d+h ago$/);
   } finally { await context.close(); }
 });
 
@@ -131,9 +131,8 @@ test("a card and a place are real links: a plain click stays in this view, and â
     await project.click();
     await page.locator('[data-library-title]:text-is("gearbox")').waitFor();
     assert.deepEqual([page.url(), await project.getAttribute("aria-current"), context.pages().length], [`${origin}/?`, "page", 1]);
-    // Its page: its folder from the home folder beside its name; its folders first, each a link to its own page, a tile
-    // of the cards' family (a card's box: its 1px border round a card's 12px inset round one line, 46px) in the cards' columns, then its files.
-    assert.equal(await page.locator("[data-library-path]").textContent(), "~/work/gearbox");
+    // Its page: its folders first, each a link to its own page, a tile of the cards' family (a card's box: its 1px
+    // border round a card's 12px inset round one line, 46px) in the cards' columns, then its files.
     const folder = page.getByRole("link", { name: "Open dxf", exact: true });
     assert.equal(await folder.getAttribute("href"), "/?place=gearbox&path=dxf");
     const tiles = await page.locator("[data-library-folders] > li").evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
@@ -158,7 +157,7 @@ test("a card and a place are real links: a plain click stays in this view, and â
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-place")), "recents");
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
-    await page.locator('[data-library-title]:text-is("Pinned")').waitFor();
+    await page.locator('[data-library-title]:text-is("Starred")').waitFor();
     assert.equal(page.url(), `${origin}/?`);
   } finally { await context.close(); }
 });
@@ -273,7 +272,7 @@ test("resting on the toggle peeks the collapsed sidebar as a card over the place
     assert.deepEqual([cog.bottom, cog.right <= card.right], [900 - 8, true]);
     // From the toggle into the card it stays; a place chosen in it is shown without pinning it.
     await page.locator(`${SIDEBAR} [data-place="pinned"]`).click();
-    await page.locator('[data-library-title]:text-is("Pinned")').waitFor();
+    await page.locator('[data-library-title]:text-is("Starred")').waitFor();
     assert.deepEqual([await page.locator(`${SIDEBAR}[data-panel-peek]`).count(), await kept(page)], [1, null]);
     // Left, it goes; Escape puts it away too.
     await page.mouse.move(900, 500);
@@ -490,9 +489,9 @@ test("the kinds' chips wrap on a narrow page, and at a phone's scale every chip 
     const { page } = phone;
     await page.locator('[data-viewer-layout="mobile"]').waitFor();
     await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
-    for (const name of ["All, 8", "Robots, 1", "Grid", "List"]) assert.equal((await box(page.getByRole("button", { name }))).height, 36, name);
+    for (const name of ["All", "Robots", "Grid", "List"]) assert.equal((await box(page.getByRole("button", { name, exact: true }))).height, 36, name);
     assert.deepEqual(await page.locator("[data-segment] > span").evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().height))), [32, 32]);
-    assert.deepEqual(await style(page.getByRole("button", { name: "All, 8" }), "fontSize"), ["15px"]);
+    assert.deepEqual(await style(page.getByRole("button", { name: "All", exact: true }), "fontSize"), ["15px"]);
   } finally { await phone.context.close(); }
 });
 
@@ -535,9 +534,9 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
     assert.deepEqual([(await box(badge)).height, (await box(badge)).x - picture.x, (await box(badge)).y - picture.y, ...(await px(badge, "paddingLeft", "borderTopLeftRadius"))], [20, 8, 8, "8px", "8px"]);
     // The type: text-ui throughout, the place's name and a card's at medium weight (the navbar's size), the age
     // text-tiny, the chip's own step.
-    assert.deepEqual([await type(page.locator("[data-library-title]")), await type(page.locator("[data-library-path]")), await type(cards.first().locator("[data-library-label]")),
+    assert.deepEqual([await type(page.locator("[data-library-title]")), await type(cards.first().locator("[data-library-label]")),
       await type(cards.first().locator("[data-library-status]")), await type(badge), await type(page.locator("[data-field-label]")), await type(page.locator("[data-navbar-home-left] h1"))],
-    ["13px 20px 500", "13px 20px 400", "13px 20px 500", "11px 16px 400", "12px 16px 500", "13px 20px 400", "13px 20px 400"]);
+    ["13px 20px 500", "13px 20px 500", "11px 16px 400", "12px 16px 500", "13px 20px 400", "13px 20px 400"]);
     // The list: a header of muted labels the control tall, on the line, then rows the control + 16 tall with a row's
     // corners, each picture the control + 4 tall at 3:2 on the line; names and facts one size, told apart by colour.
     await page.getByRole("button", { name: "List" }).click();

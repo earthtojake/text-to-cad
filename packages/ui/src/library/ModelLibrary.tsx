@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Clock, Ellipsis, Files, Folder, FolderOpen, LayoutGrid, List, Pin, Search } from "lucide-react";
+import { ChevronDown, Clock, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Search, Star } from "lucide-react";
 import { Badge } from "../primitives/badge.jsx";
 import { Button } from "../primitives/button.jsx";
 import { ValueDropdown } from "../primitives/value-dropdown.jsx";
@@ -53,6 +53,11 @@ export interface LibraryModel {
   updated: number | null;
   /** When the library first knew it, in seconds; null for a file of a project's folder it does not know. */
   created: number | null;
+  /**
+   * Starred: kept in the home's Starred place. The page says "starred" and "Star", as Figma, Drive and Dropbox do; the
+   * library, its rows, the host's `change` actions (`pin`, `unpin`) and the place's address (`pinned`) keep the word
+   * they shipped with.
+   */
   pinned: boolean;
   /** Gone from where it was: listed, but not openable. */
   missing: boolean;
@@ -67,7 +72,7 @@ export interface LibraryModel {
    * where it does not. A model's badge reads it: one is a Part, more an Assembly.
    */
   parts?: number | null;
-  /** The id of the nearest project above it (`LibraryProject`); none, a standalone document's. */
+  /** The id of the nearest project above it (`LibraryProject`); none for a document in no project. */
   project?: string | null;
   /**
    * Its document's type, where the host names it: `cad.registry`'s spelling (`model`, `step`, `3mf`, `kicad_pcb`...).
@@ -180,10 +185,10 @@ export function sizeLabel(bytes: number | null | undefined, locale?: string): st
 
 /** A host's library of documents: read, changed and opened through the host. */
 export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
-  /** Pinned first, then by last activity (`lastActivity`), newest first. */
+  /** Starred first, then by last activity (`lastActivity`), newest first. */
   list(): Promise<readonly Model[]>;
-  /** Pin or unpin a document (pinned, it is kept), or remove it from the lists; nothing on disk changes. The list as it now is. */
-  change(action: "pin" | "unpin" | "remove", model: Model): Promise<readonly Model[]>;
+  /** Star (`pin`) or unstar (`unpin`) a document: starred, it is kept; nothing on disk changes. The list as it now is. */
+  change(action: "pin" | "unpin", model: Model): Promise<readonly Model[]>;
   /**
    * An image URL for a model's thumbnail (the one its `thumbnail` names), or null: the light viewport's
    * picture, which the Home shows in both themes.
@@ -213,6 +218,8 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
 
 /** The home with no place named: every document opened lately. */
 export const RECENTS: HomeLocation = Object.freeze({ view: "recents" });
+/** A place's name as the page says it. */
+const PLACE_NAMES = Object.freeze({ recents: "home.place.recents", pinned: "home.place.starred" } as const);
 /** A place as one word: what marks its row in the sidebar (a project's, whichever of its folders is on screen). */
 export const placeKey = (place: HomeLocation) => (place.view === "project" ? `project:${place.project}` : place.view);
 /** The folder of a project's page, below its root: `""` its root. */
@@ -225,7 +232,7 @@ const NO_LABELS: ModelLabels = Object.freeze({ xbf: "", part: "", assembly: "" }
  * A place's documents in the order the person chose: by last activity (when each was last opened or changed), newest
  * first; by name; or by kind, in the kinds' order (`DOCUMENT_KINDS`, one of none last), then the models (`isModel`),
  * then by format (`format`: a model's Part, Assembly or XBF, a file's format), then by name. The host's order where
- * two tie. A pinned document is not first: Pinned is a place of its own.
+ * two tie. A starred document is not first: Starred is a place of its own.
  */
 export function sortDocuments<Model extends LibraryModel>(documents: readonly Model[], sort: LibrarySort,
   format: (item: Model) => string = item => formatLabel(item, NO_LABELS), locale?: string): Model[] {
@@ -242,14 +249,6 @@ const slashed = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "");
 export function below(path: string, root: string): string {
   const shown = slashed(path), base = slashed(root);
   return shown === base ? "" : base && shown.startsWith(`${base}/`) ? shown.slice(base.length + 1) : shown;
-}
-
-/** `path` as the home says it: from `~` where it is in the person's home folder (`home`). */
-export function tildePath(path: string, home?: string | null): string {
-  const base = (home ?? "").replace(/\\/g, "/").replace(/\/+$/, "");
-  const shown = path.replace(/\\/g, "/");
-  if (!base) return shown;
-  return shown === base ? "~" : shown.startsWith(`${base}/`) ? `~${shown.slice(base.length)}` : shown;
 }
 
 /** Whether every word of `query` is in its name or its path. */
@@ -275,14 +274,13 @@ export function shownModels<Model extends LibraryModel>(items: readonly Model[],
 }
 
 /**
- * The chips over a place's documents (`items`): All, then each kind the place holds, in the kinds' order, each with how
- * many a search (`query`) leaves of it. None where the place holds one kind or none: there is nothing to tell apart.
+ * The kinds' tabs over a place's documents (`items`): All, then each kind the place holds, in the kinds' order, with
+ * no count, as Figma's and Drive's tabs have none. None where the place holds one kind or none: there is nothing to
+ * tell apart.
  */
-export function kindChips(items: readonly LibraryModel[], query: string): { kind: LibraryKind; count: number }[] {
+export function kindChips(items: readonly LibraryModel[]): LibraryKind[] {
   const held = DOCUMENT_KINDS.filter(kind => items.some(item => documentKind(item) === kind));
-  if (held.length < 2) return [];
-  const found = filterModels(items, query);
-  return [{ kind: "all", count: found.length }, ...held.map(kind => ({ kind, count: found.filter(item => documentKind(item) === kind).length }))];
+  return held.length < 2 ? [] : ["all", ...held];
 }
 
 const message = (failure: unknown) => failure instanceof Error ? failure.message : String(failure);
@@ -409,8 +407,8 @@ const NO_PLACES: ReadonlySet<EntryAction> = new Set();
  * A card's or a row's ⋯: one menu for every file. What leads it is the caller's (`lead`: a document's Open and Open in
  * new tab), then Open in, a submenu of the apps the host lists for the file and Default app (`OpenInItems`, the rows the
  * navbar's Open in draws), looked up as the menu opens and there only once the host has listed something; then what
- * the host can do with a file on disk (`items`: Copy path, Copy link, the file manager); then the caller's last items
- * (`tail`: a document's Pin and Remove from Recents). Nothing at all where there would be no item.
+ * the host can do with a file on disk (`items`: Copy path, Copy link, the file manager); then the caller's last item
+ * (`tail`: a document's Star or Unstar). Nothing at all where there would be no item.
  */
 function FileMenu<Model extends LibraryModel>({ item, fileActions, items, lead = null, tail = null, label, className, variant, onPerform, onFail }: {
   item: Model; fileActions?: FileActions; items: readonly { action: EntryAction; label: string }[]; lead?: ReactNode; tail?: ReactNode; label: string;
@@ -447,14 +445,14 @@ function FileMenu<Model extends LibraryModel>({ item, fileActions, items, lead =
 const ESCAPE_KEY = "Esc";
 // A small icon button that opens a menu (a card's, a row's and a project's ⋯): muted, on the accent fill while it is open.
 const MENU_BUTTON_CLASS = "text-muted-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground";
-// A card's and a row's pin and ⋯: there under the pointer or the keyboard, while its menu is open, always where nothing
-// hovers, and the pin always while it is on.
+// A card's and a row's star and ⋯: there under the pointer or the keyboard, while its menu is open, always where nothing
+// hovers, and the star always while it is on.
 const ACTION_CLASS = "opacity-0 transition-opacity group-hover/entry:opacity-100 group-focus-within/entry:opacity-100 data-[state=open]:opacity-100 "
   + "aria-pressed:opacity-100 [@media(hover:none)]:opacity-100 motion-reduce:transition-none";
 /** What the home keeps of its sidebar (`LibrarySidebar.jsx`): the person's choice of open or closed, and its width. */
 export interface LibraryPanel { open?: boolean; width?: number }
-/** One place of the home as its row draws it: a project's row has no count (its folder is not walked to count it). */
-interface PlaceRow { place: HomeLocation; key: string; label: string; count?: number; Icon: ComponentType<any>; missing?: boolean }
+/** One place of the home as its row draws it: its glyph and its name, and no count, as Figma's and Drive's sidebars have none. */
+interface PlaceRow { place: HomeLocation; key: string; label: string; Icon: ComponentType<any>; missing?: boolean }
 /** What the home asks of the host's navigation: a target's address, and a target opened beside this view. */
 export type LibraryNavigation = Pick<ViewerHost["navigation"], "hrefOf" | "openBeside">;
 /** The document the person just left for a project's page: its card is ringed, and Back and Escape return to it. */
@@ -472,46 +470,45 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * The host's home: every document the viewer knows, one place at a time, to open again. The viewer's navbar is over it
  * (the logo, the sidebar's toggle, the host's update and Full size, as over a file), holding "Home", the search and, where the
  * host has a chooser, Import (its File and its Folder); with no navbar they stand in a bar of the page's own. The page
- * is on the page's colour (`--background`), full width.
+ * is on the page's colour (`--background`), full width. It is drawn as Figma's and Drive's file browsers are: places
+ * with no counts, tabs with no counts, a card's line its activity alone, and no list of "files in no folder".
  *
  * At its left, a sidebar of places (`LibrarySidebar.jsx`), which is the viewer's panel over this page: pinned it pushes
  * the place, collapsed it leaves nothing but a peek from its toggle, a phone's is a sheet, its width the person's by its
  * grip (232px at first), and what the person chose of it is kept (`panel`, `onPanelChange`). It ends in the panel's
  * foot (the host's links and Settings), as a document's panel does. Its places: Recents (`place`'s
- * default: every document opened lately, across projects, as `library.list()` gives them), Pinned with its count, then
- * "Projects" with a "+" (Import's Folder, where the host has a chooser) over one row a project (`projects()`: its folder
- * glyph and name, the latest activity first; one whose folder is gone muted), then Standalone, the documents
- * in no project. Its rows are the panel's (`primitives/tree-row.jsx`), the one on screen marked (`aria-current`), Up and
- * Down moving between them; each is a link where the host gives places an address (`navigation.hrefOf`).
+ * default: every document opened lately, across projects, as `library.list()` gives them; a document in no project is
+ * found there and by the search), Starred, then "Projects" with a "+" (Import's Folder, where the host has a chooser)
+ * over one row a project (`projects()`: its folder glyph and name, the latest activity first; one whose folder is gone
+ * muted). Its rows are the panel's (`primitives/tree-row.jsx`), with no count, the one on screen marked (`aria-current`),
+ * Up and Down moving between them; each is a link where the host gives places an address (`navigation.hrefOf`).
  *
  * The main area shows the place on screen. Its heading row: the place's name; on a project's page, the folder glyph
  * and the folder's path, the project's name first and each part a way back up to it (the last, the folder on screen,
- * the heading), at the project's top that folder from `~` (below it the heading is the path already), and its ⋯ (Open
- * in new tab, Copy path, Reveal, then Remove from CAD, which forgets the project and nothing on disk); then Sort (Last activity, Name, Kind) and grid or list, one segmented control.
- * Under it the kinds' chips (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds,
- * with its count under the search), where it holds more than one.
+ * the heading), and its ⋯ (Open in new tab, Copy path, Reveal, then Remove from CAD, which forgets the project and
+ * nothing on disk); then Sort (Last activity, Name, Kind) and grid or list, one segmented control. Under it the kinds'
+ * tabs (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds), where it holds more
+ * than one.
  *
  * A project's page is one folder of it (`library.folder`, read again every `LIST_MS`): its subfolders first, each its
- * glyph and its name and a way into it (a row, `PlaceLink`), then every file directly in it, the documents and the
- * files no page opens together (`isDocument`: one of those is a card or a row like the rest, opened in an app of the
- * computer's by a press, `openFile`, with Open in in its ⋯ and no pin). Recents, Pinned and Standalone are the
- * library's rows. Each document is a card (a picture badged with its format -- for an `.xbf` file "Part" or
- * "Assembly", by its `parts`, "XBF" (its format) where that is not known -- over the name and a line: its project's
- * name in Recents and Pinned, then its last activity with its verb; no glyph or size, which the list has) or a row
- * (Name, Where or Project, Kind: its format, Size, Updated, Created). A card's picture is the one its row names, else its
- * format's tile: the home draws none. A card's or a row's main press is a link where the host gives the document an
- * address (it is named by its `id`; a row with none by its `path`), a button otherwise. Each has a pin and one ⋯ menu
- * (`FileMenu`): Open, Open in new tab (or Open in browser: `navigation.openBeside`), Open in (the host's apps for its
- * files, looked up as the menu opens), Copy path, Copy link and Reveal where the host can, Pin or Unpin, then, but on a project's page (where a file is listed for being in the folder), Remove from Recents,
- * which forgets the library's entry of it (no question: its file is untouched, and opening it again brings it back) and
- * takes the card off the list at once. Nothing on the home deletes a file.
+ * glyph and its name and a way into it, then every file directly in it, the documents and the files no page opens
+ * together (`isDocument`: one of those is a card or a row like the rest, opened in an app of the computer's by a
+ * press, `openFile`, with Open in in its ⋯ and no star). Recents and Starred are the library's rows. Each document is
+ * a card (a picture badged with its format -- for an `.xbf` file "Part" or "Assembly", by its `parts`, "XBF" (its
+ * format) where that is not known -- over the name and its last activity with its verb; no glyph, place or size,
+ * which the list has) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created). A card's picture is
+ * the one its row names, else its format's tile: the home draws none. A card's or a row's main press is a link where
+ * the host gives the document an address (it is named by its `id`; a row with none by its `path`), a button
+ * otherwise. Each has a star and one ⋯ menu (`FileMenu`): Open, Open in new tab (or Open in browser:
+ * `navigation.openBeside`), Open in (the host's apps for its files, looked up as the menu opens), Copy path, Copy link
+ * and Reveal where the host can, then Star or Unstar. Nothing on the home deletes a file or forgets one.
  *
- * The search narrows the place on screen: Recents, Pinned and Standalone by the rows in hand; a project's page asks the
- * host for every file below the folder on screen (`library.folder` with `q`), the one place its levels are
- * flattened, each row saying where it is below that folder.
+ * The search narrows the place on screen: Recents and Starred by the rows in hand; a project's page asks the host for
+ * every file below the folder on screen (`library.folder` with `q`), the one place its levels are flattened, each
+ * row saying where it is below that folder.
  *
  * The place is padded by the panel's inset (16px) on every side, at every width and on a phone: its heading, its
- * chips' words, its folders' glyphs and its cards stand on that one line.
+ * tabs' words, its folders' glyphs and its cards stand on that one line.
  *
  * `from` (the document the navbar's project name was pressed over) rings that document's card in the brand's colour,
  * brought into view, and puts "Back to <name>" in the heading row; Escape, while no menu, dialog or field has the
@@ -522,7 +519,7 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * library takes no other open until the host has opened it or failed to.
  */
 export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, sort = "activity", onSortChange, fileActions,
-  place: placed, onPlaceChange, onPlaceShown, from = null, onBack, navigation, home = null, panel = null, onPanelChange }: {
+  place: placed, onPlaceChange, onPlaceShown, from = null, onBack, navigation, panel = null, onPanelChange }: {
   library: ModelLibrarySource<Model>;
   /** What the host can do with a file on disk (Copy path, Reveal): each file's menu offers it, and each project's. */
   fileActions?: FileActions;
@@ -543,8 +540,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   onBack?(): void;
   /** The host's addresses and its Open in new tab (`ViewerHost.navigation`): links for buttons, and the menus' item. */
   navigation?: LibraryNavigation;
-  /** The person's home folder, where the host knows it: a project's folder is said from `~` in it. */
-  home?: string | null;
   /** The sidebar as the person left it, where the host keeps it (the tab's settings); without it the home keeps its own while it is up. */
   panel?: LibraryPanel | null;
   /** The person opened or closed the sidebar, or dragged its width: the whole of what is kept. */
@@ -663,7 +658,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     }).catch(fail).finally(() => setOpening(null));
   };
   // The person's own move to a place: a row of the sidebar, a folder of a project, or a part of its path.
-  const PLACE_CONTROLS = { recents: "home_place_recents", pinned: "home_place_pinned", standalone: "home_place_standalone", project: "home_place_project" } as const;
+  const PLACE_CONTROLS = { recents: "home_place_recents", pinned: "home_place_pinned", project: "home_place_project" } as const;
   const visit = (next: HomeLocation) => {
     if (samePlace(next, place)) return;
     usage.used(PLACE_CONTROLS[next.view]);
@@ -692,36 +687,24 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       return refresh();
     }).catch(fail);
   } : null;
-  // A change answers the library as it now is; a project's page, whose rows say whether each is pinned, reads its folder again.
-  const change = (action: "pin" | "unpin" | "remove", item: Model) => current.current.change(action, item)
+  // A change answers the library as it now is; a project's page, whose rows say whether each is starred, reads its folder again.
+  const change = (action: "pin" | "unpin", item: Model) => current.current.change(action, item)
     .then(next => { setItems(next); askFolder.current(); }, fail);
-  // Remove from Recents: the library's entry of the document forgotten, its file untouched, so nothing is asked first
-  // (opening the file again brings the entry back). The card leaves the list at once.
-  const [gone, setGone] = useState<ReadonlySet<string>>(() => new Set());
-  const remove = (item: Model) => {
-    usage.used("home_delete");
-    setGone(previous => new Set([...previous, item.path]));
-    void change("remove", item)
-      .finally(() => setGone(previous => { const next = new Set(previous); next.delete(item.path); return next; }));
-  };
-  const all = (items ?? []).filter(item => !gone.has(item.path));
+  const all = items ?? [];
   const [kind, setKind] = useState<LibraryKind>("all");
   // Home's navbar (`file-viewer/navbarSlots.js`): its heading, the search and Import go there; where there is no
   // navbar they stand in a bar of the page's own.
   const slots = useNavbarSlots();
   // A narrow navbar (under 700px: `styles/globals.css`) shows the search as its icon until it is pressed.
   const [searchOpen, setSearchOpen] = useState(false);
-  // The places. Pinned and Standalone, from the library's rows; a project's page, from its folder.
+  // The places. Starred, from the library's rows (`pinned`); a project's page, from its folder.
   const known = new Map((projects ?? []).map(project => [project.id, project]));
-  const inProject = (item: Model) => Boolean(item.project && known.has(item.project));
-  const standalone = all.filter(item => !inProject(item));
   const pinned = all.filter(item => item.pinned);
   const shownProject = place.view === "project" ? known.get(place.project) ?? null : null;
   useEffect(() => { if (arriving && projects?.some(project => project.id === arriving)) setArriving(null); }, [arriving, projects]);
   // A project's page before its project is listed: one Import's Folder just opened, or the first read of the projects.
   const awaited = place.view === "project" && !shownProject && (projects === null ? !projectsFailed : arriving === place.project);
-  const placeName = place.view === "project" ? shownProject?.name ?? t("home.project")
-    : place.view === "standalone" ? t("home.standalone") : t(`home.place.${place.view}`);
+  const placeName = place.view === "project" ? shownProject?.name ?? t("home.project") : t(PLACE_NAMES[place.view]);
   // The folder on screen's path, a part a level: the project's name first, each a way back up to its folder.
   const crumbs = place.view === "project" ? [{ name: placeName, path: "" }, ...folderPath.split("/").filter(Boolean)
     .map((name, index, parts) => ({ name, path: parts.slice(0, index + 1).join("/") }))] : [];
@@ -735,13 +718,12 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // A search on a project's page: the host's answer for the words, or the one before narrowed by them here until it comes.
   const searching = place.view === "project" && Boolean(words);
   const folders = listing && !searching ? listing.folders : [];
-  const inPlace = place.view === "project" ? listing?.documents ?? []
-    : place.view === "pinned" ? pinned : place.view === "standalone" ? standalone : all;
+  const inPlace = place.view === "project" ? listing?.documents ?? [] : place.view === "pinned" ? pinned : all;
   const ordered = sortDocuments(inPlace, sort, format, locale);
   // The kinds' chips: the place's kinds, counted under the search. A kind chosen in another place that this one does
   // not hold shows all of it.
-  const chips = kindChips(inPlace, query);
-  const shownKind = chips.some(chip => chip.kind === kind) ? kind : "all";
+  const chips = kindChips(inPlace);
+  const shownKind = chips.includes(kind) ? kind : "all";
   const matching = shownModels(ordered, query, shownKind);
   const now = Date.now();
   // The document just left, among the place's: its card is ringed and brought into view.
@@ -787,33 +769,30 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     setError("");
     void Promise.resolve().then(() => beside?.open(target)).catch(fail);
   };
-  // A card's pin and its one menu (`FileMenu`: Open, Open in new tab, Open in, what the host can do with a file on disk,
-  // Pin or Unpin, then Remove from Recents), there while the pointer is on the card (Figma's star): the pin toggles, and a
-  // pinned card shows it, filled, whatever the pointer does. A file that is no document has the menu alone, with Open in
-  // and what the host can do with a file: it has no page to open and is in no library to pin it in. On a project's page there is no Remove from Recents: a file is there
-  // because it is in the folder. Nothing here deletes a file: that is the person's own act, in their file manager.
-  // Pin or Unpin, from the card's pin or its menu: counted alike.
-  const pin = (item: Model) => { usage.used(item.pinned ? "home_unpin" : "home_pin"); void change(item.pinned ? "unpin" : "pin", item); };
-  const removable = place.view !== "project";
+  // A card's star and its one menu (`FileMenu`: Open, Open in new tab, Open in, what the host can do with a file on disk,
+  // then Star or Unstar), there while the pointer is on the card (Figma's star): the star toggles, and a starred card
+  // shows it, filled in the foreground, whatever the pointer does; its hint says what a press does. A file that is no
+  // document has the menu alone, with Open in and what the host can do with a file: it has no page to open and is in
+  // no library to star it in. Nothing here deletes a file or forgets one, as nothing in Figma's or Drive's file browser
+  // forgets a file: a file goes where the person deletes it, in their file manager. Star or Unstar, from the card's
+  // star or its menu: counted alike, by the names the counts shipped with (`home_pin`, `home_unpin`).
+  const star = (item: Model) => { usage.used(item.pinned ? "home_unpin" : "home_pin"); void change(item.pinned ? "unpin" : "pin", item); };
   const actions = (item: Model, row: boolean) => {
     const document = isDocument(item);
     const variant = row ? "ghost" : "outline";
+    const starLabel = t(item.pinned ? "home.unstar" : "home.star");
     return <div className={cn("absolute flex items-center gap-1", row ? "top-1/2 right-2 -translate-y-1/2" : "light top-2 right-2")} data-library-actions="">
-      {document ? <Button variant={variant} size="icon-xs" className={cn(ACTION_CLASS, "text-muted-foreground aria-pressed:text-foreground")} aria-label={t(item.pinned ? "home.unpin" : "home.pin")} aria-pressed={item.pinned}
-        data-library-pin="" onClick={() => pin(item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button> : null}
+      {document ? <TooltipHint content={starLabel}>
+        <Button variant={variant} size="icon-xs" className={cn(ACTION_CLASS, "text-muted-foreground aria-pressed:text-foreground")} aria-label={starLabel} aria-pressed={item.pinned}
+          data-library-star="" onClick={() => star(item)}><Star aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button>
+      </TooltipHint> : null}
       <FileMenu item={item} fileActions={fileActions} variant={variant} className={cn(ACTION_CLASS, MENU_BUTTON_CLASS)} label={t("home.actionsAria", { name: item.name })}
         items={document ? fileItems : fileItems.filter(entry => entry.action !== "copy-link")} onPerform={perform} onFail={fail}
         lead={document ? <>
           <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
           {beside ? <DropdownMenuItem disabled={item.missing} onSelect={() => openBeside(targetOf(item), "home_open_new_tab")}>{besideLabel}</DropdownMenuItem> : null}
         </> : null}
-        tail={document ? <>
-          <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem>
-          {removable ? <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => remove(item)}>{t("home.removeFromRecents")}</DropdownMenuItem>
-          </> : null}
-        </> : null} />
+        tail={document ? <DropdownMenuItem onSelect={() => star(item)}>{starLabel}</DropdownMenuItem> : null} />
     </div>;
   };
   // The ⋯ of a project's page: Open in new tab first, where the host opens a place beside this view; the folder on
@@ -848,16 +827,15 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </DropdownMenuContent>
     </DropdownMenu> : null;
   const age = (seconds: number | null) => ageLabel(seconds, now, t, locale);
-  // Where a document is, said where it is not plain: in a search on a project's page, its folder below the folder on
-  // screen; in Recents and Pinned, where projects are listed, its project's name (Standalone for one in none).
+  // Where a document is, the list's column where it is not plain: in a search on a project's page, its folder below
+  // the folder on screen; in Recents and Starred, where projects are listed, its project's name (a dash for none).
   const across = (place.view === "recents" || place.view === "pinned") && known.size > 0;
   const where = (item: Model) => searching && shownProject ? below(item.folder ?? "", folderOnScreen)
-    : across ? known.get(item.project ?? "")?.name ?? t("home.standalone") : "";
+    : across ? known.get(item.project ?? "")?.name ?? "—" : "";
   const whereColumn = searching ? t("home.columnWhere") : across ? t("home.columnProject") : null;
-  // A tile's line: where it is (its project's name in Recents and Pinned, its folder in a search on a project's page),
-  // then its last activity with its verb, Edited or Viewed, whichever came last. Its size is the list's column.
-  const status = (item: Model) => [where(item), item.missing ? t("home.fileUnavailable") : activityLabel(item, now, t, locale)]
-    .filter(Boolean).join(" · ");
+  // A card's line: its last activity with its verb, Edited or Viewed, whichever came last, and nothing before it, as
+  // Figma's cards say "Edited 2 hours ago" alone. Where it is and its size are the list's columns.
+  const status = (item: Model) => item.missing ? t("home.fileUnavailable") : activityLabel(item, now, t, locale);
   // A row's name: its picture (the search's row picture, its spinner over it while it is being opened), then its name in
   // the foreground at regular weight: a list's emphasis is colour.
   const name = (item: Model) => <span className={cn(NAME_COLUMN_CLASS, "group-data-missing/entry:opacity-50")} data-library-name="">
@@ -951,14 +929,12 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {importFolder ? <DropdownMenuItem onSelect={importFolder}>{t("home.importFolder")}</DropdownMenuItem> : null}
     </DropdownMenuContent>
   </DropdownMenu> : null;
-  // The places, as the sidebar's rows list them (`LibraryPlaces.jsx`): Recents, Pinned, each project, Standalone.
-  const fixed = (view: "recents" | "pinned" | "standalone", count: number, Icon: PlaceRow["Icon"]): PlaceRow =>
-    ({ place: { view }, key: view, label: view === "standalone" ? t("home.standalone") : t(`home.place.${view}`), count, Icon });
+  // The places, as the sidebar's rows list them (`LibraryPlaces.jsx`): Recents, Starred, then each project.
+  const fixed = (view: "recents" | "pinned", Icon: PlaceRow["Icon"]): PlaceRow => ({ place: { view }, key: view, label: t(PLACE_NAMES[view]), Icon });
   const places = {
-    lead: [fixed("recents", 0, Clock), fixed("pinned", pinned.length, Pin)],
+    lead: [fixed("recents", Clock), fixed("pinned", Star)],
     projects: (projects ?? []).map((project): PlaceRow => ({ place: { view: "project", project: project.id },
       key: placeKey({ view: "project", project: project.id }), label: project.name, Icon: Folder, missing: project.missing })),
-    standalone: fixed("standalone", standalone.length, Files),
     current: here, onVisit: visit, onAddProject: importFolder,
     loading: projects === null && !projectsFailed,
     note: projects === null ? (projectsFailed ? t("home.projectsFailed") : null) : projects.length ? null : t("home.projectsEmpty"),
@@ -966,12 +942,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   };
   // The page's heading: "Home", in the navbar where there is one, drawn as a file's name is there.
   const heading = <h1 className="m-0 flex h-control min-w-0 items-center whitespace-nowrap text-ui font-normal text-foreground" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
-  // The kinds: a row of pills (`primitives/pill.jsx`) under the heading row, All then each kind the place holds, with its
-  // count; one on at a time.
+  // The kinds: a row of pills (`primitives/pill.jsx`) under the heading row, All then each kind the place holds, with no
+  // count (Figma's and Drive's tabs have none); one on at a time, each named by its word alone.
   const kindRow: ReactNode = chips.length ? <PillGroup label={t("home.kindsAria")} data-library-kinds="">
-    {chips.map(chip => <Pill key={chip.kind} pressed={chip.kind === shownKind} count={chip.count} data-kind={chip.kind}
-      aria-label={t("home.kindCount", { kind: t(`home.kind.${chip.kind}`), count: chip.count })}
-      onClick={() => { if (chip.kind !== shownKind) usage.used(`home_kind_${chip.kind}`); setKind(chip.kind); }}>{t(`home.kind.${chip.kind}`)}</Pill>)}
+    {chips.map(chip => <Pill key={chip} pressed={chip === shownKind} data-kind={chip}
+      onClick={() => { if (chip !== shownKind) usage.used(`home_kind_${chip}`); setKind(chip); }}>{t(`home.kind.${chip}`)}</Pill>)}
   </PillGroup> : null;
   // Sort: a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), set to fit beside it.
   const sortMenu: ReactNode = onSortChange ? <span className="flex min-w-0 items-center"><FieldLabel className="flex-none">{t("home.sortAria")}</FieldLabel>
@@ -1014,8 +989,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // Nothing at all yet: no project, no document.
   const empty = !all.length && !(projects ?? []).length;
   // The place with nothing to list says why, in a line.
-  const nothing = place.view === "project" ? t("home.projectEmpty") : place.view === "pinned" ? t("home.pinnedEmpty")
-    : place.view === "standalone" ? t("home.standaloneEmpty") : t("home.recentsEmpty");
+  const nothing = place.view === "project" ? t("home.projectEmpty") : place.view === "pinned" ? t("home.starredEmpty") : t("home.recentsEmpty");
   // Nothing at all yet: the C mark, two controls tall, the welcome's title in the heading step, one muted line 4px
   // under it, then 16px apart the two ways in and the formats the viewer opens; a column centred in the place.
   const welcome = <div className="flex flex-col items-center gap-4 p-4 text-center" data-library-empty="">
@@ -1058,16 +1032,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
           apart; its rows hang past that line as the panel's do (`PANEL_ROW_VARIABLES`). */}
       <main className="@container grid min-w-0 flex-1 auto-rows-max grid-cols-1 content-start gap-4 overflow-y-auto p-(--panel-inset) pb-[calc(var(--cad-host-bottom-inset,0px)+var(--panel-inset))]"
         aria-label={t("home.modelsAria")} style={PANEL_ROW_VARIABLES as React.CSSProperties} data-library-content="">
-        {/* The place's heading row, every control the scale's: its name (a project's folder's path, with its glyph, its
-            folder from `~` at the project's top and its ⋯) and the way back at the left; Sort and the layout at the right.
-            It keeps its shape from place to place. 8px under it, the kinds' chips, where the place holds more than one kind. */}
+        {/* The place's heading row, every control the scale's: its name (a project's folder's path, with its glyph and its
+            ⋯) and the way back at the left; Sort and the layout at the right. It keeps its shape from place to place. 8px
+            under it, the kinds' tabs, where the place holds more than one kind. */}
         <div className="grid grid-cols-1 gap-2">
           <div className="flex min-h-control flex-wrap items-center justify-between gap-x-4 gap-y-2" data-library-toolbar="filters">
             <div className="flex min-w-0 flex-auto items-center gap-2">
               {shownProject ? <Folder className="size-glyph flex-none text-muted-foreground" aria-hidden="true" /> : null}
               {title}
-              {shownProject && !folderPath ? <TooltipHint content={folderOnScreen} overflowOnly>
-                <span className="min-w-0 flex-[0_100000_auto] truncate text-muted-foreground" data-library-path="">{tildePath(folderOnScreen, home)}</span></TooltipHint> : null}
               {shownProject ? projectMenu(shownProject) : null}
               {backControl}
             </div>

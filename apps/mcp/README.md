@@ -239,7 +239,7 @@ the launch's `_meta` first (`host/capability.ts`).
   The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo, its sidebar's toggle, Back
   and Forward and Full size; no file, so no ⋯). It shows one place at a time, from its
-  sidebar (Recents, Pinned, each project, Standalone), which is the viewer's panel over the home: pinned it pushes
+  sidebar (Recents, Starred, each project), which is the viewer's panel over the home: pinned it pushes
   the place, in a card or a narrow tab it is collapsed until its toggle (or ⌘\) opens it or a mouse resting there
   peeks it, at a phone's width it is a sheet, and the person's choice and width are kept in the tab's own store. It
   ends in the panel's foot, as a file's panel does: GitHub, Discord and Send feedback as icons, and **Settings**, a
@@ -257,7 +257,7 @@ the launch's `_meta` first (`host/capability.ts`).
   shows the document in place. A tab, a card and the web viewer do the same, and
   nothing browses the disk outside a project.
 - **A view keeps its own history.** As a browser keeps a tab's: every file a
-  view showed, and each place of the home the person went to (Recents, Pinned, a project's page, Standalone: the
+  view showed, and each place of the home the person went to (Recents, Starred, a project's page: the
   view has no address to keep one in; a project's page is one step a folder), in order, the agent's shows and the person's own
   moves alike (`ModelView.tsx`), handed to the viewer as `history`. The navbar's Back
   and Forward, after its logo, over a file and on the home, walk it, each disabled where it

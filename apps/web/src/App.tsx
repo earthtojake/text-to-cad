@@ -44,7 +44,7 @@ const RECENTS: HomeLocation = { view: 'recents' };
 /**
  * The viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
  * or a file's, which the server registers when it is opened), or the home (`/`) at the place its query names
- * (`fileParam.js`: Recents, `?view=pinned`, `?view=standalone`, `?project=<id>&path=<folder>`). A file opened by its path (from the
+ * (`fileParam.js`: Recents, `?view=pinned` Starred, `?project=<id>&path=<folder>`). A file opened by its path (from the
  * home's Open) is asked for its id first, and shown by it. The browser's own history is the way back: showing a
  * document, the home or another place on it is a new entry, and every one of them has its own address, for a link
  * and for Open in new tab.

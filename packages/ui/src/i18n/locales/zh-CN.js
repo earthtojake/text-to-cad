@@ -290,7 +290,6 @@ export default {
   "home.importFolderButton": "导入文件夹",
 
 
-  "home.standalone": "独立文档",
 
 
   "home.projectActionsAria": "项目 {name} 的操作",
@@ -299,7 +298,7 @@ export default {
   "home.projectRemove": "从 CAD 中移除",
 
 
-  "home.projectRemoved": "已移除 {name}。磁盘上的内容没有改变，其中的文档恢复为独立文档。",
+  "home.projectRemoved": "已移除 {name}。磁盘上的内容没有改变。",
 
 
   "home.projectMade": "{name} 现在是一个项目。没有向该文件夹写入任何内容。",
@@ -324,7 +323,7 @@ export default {
   "home.place.recents": "最近",
 
 
-  "home.place.pinned": "已置顶",
+  "home.place.starred": "已加星标",
 
 
   "home.project": "项目",
@@ -355,10 +354,9 @@ export default {
   "home.recentsEmpty": "最近没有打开过任何内容。",
 
 
-  "home.pinnedEmpty": "还没有置顶的内容。置顶一个文档，它就会留在这里。",
+  "home.starredEmpty": "还没有加星标的内容。给一个文件加星标，它就会留在这里。",
 
 
-  "home.standaloneEmpty": "没有独立文档。所有文档都在项目中。",
 
 
 
@@ -417,9 +415,8 @@ export default {
   "home.fileUnavailable": "文件不可用",
   "home.actionsAria": "{name} 的操作",
   "home.menuOpen": "打开",
-  "home.pin": "置顶",
-  "home.unpin": "取消置顶",
-  "home.removeFromRecents": "从最近中移除",
+  "home.star": "加星标",
+  "home.unstar": "取消星标",
   "home.kindsAria": "显示",
   "home.kind.all": "全部",
   "home.kind.models": "3D 模型",
@@ -427,7 +424,6 @@ export default {
   "home.kind.boards": "电路板",
   "home.kind.schematics": "原理图",
   "home.kind.robots": "机器人",
-  "home.kindCount": "{kind}，{count} 个",
   "home.columnName": "名称",
   "home.columnKind": "类型",
   "home.columnSize": "大小",

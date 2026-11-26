@@ -289,7 +289,6 @@ export default {
   "home.importFolderButton": "폴더 가져오기",
 
 
-  "home.standalone": "독립 문서",
 
 
   "home.projectActionsAria": "프로젝트 {name} 작업",
@@ -298,7 +297,7 @@ export default {
   "home.projectRemove": "CAD에서 제거",
 
 
-  "home.projectRemoved": "{name}을(를) 제거했습니다. 디스크의 내용은 바뀌지 않았고, 문서는 다시 독립 문서가 되었습니다.",
+  "home.projectRemoved": "{name}을(를) 제거했습니다. 디스크의 내용은 바뀌지 않았습니다.",
 
 
   "home.projectMade": "{name}이(가) 이제 프로젝트입니다. 폴더에는 아무것도 쓰지 않았습니다.",
@@ -323,7 +322,7 @@ export default {
   "home.place.recents": "최근 항목",
 
 
-  "home.place.pinned": "고정됨",
+  "home.place.starred": "별표",
 
 
   "home.project": "프로젝트",
@@ -354,10 +353,9 @@ export default {
   "home.recentsEmpty": "최근에 연 항목이 없습니다.",
 
 
-  "home.pinnedEmpty": "아직 고정한 항목이 없습니다. 문서를 고정하면 여기에 표시됩니다.",
+  "home.starredEmpty": "아직 별표한 항목이 없습니다. 파일에 별표를 표시하면 여기에 표시됩니다.",
 
 
-  "home.standaloneEmpty": "독립 문서가 없습니다. 모든 문서가 프로젝트에 속해 있습니다.",
 
 
 
@@ -416,9 +414,8 @@ export default {
   "home.fileUnavailable": "파일을 사용할 수 없음",
   "home.actionsAria": "{name} 작업",
   "home.menuOpen": "열기",
-  "home.pin": "고정",
-  "home.unpin": "고정 해제",
-  "home.removeFromRecents": "최근 항목에서 제거",
+  "home.star": "별표 표시",
+  "home.unstar": "별표 해제",
   "home.kindsAria": "표시",
   "home.kind.all": "전체",
   "home.kind.models": "3D 모델",
@@ -426,7 +423,6 @@ export default {
   "home.kind.boards": "기판",
   "home.kind.schematics": "회로도",
   "home.kind.robots": "로봇",
-  "home.kindCount": "{kind}, {count}개",
   "home.columnName": "이름",
   "home.columnKind": "종류",
   "home.columnSize": "크기",

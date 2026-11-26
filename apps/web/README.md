@@ -6,7 +6,7 @@ The built client ships inside the same wheel. `cad viewer [FILE ...]` opens the
 engine's one page and exits; a FILE that is a folder is opened as a project, on the home. The page addresses every
 document by path, `/<uuid>`: a model's id, or a file's id once a launcher (or the page itself) registers it, derived
 from the file's canonical path. `/` is the home, and each place on it has its own address: `/` Recents,
-`/?view=pinned`, `/?view=standalone`, `/?project=<id>` a project's page. Python scripts are never documents. There
+`/?view=pinned` Starred, `/?project=<id>` a project's page. Python scripts are never documents. There
 is no hosted deployment.
 
 This app is the browser host of `@cad/ui/file-viewer`, not the owner of
@@ -69,9 +69,8 @@ and assets, so the app does not scan another package's source.
 - **Loud failure**: a missing entry, an unresolvable ref, or a file the engine
   cannot read surfaces as an alert — never a silently wrong scene.
 - **The viewer is read-only**: it never changes a design. It writes no
-  document's content and no file of one (an export downloads a new file; the
-  home's Remove from Recents forgets the library's entry of a document, never
-  its file, and nothing in the viewer deletes a file). Changing a design belongs to the agent and the code; every viewer tool
+  document's content and no file of one (an export downloads a new file, and
+  nothing in the viewer deletes a file). Changing a design belongs to the agent and the code; every viewer tool
   (Select, Measure, Draw, Quick Edit, the filters and displays) exists to
   show the person the design and to give the agent feedback.
 
@@ -421,8 +420,9 @@ new tab starts without them. It ends in the panel's foot, the row a document's p
 GitHub, Discord and Send feedback as icons, and at the right **Settings**, a cog whose menu holds Language,
 Telemetry, Theme and the version.
 
-A sidebar at the left lists the places: Recents (every document opened lately, across projects), Pinned, each project
-(`GET /api/v1/projects`, the latest activity first, with no count) and Standalone, the documents of no project. A
+A sidebar at the left lists the places, with no counts: Recents (every document opened lately, across projects; a
+document in no project is found there and by the search), Starred (`?view=pinned`: the library's `pinned` rows), and
+each project (`GET /api/v1/projects`, the latest activity first). A
 project's page is one folder of it (`GET /api/v1/projects/<id>?path=`): its subfolders, each its glyph and its name,
 a row and a link into it, then every file directly in it; from the sidebar it opens at the project's top, and from a
 document's navbar at the document's folder. A file the viewer does not open (a PDF, a script, another tool's native
@@ -430,12 +430,12 @@ file) is a card and a row like the rest, with its extension for a badge: a press
 computer's (`GET /api/v1/local/open-in?id=`, then `POST /api/v1/local/open`: the OS's own handler where the server
 offers it, else the first app it lists; where neither, a line says no app here opens it), and its ⋯ holds Open in,
 Copy path and the file manager. Its heading is the folder's path, the project's name first, each part above the
-folder on screen a link back up, then, at the project's top, that folder from `~`, and its ⋯ (Open in new tab, Copy
+folder on screen a link back up, and its ⋯ (Open in new tab, Copy
 path, Reveal, Remove from CAD, which forgets the project, changes nothing on disk and goes to Recents). The search on
 a project's page asks the server for every file below the folder on screen that holds the
 words (`?path=&q=`, once typing rests) and lists them flat, each saying where it is below that folder; elsewhere it
 narrows the rows in hand. Every heading row ends in Sort and grid or list, one segmented control; the kinds' chips
-under it (All, then 3D models, Drawings, Boards, Schematics and Robots, each the place holds, with its count: an
+under it (All, then 3D models, Drawings, Boards, Schematics and Robots, each the place holds, with no count: an
 `.xbf` and the STEP, STL or GLB exported from it are all 3D models); then the documents, all of them. The grid's tiles
 are framed cards, at least 232px wide and 16px apart: the picture its row names (the light viewport's, 3:2 on the
 model area's light gradient in both themes; a file with none, its kind's glyph on the plain tile), its format's chip
@@ -443,16 +443,16 @@ at its top-left (for an `.xbf`
 file, the engine's own document saved as a file, so a model though still a file in everything else, "Part" when its
 document holds one part and "Assembly" when it holds more, as desktop CAD names its documents (the row's `parts`), and
 "XBF", its format, where the server does not know the count for the file as it is; every other file its format,
-"STEP", "KiCad PCB"), then, in a compact caption, its name over one line: where it is (its project's name in Recents
-and Pinned, its folder in a project's search), then its last activity with its verb ("Edited now", "Viewed 5m ago",
+"STEP", "KiCad PCB"), then, in a compact caption, its name over one line: its last activity with its verb, alone, as
+Figma's cards say it ("Edited now", "Viewed 5m ago",
 "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last opened, Viewed when it
 was opened after it last changed). The list is a table: Name, Project (or, in a project's search, Where), Kind, Size,
 Updated and Created over rows the control + 16 tall (44px), each a document's small picture and name, its format (as the badge), its size and
 those two ages with no verb; a folder's row has its glyph and a dash in each column. Every file is a tile and a row
-of its own, a model's `.xbf` among them. The pin and the ⋯ appear on hover (at a tile's picture's corner, at a row's
-end); a pinned one keeps its pin. The ⋯ menu holds Open, Open in new tab, Open in (the apps the server lists for
-its files), Copy path, Copy link and Reveal, Pin or Unpin, and, but on a project's page, Remove from Recents, which forgets the library's entry of the file at once, asks
-nothing and touches no file (opening the file again brings it back). From a file, the navbar's C logo leads back to it: a link to `/` (Recents), so a
+of its own, a model's `.xbf` among them. The star and the ⋯ appear on hover (at a tile's picture's corner, at a row's
+end); a starred one keeps its star, filled. The ⋯ menu holds Open, Open in new tab, Open in (the apps the server lists
+for its files), Copy path, Copy link and Reveal, then Star or Unstar (`PATCH /api/v1/documents`'s `pin` and `unpin`);
+nothing on the home deletes or forgets a file. From a file, the navbar's C logo leads back to it: a link to `/` (Recents), so a
 plain click goes home in this tab and ⌘ or Ctrl and a click opens the home in a new one. The home has the same
 navbar and the same C logo (one 16px mark on every page), which there goes to Recents; the links and Settings are
 the foot of the sidebar, on the home and over a file.
@@ -460,12 +460,13 @@ the foot of the sidebar, on the home and over a file.
 #### Addresses, and a new tab
 
 Every place of the home and every document has its own address in this origin (`fileParam.js`'s `pageAddress`): a
-document's page `/<id>`; Recents `/`, `/?view=pinned`, `/?view=standalone`, and a project's page `/?project=<id>`, at
+document's page `/<id>`; Recents `/`, Starred `/?view=pinned`, and a project's page `/?project=<id>`, at
 a folder of it `/?project=<id>&path=<folder below its root>`, each beside whatever the page's address already carries
-(its link, `?token=`). A query that names no place is Recents.
+(its link, `?token=`). A query that names no place is Recents, as is `?view=standalone`, a place the home no longer
+has (its documents are in Recents).
 Going to a place is a step of the browser's history, as showing a file is: Back and Forward walk between them (the
 navbar draws no arrows of its own here), and a reload stays where it was. The page's title names the place
-("gearbox · text-to-cad", "v3 · text-to-cad" for a folder of it, "Pinned · text-to-cad").
+("gearbox · text-to-cad", "v3 · text-to-cad" for a folder of it, "Starred · text-to-cad").
 
 So a card, a row, a folder, a part of a folder's path and a sidebar row are real links (`ViewerHost.navigation.hrefOf`): a plain click shows the target in
 this view, and ⌘ or Ctrl and a click, a middle click or the browser's link menu opens it in a new tab. Open in new

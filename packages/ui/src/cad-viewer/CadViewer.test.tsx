@@ -228,7 +228,7 @@ test("What's new is said over the home, and over a file once its view is up: nev
   act(() => release());
 });
 
-type HomeProps = { place: unknown; from: { path: string; id: string | null; name: string } | null; home: string; onBack(): void; onPlaceChange(place: unknown): void;
+type HomeProps = { place: unknown; from: { path: string; id: string | null; name: string } | null; onBack(): void; onPlaceChange(place: unknown): void;
   onPlaceShown(name: string): void; navigation: { hrefOf?: unknown; openBeside?: unknown } };
 const homeProps = () => (props().presentation!.home as { props: HomeProps }).props;
 
@@ -236,7 +236,7 @@ test("a document in a project has its project's name before its own and its fold
   const listed = { project: { id: 'p1', name: 'parts', root: '/models/parts', created: 1, opened: 1, missing: false }, path: 'v3', folders: [], truncated: false,
     documents: [{ path: '/models/parts/v3/a.step', name: 'a.step', folder: '/models/parts/v3' }] };
   const base = cadClient();
-  const client = Object.assign(base, { serverInfo: vi.fn(async () => ({ home: '/Users/me' })), projectFolder: vi.fn(async () => listed),
+  const client = Object.assign(base, { projectFolder: vi.fn(async () => listed),
     entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries.find(entry => entry.file === path) ?? null });
   // A host that keeps the file and the place itself, as an app does: what it is asked to show is what it shows next.
   const shows: [string, unknown][] = [];
@@ -253,12 +253,11 @@ test("a document in a project has its project's name before its own and its fold
   expect(client.projectFolder).toHaveBeenCalledWith('p1', expect.objectContaining({ path: 'v3', signal: expect.any(AbortSignal) }));
   // A host with no addresses: the name is no link.
   expect(props().project?.href).toBeNull();
-  // Its name shows the home at that project's page, at the folder the document is in; the person's home folder says
-  // its folder from `~`.
+  // Its name shows the home at that project's page, at the folder the document is in.
   act(() => props().project!.onShow());
   expect(shows.at(-1)).toEqual(['', { view: 'project', project: 'p1', path: 'v3' }]);
   rerender(view('', { place: { view: 'project', project: 'p1', path: 'v3' } }));
-  await vi.waitFor(() => expect(homeProps()).toMatchObject({ place: { view: 'project', project: 'p1', path: 'v3' }, home: '/Users/me' }));
+  await vi.waitFor(() => expect(homeProps()).toMatchObject({ place: { view: 'project', project: 'p1', path: 'v3' } }));
   // The document just left is the home's to ring, by its path and its id, with the way back to it.
   expect(homeProps().from).toMatchObject({ path: '/models/parts/v3/a.step', id: 'f1', name: 'a.step' });
   act(() => homeProps().onBack());
@@ -303,11 +302,14 @@ test("the home's place is the host's where it keeps one, the view's own otherwis
   act(() => props().host.navigation.home!({ view: 'project', project: 'p1' }));
   expect(homeProps().place).toEqual({ view: 'project', project: 'p1' });
   // A host that keeps the place (its address, its history) is the one that says it.
-  rerender(view({ place: { view: 'standalone' } }));
-  expect(homeProps().place).toEqual({ view: 'standalone' });
+  rerender(view({ place: { view: 'pinned' } }));
+  expect(homeProps().place).toEqual({ view: 'pinned' });
   // The home says its place's name, as the person reads it, for the host's page title.
-  act(() => homeProps().onPlaceShown('Standalone'));
-  expect(named).toEqual([[{ view: 'standalone' }, 'Standalone']]);
+  act(() => homeProps().onPlaceShown('Starred'));
+  expect(named).toEqual([[{ view: 'pinned' }, 'Starred']]);
+  // A place the home no longer has (Standalone, whose documents are Recents'), asked for, is Recents.
+  act(() => props().host.navigation.home!({ view: 'standalone' } as never));
+  expect(shows.at(-1)).toEqual(['', { view: 'recents' }]);
 });
 
 test("the host's addresses and its Open in new tab reach the home, the navbar's project name and the viewer's navigation; a view with no home has neither", async () => {

@@ -18,8 +18,7 @@ that chrome changes them first. The CAD app's surrounding host controls
 remain its own.
 
 **The viewer is read-only, with one exception.** It writes no document's content and no file of
-one (an export is a download of a new file; the home's Remove from Recents forgets the library's entry
-of a document, never its file, and nothing in the viewer deletes a file). Changing a design belongs to the agent and the code, and every
+one (an export is a download of a new file, and nothing in the viewer deletes a file). Changing a design belongs to the agent and the code, and every
 viewer tool (Select, Measure, Draw, Quick Edit, the filters and displays) exists to show the
 person the design and to give the agent feedback. The exception is a model's **Params** tab
 ([Parameters](docs/viewer-ux.md#parameters)): its Save asks the engine to set the named numbers
@@ -113,7 +112,7 @@ src/
   cad-viewer/        CadViewer (FileViewer + the six CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
     navigation/     the navbar, the app menu and its links, the file menu
-  library/           a host's home: its places (Recents, Pinned, each project, Standalone) and their documents, to open again, and their pictures
+  library/           a host's home: its places (Recents, Starred, each project) and their documents, to open again, and their pictures
   search/            the search of every document (⌘K), over a document and the home
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
@@ -371,12 +370,12 @@ are without it. With no
 file a view shows the host's home under the same navbar (the logo, which goes to Recents, its sidebar's toggle,
 Back and Forward where the host keeps the view's history, and the host's
 actions, and the home's own Home, search and Import: a file, or a folder opened as a project): a
-sidebar of places (Recents, Pinned, each project, Standalone, over the panel's foot), which is the viewer's panel
+sidebar of places (Recents, Starred, each project, over the panel's foot), which is the viewer's panel
 over the home (pinned, collapsed, peeking, a phone's sheet), and the place on screen (a project's: one folder of it,
 its subfolders then its files, under the folder's path), its
 documents as Figma-style tiles with their pictures or as a table of rows, shown, sorted and laid
-out from its heading row, each with its pin and a ⋯ menu (Open, Open in new tab, ending, but on a folder's page, in
-Remove from Recents, which asks nothing and deletes nothing); a card is a real link where the host gives documents an address
+out from its heading row, each with its star and a ⋯ menu (Open, Open in new tab, ending in Star or Unstar; nothing
+deletes or forgets a file); a card is a real link where the host gives documents an address
 ([the home](docs/viewer-ux.md#the-home)). A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
 "Could not open that file" and why, each with Go home where the host has a home. A

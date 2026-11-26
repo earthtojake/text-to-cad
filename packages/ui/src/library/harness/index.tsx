@@ -8,12 +8,12 @@ import type { HomeLocation, NavigationTarget } from "../../host/types.js";
 import { ModelLibrary, type LibraryFolder, type LibraryModel, type LibraryProject } from "../ModelLibrary.js";
 
 // The home under the viewer's navbar, as a host shows it, for the home's browser spec (`ModelLibrary.browser.test.mjs`)
-// and for a look at the page: a few standalone documents and three projects: gearbox, a tree of folders; an empty one;
+// and for a look at the page: a few documents in no project and three projects: gearbox, a tree of folders; an empty one;
 // and one whose folder is gone. A project's folder is answered as a CAD host answers it (`GET /api/v1/projects/<id>`):
 // its subfolders that hold a file somewhere below, then its files; with words, every file below it that holds them all. gearbox holds an engineer's other files too (a datasheet, a script,
 // notes, another tool's native file, a file of an unknown kind and one with no extension): files the viewer does not open,
 // listed with the rest and opened in the computer's apps (`fileActions`: Open in's apps as a CAD host answers them).
-// The page's address chooses what is on screen: `?place=pinned|standalone|<project id>` the place (`&path=` a folder
+// The page's address chooses what is on screen: `?place=pinned|<project id>` the place (Starred, or a project; `&path=` a folder
 // of a project), `?from=<name>` the document just left, `?layout=list`, `?links=0` a host with no addresses,
 // `?scheme=dark`, `?width=<px>` the home's width (the window's without it), `?panel=<json>` the sidebar as a host kept
 // it (`{"open":false,"width":320}`), `?state=empty` a library with nothing in it yet (the welcome), `?state=reading` one
@@ -100,7 +100,7 @@ const navigation = params.get("links") === "0" ? undefined : {
   openBeside: { kind: "tab" as const, open() {} },
 };
 const named = params.get("place");
-const start: HomeLocation = !named || named === "recents" ? { view: "recents" } : named === "pinned" || named === "standalone" ? { view: named }
+const start: HomeLocation = !named || named === "recents" ? { view: "recents" } : named === "pinned" ? { view: named }
   : { view: "project", project: named, ...(params.get("path") ? { path: params.get("path")! } : {}) };
 const scheme = params.get("scheme") === "dark" ? "dark" as const : "light" as const;
 // The way home (the navbar's logo): Recents, shown in place; a link where the host has addresses.
@@ -118,7 +118,7 @@ function Home() {
   const [sort, setSort] = useState<"activity" | "name" | "kind">("activity");
   const from = params.get("from");
   showPlace = setPlace;
-  return <ModelLibrary library={library} fileActions={fileActions} layout={layout} onLayoutChange={setLayout} sort={sort} onSortChange={setSort} home="/home/me"
+  return <ModelLibrary library={library} fileActions={fileActions} layout={layout} onLayoutChange={setLayout} sort={sort} onSortChange={setSort}
     place={place} onPlaceChange={setPlace} navigation={navigation} from={from ? { path: `/elsewhere/${from}`, id: `id-${from}`, name: from } : null} onBack={() => {}}
     panel={keptPanel} onPanelChange={panel => { (window as unknown as { homePanel?: object }).homePanel = panel; }} />;
 }

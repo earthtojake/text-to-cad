@@ -14,18 +14,17 @@ export const PILL_OFF_CLASS = "text-muted-foreground hover:bg-accent/50 hover:te
 
 /**
  * A pill that is a toggle of a row of them (`aria-pressed`): its name, as wide as at medium weight so turning it on moves
- * nothing, then its count where it has one, muted, regular and tabular, 4px on.
+ * nothing, and no count, as Figma's and Drive's tabs have none.
  */
 export const Pill = React.forwardRef(/**
- * @param {React.ComponentPropsWithoutRef<"button"> & { pressed: boolean, count?: React.ReactNode }} props
+ * @param {React.ComponentPropsWithoutRef<"button"> & { pressed: boolean }} props
  * @param {React.ForwardedRef<HTMLButtonElement>} ref
- */ function Pill({ pressed, count = null, className, children, ...props }, ref) {
-  return <button ref={ref} type="button" aria-pressed={pressed} data-slot="pill" className={cn(PILL_CLASS, pressed ? PILL_ON_CLASS : PILL_OFF_CLASS, "gap-1", className)} {...props}>
+ */ function Pill({ pressed, className, children, ...props }, ref) {
+  return <button ref={ref} type="button" aria-pressed={pressed} data-slot="pill" className={cn(PILL_CLASS, pressed ? PILL_ON_CLASS : PILL_OFF_CLASS, className)} {...props}>
     <span className="grid">
       <span aria-hidden="true" className="invisible col-start-1 row-start-1 font-medium">{children}</span>
       <span className={cn("col-start-1 row-start-1", pressed && "font-medium")}>{children}</span>
     </span>
-    {count === null ? null : <span className="font-normal tabular-nums text-muted-foreground" data-pill-count="">{count}</span>}
   </button>;
 });
 

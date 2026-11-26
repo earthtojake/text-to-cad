@@ -178,22 +178,24 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - The same navbar: the logo (which goes to Recents), the sidebar's toggle, then "Home", and at the right the search
   and Import (where the host has a chooser: File…, Folder…). No ⋯. The search narrows the place on screen.
 - **One place at a time** (`library/ModelLibrary.tsx`, the `.cad-library` rules): Recents (the default: every document
-  opened lately, across projects), Pinned, one folder of a project, or Standalone (the documents in no project). Why:
-  each is a question a person asks ("what was I on?", "what is in this folder?"), and one list answers one question.
+  opened lately, across projects), Starred, or one folder of a project. Why: each is a question a person asks ("what
+  was I on?", "what is in this folder?"), and one list answers one question. A document in no project is found in
+  Recents (and Starred, starred) and by the search, as in Drive's file browser, which has no place of files in no
+  folder: a place of them was one more row for a question nobody asks.
 - **The sidebar** lists the places (`library/LibraryPlaces.jsx`) and behaves as the viewer's panel does, because it is
   that panel over another page (`library/LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx` and `PanelSurface.jsx`):
   pinned it pushes the place, collapsed it leaves nothing, it peeks from its toggle, ⌘\ shows and hides it, its grip
   sets its width, and on a phone it is a sheet ([The panel](#the-panel)). Its rows are the panel's rows on the panel's
   16px inset. Why: one sidebar to learn, not two that look alike and differ.
-  - Recents; Pinned with its count; "Projects", with a "+" that is Import's Folder (where the host has a chooser), over
-    one row a project (its folder glyph and name, the latest activity first; one whose folder is gone muted); then
-    Standalone with its count. A project's row has no count: counting its files would read every folder of it, on
-    every read of the sidebar, for a number nobody acts on.
+  - Recents; Starred (lucide's star); "Projects", with a "+" that is Import's Folder (where the host has a chooser),
+    over one row a project (its folder glyph and name, the latest activity first; one whose folder is gone muted). No
+    row has a count, as Figma's and Drive's sidebars have none: a count is a number nobody acts on, and a project's
+    would read every folder of it on every read of the sidebar.
   - The place on screen is marked as an open tab is (the accent fill, medium weight) and said (`aria-current`), a
     project's whichever of its folders is on screen; pressed there, it goes to the project's top. Up and Down move
     between the rows, Home and End to the first and the last.
-  - Every row is always there, so the list keeps its shape: Pinned with nothing pinned has no count, and its page says
-    how a document gets there. A count of none is not written.
+  - Every row is always there, so the list keeps its shape: Starred with nothing starred is there too, and its page
+    says how a file gets there.
   - It ends in the panel's foot, as a document's panel does: the app's links and Settings
     ([The panel's foot](#the-panels-foot)).
 - **The place** fills the rest, on the page's colour, padded by the panel's inset (16px) on all four sides, at every
@@ -207,25 +209,23 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **A project's heading is the folder's path**: its folder glyph, then the project's name and each folder down to the
   one on screen (`gearbox / housing / v3`), each part but the last a link back up to its folder, muted, and the last the
   heading, all in the heading's step; then its ⋯: Open in new tab (this folder), Copy path, Reveal (this folder), then
-  Remove from CAD (the project), which says nothing on disk changed and goes to Recents. At the project's top, where the
-  heading is its name alone, its folder from `~` follows the name, muted (`~/work/gearbox`); below the top it is left
-  out. Why: there the heading is already the path, and the same folders said twice in one row is noise; where the
-  project's folder is on disk is asked at its top, and Copy path says the rest. A path too long for the row gives way
-  from its start: the parts above, down to their first letters, then the folder's own name, so the folder on screen is
-  the last to go. Why: it is the way a file browser says where you are, and the one way back up, with no Back button
-  of its own.
-- **The kinds**, a row of chips of its own 8px under the heading row: All, then 3D models, Drawings, Boards, Schematics and
-  Robots, each only where the place holds one, always in that order, each with its count. One is on at a time (All at
-  first); a search and the chip narrow together, and the counts are the place's under the search, before the chip.
-  There is no row where the place holds one kind or none, and a kind chosen in another place that this one lacks shows
-  all of it. The choice is the page's own, as the search is. An XBF, a STEP, an STL, a 3MF and a GLB are 3D
+  Remove from CAD (the project), which says nothing on disk changed and goes to Recents. Nothing beside the name says
+  where the folder is on disk: Copy path and Reveal do, as Figma's and Drive's titles say none. A path too long for
+  the row gives way from its start: the parts above, down to their first letters, then the folder's own name, so the
+  folder on screen is the last to go. Why: it is the way a file browser says where you are, and the one way back up,
+  with no Back button of its own.
+- **The kinds**, a row of tabs of its own 8px under the heading row: All, then 3D models, Drawings, Boards, Schematics and
+  Robots, each only where the place holds one, always in that order, each its word alone with no count, as Figma's
+  and Drive's tabs have none (each is named by its word: "3D models"). One is on at a time (All at first); a search
+  and the tab narrow together. There is no row where the place holds one kind or none, and a kind chosen in another
+  place that this one lacks shows all of it. The choice is the page's own, as the search is. An XBF, a STEP, an STL, a 3MF and a GLB are 3D
   models; a DXF a drawing; a KiCad board and schematic a board and a schematic; a URDF or an SRDF a
   robot (`DOCUMENT_KINDS`: by the row's document type, else its file's extension). Why: a person calls a STEP, an STL
   or a GLB a model too; "a model" against "a file on disk" would be the implementation showing. A model's `.xbf` and
   the files exported from it stay cards of their own.
 - **A document is its file, one card.** Every row is a file: a model's document is its `.xbf` (every model has one:
   `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it; a shape's handed over too), and its id is
-  that file's: one file, one row, one card, in Recents, Pinned, a folder's page, Standalone and the search, named by
+  that file's: one file, one row, one card, in Recents, Starred, a folder's page and the search, named by
   its file's name. Opening the file opens the model, live while the engine holds its build, else read from the file.
   Why: one document, one identity, one "model" type; two Assembly cards of the same thing asked the person which to
   open. An `.xbf` exported to another path, or copied, is another file, so a card of its own, and STEP, GLB and the
@@ -241,7 +241,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
     cards' own: a card's box, corners and column, a card's 12px inset round one line inside a card's border (46px tall), its name a card's
     name in size and weight, its glyph where a card's name starts; the folders are a grid of their own, 16px over the
     cards (Drive's folders over its files). In the list it is a row of the list, its glyph on the picture tile where a
-    file's picture stands, and a dash in each column. It has no picture, count, pin or menu: it is a way into the
+    file's picture stands, and a dash in each column. It has no picture, count, star or menu: it is a way into the
     folder, a real link where the host gives places an address. Why a tile of the cards' family: a folder and a file
     on one page are read as one set, so they share a box, a column and a name's type; the sidebar's row drawn among
     cards read as a different surface, its folders a line of small labels beside large cards.
@@ -255,10 +255,10 @@ chrome that floats over the picture. The home is the navbar over the library: it
     in the host's words. It is a button, not a link (it has no address), worked as a document's card is: the same ring,
     Enter and Space, the same pointer. Its ⋯ is the card's menu with what applies: Open in ▸ (each app the host lists,
     then Default app where it is offered; the rows the navbar's Open in draws), Copy path and the file manager; with no
-    app and no handler, those two alone. It has no pin, no Open in new tab and no Remove from Recents, being in no
+    app and no handler, those two alone. It has no star and no Open in new tab, being in no
     library; `[` and `]` and the search of documents pass it by. A host that opens no apps shows it in its file
     manager on a press, and where it can do neither the card is no control at all.
-  - The kinds' chips count the documents; Sort orders every file; the folders stand first in the folder's own order.
+  - The kinds' tabs narrow the documents; Sort orders every file; the folders stand first in the folder's own order.
   - The folder is read as it is shown and again every two seconds while it is up, so a file written meanwhile joins
     it. Where the host listed only part of a very large folder, a line under its last row says so.
 - **Its documents**, all of them, with no Show more: a folder lists at most what the host answers of it, and Recents a
@@ -273,7 +273,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   - **A row** is the search's: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall, then its
     name and its facts in one size, the name in the foreground and the facts muted, under a header of muted labels the
     control tall with no rule under it. Its fill hangs 8px past the place's line, so the header's labels and the pictures,
-    a folder's tile among them, stand on the line; its pin and ⋯ float over its right end. A narrower place drops Created
+    a folder's tile among them, stand on the line; its star and ⋯ float over its right end. A narrower place drops Created
     (under 820px), then Where (680), Kind (560) and Size (440). Why that tall: a row with a picture is as tall as its
     picture needs, the same in the search; a list's emphasis is colour, never a second size.
   - An `.xbf` file is badged "Part" when its document holds one part and
@@ -282,24 +282,25 @@ chrome that floats over the picture. The home is the navbar over the library: it
   guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and
   a person reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's
   page shows, so it is named as a model is. STEP, STL, 3MF, GLB and the rest are other formats and keep their format's
-  name, whatever they hold. Only the label: an xbf is still a file (its menu, its size and path, what Pin does).
+  name, whatever they hold. Only the label: an xbf is still a file (its menu, its size and path, what Star does).
   - **A card's picture is the one its row names**, the one taken when a page last showed that file as it now is; a
     file with none shows its kind's glyph on the plain tile. The home draws no picture of its own. Why: a picture drawn out of sight
     reads a file nobody opened, on a timer, and a folder of a thousand files is a thousand reads.
-  - A card's line is its last activity ("Edited now", "Viewed 7h ago"), after where it is: its project's name in
-    Recents and Pinned ("Standalone" for one in none), its folder below the folder on screen in a project's search. A
-    card has no glyph or size. Why: the picture and its badge say what it is, and a size is for the list, where it is
-    a column to read down. A list's columns are Name, then where it is as a column (Project in Recents and Pinned,
-    Where in a project's search; a folder's own listing has none, every row being in it), Kind (its format, as the
-    badge: "Part", "Assembly", "STEP", "KiCad PCB"), Size, Updated and Created.
-  - Each has a pin and a ⋯ (Open, Open in new tab, Open in ▸, Copy path, Copy link, Reveal, Pin, then Remove from
-    Recents), shown on hover or focus and always on touch. Open in is the navbar's: the apps the host lists for the
-    document's files and Default app, looked up as the menu opens, and there only where it lists one. Remove from Recents forgets the library's entry of the file, at once and
-    without a question: nothing on disk changes, and opening the file again brings it back. A card on a folder's page
-    has no Remove from Recents: the file is there because it is in the folder. Nothing on the home says Delete or
-    deletes a file. Why: a document is its file, and removing a file is the person's own act, in their file manager;
-    a delete in a viewer that only reads files would say it does what it never does. A pinned document is not listed
-    first: Pinned is its own place.
+  - A card's line is its last activity alone ("Edited now", "Viewed 7h ago"), as Figma's cards say "Edited 2 hours
+    ago". A card has no glyph, place or size. Why: the picture and its badge say what it is, and where it is and its
+    size are for the list, where each is a column to read down. A list's columns are Name, then where it is as a column
+    (Project in Recents and Starred, a dash for a document in no project; Where in a project's search; a folder's own
+    listing has none, every row being in it), Kind (its format, as the badge: "Part", "Assembly", "STEP", "KiCad
+    PCB"), Size, Updated and Created.
+  - Each has a star and a ⋯ (Open, Open in new tab, Open in ▸, Copy path, Copy link, Reveal, then Star or Unstar),
+    shown on hover or focus and always on touch; a starred document keeps its star, filled in the foreground. The star
+    says "Star" or "Unstar" in its hint and its name. Open in is the navbar's: the apps the host lists for the
+    document's files and Default app, looked up as the menu opens, and there only where it lists one. Nothing on the
+    home deletes a file or forgets one: there is no Delete and no Remove from Recents. Why: a document is its file,
+    and removing a file is the person's own act, in their file manager; the list of what was opened needs no pruning
+    by hand, and the item was one more line in every card's menu for a chore nobody asked for. A starred document is not
+    listed first: Starred is its own place. Starred is Figma's, Drive's and Dropbox's word; the library, its rows, the
+    host's actions and the place's address keep the word they shipped with, `pinned`.
 - **Links.** Where the host gives a target an address (the web page), a card's or a row's main press and every row of
   the sidebar is a real link: a plain click shows it in this view, and ⌘ or Ctrl and a click, a middle click and the
   browser's own link menu open it in a new tab. Where the host can open a target beside the view, every document's ⋯
@@ -314,7 +315,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   From the sidebar a project opens at its top. Why: the document's folder is where the documents beside it are, and
   the way back should cost nothing. "Back to <name>" is the scale's outline button, as tall as the row's other
   controls, its name the first to give way.
-- **Search** narrows the place on screen. Recents, Pinned and Standalone narrow the rows in hand. A folder's page asks
+- **Search** narrows the place on screen. Recents and Starred narrow the rows in hand. A folder's page asks
   the host, once typing rests, for every file anywhere below the folder on screen whose path below it holds every
   word, and lists them flat, with no folders, each saying where it is below that folder. Why: a search is the one place
   a person wants every level at once, and it is the one place they are flattened.
@@ -322,7 +323,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   project, with a line saying what came of it (made, already a project, or inside another). **After Remove from CAD** it goes to Recents and says so.
 - **Every state stands where its content will**: placeholder cards or rows while the list is read, placeholder rows
   where the projects will be; "No projects yet." under Projects; one muted line, where the place's first row would
-  stand, in a place with nothing to list (an empty folder, nothing pinned, a project whose folder is gone, one no
+  stand, in a place with nothing to list (an empty folder, nothing starred, a project whose folder is gone, one no
   longer in CAD, a folder that could not be read: the path above it still leads back up), and under a folder's last
   file when the host listed only part of it. What came of an Import's Folder or a Remove from CAD, and an action that
   failed, are a line there too, the failure in the destructive colour: no box, no tint. With nothing at all yet,
@@ -996,5 +997,10 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   before they look. A project's page is one folder of it, and the search is where levels are flattened.
 - **Pictures drawn out of sight for cards.** The home read and drew files nobody had opened, on a timer. A card shows
   the picture a page took of its file, or its format's tile.
-- **Delete on a card, and a question before it.** A viewer that reads files never deletes one: Remove from Recents
-  forgets the library's entry, asks nothing, and is undone by opening the file again.
+- **Delete on a card, and Remove from Recents.** A viewer that reads files never deletes one, and the list of what was
+  opened needs no pruning by hand: the item was one more line in every card's menu.
+- **A place of the documents in no project (Standalone).** Drive has no place of files in no folder: such a document is
+  in Recents, Starred when starred, and the search.
+- **Counts in the sidebar and on the kinds' tabs.** Figma's and Drive's have none: a count is a number nobody acts on.
+- **Where a card is, before its activity, and a project's folder from `~` beside its name.** A card's line is its
+  activity, as Figma's is; where a file is, is the list's column and Copy path's.

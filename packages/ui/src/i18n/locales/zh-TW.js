@@ -290,7 +290,6 @@ export default {
   "home.importFolderButton": "匯入資料夾",
 
 
-  "home.standalone": "獨立文件",
 
 
   "home.projectActionsAria": "專案 {name} 的操作",
@@ -299,7 +298,7 @@ export default {
   "home.projectRemove": "從 CAD 移除",
 
 
-  "home.projectRemoved": "已移除 {name}。磁碟上的內容沒有變更，其中的文件恢復為獨立文件。",
+  "home.projectRemoved": "已移除 {name}。磁碟上的內容沒有變更。",
 
 
   "home.projectMade": "{name} 現在是一個專案。沒有寫入任何內容到該資料夾。",
@@ -324,7 +323,7 @@ export default {
   "home.place.recents": "最近",
 
 
-  "home.place.pinned": "已釘選",
+  "home.place.starred": "已加星號",
 
 
   "home.project": "專案",
@@ -355,10 +354,9 @@ export default {
   "home.recentsEmpty": "最近沒有開啟過任何內容。",
 
 
-  "home.pinnedEmpty": "還沒有釘選的內容。釘選一份文件，它就會留在這裡。",
+  "home.starredEmpty": "還沒有加星號的內容。替一個檔案加星號，它就會留在這裡。",
 
 
-  "home.standaloneEmpty": "沒有獨立文件。所有文件都在專案中。",
 
 
 
@@ -417,9 +415,8 @@ export default {
   "home.fileUnavailable": "無法使用檔案",
   "home.actionsAria": "{name} 的動作",
   "home.menuOpen": "開啟",
-  "home.pin": "釘選",
-  "home.unpin": "取消釘選",
-  "home.removeFromRecents": "從最近中移除",
+  "home.star": "加星號",
+  "home.unstar": "取消星號",
   "home.kindsAria": "顯示",
   "home.kind.all": "全部",
   "home.kind.models": "3D 模型",
@@ -427,7 +424,6 @@ export default {
   "home.kind.boards": "電路板",
   "home.kind.schematics": "電路圖",
   "home.kind.robots": "機器人",
-  "home.kindCount": "{kind}，{count} 個",
   "home.columnName": "名稱",
   "home.columnKind": "類型",
   "home.columnSize": "大小",
