@@ -1,13 +1,11 @@
 // A view bundle as the viewer's CAD service: the answers a page reads of one document, written ahead
-// of time as files in one folder (`cad <type> export SRC DST.view`; the engine's documentation, "View
-// bundle", gives the layout and the manifest), answered here with no engine behind the page.
+// of time as files in one folder (a share's view, which `cad share` has the server write; the engine's
+// documentation, "View bundle", gives the layout and the manifest), answered here with no engine behind the page.
 //
 // The bundle is read through one small abstraction, its source: the bytes of a path of the bundle
-// (`read(path)`). Two sources are here: a folder on a plain static file server, by its URL
-// (`viewBundleUrlSource`), and the files held in the page, by path (`viewBundleMemorySource`), for a
-// bundle that reached it some other way; a share's is `share.js`'s. Nothing here assumes one request per
-// file, or any request at all. A source with something to let go of (`dispose`) is let go of with the
-// service.
+// (`read(path)`). A share's is `share.js`'s; the files held in the page, by path (`viewBundleMemorySource`), are
+// another, for a bundle that reached it some other way. Nothing here assumes one request per file, or any request
+// at all. A source with something to let go of (`dispose`) is let go of with the service.
 //
 // The service answers what the viewer's renderers ask of a CAD client, from the bundle alone:
 //
@@ -27,7 +25,7 @@
 //   and `meshes/<sha256>.<format>`, as its structure names them).
 //
 // Whatever needs an engine is no method here, so the viewer leaves out what calls it: saving or
-// previewing a model's parameters, exports, a version to wait on, the library, the explorer, the
+// previewing a model's parameters, exports, a version to wait on, the library, the projects, the
 // person's settings and everything under `/api/v1/local`. A path the manifest does not list is
 // answered 404, and a file whose size is not what the manifest says fails loudly.
 
@@ -50,9 +48,6 @@ const ENGINE_KINDS = new Set(['model', 'xbf', 'step']);
 const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srdf']);
 // A part's elements, as the API's routes name them, and as a table keys them.
 const ELEMENT_ROUTES = new Set(['faces', 'edges', 'vertices']);
-// A bundle's files named by their content: the same bytes in every bundle that holds them, so a cache may
-// keep them. The files at the root are the document's own and change with it.
-const CONTENT_NAMED = /^(?:parts|meshes|names)\//;
 // What a prototype's names file holds, in the order the engine's structure gives them.
 const ELEMENT_NAMES = ['faceNames', 'edgeNames', 'vertexNames'];
 const decoder = new TextDecoder();
@@ -80,29 +75,6 @@ export function viewBundleSegment(name) {
   }
   if (spelled === '' || spelled === '.' || spelled === '..') throw new Error(`${JSON.stringify(name)} names no file of a view bundle`);
   return spelled;
-}
-
-/**
- * A bundle in a folder of a plain static file server: each path read from under `base` (a URL, resolved
- * against the page's; it names the folder, with or without its trailing `/`). The files at the bundle's
- * root are asked again of the server each time (`no-cache`), its content-named ones as the browser's cache
- * has them.
- * @param {string | URL} base
- * @param {{ fetch?: typeof globalThis.fetch }} [options]
- * @returns {import('./types.js').ViewBundleSource}
- */
-export function viewBundleUrlSource(base, { fetch: fetchImpl = globalThis.fetch } = {}) {
-  const folder = new URL(String(base), globalThis.location?.href);
-  if (!folder.pathname.endsWith('/')) folder.pathname += '/';
-  return {
-    url: folder.href,
-    async read(path, { signal } = {}) {
-      const response = await fetchImpl(new URL(path, folder).href, { signal, cache: CONTENT_NAMED.test(path) ? 'default' : 'no-cache' });
-      if (!response.ok) throw response.status === 404 ? missingFile(path) : Object.assign(
-        new Error(`The view bundle's ${path} could not be read: its server answered ${response.status}.`), { status: response.status });
-      return response.arrayBuffer();
-    },
-  };
 }
 
 /**

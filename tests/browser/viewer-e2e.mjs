@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 // Real-browser coverage for the bundled Viewer: every load path opens through the
 // real backend and bundle, the camera holds across modes, and a saved revision re-fits a
-// camera nobody has touched and keeps one the person took; and a view bundle the engine
-// exported opens from a plain static file server, with no engine running, and a model `cad share` shared
-// opens from the share service itself, run locally, under its content security policy. CI runs all of it;
+// camera nobody has touched and keeps one the person took; and a model `cad share` shared opens, with no
+// engine running, from the share service itself, run locally, under its content security policy: on
+// screen, a face's facts from its table, read-only parameters, nothing asked of an engine. CI runs all of it;
 // there is no local-only set. Fixture and process lifecycle belong to
 // scripts/test/test-viewer-browser.sh.
 
 import fs from "node:fs";
-import http from "node:http";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
@@ -19,17 +18,15 @@ const { chromium } = createRequire(path.join(REPO, "packages/core/package.json")
 const { PNG } = createRequire(path.join(REPO, "apps/web/package.json"))("pngjs");
 
 function parseArgs(argv) {
-  const args = { url: "", dir: "", out: "", only: "", bundle: "", share: "", shareAgain: "", plate: "", prompt: "" };
+  const args = { url: "", dir: "", out: "", only: "", share: "", shareAgain: "", plate: "", prompt: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === "--url") args.url = argv[++i] || "";
     else if (flag === "--dir") args.dir = argv[++i] || "";
-    // A folder of view bundles, for the bundle gate, which runs with no engine.
-    else if (flag === "--bundle") args.bundle = argv[++i] || "";
     // What `cad share` printed, sharing the model and then sharing it again unchanged.
     else if (flag === "--share") args.share = argv[++i] || "";
     else if (flag === "--share-again") args.shareAgain = argv[++i] || "";
-    // The bundle fixture's model, by its document id, for the prompt gate on the engine's page; and the file the
+    // The share fixture's model, by its document id, for the prompt gate on the engine's page; and the file the
     // prompt gate writes the prompt it copied to, for the share gate to compare the shared page's with.
     else if (flag === "--plate") args.plate = argv[++i] || "";
     else if (flag === "--prompt") args.prompt = argv[++i] || "";
@@ -77,17 +74,15 @@ function fail(message) {
   throw new Error(message);
 }
 
-// The engine's page's gates read its server (`--url`) and the project it serves (`--dir`); the bundle gate
-// reads a folder of bundles (`--bundle`) and the bundled client alone; the share gate what `cad share` printed
-// (`--share`), its links on the share service.
-if (!args.url && !args.bundle && !args.share) fail("--url, --bundle or --share is required; use the self-contained scripts/test runner");
+// The engine's page's gates read its server (`--url`) and the project it serves (`--dir`); the share gate what
+// `cad share` printed (`--share`), its links on the share service.
+if (!args.url && !args.share) fail("--url or --share is required; use the self-contained scripts/test runner");
 if (args.url) {
   if (!args.dir || !path.isAbsolute(args.dir)) fail("--dir must name the absolute served test project");
   for (const fixture of fixtures) {
     if (!fs.existsSync(path.join(root, fixture.file))) fail(`missing test input ${fixture.file}`);
   }
 }
-if (args.bundle && !path.isAbsolute(args.bundle)) fail("--bundle must name the absolute folder of the test's view bundles");
 
 // CI's Linux renders in software (SwiftShader); CAD_TEST_SWIFTSHADER=1 does so on a Mac too, and
 // VIEWER_E2E_CPU_THROTTLE=N slows each page's CPU N times (CDP), to reproduce a slow runner locally.
@@ -719,114 +714,6 @@ async function modeCameraGate() {
   }
 }
 
-// The bundle gate's static file server: the bundled client under /viewer/ and the test's view bundles under
-// /bundles/, as any plain file server serves files, by their extension's type. It answers nothing else.
-const STATIC_TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
-  ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".wasm": "application/wasm", ".woff2": "font/woff2" };
-function serveStatic(roots) {
-  const server = http.createServer((request, response) => {
-    const pathname = decodeURIComponent(new URL(request.url, "http://static.local").pathname);
-    const [, mount, ...rest] = pathname.split("/");
-    const root = roots[mount];
-    const file = root ? path.resolve(root, rest.join("/") || "index.html") : "";
-    if (request.method !== "GET" || !root || !file.startsWith(root + path.sep) || !fs.statSync(file, { throwIfNoEntry: false })?.isFile()) {
-      response.writeHead(404).end();
-      return;
-    }
-    response.writeHead(200, { "content-type": STATIC_TYPES[path.extname(file)] || "application/octet-stream" });
-    fs.createReadStream(file).pipe(response);
-  });
-  return new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve(server)));
-}
-
-async function bundleGate() {
-  // A model the engine exported as a view bundle (the runner's fixture: one part, its width a parameter),
-  // opened by the bundled client from a plain file server, with the engine stopped: the page has its
-  // document from the bundle's files alone.
-  const runtime = process.env.CAD_VIEWER_DIST || "";
-  if (!fs.existsSync(path.join(runtime, "index.html"))) fail("CAD_VIEWER_DIST names no bundled client");
-  const folder = path.join(args.bundle, "plate.view");
-  const manifest = JSON.parse(fs.readFileSync(path.join(folder, "manifest.json"), "utf8"));
-  const server = await serveStatic({ viewer: path.resolve(runtime), bundles: path.resolve(args.bundle) });
-  const origin = `http://127.0.0.1:${server.address().port}`;
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
-  const errors = [];
-  const asked = [];
-  await context.route("**/*", async (route) => {
-    const url = new URL(route.request().url());
-    asked.push(url);
-    // The page reads its own origin alone: anything else is said, and never reached.
-    if (url.origin !== origin) {
-      await route.abort("blockedbyclient");
-      return;
-    }
-    await route.continue();
-  });
-  const page = await context.newPage();
-  page.setDefaultTimeout(60_000);
-  page.on("pageerror", (error) => errors.push(`page: ${error.message || error}`));
-  page.on("console", (message) => { if (message.type() === "error") errors.push(`console: ${message.text()}`); });
-  await page.addInitScript(MODEL_BOUNDS_SCRIPT);
-  try {
-    // The page under a folder of its own, the bundle named relative to it.
-    await page.goto(`${origin}/viewer/?bundle=../bundles/plate.view/`, { waitUntil: "domcontentloaded" });
-    await page.locator('[data-slot="cad-file-view"] [aria-busy="false"]').first().waitFor({ timeout: 120_000 });
-    await page.waitForFunction(() => {
-      const bounds = window.__cadModelBounds?.();
-      return Array.isArray(bounds?.min) && bounds.min.some((value, axis) => Number(bounds.max[axis]) - Number(value) > 0);
-    }, null, { timeout: 120_000 });
-    await painted(page);
-    const canvas = page.locator("canvas").first();
-    const drawn = coverage(PNG.sync.read(await canvas.screenshot()));
-    if (drawn < 0.03) failures.push(`bundle: no foreground model region (${drawn.toFixed(4)})`);
-    results.push({ format: "view", coverage: drawn });
-    if (await page.title() !== manifest.document.name) failures.push(`bundle: the page is titled ${JSON.stringify(await page.title())}, not its document's name`);
-    // What needs an engine is not there: no file menu (Export, Open in, Copy path), and no way home.
-    if (await page.getByTestId("file-actions").count()) failures.push("bundle: a file menu over a view bundle");
-
-    // A face picked shows its facts, measured on the exact shape where the bundle was made: the part's table.
-    const box = await canvas.boundingBox();
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    const chip = page.locator("button", { hasText: /face \d+/ }).first();
-    await chip.waitFor();
-    await chip.click();
-    const card = page.getByText(/[\d,.]+ mm²/).first();
-    await card.waitFor();
-    const area = await card.innerText();
-    if (!/\d/.test(area)) failures.push(`bundle: a face's area reads ${JSON.stringify(area)}`);
-    await page.keyboard.press("Escape");
-
-    // Parameters are shown and read only, as an .xbf opened as a file shows them.
-    await page.locator("[data-flat-panel]").getByRole("tab", { name: "Params", exact: true }).click();
-    const status = page.locator("[data-parameters-status]");
-    await status.waitFor();
-    if (await status.getAttribute("data-parameters-status-reason") !== "file") {
-      failures.push(`bundle: the parameters say ${JSON.stringify(await status.innerText())}, not that they are edited in the script`);
-    }
-    if (!(await page.locator("[data-parameter=\"width\"]").count())) failures.push("bundle: the width parameter is not shown");
-    if (!(await page.locator("button[data-parameters-save]").isDisabled())) failures.push("bundle: Save is offered over a view bundle");
-
-    // Nothing left for an engine: no request to /api/ or another origin, and the bundle read as its manifest
-    // lists it, each part's facts in one read of its table.
-    const away = asked.filter(url => url.origin !== origin || url.pathname.includes("/api/"));
-    if (away.length) failures.push(`bundle: requests past the bundle: ${away.map(url => url.href).join(", ")}`);
-    const read = asked.filter(url => url.origin === origin && url.pathname.startsWith("/bundles/plate.view/"))
-      .map(url => url.pathname.slice("/bundles/plate.view/".length));
-    const unlisted = read.filter(file => file !== "manifest.json" && !Object.hasOwn(manifest.files, file));
-    if (unlisted.length) failures.push(`bundle: files the manifest does not list were asked for: ${unlisted.join(", ")}`);
-    const tables = read.filter(file => file.endsWith("/elements.json"));
-    if (tables.length !== 1) failures.push(`bundle: the part's table was read ${tables.length} times (${tables.join(", ")})`);
-    if (errors.length) failures.push(`bundle: ${errors.join(" | ")}`);
-  } finally {
-    if (diagnosticDir && !page.isClosed()) {
-      fs.mkdirSync(diagnosticDir, { recursive: true });
-      await page.screenshot({ path: path.join(diagnosticDir, "diagnostic-bundle.png"), timeout: 3000 }).catch(() => {});
-    }
-    await context.close();
-    await new Promise(resolve => server.close(resolve));
-  }
-}
-
 // Every content security policy violation the page meets, as it reports them, for the gate to say.
 const CSP_VIOLATIONS_SCRIPT = () => {
   window.__cspViolations = [];
@@ -861,7 +748,7 @@ function framed(packet) {
     outputs: (outputs || []).map(({ width, height, ...output }) => output) })) };
 }
 
-// The engine's page: a Quick Edit on the bundle fixture's model, copied, names the model by its document id and
+// The engine's page: a Quick Edit on the share fixture's model, copied, names the model by its document id and
 // carries its snapshot inline (no file, no path), and is kept for the share gate to compare.
 async function promptGate() {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1, extraHTTPHeaders: process.env.VIEWER_TEST_TOKEN ? { Authorization: `Bearer ${process.env.VIEWER_TEST_TOKEN}` } : {} });
@@ -1011,6 +898,27 @@ async function shareGate() {
     if (!packs.length || packs.some(pack => pack.status !== 200 || !/\bimmutable\b/.test(pack.cache))) {
       failures.push(`share: the model's packs were answered ${JSON.stringify(packs)}`);
     }
+    // A face picked shows its facts, measured on the exact shape where it was shared: the part's table.
+    const canvas = view.locator("canvas").first();
+    const box = await canvas.boundingBox();
+    await view.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    const chip = view.locator("button", { hasText: /face \d+/ }).first();
+    await chip.waitFor();
+    await chip.click();
+    const card = view.getByText(/[\d,.]+ mm²/).first();
+    await card.waitFor();
+    const area = await card.innerText();
+    if (!/\d/.test(area)) failures.push(`share: a face's area reads ${JSON.stringify(area)}`);
+    await view.keyboard.press("Escape");
+    // Parameters are shown and read only, as an .xbf opened as a file shows them.
+    await view.locator("[data-flat-panel]").getByRole("tab", { name: "Params", exact: true }).click();
+    const status = view.locator("[data-parameters-status]");
+    await status.waitFor();
+    if (await status.getAttribute("data-parameters-status-reason") !== "file") {
+      failures.push(`share: the parameters say ${JSON.stringify(await status.innerText())}, not that they are edited in the script`);
+    }
+    if (!(await view.locator("[data-parameter=\"width\"]").count())) failures.push("share: the width parameter is not shown");
+    if (!(await view.locator("button[data-parameters-save]").isDisabled())) failures.push("share: Save is offered over a shared model");
     await close(view, "view");
 
     // An address that names no share opens nothing: the service holds none, and the page says so.
@@ -1042,6 +950,8 @@ async function shareGate() {
     if (away.length) failures.push(`share: requests to another origin: ${away.map(request => request.url).join(", ")}`);
     for (const request of asked) {
       const { pathname, search } = new URL(request.url);
+      // What needs an engine is never asked: nothing under /api/.
+      if (pathname.startsWith("/api/")) failures.push(`share: the page asked for ${pathname}, which needs an engine`);
       if (pathname.startsWith("/v1/") && (search || !/^\/v1\/shares\/[A-Za-z0-9_-]{22}(?:\/packs\/[0-9a-f]{64})?$/.test(pathname)
         || !(request.method === "GET" || (request.method === "DELETE" && pathname === `/v1/shares/${id}`)))) {
         failures.push(`share: the page asked the service ${request.method} ${pathname.replace(id, "<id>")}${search}`);
@@ -1070,12 +980,11 @@ async function shareGate() {
 // links, and driving URDF joints and STEP mates, belong to the packages/ui browser
 // specs.
 // Each gate runs where its input is given: the runner hands the engine's page's gates their server, and
-// the bundle and share gates its bundles once that server has stopped.
+// the share gate its share once that server has stopped.
 const gates = [
   ["format", formatGate, "url"],
   ["camera", modeCameraGate, "url"],
   ["prompt", promptGate, "plate"],
-  ["bundle", bundleGate, "bundle"],
   ["share", shareGate, "share"],
 ];
 

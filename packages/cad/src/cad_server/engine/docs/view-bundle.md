@@ -4,29 +4,14 @@ A page of [the engine's documentation](../README.md). A name in bold in parenthe
 
 A page shows a document by asking the engine for each thing it draws (**Wire format**), and the engine
 makes some of those answers when asked. A **view bundle** is the same answers made ahead of time and
-written as files in one folder, so that a page can show the document from any plain file server, with no
-engine and no kernel behind it. The engine writes one only when asked (law 2):
-
-```bash
-cad model export <id> arm.view        # a model, as the engine holds it
-cad xbf export XBF/arm.xbf arm.view   # a file: an .xbf, a .step, an .stl, a .glb, a .3mf, a .dxf, a .urdf, an .srdf
-```
-
-```python
-from cad import model, xbf
-
-model.export(arm(), "arm.view")         # the same operation (law 20); a list of one Written, its kind "view"
-xbf.export("XBF/arm.xbf", "out/arm.view")
-```
-
-It is `export`'s one destination that is a folder and no translation: named by its suffix, `.view`, as
-every destination is (law 26), exported in a command of its own, and taking none of a translation's
-options (`--tolerance`, `--angle`, `--zero`). It is the one export of a DXF and of a robot description.
-The row it answers (`Written`, `--json`'s `files`) is the folder, with `view`: its `document`, how many
-`files` it holds, and the paths this export `written` and `removed`.
-
-`cad share` uploads one for anyone with its link to open in the hosted viewer, sending only the files its
-share does not hold yet (**Sharing**).
+written as files in one folder, so that a page can show the document with no engine and no kernel behind
+it. It is a share's view: `cad share` has the running server write the shared file's bundle into that file's
+folder of cad's cache, `documents/<id>/view/`, and uploads its files, sending only the ones its share does not
+hold yet (**Sharing**); the hosted viewer opens it from the share service. Nothing else writes one: it is no
+export (no `cad <type> export` destination names one, and a `.view` folder is refused as any suffix no
+export knows), and the engine writes one only when a file is shared (law 2). The library's half of it is
+`api.bundle(path, folder)`, the request `{"op": "bundle", "path", "folder"}`; its answer is what was written:
+the folder, its `document`, how many `files` it holds, and the paths this writing `written` and `removed`.
 
 A KiCad board or schematic has no view bundle yet: its `export` is KiCad's own (`--to`, into a folder, run
 by the kicad integration) and names no such destination. What one waits on is said under **Writing one**.
@@ -74,11 +59,12 @@ structure's `unmeshed` and the buffer's face table say, and a model's `made_by`,
 never written (law 7).
 
 **Where a file is not the answer.** A bundle holds no path of the computer it was made on, no source code
-and nothing a kernel must read (no `.xbf`, no STEP, no shape). Three answers say something of that
-computer, and each is the answer but for that:
+and nothing a kernel must read (no `.xbf`, no STEP, no shape: a share carries a model's `.xbf` among its files,
+never in its view). Three answers say something of that computer, and each is the answer but for that:
 
-- A structure's `path` is the file's name alone, where the engine's answer names where the file is (a
-  model's is its id, as answered).
+- A structure's `path` is the file's name alone, where the engine's answer names where the file is; a
+  model's is its id, as a live worker answers it, whether a worker holds the model or its `.xbf` is read, so a
+  model's bundle is the same after a restart.
 - A model's structure has no `closure`: the build closure names the code that built the model, its script
   and modules by path, their names and its inputs (**Build closure**). It stays with the engine and the
   `.xbf`.
@@ -87,7 +73,7 @@ computer, and each is the answer but for that:
   serves it at, and the `path` a link's facts give a mesh file is the file's name alone. A mesh file that
   names other files (a GLB's external buffer or texture) is bundled as it is, without them.
 
-A JSON file that would still name the folder its document came from fails the export rather than being
+A JSON file that would still name the folder its document came from fails the writing rather than being
 written (law 16): what is left is the document's own text (a label, a note) or a mistake. Nothing in a
 bundle is the document's envelope, which says where things are on one computer: the manifest says what a
 reader needs of it. `thumbnail.png` is the picture a page last kept, which may be of an earlier version.
@@ -127,12 +113,13 @@ ever. The files at the bundle's root are the document's own and change with it.
 ```
 
 `format` names the layout: a change within `view-bundle/1` only adds, and a reader of another number reads
-none of it (law 14, tier 4). `document` is the document's `id`, its `kind` (the API's: `model`, `xbf`,
-`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`), its `name` and the `version` its files are of (the
-structure's, for a model, an `.xbf` and a STEP; else the envelope's). `files` is every other file of the
+none of it (law 14, tier 4). `document` is the document's `id`, its `kind` (the API's: `model`, `step`,
+`stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`; a reader takes `xbf` too, an `.xbf`'s kind while it was a type of its
+own), its `name` and the `version` its files are of (the structure's, for a model and a STEP; else the
+envelope's). `files` is every other file of the
 bundle by its path, with its size, its SHA-256 and the content type its answer was sent with, which a file
 server that knows no `.xbm` or `.hdr` is told from here. The manifest holds no time and no path: a document
-the engine holds gives the same manifest each time it is exported. A model built again has a new
+the engine holds gives the same manifest each time it is written. A model built again has a new
 `version`, whatever changed.
 
 ## Writing one
@@ -145,11 +132,11 @@ page reads from, and each table is one job of the pool's facts queue (`mesh.Topo
 and kept by the part's geometry key as its facts are, in memory alone (`serve.Server.table`), so no part's
 table is made twice while the engine runs, whichever document holds it. A document's part files are asked
 at once, twice as many at a time as the pool has processes, so a first bundle's tables are made on every
-core the engine uses. The library's half is one request through the door (`api.export`,
-`{"op": "bundle"}`); with `daemon=False` there is no server to ask, and a bundle is refused.
+core the engine uses. The library's half is one request through the door (`api.bundle`,
+`{"op": "bundle", "path", "folder"}`): there is no bundle without a server to ask.
 
-Every answer is gathered into a folder made beside the bundle's before the bundle's own is touched, so an
-export that fails leaves what was there as it was (law 16). A new bundle is then that folder, renamed. A
+Every answer is gathered into a folder made beside the bundle's before the bundle's own is touched, so a
+writing that fails leaves what was there as it was (law 16). A new bundle is then that folder, renamed. A
 bundle written over an earlier one by the same release keeps each of the earlier one's content-named files
 whose bytes are still what its manifest says, asking the engine for nothing of that part; it moves in the
 files whose bytes changed, then the manifest, last, then removes the files the earlier manifest named and
@@ -157,12 +144,12 @@ this one does not. So after an edit of one part a bundle costs that part's mesh 
 whose manifest names a file holds it. Those moves are one file at a time: a bundle read while it is written
 over can hold a root file newer than its manifest says, until the manifest lands.
 
-A folder that holds anything but a bundle is refused before anything is asked, as is a document the engine
-does not hold or read, and a type no bundle is made of. A document that changes while it is read (a model
-built again, a file rewritten) is read again from the start, three times at most, then the export fails
-saying so.
+A folder that holds anything but a bundle is refused before anything is asked, as is a file the engine
+does not read, and a type no bundle is made of. A document that changes while it is read (a model built
+again, a file rewritten) is read again from the start, three times at most, then the writing fails saying
+so.
 
 **What a KiCad bundle waits on.** A board's page reads its `plot`, whose pours are KiCad's refill, made in
 the kicad integration's environment, and a table of its 3D models, each a STEP the engine serves as a
 document of its own; a schematic's reads its `plot` a sheet at a time. Their bundle is those answers by the
-same rules (each model a bundle of its own), and a way to ask for one beside an `export` that is KiCad's.
+same rules (each model a bundle of its own), which `cad share` asks for as it asks for any.

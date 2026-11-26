@@ -262,7 +262,7 @@ each as text; `null` where no closure says), and its two maps, `view` and `files
 bytes' SHA-256 and size and `at`, the ranges of packs whose bytes, joined in order, are its member:
 
 ```json
-{"format": "cad-share/2", "name": "arm", "entry": "arm.py", "made": {"cad": "0.12.0", "build123d": "0.13.0"},
+{"format": "cad-share/2", "name": "arm", "entry": "arm.py", "made": {"cad": "0.11.17", "build123d": "0.13.0"},
  "view": {"manifest.json": {"sha256": "<64 hex>", "bytes": 1234, "at": [["<pack id>", 0, 456]]}},
  "files": {"arm.py": {"sha256": "<64 hex>", "bytes": 980, "at": [["<pack id>", 456, 410]]},
            "XBF/arm.xbf": {"sha256": "<64 hex>", "bytes": 5242880, "at": [["<pack id>", 866, 4193438],

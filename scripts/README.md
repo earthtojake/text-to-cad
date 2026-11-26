@@ -169,14 +169,13 @@ where those files ship, so these scripts are what produces them.
   engine daemon and viewer. Requires a bundled viewer and npm Playwright Chromium
   (`npx --no-install playwright install chromium`). Runs the format and camera
   gates and the prompt gate (a Quick Edit copied from the engine's page, its snapshot inline), then
-  stops the engine and runs the bundle gate (a view bundle the engine exported, opened
-  from a plain static file server) and the share gate (the same model shared by `cad share --yes`, then
-  shared again unchanged and forked by `cad fork`, against the share service's own Worker, run by
+  stops the engine and runs the share gate (the model shared by its `.xbf` with `cad share --yes`, then
+  shared again unchanged by its id and forked by `cad fork`, against the share service's own Worker, run by
   `apps/share/serve.mjs`, which serves the bundled client too: the same link and no file sent again, the
-  script that built it forked byte for byte as another computer would, viewed under the service's content
-  security policy, a copied prompt the engine page's for the same model but for its address (the prompt
-  gate copies that one, its snapshot inline), an unknown id said to be gone, deleted from its delete link):
-  exactly what `test.yml` runs.
+  script that built it and its `.xbf` forked byte for byte as another computer would, viewed under the
+  service's content security policy with a face's facts and read-only parameters, a copied prompt the engine
+  page's for the same model but for its address (the prompt gate copies that one, its snapshot inline), an
+  unknown id said to be gone, deleted from its delete link): exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that

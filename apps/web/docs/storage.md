@@ -15,9 +15,7 @@ use [backend.md](./backend.md) for that interface.
 The URL's path names the document, `/<id>` (`src/client/workbench/fileParam.js`); the bare
 path is the home, and its query names the place on it: none (Recents), `?view=pinned` (Starred) or
 `?project=<id>`, a project's page; anything else, an old `?view=standalone` among them, is Recents. So the place is the address's, never storage's: a reload stays on it, Back and
-Forward walk the places, and a new tab opens at one. One query parameter chooses what the page is, once, as it
-starts: `?bundle=<folder>` makes it a view bundle's page (`src/client/workbench/bundleParam.js`), whose path names
-nothing. No query parameter names a file: a developer's default file
+Forward walk the places, and a new tab opens at one. No query parameter names a file: a developer's default file
 (`VIEWER_DEFAULT_FILE`, an absolute path set at build time) is resolved to its id through
 the catalog, and `writeDocumentId` keeps whatever query the page carries.
 
@@ -80,11 +78,11 @@ never written again.
 ## localStorage
 
 Nothing goes in localStorage: a value that depends on a file, a tab or a person's
-choice belongs in the tab record. One exception: a view bundle's page has no server to keep
+choice belongs in the tab record. One exception: a shared view bundle's page has no server to keep
 the person's own settings (`settings.json`, the same for every CAD view where there is an
 engine), so it keeps the one it has, the language chosen in the app menu, in this browser's
 localStorage, under `text-to-cad:language` (`src/host/browserLanguage.js`): the same for every
-bundle this browser opens, as the server's is for every view.
+share this browser opens, as the server's is for every view.
 
 ## The library's pictures
 

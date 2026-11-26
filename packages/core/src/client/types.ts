@@ -391,13 +391,11 @@ export interface CadClient extends CadWorkspaceService {
   reportActivity(activity: CadActivity): void;
 }
 /**
- * Where a view bundle's files are read (`viewBundleUrlSource`, `viewBundleMemorySource`, a share's): the bytes
- * of one path of the bundle (`manifest.json`, `parts/<key>/<tessellation>.xbm`…), or an error whose `status` is
- * 404 for a path it does not hold.
+ * Where a view bundle's files are read (a share's, `viewBundleMemorySource`): the bytes of one path of the bundle
+ * (`manifest.json`, `parts/<key>/<tessellation>.xbm`…), or an error whose `status` is 404 for a path it does not
+ * hold.
  */
 export interface ViewBundleSource {
-  /** The folder's URL, for a bundle read from a file server. */
-  readonly url?: string;
   read(path: string, options?: CadRequestOptions): Promise<ArrayBuffer>;
   /** Let go of what it holds (a share's packs, the fetches under way): the bundle's service calls it once, when it is disposed. */
   dispose?(): void;

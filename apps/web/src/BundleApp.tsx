@@ -16,18 +16,18 @@ const keyboardPlatform = () => /Mac|iPhone|iPad/.test(navigator.platform) ? "dar
 const NOWHERE = () => {};
 
 /**
- * The viewer's page over one view bundle (`?bundle=`, `client/workbench/bundleParam.js`): the bundle's one
- * document and nothing else, read from the bundle alone with no engine behind the page. It is the shared
+ * The viewer's page over one view bundle, a share's (`main.tsx`'s `/<id>`): the bundle's one document and nothing
+ * else, read from the bundle alone with no engine behind the page. It is the shared
  * viewer with no library (no home, no Recents, no explorer, no link to another file) and only the host's
  * ports that need no engine: the clipboard (Quick Edit's Copy), this build's links, the tab's appearance and
  * the person's language, kept in this browser (`host/browserLanguage.js`). Everything the engine answered
  * is left out where the viewer reads it: the client has no exports, no parameters to save or preview and no
  * next version, and the host no file actions, no folders to name files from, no Telemetry and no What's new. A Quick
- * Edit carries its snapshot packet as on any page (the page makes it). Where a prompt from the page must name the
- * document otherwise than the view does (a share's, by its link), `promptSubject` says how: the host's.
+ * Edit carries its snapshot packet as on any page (the page makes it). A prompt from the page names the document
+ * by the share's link, not as the view does (`promptSubject`): the host's.
  */
 export default function BundleApp({ client, tabStore, language: chosenLanguage = null, promptSubject }: { client: CadViewBundleClient; tabStore: TabStore;
-  language?: string | null; promptSubject?: PromptSubject }) {
+  language?: string | null; promptSubject: PromptSubject }) {
   const files = useMemo(() => createCadFileSource(client, { id: 'view-bundle' }), [client]);
   const sayRef = useRef<(key: string, params?: Record<string, unknown>) => string>(english);
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
@@ -45,7 +45,7 @@ export default function BundleApp({ client, tabStore, language: chosenLanguage =
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   sayRef.current = translator(locale);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files, clipboard: browserClipboard, promptContext, links, ...(promptSubject ? { promptSubject } : {}),
+    files, clipboard: browserClipboard, promptContext, links, promptSubject,
     environment: { colorScheme: appearance.colorScheme, locale, platform: keyboardPlatform() },
   }), [files, promptContext, links, promptSubject, appearance.colorScheme, locale]);
   return <div className="fixed inset-0 flex flex-col overflow-hidden">

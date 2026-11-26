@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { fetchXbfElementFacts, fetchXbfPartGroups, xbfDocumentSource } from '../lib/xbf/xbfDocument.js';
-import { openViewBundle, viewBundleMemorySource, viewBundleSegment, viewBundleUrlSource, VIEW_BUNDLE_ORIGIN } from './bundle.js';
+import { openViewBundle, viewBundleMemorySource, viewBundleSegment, VIEW_BUNDLE_ORIGIN } from './bundle.js';
 
 // A view bundle made here, file by file, as the layout writes one (the engine's documentation, "View bundle"):
 // a STEP's two parts, one of them keyed as a STEP's are (a key with `:` in it), each with its buffer and its
@@ -40,18 +40,14 @@ function manifestOf(files, document = { id: ID, kind: 'step', name: 'pair.step',
 }
 const STEP_BUNDLE = { ...FILES, 'manifest.json': manifestOf(FILES) };
 
-/** The same files on a plain static file server: what it was asked for, by path, and with which cache mode. */
-function staticServer(files, base = 'https://files.test/bundles/pair.view/') {
+/** The same files through a source that says what it was asked for, by path, as a share's does its packs. */
+function countedSource(files) {
   const asked = [];
-  const fetch = async (url, init = {}) => {
-    asked.push({ path: url.slice(base.length), cache: init.cache });
-    if (!url.startsWith(base) || !Object.hasOwn(files, url.slice(base.length))) return new Response('no', { status: 404 });
-    return new Response(files[url.slice(base.length)]);
-  };
-  return { source: viewBundleUrlSource(base.replace(/\/$/, ''), { fetch }), asked };
+  const held = viewBundleMemorySource(files);
+  return { source: { read: (path, options) => { asked.push({ path }); return held.read(path, options); } }, asked };
 }
 const SOURCES = {
-  'a folder on a static file server': () => staticServer(STEP_BUNDLE),
+  'a source that says each read': () => countedSource(STEP_BUNDLE),
   'files held in the page': () => ({ source: viewBundleMemorySource(new Map(Object.entries(STEP_BUNDLE))), asked: null }),
 };
 const bytesOf = async response => new Uint8Array(await response.arrayBuffer());
@@ -102,9 +98,6 @@ for (const [kind, make] of Object.entries(SOURCES)) {
     await assert.rejects(fetchXbfElementFacts(served.url, PLATE, 'face', 9, options), error => error.status === 404);
     if (asked) {
       assert.equal(asked.filter(read => read.path === 'parts/step-f8f4-0~3A1~3A2/elements.json').length, 1, JSON.stringify(asked));
-      // The root's files are asked of the server again each time; the parts, named by their content, as cached.
-      assert.equal(asked.find(read => read.path === 'structure.json').cache, 'no-cache');
-      assert.equal(asked.find(read => read.path.endsWith('.xbm')).cache, 'default');
     }
 
     // What needs an engine has no answer: a next version to wait on, a mesh run, the page's local routes.
@@ -132,7 +125,7 @@ test("a mesh file's bytes, a robot's meshes and a drawing are read through the s
   };
   for (const [name, { files, document }] of Object.entries(bundles)) {
     const all = { ...files, 'manifest.json': manifestOf(files, document) };
-    for (const source of [staticServer(all).source, viewBundleMemorySource(all)]) {
+    for (const source of [countedSource(all).source, viewBundleMemorySource(all)]) {
       const client = await openViewBundle(source);
       const entry = await client.resolveEntry(`/${document.name}`);
       if (name === 'stl') {
@@ -201,17 +194,17 @@ test("a structure whose mechanism and names the bundle keeps apart is answered a
   const named = Object.keys(all).filter(path => path.startsWith('names/'));
   // The plates share a key and keep two names files; the peg's names are the left plate's file; the pin has none.
   assert.equal(named.length, 2);
-  // The folder's server, which says how many names files were read through before each was asked for.
-  const base = 'https://files.test/bundles/pair.view/';
+  // A source that says how many names files were read through before each was asked for.
   const asked = [];
   let read = 0;
-  const fetch = async (url, init = {}) => {
-    const path = url.slice(base.length);
-    asked.push({ path, cache: init.cache, read });
-    if (!Object.hasOwn(all, path)) return new Response('no', { status: 404 });
-    return { ok: true, status: 200, arrayBuffer: async () => { if (path.startsWith('names/')) read += 1; return new Uint8Array(all[path]).buffer; } };
-  };
-  for (const source of [viewBundleUrlSource(base, { fetch }), viewBundleMemorySource(all)]) {
+  const counted = { read: async path => {
+    asked.push({ path, read });
+    if (!Object.hasOwn(all, path)) throw Object.assign(new Error(`no ${path}`), { status: 404 });
+    await Promise.resolve();
+    if (path.startsWith('names/')) read += 1;
+    return new Uint8Array(all[path]).buffer;
+  } };
+  for (const source of [counted, viewBundleMemorySource(all)]) {
     const client = await openViewBundle(source);
     const served = await client.engineDocument('/pair.step');
     const where = xbfDocumentSource(served.url);
@@ -221,10 +214,10 @@ test("a structure whose mechanism and names the bundle keeps apart is answered a
     client.dispose();
   }
   // Each names file was asked for once, however many prototypes name it and however often the structure is read,
-  // all of them before any was read through; named by their content, they are asked for as the browser's cache has them.
+  // all of them before any was read through.
   const reads = asked.filter(({ path }) => path.startsWith('names/'));
   assert.deepEqual(reads.map(({ path }) => path).sort(), [...named].sort());
-  assert.ok(reads.every(({ cache, read: before }) => cache === 'default' && before === 0), JSON.stringify(reads));
+  assert.ok(reads.every(({ read: before }) => before === 0), JSON.stringify(reads));
 
   // A structure naming a names file the bundle does not hold is no structure with fewer names: it fails, saying which.
   const lost = { ...moved, 'structure.json': encode({ ...JSON.parse(new TextDecoder().decode(moved['structure.json'])),

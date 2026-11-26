@@ -1670,32 +1670,28 @@ class Daemon:
             send({"failed": f"unknown request {op!r}"})
 
     def bundle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
-        """``{"op": "bundle", "source", "destinations"}`` (``api.export`` to a ``.view`` folder): the view
-        bundle of a document -- ``{"id"}``, one the engine holds, or ``{"path"}``, a CAD file -- written into
-        each folder by the page's own application, from what it answers a page (its ``bundle``:
-        ``viewer/bundle.py``). Answered ``{"done": {"files": [row]}}``, each row its folder, its document and
-        what was written; a refusal as its type (``refused``), anything else ``failed`` in its words."""
-        source, folders = request.get("source"), request.get("destinations")
-        if not (isinstance(source, dict) and isinstance(source.get("id", source.get("path")), str)
-                and isinstance(folders, list) and folders and all(isinstance(folder, str) for folder in folders)):
-            send(refused(ValueError("bundle takes a source, {id} or {path}, and destinations: [folder]")))
+        """``{"op": "bundle", "path", "folder"}`` (``api.bundle``, ``cad share``'s step): the view bundle of the CAD
+        file at ``path`` (a model's ``.xbf`` is the model a live worker holds, else the file) written into ``folder``
+        by the page's own application, from what it answers a page (its ``bundle``: ``viewer/bundle.py``).
+        Answered ``{"done": {...}}``: the folder, its document and what was written; a refusal as its type
+        (``refused``), anything else ``failed`` in its words."""
+        path, folder = request.get("path"), request.get("folder")
+        if not (isinstance(path, str) and os.path.isabs(path) and isinstance(folder, str) and os.path.isabs(folder)):
+            send(refused(ValueError("bundle takes a file's path and a folder, each absolute")))
             return
         try:
             application = getattr(self.serve(request).http, "app", None)
             if application is None:
                 send({"failed": "this engine has no application host"})
                 return
-            rows = []
-            for folder in folders:
-                began = time.monotonic()
-                done = application.bundle(source, folder, version())
-                rows.append({**done, "seconds": round(time.monotonic() - began, 4)})
+            began = time.monotonic()
+            done = application.bundle(path, folder, version())
         except ValueError as error:
             send(refused(error))
         except (OSError, RuntimeError) as error:
             send({"failed": str(error), **failed_type(error)})
         else:
-            send({"ok": True, "done": {"files": rows}})
+            send({"ok": True, "done": {**done, "seconds": round(time.monotonic() - began, 4)}})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
         """``cad update`` (``{"op": "update"}``, ``"major": true`` for ``cad update --major``): judged

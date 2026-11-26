@@ -1,13 +1,13 @@
-"""A document's view bundle (``cad <type> export SRC DST.view``), written by an engine of this test's own
-and held to the answers that engine gives a page over HTTP: every file the manifest lists is there with its
+"""A file's view bundle, what ``cad share`` uploads as a share's view (``api.bundle``, the share's step, which no
+export is), written by an engine of this test's own and held to the answers that engine gives a page over HTTP: every file the manifest lists is there with its
 size and digest, each is the live answer byte for byte (but what a structure says of the computer it was
 answered on: a file's ``path``, a model's ``closure``, where a robot's meshes are; and the two things it
 holds apart, its mechanism and its prototypes' element names, which its reader puts back), a prototype's
 names are a file named by its bytes, a part's table holds exactly what asking for each element answers of its
 geometry, a document's part files are asked at once, a bundle written again after an edit rewrites the
-changed part's files and no other part's, an export that fails leaves the folder as it was, and no file of a
-bundle names a folder of the computer it was made on. A model, an ``.xbf``, a STEP, an STL, a DXF and a URDF
-each have one.
+changed part's files and no other part's, a writing that fails leaves the folder as it was, and no file of a
+bundle names a folder of the computer it was made on. A model (its ``.xbf``), a STEP, an STL, a DXF and a URDF each
+have one; an export takes no ``.view`` destination.
 
 The models are written into a fresh temporary folder and built there; nothing reads the sample corpus.
 """
@@ -40,7 +40,7 @@ SRC = add_sources()  # the packages' sources, as PYTHONPATH names them
 # geometries; the boss and the lug are of one geometry, so one part's key, and named apart.
 MODEL = """
 import build123d as bd
-from cad import step, xbf
+from cad import model, step
 from bd_materials import metals
 
 
@@ -62,7 +62,7 @@ def lug():
     return made
 
 
-@xbf("XBF/pair.xbf")
+@model("XBF/pair.xbf")
 @step("pair.step")
 def pair():
     plate = bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
@@ -143,9 +143,9 @@ class ViewBundleTest(unittest.TestCase):
         cls.run_script("models.py")
         from cad.engine import api
         from cad.engine.client import request
-        from cad.engine.ids import model_id
+        from cad.engine.ids import file_id
 
-        cls.model = model_id(cls.base / "models.py", "pair")
+        cls.model = file_id(cls.base / "XBF" / "pair.xbf")  # a model's id is its .xbf's
         cls.out = cls.base / "out"
         api.export(cls.base / "XBF" / "pair.xbf", cls.out / "pair.stl")
         import ezdxf
@@ -159,11 +159,12 @@ class ViewBundleTest(unittest.TestCase):
         launched = request({"op": "viewer", "api_only": True, "start": str(cls.base)})
         assert launched and "failed" not in launched, launched
         cls.port, cls.token = launched["port"], launched["token"]
-        # One bundle of each source, written once for every test that reads one.
-        cls.sources = {"model": cls.model, "xbf": cls.base / "XBF" / "pair.xbf", "step": cls.base / "pair.step",
+        # One bundle of each source, written once for every test that reads one: a model by its .xbf, which a live
+        # worker holds.
+        cls.sources = {"model": cls.base / "XBF" / "pair.xbf", "step": cls.base / "pair.step",
                        "stl": cls.out / "pair.stl", "dxf": cls.base / "plate.dxf",
                        "urdf": cls.base / "robot" / "arm.urdf"}
-        cls.rows = {name: api.export(source, cls.out / f"{name}.view")[0] for name, source in cls.sources.items()}
+        cls.rows = {name: api.bundle(source, cls.out / name) for name, source in cls.sources.items()}
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -204,8 +205,7 @@ class ViewBundleTest(unittest.TestCase):
 
     def api(self, name: str) -> str:
         """Where a page reads the source ``name``: its document opened as a page opens it."""
-        source = self.sources[name]
-        opening = {"id": source} if name == "model" else {"path": str(source)}
+        opening = {"path": str(self.sources[name])}
         deadline = time.monotonic() + 300
         while True:
             connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=300)
@@ -238,7 +238,7 @@ class ViewBundleTest(unittest.TestCase):
     def test_a_bundle_holds_every_file_its_manifest_lists(self) -> None:
         for name, row in self.rows.items():
             with self.subTest(source=name):
-                folder = self.out / f"{name}.view"
+                folder = self.out / name
                 manifest = self.manifest(folder)
                 self.assertEqual((manifest["format"], manifest["made"]["tool"]), ("view-bundle/1", "cad"))
                 self.assertEqual(self.files(folder), {*manifest["files"], "manifest.json"})
@@ -246,44 +246,45 @@ class ViewBundleTest(unittest.TestCase):
                     data = (folder / path).read_bytes()
                     self.assertEqual((entry["bytes"], entry["sha256"]), (len(data), hashlib.sha256(data).hexdigest()), path)
                     self.assertTrue(entry["type"], path)
-                # What the export answers is the folder and what it holds.
-                self.assertEqual((row.path, row.kind, row.written), (folder, "view", True))
-                self.assertEqual((row.view["document"], row.view["files"]), (manifest["document"], len(manifest["files"]) + 1))
-                self.assertEqual(set(row.view["written"]), self.files(folder))
+                # What the writing answers is the folder and what it holds.
+                self.assertEqual((Path(row["path"]), row["removed"]), (folder, []))
+                self.assertEqual((row["document"], row["files"]), (manifest["document"], len(manifest["files"]) + 1))
+                self.assertEqual(set(row["written"]), self.files(folder))
         from cad.engine.ids import file_id
 
         envelope = json.loads(self.live(f"/api/v1/documents/{self.model}"))
         structure = json.loads(self.live(self.api("model") + "/structure"))
-        self.assertEqual(self.manifest(self.out / "model.view")["document"],
+        self.assertEqual(self.manifest(self.out / "model")["document"],
                          {"id": self.model, "kind": "model", "name": envelope["name"], "version": structure["version"]})
-        files = ("xbf", "step", "stl", "dxf", "urdf")
-        self.assertEqual([self.manifest(self.out / f"{name}.view")["document"] for name in files],
+        files = ("step", "stl", "dxf", "urdf")
+        self.assertEqual([self.manifest(self.out / name)["document"] for name in files],
                          [{"id": file_id(self.sources[name]), "kind": name, "name": self.sources[name].name,
                            "version": json.loads(self.live(f"/api/v1/documents/{file_id(self.sources[name])}"))["version"]
                            if name in ("stl", "dxf", "urdf") else
-                           json.loads((self.out / f"{name}.view" / "structure.json").read_bytes())["version"]}
+                           json.loads((self.out / name / "structure.json").read_bytes())["version"]}
                           for name in files])
         # A mesh file's bundle is the file, which its page parses; a drawing's, its drawing; a robot's, its
         # structure, the one primitive cad meshed for it and the one mesh file its links draw, each once.
-        self.assertEqual(self.files(self.out / "stl.view"), {"manifest.json", "source.stl"})
-        self.assertEqual(self.files(self.out / "dxf.view"), {"manifest.json", "drawing.json"})
+        self.assertEqual(self.files(self.out / "stl"), {"manifest.json", "source.stl"})
+        self.assertEqual(self.files(self.out / "dxf"), {"manifest.json", "drawing.json"})
         mesh = hashlib.sha256((self.base / "robot" / "meshes" / "head.stl").read_bytes()).hexdigest()
-        robot = self.files(self.out / "urdf.view")
+        robot = self.files(self.out / "urdf")
         self.assertLessEqual({"manifest.json", "structure.json", f"meshes/{mesh}.stl"}, robot)
         self.assertEqual([len(robot), len([path for path in robot if path.startswith("parts/") and path.endswith(".glb")])],
                          [4, 1])
 
     def test_each_bundled_answer_is_the_live_answer(self) -> None:
-        for name in ("model", "xbf", "step"):
+        for name in ("model", "step"):
             with self.subTest(source=name):
-                folder, api = self.out / f"{name}.view", self.api(name)
+                folder, api = self.out / name, self.api(name)
                 structure = json.loads(self.live(api + "/structure"))
                 # A structure is the answer but for what it says of the computer it was answered on: a
                 # model's names the code that built it (its closure: the script and its modules by path, their
-                # names), which its bundle leaves out; a file's names where the file is, and its bundle the
-                # file's name alone.
+                # names), which its bundle leaves out, and its path is its id, as a live worker answers it; a
+                # file's names where the file is, and its bundle the file's name alone.
                 if name == "model":
                     self.assertEqual(structure["closure"]["source"]["function"], "pair")
+                    self.assertEqual(structure["path"], self.model)
                     portable = {key: value for key, value in structure.items() if key != "closure"}
                 else:
                     self.assertNotIn("closure", structure)
@@ -299,7 +300,7 @@ class ViewBundleTest(unittest.TestCase):
                 self.assertEqual("kinematics.json" in self.files(folder), "kinematics" in structure)
                 if "kinematics" in structure:
                     self.assertEqual((folder / "kinematics.json").read_bytes(), self.live(api + "/kinematics"))
-                if name in ("model", "xbf"):  # the model's mechanism, which its xbf holds too
+                if name == "model":  # the model's mechanism, which its xbf holds too
                     self.assertIn("kinematics", structure)
                 # Every part is meshed before the structure is read: it names each part's unmeshed faces.
                 self.assertTrue(all("unmeshed" in prototype for prototype in structure["prototypes"]))
@@ -316,16 +317,16 @@ class ViewBundleTest(unittest.TestCase):
                 # No page kept a picture of it.
                 self.assertNotIn("thumbnail.png", self.files(folder))
         source = self.live(self.api("stl") + "/source")
-        self.assertEqual((self.out / "stl.view" / "source.stl").read_bytes(), source)
+        self.assertEqual((self.out / "stl" / "source.stl").read_bytes(), source)
         self.assertEqual(source, self.sources["stl"].read_bytes())
         drawing = self.live(self.api("dxf") + "/drawing")
         self.assertEqual(json.loads(drawing)["schemaVersion"] > 0, True, drawing[:200])
-        self.assertEqual((self.out / "dxf.view" / "drawing.json").read_bytes(), drawing)
+        self.assertEqual((self.out / "dxf" / "drawing.json").read_bytes(), drawing)
 
     def test_a_prototypes_names_are_a_file_named_by_its_bytes(self) -> None:
-        for name in ("model", "xbf", "step"):
+        for name in ("model", "step"):
             with self.subTest(source=name):
-                folder = self.out / f"{name}.view"
+                folder = self.out / name
                 bundled = json.loads((folder / "structure.json").read_bytes())
                 held = {path for path in self.files(folder) if path.startswith("names/")}
                 self.assertEqual(held, {prototype["names"] for prototype in bundled["prototypes"] if "names" in prototype})
@@ -338,13 +339,13 @@ class ViewBundleTest(unittest.TestCase):
                     self.assertLessEqual(set(json.loads(body)), set(NAMES))
         # Named by what it holds, never by a part's key: the two rims, two geometries named alike, share one;
         # the boss and the lug, one geometry named apart, hold one each.
-        prototypes = json.loads((self.out / "model.view" / "structure.json").read_bytes())["prototypes"]
+        prototypes = json.loads((self.out / "model" / "structure.json").read_bytes())["prototypes"]
         named = {label: [prototype for prototype in prototypes if prototype["name"] == label] for label in ("rim", "boss")}
         self.assertEqual([(len({one["key"] for one in alike}), len({one["names"] for one in alike}))
                           for alike in named.values()], [(2, 1), (1, 2)])
 
     def test_a_robots_bundle_holds_its_meshes_and_names_them_where_it_holds_them(self) -> None:
-        folder, api = self.out / "urdf.view", self.api("urdf")
+        folder, api = self.out / "urdf", self.api("urdf")
         structure = json.loads(self.live(api + "/structure"))
         meshes = self.base / "robot" / "meshes"
         self.assertEqual(len(structure["visuals"]), 3)
@@ -376,7 +377,7 @@ class ViewBundleTest(unittest.TestCase):
         # table, named by the part's geometry alone, leaves out: whether the face is meshed, and -- of a
         # model's document -- what made it, which is served live and never written.
         for name in ("model", "step"):
-            folder, api = self.out / f"{name}.view", self.api(name)
+            folder, api = self.out / name, self.api(name)
             structure = put_back(folder)
             measured = json.loads((folder / "measure.json").read_bytes())
             for prototype in structure["prototypes"]:
@@ -401,27 +402,26 @@ class ViewBundleTest(unittest.TestCase):
 
     def test_a_bundle_written_again_after_an_edit_rewrites_only_what_changed(self) -> None:
         from cad.engine import api
-        from cad.engine.ids import model_id
 
-        script, folder = self.base / "edited.py", self.out / "kit.view"
+        script, folder = self.base / "edited.py", self.out / "kit"
         script.write_text(textwrap.dedent(EDITED).replace("HEIGHT", "6"), encoding="utf-8")
         self.run_script("edited.py")
-        ident = model_id(script, "kit")
-        first = api.export(ident, folder)[0]
+        xbf = self.base / "kit.xbf"  # @model saves it beside its script
+        first = api.bundle(xbf, folder)
         before = self.manifest(folder)
         stamps = {path: (folder / path).stat().st_mtime_ns for path in self.files(folder)}
         parts = {path.split("/")[1] for path in before["files"] if path.startswith("parts/")}
         self.assertEqual(len(parts), 2)
 
         # Written again with nothing changed: nothing is written.
-        again = api.export(ident, folder)[0]
-        self.assertEqual((again.written, again.view["written"], again.view["removed"]), (False, [], []))
-        self.assertEqual(again.bytes, first.bytes)
+        again = api.bundle(xbf, folder)
+        self.assertEqual((again["written"], again["removed"]), ([], []))
+        self.assertEqual(again["bytes"], first["bytes"])
 
         # The peg made taller, the plate left alone: a small edit, run.
         script.write_text(textwrap.dedent(EDITED).replace("HEIGHT", "7"), encoding="utf-8")
         self.run_script("edited.py")
-        edited = api.export(ident, folder)[0]
+        edited = api.bundle(xbf, folder)
         after = self.manifest(folder)
         kept = {path for path in after["files"] if path in before["files"] and after["files"][path] == before["files"][path]}
         added = set(after["files"]) - set(before["files"])
@@ -431,35 +431,35 @@ class ViewBundleTest(unittest.TestCase):
         self.assertEqual({path.rsplit("/", 1)[1] for path in added}, {f"{json.loads((folder / 'structure.json').read_bytes())['tessellation']}.xbm", "elements.json"})
         self.assertEqual(len({path.split("/")[1] for path in added}), 1)
         self.assertEqual(len({path.split("/")[1] for path in kept if path.startswith("parts/")}), 1)
-        self.assertEqual(set(edited.view["removed"]), gone)
+        self.assertEqual(set(edited["removed"]), gone)
         # Written: the new part's files, and the document's own that say it changed. Nothing else.
-        self.assertEqual(set(edited.view["written"]), added | {"manifest.json", "structure.json", "measure.json"})
+        self.assertEqual(set(edited["written"]), added | {"manifest.json", "structure.json", "measure.json"})
         self.assertLessEqual({"look.json", "look/environment.hdr"}, kept)
         for path in kept:
             self.assertEqual((folder / path).stat().st_mtime_ns, stamps[path], f"{path} was written again")
         self.assertEqual(self.files(folder), {*after["files"], "manifest.json"})
         self.assertNotEqual(after["document"]["version"], before["document"]["version"])
 
-    def test_an_export_that_fails_leaves_the_folder_as_it_was(self) -> None:
+    def test_a_writing_that_fails_leaves_the_folder_as_it_was(self) -> None:
         from cad.engine import api
         from cad.engine.api import EngineError
 
         # A robot of its own, bundled; then a visual of it named by the folder it is in, which no bundle holds.
-        source, folder = self.base / "robot" / "named.urdf", self.out / "named.view"
+        source, folder = self.base / "robot" / "named.urdf", self.out / "named"
         source.write_text(ROBOT.replace("NAME", "plinth"), encoding="utf-8")
-        api.export(source, folder)
+        api.bundle(source, folder)
         before = {path: ((folder / path).read_bytes(), (folder / path).stat().st_mtime_ns) for path in self.files(folder)}
         source.write_text(ROBOT.replace("NAME", (self.base / "robot" / "plinth").as_posix()), encoding="utf-8")
-        for target in (folder, self.out / "unmade.view"):
+        for target in (folder, self.out / "unmade"):
             with self.subTest(folder=target.name):
                 with self.assertRaises(EngineError) as failed:
-                    api.export(source, target)
+                    api.bundle(source, target)
                 self.assertIn("would name a folder of this computer", str(failed.exception))
         # The earlier bundle is byte for byte what it was, no folder was made for the new one, and nothing
-        # the export gathered is left beside them.
+        # the writing gathered is left beside them.
         self.assertEqual({path: ((folder / path).read_bytes(), (folder / path).stat().st_mtime_ns)
                           for path in self.files(folder)}, before)
-        self.assertFalse((self.out / "unmade.view").exists())
+        self.assertFalse((self.out / "unmade").exists())
         self.assertEqual([path.name for path in self.out.iterdir() if path.name.endswith(".tmp")], [])
 
     def test_a_bundle_holds_the_picture_a_page_kept(self) -> None:
@@ -471,10 +471,10 @@ class ViewBundleTest(unittest.TestCase):
         picture = b"\x89PNG\r\n\x1a\n a page's picture of it"
         for change in ({"action": "open"}, {"action": "thumbnail", "png": base64.b64encode(picture).decode()}):
             self.live("/api/v1/documents", "PATCH", {**change, "path": str(source)})
-        api.export(source, self.out / "pictured.view")
+        api.bundle(source, self.out / "pictured")
         self.assertEqual(self.live(f"/api/v1/documents/{file_id(source)}/thumbnail"), picture)
-        self.assertEqual((self.out / "pictured.view" / "thumbnail.png").read_bytes(), picture)
-        self.assertEqual(self.manifest(self.out / "pictured.view")["files"]["thumbnail.png"]["type"], "image/png")
+        self.assertEqual((self.out / "pictured" / "thumbnail.png").read_bytes(), picture)
+        self.assertEqual(self.manifest(self.out / "pictured")["files"]["thumbnail.png"]["type"], "image/png")
 
     def test_a_bundle_names_no_folder_of_this_computer(self) -> None:
         home = os.path.expanduser("~")
@@ -483,51 +483,50 @@ class ViewBundleTest(unittest.TestCase):
             places.add(home)
         needles = {spelled.encode() for place in places for spelled in (place, json.dumps(place)[1:-1])}
         for name in self.rows:
-            folder = self.out / f"{name}.view"
+            folder = self.out / name
             for path in sorted(self.files(folder)):
                 data = (folder / path).read_bytes()
                 for needle in needles:
-                    self.assertNotIn(needle, data, f"{name}.view/{path} names {needle!r}")
+                    self.assertNotIn(needle, data, f"{name}/{path} names {needle!r}")
         # The live answers do name them, where the bundle's do not: a model's elements say the file that made
         # them, and a robot's links where their mesh files are.
-        key = json.loads((self.out / "model.view" / "structure.json").read_bytes())["prototypes"][0]["key"]
+        key = json.loads((self.out / "model" / "structure.json").read_bytes())["prototypes"][0]["key"]
         face = json.loads(self.live(f"{self.api('model')}/parts/{key}/faces/1"))
         self.assertEqual(Path(face["made_by"]["file"]), self.base / "models.py")
         self.assertIn(json.dumps(str(self.base / "robot" / "meshes" / "head.stl")).encode(),
                       self.live(self.api("urdf") + "/structure"))
 
-    def test_what_is_no_view_bundle_is_refused_before_anything_is_written(self) -> None:
+    def test_what_is_no_bundle_is_refused_before_anything_is_written_and_no_export_writes_one(self) -> None:
+        from cad import model
         from cad.engine import api
         from cad.engine.export import ExportRefused
 
-        xbf = self.sources["xbf"]
-        junk = self.out / "junk.view"
+        xbf = self.sources["model"]
+        junk = self.out / "junk"
         junk.mkdir()
         (junk / "notes.txt").write_text("mine", encoding="utf-8")
+        (self.base / "notes.txt").write_text("mine", encoding="utf-8")
         cases = {
-            "in a command of its own": lambda: api.export(xbf, self.out / "one.view", self.out / "one.glb"),
-            "takes no tolerance": lambda: api.export(xbf, self.out / "two.view", tolerance=0.1),
-            "written by the CAD server": lambda: api.export(xbf, self.out / "three.view", daemon=False),
-            "holds other files and no manifest.json": lambda: api.export(xbf, junk),
+            "holds other files and no manifest.json": lambda: api.bundle(xbf, junk),
+            "is no CAD file": lambda: api.bundle(self.base / "notes.txt", self.out / "notes"),
+            "no document": lambda: api.bundle(self.base / "gone.stl", self.out / "gone"),
         }
-        for words, export in cases.items():
+        for words, writing in cases.items():
             with self.subTest(refusal=words):
                 with self.assertRaises(ExportRefused) as refused:
-                    export()
+                    writing()
                 self.assertIn(words, str(refused.exception))
         self.assertEqual(self.files(junk), {"notes.txt"})
-        self.assertFalse([path.name for path in self.out.iterdir() if path.name.startswith(("one.", "two.", "three."))])
-
-    def test_the_command_says_the_bundle_it_wrote(self) -> None:
-        folder = self.out / "said.view"
-        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "dxf", "export", str(self.sources["dxf"]),
-                                  str(folder), "--json"], env=self.env)
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        answer = json.loads(done.stdout)
-        (row,) = answer["files"]
-        self.assertEqual((answer["ok"], row["kind"], Path(row["path"]), row["written"]), (True, "view", folder, True))
-        self.assertEqual(row["view"]["document"], self.manifest(folder)["document"])
-        self.assertEqual(row["view"]["files"], len(self.files(folder)))
+        self.assertFalse((self.out / "notes").exists() or (self.out / "gone").exists())
+        # A view bundle is no export: a .view destination is refused as any other unknown suffix, by the library
+        # and by the command, and nothing is written.
+        with self.assertRaisesRegex(ExportRefused, r"^pair\.view: an export is one of "):
+            model.export(xbf, self.out / "pair.view")
+        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "export", str(xbf),
+                                  str(self.out / "said.view"), "--json"], env=self.env)
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertIn("said.view: an export is one of ", json.loads(done.stdout)["error"])
+        self.assertFalse((self.out / "pair.view").exists() or (self.out / "said.view").exists())
 
 
 class AskedAtOnceTest(unittest.TestCase):
@@ -550,7 +549,7 @@ class AskedAtOnceTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="asked-"))
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         (folder / "stage").mkdir()
-        writing = bundle._Bundle(App(), folder / "kit.view", folder / "stage", {}, "0", [])
+        writing = bundle._Bundle(App(), folder / "kit", folder / "stage", {}, "0", [])
         with mock.patch.object(bundle, "ASKS", len(asks)):
             writing.take_all(asks)
         self.assertEqual({path: (folder / "stage" / path).read_bytes() for path, _url in asks},

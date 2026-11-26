@@ -115,8 +115,7 @@ class Report:
 class Written:
     """One file an export wrote, or found holding its bytes already and left as it was
     (``written`` False); a robot description's (an MJCF, a URDF) with what it holds (``robot``:
-    ``Description.summary``, with the notes it was written with), None for any other file; a view
-    bundle's folder with what it holds (``view``)."""
+    ``Description.summary``, with the notes it was written with), None for any other file."""
 
     path: Path
     kind: str
@@ -124,9 +123,6 @@ class Written:
     seconds: float
     written: bool = True
     robot: dict[str, Any] | None = None
-    #: A view bundle's (kind ``view``, ``path`` its folder): its ``document`` (id, kind, name, version), how
-    #: many ``files`` it holds, and the paths this export ``written`` and ``removed`` in it. None for a file.
-    view: dict[str, Any] | None = None
 
 
 @dataclass
@@ -596,9 +592,7 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, angl
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
-    ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, ``.view``: a view bundle, the folder of
-    what the document's page reads, made ahead so a page shows it with no engine, in an export of its own
-    (``_bundled``); and ``.xml`` or ``.mjcf``: an MJCF, the
+    ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, and ``.xml`` or ``.mjcf``: an MJCF, the
     document's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,
     ``export/mjcf.py``; ``.urdf``: the same description as ROS reads one, its meshes in a ``meshes``
     folder beside it, ``export/urdf.py``): the document of an
@@ -653,13 +647,11 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
                progress: Callable[[dict], None] | None = None, tolerance: float | None = None,
                angle: float | None = None, zero: str | None = None) -> list[Written]:
-    from cad.engine.export import VIEW, ExportRefused, angle_of, kind_of, tolerance_of, zero_of
+    from cad.engine.export import ExportRefused, angle_of, kind_of, tolerance_of, zero_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
     resolved = [Path(os.fspath(destination)).resolve() for destination in destinations]
-    if any(destination.suffix.lower() == VIEW for destination in resolved):
-        return _bundled(source, resolved, daemon, {"tolerance": tolerance, "angle": angle, "zero": zero})
     for destination in resolved:
         kind_of(destination)
     tolerance, angle = tolerance_of(tolerance, resolved), angle_of(angle, resolved)
@@ -709,67 +701,14 @@ def bundle(path: Any, folder: Any) -> dict[str, Any]:
         raise ExportRefused(f"{found.name} is no CAD file: a view bundle is written of a file the viewer opens")
     if not found.is_file():
         raise ExportRefused(f"no document {found}")
-    message = {"op": "bundle", "source": {"path": str(found)}, "destinations": [str(Path(os.fspath(folder)).resolve())]}
     try:
-        (done,) = _ask(message)["done"]["files"]
+        done = _ask({"op": "bundle", "path": str(found), "folder": str(Path(os.fspath(folder)).resolve())})["done"]
     except EngineError as error:
         if str(error).startswith("unknown request"):  # a server of a release before the bundle
             raise Outdated("the CAD server running writes no view bundle: it is older than this library. Update cad "
                            "and run it again") from None
         raise
     return done
-
-
-def _bundled(source: Any, folders: list[Path], daemon: bool, options: dict[str, Any]) -> list[Written]:
-    """An export whose destinations are view bundles (``export.VIEW``): each folder written by the server
-    that answers the document's page, from the answers it gives that page (the engine's **View bundle**) --
-    so only through the engine, and in a command of its own: a bundle is no translation, takes none of a
-    translation's options, and is not written beside one."""
-    from cad.engine.export import VIEW, ExportRefused
-
-    other = [folder.name for folder in folders if folder.suffix.lower() != VIEW]
-    if other:
-        raise ExportRefused(f"a view bundle ({VIEW}) is exported in a command of its own: export "
-                            f"{', '.join(other)} in another")
-    given = [name for name, value in options.items() if value is not None]
-    if given:
-        raise ExportRefused(f"a view bundle takes no {' or '.join(given)}: it holds what the document's page reads")
-    if not daemon:
-        raise ExportRefused("a view bundle is written by the CAD server, from what it answers the document's "
-                            "page: export it without daemon=False")
-    spec = _viewed(_called(source, daemon))
-    try:
-        done = _ask({"op": "bundle", "source": spec, "destinations": [str(folder) for folder in folders]})["done"]
-    except EngineError as error:
-        if str(error).startswith("unknown request"):  # a server of a release before the bundle
-            raise Outdated("the CAD server running writes no view bundle: it is older than this library. Update "
-                           "cad and export again") from None
-        raise
-    return [Written(Path(row["path"]), "view", row["bytes"], row["seconds"], bool(row["written"] or row["removed"]),
-                    view={key: row[key] for key in ("document", "files", "written", "removed")})
-            for row in done["files"]]
-
-
-def _viewed(source: Any) -> dict[str, Any]:
-    """What a view bundle is written of: a document's handle or its id (``{"id"}``), or a file of any
-    document type by its path (``{"path"}``): every type has a page, so a wider set than a translation
-    reads (``_source``). Which of them a bundle is made of yet is the server's to say."""
-    from cad.engine.export import ExportRefused
-    from cad.engine.ids import is_id
-    from cad.registry import type_of
-
-    if isinstance(source, Document):
-        return {"id": source.id}
-    text = os.fspath(source)
-    if is_id(text):
-        return {"id": text}
-    path = Path(text).resolve()
-    if type_of(path) is None:
-        raise ExportRefused(f"{path.name} is no CAD file: a view bundle is written of a document id or a file "
-                            "the viewer opens")
-    if not path.is_file():
-        raise ExportRefused(f"no document {path}")
-    return {"path": str(path)}
 
 
 def _called(source: Any, daemon: bool) -> Any:

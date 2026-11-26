@@ -266,10 +266,10 @@ home, launches it.
 
 ## A view bundle's host
 
-A view bundle (`cad <type> export SRC DST.view`) is one document's answers, written down: a host shows it
-with no engine behind the page, through `openViewBundle(source)` (`@cad/core/client`), the second
-implementation of `CadWorkspaceService`, whose source is a folder's URL on a static file server or the
-files held in the page. The view is `CadViewer` with no `library`: one document and nothing else. Every
+A view bundle (a share's view, which `cad share` has the server write) is one document's answers, written
+down: a host shows it with no engine behind the page, through `openViewBundle(source)` (`@cad/core/client`),
+the second implementation of `CadWorkspaceService`, whose source is a share's packs or the files held in the
+page. The view is `CadViewer` with no `library`: one document and nothing else. Every
 tool computed in the page works as over an engine (the display styles, Explode, Clip, Select and selection by
 name, Measure, whose exact values are the part's table of facts, the joints, poses and motions, Draw and
 Preview). What needs an engine is left out where it is read, by the capability each already rests on, so a
@@ -280,25 +280,25 @@ tool the document cannot use is absent, never drawn disabled:
   `setModelParameters` or `previewModelParameters`.
 - **No next version**: its engine document is `final`, so the view reads it once and waits on nothing.
 - **No Export**: the service has no `exports` and the host no `downloads`.
-- **No home, Recents, explorer, Open, Open in, Reveal, Copy path or Copy link**: no `library`, a file source
-  that only reads its one document (`createCadFileSource` gives it no `list` or `search`), and no
+- **No home, Recents, projects, Open, Open in, Reveal, Copy path or Copy link**: no `library`, a file source
+  that only reads its one document (`createCadFileSource`), no `projectFolder` to step through, and no
   `fileActions`, so the navbar draws no ⋯.
 - **Quick Edit** keeps Copy alone (the clipboard is the destination; no composer, no `send`), and carries its
-  snapshot packet as every page does (the page makes it); with no `promptFiles`, its message names its file as the
-  view does.
+  snapshot packet as every page does (the page makes it); with no `promptFiles`, its message names its file by
+  the host's `promptSubject` (below).
 - **The person's settings** are the host's to keep where it can: the web keeps the language in the
   browser ([storage](../../../apps/web/docs/storage.md)); there is no Telemetry and no What's new.
 
 ## A shared view bundle's host
 
 A shared view bundle is a view bundle a share service keeps, sealed, for anyone with its link, which is the
-share's address alone, beside the files that made it (a model's code and the files its build read; a file
-document's file), which `cad fork <link>` gets. Its host is the view bundle's host above, unchanged: the web's
+share's address alone, beside the files that made it (a model's `.xbf`, its code and the files its build read; a
+file document's file), which `cad fork <link>` gets. Its host is the view bundle's host above, unchanged: the web's
 share mode (`/<id>`, [apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens it with
 `openShare(id, service)` (`@cad/core/client`), which reads the share's manifest from the page's own origin, then
 each file of the view from the packs it lies in, fetched once each and kept by the browser (never a pack only the
-files that made it lie in), and hands them to `openViewBundle` as a lazy source; it shows that service as `?bundle=`
-does. Everything a bundle's view keeps and leaves out stays as it is. What the share adds lives in the host alone:
+files that made it lie in), and hands them to `openViewBundle` as a lazy source, and shows that service.
+Everything a bundle's view keeps and leaves out stays as it is. What the share adds lives in the host alone:
 its prompts' subject (`promptSubject`): the share's link, `<origin>/<id>`, for the model, so a prompt says
 `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>` (which Copy Reference and a chip copy too) and its
 snapshot packet's `input` the link, and nothing else of it differs from the engine's page's for the same views,

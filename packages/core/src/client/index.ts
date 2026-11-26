@@ -7,7 +7,7 @@ export type * from "./types.js";
 export { requestViewerJson, ViewerRequestError, serverErrorMessage, isEngineGone, isEngineRefused } from "./request.js";
 
 export { createHttpCadResourceProvider, cadResourceCacheKey } from './resources.js';
-export { createViewBundleClient, openViewBundle, readViewBundleManifest, viewBundleMemorySource, viewBundleSegment, viewBundleUrlSource,
+export { createViewBundleClient, openViewBundle, readViewBundleManifest, viewBundleMemorySource, viewBundleSegment,
   VIEW_BUNDLE_FORMAT, VIEW_BUNDLE_MANIFEST, VIEW_BUNDLE_ORIGIN } from './bundle.js';
 export { deriveShareBits, isShareSecret, openShare, readShareAddress,
   SHARE_DAMAGED, SHARE_FORMAT, SHARE_ID_PATTERN, SHARE_PREFETCH, SHARE_UNAVAILABLE, SHARE_UNSUPPORTED } from './share.js';

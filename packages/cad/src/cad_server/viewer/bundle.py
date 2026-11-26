@@ -1,8 +1,9 @@
 """A document's view bundle: what its page reads, written down ahead of time (the engine's **View bundle**).
 
 A page shows a document by asking this application for each thing it draws (``kinds.py``). A view bundle
-is those answers as files in one folder, so that a page can show the document from any plain file server,
-with no engine: ``write`` opens the document as a page does, asks this application, in process, for every
+is those answers as files in one folder, so that a page can show the document with no engine: what ``cad
+share`` uploads as a share's view, kept in the shared file's folder of the cache (``sharing``), and nothing
+else writes. ``write`` opens the document as a page does, asks this application, in process, for every
 read of its kind, and puts each answer's bytes at the path the layout gives its route. Nothing here makes
 an answer: the engine and this application make each as they make it for a page -- kernel work in the
 engine's own processes, never in this one -- so a bundled answer is the HTTP answer, byte for byte, but
@@ -18,7 +19,7 @@ edge's and vertex's facts and its groups), made once per part. A document's part
 on every core it has.
 
 Every answer is gathered into a folder made beside the bundle's (``atomic_replace.staging``) before the
-bundle's own is touched, so an export that fails -- the engine's refusal, a document that keeps changing --
+bundle's own is touched, so a writing that fails -- the engine's refusal, a document that keeps changing --
 leaves what was there as it was. A new bundle is then that folder, renamed. One written over an earlier
 bundle keeps what it can: a part's files are named by its geometry key (and its mesh by the tessellation),
 and a prototype's names by their bytes, so they are the same bytes in every bundle that holds them; the
@@ -52,7 +53,7 @@ __all__ = ["FORMAT", "MANIFEST", "write"]
 FORMAT = "view-bundle/1"
 MANIFEST = "manifest.json"
 # How often a bundle is begun again when its document changes under it (a model built again, a file
-# rewritten) before the export fails saying so.
+# rewritten) before the writing fails saying so.
 TRIES = 3
 # The longest wait between two asks of an answer still being made (a drawing, a file's read), in seconds.
 RETRY_SECONDS = 1.0
@@ -118,7 +119,8 @@ def _previous(folder: Path) -> dict:
         found = None
     if not isinstance(found, dict) or not isinstance(found.get("files"), dict) or \
             not str(found.get("format") or "").startswith("view-bundle/"):
-        raise ExportRefused(f"{folder.name}/{MANIFEST} is no view bundle's manifest: export to a new folder")
+        raise ExportRefused(f"{folder.name}/{MANIFEST} is no view bundle's manifest: a bundle is written into a "
+                            "new folder, or over an earlier bundle")
     return found
 
 
@@ -162,7 +164,7 @@ class _Bundle:
         response = Response(handler)
         try:
             self.app.handle(request, response)
-        except Exception as error:  # noqa: BLE001 - the route's own crash is this export's failure, in its words
+        except Exception as error:  # noqa: BLE001 - the route's own crash is this writing's failure, in its words
             raise RuntimeError(f"{url}: {type(error).__name__}: {error}") from error
         if not response.written or handler.close_connection:
             raise RuntimeError(f"{url} was not answered whole")
@@ -440,37 +442,36 @@ _READS = {"document": _engine_document, "mesh": _mesh_file, "drawing": _drawing,
 _VIEWS = {entry.wire: entry.view for entry in DOCUMENT_TYPES.values()}
 
 
-def _open(bundle: _Bundle, source: dict) -> dict:
-    """The document a page opens (``POST /api/v1/documents``: a file by its path, a held model by its
-    id), asked again while the engine reads it: its envelope."""
-    opening = json.dumps({"id": source["id"]} if "id" in source else {"path": source["path"]}).encode()
+def _open(bundle: _Bundle, path: str) -> dict:
+    """The document a page opens (``POST /api/v1/documents``: a file by its path), asked again while the engine
+    reads it: its envelope."""
+    opening = json.dumps({"path": path}).encode()
     while True:
         status, _kind, body = bundle.ask("POST", "/api/v1/documents", opening)
         if status != 202:
             break
         time.sleep(min(max(float(json.loads(body).get("retryMs") or 0) / 1000.0, 0.0), RETRY_SECONDS))
     if status != 201:
-        raise ExportRefused(f"no view bundle of {source.get('id') or Path(source['path']).name}: "
-                            f"{json.loads(body).get('error') or status}")
+        raise ExportRefused(f"no view bundle of {Path(path).name}: {json.loads(body).get('error') or status}")
     return json.loads(bundle.get(f"/api/v1/documents/{json.loads(body)['id']}")[1])
 
 
-def write(app, source: dict, folder, *, release: str) -> dict:
-    """Write the view bundle of ``source`` -- ``{"id"}``, a document the engine holds, or ``{"path"}``, a
-    CAD file's absolute path -- into ``folder`` through ``app`` (the engine's page's application), by this
-    ``release`` of cad. Returns what was done: ``{"path", "document", "files", "bytes", "written",
-    "removed"}`` (``written``: the paths whose bytes this writing put, the manifest among them;
+def write(app, path: str, folder, *, release: str) -> dict:
+    """Write the view bundle of the CAD file at ``path`` (absolute; a model's ``.xbf`` is the model a live
+    worker holds, else the file) into ``folder`` through ``app`` (the engine's page's application), by this
+    ``release`` of cad: ``cad share``'s step. Returns what was done: ``{"path", "document", "files", "bytes",
+    "written", "removed"}`` (``written``: the paths whose bytes this writing put, the manifest among them;
     ``removed``: the ones an earlier bundle there held and this document does not name).
 
-    ``ExportRefused`` for a folder that holds something other than a bundle, a source the engine does not
-    hold or read, and a type no bundle is made of yet. A document that keeps changing while it is read
-    fails, saying so. Whatever fails, the folder is left as it was: its files are moved in only once every
-    answer is in hand."""
+    ``ExportRefused`` for a folder that holds something other than a bundle, a file the engine does not
+    read, and a type no bundle is made of yet. A document that keeps changing while it is read fails, saying
+    so. Whatever fails, the folder is left as it was: its files are moved in only once every answer is in
+    hand."""
     folder = Path(folder)
     previous = _previous(folder)
-    roots = [os.path.dirname(source["path"])] if "path" in source else []
+    roots = [os.path.dirname(path)]
     opener = _Bundle(app, folder, folder, {}, release, roots)
-    envelope = _open(opener, source)
+    envelope = _open(opener, path)
     view = _VIEWS.get(envelope["kind"])
     if view not in _READS:
         raise ExportRefused(f"no view bundle is made of a {envelope['kind']} yet: one is made of "
@@ -486,9 +487,9 @@ def write(app, source: dict, folder, *, release: str) -> dict:
             try:
                 version = _READS[view](bundle, envelope)
             except _Changed:
-                envelope = _open(opener, source)
+                envelope = _open(opener, path)
                 continue
-            again = _open(opener, source)
+            again = _open(opener, path)
             if view != "document" and again["version"] != envelope["version"]:
                 envelope = again
                 continue
@@ -499,4 +500,4 @@ def write(app, source: dict, folder, *, release: str) -> dict:
             document = {"id": envelope["id"], "kind": envelope["kind"], "name": envelope["name"], "version": version}
             return {"path": str(folder), **bundle.land(document, previous)}
     raise RuntimeError(f"{envelope['name']} changed each of the {TRIES} times its view bundle was read: "
-                       "export it again once it is built")
+                       "share it again once it is built")

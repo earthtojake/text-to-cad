@@ -435,7 +435,7 @@ test("a share's address is its id alone as the path; a delete secret after the #
   for (const href of [
     `https://cad.example/${id}/`, `https://cad.example/x/${id}`, `https://cad.example/${id}x`, `https://cad.example/${id.slice(1)}`,
     `https://cad.example/${id.replace('_', '.')}`, 'https://cad.example/', 'https://cad.example/1024a2f2-2b65-5151-8299-282973f2a9fc',
-    `https://cad.example/?bundle=a.view/#delete=${secret}`,
+    `https://cad.example/?share=${id}#delete=${secret}`,
   ]) assert.equal(readShareAddress(href), null, href);
   assert.equal(isShareSecret(secret), true);
   for (const value of ['', secret.slice(1), `${secret}=`, `${secret.slice(0, 42)}/`, null]) assert.equal(isShareSecret(value), false, String(value));

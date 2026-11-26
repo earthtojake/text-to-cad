@@ -240,11 +240,10 @@ transport](docs/workspace-resources.md) for worker transfer, nested dependencies
 cache generations and the standalone static-HTTP default. No client reads model
 source or starts a source build.
 
-`openViewBundle(source)` (`client/bundle.js`) is the same service over a view bundle (`cad <type>
-export SRC DST.view`): the answers a page reads of one document, as files, read with no engine
-behind the page from a `ViewBundleSource` -- `viewBundleUrlSource(url)`, a folder on a plain static
-file server, `viewBundleMemorySource(files)`, the files held in the page, or a share's (`openShare`)
--- each the bytes of a path of the bundle; a source's `dispose`, where it has one, goes with the
+`openViewBundle(source)` (`client/bundle.js`) is the same service over a view bundle (a share's view,
+which `cad share` has the server write): the answers a page reads of one document, as files, read with no
+engine behind the page from a `ViewBundleSource` -- a share's (`openShare`), or
+`viewBundleMemorySource(files)`, the files held in the page -- each the bytes of a path of the bundle; a source's `dispose`, where it has one, goes with the
 service's. It checks the manifest (`view-bundle/1`; a file not its listed size fails), and
 answers the catalog (the one document: a model by its id, a file by `/<name>`), an engine document
 (its API URL under `http://view-bundle.invalid`, answered by a fetch of its own that maps each route

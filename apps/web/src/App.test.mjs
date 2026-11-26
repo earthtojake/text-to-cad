@@ -407,7 +407,7 @@ test('the notice says the page reconnects, and how to start the engine', async (
   }
 });
 
-test("a share's page hands the viewer what its prompts name the model by, and nothing in its navbar; a bundle's names it as the view does", async () => {
+test("a share's page hands the viewer what its prompts name the model by, and nothing in its navbar", async () => {
   const id = 'AbCdEfGhIjKlMnOpQrSt_-';
   const dom = new JSDOM('<div id="root"></div>', { url: `https://cad.example/${id}` });
   const { window } = dom;
@@ -426,8 +426,6 @@ test("a share's page hands the viewer what its prompts name the model by, and no
     // What the page offers of the files is its prompt's line: no host action in the navbar, and no file menu.
     assert.deepEqual(['fullSize', 'navbarActions'].filter(name => name in snapshot()), []);
     assert.equal(snapshot().host.fileActions, undefined);
-    await act(() => root.render(createElement(BundleApp, { client, tabStore })));
-    assert.equal('promptSubject' in snapshot().host, false);
   } finally {
     await act(() => root.unmount());
     dom.window.close();

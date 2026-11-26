@@ -7,8 +7,8 @@ engine's one page and exits; a FILE that is a folder is opened as a project, on 
 document by path, `/<uuid>`: a model's id, or a file's id once a launcher (or the page itself) registers it, derived
 from the file's canonical path. `/` is the home, and each place on it has its own address: `/` Recents,
 `/?view=pinned` Starred, `/?project=<id>` a project's page. Python scripts are never documents. The same client also
-shows one view bundle with no engine behind it, from any plain static file server ([A view bundle](#a-view-bundle)),
-or a shared one, from the share service that serves it ([A shared view bundle](#a-shared-view-bundle)).
+shows a shared model's view bundle with no engine behind it, from the share service that serves it ([A shared view
+bundle](#a-shared-view-bundle)).
 
 This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
@@ -34,9 +34,9 @@ this app. The Python wheel consumes only the production build.
 ```text
 src/
   App.tsx               the CadViewer's browser host: URL, history, addresses, title, appearance, the file menu and the library
-  BundleApp.tsx         the host of one view bundle: its document alone, with no engine
+  BundleApp.tsx         the host of a shared view bundle: its document alone, with no engine
   SharePage.tsx         a shared view bundle's pages that are no view: why it did not open, and its delete page
-  main.tsx              host/client bootstrap and cleanup, and the choice between the three (`?bundle=`, `/<share>`)
+  main.tsx              host/client bootstrap and cleanup, and the choice between the engine's page and a share's (`/<share>`)
   StartingView.tsx      the page while it asks its server what it is: the app's own frame, inert
   host/                 browser clipboard, prompt delivery, the app menu's links, reload under a new server
   persistence/          the tab record in sessionStorage
@@ -168,45 +168,28 @@ until cad's own update restarts it on a newer release while nothing uses it.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
 
-## A view bundle
-
-A page whose address carries `?bundle=<folder>` shows that view bundle (`cad <type> export SRC DST.view`)
-and nothing else: `main.tsx` reads the parameter once, at start-up (`src/client/workbench/bundleParam.js`),
-and an address without it is the engine's page, exactly as above. The folder is a URL resolved against the
-page's own and on its origin, so the built client and the bundle are served side by side by any static
-file server, at any path (the build's asset URLs are relative):
-
-```text
-https://example.org/viewer/index.html?bundle=bundles/arm.view/
-```
-
-The page reads the bundle's `manifest.json`, then `BundleApp.tsx` hands `CadViewer` the bundle's
-service (`openViewBundle(viewBundleUrlSource(folder))`, `@cad/core/client`) and only the host ports that
-need no engine: the clipboard, this build's links, the tab's appearance and the person's language, which
-this browser keeps (`src/host/browserLanguage.js`, [storage](docs/storage.md#localstorage)). It asks
-nothing of `/api/`: no server description, address link, library, Recents, telemetry, What's new, crash
-report or version to wait on, and no Export, Open in, Reveal or Copy path; parameters read as an `.xbf`'s
-do ("Edit these in the script."), and Quick Edit copies, carrying its snapshot packet as the engine's page does.
-What a bundle-backed view leaves out, and why, is
-[the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A bundle the page
-cannot open (none named, another origin's, no manifest, another format) says why, on a page of its own.
-
 ## A shared view bundle
 
 A share service keeps a view bundle sealed, as a manifest and the packs its files lie in, with the files that
-made it in the same packs (a model's code and the files its build read; a file document's file), which it serves
+made it in the same packs (a model's `.xbf`, its code and the files its build read; a file document's file), which
+it serves
 as a zip (`/<id>.zip`, what `cad fork` downloads), and serves this same built client, its `index.html` at `/<id>`
 and its files beside it (the build's asset URLs are relative, so `./assets/…` resolves to `/assets/…` from
 `/<id>`). `main.tsx` chooses the share mode first, at start-up, from the address alone (`readShareAddress`,
 `@cad/core/client`): a path that is exactly one share id (22 base64url characters). Any other address is the
-bundle's or the engine's page, as above; the engine's ids never have a share id's form.
+engine's page, as above; the engine's ids never have a share id's form.
 
 - `/<id>`, whatever follows it but a delete secret (a key an earlier link carried is passed over): the page
   reads the share's manifest (`/v1/shares/<id>`, never from a cache) and its view's packs
   (`/v1/shares/<id>/packs/<pack id>`, as the browser's cache keeps them: a pack never changes) from its own
   origin (`src/host/share.js`), opens them with the key the id gives (`openShare`), fetching every pack of the
-  view ahead and none that only the files that made it lie in, and shows the bundle exactly as `?bundle=` does
-  (`BundleApp`, titled by the document's name). A prompt from it (Quick Edit's, a screenshot's) names the model by
+  view ahead and none that only the files that made it lie in, and shows the bundle (`BundleApp`, titled by the
+  document's name) with only the host ports that need no engine: the clipboard, this build's links, the tab's
+  appearance and the person's language, which this browser keeps (`src/host/browserLanguage.js`,
+  [storage](docs/storage.md#localstorage)). It asks nothing of `/api/`: no server description, address link,
+  library, Recents, telemetry, What's new, crash report or version to wait on, and no Export, Open in, Reveal or
+  Copy path; parameters read as an `.xbf`'s do ("Edit these in the script."). What a bundle-backed view leaves
+  out, and why, is [the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A prompt from it (Quick Edit's, a screenshot's) names the model by
   the share's link, not by the model's id on the computer it was shared from, which means nothing to an agent on
   another: `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>` (as Copy Reference and a chip copy
   it) and its snapshot packet's `input` (`sharePromptSubject`, the host's `promptSubject`). Its Quick Edit carries
@@ -362,14 +345,13 @@ on Linux and Windows. Compare a baseline and a refactor on the same backend.
 
 From the repository root, `scripts/test/test-viewer-browser.sh` exercises the
 bundled client's format and camera contracts through the real backend, with fresh
-temporary fixtures and a private server/cache, then, with that engine stopped, a view
-bundle it exported, opened from a plain static file server (the model on screen, a face's
-facts, read-only parameters, and no request for `/api/`), and the model `cad share` shared, then shared
-again unchanged (the same link, no file sent again), opened from the share service's own Worker under its
-content security policy (viewed, its packs served immutable; an unknown id gone; deleted, then gone; with
-no request off the origin and the secret in the DELETE's header alone); it runs exactly what CI runs
-(picking and kinematics run on every PR in the `packages/ui` browser specs).
-`--only format|camera|bundle|share` runs one gate, and `--out /tmp/viewer-review` retains
+temporary fixtures and a private server/cache, then, with that engine stopped, the model
+`cad share` shared by its `.xbf`, then shared again unchanged by its id (the same link, no file sent again),
+opened from the share service's own Worker under its content security policy (the model on screen, a face's
+facts from its table, read-only parameters, its packs served immutable, no request for `/api/`; an unknown id
+gone; deleted, then gone; with no request off the origin and the secret in the DELETE's header alone); it runs
+exactly what CI runs (picking and kinematics run on every PR in the `packages/ui` browser specs).
+`--only format|camera|prompt|share` runs one gate, and `--out /tmp/viewer-review` retains
 screenshots and bounded failure diagnostics; the runner cleans up its project and
 processes on exit.
 
