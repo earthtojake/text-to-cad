@@ -50,7 +50,7 @@ ones a project's library tables resolve to; otherwise the newest installed KiCad
 A part without a model stands as a block, and the viewer tells the person why:
 VRML only, not found, outside the folders above, too large, not a STEP, embedded in the board, or
 too many models. `cad inspect board.kicad_pcb --json` reports each model the same way
-(`models`), and a STEP or GLB export (`cad export board.kicad_pcb DIR --to step|glb`, `cad.export`) holds
+(`models`), and a STEP or GLB export (`cad export board.kicad_pcb board.step`, or `board.glb`) holds
 exactly the models found. `cad run kicad-cli` reads KiCad's library as KiCad does, where a `.wrl`
 name needs its `.wrl` file (KiCad 10's library ships STEP alone), so prefer the typed export.
 

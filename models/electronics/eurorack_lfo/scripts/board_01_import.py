@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TMP = ROOT / "tmp" / "netlist"
 BOARD = ROOT / "twin_orbit.kicad_pcb"
 
-(netlist,) = cad.export(ROOT / "twin_orbit.kicad_sch", TMP, to="netlist").written
+(netlist,) = cad.export(ROOT / "twin_orbit.kicad_sch", TMP / "twin_orbit.net").written
 with kicad_pcb.edit(BOARD) as b:
     result = b.import_netlist(str(netlist), dry_run="--dry-run" in sys.argv)
     print(result.report if hasattr(result, "report") else result)

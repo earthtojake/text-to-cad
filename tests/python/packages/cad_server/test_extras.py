@@ -404,8 +404,15 @@ class ChoosingTest(unittest.TestCase):
                 ("import cad\nhandle = None\ncad.inspect(handle, ranges=True)\n", {"build123d"}),
                 ("import cad\ncad.inspect('p.step', interference=True)\n", set()),
                 ("import cad\ncad.inspect('p.step')\n", set()),
-                ("import cad\ncad.export('b.kicad_pcb', 'fab', to='gerbers')\n", {"kicad"}),
-                ("import cad\nboard = out = kind = None\ncad.export(board, out, to=kind)\n", {"kicad"}),
+                ("import cad\ncad.export('b.kicad_pcb', 'fab/', as_='gerbers')\n", {"kicad"}),
+                # A source the scan cannot read is a KiCad file's where the call says what its export alone does: a
+                # kind no model's export is, or one it cannot read; a folder; a .csv, a .net, a .pdf, a .zip.
+                ("import cad\nboard = out = kind = None\ncad.export(board, out, as_=kind)\n", {"kicad"}),
+                ("import cad\nboard = None\ncad.export(board, 'fab/pos.csv', 'pos')\n", {"kicad"}),
+                ("import cad\nboard = None\ncad.export(board, 'fab/')\n", {"kicad"}),
+                ("import cad\nboard = HERE = None\ncad.export(board, HERE / 'fab.zip', as_='gerbers')\n", {"kicad"}),
+                ("import cad\npart = None\ncad.export(part, 'part.step', as_='step')\n", set()),
+                ("import cad\npart = None\ncad.export(part, 'part.glb', as_=None)\n", set()),
                 ("import cad\ncad.snapshot('b.kicad_pcb', 'b.png')\n", set())):
             with self.subTest(code=code):
                 self.assertEqual(scan.scan(code=code, cwd=self.folder), found)

@@ -6,7 +6,7 @@
 
 It reads two GLBs, made first as the README's "Rebuild" says: the assembly with its explode,
 GLB/orbit_assembly.glb (`cad run src/exports.py`), and the board as KiCad draws it, its copper, mask and
-silkscreen, GLB/orbit.glb (`cad export orbit.kicad_pcb GLB --to glb`). The assembly gives
+silkscreen, GLB/orbit.glb (`cad export orbit.kicad_pcb GLB/orbit.glb`). The assembly gives
 every part and the explode; the board's GLB gives its layers, laid on the assembly's bare PCB. The script
 is the source of the render: what it writes in RENDERS/ is made again by running it.
 """

@@ -2,8 +2,8 @@
 ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
-    cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a model's, an
-        xbf's, a STEP's)
+    cad export SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
+        model's, an xbf's, a STEP's)
     cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE|JSON|-] [--measurements FILE] [--width N]
         [--height N] [--size-profile P] [--json]
@@ -77,19 +77,27 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
                        "kinds") + _LINKED)
     if hasattr(export, "checks"):
         export.checks.append(_one_destination)
-    export.usage = ("%(prog)s SRC DST [--json]" if _meshes(document_type)
-                    else "%(prog)s SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]")
+    export.usage = ("%(prog)s SRC DST [--as KIND] [--json]" if _meshes(document_type)
+                    else "%(prog)s SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]")
+    from cad._internal.verbs import MODEL_KINDS
+
     if _meshes(document_type):
         export.add_argument("destinations", nargs="+", metavar="DST",
-                            help="one of the other mesh kinds (.glb, .stl, .3mf), holding what its format carries")
+                            help="one of the other mesh kinds (.glb, .stl, .3mf), holding what its format carries: "
+                                 "one file, named (never a folder)")
+        export.add_argument("--as", dest="as_", choices=tuple(MODEL_KINDS), metavar="KIND",
+                            help="the kind DST is (glb, stl, 3mf): DST says it, and the two must agree")
         export.add_argument("--json", action="store_true", help="print what was written as JSON")
         return
     export.add_argument("destinations", nargs="+", metavar="DST",
-                        help="the file to write, its format by its suffix: .step, .glb, .stl, .3mf, .dxf (of a planar "
-                             "document), .xbf (a copy of the document, never over its own file), .xml (MJCF, its "
-                             "meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): the document "
-                             "as its code built it, checked (a DXF's drawing too) before it is written: a refused "
-                             "export writes nothing")
+                        help="the file to write, its format by its suffix: .step (or .stp), .glb, .stl, .3mf, .dxf (of "
+                             "a planar document), .xbf (a copy of the document, never over its own file), .xml (MJCF, "
+                             "its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): one file, "
+                             "named (never a folder), the document as its code built it, checked (a DXF's drawing "
+                             "too) before it is written: a refused export writes nothing")
+    export.add_argument("--as", dest="as_", choices=tuple(MODEL_KINDS), metavar="KIND",
+                        help="the kind DST is (step, glb, stl, 3mf, dxf, xbf, mjcf, urdf): DST says it, and the two "
+                             "must agree")
     from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
@@ -575,11 +583,14 @@ def _export(args: argparse.Namespace, prog: str) -> int:
     """``cad export SRC DST``: an ``.xbf``, a ``.step``, a document id or a mesh file written
     to its destination (``api.export`` refuses any other source); with ``--json``, what was written
     as one JSON object."""
+    from cad._internal.verbs import one_file
     from cad.engine import api
     from cad.engine.addresses import key
     from cad.engine.export import ExportRefused
 
     try:
+        for destination in args.destinations:
+            one_file(destination, getattr(args, "as_", None))
         written = api.export(args.source, *args.destinations, tolerance=getattr(args, "tolerance", None),
                              angle=getattr(args, "angle", None), zero=getattr(args, "zero", None),
                              log=lambda text: print(text, file=sys.stderr))

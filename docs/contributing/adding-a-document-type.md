@@ -142,9 +142,10 @@ runs KiCad's own command, `kicad-cli`. Where each item of the two checklists lan
    library's board renderer and summary. `drc`, `export` and `edit` hand the board to the `kicad`
    integration (`cad.kicad._check`, `_export`, `_session`), imported when they run, so the type's
    package still imports no third-party library.
-5. **The commands**: `cad kicad drc BOARD`, `cad export BOARD --to
-   gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`, `cad snapshot` and
-   `cad inspect`, each with a parser of its own in `cli/document_types.py`.
+5. **The commands**: `cad kicad drc BOARD`, `cad export BOARD DST [--as
+   gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf]` (DST a file by its suffix, a folder or a
+   `.zip`: `cad/kicad/_destination.py`), `cad snapshot` and `cad inspect`, each with a parser of its
+   own in `cli/document_types.py`.
 6. **The external program and the edit**: `cad/kicad/_program.py` finds and runs `kicad-cli` through
    the library's one helper (`cad/_internal/programs.py`), and `cad/kicad/_session.py` is the edit;
    each module's docstring is its mechanism. Every rule that keeps a desktop app out holds and is
@@ -160,7 +161,7 @@ runs KiCad's own command, `kicad-cli`. Where each item of the two checklists lan
 
    with kicad_pcb.edit("board.kicad_pcb") as b:   # KiPy's open Board (kicode's); the file is the source
        ...
-   cad.export("board.kicad_pcb", "STEP", to="step")
+   cad.export("board.kicad_pcb", "STEP/board.step")
    ```
 7. **The viewer**: the board renderer (`packages/ui/src/renderers/board/`), the plot payload the
    server resolves (`cad_server/viewer/plots.py`), its icon, and the `plot` route of its kind.

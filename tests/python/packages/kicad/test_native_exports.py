@@ -169,7 +169,7 @@ class StepWithoutModels(unittest.TestCase):
             (step,) = [Path(written) for written in found["written"]]
             self.assertTrue(step.read_text(encoding="utf-8", errors="replace").startswith("ISO-10303-21"))
             said = " ".join(found["warnings"])
-            self.assertIn("board.step is written", said)
+            self.assertIn("the STEP is written", said)
             self.assertIn("R1", said)
             self.assertIn("VRML", said)
 

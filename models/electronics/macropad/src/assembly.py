@@ -7,7 +7,7 @@ the layers apart in order (board, plate, switches, caps, knob), holds, and sets 
     cad export nine.xbf GLB/nine.glb
 
 The board is KiCad's STEP of it with every part, converted once to an xbf (README: "Rebuild"):
-`cad export macropad.kicad_pcb STEP --to step`, then `cad export STEP/macropad.step
+`cad export macropad.kicad_pcb STEP/macropad.step`, then `cad export STEP/macropad.step
 XBF/macropad.xbf`. Export both again after a board change.
 """
 from pathlib import Path

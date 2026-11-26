@@ -154,13 +154,14 @@ cad kicad drc macropad.kicad_pcb
 cad run check_macropad.py                  # prints nothing when the board is clean
 
 # fabrication files
-for k in gerbers drill pos bom pdf; do cad export macropad.kicad_pcb fab/$k --to $k; done
-cad export macropad.kicad_sch fab/schematic --to pdf
-cad export macropad.kicad_pcb DXF --to dxf     # the outline and drilled holes
-cad export macropad.kicad_pcb GLB --to glb     # the board with its parts, to look at
+for k in gerbers drill pdf; do cad export macropad.kicad_pcb fab/$k/ --as $k; done
+for k in pos bom; do cad export macropad.kicad_pcb fab/$k.csv --as $k; done
+cad export macropad.kicad_sch fab/schematic.pdf
+cad export macropad.kicad_pcb DXF/macropad-outline.dxf   # the outline and drilled holes
+cad export macropad.kicad_pcb GLB/macropad.glb           # the board with its parts, to look at
 
 # the case, read from the board: its STEP with every part, converted once to an xbf
-cad export macropad.kicad_pcb STEP --to step   # STEP/macropad.step
+cad export macropad.kicad_pcb STEP/macropad.step
 cad export STEP/macropad.step XBF/macropad.xbf
 cad run src/case.py                        # tray, plate, keycap, knob and their print orientations
 cad run src/assembly.py                    # nine (with its explode) and nine_exploded

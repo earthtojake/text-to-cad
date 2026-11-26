@@ -548,8 +548,9 @@ and a script run with `cad run` import them without the CAD kernel; the flat ren
 `src/cad/engine/render/board.py`, which imports Pillow only when it draws. `cad.kicad_pcb` is
 the document type: `kicad_pcb.read` exposes the inspection index, `inside` the even-odd test a check measures
 with, and `cad inspect` the board in one look. KiCad owns authoring, DRC (`cad.kicad.drc`, `cad kicad drc
-BOARD`) and the fabrication, assembly and 3D exports (`cad.export(board, out, to=kind)`, `cad export BOARD DIR
---to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf`), the `kicad`
+BOARD`) and the fabrication, assembly and 3D exports (`cad.export(board, dst, as_=kind)`, `cad export BOARD DST
+[--as KIND]`: a `.step`, `.glb`, `.dxf`, `.xml` or `.csv` (`--as pos|bom`) at the file named, and `--as
+gerbers|drill|odb|pdf` into a folder or a `.zip`), the `kicad`
 integration's, run by kicode's `kicad-cli` (`cad[kicad]`; a person's own KiCad is never run). A script
 run with `cad run` that calls them gets the extra; the command runs them in the extra's environment. An
 exported STEP enters the ordinary foreign-file path. A board's GLB holds its copper, mask and silkscreen
@@ -568,8 +569,8 @@ ERC (`cad.kicad.erc`, `cad kicad erc SCHEMATIC`; beside KiCad's findings the che
 and each wire end that lies on a wire's span with no junction, which KiCad joins and its ERC passes:
 `pin_on_wire_span`, `wire_end_on_wire_span`, warnings whose `items` name the pin or wire and the wire; a pin
 whose one connection is a wire's span is KiCad's own straight run through a pin, not one) and the exports
-(`cad.export(schematic, out, to=kind)`, `cad export SCHEMATIC DIR --to pdf|svg|netlist|bom`), the `kicad`
-integration's, run where the board's are.
+(`cad.export(schematic, dst)`, `cad export SCHEMATIC DST`: a `.pdf`, a `.net` or a `.csv`, or its SVGs into a
+folder or a `.zip`), the `kicad` integration's, run where the board's are.
 
 A board or a schematic is changed in place through KiCad's IPC API by an edit of it, a `with` block:
 `with kicad_pcb.edit("board.kicad_pcb") as board:` or `with kicad_sch.edit("design.kicad_sch") as schematic:`

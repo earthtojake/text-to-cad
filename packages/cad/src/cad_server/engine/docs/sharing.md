@@ -30,7 +30,7 @@ file, and shares to a link of its own.
 - **What.** Its files (**The files that made it**, below) and its view: a model's or a STEP's parts as meshes,
   with their names, measurements and joints; an STL's, a GLB's or a 3MF's mesh; a DXF's drawing as the viewer draws
   it; a URDF's or an SRDF's links, joints and mesh files; a KiCad board's layers as KiCad draws them, in 2D, its
-  pours KiCad's refill (its 3D is a GLB of its own, `cad export BOARD DIR --to glb`, shared as a file of its own); a
+  pours KiCad's refill (its 3D is a GLB of its own, `cad export BOARD board.glb`, shared as a file of its own); a
   KiCad schematic's sheets. The picture a page kept (`thumbnail.png`) is left out of the view: it may be of an
   earlier version. A folder and a script are refused in one line each.
 - **Where.** The share service, `https://cad.fun`, which keeps everything of a share encrypted (AES-256-GCM)

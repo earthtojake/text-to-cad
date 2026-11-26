@@ -91,7 +91,7 @@ def setup(b):
     if not [s for s in b.get_shapes() if s.layer == BL.BL_Edge_Cuts]:
         make_outline(b)
     with tempfile.TemporaryDirectory() as tmp:
-        (netlist,) = cad.export(str(SCHEMATIC), tmp, to="netlist").written
+        (netlist,) = cad.export(str(SCHEMATIC), Path(tmp) / "pinball.net").written
         result = b.import_netlist(str(netlist))
         print("netlist: new footprints", result.new_footprint_count, "errors", result.error_count)
         if result.error_count:

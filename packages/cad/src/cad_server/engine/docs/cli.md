@@ -15,24 +15,29 @@ cad run mujoco-studio --model scene.xml      MuJoCo Studio's web viewer on the m
                                              changes: the person opens the URL it prints
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
-cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
-                                             one file a command, as cp writes one, its format by DST's
-                                             suffix; SRC a model's .xbf (the file, read as it is, never as
-                                             the model the engine holds), a .step or a mesh; --tolerance
-                                             and --angle (a model's, an xbf's, a STEP's) mesh a .glb, an
-                                             .stl or a .3mf to MM and DEG (Mesh)
-                                             DST .step, .glb, .stl, .3mf, .dxf, .xbf (a copy of the
-                                             document), or .xml: an MJCF of the document (the robot
-                                             description), its meshes in assets/ beside it, a scene.xml
-                                             beside it where none is; .urdf: the same as ROS reads it,
-                                             meshes/ beside it; --zero takes either at a mechanism state;
-                                             what each holds said on stderr (--json: its row's robot); of
-                                             a mesh, the other two mesh kinds
-cad export BOARD|SCHEMATIC DIR --to KIND [--json]
-                                             KiCad's outputs, by kicad-cli, into the folder DIR: a board's
-                                             gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or
-                                             dxf; a schematic's pdf, svg, netlist or bom, run on the
-                                             project's root sheet whichever sheet is named
+cad export SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
+                                             one destination a command, as cp writes one, what is written
+                                             what DST says: a file by its suffix, or of a KiCad file a
+                                             folder or a .zip too; --as names the kind where DST cannot,
+                                             and must agree with it where DST says it; no name is made up
+                                             SRC a model's .xbf (the file, read as it is, never as the
+                                             model the engine holds), a .step or a mesh: DST one file,
+                                             .step, .glb, .stl, .3mf, .dxf, .xbf (a copy of the document),
+                                             or .xml: an MJCF of the document (the robot description), its
+                                             meshes in assets/ beside it, a scene.xml beside it where none
+                                             is; .urdf: the same as ROS reads it, meshes/ beside it; --zero
+                                             takes either at a mechanism state; what each holds said on
+                                             stderr (--json: its row's robot); of a mesh, the other two
+                                             mesh kinds; --tolerance and --angle (a model's, an xbf's, a
+                                             STEP's) mesh a .glb, an .stl or a .3mf to MM and DEG (Mesh)
+                                             SRC a KiCad board, by kicad-cli: DST a .step, .glb, .dxf (the
+                                             outline), .xml (IPC-2581) or .csv (--as pos or bom); or a
+                                             folder (ending in /: made when missing) or a .zip, --as
+                                             gerbers, drill, odb (a .zip KiCad's compressed ODB++, a
+                                             folder its tree) or pdf (a drawing of each side)
+                                             SRC a KiCad schematic, run on the project's root sheet
+                                             whichever sheet is named: DST a .pdf (every sheet), .net (the
+                                             netlist) or .csv (the BOM), or a folder or a .zip of its SVGs
 cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
                 [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE|JSON|-] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
@@ -150,7 +155,8 @@ A spelling the command had runs nothing (law 14's first tier): `cad xbf export a
 `cad step solve`, `cad urdf validate`, `cad kicad_pcb drc`, `cad kicad_pcb export`, `cad status`, `cad stop`, bare
 `cad server` and `cad orcaslicer` are each answered in one line with the spelling the command has now, exit 2
 (`usage`): `'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its options`. One table holds
-them (`cad_server.cli._hint`: `_RENAMED`, `_BARE`, `_OPERATIONS_NOW`, and a deprecated integration's words).
+them (`cad_server.cli._hint`: `_RENAMED`, `_BARE`, `_OPERATIONS_NOW`, `_KICAD_EXPORT`, and a deprecated integration's
+words).
 
 Every `SRC` and `FILE` is an on-disk CAD file's path, a model's its `.xbf`, which `cad run SCRIPT.py` writes,
 printing its page (`view: <engine>/<id>`). The id the engine names a document by (`ids`), which the viewer's

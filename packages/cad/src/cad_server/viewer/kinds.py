@@ -49,7 +49,7 @@ ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry
 
 # What each kind's Export offers (``packages/ui``'s ``export/formats.ts``), by its format name
 # (``exports.FORMATS``); ``dxf`` only where the view draws the document flat. A KiCad board's are KiCad's
-# (``cad export --to``, ``exports.BOARD``). An ``xbf`` is either a model the engine holds, which exports
+# (``cad export --as``, ``exports.BOARD``). An ``xbf`` is either a model the engine holds, which exports
 # what ``EXPORTS["model"]`` lists (the key 0.11 read for it), or its ``.xbf`` opened from disk, which exports what
 # ``EXPORTS["xbf"]`` lists, its own bytes as the ``original`` (``exports_of`` tells them apart).
 _SOLID = ["step", "stl", "threemf", "glb", "dxf"]
@@ -57,7 +57,7 @@ EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID,
            "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
            "dxf": [], "urdf": [], "srdf": [],
            "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
-# A KiCad schematic's are KiCad's too (``cad export --to``, ``exports.SCHEMATIC``).
+# A KiCad schematic's are KiCad's too (``cad export --as``, ``exports.SCHEMATIC``).
 EXPORTS["kicad_sch"] = ["pdf", "svg", "netlist", "bom"]
 
 

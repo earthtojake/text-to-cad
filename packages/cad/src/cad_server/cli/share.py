@@ -57,7 +57,7 @@ DESCRIPTION = (
     "that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf "
     "records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's "
     "project file, local libraries, 3D models and sheets -- and its view: its shapes as meshes with their names, "
-    "measurements and joints, a board's layers in 2D (its 3D is a GLB of its own: `cad export BOARD DIR --to glb`, "
+    "measurements and joints, a board's layers in 2D (its 3D is a GLB of its own: `cad export BOARD board.glb`, "
     "then share that), a schematic's sheets. Never an installed library. Sharing it again keeps the link "
     "and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether "
     "sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a "

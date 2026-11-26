@@ -13,9 +13,9 @@ they are the type's, not the ``kicad`` integration's (the signature rule):
   (made by KiCad when the file is not there yet) and not at all when the block raises.
 
 The board in one look is ``cad.inspect`` (``cad inspect BOARD``), a still of it ``cad.snapshot``, KiCad's
-fabrication, assembly and 3D outputs ``cad.export(board, folder, to=...)`` (``cad export BOARD DIR --to
-KIND``), and KiCad's design rule check ``cad.kicad.drc`` (``cad kicad drc BOARD``): the last two run KiCad's own
-``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``).
+fabrication, assembly and 3D outputs ``cad.export(board, dst, as_=...)`` (``cad export BOARD DST [--as KIND]``:
+``board.step``, ``fab/gerbers/ --as gerbers``), and KiCad's design rule check ``cad.kicad.drc`` (``cad kicad drc
+BOARD``): the last two run KiCad's own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``).
 """
 
 from __future__ import annotations

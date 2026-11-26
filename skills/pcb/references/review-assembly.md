@@ -29,7 +29,7 @@ the value, package and rating, give the person the candidates, and let them pick
 
 ## The placement file
 
-The placement file is KiCad's position export (`--to pos`,
+The placement file is KiCad's position export (`--as pos`,
 [manufacturing](manufacturing.md#exports)), one row per placed part. Check:
 
 - Its origin: the export measures from KiCad's page origin. An assembler that wants the drill/place

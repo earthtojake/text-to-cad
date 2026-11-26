@@ -55,7 +55,7 @@ file name on every system and reads the same in a URL as on a disk.
 
 **A board, in 2D.** A board's bundle is its plot alone: a share shows a board in 2D, its layers as KiCad draws
 them. Its 3D -- the slab, and each part standing on the STEP its footprint names -- is a GLB of its own, an export
-(`cad export BOARD DIR --to glb`), shared as a file of its own; so a board's 3D models table (`GET <api>/models`)
+(`cad export BOARD board.glb`), shared as a file of its own; so a board's 3D models table (`GET <api>/models`)
 and the STEPs it names are no files of a bundle, and its reader answers no 3D of a board. The 3D model files of a
 board's project are among the files that made it, which its share holds and an import writes (**Sharing**).
 

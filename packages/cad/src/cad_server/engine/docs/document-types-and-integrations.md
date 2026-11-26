@@ -63,7 +63,7 @@ line before it starts (`_refused`), and a slow start said once while it waits --
 or KiCad made it, never when it raises. One server serves a project: an edit of the project's other file
 inside the block joins it (`OpenDocument`), each document saved at its own block's end. Nothing is
 declared, and nothing is written from the edited file but what explicit calls after the block write
-(`cad.export(board, out, to=kind)`, `cad.kicad.drc`, `cad.kicad.erc`).
+(`cad.export(board, dst, as_=kind)`, `cad.kicad.drc`, `cad.kicad.erc`).
 
 **The commands.** The verbs (`cad export`, `cad inspect`, `cad snapshot`, `cad dfm`, `cad fea`:
 `cad_server.cli.verbs`) read a file's type from its suffix and hand its command line to what that type does for
@@ -297,19 +297,22 @@ kernel, netgen and ccx (`integration_env.carries("calculix")`, the kernel and ne
 `cad[build123d,calculix,netgen]` at the installation's release, made once by the engine, by the library's runner
 of one operation, and the result is printed as it would be here (`FeaResult.from_data`).
 
-**The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad drc BOARD` and `cad export BOARD DIR
---to KIND` are the library's `cad.kicad.drc` and `cad.export(board, out, to=kind)`, the `kicad` integration's
+**The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad drc BOARD` and `cad export BOARD DST
+[--as KIND]` are the library's `cad.kicad.drc` and `cad.export(board, dst, as_=kind)`, the `kicad` integration's
 (`cad.kicad._check`, `_export`), run the same way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
 names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
 installation's release, made once by the engine (about 100 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
-for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
-board's `--to glb` holds its copper, mask and silkscreen too, each KiCad's own mesh named by its layer
-(`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`); its `--to step` holds the board
-and its parts alone. A
-schematic's `cad kicad erc` and `cad export SCHEMATIC DIR --to KIND` are `cad.kicad.erc` and `cad.export`
-(`cad.kicad._schematic`), run the same way. KiCad's own checks are the integration's operations on its tool's
+for kicode's. An export writes what DST says (`cad.kicad._destination`), checked before KiCad runs, so a refusal
+writes nothing: a one-file output (a `.step`, a `.glb`, a `.dxf`, an `.xml`, a `.csv` with `--as pos` or `bom`) at
+the file named, KiCad's files of the others (`--as gerbers`, `drill`, `odb`, `pdf`) into the folder named or zipped
+into the `.zip` (an ODB++ KiCad's own zip, into a folder its tree), KiCad writing into a folder of its own first.
+Its result is a `cad.results.ExportResult` (the files written, the warnings). A board's GLB holds its copper, mask
+and silkscreen too, each KiCad's own mesh named by its layer (`<board>_copper`, `_pad`, `_via`, `_silkscreen`,
+`_soldermask`, `_PCB`); its STEP holds the board and its parts alone. A schematic's `cad kicad erc` and `cad export
+SCHEMATIC DST` (a `.pdf`, a `.net`, a `.csv`; its SVGs into a folder or a `.zip`) are `cad.kicad.erc` and
+`cad.export` (`cad.kicad._schematic`), run the same way. KiCad's own checks are the integration's operations on its tool's
 files (`cad.registry`'s `INTEGRATION_OPERATIONS`, each taking the suffixes its `Operation.files` names), and `cad
 dfm` of a board or a schematic is refused, naming its check.
 

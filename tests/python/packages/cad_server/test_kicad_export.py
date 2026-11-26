@@ -1,8 +1,9 @@
-"""``cad.kicad._export``: the exports of a saved board by kicad-cli, headless, in private homes.
+"""``cad.kicad._export``: the exports of a saved board by kicad-cli, headless, in private homes; and
+``cad.kicad._destination``: where a KiCad file's export goes, what its destination says.
 
-The command each export builds, the files it reports and what it refuses. No KiCad: ``subprocess.run``
-is replaced by a function that writes what kicad-cli would. (The real runs are
-``tests/python/packages/kicad``.)
+The command each export builds, the files it reports and what it refuses; what each destination writes, what it
+refuses before KiCad runs, and the files put there. No KiCad: ``subprocess.run`` is replaced by a function that
+writes what kicad-cli would. (The real runs are ``tests/python/packages/kicad``.)
 """
 
 from __future__ import annotations
@@ -10,9 +11,12 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
+from cad._internal.refused import ArgumentRefused
+from cad.kicad import _destination as destination
 from cad.kicad import _export as export
 from cad.kicad._program import KicadRunError
 
@@ -61,6 +65,9 @@ class Commands(unittest.TestCase):
     def test_odb_ipc2581_and_the_outline_are_millimetres(self) -> None:
         self.assertEqual(self.command("odb")[4:-1], ["--units", "mm", "--compression", "zip",
                                                      "-o", str(self.out / "uart-odb.zip")])
+        # Uncompressed, KiCad's tree of it, into the folder itself.
+        (tree,) = export.commands(CLI, self.board, "odb", self.out, compressed=False)
+        self.assertEqual(tree[4:-1], ["--units", "mm", "--compression", "none", "-o", os.path.join(self.out, "")])
         self.assertEqual(self.command("ipc2581")[4:-1], ["--units", "mm", "--version", "C",
                                                          "-o", str(self.out / "uart-ipc2581.xml")])
         dxf = self.command("dxf")
@@ -167,6 +174,160 @@ class Run(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "choose one of"):
                 export.export(self.board, "stl", self.out, cli=CLI)
         self.assertEqual(self.seen, [])
+
+
+class Destinations(unittest.TestCase):
+    """``cad export FILE DST [--as KIND]``: DST says what is written -- a file by its suffix, a folder (a path that
+    ends in a separator, or a folder that is there) or a ``.zip`` -- and ``--as`` names the kind only where DST cannot:
+    a board's folder or ``.zip``, and its ``.csv``. Every refusal names what fits, before KiCad runs."""
+
+    def setUp(self) -> None:
+        self._tempdir = tempfile.TemporaryDirectory(prefix="tmp-kicad-destination-")
+        self.addCleanup(self._tempdir.cleanup)
+        self.root = Path(self._tempdir.name)
+        self.board, self.schematic = self.root / "uart.kicad_pcb", self.root / "uart.kicad_sch"
+        (self.root / "there").mkdir()
+
+    def plan(self, document_type: str, dst: str, as_: str | None = None) -> tuple[str, str, Path, dict]:
+        source = self.board if document_type == "kicad_pcb" else self.schematic
+        found = destination.resolve(document_type, source, dst, as_)
+        return found.kind, found.form, found.dst, found.options
+
+    def test_each_destination_says_what_is_written(self) -> None:
+        root = self.root
+        for dst, as_, kind, form in (
+                ("uart.step", None, "step", "file"), ("uart.stp", "step", "step", "file"),
+                ("3d/uart.glb", None, "glb", "file"), ("outline.dxf", "dxf", "dxf", "file"),
+                ("uart.xml", None, "ipc2581", "file"), ("pos.csv", "pos", "pos", "file"),
+                ("bom.CSV", "bom", "bom", "file"), ("fab/", "gerbers", "gerbers", "folder"),
+                (str(root / "there"), "drill", "drill", "folder"), ("fab/pdf.zip", "pdf", "pdf", "zip"),
+                ("fab/odb.zip", "odb", "odb", "zip")):
+            with self.subTest(dst=dst, as_=as_):
+                self.assertEqual(self.plan("kicad_pcb", os.path.join(root, dst), as_)[:2], (kind, form))
+        # A folder holds the ODB++ uncompressed, its tree; a .zip is KiCad's own zip of it.
+        self.assertEqual(self.plan("kicad_pcb", f"{root}/odb/", "odb")[3], {"compressed": False})
+        self.assertEqual(self.plan("kicad_pcb", str(root / "odb.zip"), "odb")[3], {})
+        for dst, as_, kind, form in (("sheets.pdf", None, "pdf", "file"), ("uart.net", "netlist", "netlist", "file"),
+                                     ("bom.csv", None, "bom", "file"), ("sheets/", None, "svg", "folder"),
+                                     ("sheets.zip", "svg", "svg", "zip")):
+            with self.subTest(dst=dst, as_=as_):
+                self.assertEqual(self.plan("kicad_sch", os.path.join(root, dst), as_)[:2], (kind, form))
+        # A destination is where it says, made absolute; ``~`` is the home folder.
+        self.assertEqual(self.plan("kicad_pcb", "~/uart.step")[2], Path.home() / "uart.step")
+        self.assertTrue(self.plan("kicad_pcb", "fab/uart.step")[2].is_absolute())
+
+    def test_a_destination_that_cannot_say_or_says_otherwise_is_refused_naming_what_fits(self) -> None:
+        root = self.root
+        for document_type, dst, as_, said in (
+                ("kicad_pcb", "fab/", None, "fab/ is a folder, which takes a board's Gerbers, drill files, ODB++ or "
+                                            "PDF: name which, --as gerbers, --as drill, --as odb or --as pdf"),
+                ("kicad_pcb", "fab.zip", None, "fab.zip is a .zip, which takes a board's Gerbers"),
+                ("kicad_pcb", "fab.csv", None, "fab.csv is a .csv, which takes a board's placement or BOM: name "
+                                               "which, --as pos or --as bom"),
+                ("kicad_pcb", "fab/", "glb", "fab/ is a folder, and a board's GLB is one file: name the file "
+                                             "(fab/uart.glb)"),
+                ("kicad_pcb", "fab.zip", "step", "fab.zip is a .zip, and a board's STEP is one file: name the file "
+                                                 "(fab.step)"),
+                ("kicad_pcb", "uart.glb", "step", "uart.glb is a board's GLB, and --as step names its STEP: they must "
+                                                  "agree"),
+                ("kicad_pcb", "pos.csv", "step", "pos.csv is a board's placement or BOM, and --as step names its "
+                                                 "STEP: they must agree"),
+                ("kicad_pcb", "uart.glb", "gerbers", "--as gerbers writes several files: name a folder (ending in /) "
+                                                     "or a .zip, not uart.glb"),
+                ("kicad_pcb", "uart.pdf", None, "uart.pdf: a board's PDF is two files, a drawing of each side: name a "
+                                                "folder or a .zip, with --as pdf"),
+                ("kicad_pcb", "uart.txt", None, "uart.txt: a board's export is a .step, .stp, .glb, .dxf, .xml or "
+                                                ".csv file, a folder or a .zip"),
+                ("kicad_pcb", "uart.step", "svg", "--as svg: a board's export is one of gerbers, drill, pos, bom"),
+                ("kicad_pcb", "", None, "a board's export names its destination: a file, a folder or a .zip"),
+                ("kicad_sch", "sheets/", "pdf", "sheets/ is a folder, and a schematic's PDF is one file: name the "
+                                                "file (sheets/uart.pdf)"),
+                ("kicad_sch", "sheet.svg", None, "sheet.svg: a schematic's export is a .pdf, .net or .csv file, a "
+                                                 "folder or a .zip"),
+                ("kicad_sch", "uart.net", "bom", "uart.net is a schematic's netlist, and --as bom names its BOM: they "
+                                                 "must agree")):
+            with self.subTest(dst=dst, as_=as_):
+                with self.assertRaises(ArgumentRefused) as refused:  # each destination as typed, in the folder
+                    self.plan(document_type, dst, as_)
+                self.assertTrue(str(refused.exception).startswith(said), refused.exception)
+
+    def test_an_export_never_writes_over_its_source_and_the_library_spells_its_keyword(self) -> None:
+        with self.assertRaisesRegex(ArgumentRefused, "is the board itself: an export never writes over its source"):
+            destination.resolve("kicad_pcb", self.board, str(self.root / "." / "uart.kicad_pcb"), "step")
+        with self.assertRaisesRegex(ArgumentRefused, "name which, as_=gerbers, as_=drill, as_=odb or as_=pdf"):
+            destination.resolve("kicad_pcb", self.board, f"{self.root}/fab/", flag="as_=")
+
+    @staticmethod
+    def wrote(folder: Path, *names: str) -> list[Path]:
+        """What KiCad would have written into its folder: each file holding its own name."""
+        for name in names:
+            (folder / name).parent.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_text(name, encoding="utf-8")
+        return [folder / name for name in names]
+
+    def test_what_kicad_wrote_is_put_where_the_destination_says(self) -> None:
+        wrote = self.wrote
+        root = self.root
+        with destination.scratch() as made:
+            plan = destination.resolve("kicad_pcb", self.board, f"{root}/fab/gerbers/", "gerbers")
+            placed = destination.place(plan, wrote(Path(made), "uart-F_Cu.gbr", "uart-job.gbrjob"), made)
+        self.assertEqual(placed, [root / "fab" / "gerbers" / "uart-F_Cu.gbr", root / "fab" / "gerbers" / "uart-job.gbrjob"])
+        with destination.scratch() as made:
+            plan = destination.resolve("kicad_pcb", self.board, f"{root}/fab/odb/", "odb")
+            placed = destination.place(plan, wrote(Path(made), "matrix/matrix", "steps/pcb/profile"), made)
+        self.assertEqual(placed, [root / "fab" / "odb" / "matrix" / "matrix", root / "fab" / "odb" / "steps" / "pcb" /
+                                  "profile"])
+        with destination.scratch() as made:
+            plan = destination.resolve("kicad_pcb", self.board, str(root / "3d" / "board.step"))
+            self.assertEqual(destination.place(plan, wrote(Path(made), "uart.step"), made), [root / "3d" / "board.step"])
+        self.assertEqual("uart.step", (root / "3d" / "board.step").read_text(encoding="utf-8"))
+        with destination.scratch() as made:  # KiCad's own zip of an ODB++, moved there as it is
+            plan = destination.resolve("kicad_pcb", self.board, str(root / "odb.zip"), "odb")
+            destination.place(plan, wrote(Path(made), "uart-odb.zip"), made)
+        self.assertEqual("uart-odb.zip", (root / "odb.zip").read_text(encoding="utf-8"))
+        # A .zip holds the files by their paths in KiCad's folder, each dated alike: the same files, the same zip.
+        zips = []
+        for name in ("a.zip", "b.zip"):
+            with destination.scratch() as made:
+                plan = destination.resolve("kicad_sch", self.schematic, str(root / name))
+                self.assertEqual(destination.place(plan, wrote(Path(made), "uart.svg", "uart-power.svg"), made),
+                                 [root / name])
+            zips.append((root / name).read_bytes())
+            with zipfile.ZipFile(root / name) as archive:
+                self.assertEqual(archive.namelist(), ["uart-power.svg", "uart.svg"])
+                self.assertEqual({entry.date_time for entry in archive.infolist()}, {(1980, 1, 1, 0, 0, 0)})
+        self.assertEqual(zips[0], zips[1])
+        with destination.scratch() as made, self.assertRaisesRegex(RuntimeError, "KiCad wrote no GLB"):
+            destination.place(destination.resolve("kicad_pcb", self.board, str(root / "x.glb")), [], made)
+
+    def test_a_destination_that_cannot_be_written_is_said_and_keeps_what_it_held(self) -> None:
+        import errno
+        import shutil
+
+        root = self.root
+        (root / "taken").write_text("a file, not a folder", encoding="utf-8")
+        with destination.scratch() as made:
+            plan = destination.resolve("kicad_pcb", self.board, f"{root}/taken/gerbers/", "gerbers")
+            with self.assertRaisesRegex(RuntimeError, "cannot write the Gerbers to .*taken"):
+                destination.place(plan, self.wrote(Path(made), "uart-F_Cu.gbr"), made)
+        # A folder's files are all made beside their places before the first is renamed over what is there: one that
+        # cannot be made changes none of them, and leaves nothing of its own behind.
+        fab = root / "fab"
+        fab.mkdir()
+        (fab / "uart-F_Cu.gbr").write_text("earlier", encoding="utf-8")
+        copy = shutil.copyfile
+
+        def full(source: str, target: str, **options: object) -> object:
+            if Path(source).name == "uart-job.gbrjob":
+                raise OSError(errno.ENOSPC, "No space left on device")
+            return copy(source, target, **options)
+
+        with destination.scratch() as made, mock.patch.object(shutil, "copyfile", full):
+            plan = destination.resolve("kicad_pcb", self.board, f"{fab}/", "gerbers")
+            with self.assertRaisesRegex(RuntimeError, "cannot write the Gerbers to .*fab: No space left on device"):
+                destination.place(plan, self.wrote(Path(made), "uart-F_Cu.gbr", "uart-job.gbrjob"), made)
+        self.assertEqual("earlier", (fab / "uart-F_Cu.gbr").read_text(encoding="utf-8"))
+        self.assertEqual(["uart-F_Cu.gbr"], [path.name for path in fab.iterdir()])
 
 
 if __name__ == "__main__":

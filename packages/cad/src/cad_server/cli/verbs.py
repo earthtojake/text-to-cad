@@ -1,8 +1,9 @@
 """``cad <verb> FILE``: the verbs on a file -- ``export``, ``inspect``, ``snapshot``, ``dfm`` and ``fea`` -- each
 running what the file's type does for it (``cad.registry.VERBS``, ``operation_for``), the type by the file's suffix.
 
-``cad export SRC DST`` writes one file, like ``cp``, its format by DST's suffix (a KiCad file's outputs into the
-folder DST, ``--to`` naming which); ``cad inspect FILE [REF]`` says what a document holds, a robot description's
+``cad export SRC DST [--as KIND]`` writes what DST says, like ``cp``: a file, its format by its suffix, or of a KiCad
+file a folder or a ``.zip`` too, ``--as`` naming the kind where DST cannot; ``cad inspect FILE [REF]`` says what a
+document holds, a robot description's
 conformance check (``--strict``, ``--packages``, ``--urdf``), and with ``--interference`` or ``--ranges`` a B-rep's
 interference check or its joint stops; ``cad snapshot FILE OUT.png`` draws it; ``cad dfm FILE`` checks that a part
 can be made; ``cad fea FILE`` is a B-rep's stress study. A model's document id is an ``xbf``'s source as its
@@ -31,8 +32,8 @@ VERBS = ("export", "inspect", "snapshot", "dfm", "fea")
 
 #: What each verb does, in a line (``cad --help``, the reference).
 SUMMARIES = {
-    "export": "write a file to another, one destination, its format by its suffix (a KiCad file's outputs into a "
-              "folder, --to KIND)",
+    "export": "write a file to one destination, what DST says: a file by its suffix, or of a KiCad file a folder or a "
+              ".zip too (--as KIND where DST cannot say it)",
     "inspect": "what a document holds, or a ref in it; a robot description's conformance check; --interference: which "
                "parts share volume; --ranges: each joint's stops",
     "snapshot": "draw a file as the viewer does, into a PNG",
@@ -43,8 +44,7 @@ SUMMARIES = {
 
 #: Each verb's forms, a line each, as its usage says them.
 USAGES = {
-    "export": ("cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]",
-               "cad export BOARD|SCHEMATIC DIR --to KIND [--json]"),
+    "export": ("cad export SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]",),
     "inspect": ("cad inspect FILE [REF] [--query Q] [--json]",
                 "cad inspect FILE --interference [--pose POSE]... [--fit A B]... [--min-volume MM3] [--json]",
                 "cad inspect FILE --ranges [--step STEP] [--clearance MM] [--joint NAME]... [--verbose] [--json]",
@@ -93,6 +93,29 @@ def _source_said(verb: str) -> str:
     job = "; with --job, drawn in place of every job's input" if verb == "snapshot" else ""
     return (f"the file, its type by its suffix: {files}, a model's .xbf read as the file it is, never as the model the "
             f"engine holds{_LINKED}{job}")
+
+
+def _export_said(action: argparse.Action) -> argparse.Action:
+    """``cad export``'s DST and ``--as`` as its help says them with no file named (``build_parser``): every type's
+    destinations and kinds, not a model's alone (the first type's); else the action as it is."""
+    from cad._internal.verbs import MODEL_KINDS
+    from cad.kicad._export import EXPORTS as BOARD
+    from cad.kicad._schematic import EXPORTS as SCHEMATIC
+
+    if action.dest not in ("destinations", "as_"):
+        return action
+    action = copy.copy(action)
+    if action.dest == "as_":
+        action.choices = tuple(dict.fromkeys((*MODEL_KINDS, *BOARD, *SCHEMATIC)))
+        action.help = ("the kind written, where DST cannot say it: a board's gerbers, drill, odb or pdf into a folder "
+                       "or a .zip, its pos or bom into a .csv; given where DST says it, the two must agree")
+    else:
+        action.help = ("where to write it, a file by its suffix: .step (or .stp), .glb, .stl, .3mf, .dxf, .xbf, .xml "
+                       "(MJCF; a board's IPC-2581) or .urdf, a board's .csv (its placement or BOM), a schematic's .pdf, "
+                       ".net or .csv; or of a KiCad file a folder (ending in /, or one that is there: made when "
+                       "missing) or a .zip, of the files KiCad writes. An output of one file is named as that file, "
+                       "never a folder: no name is made up, and a refused export writes nothing")
+    return action
 
 
 # --- what a command line names ------------------------------------------------------------------------------
@@ -242,12 +265,12 @@ def build_parser(verb: str, argv: list[str] | None = None, *, prog: str | None =
                     if not union._get_positional_actions():  # noqa: SLF001 - its source, of every file the verb takes
                         action = copy.copy(action)
                         action.help = _source_said(verb)
-                    union._add_action(action)  # noqa: SLF001 - the type's own action, shared
+                    union._add_action(_export_said(action) if verb == "export" else action)  # noqa: SLF001
                 continue
             if flags & set(action.option_strings):
                 continue
             flags.update(action.option_strings)
-            union._add_action(action)  # noqa: SLF001
+            union._add_action(_export_said(action) if verb == "export" else action)  # noqa: SLF001 - shared, or a copy
     return union
 
 
@@ -270,6 +293,12 @@ def dispatch(verb: str, argv: list[str], prog: str | None = None) -> int:
 
     prog = prog or f"cad {verb}"
     argv = pull_value(list(argv)) if verb == "dfm" else list(argv)
+    if verb == "export":  # a spelling it had (``--to KIND``): answered with the one it has now, nothing run
+        from cad_server.cli import _hint
+
+        hint = _hint(["export", *argv])
+        if hint is not None:
+            return write(Failure(hint, "usage"), prog=prog, as_json=wants_json(argv))
     asked = {"-h", "--help"} & set(argv[: argv.index("--") if "--" in argv else len(argv)])
     if asked and _source(verb, argv) is None:
         return _help(verb, prog)

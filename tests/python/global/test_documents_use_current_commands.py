@@ -48,7 +48,7 @@ ALLOWED: dict[str, frozenset[str] | None] = {
     # The table that answers each, and its tests.
     "packages/cad/src/cad_server/cli/__init__.py": None,
     "tests/python/packages/cad_server/test_cli.py": None,
-    "tests/python/packages/cad_server/test_cli_commands.py": frozenset({"cad orcaslicer"}),
+    "tests/python/packages/cad_server/test_cli_commands.py": frozenset({"cad orcaslicer", "cad export"}),
     "tests/python/packages/cad_server/engine/test_daemon_server.py": frozenset({"cad status"}),
     "tests/python/packages/cad_server/engine/test_engine_port.py": frozenset({"cad server"}),
     "packages/cad/src/cad_server/cli/server.py": frozenset({"cad server"}),

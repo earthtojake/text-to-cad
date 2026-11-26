@@ -481,7 +481,7 @@ export interface CadActivity {
   crash?: CadPageCrash;
 }
 
-/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad export --to`). */
+/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad export --as`). */
 export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
   | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf' | 'svg' | 'netlist';
 export interface ExportSource { doc: string; revision: string }

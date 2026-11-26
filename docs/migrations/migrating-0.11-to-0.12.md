@@ -63,7 +63,7 @@ A spelling 0.11 had runs nothing now: it answers in one line with the one that d
 | `cad xbf solve FILE`, `cad step solve FILE` | `cad fea FILE` |
 | `cad urdf validate ROBOT.urdf`, `cad srdf validate ROBOT.srdf` | `cad inspect ROBOT.urdf`, `cad inspect ROBOT.srdf`: the same check, options and exit status |
 | `cad kicad_pcb drc BOARD`, `cad kicad_sch erc SCHEMATIC` | `cad kicad drc BOARD`, `cad kicad erc SCHEMATIC` |
-| `cad kicad_pcb export BOARD --to KIND -o DIR`, a schematic's the same | `cad export BOARD DIR --to KIND` |
+| `cad kicad_pcb export BOARD --to KIND -o DIR`, a schematic's the same | `cad export BOARD DST [--as KIND]`: DST a file by its suffix (`board.step`, `board.glb`, `outline.dxf`, `board.xml` for the IPC-2581, `pos.csv --as pos`), or a folder (ending in `/`) or a `.zip` for the Gerbers, drill files, ODB++ or PDF (`fab/gerbers/ --as gerbers`); a schematic's `.pdf`, `.net`, `.csv`, or its SVGs into a folder or a `.zip` |
 | `cad model <operation> ...` | the verb above |
 | `cad status`, `cad stop` | `cad server status`, `cad server stop` |
 | bare `cad server` | `cad server start` (`--foreground` runs it in that process) |
@@ -77,7 +77,7 @@ A spelling 0.11 had runs nothing now: it answers in one line with the one that d
 ## The library (tier 2)
 
 The verbs are the library's too, one to one with the command's, each taking a file, the handle a model's
-call returns, or for `export` and `dfm` a shape: `cad.export(source, destination)`, `cad.inspect(source, ...)`
+call returns, or for `export` and `dfm` a shape: `cad.export(source, dst, as_=None)`, `cad.inspect(source, ...)`
 (`interference=True`, `ranges=True`), `cad.snapshot(source, out)`, `cad.dfm(source, ...)` (a live build123d shape
 checked in the script's own process, as `cad.build123d.dfm` checked it), `cad.fea(source, ...)`, and
 `cad.save(shape, "plate.xbf")`, a shape a program holds saved as a model.
@@ -99,7 +99,7 @@ Each spelling of 0.11 still works, says once a process that it is deprecated and
 | `cad.dfm(shape, process="cnc", ...)`, a live build123d shape | `cad.build123d.dfm(shape, ...)` |
 | `cad.fea(source, study=..., out=...)` | `cad.xbf.solve(...)`, `cad.step.solve(...)` |
 | `cad.kicad.drc(board)`, `cad.kicad.erc(schematic)` | `cad.kicad_pcb.drc(...)`, `cad.kicad_sch.erc(...)` |
-| `cad.export(board, "fab/gerbers", to="gerbers")` | `cad.kicad_pcb.export(board, to="gerbers", out="fab/gerbers")`, a schematic's the same |
+| `cad.export(board, "fab/gerbers/", as_="gerbers")`, `cad.export(board, "board.step")` | `cad.kicad_pcb.export(board, to="gerbers", out="fab/gerbers")`, a schematic's the same |
 | `cad.save(shape, "plate.xbf")` | `xbf(shape, "plate.xbf")`, `xbf(shape, name="plate")`, `model(shape, ...)` |
 | `cad.export(shape, "plate.step")` | `step(shape, "plate.step")`, and `glb`, `stl`, `threemf` and `dxf` given a shape |
 | `from cad import xbf`, `@xbf`, `@xbf("XBF/arm.xbf")` | `from cad import model` and `@model` (`cad.model is deprecated; use cad.xbf`) |

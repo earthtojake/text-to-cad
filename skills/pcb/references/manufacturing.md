@@ -5,24 +5,24 @@ the fabs' standard limits.
 
 ## Exports
 
-`cad export BOARD DIR --to KIND` writes one kind a run from the saved board, which it never
-changes (`--json` lists the files written). `cad.export(board, out, to=kind)` is the same in a script run
-with `cad run` (its result's `written` and `warnings`).
+`cad export BOARD DST [--as KIND]` writes one kind a run from the saved board, which it never
+changes, at DST: a file by its suffix, or a folder (a path ending in `/`, made when missing) or a `.zip`
+of the files KiCad writes, `--as` naming the kind where DST cannot. No name is made up, and DST is checked
+before KiCad runs, so a refused export writes nothing (`--json` lists the files written).
+`cad.export(board, dst, as_=kind)` is the same in a script run with `cad run` (its result's `written` and
+`warnings`).
 
-| `--to` | Writes into DIR |
+| DST | Writes |
 | --- | --- |
-| `gerbers` | every plot layer the board's own plot settings choose, and a job file |
-| `drill` | Excellon drill files, mm |
-| `pos` | `<board>-pos.csv`: placement of both sides, mm, from KiCad's page origin with y up (`PosY` is the board's y negated), every placed part (DNP ones too): KiCad's columns `Ref`, `Val`, `Package`, `PosX`, `PosY`, `Rot`, `Side` |
-| `bom` | `<board>-bom.csv` from the schematic beside the board (`<board>.kicad_sch`), grouped by value and footprint, DNP parts left out: `Reference` (every designator, no ranges), `Value`, `Footprint`, `Quantity`, then `MPN` and `LCSC` where any part carries one (read from fields named `MPN`, `Manufacturer_Part_Number`, `LCSC`, `LCSC Part`, ...) |
-| `step`, `glb` | `<board>.step` / `<board>.glb`: the board and each part whose 3D model is found ([where it is looked for](views.md#3d-and-part-models)); a warning names the parts without one. The GLB holds the board's copper, mask and silkscreen too, each KiCad's own mesh named by its layer (`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`), so it is the larger and slower of the two (tens of MB on a four-layer board) |
-| `odb` | `<board>-odb.zip`: ODB++, mm |
-| `ipc2581` | `<board>-ipc2581.xml`: IPC-2581 rev C, mm |
-| `pdf` | `<board>-front.pdf` and `<board>-back.pdf` (mirrored): copper, silkscreen and fab layers over the outline |
-| `dxf` | `<board>-outline.dxf`: Edge.Cuts and every drilled hole, mm, for an enclosure |
-
-KiCad writes a STEP or GLB through a temporary file of a fixed name in the output folder, so two such
-exports into one folder at once can collide: give each a folder of its own.
+| `fab/gerbers/ --as gerbers` (or a `.zip`) | every plot layer the board's own plot settings choose, and a job file |
+| `fab/drill/ --as drill` (or a `.zip`) | Excellon drill files, mm |
+| `pos.csv --as pos` | placement of both sides, mm, from KiCad's page origin with y up (`PosY` is the board's y negated), every placed part (DNP ones too): KiCad's columns `Ref`, `Val`, `Package`, `PosX`, `PosY`, `Rot`, `Side` |
+| `bom.csv --as bom` | from the schematic beside the board (`<board>.kicad_sch`), grouped by value and footprint, DNP parts left out: `Reference` (every designator, no ranges), `Value`, `Footprint`, `Quantity`, then `MPN` and `LCSC` where any part carries one (read from fields named `MPN`, `Manufacturer_Part_Number`, `LCSC`, `LCSC Part`, ...) |
+| `board.step`, `board.glb` | the board and each part whose 3D model is found ([where it is looked for](views.md#3d-and-part-models)); a warning names the parts without one. The GLB holds the board's copper, mask and silkscreen too, each KiCad's own mesh named by its layer (`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`), so it is the larger and slower of the two (tens of MB on a four-layer board) |
+| `fab/odb.zip --as odb` | ODB++, mm, zipped by KiCad; into a folder (`fab/odb/`), its tree uncompressed |
+| `board.xml` | IPC-2581 rev C, mm |
+| `fab/pdf/ --as pdf` (or a `.zip`) | `<board>-front.pdf` and `<board>-back.pdf` (mirrored): copper, silkscreen and fab layers over the outline |
+| `outline.dxf` | Edge.Cuts and every drilled hole, mm, for an enclosure |
 
 For anything else (another origin, other layers, a placement file without the DNP parts), run KiCad's own
 command line, `cad run kicad-cli ...`, as its [manual](https://docs.kicad.org/9.0/en/cli/cli.html) and

@@ -23,7 +23,7 @@ and edits through its IPC API. There is no board model or build step; the files 
 | Place and route | The schematic's netlist, one functional group at a time | [Layout](references/layout.md), [placement](references/placement.md) |
 | Check a change | `cad kicad drc`, snapshots | [Check each change](#check-each-change) |
 | Review before ordering | DRC, then measurements, then the checklist | [Before ordering](#before-ordering) |
-| Export fabrication files, a BOM, or a STEP for an enclosure | `cad export board.kicad_pcb DIR --to KIND` | [Manufacturing](references/manufacturing.md) |
+| Export fabrication files, a BOM, or a STEP for an enclosure | `cad export board.kicad_pcb DST [--as KIND]` | [Manufacturing](references/manufacturing.md) |
 | Show a board or a schematic; what the person can see or pick in it; a missing 3D model | `cad viewer --json FILE` | [Show the model](#show-the-model), [views](references/views.md) |
 
 ## Setup
@@ -84,8 +84,11 @@ with kicad_pcb.edit(BOARD) as b:       # the board file is the source; the block
 drc = cad.kicad.drc(BOARD)
 if not drc.ok:
     raise SystemExit("\n".join(drc.human_lines()))  # each finding, then FAILED and the count
-for kind in ("gerbers", "drill", "pos", "bom", "step"):
-    cad.export(BOARD, f"fab/{kind}", to=kind)
+for kind in ("gerbers", "drill"):                  # several files each: into a folder, as_ naming which
+    cad.export(BOARD, f"fab/{kind}/", as_=kind)
+for kind in ("pos", "bom"):                        # a .csv is either: as_ names which
+    cad.export(BOARD, f"fab/{kind}.csv", as_=kind)
+cad.export(BOARD, "fab/board.step")                # one file, its kind by its suffix
 ```
 
 - **State the result, not the change**: "U1 is at (10, 20)", "the power tracks are 0.8 mm", never
@@ -204,8 +207,8 @@ The page follows every run of the model. A file you export is a download: give i
 for the person: to check your own work, review with `cad snapshot`, never a screenshot
 of the page. If it fails to launch, say so.
 
-A shared board opens in 2D. For its 3D, run `cad export board.kicad_pcb tmp/glb --to glb` and share the
-`tmp/glb/board.glb` it writes. An import of the board's share gets the whole project, its 3D models included.
+A shared board opens in 2D. For its 3D, run `cad export board.kicad_pcb board.glb`, then `cad share board.glb`.
+An import of the board's share gets the whole project, its 3D models included.
 
 What the board and schematic pages offer the person (layers, selection, 3D, part models), and what
 they approximate, is in [views](references/views.md).

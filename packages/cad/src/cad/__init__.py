@@ -3,7 +3,8 @@ declare.
 
 The root holds ``__version__``, ``CadDeprecationWarning``, the verbs and the document types. The verbs are what
 is done to a document, one to one with the ``cad`` command's (``cad export SRC DST``): ``export`` (a document,
-a mesh, a KiCad file or a shape written to another format, its format by the destination's suffix), ``inspect``
+a mesh, a KiCad file or a shape written to another format, what the destination says: a file by its suffix, or of a
+KiCad file a folder or a ``.zip`` too, ``as_`` naming the kind where it cannot), ``inspect``
 (what a document holds, a robot description's conformance; ``interference=True``, ``ranges=True``), ``snapshot``,
 ``dfm`` and ``fea``, each taking a file or the handle a model's call returns (``export`` and ``dfm`` a shape a program
 holds too, written or checked in its own process); and ``save``, a shape a program holds saved as a model's
