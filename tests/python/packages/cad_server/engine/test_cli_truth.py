@@ -175,6 +175,41 @@ class VerbsTest(unittest.TestCase):
         self.assertEqual(summary.stdout.splitlines()[-1], "closure     none: a STEP file carries none, only an .xbf "
                                                           "does (a model's document, inspected by its id, has one)")
 
+    def test_an_xbf_file_summary_shows_the_same_closure_as_the_closure_query(self) -> None:
+        xbf = self.folder / "inspect-box.xbf"
+        script = self.folder / "inspect-box.py"
+        script.write_text(textwrap.dedent("""
+            from cad import xbf
+            import build123d as bd
+
+            @xbf("inspect-box.xbf")
+            def box():
+                return bd.Box(4, 8, 2)
+
+            if __name__ == "__main__":
+                box()
+        """), encoding="utf-8")
+        built = self.run_(script.name)
+        self.assertEqual(built.returncode, 0, built.stderr)
+
+        def inspect(*options: str):
+            return self.run_("-c", "from cad_server.cli import main; raise SystemExit(main())",
+                             "xbf", "inspect", str(xbf), *options)
+
+        closure = inspect("--query", "closure", "--json")
+        self.assertEqual(closure.returncode, 0, closure.stderr or closure.stdout)
+        expected = json.loads(closure.stdout)
+        self.assertEqual(expected["source"]["function"], "box")
+        for options in (("--json",), ("--query", "structure", "--json"), ()):
+            with self.subTest(options=options):
+                done = inspect(*options)
+                self.assertEqual(done.returncode, 0, done.stderr or done.stdout)
+                if options:
+                    self.assertEqual(json.loads(done.stdout)["closure"], expected)
+                else:
+                    self.assertIn("\nclosure\n", done.stdout)
+                    self.assertEqual(json.loads(done.stdout.split("\nclosure\n", 1)[1]), expected)
+
     def test_a_part_ref_answers_where_the_part_stands_and_its_world_bounds(self) -> None:
         shown = self.cli("inspect", self.box, "box/link")
         self.assertEqual(shown.returncode, 0, shown.stderr)

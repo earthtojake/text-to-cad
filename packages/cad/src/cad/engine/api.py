@@ -1075,8 +1075,13 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
 
     structure = get("")
     if query in ("summary", "structure"):
+        closure = structure.get("closure")
+        if isinstance(path, Path) and path.suffix.lower() == ".xbf":
+            from cad.engine import previous
+
+            closure = previous.of(path)
         return {"summary": _summary(structure, path, get, ident, progress, measured=query == "summary"),
-                "closure": structure.get("closure")}
+                "closure": closure}
     if ref is None:
         if not structure.get("closure"):
             raise EngineError(f"{source} holds no build closure")
