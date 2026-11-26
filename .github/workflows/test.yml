@@ -897,7 +897,8 @@ jobs:
         run: scripts/test/test-installed.sh --wheels "$RUNNER_TEMP/cadgen-wheel-check"
 
   # The client the wheel ships, served by the real backend and drawn in Chromium: the launch
-  # smoke test, then the format and camera gates, and a view bundle opened with the engine stopped. The bundle is built here, not passed from
+  # smoke test, then the format, camera and prompt gates, and a model `cad share` shared, opened from the share
+  # service with the engine stopped. The bundle is built here, not passed from
   # `packaging`: an artifact would put this job behind that one for longer than the bundle takes.
   viewer-e2e:
     name: viewer-e2e

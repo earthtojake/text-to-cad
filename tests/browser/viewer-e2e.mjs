@@ -910,15 +910,15 @@ async function shareGate() {
     const area = await card.innerText();
     if (!/\d/.test(area)) failures.push(`share: a face's area reads ${JSON.stringify(area)}`);
     await view.keyboard.press("Escape");
-    // Parameters are shown and read only, as an .xbf opened as a file shows them.
+    // Parameters are shown and read only: the page has no engine to save them, and its controls and Save say so.
     await view.locator("[data-flat-panel]").getByRole("tab", { name: "Params", exact: true }).click();
-    const status = view.locator("[data-parameters-status]");
-    await status.waitFor();
-    if (await status.getAttribute("data-parameters-status-reason") !== "file") {
-      failures.push(`share: the parameters say ${JSON.stringify(await status.innerText())}, not that they are edited in the script`);
-    }
-    if (!(await view.locator("[data-parameter=\"width\"]").count())) failures.push("share: the width parameter is not shown");
+    const width = view.locator("[data-parameter=\"width\"]");
+    await width.waitFor();
+    const widthReason = await width.getAttribute("data-parameter-reason");
+    if (widthReason !== "unavailable") failures.push(`share: the width parameter's reason is ${JSON.stringify(widthReason)}, not that this view can't save`);
     if (!(await view.locator("button[data-parameters-save]").isDisabled())) failures.push("share: Save is offered over a shared model");
+    const saveReason = await view.locator("[data-parameters-save-reason]").getAttribute("data-parameters-save-reason");
+    if (saveReason !== "unavailable") failures.push(`share: Save is off for ${JSON.stringify(saveReason)}, not because this view can't save`);
     await close(view, "view");
 
     // An address that names no share opens nothing: the service holds none, and the page says so.
