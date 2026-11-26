@@ -210,8 +210,8 @@ the newest release, not that one.
 
 **Automatic updates.** A cad installed globally (`uv tool install cad`) installs
 new releases of its own major version by itself, with no one asked, unless you turn
-that off with `cad update auto off`; a new major version installs only when a person
-runs `cad update --major`. At most once an hour, and as its server starts, cad asks
+that off with `cad update auto off`; a new major version never installs itself, and no
+command of cad's installs one. At most once an hour, and as its server starts, cad asks
 `api.texttocad.dev/v1/releases` which release is newest, of each major (releases before
 0.11.12 ask `api.texttocad.dev/v1/versions`, which names nothing from 0.12.0 on). The feed
 names a release only once it has been on PyPI for an hour, and we can hold a release back
@@ -222,7 +222,7 @@ check it, stops its server once nothing is in flight, writes the pointer, a file
 naming the release every `cad` then runs, and starts the server again; where that server
 does not start, the pointer is put back. It never installs an older release, nor changes
 the installed cad's files. A typed `cad update` asks PyPI which release of its major is
-newest and installs it the same way; `cad update --major`, PyPI's newest of all. The store
+newest and installs it the same way, never across a major. The store
 and the pointer are code cad runs, so whoever can write cad's state folder can change what
 `cad` runs, as whoever can write cad's environment always could. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an

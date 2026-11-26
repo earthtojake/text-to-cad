@@ -89,7 +89,7 @@ class TheCommandTable(unittest.TestCase):
         root = Path(scratch.name).resolve()
         (root / "bin").mkdir()
         a_home_of_its_own(self, root / "home", root / "bin")
-        for argv, usage in ((["update", "--help"], "usage: cad update [-h] [--major]"),
+        for argv, usage in ((["update", "--help"], "usage: cad update [-h]"),
                             (["update", "auto", "--help"], "usage: cad update auto [-h] [{status,on,off}]"),
                             (["plugin", "install", "--help"], "usage: cad plugin install [-h]"),
                             (["plugin", "update", "--help"], "usage: cad plugin update [-h] [auto [{status,on,off}]]"),
@@ -100,7 +100,8 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual((code, said.splitlines()[0]), (0, usage))
         for argv in (["auto-update"], ["auto-update", "on"], ["plugin", "install", "--force"],
                      ["plugin", "install", "claude"], ["plugin", "auto-update", "on"],
-                     ["update", "auto", "maybe"], ["update", "--major", "auto"], ["update", "auto", "--major"]):
+                     ["update", "auto", "maybe"], ["update", "--major"], ["update", "--major", "auto"],
+                     ["update", "auto", "--major"]):
             with self.subTest(argv=argv):
                 self.assertEqual(_run(argv)[0], 2)
 

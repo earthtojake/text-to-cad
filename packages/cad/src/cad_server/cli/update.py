@@ -1,10 +1,9 @@
 """``cad update`` -- cad, and only cad, updated now to the newest release of its major version, by the server that runs
 (``{"op": "update"}``, ``Daemon.update``): it asks PyPI for the newest release of this cad's major that is not yanked
 and, where it is newer, begins cad's own update at once (``cad_server._internal.auto_update``: ``asked``, ``begin``),
-even with automatic updates off; where nothing in this major is newer, it says so. Where a release of a higher major is
-out, it adds one line naming it and how to get it (``auto_update.MAJOR_LINE``). ``cad update --major`` installs the
-newest release of all, of whatever major (``{"op": "update", "major": true}``): a new major version is the person's to
-ask for, and never arrives by itself. Where PyPI cannot be reached, the update runs all the same, and says what it got.
+even with automatic updates off; where nothing in this major is newer, it says so. It never crosses a major: where a
+release of a higher major is out, it adds one line naming it and where the migration guides are
+(``auto_update.MAJOR_LINE``). Where PyPI cannot be reached, the update runs all the same, and says what it got.
 It never runs the install command. The server does the work where one runs: an agent's shell may not reach the network
 or change cad's folders, and the server, outside that sandbox, may; so the command asks no permission.
 
@@ -22,7 +21,7 @@ does; ``WAIT_SECONDS`` at most. Nothing of this cad changes under it meanwhile: 
 folder of its own and switches to it by a pointer, which this process, started before, never reads again.
 
 A cad that is no global install does not update itself, and is refused. ``cad update auto [status|on|off]`` shows or
-changes whether cad updates itself (``cad_server.cli.auto_update``); ``--major`` is no option of it.
+changes whether cad updates itself (``cad_server.cli.auto_update``).
 """
 
 from __future__ import annotations
@@ -47,22 +46,18 @@ OLD_SERVER = ("the cad server running cannot update cad: run `cad server stop`, 
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    from cad_server._internal.auto_update import MIGRATIONS
     from cad_server._internal.cli_parser import parser as command_parser
     from cad_server.cli import auto_update
 
-    parser = command_parser(prog=prog, usage=f"%(prog)s [-h] [--major]\n       {prog} auto [{{status,on,off}}]",
+    parser = command_parser(prog=prog, usage=f"%(prog)s [-h]\n       {prog} auto [{{status,on,off}}]",
                             description=(
-        "cad installs every newer release of its major version by itself, and a new major version only when you run "
-        "`cad update --major`. `cad update` updates cad now to the newest release of its major version, even with "
+        "cad installs every newer release of its major version by itself, and never a new major version. "
+        "`cad update` updates cad now to the newest release of its major version, even with "
         "automatic updates off: cad asks PyPI, installs it beside the cad that runs, and switches to it (where cad "
         "has it installed and ready already, it only switches, even without PyPI). A cad server that was running "
         "restarts on it once nothing is running; with none running, none is started. By itself, cad installs a new "
         "release beside the cad that runs as soon as it is out, and restarts the server on it as the server next "
         "starts. `cad update auto` shows or changes whether cad updates itself."))
-    parser.add_argument("--major", action="store_true",
-                        help="install the newest release of all, a new major version included, which may ask for "
-                             f"changes ({MIGRATIONS})")
     commands = parser.add_subparsers(dest="command", metavar="{auto}")
     auto_update.arguments(commands.add_parser("auto", prog=f"{prog} auto",
                                               help="show or change whether cad updates itself: status, on, off",
@@ -74,8 +69,6 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     parser = build_parser(prog)
     args = parser.parse_args(argv)
     if args.command == "auto":
-        if args.major:
-            parser.error("--major is an option of `cad update`, not of `cad update auto`")
         from cad_server.cli import auto_update as switch
 
         return switch.switch(args.action, prog=f"{prog} auto")
@@ -86,11 +79,11 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if auto_update.global_install() is None:  # this command's own cad
         return write(Failure(NOT_A_TOOL), prog=prog, as_json=False)
     try:  # never starts one
-        answer = client.request({"op": "update", **({"major": True} if args.major else {})}, timeout=ASK_SECONDS)
+        answer = client.request({"op": "update"}, timeout=ASK_SECONDS)
     except client.NotRunning:
         if client._sandboxed():  # noqa: SLF001 - nor can it update cad
             return write(classify(client.NotRunning(client.SANDBOXED)), prog=prog, as_json=False)
-        answer = here(auto_update, major=args.major)
+        answer = here(auto_update)
     except ConnectionError as error:
         return write(classify(error), prog=prog, as_json=False)
     failed = answer.get("failed") if isinstance(answer, dict) else "the cad server gave no answer"
@@ -121,13 +114,13 @@ def newest_of(release: str, higher: str | None) -> str:
     return f"the newest {release.split('.', 1)[0]}.x release" if higher else "the newest release"
 
 
-def here(auto_update: Any, *, major: bool = False) -> dict[str, Any]:
+def here(auto_update: Any) -> dict[str, Any]:
     """The update judged and begun in this process, where no server runs: the server's answer to ``{"op": "update"}``
     in shape (``Daemon.update``), ``since`` the attempt's own ``at``. The helper is told to start no server."""
-    judged = auto_update.asked(major=major)
+    judged = auto_update.asked()
     if "updating" not in judged:
         return judged
-    found = auto_update.begin(judged["updating"], start=False, major=major)
+    found = auto_update.begin(judged["updating"], start=False)
     if found is None:
         return {"failed": f"the update could not begin, so cad {judged['from']} stays as it is"}
     return {**judged, "updating": found["release"], "since": found["at"], "here": True}
@@ -208,8 +201,7 @@ def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,
           higher: str | None = None) -> int:
     """An attempt that ended, said in one line: its exit status. The release it names is the one installed, where it
-    ended well (an update begun without PyPI's answer finds out only then), with one more line where uv's own record
-    keeps this install below the release cad now runs (``auto_update.outgrown``). One that failed for a cause it names says
+    ended well (an update begun without PyPI's answer finds out only then). One that failed for a cause it names says
     it in plain words (``auto_update.in_words``), then what to do (``auto_update.advice``, by who made the global
     install), then where the worker's log is; one whose new server did not start, that cad went back and runs the
     release before still. One that names no cause says uv's last words (its ``detail``) and the server, of which
@@ -223,9 +215,6 @@ def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable
         if str(attempt.get("started", "")).startswith("not started"):
             return said(f"{done}, but the cad server did not start again: run `cad server start`")
         print(done)
-        bound = auto_update.outgrown()  # a major crossed on an install uv's own record keeps below it
-        if bound:
-            print(bound)
         return 0
     newest = "the newest release" if target == "latest" else target
     word = auto_update.cause(attempt)

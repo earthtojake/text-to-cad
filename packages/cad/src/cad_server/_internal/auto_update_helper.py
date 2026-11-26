@@ -1,9 +1,9 @@
 """cad's own update, carried out: the worker ``auto_update.trigger`` starts, detached and with no window, as ``python -P
 -m cad_server._internal.auto_update_helper <told>`` by the environment's own interpreter, so it runs the release that
 is current, whose files nothing changes. ``told`` is one JSON argument: ``record`` (the attempt's file), ``log``,
-``from`` (the release that runs), ``at``, ``tries``, ``wanted``, ``asked``, ``major``, ``start`` (a server wanted at the
-end though none runs), ``target`` (the release asked for, or null), ``requirement`` (what uv builds: ``cad==<target>``;
-with no target the bound of ``from``'s major, or for ``major`` its floor alone), ``cad`` (the environment's own ``cad``
+``from`` (the release that runs), ``at``, ``tries``, ``wanted``, ``asked``, ``start`` (a server wanted at the end though
+none runs), ``target`` (the release asked for, or null), ``requirement`` (what uv builds: ``cad==<target>``; with no
+target the bound of ``from``'s major), ``cad`` (the environment's own ``cad``
 command), ``uv`` (the uv it builds with) and ``installer`` (who made the environment, kept in the record).
 
 In order (``update``):
@@ -13,10 +13,9 @@ In order (``update``):
    an older release, or of another environment, is replaced by this one's (``replace``). Else the stored release
    ``target`` where it is there and runs (``store.sound``: run once now, since another Python may have built it, or a
    file of it be gone), or the requirement built and run once in a folder of the store (``store.build``,
-   ``store.verify``) and judged: never older than ``from`` and, but for ``major``, of ``from``'s major
-   (``accepted``); ``from`` itself is ``current``, nothing newer; then named (``store.publish``, which removes a
-   stored release of that name that no longer runs). Nothing that runs is touched, so a failure here leaves cad as it
-   was. A resumed attempt (its record kept as ``switching``, ``auto_update._claim``) finds its stored release this
+   ``store.verify``) and judged: never older than ``from`` and of ``from``'s major (``accepted``); ``from`` itself is
+   ``current``, nothing newer; then named (``store.publish``, which removes a stored release of that name that no
+   longer runs). Nothing that runs is touched, so a failure here leaves cad as it was. A resumed attempt (its record kept as ``switching``, ``auto_update._claim``) finds its stored release this
    way, and builds it again only where it no longer runs.
 2. **Ready, or on** (``settle``): in one step under the state folder's lock, where the record is still this
    attempt's, underway, and says ``"switch": false``, the attempt ends here, outcome ``ready``: the release stored and
@@ -105,12 +104,12 @@ def last_line(text):
     return lines[-1] if lines else ""
 
 
-def accepted(held, before, major):
-    """Whether the update may end on release ``held``: never older than ``before``, the release that ran, and, but for
-    ``major`` (``cad update --major``), of ``before``'s major. Any release where ``before`` is not known."""
+def accepted(held, before):
+    """Whether the update may end on release ``held``: never older than ``before``, the release that ran, and of
+    ``before``'s major: cad's own update never crosses one. Any release where ``before`` is not known."""
     if held is None:
         return False
-    return before is None or (held >= before and (major or held[0] == before[0]))
+    return before is None or (held >= before and held[0] == before[0])
 
 
 def update(told, run=run, mark=lambda phase: None):
@@ -141,7 +140,7 @@ def update(told, run=run, mark=lambda phase: None):
     store.clean(keep=[built] if found["outcome"] in ("installed", "ready") else [])
     if found["outcome"] != "ready":
         found = {**found, "from": told["from"], "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(),
-                 **{name: told[name] for name in ("installer", "wanted", "asked", "major") if name in told}}
+                 **{name: told[name] for name in ("installer", "wanted", "asked") if name in told}}
     log.end(found)
     return found
 
@@ -163,7 +162,7 @@ def settle(told, found, path):
         done = {**found, "outcome": "ready", "switch": False,
                 "detail": f"cad {found['release']} is ready in {path}, and nothing points at it yet",
                 "from": told["from"], "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(),
-                **{name: told[name] for name in ("installer", "wanted", "major") if name in told}, "asked": False}
+                **{name: told[name] for name in ("installer", "wanted") if name in told}, "asked": False}
         keep(told["record"], done)
     return done, False
 
@@ -174,7 +173,7 @@ def build(told, run, log, mark=lambda phase: None):
     only where its stored release no longer runs."""
     from cad_server._internal import store
 
-    before, major, target = release(told["from"]), told.get("major") is True, told.get("target")
+    before, target = release(told["from"]), told.get("target")
     path = store.folder(target) if release(target) is not None else None
     if path is not None and store.sound(path, run=run):
         return {"path": path, "release": target}
@@ -190,7 +189,7 @@ def build(told, run, log, mark=lambda phase: None):
                     "detail": f"the release built did not run: {said or f'exit {failed.code}'}"}
         return {"release": wanted, "outcome": "failed", "cause": cause_of(failed.code, failed.output, log),
                 "detail": said or "uv said nothing"}
-    if not accepted(release(got), before, major):
+    if not accepted(release(got), before):
         store.remove(staged)
         return {"release": got, "outcome": "failed", "cause": "unknown",
                 "detail": f"it built cad {got}, which it may not end on"}
@@ -519,8 +518,7 @@ class Log:
                              f"{told.get('target') or 'the newest it may take'}"
                              f"{f' (for {wanted})' if wanted and wanted != told.get('target') else ''}, "
                              f"{told.get('requirement')} built by {told.get('uv')}, "
-                             f"{'typed' if told.get('asked') else 'automatic'}"
-                             f"{', --major' if told.get('major') else ''}, try {told.get('tries', 1)}\n")
+                             f"{'typed' if told.get('asked') else 'automatic'}, try {told.get('tries', 1)}\n")
         except Exception:  # noqa: BLE001 - the worker never fails of its log
             self.path = None
 

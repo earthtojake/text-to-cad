@@ -127,7 +127,7 @@ where those files ship, so these scripts are what produces them.
   that started at once, switched off, back by itself from a release whose server cannot start (typed, or at the
   start that switched to it ready, then held back), a ready release damaged before its restart built again, past
   an installed release whose server cannot start, untouched by a release uv cannot install or one that fails its
-  own check, inside its major with a higher major out and across it only by `cad update --major`, by pipx (no
+  own check, inside its major with a higher major out, which `cad update` names and nothing crosses to, by pipx (no
   `pipx upgrade`), while three callers run `cad` every 50 ms, while files of the installed and the running
   release are held open, after a person's own `uv tool install --reinstall` and `uv tool upgrade`, after its
   worker was stopped midway, and from the shipped 0.11.17, which updates itself in place into this build first;

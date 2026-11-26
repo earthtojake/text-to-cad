@@ -116,9 +116,9 @@ list` names the release uv installed, not the newer one that runs; `cad --versio
 say which runs. uv's record of the install stays as the install made it. A plain `uv tool install
 cad` keeps no range, so a person's own `uv tool upgrade cad` takes the newest of all, a higher major
 included. A computer that 0.11.12 to 0.11.17 updated keeps the range their update wrote there
-(`cad>=X,<1`), which cad never rewrites: once `cad update --major` has taken it past that range, uv's
-own upgrade would put an older cad over the newer one, so `cad update` and `cad doctor` say so
-there, with the command that clears it (`uv tool install --force cad`). Besides what uv
+(`cad>=X,<1`), which cad never rewrites: uv's own upgrade there stays below the next major until
+`uv tool install --force cad` clears it, and whatever moves computers to a next major must mind it
+([Before the first release of a higher major](releases.md#before-the-first-release-of-a-higher-major)). Besides what uv
 installed, the store keeps the release that runs and one waiting for its restart, each linked from uv's
 cache where the file system links; every tidying of the store (each update's end, each server start and then
 hourly, `cad cache prune`) removes the rest, and a release a process still runs once nothing does. The way back at a
@@ -200,9 +200,10 @@ whatever is wrong on each.
 ## A major version never installs itself
 
 **Decision.** cad installs by itself any newer release with the same major version number as its
-own, a patch and a minor alike; a release of a higher major never arrives by itself. A person asks
-for it: `cad update --major`, which `cad update` and `cad doctor` name, with the migration guides,
-when one is out. The automatic update and a typed `cad update` install a release of the installed
+own, a patch and a minor alike; cad's own update never crosses a major. Where a release of a higher
+major is out, `cad update` and `cad doctor` say so in one line, with the migration guides, and
+nothing more: how computers move to a next major is decided with it (the last release of a major
+carries what moves them). The automatic update and a typed `cad update` install a release of the installed
 major by name ([how](#uv-installs-cad-and-cads-update-changes-none-of-it)); where none is named (a
 feed with no release of this major, PyPI out of reach), the newest release the range
 `cad>=<installed>,<<next major>` allows. The CAD app's line installs the newest
@@ -226,8 +227,8 @@ before it may run. A minor that breaks installs itself because text-to-cad is in
 break bumps the minor, comes with a migration guide, and the skills tell the person when cad is a
 version ahead of them.
 
-**What it costs.** A person on an old major stays there until they run `cad update --major`, and gets
-no fixes made only in a later major. A minor that breaks reaches everyone by itself. The bound is
+**What it costs.** A computer on an old major stays there until whatever moves it to the next ships,
+and gets no fixes made only in a later major. A minor that breaks reaches everyone by itself. The bound is
 cad's own and no longer the installer's: a person's own `uv tool upgrade cad` or `pipx upgrade cad`
 takes the newest of all, unless uv's record still holds the range an earlier release's update left
 there ([what that costs](#uv-installs-cad-and-cads-update-changes-none-of-it)).
@@ -236,7 +237,7 @@ there ([what that costs](#uv-installs-cad-and-cads-update-changes-none-of-it)).
 
 **Decision.** cad and the plugin update separately. A global install of cad updates itself, inside
 its major version, on by default (`cad update auto off` stops it). `cad update` updates cad now,
-inside its major (`--major`: the newest of all), with or without a server running and with automatic
+inside its major, with or without a server running and with automatic
 updates off too, and touches nothing else. The viewer and the CAD app show an update button while a
 global install is behind a newer release of its own major, automatic updates on or off: a click is
 the same request as `cad update` (never across a major), which installs the release and restarts in

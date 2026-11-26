@@ -68,8 +68,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
-    "update": ("cad_server.cli.update", "update cad now to the newest release of its major version (`--major`: of "
-                                     "all); `update auto`: whether it does so itself"),
+    "update": ("cad_server.cli.update", "update cad now to the newest release of its major version; "
+                                     "`update auto`: whether it does so itself"),
     "plugin": ("cad_server.cli.plugin", "the plugin in your agent apps: `install` puts it in or updates it; "
                                         "`update auto`: whether cad's updates update it too"),
 }

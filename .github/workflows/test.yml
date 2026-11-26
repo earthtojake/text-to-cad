@@ -455,7 +455,7 @@ jobs:
   # running, after a start that serves at once, switched off, back by itself from a release whose server cannot start
   # (typed, or at the start that switched to it ready, then held back), a ready release damaged before its restart
   # built again, past an installed one whose server cannot, untouched by a release uv cannot install or
-  # one that fails its own check, inside its major and never to a new major but by `cad update --major`, installed by
+  # one that fails its own check, inside its major and never to a new major (named, with the migration guides), installed by
   # pipx, while three callers run `cad` every 50 ms, while files of it are held open, after a person's own reinstall
   # and upgrade, after its worker was stopped midway, and from 0.11.17's update in place); and the bridge from the real shipped releases on PyPI (`bridge`: 0.11.11's update button and automatic
   # update into this build, through its server's run of the install command in install mode to the uv tool's server,

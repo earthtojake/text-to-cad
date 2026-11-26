@@ -110,7 +110,8 @@ guide: `Test`'s version check refuses one there (`version_breaks_nothing` in
 release of the major a computer is on, a patch and a minor alike, and never a higher major. So from
 1.0 a minor installs itself and must break nothing. Below 1.0 a minor installs itself and may break,
 with its guide: text-to-cad is in beta, and the skills tell the person when cad is a version ahead of
-them. The release to 1.0, and every major after it, waits for the person.
+them. The release to 1.0, and every major after it, never installs itself: how computers move to it
+is decided with it ([Before the first release of a higher major](#before-the-first-release-of-a-higher-major)).
 
 ## How a release reaches a computer
 
@@ -121,9 +122,8 @@ them. The release to 1.0, and every major after it, waits for the person.
   the pointer that names that folder, and starts the new release's server, or puts the pointer back.
   Nothing uv made changes: `uv tool upgrade cad` is the person's own. A typed `cad update` does the
   same at once, asking PyPI instead, and names a higher major. Nothing installs an older release.
-- **A major is crossed only when a person asks**, with `cad update --major` (the same, to
-  PyPI's newest of all); the automatic update then goes on inside the new major. What cad
-  runs of its own is bounded to a major: its update, and its install of itself where a computer has
+- **No command crosses a major.** `cad update` and `cad doctor` name a higher major where one is
+  out, with the migration guides, and nothing more. What cad runs of its own is bounded to a major: its update, and its install of itself where a computer has
   none, by the plugin's server line and by the bridge (`tool_install`: `cad<N>`, never over a `cad`
   of a higher major), and the install command's update of a cad that is there, which is that cad's
   own `cad update`. Not bounded: the plugin, which `cad plugin install` takes from `latest`, the
@@ -278,13 +278,13 @@ No higher major exists today, and none of this is done. Before the first one shi
   source is decided.
 - **The newest release below 0.12.0**, the stepping stone through which 0.10.0 to 0.11.11 computers
   arrive (`/v1/versions`), is checked against the same rule: its bridge runs the install command.
-- **A person's `uv tool upgrade cad` does not move cad back a major.** uv keeps no range for `uv tool
-  install cad`, but keeps the one 0.11.12 to 0.11.17 gave it as they updated (`cad>=<release>,<1`),
-  and cad's own update never rewrites it. On such a computer switched to 1.x by `cad update --major`,
-  that command installs the newest 0.x where one is newer than uv's, and an install runs what it
-  installed. `cad update` and `cad doctor` say so on such a computer, with the command that
-  clears the range (`auto_update.outgrown`: `uv tool install --force cad`); the migration guide to the
-  new major says it too.
+- **What moves a computer to the new major**, carried by the last release of the major before it:
+  today nothing does (cad's own update never crosses one, and no command of cad's does), so it is
+  designed then. It minds uv's own range: uv keeps none for `uv tool install cad`, but keeps the one
+  0.11.12 to 0.11.17 gave it as they updated (`cad>=<release>,<1`), and cad's own update never
+  rewrites it, so on a computer moved to 1.x without clearing it (`uv tool install --force cad`), a
+  person's `uv tool upgrade cad` installs the newest 0.x where one is newer than uv's, and an install
+  runs what it installed. The migration guide to the new major says it too.
 
 ## Shipping a release
 

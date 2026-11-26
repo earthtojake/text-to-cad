@@ -116,8 +116,8 @@ cad_server/
   Only these, cad's update and the server's start delete a past release's files.
 - **`cad update`**: cad, and only cad, updated now to the newest release of its major version on PyPI, by the
   server that runs, or by the command itself where none runs (below), even with automatic updates off; where a
-  release of a higher major is out, one more line names it. **`cad update --major`**: the newest release of all,
-  a new major version included, which never installs itself. It never starts a server, and is refused unless
+  release of a higher major is out, one more line names it and where the migration guides are: nothing crosses
+  a major. It never starts a server, and is refused unless
   this cad is a global install. It waits until the update ends and says how in one line: where it failed, why
   in plain words, what to do (`auto_update.advice`) and where the log is.
   **`cad update auto [status|on|off]`**: whether cad updates itself (below), on by
@@ -181,7 +181,7 @@ PowerShell pipeline is still wrong there, and that is PowerShell's to set.
 ## cad's own update
 
 `_internal/auto_update.py`. **The rule**: cad installs by itself any newer release of its own major version,
-and never a release of a higher major, which a person asks for (`cad update --major`). Only a global install
+and never a release of a higher major: no command crosses one. Only a global install
 updates itself, one whose environment `uv tool install cad` or `pipx install cad` made, and both the same way,
 with uv. Two switches in the person's settings: `auto_update.on`, whether cad updates itself, on unless turned
 off (`cad update auto`); and `plugin.auto_update`, whether the server runs `cad plugin install` once where cad
@@ -271,8 +271,8 @@ cad_server._internal.auto_update_helper` by the environment's interpreter, so it
    process still runs it, the attempt ends `in_use`), with the uv the release that runs carries (`carried_uv`, beside its `uv` package; else the
    person's), in a `.building-` folder; run once by the environment's interpreter with that
    folder and the standard library alone on its path (`store.verify`: the release's own check,
-   `_internal/selftest.py`, says `cad <release>` last); judged (not older, and but for `--major` of the same
-   major; the same release is `current`); named (`store.publish`). Nothing that runs is touched: uv stopped at
+   `_internal/selftest.py`, says `cad <release>` last); judged (not older, and of the same major; the same
+   release is `current`); named (`store.publish`). Nothing that runs is touched: uv stopped at
    its 15 minutes leaves no release. An attempt that only gets its release ready ends here, `ready`.
 2. **Switch** (`switching`, kept first). The pointer read, for the way back. A server that answers is drained:
    asked to stop once nothing is in flight, and waited for five seconds at most (`client.drain`), after which
@@ -353,12 +353,10 @@ one before it first, whatever begins it, as it stands where its `cad plugin inst
 `cad update` asks the server that runs (`{"op": "update"}`, which an agent's sandboxed shell may send with no
 permission): it asks PyPI for the newest release of this cad's major that is not yanked (`updates.pypi`, 5 s at
 most; `CAD_PYPI_URL` names a stand-in), says `cad X is the newest release` where none is newer (`the newest 0.x
-release` where a higher major is out, with one more line naming it, `cad update --major` and the migration
-guides' address), and otherwise begins the same update at once, with the switch off too and whatever the
+release` where a higher major is out, with one more line naming it and the migration guides' address), and
+otherwise begins the same update at once, with the switch off too and whatever the
 schedule says (it spends no automatic try, and counts among the day's four), or joins the one underway, another
-process's too. `cad update --major` (`{"op": "update", "major": true}`) builds PyPI's newest of all, never below
-the release that runs; the next automatic update keeps to the new major. Where uv's own record keeps the install
-below the major it then runs (`outgrown`), it says so in one more line, with `uv tool install --force cad`. Where PyPI cannot be reached it builds
+process's too. Where PyPI cannot be reached it builds
 all the same, or, where a release is ready and PyPI names it or none, only switches to it. It waits for the end, up
 to 30 minutes, saying each step once on stderr (`cad: installing cad X beside cad Y`, then `cad: restarting the cad
 server on it, once nothing is running`, or `cad: switching to it` with no server; for a release that was ready,

@@ -529,7 +529,7 @@ class SwitchTidyTest(StoreCase):
                       mock.patch.object(helper, "answering", side_effect=lambda: self.serving and (self.serving, None))):
             self.enterContext(patch)
         self.told = {"record": str(self.state / "auto-update.json"), "log": None, "from": "1.0.1", "at": 1.0,
-                     "tries": 1, "wanted": "1.0.2", "asked": True, "major": False, "start": True, "target": "1.0.2",
+                     "tries": 1, "wanted": "1.0.2", "asked": True, "start": True, "target": "1.0.2",
                      "requirement": "cad==1.0.2", "cad": "cad", "uv": "uv", "installer": "uv"}
 
     def run_(self, command: list[str], timeout: float) -> tuple[int | None, str]:

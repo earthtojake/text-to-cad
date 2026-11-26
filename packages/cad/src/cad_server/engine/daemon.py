@@ -1786,25 +1786,25 @@ class Daemon:
             send({"failed": f"unknown request {op!r}"})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
-        """``cad update`` (``{"op": "update"}``, ``"major": true`` for ``cad update --major``): judged
-        (``auto_update.asked``: PyPI asked now, this request's thread waiting), then, where a newer release is out or
-        PyPI could not say, the attempt underway joined, the release that is ready switched to, or the update begun at
-        once (``auto_update.begin``), whatever the switch says: it builds the release beside this one, and only its
+        """``cad update`` (``{"op": "update"}``; the ``"major"`` an older ``cad update --major`` sends is not read):
+        judged (``auto_update.asked``: PyPI asked now, this request's thread waiting), then, where a newer release is out
+        or PyPI could not say, the attempt underway joined, the release that is ready switched to, or the update begun
+        at once (``auto_update.begin``), whatever the switch says: it builds the release beside this one, and only its
         switch waits for what is in flight (the server's ``drain``). ``{"ok": true, "updating", "from", "since"}``
-        (``updating``: the release it is for, or
-        null; ``since``: when the attempt that serves it began; ``higher``, where ``asked`` names a release of a higher
-        major), else what ``asked`` answers, or ``{"failed"}`` where it could not begin. ``{"op": "update", "begin":
-        false}`` begins nothing: ``{"ok": true, "version", "last", "waiting": null}``, this release and the last attempt
-        (``auto_update.last``), which ``cad update`` asks while it waits (``waiting``: what the releases before this
-        one say of an update not begun yet; none waits here)."""
+        (``updating``: the release it is for, or null; ``since``: when the attempt that serves it began; ``higher``,
+        where ``asked`` names a release of a higher major, never installed), else what ``asked`` answers, or
+        ``{"failed"}`` where it could not begin. ``{"op": "update", "begin": false}`` begins nothing: ``{"ok": true,
+        "version", "last", "waiting": null}``, this release and the last attempt (``auto_update.last``), which ``cad
+        update`` asks while it waits (``waiting``: what the releases before this one say of an update not begun yet;
+        none waits here)."""
         from cad_server._internal import auto_update
 
         if request.get("begin") is False:
             return {"ok": True, "version": auto_update._version(), "last": auto_update.last(), "waiting": None}
-        judged = auto_update.asked(major=request.get("major") is True)
+        judged = auto_update.asked()
         if "updating" not in judged:
             return judged
-        found = auto_update.begin(judged["updating"], major=judged.get("major") is True)
+        found = auto_update.begin(judged["updating"])
         if found is None:
             return {"failed": f"the update could not begin, so cad {judged['from']} stays as it is"}
         named = "the newest release" if found["release"] == auto_update.LATEST else f"cad {found['release']}"

@@ -23,7 +23,7 @@ plugin install``, which carries the one table of them. It does these things alon
 3. brings a ``cad`` that was here already, and starts, up to date, only where a person ran this (``update``): that
    tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's update switches the server only once
    nothing is in flight, and the command waits for it). It stays inside cad's major version, as ``cad update`` does:
-   a higher major is the person's to ask for. What it prints is captured, never shown: one line says the update
+   cad's own update never crosses a major. What it prints is captured, never shown: one line says the update
    begins, and one line what came of it, over the first in a terminal (after it on a pipe or in a file). Its exit
    status says little (0 where it updated and where nothing is newer, non-zero where the update may still be
    queued), so the release the tool runs is read again, by its ``cad --version`` (uv's and pipx's listings name the

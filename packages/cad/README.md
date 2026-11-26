@@ -17,8 +17,8 @@ uv tool install cad
 
 It runs on Python 3.11 and newer. `cad server start` starts the server; cad then updates itself to each
 new release of its major version (`cad update auto off` stops that); `cad update` updates it now; a new
-major version installs only with `cad update --major`; `cad doctor` reports what is installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
-distribution, kept so older installs keep working.
+major version never installs itself; `cad doctor` reports what is installed. `cad-server`, `cad-mcp` and `cadgen`
+are empty aliases of this distribution, kept so older installs keep working.
 
 A **document** is what a person reviews: one instance of a **document type** (below), either a file read on
 its own or one built from code -- a model, built by the engine. Documents exist so that a person can review the
@@ -242,7 +242,7 @@ renumbers the list and every citation in the same change.
     workflow does not.
 14. **Compatibility, by who pays for a break.** *The package.* A change is judged by who absorbs it
     and whether they can. cad installs by itself every newer release of the major it is on, and never
-    a higher major (`cad update --major`); below 1.0 a break bumps the minor, so a breaking release
+    a higher major; below 1.0 a break bumps the minor, so a breaking release
     arrives by itself with its migration guide. Four tiers, which hold within a major as across one:
 
     - **Tier 1, what an agent reads each session**: the skills, the commands' verbs and flags, the CAD

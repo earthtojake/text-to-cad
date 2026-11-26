@@ -99,14 +99,14 @@ reachable or not; never by itself at a tending, however busy the server and howe
   made it; no pointer; the store holds no release and no ``.building-`` folder.
 - ``self-unrunnable``: the same for a release that installs but does not pass its own check (its
   ``cad_server/_internal/selftest.py`` raises): cause ``broken``.
-- ``self-major``: the rule that a new major never installs itself. With the next release and a release a major up out,
-  the server gets the next release ready, never the higher major, and a typed ``cad update`` restarts on it
-  (naming the higher major); then, automatic updates off, a typed ``cad update`` says the next release is the newest
-  of its major and names the higher one in one line, beginning nothing; ``cad update --major`` installs the higher
-  major; then, automatic updates on, with a newer release of that major and one two majors up out, the server gets the
-  newer one of the new major ready alone, and a typed ``cad update`` with PyPI out of reach (the stand-in answering
-  503) restarts on it all the same. Each through the store: uv's receipt stays byte for byte as the install wrote it,
-  and cad writes no range there.
+- ``self-major``: the rule that a new major never installs itself, and that nothing crosses one. With the next release
+  and a release a major up out, the server gets the next release ready, never the higher major, and a typed ``cad
+  update`` restarts on it (naming the higher major and the migration guides in one line); then, automatic updates
+  off, a typed ``cad update`` says the next release is the newest of its major and names the higher one, beginning
+  nothing; ``cad update --major`` is refused as an unknown option (exit 2), beginning nothing; then, automatic updates
+  on, with the release after out, the server gets that one ready, never the higher major, and a typed ``cad update``
+  with PyPI out of reach (the stand-in answering 503) restarts on it all the same. Each through the store: uv's
+  receipt stays byte for byte as the install wrote it, and cad writes no range there.
 - ``self-pipx``: cad installed by ``pipx install cad`` (pipx itself a uv tool of the computer's, on pip's backend, its
   folders in the home, pip offered this tree's releases by ``PIP_FIND_LINKS``): the install command, a person's run,
   finds nothing newer for pipx's cad (its own ``cad update``), installs no uv tool, hands over to that cad's ``cad
@@ -115,9 +115,7 @@ reachable or not; never by itself at a tending, however busy the server and howe
   major, and its next start is the switch, through the store as uv's cad updates, and the new cad's server runs ``cad
   plugin install`` once; then, automatic updates off, a typed ``cad update`` with nothing newer in its major says so
   and names the higher major, and with the release after out updates pipx's cad to it, whose server runs ``cad plugin
-  install`` once more; ``cad update --major`` installs the higher major, and, automatic updates on, the server then
-  gets a release of the new major ready alone, never two majors up, and the button restarts on it. No ``pipx
-  upgrade`` runs: pipx's own record of its environment (``pipx_metadata.json``)
+  install`` once more. No ``pipx upgrade`` runs: pipx's own record of its environment (``pipx_metadata.json``)
   stays byte for byte and ``pipx list`` names the first release throughout, while pipx's ``cad`` says each new one; an
   open page's port and token reach the last.
 - ``self-called``: the acceptance test of the switch. While the update runs (from its record underway, through the
@@ -283,11 +281,11 @@ def above(majors: int, step: int) -> str:
     return rc.stamp(_BASE + step, version=f"{MAJOR + majors}.9000.0")
 
 
-# This tree as releases of higher majors: one a major up, the next of that major, and one two majors up.
-HIGH, HIGH2, HIGHER = above(1, 7), above(1, 8), above(2, 9)
+# This tree as a release a major up.
+HIGH = above(1, 7)
 # What `cad update` and `cad doctor` say where a release of a higher major is out (``auto_update.MAJOR_LINE``).
-MAJOR_LINE = ("cad {release}, a new major version, is out and does not install itself: `cad update --major` installs it "
-              "(what changes: https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)")
+MAJOR_LINE = ("cad {release}, a new major version, is out: the migration guides say what changes "
+              "(https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)")
 BROKEN_DAEMON = b"raise SystemExit('cad: this build cannot start its server (a rehearsal of a release that cannot)')\n"
 # What the release that does not pass its own check (``UNRUNNABLE``) has for that check, and what the release uv
 # cannot install (``UNBUILDABLE``) requires.
@@ -1270,11 +1268,12 @@ def self_update(box: Box) -> None:
 
 
 def self_major(box: Box) -> None:
-    """cad installs by itself any newer release of its major, never a higher major: the automatic update gets the newer
-    release of this major ready with a higher major out, and a typed ``cad update`` restarts on it; a typed ``cad
-    update`` that stays and names the higher major; ``cad update --major`` installs it; then the automatic update stays
-    inside the new major, and a typed ``cad update`` restarts on it with PyPI out of reach. uv's receipt stays as uv
-    wrote it throughout."""
+    """cad installs by itself any newer release of its major, never a higher major, and no command crosses one: the
+    automatic update gets the newer release of this major ready with a higher major out, and a typed ``cad update``
+    restarts on it, naming the higher major; a typed ``cad update`` with nothing newer in this major says so, names
+    the higher major and begins nothing; ``cad update --major`` is refused as an unknown option; then the automatic
+    update gets the next release of this major ready, never the higher major, and a typed ``cad update`` with PyPI out
+    of reach restarts on it all the same. uv's receipt stays as uv wrote it throughout."""
     box.set_up("off")
     before = uv_installed(box)
     python = rc.interpreter(before.env)
@@ -1283,7 +1282,7 @@ def self_major(box: Box) -> None:
     box.hour_later()
     ready = made_ready(box, before.env, NEW, NEXT, box.ask(python, "status") or {})
     read_feed(box, "releases", "cad")
-    if (ready.get("wanted"), ready.get("major")) != (NEXT, False):
+    if ready.get("wanted") != NEXT or "major" in ready:
         raise Failed(f"{box.label}: the automatic update: {ready}\n{box.said()}")
     # A typed `cad update` restarts on it, and names the higher major.
     typed_restart(box, NEW, NEXT, ready, also=(MAJOR_LINE.format(release=HIGH),))
@@ -1302,36 +1301,32 @@ def self_major(box: Box) -> None:
         raise Failed(f"{box.label}: cad update with a higher major out exited {done.returncode}: {done.stdout}"
                      f"{done.stderr}, {box.read('auto-update.json')}\n{box.said()}")
     say(f"        `cad update`: {' / '.join(said)!r}; nothing begun")
-    # `cad update --major`: the higher major.
+    # `cad update --major` is no option: refused as any unknown option is, nothing begun.
     done = box.run([box.cad(), "update", "--major"], check=False, timeout=SECONDS + 60)
-    if (done.returncode, done.stdout.strip()) != (0, f"cad {NEXT} updated to {HIGH}"):
-        raise Failed(f"{box.label}: cad update --major exited {done.returncode}: {done.stdout}{done.stderr}\n"
-                     f"{box.said()}")
-    record = updated(box, HIGH)
-    through_store(box, before, HIGH)
-    if (record.get("asked"), record.get("major")) != (True, True):
-        raise Failed(f"{box.label}: the update across majors: {record}\n{box.said()}")
-    say(f"        `cad update --major`: {NEXT} -> {HIGH}; uv's receipt as uv wrote it")
-    # Afterwards the automatic update stays inside the new major.
+    if done.returncode != 2 or "unrecognized arguments: --major" not in done.stderr \
+            or box.read("auto-update.json").get("at") != begun.get("at") or box.version() != f"cad {NEXT}":
+        raise Failed(f"{box.label}: cad update --major exited {done.returncode}: {done.stdout}{done.stderr}, "
+                     f"{box.read('auto-update.json')}\n{box.said()}")
+    say("        `cad update --major`: refused as an unknown option (exit 2); nothing begun")
+    # Automatic updates on again: the release after, of this major, ready by itself, never the higher major.
     switched = box.run([box.cad(), "update", "auto", "on"]).stdout.strip()
     if switched != "update auto: on":
         raise Failed(f"{box.label}: cad update auto on said {switched!r}")
-    box.out(HIGH2)
-    box.out(HIGHER)
+    box.out(AFTER)
     box.hour_later()
-    ready = made_ready(box, before.env, HIGH, HIGH2, box.ask(python, "status") or {})
-    if ready.get("wanted") != HIGH2:
-        raise Failed(f"{box.label}: the automatic update in the new major: {ready}\n{box.said()}")
+    ready = made_ready(box, before.env, NEXT, AFTER, box.ask(python, "status") or {})
+    if ready.get("wanted") != AFTER:
+        raise Failed(f"{box.label}: the automatic update with {AFTER} and {HIGH} out: {ready}\n{box.said()}")
     # A typed `cad update` with PyPI out of reach: the release that is ready needs no answer from it.
     box.pypi.down = True
     try:
-        typed_restart(box, HIGH, HIGH2, ready)
+        typed_restart(box, NEXT, AFTER, ready)
     finally:
         box.pypi.down = False
-    through_store(box, before, HIGH2)
-    say(f"        {HIGH2} and {HIGHER} out: {HIGH2} ready by itself, never {HIGHER}; then, PyPI out of reach, a typed "
-        f"`cad update` restarted on it: {HIGH} -> {HIGH2}; uv's receipt as uv wrote it, uv still lists {NEW}")
-    pages(box, HIGH2)
+    through_store(box, before, AFTER)
+    say(f"        {AFTER} and {HIGH} out: {AFTER} ready by itself, never {HIGH}; then, PyPI out of reach, a typed "
+        f"`cad update` restarted on it: {NEXT} -> {AFTER}; uv's receipt as uv wrote it, uv still lists {NEW}")
+    pages(box, AFTER)
 
 
 def pages(box: Box, version: str) -> None:
@@ -2151,8 +2146,7 @@ def self_pipx(box: Box) -> None:
     """cad installed by ``pipx install cad``: the install command, a person's run, finds nothing newer for it,
     installs no second cad, and has it turn the plugin's switch on; it updates itself through the store inside its
     major, as uv's does, never by pipx -- the release ready by itself, then its next start the switch (then ``cad
-    plugin install`` once) --, and a typed ``cad update`` the same way; ``cad update --major`` takes it across, and in
-    the new major the button restarts on the release ready."""
+    plugin install`` once) --, and a typed ``cad update`` the same way, never across a major."""
     env = with_pipx(box)
     box.out(NEW)
     box.run(["pipx", "install", "cad"])
@@ -2208,31 +2202,7 @@ def self_pipx(box: Box) -> None:
     caught_up(box, AFTER)
     say(f"        `cad update` with nothing newer: 'cad {NEXT} is the newest {MAJOR}.x release' and {HIGH} named; then "
         f"{typed!r}, automatic updates off; then the new server ran `cad plugin install`, once more, exit 0")
-    # `cad update --major`: the newest of all.
-    done = box.run([box.cad(), "update", "--major"], check=False, timeout=SECONDS + 60)
-    if (done.returncode, done.stdout.strip()) != (0, f"cad {AFTER} updated to {HIGH}"):
-        raise Failed(f"{box.label}: cad update --major exited {done.returncode}: {done.stdout}{done.stderr}\n"
-                     f"{pipx_said(box)}")
-    record = updated(box, HIGH)
-    through_store(box, before, HIGH)
-    caught_up(box, HIGH)
-    if (record.get("major"), record.get("installer")) != (True, "pipx"):
-        raise Failed(f"{box.label}: the update across majors: {record}")
-    say(f"        `cad update --major`: {AFTER} -> {HIGH} through the store; the new server ran `cad plugin install`")
-    # Afterwards, automatic updates on: inside the new major, never two majors up.
-    switched = box.run([box.cad(), "update", "auto", "on"]).stdout.strip()
-    if switched != "update auto: on":
-        raise Failed(f"{box.label}: cad update auto on said {switched!r}")
-    box.out(HIGH2)
-    box.out(HIGHER)
-    box.hour_later()
-    ready = made_ready(box, env, HIGH, HIGH2, box.ask(rc.interpreter(env), "status") or {})
-    restarted_by_button(box, HIGH, HIGH2, ready)
-    through_store(box, before, HIGH2)
-    caught_up(box, HIGH2)
-    say(f"        {HIGH2} and {HIGHER} out: {HIGH2} ready by itself, never {HIGHER}; the button restarted on it: {HIGH} "
-        f"-> {HIGH2}; pipx still lists {NEW}")
-    pages(box, HIGH2)
+    pages(box, AFTER)
 
 
 # --- the bridge ---------------------------------------------------------------------------------------------------
@@ -2674,7 +2644,7 @@ def publish_all(source: Path | None, out: Path) -> None:
     else:
         for wheel in source.glob("*.whl"):
             shutil.copy2(wheel, base / wheel.name)
-    for version in (NEW, NEXT, AFTER, HIGH, HIGH2, HIGHER):
+    for version in (NEW, NEXT, AFTER, HIGH):
         rc.publish(base, version, out)
     rc.publish(base, BROKEN, out, replace={"cad_server/engine/daemon.py": BROKEN_DAEMON})
     rc.publish(base, NOSTART, out, replace={"cad_server/_internal/engine_daemon.py": BROKEN_DAEMON})
@@ -2711,8 +2681,8 @@ def main(argv: list[str] | None = None) -> int:
     feed = rc.Feed(NEW)
     pypi = PyPI(feed)
     say(f"rehearse-update: {', '.join(chosen)}; this tree as {NEW} (and {NEXT}, {BROKEN} and {NOSTART} whose server "
-        f"cannot start, {AFTER}, {UNBUILDABLE} uv cannot install, {UNRUNNABLE} failing its own check; {HIGH} and "
-        f"{HIGH2} a major up, {HIGHER} two); the bridge from {args.old}")
+        f"cannot start, {AFTER}, {UNBUILDABLE} uv cannot install, {UNRUNNABLE} failing its own check; {HIGH} a "
+        f"major up); the bridge from {args.old}")
     failed = 0
     began_all = time.monotonic()
     try:

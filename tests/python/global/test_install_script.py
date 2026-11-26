@@ -570,7 +570,7 @@ class InstallScriptTests(AgentApps):
 
     def test_a_person_s_run_brings_a_cad_that_is_here_up_to_date_by_that_cad_s_own_update(self) -> None:
         # Older or newer than PyPI's newest, uv installs nothing: the tool's own `cad update` is what updates it, and
-        # it stays inside its major (no --major). Never PATH's cad: a shell may find another one first.
+        # it stays inside its major. Never PATH's cad: a shell may find another one first.
         self.programs("cad")
         for there in ("0.13.0", "0.1.0", "99.0.0"):
             self.tools(cad=there)

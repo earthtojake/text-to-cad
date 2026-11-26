@@ -255,7 +255,7 @@ its pull request. The tier holds:
   computers it installs the real releases 0.11.11, 0.11.0 and 0.10.4 from PyPI (and 0.10.0, on
   Windows) and brings each to this tree's build by the route it takes (where the new server runs the
   install command once, that command hands the apps to the cad it installed); then cad's own update
-  through the store, automatic and typed, inside its major and across one only by `cad update --major`:
+  through the store, automatic and typed, inside its major, never across one (`cad update` names it):
   the automatic one gets the release ready with nothing restarted, at once even while a page asks and a
   command runs every few seconds, then the server restarts on it at its next start, by the viewer's button
   or by a typed `cad update` (PyPI reachable or not), and never by itself at a tending, however long it has

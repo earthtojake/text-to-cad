@@ -7,9 +7,9 @@ environment ``cad run`` made for a program that a build ran in, if one was (``ex
 integration's operations run, whether the server runs and its release, and cad's own update
 (``cad_server._internal.auto_update``: the switches, whether this cad is a global install and by which installer, and
 whether an update can begin at all, ``blocked``; the newest release of this cad's major the version feed as last read
-names, and when it was last asked for, and, where it names a release of a higher major, the one line that says how to
-get it (``auto_update.MAJOR_LINE``); the uv the update builds with; and the last attempt: its outcome and uv's words,
-why in plain words where it did not install what it was for, a release held back, a release ready and when cad
+names, and when it was last asked for, and, where it names a release of a higher major, the one line that says it is
+out and where the migration guides are (``auto_update.MAJOR_LINE``); the uv the update builds with; and the last
+attempt: its outcome and uv's words, why in plain words where it did not install what it was for, a release held back, a release ready and when cad
 restarts on it, and where the worker's log of it is), each of the project's notices for this cad, a line each
 (``cad_server.notices``: none where none is posted), and the plugin's record
 (``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for, and
@@ -139,8 +139,7 @@ def _install() -> tuple:
     (``store.own``) and who made it (``auto_update.global_install``); where this process runs a stored release
     (``store.running``), that release and its folder, the one cad's own update keeps; and, under it, a pointer the
     environment no longer takes (``store.pointer`` there, ``store.pointed`` None: cad was installed again since, which
-    always runs what was installed). A WARNING where uv's own record keeps the install below the release it runs
-    (``auto_update.outgrown``), with the line that says what to do under it. Where the environment's own packages hold no installed cad (a checkout, whose
+    always runs what was installed). Where the environment's own packages hold no installed cad (a checkout, whose
     ``store.packages`` is its source folder, or none), the folder ``cad_server`` is imported from."""
     import cad_server
     from cad_server._internal import store
@@ -154,9 +153,6 @@ def _install() -> tuple:
     running = store.running()
     if running is not None:
         said += f"; this cad is {cad_server.__version__}, kept by its own update in {running}"
-    bound = _auto().outgrown()
-    if bound is not None:
-        return WARNING, said, [bound]
     kept = store.pointer()
     if kept is None or store.pointed() is not None:
         return INFO, said

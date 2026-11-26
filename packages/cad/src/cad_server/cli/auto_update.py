@@ -18,7 +18,7 @@ DEFAULT_PROG = "cad update auto"
 DESCRIPTION = ("Show or change whether cad updates itself to the newest release of its major version: cad installs "
                "it beside the cad that runs as soon as it is out, whatever the server is doing, and restarts the cad "
                "server on it as the server next starts; the viewer's update button and `cad update` restart it now. "
-               "A new major version never installs itself: `cad update --major` installs it. On by default, for a "
+               "A new major version never installs itself. On by default, for a "
                "global install (`uv tool install cad`).")
 NOT_GLOBAL = "this cad is not a global install, so it does not update itself (`uv tool install cad` makes one)"
 REFUSED = "refused: this cad is not a global install, and only a global install updates itself (`uv tool install cad`)"

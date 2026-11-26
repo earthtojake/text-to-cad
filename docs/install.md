@@ -393,13 +393,9 @@ With automatic updates on, a `cad` command also says once a day when cad has sta
 days, and what to do. Where it keeps failing, or cad no longer runs: run `cad update`, which says why and
 what to do; then `cad doctor`, which ends with the one thing to do next; then install cad again, which
 always gives a clean cad: `uv tool install --force cad`, or the install command where cad does not start.
-A new major version never installs itself, because it may need changes on your side: `cad update` and `cad doctor` say when one is out, and this installs it:
-
-```bash
-cad update --major
-```
-
-The [migration guides](https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations) say what
+A new major version never installs itself, because it may need changes on your side: `cad update` and
+`cad doctor` say when one is out, and the
+[migration guides](https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations) say what
 changes. Automatic updates are on unless you turn them off. To see whether they are on, or to turn them
 off or on:
 
@@ -420,8 +416,8 @@ cad server start
 ```
 
 cad's own update leaves uv's record of cad as it is, so `uv tool upgrade cad` takes the newest of all, a
-new major version included, unless an update by 0.11.17 or earlier left uv a range there; where that
-range is below the cad that runs, `cad doctor` says so, and `uv tool install --force cad` clears it.
+new major version included, unless an update by 0.11.17 or earlier left uv a range there, which keeps
+it below the next major; `uv tool install --force cad` clears it.
 
 ### The plugin
 

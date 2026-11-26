@@ -137,7 +137,7 @@ doctor` name a release of a higher major, which never installs itself).
 
 A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself to
 newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad update`:
-`Daemon.update`, begun at once, whatever the switch says; `cad update --major` to the newest of all). A detached
+`Daemon.update`, begun at once, whatever the switch says; never across a major). A detached
 worker (`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the
 state folder (`cad_server._internal.store`) beside the server, drains the server, points the environment at that
 folder (the pointer, which `_cad_release` reads as each interpreter starts) and starts the new release's server, or
