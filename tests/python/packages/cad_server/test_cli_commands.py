@@ -115,6 +115,24 @@ class TheCommandTable(unittest.TestCase):
                          (0, "usage: cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]"))
         self.assertIn("cad export BOARD|SCHEMATIC DIR --to KIND", said)
 
+    def test_a_verb_s_help_names_every_file_its_source_may_be(self) -> None:
+        # `cad dfm --help` is every type's options in one: its source is every file the verb takes, not the first
+        # type's alone (a model's .xbf), as its refusal of another file names them.
+        from cad.registry import types_for
+        from cad_server.cli.verbs import build_parser
+
+        for verb in VERBS:
+            with self.subTest(verb=verb):
+                [source, *_rest] = build_parser(verb)._get_positional_actions()
+                for document_type in types_for(verb):
+                    for suffix in DOCUMENT_TYPES[document_type].extensions:
+                        self.assertRegex(source.help, rf"{suffix}\b", f"cad {verb} --help names no {suffix}")
+                code, said, _ = _run([verb, "--help"])
+                self.assertEqual(code, 0)
+                self.assertIn(" ".join(source.help.split()[:4]), " ".join(said.split()))
+        [own, *_rest] = build_parser("dfm", ["part.xbf"])._get_positional_actions()
+        self.assertIn("the .xbf file a model is saved as", own.help, "a file's own type's help is its own")
+
     def test_a_file_that_is_not_there_is_the_same_failure_for_every_type(self) -> None:
         """Every verb of every file's type refuses a file that is not there before anything runs, alike:
         ``not_found``, exit 2, with ``--json`` and without; and a file of no type as ``wrong_type``."""
@@ -248,7 +266,7 @@ class TheCommandTable(unittest.TestCase):
                     for source in (ident, str(saved), f"{saved}#arm/face 1"):
                         _refuse_other_type("xbf", operation, source)  # taken: no refusal
                     said = " ".join(build_parser("xbf", operation).format_help().split())
-                    self.assertTrue("the .xbf file a model is saved as" in said or "a .step or .xbf" in said, said)
+                    self.assertTrue("the .xbf file a model is saved as" in said or "a .xbf, .step or .stp" in said, said)
 
     def test_an_xbf_reads_only_its_source_as_a_file_and_an_id_stays_the_model_s(self) -> None:
         """A destination is no source: ``cad export ID out.xbf`` is the export of what the engine holds, however its

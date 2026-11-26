@@ -18,6 +18,7 @@ the file's type's alone.
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import sys
 from collections.abc import Callable
@@ -75,6 +76,23 @@ def _files_said(verb: str, mode: str | None = None) -> str:
     found = types_for(verb, mode)
     suffixes = [suffix for name in found for suffix in DOCUMENT_TYPES[name].extensions]
     return f"{', '.join(suffixes[:-1])} or {suffixes[-1]}" if len(suffixes) > 1 else suffixes[0]
+
+
+def _source_said(verb: str) -> str:
+    """What ``cad <verb>`` takes as its source, said in its help with no file named (``build_parser``): every file it
+    takes, by its suffix, not the first type's alone (a model's .xbf), and what else its types' sources are."""
+    from cad_server.engine.cli import _LINKED
+
+    files = _files_said(verb)
+    if verb == "fea":
+        return (f"the part or the assembly: a {files} file, a model's .xbf read as the file it is; in Python, the "
+                "handle a model's call returns too")
+    if verb == "dfm":
+        return (f"the file to check, its type by its suffix: {files}, a model's .xbf checked as the file it is; in "
+                "Python, the handle a model's call returns too")
+    job = "; with --job, drawn in place of every job's input" if verb == "snapshot" else ""
+    return (f"the file, its type by its suffix: {files}, a model's .xbf read as the file it is, never as the model the "
+            f"engine holds{_LINKED}{job}")
 
 
 # --- what a command line names ------------------------------------------------------------------------------
@@ -221,6 +239,9 @@ def build_parser(verb: str, argv: list[str] | None = None, *, prog: str | None =
         for action in parser._actions:  # noqa: SLF001 - argparse exposes no public view
             if not action.option_strings:
                 if index == 0:  # the positionals of the first type that has the verb: its source, and what follows
+                    if not union._get_positional_actions():  # noqa: SLF001 - its source, of every file the verb takes
+                        action = copy.copy(action)
+                        action.help = _source_said(verb)
                     union._add_action(action)  # noqa: SLF001 - the type's own action, shared
                 continue
             if flags & set(action.option_strings):

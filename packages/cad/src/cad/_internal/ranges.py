@@ -90,7 +90,7 @@ def ranges_for(document_type: str) -> Any:
         parts meet past each, every part tested against every other on its own surface. The model is not
         changed: adopt the numbers into its joints' ranges. --json carries every number.
 
-        source: the document: a .step or .xbf, or (in Python) the handle a model's call returns.
+        source: the document: a .xbf, .step or .stp, or (in Python) the handle a model's call returns.
         step: the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.
         clearance: how near two parts' surfaces come before they count as touching, in millimetres; default 0.3,
           the least (where they all but touch): a larger one stops each joint where its parts first come that near;

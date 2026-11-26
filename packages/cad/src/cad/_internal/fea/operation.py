@@ -81,7 +81,7 @@ def solve_for(document_type: str) -> Any:
         or misses a check fails it, its results written all the same; a study whose answer would be wrong (a part
         nothing holds, a load no face takes) is refused. --json carries every number.
 
-        source: the part or the assembly: a .step or .xbf, or (in Python) the handle a model's call returns.
+        source: the part or the assembly: a .xbf, .step or .stp, or (in Python) the handle a model's call returns.
         study: the study: a JSON file path, inline JSON, or (a library caller) a dict: the fixed faces, the
           loads (forces, pressures, gravity, acceleration), a material where the model has none, an
           assembly's parts and connections and the checks to judge. Without it, the setup.
