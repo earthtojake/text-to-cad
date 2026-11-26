@@ -67,7 +67,7 @@ class RecentsTest(unittest.TestCase):
         self.assertEqual(row["created"], row["opened"], "made as a page first opened it")
         model = rows["arm.xbf"]
         self.assertEqual((model["kind"], model["record"], model["api"], model["opened"]),
-                         ("model", "file", f"/api/v1/documents/model/{file_id(arm)}", None))
+                         ("xbf", "file", f"/api/v1/documents/xbf/{file_id(arm)}", None))
         part.write_bytes(STL + b"\n")  # written again: the next read has its new size
         self.assertEqual(self.rows()["part.stl"]["size"], len(STL) + 1)
 

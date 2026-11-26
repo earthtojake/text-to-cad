@@ -55,24 +55,24 @@ class SameResultTest(unittest.TestCase):
             api.export(ident, exported, progress=False)
             for process in PROCESSES:
                 with self.subTest(model=ident, process=process):
-                    held = cad.model.dfm(ident, process=process)
-                    self.assertEqual(_plain(held), _plain(_today("model", exported, Path(ident), process)))
+                    held = cad.xbf.dfm(ident, process=process)
+                    self.assertEqual(_plain(held), _plain(_today("xbf", exported, Path(ident), process)))
                     for finding in [f for f in held.findings if f.location and "/" in f.location][:2]:
-                        self.assertIn(cad.model.inspect(ident, finding.location)["kind"], ("face", "edge"))
+                        self.assertIn(cad.xbf.inspect(ident, finding.location)["kind"], ("face", "edge"))
         plate = fixture.ids[0]
         exported = fixture.folder / f"{plate}.xbf"
         for process in ("molding", "printing"):
             with self.subTest(candidates=process):
-                self.assertEqual(_plain(cad.model.dfm(plate, process=process, candidates=True)),
-                                 _plain(_today("model", exported, Path(plate), process, candidates=True)))
+                self.assertEqual(_plain(cad.xbf.dfm(plate, process=process, candidates=True)),
+                                 _plain(_today("xbf", exported, Path(plate), process, candidates=True)))
         step = fixture.folder / "part.step"
         bd.export_step(bd.Box(30, 20, 6) - bd.Pos(5, 0, 0) * bd.Cylinder(2, 6), str(step))
         xbf = fixture.folder / f"{fixture.ids[1]}.xbf"
         # A file's reader is what differs from a model's, not its process (every process was compared above):
-        # each file type by two processes, each process by one file. The .xbf a model is saved as is cad.model's,
+        # each file type by two processes, each process by one file. The .xbf a model is saved as is cad.xbf's,
         # checked as the file it is.
         for document_type, of, path, processes in (("step", cad.step, step, ("cnc", "molding")),
-                                                   ("model", cad.model, xbf, ("sheet", "printing"))):
+                                                   ("xbf", cad.xbf, xbf, ("sheet", "printing"))):
             for process in processes:
                 with self.subTest(file=path.name, process=process):
                     held = of.dfm(path, process=process)
@@ -91,22 +91,22 @@ class SameResultTest(unittest.TestCase):
         (block,) = fixture.ids
         exported = fixture.folder / "exported.xbf"  # not block.xbf: the file its model writes
         api.export(block, exported, progress=False)
-        self.assertEqual(api.check(block, {"type": "model", "process": None, "resolved": None, "candidates": False,
+        self.assertEqual(api.check(block, {"type": "xbf", "process": None, "resolved": None, "candidates": False,
                                            "given": {}})["measured_in"], api.IN_ENGINE)
-        held = cad.model.dfm(block)
-        today = _today("model", exported, Path(block), None)
+        held = cad.xbf.dfm(block)
+        today = _today("xbf", exported, Path(block), None)
         self.assertEqual(_plain(held), _plain(today))
         self.assertEqual(held.measurements["process"], "cnc")
         self.assertTrue({"process_declared", "material_declared"} <= {f.code for f in held.findings})
-        self.assertEqual(_plain(cad.model.dfm(exported)), _plain(_today("model", exported, exported.resolve(), None)))
+        self.assertEqual(_plain(cad.xbf.dfm(exported)), _plain(_today("xbf", exported, exported.resolve(), None)))
         before = _restarted()  # its worker gone: the restarted engine measures its .xbf, the file it is now
-        self.assertEqual(_plain(cad.model.dfm(block)), _plain(today))
+        self.assertEqual(_plain(cad.xbf.dfm(block)), _plain(today))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"] + 1, before["restored"]))
         # Other checks: measured by the restarted engine from the same file, read once for all three.
         for process in ("cnc", "sheet"):
             with self.subTest(process=process):
-                self.assertEqual(_plain(cad.model.dfm(block, process=process, material="steel")),
-                                 _plain(_today("model", exported, Path(block), process, material="steel")))
+                self.assertEqual(_plain(cad.xbf.dfm(block, process=process, material="steel")),
+                                 _plain(_today("xbf", exported, Path(block), process, material="steel")))
         self.assertEqual((_counts()["measured"], _counts()["read"]), (before["measured"] + 3, before["read"] + 1))
 
 
@@ -127,12 +127,12 @@ class KeptResultTest(unittest.TestCase):
                 printer.write_text(json.dumps({"printable_area": ["0x0", f"{width}x200"], "printable_height": "200"}),
                                    encoding="utf-8")
                 for process in (None, "printing"):
-                    manufacturing.through_engine("model", source, process, given, False)
+                    manufacturing.through_engine("xbf", source, process, given, False)
             before, explicit_before, after, explicit_after = (call.args[1] for call in check.call_args_list)
             self.assertNotEqual(Checks.key(before, "test"), Checks.key(after, "test"))
             self.assertNotEqual(Checks.key(explicit_before, "test"), Checks.key(explicit_after, "test"))
             printer.unlink()  # The measuring process does not need the caller's file.
-            options = manufacturing.options("model", "printing", after["given"], printer_snapshot=after["printer_settings"])
+            options = manufacturing.options("xbf", "printing", after["given"], printer_snapshot=after["printer_settings"])
             self.assertEqual(options["build_volume"], "250x200x200")
 
     def test_a_check_is_kept_by_its_document_version_and_its_options(self) -> None:
@@ -142,24 +142,24 @@ class KeptResultTest(unittest.TestCase):
 
         fixture = Fixture(self, MODELS)
         plate = fixture.ids[0]
-        first = cad.model.dfm(plate, process="cnc", material="aluminum")
+        first = cad.xbf.dfm(plate, process="cnc", material="aluminum")
         # The runner answers a check's caller and then lets the check go: asked again before it has, the same
         # check is joined, not read from what was kept. So the first is awaited gone before the second is asked.
         _until(self, lambda: _counts()["asked"] == 0, "the first check is let go")
         before = _counts()
-        again = cad.model.dfm(plate, process="cnc", material="aluminum")
+        again = cad.xbf.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_plain(again), _plain(first))
         self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"], before["reused"] + 1))
 
-        cad.model.dfm(plate, process="cnc", material="steel")  # other options: measured
+        cad.xbf.dfm(plate, process="cnc", material="steel")  # other options: measured
         self.assertEqual(_counts()["measured"], before["measured"] + 1)
 
         fixture.build()  # the same code run again in the worker that holds it: the same version, kept
-        cad.model.dfm(plate, process="cnc", material="aluminum")
+        cad.xbf.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_counts()["measured"], before["measured"] + 1)
 
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(44, 30, 10)"))  # an edit: a new version
-        edited = cad.model.dfm(plate, process="cnc", material="aluminum")
+        edited = cad.xbf.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_counts()["measured"], before["measured"] + 2)
         self.assertNotEqual(edited.measurements["bodies"][0]["bbox_mm"], first.measurements["bodies"][0]["bbox_mm"])
 
@@ -214,10 +214,10 @@ class KeptResultTest(unittest.TestCase):
         plate = fixture.ids[0]
         read = _counts()["read"]
         for process in ("cnc", "sheet"):
-            cad.model.dfm(plate, process=process)
+            cad.xbf.dfm(plate, process=process)
         self.assertEqual(_counts()["read"], read + 1)
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(42, 30, 10)"))
-        edited = cad.model.dfm(plate, process="cnc")
+        edited = cad.xbf.dfm(plate, process="cnc")
         self.assertEqual(_counts()["read"], read + 2)
         self.assertAlmostEqual(edited.measurements["bodies"][0]["bbox_mm"][0], 42.0, delta=1e-6)
 
@@ -233,11 +233,11 @@ class KeptResultTest(unittest.TestCase):
         step = fixture.folder / "kept.step"
         bd.export_step(bd.Box(30, 20, 6), str(step))
         first = cad.step.dfm(step, process="printing")
-        model = cad.model.dfm(plate, process="cnc", tools="11")
+        model = cad.xbf.dfm(plate, process="cnc", tools="11")
         before = _restarted()
         fixture.build()  # taken from its .xbf by its key: a worker holds it at the revision the result was kept at
         self.assertEqual(_plain(cad.step.dfm(step, process="printing")), _plain(first))
-        self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
+        self.assertEqual(_plain(cad.xbf.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 2),
                          "the restarted engine measured none")
 
@@ -246,7 +246,7 @@ class KeptResultTest(unittest.TestCase):
         kept[0].write_bytes(b"{not json")
         before = _restarted()
         fixture.build()
-        self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
+        self.assertEqual(_plain(cad.xbf.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual(_counts()["measured"], before["measured"] + 1, "an entry that does not read is measured again")
         self.assertEqual(json.loads(kept[0].read_text(encoding="utf-8"))["result"]["measured"]["process"], "cnc")
 
@@ -254,7 +254,7 @@ class KeptResultTest(unittest.TestCase):
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(46, 30, 10)"))
         before = _restarted()
         cad.step.dfm(step, process="printing")
-        cad.model.dfm(plate, process="cnc", tools="11")
+        cad.xbf.dfm(plate, process="cnc", tools="11")
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"] + 2, before["restored"]),
                          "other bytes, another build")
 

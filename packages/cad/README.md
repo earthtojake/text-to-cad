@@ -26,10 +26,10 @@ subjective output of an agent, a design, and answer it through the viewer's tool
 The laws below say how they are made, named, kept and served.
 
 ```python
-from cad import model, step
+from cad import xbf, step
 import build123d as bd
 
-@model                    # each run saves it as arm.xbf beside the script (@model("XBF/arm.xbf") elsewhere)
+@xbf                    # each run saves it as arm.xbf beside the script (@xbf("XBF/arm.xbf") elsewhere)
 @step("STEP/arm.step")    # and its STEP, a translation of that document (bare @step: arm.step)
 def arm():
     return bd.Box(10, 20, 30)
@@ -41,29 +41,29 @@ if __name__ == "__main__":
 
 ```bash
 cad run arm.py                                 # builds it in the engine's warm worker, printing its id
-cad model export <id> arm.3mf --tolerance 0.01 # the model as the engine holds it, by that id
-cad model export arm.xbf arm.glb arm.stl       # more translations of the document it wrote, read from the file
-cad model snapshot arm.xbf arm.png             # a still of it, drawn by OCCT
+cad xbf export <id> arm.3mf --tolerance 0.01 # the model as the engine holds it, by that id
+cad xbf export arm.xbf arm.glb arm.stl       # more translations of the document it wrote, read from the file
+cad xbf snapshot arm.xbf arm.png             # a still of it, drawn by OCCT
 cad viewer arm.xbf                             # the document on the running server's page
-cad model inspect arm.xbf                      # what it holds, then its build closure
+cad xbf inspect arm.xbf                      # what it holds, then its build closure
 ```
 
-The same operations are functions of each type: `model.export("arm.xbf", "arm.glb")`,
-`model.snapshot(...)`, `model.inspect(...)`; `model.export(arm(), "arm.glb")` exports the model a call returns,
-and `step.read("vendor.step")` and `model.read("vendor.xbf")` read a file into a model.
+The same operations are functions of each type: `xbf.export("arm.xbf", "arm.glb")`,
+`xbf.snapshot(...)`, `xbf.inspect(...)`; `xbf.export(arm(), "arm.glb")` exports the model a call returns,
+and `step.read("vendor.step")` and `xbf.read("vendor.xbf")` read a file into a model.
 
 ## Definitions
 
 These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
-  id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
+  id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `xbf`, `step`,
   `glb`, `stl`, `threemf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
   because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
-  and `.stp` are `step`). `model` is a model built from code, and its document is its `.xbf` (`.xbf` is `model`),
+  and `.stp` are `step`). `xbf` is a model built from code, and its document is its `.xbf` (`.xbf` is `xbf`),
   which every run writes (law 10) and whose id is the model's, addressed by that id, the handle its call returns
-  or the file's path; the engine's live build makes it live while a worker holds it. `model.read` reads one. `xbf`, the earlier id of that
-  file's type, is an alias of `model` wherever a type is looked up, deprecated and listed nowhere (law 26). A
+  or the file's path; the engine's live build makes it live while a worker holds it. `xbf.read` reads one. `model`, the earlier id of that
+  document, is an alias of `xbf` wherever a type is looked up, deprecated and listed nowhere (law 26). A
   document type is a file cad shows: each has a view. A file cad writes or checks and never
   shows is none, whatever cad does with it: an MJCF, MuJoCo's own model file, is an export's destination and
   the mujoco integration's to check, and MuJoCo Studio shows it.
@@ -211,7 +211,7 @@ renumbers the list and every citation in the same change.
 6. **One document per model, with one id: its `.xbf`'s.** *Every document.* A called model makes one document
    and returns its handle, never a bare shape. Every id is one formula over a path (`ids.file_id`): a file's, and
    so a model's and a handed-over shape's, whose document is its `.xbf`; the same in every process, worked out
-   without asking the engine. Two models that write one file share its id, and the last build wins. `@model` writes
+   without asking the engine. Two models that write one file share its id, and the last build wins. `@xbf` writes
    the model's `.xbf`, a file decorator its own file and nothing else, alone or combined, one kind once; a function
    with file decorators alone writes no `.xbf`, so it is no model document, and after a restart it is built from
    nothing. A document is its file: it lives while its file does, and one whose file is gone names nothing.
@@ -226,9 +226,9 @@ renumbers the list and every citation in the same change.
 9. **Names are the durable tie to code.** *Models.* An element's name is spelled from the function
    that made its feature and the author's name for that feature, never from a line or a file: moving
    code renames nothing, and the file holds no line to go stale.
-10. **Each declaration writes its own file, and its path is optional.** *Models.* `@model` writes the model's `.xbf`;
+10. **Each declaration writes its own file, and its path is optional.** *Models.* `@xbf` writes the model's `.xbf`;
     `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` each their own file, alone or beside it. Each is a function of
-    the same arguments too, given a shape first: `model(shape, "crate.xbf", name=...)` hands it over as a model,
+    the same arguments too, given a shape first: `xbf(shape, "crate.xbf", name=...)` hands it over as a model,
     `step(shape, "crate.step")` writes that file of it. A path given is relative to the script (the calling script,
     or the working folder where there is none); omitted, it is the model's name and the format's extension joined to
     that folder (`arm.xbf`, `arm.step`).
@@ -307,8 +307,8 @@ renumbers the list and every citation in the same change.
     there are no page sessions. An id is found from its path alone: the library's, or a project folder's
     (the engine's **Architecture** and **Starting and updating**).
 20. **Operations on documents are Python functions the CLI exposes; process control is the CLI's
-    alone.** *Every document.* A type's operations are functions of that type (`cad.model.export`,
-    `cad.kicad_pcb.drc`, `cad.urdf.validate`), one to one with the commands that call them (`cad model
+    alone.** *Every document.* A type's operations are functions of that type (`cad.xbf.export`,
+    `cad.kicad_pcb.drc`, `cad.urdf.validate`), one to one with the commands that call them (`cad xbf
     export`, `cad kicad_pcb drc`, `cad urdf validate`). Serving, the engine's status and stopping it
     are commands only, with no function of the library. Every successful
     server-backed build reports its id and its page.
@@ -333,7 +333,7 @@ renumbers the list and every citation in the same change.
 23. **A document type is one object.** *The package.* `cad.<type>` holds the type's decorator where it
     has one, its reader where it has one, and its operations one to one with the CLI's. Its attributes
     load on first use, so `import cad` imports no kernel. A file of another type is refused by name
-    before anything runs; `cad.model`'s file is the `.xbf` a model is saved as (law 26). A
+    before anything runs; `cad.xbf`'s file is the `.xbf` a model is saved as (law 26). A
     type's package is neutral about producers: it imports no third-party library.
 24. **An integration is named for its tool and holds only our code for it.** *The package.*
     `cad.<integration>` holds the helpers we define that take that tool's objects and the producers it
@@ -350,13 +350,13 @@ renumbers the list and every citation in the same change.
 26. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot`
     are shared by every type that has them (`inspect` and `read` where a type has them); every other
     operation is named for what it does and means one thing: `dfm`, `interference`, `solve`, `ranges`,
-    `drc`, `erc`, `validate`. `model` is a model, in the library and the command alike, by its id, its handle or
+    `drc`, `erc`, `validate`. `xbf` is a model, in the library and the command alike, by its id, its handle or
     its `.xbf`, which is its document: live while the engine holds its build, else read as the file it is (it names
     no `made_by` then: law 7). One type, one word, everywhere -- the registry,
-    the server's kinds, the viewer: `@model` writes the file, `model.read` reads it, `cad.model.*` and `cad
-    model` take it, and an `.xbf` opened is a `model` document. The `xbf` spellings (`cad.xbf`, `@xbf`, `cad
-    xbf`) are the model's under that name, each saying it is deprecated, and the HTTP API's `xbf` kind answers
-    as `model`'s (law 14). One result shape
+    the server's kinds, the viewer: `@xbf` writes the file, `xbf.read` reads it, `cad.xbf.*` and `cad
+    xbf` take it, and an `.xbf` opened is an `xbf` document. The `model` spellings (`cad.xbf`, `@model`, `cad
+    model`) are the xbf's under that name, each saying it is deprecated, and the HTTP API's `model` kind answers
+    as `xbf`'s (law 14). One result shape
     per operation: a check returns findings, each with
     a severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
     A new shared operation must be code-free, frequently needed and meaningful across types. A file cad
@@ -392,7 +392,7 @@ renumbers the list and every citation in the same change.
     opens no tool and makes no declared file; it rewrites numbers in a model's own script, and the engine
     builds the model again from it, as a run does.
 30. **A model's parameters are its code's, and the viewer's Save is the one way the engine changes a
-    script.** *Models.* A script declares a parameter at a module's top level (`cad.model.param`: a
+    script.** *Models.* A script declares a parameter at a module's top level (`cad.xbf.param`: a
     lower-case name, a plain number default it returns unchanged, and the closed set `min`, `max`,
     `step`, `unit`); one declared inside a function is refused, since a body can be replayed without
     running. A build records the declarations in the document (law 4); the worker that loaded the
@@ -414,7 +414,7 @@ renumbers the list and every citation in the same change.
 ## Inspection
 
 `cad <type> inspect` and `cad.<type>.inspect()` read existing files or the
-documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`); the command takes a
+documents the engine holds by id (`cad xbf inspect <id>`, `cad.xbf.inspect(handle)`); the command takes a
 share's link too, for this computer's copy of it (the engine's **Sharing**). They never execute source to obtain a
 missing model or write its declared outputs. A model with no `.xbf` requires an explicit build. With no reference,
 `cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume (and a part
@@ -437,8 +437,8 @@ src/cad/
                          #   kernel and the earlier spellings' aliases, first
   registry.py            # the document types and the integrations: the one table every layer
                          #   reads, kernel-free (`python -m cad.registry --js` writes the JS)
-  model/                 # the model, held or saved: @model (out= the .xbf every run saves it as), its
-                         #   parameters (param, declared in the script), model.read, and a model's
+  model/                 # the model, held or saved: @xbf (out= the .xbf every run saves it as), its
+                         #   parameters (param, declared in the script), xbf.read, and a model's
                          #   operations, by its handle, its document id or its .xbf (a ModelType)
   step/, stl/,           # the document types, each a DocumentType (`cad.<type>`): its decorator,
   glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them, and a
@@ -621,7 +621,7 @@ pairs, keep a length, skew or track-angle rule, or choose what to route or in wh
 
 ## The interference check
 
-A B-rep document's `interference` says which of its parts share volume: `cad.model.interference`
+A B-rep document's `interference` says which of its parts share volume: `cad.xbf.interference`
 and `cad.step.interference`, one to one with `cad <type> interference SRC`. Every pair of
 parts whose boxes meet is answered, as built and at each of `poses`: a mechanism state's name, a
 configuration sequence at a time of it (`"walk@0.6"`), or `{joint: value}`, as every command takes a pose. It
@@ -633,9 +633,9 @@ two parts' geometries and how one stands to the other: a document edited is meas
 that changed is one of the two, and the same check of an unchanged document is answered at once.
 
 ```python
-from cad import model
+from cad import xbf
 
-found = model.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("bearing*", "housing")])
+found = xbf.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("bearing*", "housing")])
 for finding in found.findings:          # an `overlapping_parts` each: its two occurrences in .refs, mm3 in .value
     print(finding.human_line())
 assert found.ok, found.summary          # not ok where a pair shares volume, or could not be measured
@@ -652,19 +652,19 @@ longest (`slowest`).
 ## Manufacturing checks
 
 A 3D document's `dfm` says whether a part can be made by a process, and what to change where it cannot:
-`cad.model.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and `cad.glb.dfm`, one to one
+`cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and `cad.glb.dfm`, one to one
 with `cad <type> dfm SRC --process cnc|sheet|molding|printing` (a mesh -- STL, 3MF, GLB -- takes `printing`
 alone, its default: CNC, sheet and molding are judged on exact geometry, and a mesh asked for one is refused
 with the check to run instead, the STEP's or the model's), and a DXF's, `cad dxf dfm FILE`, as a sheet's cut file
-(its one process, `sheet`, the default). The source is a file of the type or, for `model`, a model's document the engine
+(its one process, `sheet`, the default). The source is a file of the type or, for `xbf`, a model's document the engine
 holds (its id, or the handle its call returns), so a check script measures the model it builds:
 
 ```python
-from cad import model, step
+from cad import xbf, step
 from cad.build123d import dfm
 from part import part                                          # a model
 
-model.dfm(part(), process="cnc", material="aluminum", axes=3)  # corners, pockets, holes, walls, setups
+xbf.dfm(part(), process="cnc", material="aluminum", axes=3)  # corners, pockets, holes, walls, setups
 step.dfm("bracket.step", process="sheet", material="5052", bend_radius=1.6)
 step.dfm("cover.step", process="molding", pull="z", material="abs")   # draft, undercuts, ribs, clamp
 step.dfm("housing.step", process="printing", technology="sla")         # walls, pins, trapped resin
@@ -712,7 +712,7 @@ document): an option refused by name, a file of another type or not there, a doc
   contact and warping, stair-stepping, support; `--candidates` ranks orientations.
 
 **Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
-`build123d` integration), each finding at a face ref that `cad model inspect DOC REF` resolves
+`build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
 (`plate/face 7`) -- in one of the engine's checks processes: a file read once, a model from the bytes the engine
 holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in
 millimetres.
@@ -750,7 +750,7 @@ Several parts are said (`several_bodies`); one part of several solids says so in
 xbf's or a model's parts' declared process is read too (a STEP keeps no process) (`metals.aluminum(process=machined())`,
 `plastics.abs_(process=molded())`, `fdm(layer_height_mm=0.2)`, `sls()`, `mjf()`, `slm()`, `vat()` from
 `bd_materials.processes`: cnc, molding, or printing with its technology; `process_declared`), so
-`cad model dfm ID` alone checks a part for what it says it is; `units` is an STL's, and a DXF's where it
+`cad xbf dfm ID` alone checks a part for what it says it is; `units` is an STL's, and a DXF's where it
 declares none or the wrong ones (the other types declare their own, and take no such option); an option of another process, a value of another kind
 (`axes=3.7`, `turning="no"`) and a value no machine has (an end mill over 100 mm, an FDM layer taller than
 its nozzle) are refused by name, never coerced -- by the flag on the command line (`--tools`), by the
@@ -762,7 +762,7 @@ The trimesh integration's functions measure a mesh a program already holds, answ
 `cad.trimesh.printing(mesh)` and `cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with
 `cad run` that imports `trimesh` or `cad.trimesh` gets that integration and one that imports `build123d`
 gets the other; one that calls `cad.<type>.dfm` gets the type's -- `cad.stl.dfm`, `cad.threemf.dfm` and
-`cad.glb.dfm` trimesh, `cad.step.dfm`, `cad.model.dfm` and `cad.dxf.dfm` build123d -- found by
+`cad.glb.dfm` trimesh, `cad.step.dfm`, `cad.xbf.dfm` and `cad.dxf.dfm` build123d -- found by
 `cad run`'s scan of its source, with nothing in its header; a name the scan cannot see (imported by name at
 run time) the run says it lacks, in one line.
 
@@ -788,13 +788,13 @@ script or a prompt written for an earlier release meets now:
   each void. Printing's `--candidates` answers the orientations alone, best first: run the check once without
   it for the part's own figures.
 - **`units`** is an STL's and a DXF's (`--units`; a DXF that declares none is `not_checked` without it,
-  `units_not_set`). `cad.step.dfm`, `cad.model.dfm`, `cad.threemf.dfm` and `cad.glb.dfm` take
+  `units_not_set`). `cad.step.dfm`, `cad.xbf.dfm`, `cad.threemf.dfm` and `cad.glb.dfm` take
   none, where they took `mm` alone.
 
 ## Stress studies
 
 A B-rep document's `solve` is a linear static stress study of a part or of an assembly bonded where its
-parts touch: `cad.model.solve` and `cad.step.solve`, one to one with `cad model solve`
+parts touch: `cad.xbf.solve` and `cad.step.solve`, one to one with `cad xbf solve`
 (of an id, and of an `.xbf`) and `cad step solve` (a mesh has no faces a study can hold or load by, so the
 mesh types have none). It is a check (law 26): its answer is a `cad.results.FeaResult`, a `CheckResult` whose
 findings carry a severity, a code and a location, with two uses of one signature:
@@ -852,8 +852,8 @@ without one says so in one line.
 
 ## Joint stops
 
-A document with a mechanism -- a model, an xbf, a STEP -- answers `ranges`: `cad.model.ranges`
-and `cad.step.ranges`, one to one with `cad model|step ranges` (`cad model`: an id's, and an
+A document with a mechanism -- a model, an xbf, a STEP -- answers `ranges`: `cad.xbf.ranges`
+and `cad.step.ranges`, one to one with `cad xbf|step ranges` (`cad xbf`: an id's, and an
 `.xbf`'s). It is a check (law 27): a `CheckResult` whose finding per joint (`joint_stops`, at the joint) says
 where it stops each way and which two parts meet past each, every number in `measurements["joints"]`. The document is read in the
 calling process, as a study reads one (a model exported by the engine to an `.xbf` in a temporary folder
@@ -878,7 +878,7 @@ What 0.11.8 adds:
   in the xbf beside the materials. Each is a fact of the machine; how a simulator collides a part, which
   pairs never collide, contact friction and a joint's dynamics are a simulation's choices, made in a MuJoCo
   function.
-- **A document exports as a robot description.** `cad model export ID robot.xml` (MJCF) and `robot.urdf`
+- **A document exports as a robot description.** `cad xbf export ID robot.xml` (MJCF) and `robot.urdf`
   write its links, exact inertials, visual meshes and colours, each part's mesh as its collision (MuJoCo
   collides a mesh as its convex hull), sites, drive force bounds, couplings, closed loops (MJCF) and states
   as keys, with a `scene.xml` beside an MJCF; `--zero STATE` counts every joint from a state. Its summary

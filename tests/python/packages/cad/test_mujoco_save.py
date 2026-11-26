@@ -34,11 +34,11 @@ from cad.mujoco import collisions, decompose, fit, parts, save, spec
 MODEL = """
 import build123d as bd
 from bd_materials import metals
-from cad import model
+from cad import xbf
 from cad.build123d import frame, limits, mass, mechanism_state, point_mass
 
 
-@model
+@xbf
 def hinge():
     return made()
 

@@ -40,7 +40,7 @@ SRC = add_sources()  # the packages' sources, as PYTHONPATH names them
 # geometries; the boss and the lug are of one geometry, so one part's key, and named apart.
 MODEL = """
 import build123d as bd
-from cad import model, step
+from cad import xbf, step
 from bd_materials import metals
 
 
@@ -62,7 +62,7 @@ def lug():
     return made
 
 
-@model("XBF/pair.xbf")
+@xbf("XBF/pair.xbf")
 @step("pair.step")
 def pair():
     plate = bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
@@ -84,10 +84,10 @@ if __name__ == "__main__":
 # A model of its own for the edit: its peg's height is the one thing a second run changes.
 EDITED = """
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def kit():
     plate = bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
     plate.label = "plate"
@@ -255,7 +255,7 @@ class ViewBundleTest(unittest.TestCase):
         envelope = json.loads(self.live(f"/api/v1/documents/{self.model}"))
         structure = json.loads(self.live(self.api("model") + "/structure"))
         self.assertEqual(self.manifest(self.out / "model")["document"],
-                         {"id": self.model, "kind": "model", "name": envelope["name"], "version": structure["version"]})
+                         {"id": self.model, "kind": "xbf", "name": envelope["name"], "version": structure["version"]})
         files = ("step", "stl", "dxf", "urdf")
         self.assertEqual([self.manifest(self.out / name)["document"] for name in files],
                          [{"id": file_id(self.sources[name]), "kind": name, "name": self.sources[name].name,
@@ -406,7 +406,7 @@ class ViewBundleTest(unittest.TestCase):
         script, folder = self.base / "edited.py", self.out / "kit"
         script.write_text(textwrap.dedent(EDITED).replace("HEIGHT", "6"), encoding="utf-8")
         self.run_script("edited.py")
-        xbf = self.base / "kit.xbf"  # @model saves it beside its script
+        xbf = self.base / "kit.xbf"  # @xbf saves it beside its script
         first = api.bundle(xbf, folder)
         before = self.manifest(folder)
         stamps = {path: (folder / path).stat().st_mtime_ns for path in self.files(folder)}
@@ -497,17 +497,17 @@ class ViewBundleTest(unittest.TestCase):
                       self.live(self.api("urdf") + "/structure"))
 
     def test_what_is_no_bundle_is_refused_before_anything_is_written_and_no_export_writes_one(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import api
         from cad.engine.export import ExportRefused
 
-        xbf = self.sources["model"]
+        source = self.sources["model"]
         junk = self.out / "junk"
         junk.mkdir()
         (junk / "notes.txt").write_text("mine", encoding="utf-8")
         (self.base / "notes.txt").write_text("mine", encoding="utf-8")
         cases = {
-            "holds other files and no manifest.json": lambda: api.bundle(xbf, junk),
+            "holds other files and no manifest.json": lambda: api.bundle(source, junk),
             "is no CAD file": lambda: api.bundle(self.base / "notes.txt", self.out / "notes"),
             "no document": lambda: api.bundle(self.base / "gone.stl", self.out / "gone"),
         }
@@ -521,8 +521,8 @@ class ViewBundleTest(unittest.TestCase):
         # A view bundle is no export: a .view destination is refused as any other unknown suffix, by the library
         # and by the command, and nothing is written.
         with self.assertRaisesRegex(ExportRefused, r"^pair\.view: an export is one of "):
-            model.export(xbf, self.out / "pair.view")
-        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "export", str(xbf),
+            xbf.export(source, self.out / "pair.view")
+        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "xbf", "export", str(source),
                                   str(self.out / "said.view"), "--json"], env=self.env)
         self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
         self.assertIn("said.view: an export is one of ", json.loads(done.stdout)["error"])
@@ -537,7 +537,7 @@ class AskedAtOnceTest(unittest.TestCase):
     def test_a_documents_part_files_are_asked_at_once(self) -> None:
         from cad_server.viewer import bundle
 
-        asks = [(f"parts/{key}/{file}", f"/api/v1/documents/model/m/parts/{key}/{file}")
+        asks = [(f"parts/{key}/{file}", f"/api/v1/documents/xbf/m/parts/{key}/{file}")
                 for key in ("a", "b") for file in ("0.25-28.5.xbm", "elements.json")]
         together = threading.Barrier(len(asks), timeout=30)  # each answered once every one is asked
 

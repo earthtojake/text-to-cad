@@ -23,29 +23,29 @@ from tests.python.support.paths import add_sources
 
 add_sources()
 
-import cad.model  # noqa: E402
+import cad.xbf  # noqa: E402
 from cad.engine import api, client  # noqa: E402
 from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 SCRIPT = """\
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from spec import PITCH
 
-WALL = model.param("wall", 2.0, min=1, max=5)
-HOLES = model.param("holes", 6, min=3, max=12)
-TWICE = model.param("twice", WALL * 2)
+WALL = xbf.param("wall", 2.0, min=1, max=5)
+HOLES = xbf.param("holes", 6, min=3, max=12)
+TWICE = xbf.param("twice", WALL * 2)
 
 
-@model("XBF/bracket.xbf")
+@xbf("XBF/bracket.xbf")
 def bracket():
     if WALL > 4.5:
         raise ValueError(f"a wall of {WALL} leaves no room for the holes")
     return bd.Box(PITCH, 10 + HOLES, WALL)
 """
-SPEC = 'from cad import model\n\nPITCH = model.param("pitch", 30.0, unit="mm")\n'
+SPEC = 'from cad import xbf\n\nPITCH = xbf.param("pitch", 30.0, unit="mm")\n'
 
 
 class SetCase(unittest.TestCase):
@@ -103,12 +103,12 @@ class SetTest(SetCase):
                          {"pitch": 30.0, "wall": 2.5, "holes": 8, "twice": 5.0})
         # Its .xbf by its path is the model, live: its parameters as its worker recorded them.
         rows = lambda source: {(row["name"], row["value"], row["writable"], row["reason"], row["source"])  # noqa: E731
-                               for row in cad.model.inspect(source, query="structure")["summary"]["parameters"]}
+                               for row in cad.xbf.inspect(source, query="structure")["summary"]["parameters"]}
         self.assertEqual(rows(self.folder / "XBF" / "bracket.xbf"), rows(self.ident))
         # An .xbf exported is a file of its own, a model's no worker holds: its record read from the file alone,
         # every parameter read-only.
         copy = self.folder / "copy.xbf"
-        cad.model.export(self.ident, copy)
+        cad.xbf.export(self.ident, copy)
         self.assertEqual(rows(copy), {(name, value, False, "no_worker", None) for name, value in (
             ("pitch", 30.0), ("wall", 2.5), ("holes", 8), ("twice", 5.0))})
         self.assertEqual(save(self.ident, wall=2.5), {"id": self.ident, "written": [], "rebuilt": []})
@@ -152,41 +152,41 @@ class SetTest(SetCase):
                     return error.code, json.loads(error.read() or b"{}")
 
         before = self.script.read_bytes()
-        self.assertEqual(post("model", {"values": {"wall": 3}}, guard=False)[0], 403)
-        status, said = post("model", {"values": {"wall": "3"}})
+        self.assertEqual(post("xbf", {"values": {"wall": 3}}, guard=False)[0], 403)
+        status, said = post("xbf", {"values": {"wall": "3"}})
         self.assertEqual((status, said["code"]), (400, "not_a_number"))
-        status, said = post("model", {"values": {"wall": 10**400}})
+        status, said = post("xbf", {"values": {"wall": 10**400}})
         self.assertEqual((status, said["code"]), (400, "not_a_number"))
-        status, said = post("model", {"values": {"pitch": 3}})
+        status, said = post("xbf", {"values": {"pitch": 3}})
         self.assertEqual((status, said["code"], said["reason"]), (409, "not_writable", "shared"))
-        self.assertEqual(post("model", {"path": str(self.script)})[0], 400, "a request names values alone")
+        self.assertEqual(post("xbf", {"path": str(self.script)})[0], 400, "a request names values alone")
         self.assertEqual(post("step", {"values": {"wall": 3}})[0], 404, "a model's route alone")
         self.assertEqual(self.script.read_bytes(), before)
-        status, said = post("model", {"values": {"wall": 3}})
+        status, said = post("xbf", {"values": {"wall": 3}})
         self.assertEqual((status, said["written"][0]["to"], said["rebuilt"]), (200, 3.0, [self.ident]))
         self.assertIn(b'"wall", 3.0,', self.script.read_bytes(), "an integer given a float parameter stays a float")
 
 
 SIBLINGS = """\
 import build123d as bd
-from cad import model
+from cad import xbf
 
-WALL = model.param("wall", 2.0, min=1, max=5)
+WALL = xbf.param("wall", 2.0, min=1, max=5)
 
 
-@model
+@xbf
 def a():
     if WALL > 4.5:
         raise ValueError("too thick")
     return bd.Box(10, 10, WALL)
 
 
-@model
+@xbf
 def b():
     return bd.Box(10, 10, 1)
 
 
-@model
+@xbf
 def bad():
     raise RuntimeError("always broken")
 """
@@ -227,7 +227,7 @@ class SiblingsTest(unittest.TestCase):
         out = Path(tempfile.mkdtemp(prefix="parameters-export-")).resolve()
         self.addCleanup(shutil.rmtree, out, True)
         api.export(self.a, out / "a.xbf", progress=False)
-        listed = cad.model.inspect(out / "a.xbf", query="structure")["summary"]["parameters"]
+        listed = cad.xbf.inspect(out / "a.xbf", query="structure")["summary"]["parameters"]
         self.assertEqual([(row["name"], row["value"], row["kind"], row["min"], row["max"], row["writable"], row["reason"])
                           for row in listed], [("wall", 2.0, "float", 1, 5, False, "no_worker")])
 

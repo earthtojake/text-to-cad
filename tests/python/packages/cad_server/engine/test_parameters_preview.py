@@ -29,27 +29,27 @@ from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 SCRIPT = """\
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from spec import PITCH
 
-WALL = model.param("wall", 2.0, min=1, max=5)
-HOLES = model.param("holes", 6, min=3, max=12)
+WALL = xbf.param("wall", 2.0, min=1, max=5)
+HOLES = xbf.param("holes", 6, min=3, max=12)
 
 
-@model
+@xbf
 def bracket():
     if WALL > 4.5:
         raise ValueError(f"a wall of {WALL} leaves no room for the holes")
     return bd.Box(PITCH, 10 + HOLES, WALL)
 
 
-@model
+@xbf
 def plate():
     # Reached through globals(): its key falls back to the module's bytes, which a preview leaves as they are.
     return bd.Box(10, 10, globals()["WALL"])
 """
-SPEC = 'from cad import model\n\nPITCH = model.param("pitch", 30.0, unit="mm")\n'
+SPEC = 'from cad import xbf\n\nPITCH = xbf.param("pitch", 30.0, unit="mm")\n'
 
 
 class PreviewCase(unittest.TestCase):

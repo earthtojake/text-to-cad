@@ -14,7 +14,7 @@ from unittest import mock
 
 from tests.python.support.paths import LIBRARY
 
-from cad import model
+from cad import xbf
 from cad.engine import api, contract, places
 
 OURS = {"protocol": 2, "format": "xbf/9", "kernel": "OCP 8.0"}
@@ -95,7 +95,7 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(here["executable"], sys.executable)
 
 
-@model
+@xbf
 def plate():  # built by a stand-in engine below, never run here
     raise AssertionError("the engine is a stand-in")
 

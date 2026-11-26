@@ -239,7 +239,7 @@ class ServerInfo(HttpLayerTestCase):
         self.assertRegex(info["instance"], r"^[0-9a-f]{16}$")
         self.assertEqual(json.loads(self.fixture.request("GET", "/api/v1/server")[2])["instance"], info["instance"])
         # The kinds of documents it reads, with what each exports.
-        self.assertEqual(info["kinds"]["reads"], ["model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch"])
+        self.assertEqual(info["kinds"]["reads"], ["xbf", "model", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch"])
         self.assertEqual(info["kinds"]["exports"]["xbf"], ["step", "stl", "threemf", "glb", "dxf", "original"])
         self.assertEqual(info["kinds"]["exports"]["dxf"], [])
 
@@ -334,7 +334,7 @@ class Documents(HttpLayerTestCase):
             row = found["entry"]
             self.assertEqual((row["id"], row["file"], row["sourcePath"], row["hash"]), (ident, ident, None, "model:v1"))
             self.assertEqual((found["kind"], found["name"], found["version"], found["state"], found["held"]),
-                             ("model", "cube", "v1", "held", True))
+                             ("xbf", "cube", "v1", "held", True))
             # Its script, and whether it is there now: one named but gone (or never kept) is not.
             self.assertEqual(found["source"], {"type": "script", "path": script.replace(os.sep, "/"), "function": "cube",
                                               "present": False})
@@ -342,7 +342,7 @@ class Documents(HttpLayerTestCase):
             Path(script).write_text("", encoding="utf-8")
             self.assertEqual(envelope()[1]["source"]["present"], True)
             self.assertEqual(found["producers"], [{"tool": "cad", "release": None, "at": 12.5}])
-            self.assertEqual((found["api"], found["exports"]), (f"/api/v1/documents/model/{ident}",
+            self.assertEqual((found["api"], found["exports"]), (f"/api/v1/documents/xbf/{ident}",
                                                                 ["step", "stl", "threemf", "glb", "dxf", "xbf"]))
             answers["model_info"] = {"model": {"source": {"name": "cube"}, "version": "v2"}}
             self.assertEqual(envelope()[1]["entry"]["hash"], "model:v2")

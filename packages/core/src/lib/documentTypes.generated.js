@@ -23,9 +23,9 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
   ],
   "documentTypes": [
     {
-      "id": "model",
-      "title": "model",
-      "wire": "model",
+      "id": "xbf",
+      "title": "XBF",
+      "wire": "xbf",
       "extensions": [
         ".xbf"
       ],
@@ -203,6 +203,6 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     }
   ],
   "aliases": {
-    "xbf": "model"
+    "model": "xbf"
   }
 });

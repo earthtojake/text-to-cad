@@ -80,9 +80,9 @@ cad_server/
 `cad --help` lists them all.
 
 - **Document types**: `cad <document_type> <operation> <file>`, one id per type as the library's registry
-  names it: `cad model export <id>`, `cad step snapshot`, `cad glb inspect`,
-  `cad urdf validate`. `model` is a model, by its document id or by its `.xbf`, the file that is its document and
-  whose id is the model's (`cad model export arm.xbf arm.glb`). `export`,
+  names it: `cad xbf export <id>`, `cad step snapshot`, `cad glb inspect`,
+  `cad urdf validate`. `xbf` is a model, by its document id or by its `.xbf`, the file that is its document and
+  whose id is the model's (`cad xbf export arm.xbf arm.glb`). `export`,
   `snapshot` and `inspect` are shared by every type that has them; every other operation is named for
   what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check whose
   findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
@@ -188,8 +188,8 @@ serves a document over HTTP and prints its URL, and `cad requirement [INTEGRATIO
 exact requirement a Python of a program's own installs this release's cad by (`cad[build123d]==<release>`).
 
 A command the skills used keeps working for at least 30 days after the skills stop using it. One is kept so
-now, run and never listed: `cad xbf <operation> FILE`, which the skill text of releases up to 0.11.17 says and
-`cad model <operation> FILE.xbf` replaces. It runs `cad model` (`cli/xbf.py`) after one line on stderr saying it
+now, run and never listed: `cad model <operation> FILE`, which the skill text of releases up to 0.12 says and
+`cad xbf <operation> FILE.xbf` replaces. It runs `cad xbf` (`cli/model.py`) after one line on stderr saying it
 is deprecated (none under `--json`), and goes, with that module and its `cad.registry.ALIASES` entry, 30 days
 after the release whose skills stop saying it.
 

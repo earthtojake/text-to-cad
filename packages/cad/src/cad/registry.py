@@ -16,11 +16,11 @@ shared by every type that has them, ``inspect`` where a type has it, and the res
 ``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
 description's conformance check.
 
-``model`` is a model built from code: held in the engine's memory, addressed by its document id or the handle
-its call returns (``@model`` declares one), or saved as a file, its ``.xbf``, which every model writes and
-``.xbf`` names (``by_extension(".xbf")`` is ``model``). ``xbf``, the earlier id of that file's own type, is an
-alias of ``model`` wherever a type is looked up by id (``ALIASES``: ``DOCUMENT_TYPES["xbf"]`` is
-``DOCUMENT_TYPES["model"]``), and is listed nowhere.
+``xbf`` is the engine's own document: a file, its ``.xbf``, which names it (``by_extension(".xbf")`` is
+``xbf``), and, where a model built from code made it, a document the engine also holds in its memory, addressed by
+its document id or the handle the model's call returns (``@xbf`` declares a model, and every model writes its
+``.xbf``). ``model``, the earlier id of that document, is an alias of ``xbf`` wherever a type is looked up by id
+(``ALIASES``: ``DOCUMENT_TYPES["model"]`` is ``DOCUMENT_TYPES["xbf"]``), and is listed nowhere.
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
@@ -198,10 +198,10 @@ class Edit:
 @dataclass(frozen=True)
 class DocumentTypeEntry:
     """One document type: its id, its name as people write it, its extensions (the first the one a
-    written file takes: ``model``'s its ``.xbf``), its MIME type, how it is viewed, the content it carries,
+    written file takes), its MIME type, how it is viewed, the content it carries,
     its operations, whether it has a decorator (``@<id>("out.<ext>")``) and a reader (``<id>.read``), and
     whether a document of it is also one the engine holds by its id, with no file of its own (``held``:
-    ``model``'s alone, built from code).
+    ``xbf``'s alone, built from code).
 
     ``wire`` is the spelling the frozen protocols carry for it -- the HTTP API's document kinds
     (``/api/v1/documents/<kind>/...``) and the analytics schemas -- which is the id but for
@@ -224,7 +224,7 @@ class DocumentTypeEntry:
     #: How a file of it is changed in place (``<id>.edit``, a ``with`` block), where it can be: a KiCad board's
     #: and schematic's, through KiCad's IPC API. None for a type whose files are made or authored alone.
     edit: Edit | None = None
-    #: A document of it is also one the engine holds by its id or a handle, built from code: ``model``'s alone.
+    #: A document of it is also one the engine holds by its id or a handle, built from code: ``xbf``'s alone.
     held: bool = False
 
     def __post_init__(self) -> None:
@@ -243,7 +243,7 @@ class DocumentTypeEntry:
 
     @property
     def suffix(self) -> str:
-        """The extension a file of this type is written with (``model``'s: ``.xbf``)."""
+        """The extension a file of this type is written with (``xbf``'s: ``.xbf``)."""
         return self.extensions[0] if self.extensions else ""
 
     def operation(self, name: str) -> Operation | None:
@@ -310,12 +310,12 @@ _DOCUMENT_CONTENT = (*_STEP_CONTENT, "mechanism", "configuration sequences")
 
 _TYPES = (
     DocumentTypeEntry(
-        "model", "model", "a model built from code: held in the engine's memory, addressed by its document id "
-                          "(cad run SCRIPT.py prints it) or the handle its call returns, and saved as a file, "
-                          "its .xbf: the engine's own document, an XCAF document as BinXCAF, with its build closure",
+        "xbf", "XBF", "the engine's own document, an XCAF document as BinXCAF with its build closure, saved as a "
+                      "file, its .xbf: every model built from code writes one, and holds it in the engine's memory "
+                      "too, addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
         (".xbf",), "application/octet-stream", "document", (*_DOCUMENT_CONTENT, "animations", "build closure", "parameters"),
         (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT, _INTERFERENCE, _SOLVE, _RANGES), decorator=True,
-        # ``model.read``: the reader of the .xbf a model is saved as.
+        # ``xbf.read``: the reader of the .xbf a model is saved as.
         reader=True, reader_integration=_KERNEL, held=True),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
@@ -371,18 +371,19 @@ _TYPES = (
                   ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"))),
 )
 
-#: The earlier ids of a type, each the type it names now: ``xbf``, the file a model is saved as, is ``model``'s.
-#: Every lookup of a type by its id takes one (``DOCUMENT_TYPES["xbf"]``, ``resolve("xbf")``); no listing shows one.
-ALIASES: Mapping[str, str] = MappingProxyType({"xbf": "model"})
+#: The other ids of a type, each the type it names: ``model``, the earlier id of the ``.xbf`` document, is ``xbf``'s.
+#: Every lookup of a type by its id takes one (``DOCUMENT_TYPES["model"]``, ``resolve("model")``);
+#: no listing shows one.
+ALIASES: Mapping[str, str] = MappingProxyType({"model": "xbf"})
 
 
 def resolve(document_type: str) -> str:
-    """A type's id as it is now: an earlier one (``ALIASES``) is the type it names, any other as given."""
+    """A type's id: an alias (``ALIASES``) is the type it names, any other as given."""
     return ALIASES.get(document_type, document_type)
 
 
 class _Types(Mapping):
-    """The document types by id, in the table's order: an earlier id (``ALIASES``) is looked up as the type it
+    """The document types by id, in the table's order: an alias (``ALIASES``) is looked up as the type it
     names, and listed nowhere -- not in iteration, ``keys``, ``values``, ``items`` or ``len``."""
 
     def __init__(self, entries: tuple[DocumentTypeEntry, ...]) -> None:
@@ -401,7 +402,7 @@ class _Types(Mapping):
         return f"DOCUMENT_TYPES({', '.join(self._entries)})"
 
 
-#: Every document type, by id, in the table's order (an earlier id looked up as its type: ``ALIASES``).
+#: Every document type, by id, in the table's order (an alias looked up as its type: ``ALIASES``).
 DOCUMENT_TYPES: Mapping[str, DocumentTypeEntry] = _Types(_TYPES)
 
 #: Every integration, by name.
@@ -563,7 +564,7 @@ def interference_check() -> Any:
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
-    """The producers of one type, every integration's (an earlier id's: its type's, ``ALIASES``)."""
+    """The producers of one type, every integration's (an alias's: its type's, ``ALIASES``)."""
     document_type = resolve(document_type)
     return tuple(producer for producer in _producers() if producer.document_type == document_type)
 

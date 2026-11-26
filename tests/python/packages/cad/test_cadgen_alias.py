@@ -74,9 +74,9 @@ class AliasTest(unittest.TestCase):
     def test_a_model_written_against_cadgen_builds_names_as_cad(self) -> None:
         found = run("""
             import json
-            from cadgen import model, step
+            from cadgen import xbf, step
             import cad
-            print(json.dumps({"model": model is cad.model, "step": step is cad.step}))
+            print(json.dumps({"model": xbf is cad.xbf, "step": step is cad.step}))
         """)
         self.assertEqual(found, {"model": True, "step": True})
 
@@ -100,8 +100,8 @@ class WarningTest(unittest.TestCase):
                                   env={**os.environ, "PYTHONPATH": SOURCE_PATH}, timeout=120)
 
     def test_it_warns_once_a_process_naming_cad_at_the_line_that_imported_it(self) -> None:
-        for source, line in (("import cadgen\nimport cadgen.step\nfrom cadgen import model\nimport cadgen\n", 1),
-                             ("from cadgen import model\nimport cadgen\n", 1),
+        for source, line in (("import cadgen\nimport cadgen.step\nfrom cadgen import xbf\nimport cadgen\n", 1),
+                             ("from cadgen import xbf\nimport cadgen\n", 1),
                              ("import cad\nimport cadgen.build123d\n", 2),
                              ("import cad\n\nfrom cadgen.step import read\n", 3)):
             with self.subTest(source=source):

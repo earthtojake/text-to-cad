@@ -122,10 +122,10 @@ class DecoratorTest(unittest.TestCase):
                 decorator(7)
         # A model's own .xbf is @model's to name: a path, ending in .xbf.
         for given in ("", 7):
-            with self.assertRaisesRegex(TypeError, r"@model\('…\.xbf'\) takes a path"):
+            with self.assertRaisesRegex(TypeError, r"@xbf\('…\.xbf'\) takes a path"):
                 model(out=given)
         # Any other file: the suffix check every declaration makes.
-        with self.assertRaisesRegex(ValueError, r"@model\('…\.xbf'\): the file must end in \.xbf, not 'arm\.step'"):
+        with self.assertRaisesRegex(ValueError, r"@xbf\('…\.xbf'\): the file must end in \.xbf, not 'arm\.step'"):
             model("arm.step")
         # The path is positional, as every file decorator's is, or out=; given both, the positional one is the path.
         self.assertEqual([output.kind for output in model("XBF/a.xbf")(lambda: None).outputs], ["xbf"])
@@ -135,16 +135,16 @@ class DecoratorTest(unittest.TestCase):
         self.assertEqual(step(name="arms/left")(lambda: None).targets(), [("step", here / "arms" / "left.step")])
 
     def test_declarations_stack_each_adding_its_file_and_one_kind_twice_is_refused(self) -> None:
-        from cad import model
+        from cad import xbf
 
-        @model
+        @xbf
         def plain():
             raise AssertionError("decoration must not execute the body")
 
         self.assertIsInstance(plain, Model)
         here = Path(__file__).resolve().parent
         self.assertEqual(plain.targets(), [("xbf", here / "plain.xbf")])
-        # Over a file decorator, @model gives its .xbf a path; a file decorator alone writes that file alone.
+        # Over a file decorator, @xbf gives its .xbf a path; a file decorator alone writes that file alone.
         both = model("XBF/plain.xbf")(step("STEP/plain.step")(lambda: None))
         self.assertEqual(both.targets(), [("xbf", here / "XBF/plain.xbf"), ("step", here / "STEP/plain.step")])
 
@@ -156,9 +156,9 @@ class DecoratorTest(unittest.TestCase):
         self.assertEqual(filed.targets(), [("step", here / "filed.step")])
         self.assertEqual([output.kind for output in filed.outputs], ["step"], "declared: the STEP alone")
         # One kind twice: nothing says which file is the model's.
-        with self.assertRaisesRegex(TypeError, r"model 'plain' declares its \.xbf twice: keep one @model$"):
+        with self.assertRaisesRegex(TypeError, r"model 'plain' declares its \.xbf twice: keep one @xbf$"):
             model(plain)
-        with self.assertRaisesRegex(TypeError, r"model 'plain' declares its \.xbf twice: keep one @model$"):
+        with self.assertRaisesRegex(TypeError, r"model 'plain' declares its \.xbf twice: keep one @xbf$"):
             model("other.xbf")(plain)
         with self.assertRaisesRegex(TypeError, r"model 'filed' declares @step twice: keep one @step$"):
             step()(filed)
@@ -398,9 +398,9 @@ class BuildTest(EngineCase):
         # default's name; @model over a given path both files.
         self.assertEqual(_files(self.folder), {"frame.py", "plate.xbf", "peg.step", "pin.xbf", "pin.stl",
                                                "arm.xbf", "STEP/arm.step"})
-        self.assertEqual(reports["peg"]["warnings"], ["peg saves no .xbf (no @model): once the CAD server restarts, "
-                                                      "its next run builds it again from scratch; add @model to save it"])
-        self.assertTrue(all("warnings" not in reports[name] for name in reports if name != "peg"), "@model: none")
+        self.assertEqual(reports["peg"]["warnings"], ["peg saves no .xbf (no @xbf): once the CAD server restarts, "
+                                                      "its next run builds it again from scratch; add @xbf to save it"])
+        self.assertTrue(all("warnings" not in reports[name] for name in reports if name != "peg"), "@xbf: none")
         self.assertEqual(document.Loaded(self.folder / "plate.xbf").structure()["name"], "plate")
         # A run that changes nothing keeps every file and its time.
         before = {name: (self.folder / name).stat().st_mtime_ns for name in _files(self.folder)}

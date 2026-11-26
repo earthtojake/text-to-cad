@@ -61,12 +61,12 @@ class ProfilingTest(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import json
             import build123d as bd
-            from cad import model
+            from cad import xbf
 
             def make_block():
                 return bd.Box(3, 4, 5)
 
-            @model("part.xbf")
+            @xbf("part.xbf")
             def part():
                 return make_block()
 
@@ -90,16 +90,16 @@ class ProfilingTest(unittest.TestCase):
         script = self.folder / "pin.py"
         script.write_text(textwrap.dedent('''
             import build123d as bd
-            from cad import model
+            from cad import xbf
 
             def make_pin():
                 return bd.Cylinder(2, 5)
 
-            @model
+            @xbf
             def pin():
                 return make_pin()
 
-            @model
+            @xbf
             def broken():
                 raise ValueError("broken")
         '''), encoding="utf-8")

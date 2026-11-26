@@ -33,7 +33,7 @@ model**).
 
 Every document has one id (law 6), a lower-case UUID string (the library's `cad.engine.ids`), by one formula
 (`derived_id`: uuid5 of a scope's canonical path, `::` and a name): a file's is its canonical path and no name
-(`file_id`), and a model's document is its `.xbf`, so its id is that file's -- at `@model`'s path, else
+(`file_id`), and a model's document is its `.xbf`, so its id is that file's -- at `@xbf`'s path, else
 `<name>.xbf` beside its script (`Model.xbf`, `Model.id`) -- worked out in the script's own process as in the
 engine; so is a shape handed over's (its `.xbf` at the path given, else `<name>.xbf` beside its calling script or
 in the working folder). A model's name, the function's by default, `name=` gives it another, is the name of the

@@ -1,8 +1,8 @@
-"""The xbf spellings of ``cad.model``: ``cad.xbf`` (``from cad import xbf``, ``import cad.xbf``), ``@xbf``,
-``xbf.read`` and every ``cad.xbf.<operation>``, ``cad.engine.xbf`` and ``cad.read_xbf``. Each is an alias of the
-model spelling through the library's one table (``cad._internal.aliases``, pinned by ``test_aliases``): the same
-object, so the same behaviour and the same results, saying once per process that it is deprecated and what to use.
-These are the tests a removal of the spellings deletes with them.
+"""The model spellings of ``cad.xbf``: ``cad.model`` (``from cad import model``, ``import cad.model``), ``@model``,
+``model(shape, ...)``, ``model.param``, ``model.read`` and every ``cad.model.<operation>``, and ``cad.read_xbf``. Each
+is an alias of the xbf spelling through the library's one table (``cad._internal.aliases``, pinned by ``test_aliases``):
+the same object, so the same behaviour and the same results, saying once per process that it is deprecated and what to
+use. These are the tests a removal of the spellings deletes with them.
 """
 
 from __future__ import annotations
@@ -37,58 +37,70 @@ def arm():
 
 # Every spelling, each said once, at the line that spelled it, naming the new path; said again, silent.
 SPELLINGS = """\
-from cad import xbf
-import cad, cad.xbf, cad.engine, cad.engine.model
-xbf.read, xbf.export, cad.xbf.inspect
-cad.engine.xbf
-cad.engine.model.xbf
+from cad import model
+import cad, cad.model, cad.xbf
+model.read, model.export, cad.model.inspect
 cad.read_xbf
-from cad import xbf
-cad.engine.xbf, cad.engine.model.xbf, cad.read_xbf
+from cad import model
+cad.read_xbf, cad.model.dfm
 """
 
 
-class TheXbfSpellingsAreTheModelOnes(unittest.TestCase):
-    def test_each_is_the_model_object_and_listed_nowhere(self) -> None:
+class TheModelSpellingsAreTheXbfOnes(unittest.TestCase):
+    def test_each_is_the_xbf_object_and_listed_nowhere(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", cad.CadDeprecationWarning)
-            from cad import xbf
+            from cad import model
 
-            self.assertIs(xbf, cad.model)
-            self.assertIs(cad.xbf, cad.model)
-            self.assertIs(cad.engine.xbf, cad.engine.model)
-            self.assertIs(cad.engine.model.xbf, cad.engine.model.model)
-            self.assertIs(cad.read_xbf, cad.model.read)
-            self.assertIs(xbf.read, cad.model.read)
+            self.assertIs(model, cad.xbf)
+            self.assertIs(cad.model, cad.xbf)
+            self.assertIs(cad.read_xbf, cad.xbf.read)
+            self.assertIs(model.read, cad.xbf.read)
             for name in ("export", "inspect", "snapshot", "dfm", "interference", "solve", "ranges", "param"):
                 with self.subTest(operation=name):
-                    self.assertIs(getattr(xbf, name), getattr(cad.model, name))
-        self.assertNotIn("xbf", cad.__all__)
-        self.assertNotIn("xbf", cad.engine.__all__)
-        self.assertNotIn("xbf", cad.engine.model.__all__)
-        self.assertNotIn("xbf", dir(cad))
+                    self.assertIs(getattr(model, name), getattr(cad.xbf, name))
+        self.assertNotIn("model", cad.__all__)
+        self.assertNotIn("model", dir(cad))
 
-    def test_each_warns_once_naming_the_model_spelling_at_the_line_that_spelled_it(self) -> None:
+    def test_each_warns_once_naming_the_xbf_spelling_at_the_line_that_spelled_it(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             script = Path(folder) / "older.py"
             script.write_text(SPELLINGS, encoding="utf-8")
             proc = subprocess.run([sys.executable, "older.py"], capture_output=True, text=True, timeout=120, cwd=folder)
         self.assertEqual(0, proc.returncode, proc.stderr)
-        self.assertEqual(["older.py:1: CadDeprecationWarning: cad.xbf is deprecated; use cad.model",
-                          "older.py:4: CadDeprecationWarning: cad.engine.xbf is deprecated; use cad.engine.model",
-                          "older.py:5: CadDeprecationWarning: cad.engine.model.xbf is deprecated; use cad.engine.model",
-                          "older.py:6: CadDeprecationWarning: cad.read_xbf is deprecated; use cad.model.read"],
+        self.assertEqual(["older.py:1: CadDeprecationWarning: cad.model is deprecated; use cad.xbf",
+                          "older.py:4: CadDeprecationWarning: cad.read_xbf is deprecated; use cad.xbf.read"],
                          [line for line in proc.stderr.splitlines() if "CadDeprecationWarning" in line])
 
+    def test_the_decorator_and_the_hand_over_are_the_xbf_ones_under_the_warning(self) -> None:
+        script = ("""\
+import warnings
+warnings.simplefilter("error", FutureWarning)
+from cad import xbf
+@xbf
+def a():
+    return None
+""")
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "primary.py").write_text(script, encoding="utf-8")
+            primary = subprocess.run([sys.executable, "primary.py"], capture_output=True, text=True, timeout=120, cwd=folder)
+        self.assertEqual((primary.returncode, primary.stderr), (0, ""), "@xbf is the primary spelling: no warning")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", cad.CadDeprecationWarning)
+            from cad import model
 
-class TheXbfDecoratorBuildsTheSameDocument(unittest.TestCase):
+            self.assertIs(type(model).__call__, type(cad.xbf).__call__)
+            self.assertIs(type(model), type(cad.xbf))
+
+
+class TheModelDecoratorBuildsTheSameDocument(unittest.TestCase):
     def test_either_spelling_makes_one_document_one_file_and_one_closure(self) -> None:
         """A script that says ``@xbf(path)`` and the same script saying ``@model(path)`` are one model: the
         same id, the same file at the path relative to the script, byte for byte (the closure in it too), and a
         run of one after the other is a run that changed nothing, which leaves the file as it is."""
         from cad.engine import build as engine_build
 
-        folder = Path(tempfile.mkdtemp(prefix="older-xbf-")).resolve()
+        folder = Path(tempfile.mkdtemp(prefix="older-model-")).resolve()
         self.addCleanup(shutil.rmtree, folder, True)
         script, saved = folder / "src" / "arm.py", folder / "share" / "arm.xbf"
         script.parent.mkdir()
@@ -102,15 +114,15 @@ class TheXbfDecoratorBuildsTheSameDocument(unittest.TestCase):
             self.assertTrue(report["ok"], report)
             return report
 
-        now = built("from cad import model", '@model("../share/arm.xbf")')
+        now = built("from cad import xbf", '@xbf("../share/arm.xbf")')
         self.assertEqual({path: row["written"] for path, row in now["files"].items()}, {str(saved): True})
         first, written = saved.read_bytes(), saved.stat().st_mtime_ns
-        older = built("from cad import xbf", '@xbf("../share/arm.xbf")')
+        older = built("from cad import model", '@model("../share/arm.xbf")')
         self.assertEqual((older["id"], list(older["files"])), (now["id"], list(now["files"])))
         self.assertEqual([row["written"] for row in older["files"].values()], [False], "the file it already is")
         self.assertEqual((saved.read_bytes(), saved.stat().st_mtime_ns), (first, written))
         saved.unlink()
-        again = built("from cad import xbf", '@xbf("../share/arm.xbf")')
+        again = built("from cad import model", '@model("../share/arm.xbf")')
         self.assertEqual(([row["written"] for row in again["files"].values()], saved.read_bytes()), ([True], first))
 
 

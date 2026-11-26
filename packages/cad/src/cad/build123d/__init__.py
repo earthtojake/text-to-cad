@@ -22,10 +22,10 @@ and the helpers a model calls with build123d objects:
 * measurements of native geometry: ``closest_points``, ``overlap_volume``, ``is_sound``,
   ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their
   result types;
-* ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``model.read``'s, a model's ``.shape``) placed where
+* ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where
   it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;
 * the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):
-  ``dfm(shape, process=...)`` -- what ``cad.step.dfm`` and ``cad.model.dfm`` run on a file's or a document's
+  ``dfm(shape, process=...)`` -- what ``cad.step.dfm`` and ``cad.xbf.dfm`` run on a file's or a document's
   B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``) -- with ``cnc``,
   ``sheet_metal``, ``molding`` and ``printing`` its four processes by name;
   and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance;

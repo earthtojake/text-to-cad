@@ -22,7 +22,7 @@ The page offers what the file's kind writes, and nothing is inspected first: an 
 (a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf. An opened XBF file's XBF
 download returns its original bytes (`original`), including an `xbf/8` file converted in
 memory for viewing. Use
-`cad model export old.xbf upgraded.xbf` to save that conversion to a different path
+`cad xbf export old.xbf upgraded.xbf` to save that conversion to a different path
 (**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
 file offers the other two mesh kinds and nothing else. A KiCad board offers KiCad's files of it, each `cad kicad_pcb export
 --to <kind>` (Gerbers, Drill, Position, BOM, STEP, GLB, ODB++, IPC-2581, PDF, DXF), run by the job on its
@@ -156,7 +156,7 @@ changed or new one fails in one line naming the folder and its mode.
   off z=0, by its element name. Layers are written in name order and edges in an order of
   their content (curve kind, sampled points, length), never the kernel's traversal, and
   ezdxf's provenance is pinned and its classes sorted: the same geometry is the same bytes in
-  any process on any day, so a declared DXF is the bytes `cad model export flat.xbf flat.dxf`
+  any process on any day, so a declared DXF is the bytes `cad xbf export flat.xbf flat.dxf`
   writes. The drawing checks run on the document before it is written -- units set, no
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an
@@ -212,17 +212,17 @@ the bake's: juno 108.7 MB to 6.9, tom 98.5 to 18.7, w16 83.2 to 38.5, radial 78.
 samplers shared, above). A sparsely keyed eased bake (a small model's) can take more LINEAR keys
 than it had CUBICSPLINE ones, each a third the bytes.
 
-**A file decorator's path is optional.** `@model` declares the native document, the `.xbf`
+**A file decorator's path is optional.** `@xbf` declares the native document, the `.xbf`
 the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations, each its own file and
-nothing else, alone or beside `@model`, one kind once (`Model.files`). A function with file decorators alone writes no
+nothing else, alone or beside `@xbf`, one kind once (`Model.files`). A function with file decorators alone writes no
 `.xbf`: it is no model document (`Models.unsaved`: its page its first file's), and after a restart its run
-builds it from nothing, which each of its runs says (`build._unsaved`: `plate saves no .xbf (no @model): once the CAD
-server restarts, its next run builds it again from scratch; add @model to save it`). A path given, positionally or `out=`
-(`@model("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
+builds it from nothing, which each of its runs says (`build._unsaved`: `plate saves no .xbf (no @xbf): once the CAD
+server restarts, its next run builds it again from scratch; add @xbf to save it`). A path given, positionally or `out=`
+(`@xbf("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
 `@step()`, `@glb(tolerance=0.1)`) the file is the model's name -- `name=`, else its function's -- and
-the format's extension beside the script (`Model.plan`): bare `@model` on `arm` writes `arm.xbf`, `@step` alone
+the format's extension beside the script (`Model.plan`): bare `@xbf` on `arm` writes `arm.xbf`, `@step` alone
 `arm.step`; a `name=` with a folder in it (`arms/left`) writes `arms/left.xbf`. Each decorator is a function of the
-same arguments too, given a shape first, the path second: `model(shape, "crate.xbf", name=...)` hands it over as a
+same arguments too, given a shape first, the path second: `xbf(shape, "crate.xbf", name=...)` hands it over as a
 model, its `.xbf` written once the engine holds it (`api.hand_over`), and `step(shape, "crate.step")` writes that
 file of it now, in the calling process, through the same translation (`api.write_shape`); else `<name>` and the
 format's extension. Either path is relative to the calling script's folder, or the working folder where there is
@@ -259,14 +259,14 @@ a declared file follows that file's bytes (**Document lifetime**).
 
 **Functions** (`api`, behind each type's `cad.<type>.export`, `.snapshot` and `.inspect`; `serve`,
 `status`, `stop`, `delete` and `server` only the CLI calls): one per command, each through the daemon. No function builds source text;
-a shape made elsewhere is handed over, never built (`model(shape, name=...)`, **Shapes handed over**).
+a shape made elsewhere is handed over, never built (`xbf(shape, name=...)`, **Shapes handed over**).
 `export(source, *destinations)` a list of `Written`; `check(source, check)` a manufacturing check's report,
 measured in the engine's checks processes (**Document types and integrations**); `snapshot(source, out, ...)` a `Drawn`, and `snapshot(job=PACKET, ...)` (with `source` in place of the packet's input, as `--job PACKET SRC`) a list of them, one verb with two input shapes, anything else refused as Python refuses a call; `inspect(doc)` what
 the document holds and its build closure (`query="summary"`; `"structure"` the same with nothing measured, and with no
 query the closure alone), `inspect(doc, ref)` an element's facts. Each takes a handle (what a model call
 returns), a document id or a file path; `export` and `snapshot` take the decorated function too,
-building it first. A type's function takes its own sources alone: `cad.model.*` a handle, an id, a
-decorated function or the `.xbf` a model is saved as (`cad.model.export("arm.xbf", ...)`: the file's own
+building it first. A type's function takes its own sources alone: `cad.xbf.*` a handle, an id, a
+decorated function or the `.xbf` a model is saved as (`cad.xbf.export("arm.xbf", ...)`: the file's own
 operation, the file read as the file it is), every other type's a file of it. A handle exports and draws its document the same way (`.export()`,
 `.snapshot()`); a `Model`'s `.build(verify=, profile=, daemon=)` is the debug seam, a `Report`: it
 and its children, as declared.

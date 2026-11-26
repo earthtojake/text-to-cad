@@ -61,7 +61,7 @@ class ChoosingTest(unittest.TestCase):
     def test_a_program_that_uses_blender_is_made_an_environment_of_cad_s_on_python_3_13(self) -> None:
         self.write("scene.py", "import bpy\n")
         self.write("render.py", "import scene\nimport json\n")  # bpy through a helper beside it
-        self.write("both.py", "import build123d as bd\nfrom cad import model\nfrom cad.blender import load\n")
+        self.write("both.py", "import build123d as bd\nfrom cad import xbf\nfrom cad.blender import load\n")
         spec = self.prepared("render.py").spec
         self.assertEqual((spec.integrations, spec.python, spec.python_options),
                          (("blender",), "3.13", ("--managed-python",)))

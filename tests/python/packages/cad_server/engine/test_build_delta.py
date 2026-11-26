@@ -30,14 +30,14 @@ SCRIPT = """
 import json
 import sys
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
 COUNT, FAIL, HOLE, COLOR = {count}, {fail}, {hole}, {color!r}
 
 
-@model
+@xbf
 def row():
     assert not FAIL, "the row needs a cube"
     cube = bd.Box(10, 10, 10) - bd.Cylinder(HOLE, 10) if HOLE else bd.Box(10, 10, 10)

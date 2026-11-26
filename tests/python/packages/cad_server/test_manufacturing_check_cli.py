@@ -31,10 +31,10 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 # A model whose pocket has sharp in-plane corners: no end mill cuts them.
 POCKETED = """
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def plate():
     part = bd.Box(40, 30, 10) - bd.Pos(0, 0, 3) * bd.Box(20, 10, 4.01)
     part.label = "plate"
@@ -179,7 +179,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertEqual((code, out.splitlines()[-1]), (3, f"NOT CHECKED {step}: failed"))
         self.assertEqual(err.splitlines(), ["cad step dfm: NOT CHECKED (failed): TypeError: a bug in the check"])
         with mock.patch.object(api, "check", side_effect=serve.NotHeld("no document is held")):
-            code, out, _ = _run("model", "01234567-89ab-5def-8123-456789abcdef", "--process", "printing", "--json")
+            code, out, _ = _run("xbf", "01234567-89ab-5def-8123-456789abcdef", "--process", "printing", "--json")
         self.assertEqual((code, json.loads(out)["reason"], json.loads(out)["status"]), (2, "not_found", "usage"))
 
     def test_a_check_measured_here_past_a_check_s_limit_is_stopped_and_not_checked(self) -> None:
@@ -327,7 +327,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         export_step(Box(20, 20, 15), str(step))
         ident = "01234567-89ab-5def-8123-456789abcdef"
         answered = {"process": "x"}
-        for argv, document_type in (((str(step),), "step"), ((ident,), "model")):
+        for argv, document_type in (((str(step),), "step"), ((ident,), "xbf")):
             with self.subTest(document_type), \
                     mock.patch.object(integration_env, "carries", return_value=False), \
                     mock.patch.object(integration_env, "environment", return_value=sys.executable), \
@@ -388,20 +388,20 @@ class ModelTest(unittest.TestCase):
                                       env={**os.environ, "PYTHONPATH": str(SRC)})
             self.assertEqual(built.returncode, 0, built.stderr)
             ident = built.stdout.strip().splitlines()[-1]
-            result = cad.model.dfm(ident, process="cnc", material="aluminum")
+            result = cad.xbf.dfm(ident, process="cnc", material="aluminum")
             sharp = [f for f in result.findings if f.code == "cnc.internal_corner_sharp"]
             self.assertTrue(sharp, [f.code for f in result.findings])
             self.assertFalse(result.ok)
             # a corner is its edge: the finding is at it, its faces beside it, each a ref inspect resolves
             self.assertRegex(sharp[0].location, r"plate/edge \d+$")
-            self.assertEqual(cad.model.inspect(ident, sharp[0].location)["kind"], "edge")
-            self.assertEqual([cad.model.inspect(ident, ref)["kind"] for ref in sharp[0].refs[1:3]], ["face", "face"])
-            code, out, _ = _run("model", ident, "--process", "cnc", "--json")
+            self.assertEqual(cad.xbf.inspect(ident, sharp[0].location)["kind"], "edge")
+            self.assertEqual([cad.xbf.inspect(ident, ref)["kind"] for ref in sharp[0].refs[1:3]], ["face", "face"])
+            code, out, _ = _run("xbf", ident, "--process", "cnc", "--json")
             self.assertEqual(code, 1)
             self.assertIn("cnc.internal_corner_sharp", {f["code"] for f in json.loads(out)["findings"]})
             refused, said, _ = _run("step", ident, "--process", "cnc", "--json")
             self.assertEqual((refused, json.loads(said)["reason"]), (2, "wrong_type"))
-            self.assertIn("use cad model dfm", json.loads(said)["error"])
+            self.assertIn("use cad xbf dfm", json.loads(said)["error"])
 
     def test_a_model_given_no_process_is_checked_for_the_one_its_part_declares(self) -> None:
         """Reads the part's declared process back from the engine's document (the material's process survives
@@ -417,7 +417,7 @@ class ModelTest(unittest.TestCase):
                                       env={**os.environ, "PYTHONPATH": str(SRC)})
             self.assertEqual(built.returncode, 0, built.stderr)
             ident = built.stdout.strip().splitlines()[-1]
-            code, out, _ = _run("model", ident, "--json")
+            code, out, _ = _run("xbf", ident, "--json")
             payload = json.loads(out)
             self.assertNotIn("error", payload)
             self.assertEqual((code, payload["measurements"]["process"]), (1, "cnc"))
@@ -426,10 +426,10 @@ class ModelTest(unittest.TestCase):
             unheld = "01234567-89ab-cdef-0123-456789abcdef"
             cases = (((ident, "--pull", "z"), "invalid_argument", "--pull is not cnc's"),
                      ((unheld, "--process", "cnc"), "not_found", f"no document {unheld} is held"))
-            answers = {"here": [_run("model", *argv, "--json") for argv, _, _ in cases]}
+            answers = {"here": [_run("xbf", *argv, "--json") for argv, _, _ in cases]}
             with mock.patch.object(integration_env, "carries", return_value=False), \
                     mock.patch.object(integration_env, "environment", return_value=sys.executable):
-                answers["there"] = [_run("model", *argv, "--json") for argv, _, _ in cases]
+                answers["there"] = [_run("xbf", *argv, "--json") for argv, _, _ in cases]
             for where, answered in answers.items():
                 for (argv, reason, words), (code, out, _) in zip(cases, answered, strict=True):
                     with self.subTest(where=where, argv=argv):

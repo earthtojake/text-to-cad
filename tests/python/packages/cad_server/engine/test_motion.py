@@ -351,13 +351,13 @@ def unused():
 
 KEPT = """
 import build123d as bd
-from cad import glb, model
+from cad import glb, xbf
 from cad.build123d import configuration_sequence
 from cad.build123d import animation
 import moves
 
 
-@model("XBF/hinge.xbf")
+@xbf("XBF/hinge.xbf")
 @glb("GLB/hinge.glb")
 def hinge():
     base = bd.Box(100, 60, 20)

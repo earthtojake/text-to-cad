@@ -39,12 +39,12 @@ class CadDeprecationWarning(FutureWarning):
 NAME_ALIASES: dict[str, dict[str, str]] = {
     "cad": {
         "read_step": "cad.step.read",
-        "read_xbf": "cad.model.read",
+        "read_xbf": "cad.xbf.read",
         "read_mesh": "cad.stl.read",
         "memo": "cad.build123d.memo",
         "paint": "cad.build123d.paint",
         # 0.10's export, which took any source (a handle, an id, or a file): the engine's, so a 0.10
-        # exports.py keeps writing a file's exports too; a new one names its type's (cad.model.export, ...).
+        # exports.py keeps writing a file's exports too; a new one names its type's (cad.xbf.export, ...).
         "export": "cad.engine.api.export",
         "snapshot": "cad.engine.api.snapshot",
         "inspect": "cad.engine.api.inspect",
@@ -63,17 +63,14 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
     # MuJoCo's own compile under names of ours: a script compiles with MuJoCo, and ``check`` is the check.
     "cad.mujoco": {"compile_model": "cad.mujoco._compile.compile_model",
                    "compile_findings": "cad.mujoco._compile.compile_findings"},
-    # The engine's @xbf, the model's declaration of its .xbf under the file's name: the model itself.
-    "cad.engine": {"xbf": "cad.engine.model"},
-    "cad.engine.model": {"xbf": "cad.engine.model.model"},
 }
 
 #: What the deprecation says to use instead, where the new path is not one object: the root's
 #: operations are each document type's now.
 _ADVICE = {
-    "cad.export": "cad.model.export (a file's: cad.<document_type>.export, cad.step.export, ...)",
-    "cad.snapshot": "cad.<document_type>.snapshot (cad.model.snapshot, cad.stl.snapshot, ...)",
-    "cad.inspect": "cad.<document_type>.inspect (cad.model.inspect, cad.step.inspect, ...)",
+    "cad.export": "cad.xbf.export (a file's: cad.<document_type>.export, cad.step.export, ...)",
+    "cad.snapshot": "cad.<document_type>.snapshot (cad.xbf.snapshot, cad.stl.snapshot, ...)",
+    "cad.inspect": "cad.<document_type>.inspect (cad.xbf.inspect, cad.step.inspect, ...)",
     "cad.results.ValidationResult": "cad.results.CheckResult (findings=, each with location=)",
     "cad.results.ValidationIssue": "cad.results.CheckFinding (severity, code, message, location=, hint=)",
     "cad.flatten": "build123d's own calls: bd.Plane(face).to_local_coords(face) lays a face into XY, bd.offset "
@@ -88,7 +85,6 @@ _ADVICE = {
     "cad.build123d.offset_profile": "bd.offset(profile, amount=...), build123d's own",
     "cad.mujoco.compile_model": "mujoco.MjModel.from_xml_path, MuJoCo's own",
     "cad.mujoco.compile_findings": "cad.mujoco.check, whose result holds the compile's findings",
-    "cad.engine.model.xbf": "cad.engine.model",
 }
 
 #: ``old module -> new module``: a module the library had, answered by the module that holds its names now.
@@ -103,9 +99,10 @@ MODULE_ALIASES: dict[str, str] = {
     "cad.urdf_source": "cad.urdf._source",
     "cad.srdf_source": "cad.srdf._source",
     "cad.srdf_validation": "cad.srdf._validation",
-    # The file a model is saved as, once a document type of its own: the model's, its decorator (@xbf is @model),
-    # its reader (xbf.read is model.read) and its operations (cad.xbf.export is cad.model.export).
-    "cad.xbf": "cad.model",
+    # The word for writing the file a model is saved as, before the file's own type named it: ``cad.xbf``, its
+    # decorator (@model is @xbf), its reader (model.read is xbf.read) and its operations (cad.model.export is
+    # cad.xbf.export).
+    "cad.model": "cad.xbf",
 }
 
 _WARNED: set[str] = set()

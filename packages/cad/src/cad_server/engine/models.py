@@ -119,7 +119,7 @@ class Models:
                     version = old["version"] if same else secrets.token_hex(8)
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
                                            "program": program or (old or {}).get("program") or source["script"],
-                                           "kind": "model",
+                                           "kind": "xbf",
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
                                            "facts": facts, "parameters": rows if isinstance(rows, list) else None}

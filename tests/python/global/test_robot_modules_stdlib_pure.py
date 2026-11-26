@@ -80,7 +80,7 @@ ALLOWED_CADGEN = {
     # (``cad.engine.ranges``, numpy) are imported in the function that sweeps.
     "cad._internal.ranges",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
-    # A model's parameters (no robot type's): ``cad.model.param``, loaded on first use, and what a Save
+    # A model's parameters (no robot type's): ``cad.xbf.param``, loaded on first use, and what a Save
     # checks and writes, stdlib only.
     "cad.engine.parameters",
     "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only

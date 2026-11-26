@@ -289,7 +289,7 @@ def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidate
         if process is None:
             # A live shape keeps its parts' materials, as a model's document does (a STEP does not): read as a
             # model's.
-            manufacturing.options("model", None, given, candidates=candidates)
+            manufacturing.options("xbf", None, given, candidates=candidates)
             document = _dfm_brep.parts_of(shape, name=name)
             label = Path(document.name or "shape")
             try:

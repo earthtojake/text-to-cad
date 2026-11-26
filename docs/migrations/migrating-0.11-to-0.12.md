@@ -40,6 +40,24 @@ while that server runs.
   beside any. With `--json`, the key `identity` is gone and `library` says what the first start
   carried.
 
+## What you write in a script and at the command line (tier 1)
+
+A model's file is its `.xbf`, and the document type is `xbf`: write the decorator, the reader, the
+operations and the command by that name. Each spelling that named the type `model` still works, says
+once that it is deprecated and which spelling to use, and goes away after the 30 days the compatibility
+law keeps it.
+
+| 0.12 writes | Still works, with a warning |
+| --- | --- |
+| `from cad import xbf`, `@xbf`, `@xbf("XBF/arm.xbf")`, `xbf(shape, "arm.xbf")` | `from cad import model` and `@model`, `model(shape, ...)` (`cad.model is deprecated; use cad.xbf`) |
+| `xbf.param(...)`, `xbf.read(path)`, `xbf.export(...)` and the other operations | The same on `model` (`cad.model.export`, ...) |
+| `cad.xbf.read(path)` | `cad.read_xbf(path)` |
+| `cad xbf export ...` and its other operations | `cad model export ...` (a line on stderr, none with `--json`) |
+| Kind `xbf` in `GET /api/v1/documents` and the routes `/api/v1/documents/xbf/<id>/...` | Kind `model` and `/api/v1/documents/model/<id>/...`: answered as the same documents |
+
+A model's `.xbf` is written by every run that declares a model, at the decorator's path or, with none,
+`<name>.xbf` beside the script.
+
 ## The viewer
 
 - **Recents lists a model as its file** (`arm.xbf`), with the file's size and time, and a file that

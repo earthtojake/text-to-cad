@@ -89,7 +89,7 @@ class Dispatch(unittest.TestCase):
         from cad.engine import places
 
         for argv, expected in ((["doctor"], []), (["status"], ["tell"]), (["doctor", "--help"], []),
-                               (["status", "-h"], []), (["help", "doctor"], []), (["model", "export", "--help"], []),
+                               (["status", "-h"], []), (["help", "doctor"], []), (["xbf", "export", "--help"], []),
                                (["model", "help"], []), (["status", "--json"], []), (["run", "a.py", "--help"], [])):
             with self.subTest(argv=argv):
                 calls = []
@@ -123,7 +123,7 @@ class Dispatch(unittest.TestCase):
                 return subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
                                       capture_output=True, text=True, encoding="utf-8", timeout=120)
 
-            for argv in (["doctor", "--help"], ["help", "doctor"], ["status", "-h"], ["model", "export", "--help"],
+            for argv in (["doctor", "--help"], ["help", "doctor"], ["status", "-h"], ["xbf", "export", "--help"],
                          ["help", "step"], ["status", "--json"]):
                 with self.subTest(argv=argv):
                     done = run(*argv)

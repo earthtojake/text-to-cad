@@ -87,7 +87,7 @@ a non-loopback `--host` unless you mean to offer exactly that to everyone who
 can reach the port.
 
 **The one route that writes code.** A model's Parameters Save in the viewer
-(`POST /api/v1/documents/model/<id>/parameters`) is the one page route that
+(`POST /api/v1/documents/xbf/<id>/parameters`) is the one page route that
 writes a file the server later runs as Python: the model's own script, which it
 then builds again. It is behind the same Host check, guard header and
 credentials as every route that changes something. Its body is
@@ -100,7 +100,7 @@ told it:
   and written in the server's own spelling (an integer's digits; a float rounded to
   six decimals, in the shortest text that reads back as it). A value is never
   written as the text it was sent as.
-- Only where a run recorded: the bytes of a `model.param` default that is a plain
+- Only where a run recorded: the bytes of a `xbf.param` default that is a plain
   numeric literal, at the position the script's last run recorded, in that model's
   own script. A parameter declared in another module, or whose default is an
   expression, is never written, nor is any other byte of the file.
@@ -118,7 +118,7 @@ script's own code as it ran before. They cannot pick the file, write any other
 file, or add or change code.
 
 **Its preview runs code and writes nothing.** Before a Save, the Parameters tab asks
-for the model at its drafts (`POST /api/v1/documents/model/<id>/preview`), behind the
+for the model at its drafts (`POST /api/v1/documents/xbf/<id>/preview`), behind the
 same Host check, guard header and credentials. Its body is `{"values": {name: number},
 "page": token}` (64 KiB at most; `page` 1 to 64 letters, digits, `-` and `_`): no path,
 no text the server runs. The values are checked exactly as a Save's are (the live

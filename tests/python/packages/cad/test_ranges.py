@@ -322,12 +322,12 @@ class Ranges(unittest.TestCase):
         return self.folder / "XBF/rig.xbf"
 
     def test_each_joint_stops_where_its_parts_meet_another(self) -> None:
-        from cad import model
+        from cad import xbf
 
         document = self.rig()
         before = document.read_bytes()
 
-        result = model.ranges(document)
+        result = xbf.ranges(document)
         self.assertTrue(result.ok, result.human_lines())
         joints = {found["joint"]: found for found in result.measurements["joints"]}
         elbow, slide = joints["elbow"], joints["slide"]
@@ -360,7 +360,7 @@ class Ranges(unittest.TestCase):
         self.assertEqual(("", ""), (elbow["why"], slide["why"]), "each has a stop: no reason it has none")
 
     def test_a_smaller_clearance_never_narrows_a_range(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad._internal import ranges as options
         from cad.engine import ranges as engine
 
@@ -368,7 +368,7 @@ class Ranges(unittest.TestCase):
         document = self.rig()
         found = {}
         for clearance in (2.0, 1.0, 0.6, 0.3):
-            result = model.ranges(document, clearance=clearance)
+            result = xbf.ranges(document, clearance=clearance)
             found[clearance] = {joint["joint"]: (joint["lower"], joint["upper"])
                                 for joint in result.measurements["joints"]}
         # Each range holds the one at every larger clearance: its stops at or past them, each way.
@@ -383,14 +383,14 @@ class Ranges(unittest.TestCase):
         self.assertGreater(found[0.3]["slide"][1], found[2.0]["slide"][1])
 
     def test_a_pair_near_as_built_stops_only_where_its_gap_closes(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "near.py"
         script.write_text(textwrap.dedent(NEAR), encoding="utf-8")
         report = engine_build.build(script, ["near"], cwd=self.folder)[0]
         self.assertTrue(report["ok"], report)
-        result = model.ranges(self.folder / "XBF/near.xbf", clearance=1.0)  # the plate 0.4 mm away: within it
+        result = xbf.ranges(self.folder / "XBF/near.xbf", clearance=1.0)  # the plate 0.4 mm away: within it
         [hinge] = result.measurements["joints"]
         # The plate narrowing from 0.4 to 0.35 mm stops nothing: the arm turns on until it meets the wall, its corner
         # there at +58 degrees (a stop a few degrees on: the count wants about 15 mm^2 of the narrow arm in contact).
@@ -409,14 +409,14 @@ class Ranges(unittest.TestCase):
         self.assertIn("near as built: Upper_arm v9/SOLID (Upper_arm v9) and plate (base) 0.", line)
 
     def test_a_pair_drawn_overlapping_stops_only_where_its_overlap_deepens(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "overlap.py"
         script.write_text(textwrap.dedent(OVERLAP), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["overlap"], cwd=self.folder)[0]["ok"])
         swept = {clearance: {found["joint"]: found for found in
-                             model.ranges(self.folder / "XBF/overlap.xbf", clearance=clearance).measurements["joints"]}
+                             xbf.ranges(self.folder / "XBF/overlap.xbf", clearance=clearance).measurements["joints"]}
                  for clearance in (1.0, 0.3)}
         slide, lift = swept[0.3]["slide"], swept[0.3]["lift"]
         # The carriage's 5 mm overlap shrinking off the rail's end, and sliding along it, stop nothing: it meets the end
@@ -436,7 +436,7 @@ class Ranges(unittest.TestCase):
         contact = lift["lower_contact"]
         self.assertEqual((100.0, 1.0, None), (round(contact["overlap"], -1), round(contact["depth"]), contact["gap"]))
         self.assertIsNone(lift["upper"], lift)
-        [line] = [line for line in model.ranges(self.folder / "XBF/overlap.xbf", joint=("lift",)).human_lines()
+        [line] = [line for line in xbf.ranges(self.folder / "XBF/overlap.xbf", joint=("lift",)).human_lines()
                   if line.startswith("lift: ")]
         self.assertIn(", deeper than drawn (overlapping ", line)
         self.assertIn("; overlapping as drawn, stopping only where that deepens: pad (pad) in rail (base) by ", line)
@@ -448,13 +448,13 @@ class Ranges(unittest.TestCase):
                                     math.inf if wide["upper"] is None else wide["upper"], name)
 
     def test_a_plate_on_an_output_drawn_with_its_motor_turns_on_it_to_the_real_stop(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "motor.py"
         script.write_text(textwrap.dedent(MOTOR), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["motor"], cwd=self.folder)[0]["ok"])
-        result = model.ranges(self.folder / "XBF/motor.xbf", step=2.0)
+        result = xbf.ranges(self.folder / "XBF/motor.xbf", step=2.0)
         [output] = result.measurements["joints"]
         # The plate turning on the flange's face stops nothing there, its holes passing over the flange's: it turns
         # until its side meets the block, about 67 degrees one way and 248 the other.
@@ -471,13 +471,13 @@ class Ranges(unittest.TestCase):
         self.assertIn("turns on: plate (plate) on motor (base), touching as built on a surface about its axis", line)
 
     def test_a_part_resting_on_its_parent_stops_where_it_is_pushed_into_it(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "hinge.py"
         script.write_text(textwrap.dedent(HINGE), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["hinge"], cwd=self.folder)[0]["ok"])
-        [elbow] = model.ranges(self.folder / "XBF/hinge.xbf").measurements["joints"]
+        [elbow] = xbf.ranges(self.folder / "XBF/hinge.xbf").measurements["joints"]
         # Turned down it goes into the base at once: its stop is where it lies, to within the step, not where it
         # has turned far enough for some other part of it to reach the base's side.
         self.assertEqual(("base", "base"), (elbow["lower_contact"]["still"], elbow["upper_contact"]["still"]), elbow)
@@ -487,13 +487,13 @@ class Ranges(unittest.TestCase):
         self.assertTrue(70.0 <= elbow["upper"] < 90.0, elbow)
 
     def test_a_link_turning_in_its_clevis_is_stopped_by_neither_its_pin_nor_the_cheeks(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "clevis.py"
         script.write_text(textwrap.dedent(CLEVIS), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["clevis"], cwd=self.folder)[0]["ok"])
-        [pivot] = model.ranges(self.folder / "XBF/clevis.xbf").measurements["joints"]
+        [pivot] = xbf.ranges(self.folder / "XBF/clevis.xbf").measurements["joints"]
         # The pin in its bores and the sides grooving the cheeks stop nothing: the floor stops it, its tip there at
         # 15.4 degrees one way and 195.4 the other.
         self.assertEqual(("floor", "floor"), (pivot["lower_contact"]["still"], pivot["upper_contact"]["still"]), pivot)
@@ -503,7 +503,7 @@ class Ranges(unittest.TestCase):
         self.assertEqual([], pivot["overlapping"])
 
     def test_a_lid_hinged_on_its_edge_stops_where_it_folds_back_onto_its_box(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "lid.py"
@@ -512,7 +512,7 @@ class Ranges(unittest.TestCase):
             self.assertTrue(report["ok"], report)
         for name in ("lid", "raised"):
             with self.subTest(name):
-                [hinge] = model.ranges(self.folder / f"XBF/{name}.xbf").measurements["joints"]
+                [hinge] = xbf.ranges(self.folder / f"XBF/{name}.xbf").measurements["joints"]
                 # Its end face lands on the wall at 180 degrees. Near the wall along the hinge line from far short of
                 # that (within 0.3 mm of it 0.8 mm from the axis at 158, and 1 mm from it at 163 for the raised one),
                 # it stops where a tenth of a radian (5.7 degrees) and a step are left, and short of landing.
@@ -524,13 +524,13 @@ class Ranges(unittest.TestCase):
                 self.assertTrue(-1.0 <= hinge["lower"] <= 0.0, hinge)
 
     def test_a_door_on_a_vertical_hinge_stops_where_it_folds_back_onto_its_wall(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "door.py"
         script.write_text(textwrap.dedent(DOOR), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["door"], cwd=self.folder)[0]["ok"])
-        [hinge] = model.ranges(self.folder / "XBF/door.xbf").measurements["joints"]
+        [hinge] = xbf.ranges(self.folder / "XBF/door.xbf").measurements["joints"]
         # Turned in it goes into its stop where it stands; turned out, its face lands on the wall's at 180 degrees,
         # near it along the hinge line long before: it stops within a tenth of a radian and a step of landing.
         self.assertEqual(("stop", "wall"), (hinge["lower_contact"]["still"], hinge["upper_contact"]["still"]), hinge)
@@ -538,13 +538,13 @@ class Ranges(unittest.TestCase):
         self.assertTrue(174.0 <= hinge["upper"] < 180.0, hinge)
 
     def test_a_flap_3_mm_wide_stops_short_of_folding_back_onto_its_base(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "flap.py"
         script.write_text(textwrap.dedent(FLAP), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["flap"], cwd=self.folder)[0]["ok"])
-        [hinge] = model.ranges(self.folder / "XBF/flap.xbf").measurements["joints"]
+        [hinge] = xbf.ranges(self.folder / "XBF/flap.xbf").measurements["joints"]
         # Its end face lands on the base at 180 degrees, 9 mm^2 of it. Within 3 mm of the axis a sample counts for as
         # many as its band is narrower than 0.3 mm, so that is a contact: the flap stops short of landing, as the
         # lid does, not two degrees into the base.
@@ -553,13 +553,13 @@ class Ranges(unittest.TestCase):
         self.assertTrue(174.0 <= hinge["upper"] < 180.0, hinge)
 
     def test_a_tab_near_its_axis_still_stops_at_its_block(self) -> None:
-        from cad import model
+        from cad import xbf
         from cad.engine import build as engine_build
 
         script = self.folder / "tab.py"
         script.write_text(textwrap.dedent(TAB), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["tab"], cwd=self.folder)[0]["ok"])
-        [pivot] = model.ranges(self.folder / "XBF/tab.xbf").measurements["joints"]
+        [pivot] = xbf.ranges(self.folder / "XBF/tab.xbf").measurements["joints"]
         # The block's corner meets the tab's flank at 54.8 degrees one way and 234.8 the other: each is found short
         # of it, by no more than the 8 degrees 0.3 mm is worth 2.15 mm from the axis and a step.
         self.assertEqual(("block", "block"), (pivot["lower_contact"]["still"], pivot["upper_contact"]["still"]), pivot)
@@ -570,12 +570,12 @@ class Ranges(unittest.TestCase):
         import contextlib
         import io
 
-        from cad import model
+        from cad import xbf
 
         document = self.rig()
         said = io.StringIO()
         with mock.patch("cad.engine.ranges.LONG", 0.0), contextlib.redirect_stderr(said):
-            result = model.ranges(document)
+            result = xbf.ranges(document)
         lines = result.human_lines()
         self.assertEqual([line.split() for line in lines[:3]],
                          [["joint", "lower", "upper", "range"], ["elbow", "-30", "deg", "+100", "deg", "-30", "to",
@@ -592,7 +592,7 @@ class Ranges(unittest.TestCase):
         said = io.StringIO()
         with mock.patch("cad.engine.ranges.LONG", 1e9), mock.patch("cad.engine.ranges.QUIET", 0.0), \
                 contextlib.redirect_stderr(said):
-            model.ranges(document)
+            xbf.ranges(document)
         heard = said.getvalue().splitlines()
         self.assertEqual(["ranges: sweeping elbow (1 of 2)", "ranges: elbow swept in", "ranges: sweeping slide (2 of 2)",
                           "ranges: slide swept in"], [line.rsplit(" ", 2)[0] if " swept in " in line else line
@@ -606,7 +606,7 @@ class Ranges(unittest.TestCase):
         said = io.StringIO()
         with mock.patch("cad.engine.ranges.LONG", 100.0), mock.patch("cad.engine.ranges.QUIET", 1e9), \
                 mock.patch("cad.engine.ranges.time.perf_counter", clock), contextlib.redirect_stderr(said):
-            model.ranges(document, joint=("elbow",))
+            xbf.ranges(document, joint=("elbow",))
         heard = said.getvalue().splitlines()
         self.assertTrue(heard[0].startswith("ranges: sweeping elbow (1 of 1): up to about ") and
                         heard[0].endswith(" more"), heard)
@@ -616,21 +616,21 @@ class Ranges(unittest.TestCase):
         # minutes of sampling are not minutes of silence.
         said = io.StringIO()
         with mock.patch("cad.engine.ranges.LONG", 1e9), contextlib.redirect_stderr(said):
-            model.ranges(document, verbose=True)
+            xbf.ranges(document, verbose=True)
         heard = [line.split(":")[1].strip().split(" ")[0] for line in said.getvalue().splitlines()]
         self.assertEqual(["reading", "sampling", "sweeping", "elbow", "sweeping", "slide"], heard, said.getvalue())
         self.assertIn("ranges: sampling 5 part surfaces to within 0.3 mm: about ", said.getvalue())
 
     def test_one_joint_is_swept_alone_and_an_unknown_one_is_refused_by_name(self) -> None:
-        from cad import model
+        from cad import xbf
 
         document = self.rig()
-        result = model.ranges(document, joint=("slide",))
+        result = xbf.ranges(document, joint=("slide",))
         self.assertEqual(["slide"], [found["joint"] for found in result.measurements["joints"]])
         self.assertIn("1 joint swept", result.summary)
         with self.assertRaisesRegex(ArgumentRefused, r"^--joint 'elbo' is no joint the sweep moves; its joints: "
                                                      r"elbow, slide$"):
-            model.ranges(document, joint=("elbo",))
+            xbf.ranges(document, joint=("elbo",))
 
     def test_a_document_with_no_joint_has_nothing_to_sweep(self) -> None:
         import build123d as bd
@@ -646,12 +646,12 @@ class Ranges(unittest.TestCase):
         self.assertEqual(["no_joints"], [finding.code for finding in result.findings])
 
     def test_a_step_or_a_clearance_out_of_range_is_refused_by_name(self) -> None:
-        from cad import model
+        from cad import xbf
 
         for options, flag in (({"step": 0}, "--step"), ({"step": 90}, "--step"), ({"clearance": -1}, "--clearance"),
                               ({"clearance": 0.2}, "--clearance 0.2 is under the sweep's resolution, 0.3 mm")):
             with self.subTest(options), self.assertRaisesRegex(ArgumentRefused, flag):
-                model.ranges(self.folder / "missing.xbf", **options)
+                xbf.ranges(self.folder / "missing.xbf", **options)
 
 
 if __name__ == "__main__":

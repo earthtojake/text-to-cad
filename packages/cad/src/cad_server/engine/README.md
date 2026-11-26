@@ -14,7 +14,7 @@ the last column says which page holds each.
 
 | Page | What it covers | Named in it |
 | --- | --- | --- |
-| [Models](docs/models.md) | What a model is and what its script declares: the file decorators and `@model`, the handle a call returns, `@memo`, materials, joints and mechanism states, posed copies |  |
+| [Models](docs/models.md) | What a model is and what its script declares: the file decorators and `@xbf`, the handle a call returns, `@memo`, materials, joints and mechanism states, posed copies |  |
 | [Architecture](docs/architecture.md) | One server per computer and what it owns; document ids; the HTTP listener and its token; how a release starts, joins or replaces the server; the version feed and cad's own update | A link outlives its engine; Starting and updating |
 | [Running a model](docs/running-a-model.md) | Where a model runs: the base environment, `cad run` as `uv run` with cad pinned, the environment of each set of integrations, the worker contract | The base; What an environment holds; One per distinct set, never changed once made; Its releases; An integration built for one Python; What cannot be done is said in one line; A Python of the script's own |
 | [Layout](docs/layout.md) | The modules of the engine, one line each |  |
@@ -44,5 +44,5 @@ the last column says which page holds each.
 | [Memo functions](docs/memo-functions.md) | `@memo`: what marking a function does, and when to mark one | When to mark a function |
 | [Known and accepted](docs/known-and-accepted.md) | The two byte-level drifts that are accepted, and on what condition |  |
 | [Build closure](docs/build-closure.md) | What an xbf records of the code and inputs that built it, the document's key, and compatibility as the toolchain or the format moves | When the toolchain or the format moves; Document compatibility |
-| [Model ids](docs/model-ids.md) | `@model`, a model's id and the commands that take it |  |
+| [Model ids](docs/model-ids.md) | `@xbf`, a model's id and the commands that take it |  |
 | [Parameters](docs/parameters.md) | A model's parameters: declared in its script, recorded in its document, served with whether each is writable, set into the script by the viewer's Save, and a page's preview before it saves | Declaring; Recording; Which a model has; The document; Held while the worker lives; What the page reads; Setting; Previewing |

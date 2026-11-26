@@ -85,7 +85,7 @@ _RESOURCE_NOT_FOUND = -32002
 # cadgen engine document (XBF) among them, and a KiCad board and schematic.
 EXTENSIONS = sorted(set(VIEWER_EXTENSIONS))
 # File formats alone, by their own names: a model's file is an XBF (a model the engine holds is shown by its id).
-FORMATS = ", ".join("XBF" if entry.held else entry.title for entry in DOCUMENT_TYPES.values())
+FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values())
 
 # How long a call that reads a view (cad_view, cad_screenshot) waits for one the agent just opened (a tab from
 # cad_open, a card from an inline cad_show) to sync for the first time: the host loads the page, then the page its
@@ -101,8 +101,8 @@ _MOUNTING_KEPT = 64
 _ASKED_KEPT = 16
 
 # What no tool does: the `cad` command's, which every host's agent runs in its shell.
-COMMANDS = ("To export a model, inspect it or snapshot it for yourself, run `cad model export <id> <file>`, "
-            "`cad model inspect <id>` or `cad model snapshot <id> out.png` in a shell (a file: `cad <type> ...` with "
+COMMANDS = ("To export a model, inspect it or snapshot it for yourself, run `cad xbf export <id> <file>`, "
+            "`cad xbf inspect <id>` or `cad xbf snapshot <id> out.png` in a shell (a file: `cad <type> ...` with "
             "its path, as `cad step inspect part.step`).")
 
 INSTRUCTIONS = (
@@ -214,15 +214,15 @@ def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
 # listed (``tools``); counted as any call naming no tool of cadgen's (``_refused``). Goes at the next minor release.
 _REMOVED_TOOLS = {
     "cad_export": "The cad_export tool was removed in cad 0.11.10. Export with the cad command instead: "
-                  "`cad model export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
-                  "for a CAD file (type: model for an .xbf, step, stl, glb or threemf); `cad --help` gives the details.",
+                  "`cad xbf export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
+                  "for a CAD file (type: xbf for an .xbf, step, stl, glb or threemf); `cad --help` gives the details.",
     "cad_snapshot": "The cad_snapshot tool was removed in cad 0.11.10. Draw a PNG with the cad command instead: "
-                    "`cad model snapshot <id> <out.png>` for a model's document id, `cad <type> snapshot <file> <out.png>` "
-                    "for a CAD file, or `cad model snapshot --job <packet>` for a Quick Edit packet; `cad --help` gives "
+                    "`cad xbf snapshot <id> <out.png>` for a model's document id, `cad <type> snapshot <file> <out.png>` "
+                    "for a CAD file, or `cad xbf snapshot --job <packet>` for a Quick Edit packet; `cad --help` gives "
                     "the details.",
     "cad_inspect": "The cad_inspect tool was removed in cad 0.11.10. Inspect with the cad command instead: "
-                   "`cad model inspect <id> [ref]` for a model's document id, or `cad <type> inspect <file> [ref]` for a "
-                   "CAD file (type: model for an .xbf, step or glb); `cad --help` gives the details.",
+                   "`cad xbf inspect <id> [ref]` for a model's document id, or `cad <type> inspect <file> [ref]` for a "
+                   "CAD file (type: xbf for an .xbf, step or glb); `cad --help` gives the details.",
 }
 
 

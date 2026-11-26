@@ -29,7 +29,7 @@ own keys together (a placement's look kept apart is such a copy, and keeps one k
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
 
-A GLB, an STL or a 3MF export may give its own tolerance instead: `cad model export ID part.stl
+A GLB, an STL or a 3MF export may give its own tolerance instead: `cad xbf export ID part.stl
 --tolerance 0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@glb("part.glb", tolerance=0.01)`. It is
 an absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
 the angle unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm
@@ -88,7 +88,7 @@ worker that built it (for example, after a daemon restart), answers
 that worker's last build. The line is the call's in the run that named the part. A file's
 element -- a model's declared xbf among them -- answers no `made_by`: a file names no model,
 whichever run wrote it.
-`cad model inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
+`cad xbf inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
 an element answers its facts and, of a model's document, `made_by`, with its canonical `ref`, its occurrence's `path`
 (`hand/finger.2`), its part, key, kind, ordinal and name, its points (centroid, position,
 endpoints, box) placed where that occurrence stands; a part or an assembly answers what it

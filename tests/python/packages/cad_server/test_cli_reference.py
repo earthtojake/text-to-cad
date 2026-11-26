@@ -32,10 +32,10 @@ class TheCopyIsTheCommand(unittest.TestCase):
         listed = {command["command"] for group in (*docs["documentTypes"], *docs["integrations"])
                   for command in group["operations"]} | {command["command"] for command in docs["commands"]}
         # A deprecated integration still answers, and `cad --help` no longer lists it: nor does the reference.
-        # (The file a model is saved as has no command of its own to list: `cad model` takes it.)
+        # (The file a model is saved as has no command of its own to list: `cad xbf` takes it.)
         unlisted = {name for name, entry in INTEGRATIONS.items() if entry.deprecated}
-        self.assertEqual(next(group["usage"] for group in docs["documentTypes"] if group["name"] == "model"),
-                         "cad model <operation> ID|FILE.xbf [options]")
+        self.assertEqual(next(group["usage"] for group in docs["documentTypes"] if group["name"] == "xbf"),
+                         "cad xbf <operation> ID|FILE.xbf [options]")
         answered = {f"cad {name}" for name in set(cli._COMMANDS) - cli._UNLISTED} | {
             f"cad {owner} {operation}" for owner, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS)
             if owner not in unlisted}

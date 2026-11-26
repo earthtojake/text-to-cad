@@ -33,10 +33,10 @@ import sys
 from pathlib import Path
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model("XBF/part.xbf")
+@xbf("XBF/part.xbf")
 def part():
     Path(__file__).with_name("worker.txt").write_text(sys.prefix, encoding="utf-8")
     return bd.Box(4, 5, 6)
@@ -134,10 +134,10 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertEqual(Path(status["prefix"]).resolve(), self.core.resolve(), "the engine runs the core")
 
         # The engine's own kernel processes: the documents worker exports a file, the pool measures it.
-        exported = self.run_cadgen("model", "export", "XBF/part.xbf", "out.stl", cwd=project)
+        exported = self.run_cadgen("xbf", "export", "XBF/part.xbf", "out.stl", cwd=project)
         self.assertEqual(exported.returncode, 0, exported.stderr)
         self.assertGreater((project / "out.stl").stat().st_size, 0)
-        inspected = self.run_cadgen("model", "inspect", "XBF/part.xbf", "--json", cwd=project)
+        inspected = self.run_cadgen("xbf", "inspect", "XBF/part.xbf", "--json", cwd=project)
         self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)  # --json says a failure on stdout
         self.assertAlmostEqual(json.loads(inspected.stdout)["summary"]["volume"], 120.0, places=3)
 

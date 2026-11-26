@@ -6,20 +6,20 @@ A script declares a model's parameters at a module's top level (law 30), and goe
 they return:
 
 ```python
-from cad import model
+from cad import xbf
 import build123d as bd
 
-WALL = model.param("wall", 2.0, min=1, max=5)             # a float; WALL is 2.0
-HOLES = model.param("holes", 6, min=3, max=12)            # an integer; HOLES is 6
-ANGLE = model.param("angle", 30.0, min=0, max=90, unit="deg")
+WALL = xbf.param("wall", 2.0, min=1, max=5)             # a float; WALL is 2.0
+HOLES = xbf.param("holes", 6, min=3, max=12)            # an integer; HOLES is 6
+ANGLE = xbf.param("angle", 30.0, min=0, max=90, unit="deg")
 
-@model
+@xbf
 def bracket():
     ...
 ```
 
 **Declaring.** `param(name, default, *, min=None, max=None, step=None, unit=None)` (`parameters.py`) is
-`cad.model.param`, the standard library alone, so `import cad` imports no kernel. It returns `default`
+`cad.xbf.param`, the standard library alone, so `import cad` imports no kernel. It returns `default`
 unchanged, a plain `int` or `float`: the memo's keys, what a body retains and the closure see a number like
 any other. An `int` default makes an integer parameter, whose bounds, step and values are whole numbers; a
 `float` default a float one. Refused by name: a `bool`, a number that is not finite, anything else; a name that
@@ -81,10 +81,10 @@ the document holds; else `reason` is one of
 among them; the script must run again), `shared` or `expression` (no
 span: an expression, or a literal not that declaration's alone, above).
 `source` is the declaring file relative to the script's folder where it is under it, else its name, and null
-where nothing live says it. `cad model inspect` lists the same rows, of an id and of an `.xbf` file (`api._summary`'s
+where nothing live says it. `cad xbf inspect` lists the same rows, of an id and of an `.xbf` file (`api._summary`'s
 `parameters`).
 
-**Setting.** One entrance, the viewer's Save: the page's `POST /api/v1/documents/model/<id>/parameters` with
+**Setting.** One entrance, the viewer's Save: the page's `POST /api/v1/documents/xbf/<id>/parameters` with
 `{"values": {...}}` (`viewer/http_app.py`, behind the guard header and the page token every changing route has;
 only a model's document has it, and it names a document and parameters alone, never a path or text). No command
 or library function writes parameters: an agent changes a value by editing the script and running it. The route
@@ -152,7 +152,7 @@ of a document no live worker built; overwrite a file another writer changed whil
 the run that last ran; write the record into a STEP, a GLB or any other translation.
 
 **Previewing.** Before a Save, the page's Parameters tab shows the model at its drafts as a person moves them:
-`POST /api/v1/documents/model/<id>/preview` with `{"values": {...}, "page": token}` (`viewer/http_app.py`, behind
+`POST /api/v1/documents/xbf/<id>/preview` with `{"values": {...}, "page": token}` (`viewer/http_app.py`, behind
 the guard header and the page token as `set`'s route is; `page` a token of the page's own making, letters,
 digits, `-` and `_`, which keeps one page's previews from another's), answered by `parameters.Previewing.preview`
 in the daemon (`client.previewModelParameters` on the page; no command and no library function: nothing but the

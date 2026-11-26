@@ -228,8 +228,8 @@ class ReleaseTest(unittest.TestCase):
         fixture = Fixture(self, DECLARED)
         (block,) = fixture.ids
         with mock.patch.object(api, "check", side_effect=api.Unanswered("old")):
-            exported = cad.model.dfm(block, process="cnc")
-        held = cad.model.dfm(block, process="cnc")
+            exported = cad.xbf.dfm(block, process="cnc")
+        held = cad.xbf.dfm(block, process="cnc")
         self.assertEqual(_plain(exported), _plain(held), "exported and read back, as before")
 
     def test_a_file_checked_with_no_engine_to_reach_is_measured_here_and_one_line_says_so(self) -> None:

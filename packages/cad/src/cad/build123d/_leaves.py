@@ -1,6 +1,6 @@
 """``leaves(tree)``: every leaf of a build123d tree, placed where it stands, out of the tree.
 
-A tree is what ``step.read``, ``model.read`` and a model's ``.shape`` return: each node's ``location``
+A tree is what ``step.read``, ``xbf.read`` and a model's ``.shape`` return: each node's ``location``
 is relative to its parent. build123d's ``located`` and ``moved`` deep-copy the node they are asked of
 WITH its parent, so placing one leaf of a read assembly copies the whole assembly's Python nodes (and,
 outside the engine's memo, every B-rep in it: seconds and hundreds of megabytes a call on a robot's

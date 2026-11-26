@@ -613,8 +613,8 @@ class Cantilever(unittest.TestCase):
                 shutil.copyfile(xbf, target)
 
             with mock.patch.object(api, "export", held), quiet():
-                listing = cad.model.solve(model)
-                result = cad.model.solve(model, study=self.study, out=Path(tmp) / "model")
+                listing = cad.xbf.solve(model)
+                result = cad.xbf.solve(model, study=self.study, out=Path(tmp) / "model")
             self.assertEqual([source for source, _ in written], [model, model])
             self.assertFalse(any(target.exists() for _, target in written))  # its temporary folder is gone
             self.assertEqual((listing.path, len(listing.faces)), (Path(model), 6))

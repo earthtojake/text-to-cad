@@ -1,5 +1,5 @@
 """A model call returns its document's handle -- never a bare shape, never a report -- and
-``model(shape, name=...)`` makes a document of a shape a program holds.
+``xbf(shape, name=...)`` makes a document of a shape a program holds.
 
 A handle has the document's id and page; its ``shape`` is transferred into the caller, the kernel
 loaded, on first access and never before; ``handle.export(...)`` is ``export(handle, ...)``. Inside a
@@ -32,15 +32,15 @@ from tests.python.support.ids import model_id  # noqa: E402
 
 PARTS = """
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def peg():
     return bd.Cylinder(2, 10)
 
 
-@model("XBF/base.xbf")
+@xbf("XBF/base.xbf")
 def base():
     first, second = peg(), peg()
     # A child's call is its handle, inside the body too: its id, no page yet, its result here.
@@ -73,7 +73,7 @@ EIGHT = """
 import pathlib
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 RUNS = pathlib.Path(__file__).with_name("runs.txt")
 
@@ -86,7 +86,7 @@ def _box(name, size):
     return box
 """ + "".join(f"""
 
-@model
+@xbf
 def m{at}():
     return _box("m{at}", {at + 1})
 """ for at in range(8))
@@ -111,18 +111,18 @@ HANDED = """
 import json
 
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import animation
 
 lid = bd.Box(10, 10, 2)
 lid.label = "lid"
 crate = bd.Compound(children=[bd.Box(10, 10, 10), lid.moved(bd.Pos(0, 0, 6))], label="crate")
 lift = animation(crate, "lift", duration=2).translation("lid", by=(0, 0, 10), end=2)
-handle = model(crate, name="crate", animations=[lift])
+handle = xbf(crate, name="crate", animations=[lift])
 handle.export("crate.glb", "crate.step")
-tag = model(bd.Box(1, 1, 1), name="tag")
-model(bd.Box(2, 2, 2), name="spare/pin")  # its .xbf is <name>.xbf joined to the script's folder, whatever the name
-model(bd.Box(1, 1, 3), "pegs/peg-v1.xbf", name="peg")  # a path given second: there, relative to the script
+tag = xbf(bd.Box(1, 1, 1), name="tag")
+xbf(bd.Box(2, 2, 2), name="spare/pin")  # its .xbf is <name>.xbf joined to the script's folder, whatever the name
+xbf(bd.Box(1, 1, 3), "pegs/peg-v1.xbf", name="peg")  # a path given second: there, relative to the script
 from cad import step
 
 step(crate, "loose/crate.step")  # that one file of the shape, now: no .xbf, no document
@@ -132,11 +132,11 @@ print("RESULT " + json.dumps({"id": handle.id, "url": handle.url, "same": handle
 
 HINGE = """
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import mechanism_state, posed
 
 
-@model
+@xbf
 def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -149,7 +149,7 @@ def hinge():
     return mechanism_state(assembly, "open", elbow=90)
 
 
-@model
+@xbf
 def hinge_open():
     return posed(hinge().shape, "open")
 """
@@ -185,7 +185,7 @@ import json
 import pathlib
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
 def tree(node, path=()):
@@ -199,7 +199,7 @@ def tree(node, path=()):
     return rows
 
 
-@model
+@xbf
 def arm():
     base = bd.Box(40, 40, 10).located(bd.Location((0, 0, 5)))
     servo = bd.Box(20, 10, 8).located(bd.Location((10, 0, 0)))
@@ -210,7 +210,7 @@ def arm():
     return bd.Compound(children=[base, elbow], label="arm")
 
 
-@model
+@xbf
 def inside():
     shape = arm().shape
     pathlib.Path(__file__).with_name("inside.json").write_text(json.dumps(tree(shape)), encoding="utf-8")
@@ -360,8 +360,8 @@ class HandleTest(unittest.TestCase):
         self.assertEqual((rows[ident]["path"], rows[ident]["name"], rows[ident]["record"], rows[ident]["parts"],
                           rows[found["tag"]]["parts"]), (str(project / "crate.xbf"), "crate.xbf", "file", 2, 1))
         # From a REPL: its .xbf in the working folder.
-        repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
-                               "h = model(bd.Box(2, 2, 2), name='scratch')\nmodel(bd.Box(1, 1, 1), 'kept/kept.xbf', name='kept')\n"
+        repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import xbf\n"
+                               "h = xbf(bd.Box(2, 2, 2), name='scratch')\nxbf(bd.Box(1, 1, 1), 'kept/kept.xbf', name='kept')\n"
                                "print('RESULT ' + json.dumps(h.id))\n")
         self.assertEqual(repl, file_id(project / "scratch.xbf"))
         self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "scratch.xbf", "tag.xbf"],
@@ -418,12 +418,12 @@ class HandleTest(unittest.TestCase):
             import json
 
             import build123d as bd
-            from cad import model
+            from cad import xbf
 
             from dims import WIDTH
 
 
-            @model
+            @xbf
             def plate():
                 return bd.Box(WIDTH, 2, 1)
 
@@ -457,10 +457,10 @@ UNREACHED = """
 import sys
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def peg():
     return bd.Cylinder(2, 10)
 

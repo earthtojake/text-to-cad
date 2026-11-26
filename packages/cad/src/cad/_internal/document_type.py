@@ -5,7 +5,7 @@ its entry in the registry (``cad.registry``) as its last line runs (``bind``). S
 step`` is one object that is
 
 * the type's decorator, where it has one: ``@step("out.step")`` declares a model's file (bare ``@step``,
-  ``<name>.step`` beside the script), and ``@model`` the model's ``.xbf``;
+  ``<name>.step`` beside the script), and ``@xbf`` the model's ``.xbf``;
 * its reader, where it has one: ``step.read(path)``;
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
   ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
@@ -18,10 +18,10 @@ step`` is one object that is
 
 Everything loads on first use: ``import cad`` imports no CAD kernel. A source of another type is
 refused by name before anything runs: a file of another type (``cad.stl.export("part.glb", ...)``: that's
-a glb's), a model's handle or document id given to a file's type (that's ``cad.model``'s), and a file
-given to ``cad.model`` but the one a model is saved as, its ``.xbf``: ``cad.model`` is a model the engine
-holds or that file, and its operations run on the file as the file it is. ``cad.xbf``, its earlier
-spelling, is an alias of ``cad.model`` (``cad._internal.aliases``).
+a glb's), a model's handle or document id given to a file's type (that's ``cad.xbf``'s), and a file
+given to ``cad.xbf`` but the one a model is saved as, its ``.xbf``: ``cad.xbf`` is a document the engine
+holds or that file, and its operations run on the file as the file it is. ``cad.model``, its earlier spelling,
+is an alias of ``cad.xbf`` (``cad._internal.aliases``).
 """
 
 from __future__ import annotations
@@ -32,13 +32,13 @@ import types
 from pkgutil import resolve_name as _resolve
 from typing import Any
 
-__all__ = ["DocumentType", "ModelType", "bind", "is_file", "refuse_other"]
+__all__ = ["DocumentType", "XbfType", "bind", "is_file", "refuse_other"]
 
 # An operation a type does not implement, read as one that needs no integration.
 _NONE = types.SimpleNamespace(integration=None, family=None)
-# A type's reader: the function that reads a file of it into a model. ``model``'s reads the .xbf a model is
+# A type's reader: the function that reads a file of it into a model. ``xbf``'s reads the .xbf a model is
 # saved as.
-_READERS = {"step": "cad.engine.model.read_step", "model": "cad.engine.model.read_xbf",
+_READERS = {"step": "cad.engine.model.read_step", "xbf": "cad.engine.model.read_xbf",
             "stl": "cad.engine.reader.read_mesh"}
 
 
@@ -136,7 +136,7 @@ class DocumentType(types.ModuleType):
 def refuse_other(document_type: str, source: Any) -> str:
     """``document_type``, for an operation of it given ``source``, after refusing a source of any other type by
     name before anything runs: a file of another type (``cad.stl.export("part.glb")`` is a glb's: use cad.glb), a
-    model's handle or document id given to a file's type (use cad.model), any other file given to ``cad.model``
+    model's handle or document id given to a file's type (use cad.xbf), any other file given to ``cad.xbf``
     than its ``.xbf``. None (no source: a snapshot's job names its own) passes."""
     if source is None:
         return document_type
@@ -151,17 +151,17 @@ def refuse_other(document_type: str, source: Any) -> str:
         named = parts(text)[0]  # a FILE#REF's file, a path that holds a '#' itself whole
         if is_id(named):
             if not entry.held:
-                raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.model")
+                raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.xbf")
             return entry.id
         found = type_of(named)
         if found is not None and found.id != entry.id:
             raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
         if found is None and entry.held:
-            raise ValueError(f"cad.model takes a model's handle, its document id (cad run SCRIPT.py prints it) or "
+            raise ValueError(f"cad.xbf takes a model's handle, its document id (cad run SCRIPT.py prints it) or "
                              f"an {entry.suffix} file, not {text!r}")
         return entry.id
     if not entry.held:
-        raise ValueError(f"cad.{entry.id} takes a {entry.suffix} file; {_what(source)} is a model's: use cad.model")
+        raise ValueError(f"cad.{entry.id} takes a {entry.suffix} file; {_what(source)} is a model's: use cad.xbf")
     return entry.id
 
 
@@ -182,10 +182,11 @@ def _what(source: Any) -> str:
     return f"{type(source).__name__} {name!r}" if name else type(source).__name__
 
 
-class ModelType(DocumentType):
-    """``cad.model``: the one type a document of which the engine also holds by its id, whose decorator is the
-    engine's model itself, and whose script declares its parameters with it (``model.param``, ``cad.engine.parameters.param``: the standard
-    library alone, so ``import cad`` stays kernel-free)."""
+class XbfType(DocumentType):
+    """``cad.xbf``: the document type of the ``.xbf`` a model is saved as, which the engine also holds by its id. Its
+    decorator is the engine's model declaration itself, and its script declares its parameters with it (``xbf.param``,
+    ``cad.engine.parameters.param``: the standard library alone, so ``import cad`` stays kernel-free). ``cad.model``,
+    its earlier spelling, is a module alias of it (``cad._internal.aliases``)."""
 
     _declarations = ("param",)
 
@@ -200,9 +201,9 @@ class ModelType(DocumentType):
 
     def __call__(self, target: Any = None, file: Any = None, /, *, out: Any = None,  # type: ignore[override]
                  name: str | None = None, animations: Any = None) -> Any:
-        """``@model``, ``@model(name=...)`` or ``@model("XBF/arm.xbf")``: declare a model and the ``.xbf`` each
-        run saves it as, at its path relative to the script, else ``<name>.xbf`` beside it; ``model(shape,
-        name=...)`` (``model(shape, "crate.xbf", name=...)`` with a path): hand a shape over as a named model
+        """``@xbf``, ``@xbf(name=...)`` or ``@xbf("XBF/arm.xbf")``: declare a model and the ``.xbf`` each
+        run saves it as, at its path relative to the script, else ``<name>.xbf`` beside it; ``xbf(shape,
+        name=...)`` (``xbf(shape, "crate.xbf", name=...)`` with a path): hand a shape over as a named model
         (``cad.engine.model.model``)."""
         from cad.engine import model
 
@@ -251,5 +252,5 @@ def _operation(document_type: str, name: str) -> Any:
 
 
 def bind(module_name: str) -> None:
-    """Make the module ``module_name`` (a type's package) a ``DocumentType`` (``cad.model`` a ``ModelType``)."""
-    sys.modules[module_name].__class__ = ModelType if module_name.rpartition(".")[2] == "model" else DocumentType
+    """Make the module ``module_name`` (a type's package) a ``DocumentType`` (``cad.xbf`` an ``XbfType``)."""
+    sys.modules[module_name].__class__ = XbfType if module_name.rpartition(".")[2] == "xbf" else DocumentType

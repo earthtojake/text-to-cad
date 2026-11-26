@@ -57,7 +57,7 @@ DESCRIPTION = (
     "and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether "
     "sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a "
     "share.")
-KINDS = {"model": "a model", "step": "a STEP", "stl": "an STL", "glb": "a GLB", "threemf": "a 3MF", "3mf": "a 3MF",
+KINDS = {"xbf": "a model", "step": "a STEP", "stl": "an STL", "glb": "a GLB", "threemf": "a 3MF", "3mf": "a 3MF",
          "dxf": "a DXF", "urdf": "a URDF", "srdf": "an SRDF"}
 MESHES = frozenset({"stl", "glb", "threemf", "3mf"})
 UNBUNDLED = {"kicad_pcb": "a KiCad board", "kicad_sch": "a KiCad schematic"}
@@ -173,7 +173,7 @@ def _goes(kind: str, sources: Any) -> str:
     """What a share of a file of ``kind`` (its type's id) takes of it, in words: its files (``sources``), which
     anyone with the link can download, and its view."""
     count = len(sources.files)
-    if kind == "model":
+    if kind == "xbf":
         code = count - 1  # the .xbf is one of them
         files = (f"the model's .xbf, its code and the files it reads ({count} files)" if code else
                  "the model's .xbf")
@@ -181,7 +181,7 @@ def _goes(kind: str, sources: Any) -> str:
         files = f"the file itself with {count - 1} file{'s' if count != 2 else ''} it draws from beside it"
     else:
         files = "the file itself"
-    view = ("its shapes as meshes, with their names, measurements and joints" if kind in ("model", "step") else
+    view = ("its shapes as meshes, with their names, measurements and joints" if kind in ("xbf", "step") else
             "its drawing" if kind == "dxf" else "its links, joints and meshes" if kind in ("urdf", "srdf") else
             "the mesh as the viewer draws it")
     return f"{files}, which anyone with the link can download, and its view: {view}"
@@ -266,7 +266,7 @@ def _sources(path: str, kind: str) -> tuple[Any, float | None]:
     from cad_server._internal.cli_errors import Failure
     from cad_server.cli.fork import _command
 
-    if kind != "model":
+    if kind != "xbf":
         return sharing.file_sources(path, kind), None
     made = _made(path)
     try:
@@ -334,9 +334,9 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
         shown = manifest.get("document") or {}
         document = {"id": ident, "kind": str(shown.get("kind") or kind),
                     "name": str(shown.get("name") or os.path.basename(path)), "path": path}
-        # The share's name, which its zip's folder is named for: a model's .xbf's stem (its model's name, as @model
+        # The share's name, which its zip's folder is named for: a model's .xbf's stem (its model's name, as @xbf
         # names the file), else the file's name; the same whether a worker holds the model or its file is read.
-        title = sharing.share_name(Path(path).stem if kind == "model" else os.path.basename(path))
+        title = sharing.share_name(Path(path).stem if kind == "xbf" else os.path.basename(path))
         share = sharing.share_of(earlier) if earlier is not None else sharing.Share.new(service)
         try:
             sent = _sent(share, found, sources, title, sharing.stored(folder, share), prog)
@@ -401,7 +401,7 @@ def _notes(sources: Any, kind: str, name: str) -> list[str]:
     if sources.unseen:
         lines.append("Its build read a file cad could not see, which the share does not hold: a fork may not rebuild "
                      "it without that file")
-    if kind == "model" and sources.entry is None:
+    if kind == "xbf" and sources.entry is None:
         lines.append(f"Its .xbf alone went: no build closure names the code that made {name} (a shape a program "
                      "handed over, or a file exported from another)")
     return lines
@@ -463,7 +463,7 @@ def _what(kind: str, paths: list[str], sources: Any) -> dict[str, Any]:
     meshes = [path for path in paths if path.startswith("meshes/") or (path.startswith("parts/")
                                                                        and path.count("/") == 1)]
     count = len(sources.files)
-    if kind == "model":
+    if kind == "xbf":
         code = count - 1  # the .xbf is one of them
         files = f"its .xbf and the {code} file{'s' if code != 1 else ''} that made it" if code else "its .xbf"
     elif count > 1:

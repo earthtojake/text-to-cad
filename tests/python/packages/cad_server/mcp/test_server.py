@@ -413,9 +413,9 @@ class TabServerTest(_Session):
         listed = [tool["name"] for tool in self.server.tools()]
         context = RequestContext(1, {"threadId": "t"})
         with mock.patch.object(self.server.analytics, "called") as counted:
-            for name, command in (("cad_export", "`cad model export <id> <file>...`"),
-                                  ("cad_snapshot", "`cad model snapshot <id> <out.png>`"),
-                                  ("cad_inspect", "`cad model inspect <id> [ref]`")):
+            for name, command in (("cad_export", "`cad xbf export <id> <file>...`"),
+                                  ("cad_snapshot", "`cad xbf snapshot <id> <out.png>`"),
+                                  ("cad_inspect", "`cad xbf inspect <id> [ref]`")):
                 with self.subTest(name=name):
                     self.assertNotIn(name, listed)
                     answered = self.server.handle("tools/call", {"name": name, "arguments": {"source": "x"}}, context)
@@ -1376,7 +1376,7 @@ class ToolArgumentsTest(unittest.TestCase):
                       presentation=presentation)["instructions"]
                 for client, presentation in CATALOGS.values()]
         for instructions in told:
-            for command in ("`cad model export <id> <file>`", "`cad model inspect <id>`", "`cad model snapshot <id> out.png`"):
+            for command in ("`cad xbf export <id> <file>`", "`cad xbf inspect <id>`", "`cad xbf snapshot <id> out.png`"):
                 self.assertIn(command, instructions)
 
 

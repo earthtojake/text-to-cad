@@ -107,7 +107,7 @@ class ReadAndPlaceTest(_Folder):
         plate = "\n            ".join(textwrap.dedent(writer).split("\n\n\n", 1)[1].strip().splitlines())
         refused = self.build("reads.py", reads.format(plate=plate, tail=".moved(bd.Location((0, 0, 1)))"))
         self.assertEqual([report["ok"] for report in refused], [True, False, False])
-        self.assertIn("model.read", refused[1]["error"])
+        self.assertIn("xbf.read", refused[1]["error"])
         self.assertIn("step.read", refused[2]["error"])
         for report in refused[1:]:
             self.assertIn("this build writes it (reads.py::plate)", report["error"])
@@ -154,7 +154,7 @@ class WhereTest(unittest.TestCase):
         shutil.rmtree(cls.state, ignore_errors=True)
 
     def where(self, ref: str) -> subprocess.CompletedProcess:
-        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "inspect", "XBF/hand.xbf", ref], cwd=self.folder,
+        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", "xbf", "inspect", "XBF/hand.xbf", ref], cwd=self.folder,
                                  env=self.env)
 
     def test_where_takes_an_occurrence_path(self) -> None:
@@ -184,7 +184,7 @@ class WhereTest(unittest.TestCase):
     def test_the_command_reads_a_ref_without_loading_the_kernel(self) -> None:
         # The engine measures; the command only parses and places: a ref costs it no kernel load.
         code = ("import runpy, sys\n"
-                "sys.argv = ['cadgen', 'model', 'inspect', 'XBF/hand.xbf', 'hand/finger.2/face 1']\n"
+                "sys.argv = ['cadgen', 'xbf', 'inspect', 'XBF/hand.xbf', 'hand/finger.2/face 1']\n"
                 "try:\n    runpy.run_module('cad_server.cli', run_name='__main__')\n"
                 "except SystemExit as stop:\n    assert not stop.code, stop.code\n"
                 "print(sorted(name for name in sys.modules if name.startswith('OCP.') or name == 'cad.engine.kernel.trace'),"

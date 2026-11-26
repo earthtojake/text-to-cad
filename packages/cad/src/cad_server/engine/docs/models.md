@@ -3,10 +3,10 @@
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
 A model is a parameterless function that returns a build123d shape, declared by the files it
-declares: `@model`, the `.xbf` it is saved as, or a file decorator for any other, alone or combined, one
+declares: `@xbf`, the `.xbf` it is saved as, or a file decorator for any other, alone or combined, one
 kind once. A path is optional on each: omitted, it is the model's name
 (`name=`, else the function's) and the format's extension beside the script. The engine runs it in a warm
-worker, holds the result as an XCAF document in memory, writes it as its BinXCAF file, its `.xbf`, where `@model`
+worker, holds the result as an XCAF document in memory, writes it as its BinXCAF file, its `.xbf`, where `@xbf`
 declares one (at its path, else beside the script), and writes the derived files the model declares, each a
 translation of that document. A function with file decorators alone writes those files alone: no `.xbf`, so no
 model document, and after a restart its run builds it from nothing, as its run's warning says. A drawing is
@@ -14,10 +14,10 @@ a model like any other: its body returns 2D geometry (a sketch, a face, wires or
 declares its DXF.
 
 ```python
-from cad import step, model
+from cad import step, xbf
 import build123d as bd
 
-@model                    # each run saves it as arm.xbf beside the script; @model("XBF/arm.xbf") elsewhere
+@xbf                    # each run saves it as arm.xbf beside the script; @xbf("XBF/arm.xbf") elsewhere
 @step("STEP/arm.step")    # also @glb, @stl, @threemf, @dxf; alone or combined; bare, arm.step; name= optionally names the model
 def arm():
     return bd.Box(10, 20, 30)
@@ -41,11 +41,11 @@ gives it and every part at its own in its assembly, as the body built them -- tr
 node's placement in its parent (`export.Source.locals`), never pushed down into the leaves.
 
 ```python
-@model
+@xbf
 def peg():
     return bd.Cylinder(2, 10)
 
-@model("XBF/base.xbf")
+@xbf("XBF/base.xbf")
 def base():
     return bd.Compound(children=[bd.Box(20, 20, 3), peg().shape.moved(bd.Pos(5, 0, 6))])
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 ```
 
 A program that holds a shape -- a script with no model, a REPL, a notebook -- hands it over with
-`model(shape, name="plate")` (**Shapes handed over**): a document made of it, its `.xbf` written and served by
+`xbf(shape, name="plate")` (**Shapes handed over**): a document made of it, its `.xbf` written and served by
 the engine, exportable, and returned as a handle whose `.shape` is the shape passed.
 
 `import build123d as bd` binds at once: the library makes the import of `build123d` and `OCP` lazy
@@ -71,14 +71,14 @@ assembly's parts, a stage of a long derivation. It writes no file; the model tha
 it does.
 
 ```python
-from cad import model
+from cad import xbf
 from cad.build123d import memo
 
 @memo
 def wheel(radius, spokes=5):     # replayed, not run, while what it is made of is unchanged
     ...
 
-@model("XBF/bike.xbf")
+@xbf("XBF/bike.xbf")
 def bike():
     return bd.Compound(children=[wheel(300), wheel(300).moved(bd.Pos(1200, 0, 0))], label="bike")
 ```
@@ -109,9 +109,9 @@ where the parts stand.
 
 ```python
 from cad.build123d import mechanism_state
-from cad import model
+from cad import xbf
 
-@model("XBF/hinge.xbf")
+@xbf("XBF/hinge.xbf")
 def hinge():
     base, arm = bd.Box(100, 60, 20), bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"

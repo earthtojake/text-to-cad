@@ -1,7 +1,6 @@
-"""``cad xbf <operation> ...``: the earlier spelling of ``cad model <operation> ...``, from the days an ``.xbf`` was
-a document type of its own (``cad_server.cli.xbf``). It runs ``cad model`` itself, after one line on stderr saying it
-is deprecated (none under ``--json``), and is otherwise byte for byte ``cad model``: its output, its ``--json`` and
-its exit status. Unlisted. These are the tests a removal of the spelling deletes with it.
+"""``cad model <operation> ...``: the earlier spelling of ``cad xbf <operation> ...`` (``cad_server.cli.model``). It
+runs ``cad xbf`` itself, after one line on stderr saying it is deprecated (none under ``--json``), and is otherwise
+byte for byte ``cad xbf``: its output, its ``--json`` and its exit status. Unlisted. These are the tests a removal of the spelling deletes with it.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ add_sources()
 
 import cad_server.cli as cli  # noqa: E402
 
-DEPRECATED = "cad xbf: deprecated and will be removed: use cad model\n"
+DEPRECATED = "cad model: deprecated and will be removed: use cad xbf\n"
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:
@@ -29,20 +28,21 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
-class CadXbfRunsCadModel(unittest.TestCase):
+class CadModelRunsCadXbf(unittest.TestCase):
     def test_it_is_answered_and_not_listed(self) -> None:
-        self.assertIn("xbf", cli._UNLISTED)  # noqa: SLF001 - the table IS the subject
-        self.assertEqual(cli.TYPE_COMMANDS["xbf"], "cad_server.cli.xbf")
+        self.assertIn("model", cli._UNLISTED)  # noqa: SLF001 - the table IS the subject
+        self.assertEqual(cli.TYPE_COMMANDS["model"], "cad_server.cli.model")
         types = _run(["--help"])[1].split("document types, the files cad shows", 1)[1].split("\n\n", 1)[0]
-        self.assertNotIn("xbf", [line.split()[0] for line in types.splitlines()[1:]])
-        self.assertEqual(cli.resolve(["xbf", "export", "arm.xbf", "arm.glb"]), ("model export", ["arm.xbf", "arm.glb"]))
+        self.assertNotIn("model", [line.split()[0] for line in types.splitlines()[1:]])
+        self.assertIn("xbf", [line.split()[0] for line in types.splitlines()[1:]])
+        self.assertEqual(cli.resolve(["model", "export", "arm.xbf", "arm.glb"]), ("xbf export", ["arm.xbf", "arm.glb"]))
 
-    def test_every_operation_is_the_model_s_with_one_line_more_on_stderr_but_under_json(self) -> None:
+    def test_every_operation_is_the_xbf_s_with_one_line_more_on_stderr_but_under_json(self) -> None:
         from unittest import mock
 
         from cad_server.cli.document_types import OPERATIONS, operations_of
 
-        for operation in operations_of("model"):
+        for operation in operations_of("xbf"):
             ran: list[tuple[list[str], str]] = []
 
             def run(argv: list[str], prog: str) -> int:
@@ -51,21 +51,21 @@ class CadXbfRunsCadModel(unittest.TestCase):
                 return 7
 
             for argv, said in ((["share/arm.xbf"], DEPRECATED), (["share/arm.xbf", "--json"], "")):
-                with self.subTest(operation=operation, argv=argv), mock.patch.dict(OPERATIONS, {("model", operation): run}):
-                    older, now = _run(["xbf", operation, *argv]), _run(["model", operation, *argv])
+                with self.subTest(operation=operation, argv=argv), mock.patch.dict(OPERATIONS, {("xbf", operation): run}):
+                    older, now = _run(["model", operation, *argv]), _run(["xbf", operation, *argv])
                     self.assertEqual(older, (now[0], now[1], said + now[2]))
-                    self.assertEqual(older[:2], (7, f"ran cad model {operation}\n"))
-                    self.assertEqual(ran[-2:], [(argv, f"cad model {operation}")] * 2)
+                    self.assertEqual(older[:2], (7, f"ran cad xbf {operation}\n"))
+                    self.assertEqual(ran[-2:], [(argv, f"cad xbf {operation}")] * 2)
 
-    def test_a_refusal_is_the_model_s_own_byte_for_byte(self) -> None:
+    def test_a_refusal_is_the_xbf_s_own_byte_for_byte(self) -> None:
         argv = ["export", "no-such-file.xbf", "out.glb"]
-        self.assertEqual(_run(["model", *argv]), (2, "", "cad model export: no such file: no-such-file.xbf\n"))
-        self.assertEqual(_run(["xbf", *argv]), (2, "", DEPRECATED + "cad model export: no such file: no-such-file.xbf\n"))
+        self.assertEqual(_run(["xbf", *argv]), (2, "", "cad xbf export: no such file: no-such-file.xbf\n"))
+        self.assertEqual(_run(["model", *argv]), (2, "", DEPRECATED + "cad xbf export: no such file: no-such-file.xbf\n"))
         refused = '{"ok":false,"error":"no such file: no-such-file.xbf","reason":"not_found"}\n'
-        self.assertEqual(_run(["xbf", *argv, "--json"]), (2, refused, ""))
         self.assertEqual(_run(["model", *argv, "--json"]), (2, refused, ""))
-        # Its help is the model's, said under the model's name.
-        older, now = _run(["xbf", "--help"]), _run(["model", "--help"])
+        self.assertEqual(_run(["xbf", *argv, "--json"]), (2, refused, ""))
+        # Its help is the xbf's, said under the xbf's name.
+        older, now = _run(["model", "--help"]), _run(["xbf", "--help"])
         self.assertEqual(older, (now[0], now[1], DEPRECATED + now[2]))
 
 
