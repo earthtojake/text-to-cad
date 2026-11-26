@@ -568,20 +568,23 @@ class InstallScriptTests(AgentApps):
         table = {me: (90, sys.executable), 90: (91, str(env / "Scripts" / "python.exe")),  # what started this run
                  91: (1, str(folder / "cad.exe")),
                  100: (1, str(env / "Scripts" / "python.exe")), 101: (1, str(folder / "cad.exe")),
+                 104: (100, str(self.root / "python" / "python.exe")),  # the Python a venv's python.exe started
                  102: (1, str(folder / install.ASIDE.format(stamp="12-34", n=1))), 103: (1, str(folder / ".cad-7.exe.old")),
                  110: (1, str(env) + "-other\\python.exe"), 111: (1, str(folder / "ruff.exe")), 112: (1, None)}
         test = self
 
         class Fake:
             ended: list = []
+            watched: list = []
 
             def processes(self) -> dict:
                 return dict(table)
 
-            def end(self, pids: list, seconds: float) -> list:
+            def end(self, pids: list, watched: list, seconds: float) -> list:
                 test.assertEqual(test.installs(), [], "stopped before uv runs")
                 self.ended.append(pids)
-                for pid in pids:
+                self.watched.append(watched)
+                for pid in pids + watched:
                     table.pop(pid)
                 if len(self.ended) == 1:  # one more began meanwhile: found at the next look
                     table[120] = (1, str(env / "Scripts" / "cad.exe"))
@@ -594,6 +597,7 @@ class InstallScriptTests(AgentApps):
             cad = install.install_cad(here)
         self.assertEqual((cad.code, cad.release), (0, "0.13.0"), said.getvalue())
         self.assertEqual(fake.ended, [[100, 101, 102, 103], [120]])
+        self.assertEqual(fake.watched, [[104], []], "what one stopped started directly, waited for")
         self.assertEqual(sorted(table), sorted([me, 90, 91, 110, 111, 112]))
         self.assertIn("Stopped what ran from cad's environment, so uv can install it again: 100 (", said.getvalue())
         self.assertIn("Removed cad-1.0.0.dist-info from cad's environment", said.getvalue())

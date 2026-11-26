@@ -622,7 +622,8 @@ def stop_environment(here: Here, env: Path, folder: Path, system: Any = None, se
     """Windows, before uv installs cad's environment ``env`` again: uv fails while any process runs from it (it cannot
     remove the folder of a program that runs, ``Access is denied``, measured) and leaves cad broken. So every process
     that runs from it (``running_from``), but this one and those that started it (``lineage``), is stopped and waited
-    for until it is gone, ``seconds`` at most; then looked for again, until none is left, ``rounds`` looks at most, as
+    for until it is gone, with what each started directly (the Python a venv's ``python.exe`` or a ``cad.exe`` runs,
+    which ends with it), ``seconds`` at most; then looked for again, until none is left, ``rounds`` looks at most, as
     cad's own update stops them before uv upgrades it. ``system``: Windows' process calls (``Processes``). Elsewhere,
     or where they cannot be made, nothing. What was stopped (``<pid> (<program>)``), and what is still there."""
     if not here.windows:
@@ -639,7 +640,9 @@ def stop_environment(here: Here, env: Path, folder: Path, system: Any = None, se
             if not ending:
                 return stopped, []
             stopped += [f"{pid} ({table[pid][1]})" for pid in ending]
-            left = system.end(ending, seconds)
+            watched = sorted(pid for pid, (parent, _image) in table.items()
+                             if parent in ending and pid not in kept and pid not in ending)
+            left = system.end(ending, watched, seconds)
     except Exception:  # noqa: BLE001 - uv is run all the same, and says what it meets
         pass
     return stopped, left
@@ -709,13 +712,18 @@ class Processes:
         finally:
             self.kernel.CloseHandle(handle)
 
-    def end(self, pids: List[int], seconds: float) -> List[int]:
-        """Each of ``pids`` terminated, then waited for, ``seconds`` in all: those still there."""
+    def end(self, pids: List[int], watched: List[int], seconds: float) -> List[int]:
+        """Each of ``pids`` terminated, then it and each of ``watched`` waited for, ``seconds`` in all: those still
+        there."""
         handles = {}
         for pid in pids:
             handle = self.kernel.OpenProcess(0x0001 | 0x00100000, False, pid)  # PROCESS_TERMINATE | SYNCHRONIZE
             if handle:
                 self.kernel.TerminateProcess(handle, 1)
+                handles[pid] = handle
+        for pid in watched:
+            handle = self.kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+            if handle:
                 handles[pid] = handle
         deadline, left = time.monotonic() + seconds, []
         for pid, handle in handles.items():
