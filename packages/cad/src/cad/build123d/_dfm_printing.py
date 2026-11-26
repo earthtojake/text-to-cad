@@ -1791,13 +1791,9 @@ def _orientations(ctx: Context) -> dict[str, Any]:
         if len(candidates) >= 10:
             break
     rows = mo.orientation_rows(V, F, candidates, ctx.angle_limit, _pitch(ctx), SHALLOW_DEG, owners=O,
-                               cosmetic=_cosmetic(ctx), at_limit=lambda R: _at_limit(ctx, R))
-    volume = np.array(rules.machine_volume(ctx.options)["volume_mm"])
+                               cosmetic=_cosmetic(ctx), at_limit=lambda R: _at_limit(ctx, R),
+                               machine=rules.machine_volume(ctx.options))
     for row in rows:
-        box = np.array(row["bbox_mm"])
-        xy = max(float(sorted(box[:2])[k]) / float(sorted(volume[:2])[k]) for k in range(2))
-        row["fill_ratio"] = _r(max(xy, float(box[2]) / float(volume[2])), 4)
-        row["fits"] = bool(row["fill_ratio"] <= 1.0 + 1e-9)
         row["support_area_mm2"] = row["overhang_area_mm2"]
     weights = mo.WEIGHTS["powder" if ctx.technology in rules.POWDER else "support"]
     rows = mo.ranked(rows, weights)

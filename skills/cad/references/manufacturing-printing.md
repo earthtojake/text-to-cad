@@ -63,9 +63,9 @@ cad stl dfm stand.stl --technology fdm --material petg --candidates
   its best way, across the bed's corners too, so it does not change with how the model is turned.
 - `--printer FILE` (FDM): the build volume and the nozzle read from a 3MF that OrcaSlicer or Bambu
   Studio saved (a project or a sliced `.gcode.3mf`), or from a complete machine preset JSON;
-  `--build-volume` and `--nozzle` given win. The volume is the bed's rectangular bounding box and the
-  printable height, so a part that fits it can still cross a round bed's edge or an excluded zone. A
-  preset that holds only its differences from a parent (`inherits`) has no volume: give a 3MF the
+  `--build-volume` and `--nozzle` given win. A round bed is checked against its circle and printable
+  height. Other bed shapes use their rectangular bounding box and printable height. Excluded zones
+  are not checked. A preset that holds only its differences from a parent (`inherits`) has no volume: give a 3MF the
   slicer saved. Ask the person for the file rather than copying the printer's numbers.
 - `--layer-height`: stair-stepping and, on FDM, a lying skin's layers. `--nozzle` (FDM): the wall
   minimum, two beads of it (0.4 mm assumed, and said, where none is given).

@@ -1523,12 +1523,15 @@ shop's limit; the table holds no row that cannot apply (`_general.add` refuses a
 `--printer FILE` names the printer's settings: a 3MF a slicer saved (OrcaSlicer, Bambu Studio: its
 `Metadata/project_settings.config`) or a JSON of a complete machine preset (or those project settings). `options`
 reads it once, in the calling process (the path made absolute against the caller's working directory, also where
-the options go on to the engine unresolved), and `resolved` carries plain values: `printable_area`'s bounding box by
-`printable_height` as `build_volume`, the first `nozzle_diameter` as `nozzle` -- each only where its own option is
+the options go on to the engine unresolved), and `resolved` carries plain values: the dimensions of
+`printable_area` by `printable_height` as `build_volume`, the first `nozzle_diameter` as `nozzle` -- each only where its own option is
 not given -- and `printer` as `{name, file, supplied}`, the name `printer_settings_id`, else `name`, else the file's.
-The volume is then the printer's own, judged as `--build-volume` is (`volume_origin` names the printer and the
-file and says the volume is the bed's bounding box: a round bed's outline and an excluded zone are not read), the
-nozzle a nozzle given. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
+For a circular `printable_area`, `printer` also carries `bed_radius_mm` when the preset supplies the build
+volume. Fit uses the smallest enclosing circle of the model's projection at each tested orientation,
+compared to the bed radius, and the model's height compared to `printable_height`. This applies to
+the best fit, as-drawn fit and orientation candidates for both geometry paths. Other bed shapes
+still use their bounding box, and excluded zones are not considered. `volume_origin` names the printer,
+file and boundary used. A file that is no such 3MF or JSON, or has no bed or height, is refused naming
 the file; a preset with `inherits` and no bed holds only its differences, and the refusal says to give a 3MF the
 slicer saved. A technology other than `fdm` refuses it.
 The build volume is the printer's given (`--build-volume` or `--printer`), else a typical machine of the

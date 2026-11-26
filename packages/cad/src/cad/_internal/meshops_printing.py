@@ -1,4 +1,4 @@
-"""3D printing's measures of a triangle mesh that both integrations share, numpy alone.
+"""3D printing's measures of a triangle mesh that both integrations share.
 
 The build123d integration triangulates a B-rep (``_dfm_brep.triangles``: each triangle naming its face)
 and hands the arrays here; the trimesh integration hands its mesh's. Every function takes ``V`` (n, 3)
@@ -1506,14 +1506,23 @@ def _uprights(points: np.ndarray, sides: np.ndarray | None = None) -> list[tuple
 TILTED_UPRIGHTS = 150
 
 
-def lie(points: np.ndarray, volume: np.ndarray | None = None, sides: np.ndarray | None = None) -> dict[str, Any]:
+def _round_fill(flat: np.ndarray, height: float, radius: float, limit: float) -> float:
+    """The larger of the smallest enclosing circle's radius ratio and the height ratio."""
+    from shapely import minimum_bounding_radius, multipoints
+
+    return max(float(minimum_bounding_radius(multipoints(flat))) / radius, height / limit)
+
+
+def lie(points: np.ndarray, volume: np.ndarray | None = None, sides: np.ndarray | None = None, *,
+        bed_radius: float | None = None) -> dict[str, Any]:
     """How the part of ``points`` (its hull's corners are enough; ``sides``, its hull's largest flat sides'
     normals: ``hull``) lies smallest: stood up along each of ``_uprights`` and turned about it (``TURN_STEP_DEG``, its outline's edge directions, and closer about the
     best), its tightest box (``box_mm``, the three sides, the longest first) and, given a build ``volume``, the
     least over those ways and the volume's three uprights of the largest of its sizes over the volume's
     (``fill_ratio``: at most 1 fits; ``upright`` and ``turn_deg`` say how it lies) -- a printer's bed has no
     preferred diagonal, and a rod longer than the bed's side fits across its corners. A part that fits none of
-    those ways is tried tilted too (``TILTED_UPRIGHTS``), so one said not to fit fits no way found."""
+    those ways is tried tilted too (``TILTED_UPRIGHTS``), so one said not to fit fits no way found.
+    A circular bed measures the footprint's enclosing circle at each upright, independent of yaw."""
     points = np.asarray(points, dtype=float).reshape(-1, 3)
     tight: list[Any] = [math.inf, [0.0, 0.0, 0.0]]
     best: list[Any] = [math.inf, "z", 0.0, 2]
@@ -1549,12 +1558,18 @@ def lie(points: np.ndarray, volume: np.ndarray | None = None, sides: np.ndarray 
             sides = [height, float(_widths(outline, np.array([turn]))[0]),
                      float(_widths(outline, np.array([turn + math.pi / 2.0]))[0])]
             tight[:] = [area * height, sorted(sides, reverse=True)]
-        for upright in range(3) if volume is not None else ():
-            a, b = [k for k in range(3) if k != upright]
-            ratio, turn = least(lambda w, d: np.maximum(w / float(volume[a]), d / float(volume[b])))
-            ratio = max(ratio, height / float(volume[upright]))
-            if ratio < best[0] - 1e-12:
-                best[:] = [ratio, name, math.degrees(turn) % 180.0, upright]
+        if volume is not None:
+            if bed_radius is not None:
+                ratio = _round_fill(outline, height, bed_radius, float(volume[2]))
+                if ratio < best[0] - 1e-12:
+                    best[:] = [ratio, name, 0.0, 2]
+            else:
+                for upright in range(3):
+                    a, b = [k for k in range(3) if k != upright]
+                    ratio, turn = least(lambda w, d: np.maximum(w / float(volume[a]), d / float(volume[b])))
+                    ratio = max(ratio, height / float(volume[upright]))
+                    if ratio < best[0] - 1e-12:
+                        best[:] = [ratio, name, math.degrees(turn) % 180.0, upright]
 
     for name, up in _uprights(points, sides):
         stood(name, up)
@@ -1586,8 +1601,10 @@ def build_fit(lo: np.ndarray, hi: np.ndarray, machine: dict[str, Any], points: n
     if points is None or not len(points):
         points = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
     points, sides = hull(points)
-    lying = lie(points, volume, sides)
-    placed = max(float(box[k]) / float(volume[k]) for k in range(3))
+    bed_radius = machine.get("bed_radius_mm")
+    lying = lie(points, volume, sides, bed_radius=bed_radius)
+    placed = (_round_fill(_outline(points[:, :2]), float(box[2]), bed_radius, float(volume[2]))
+              if bed_radius is not None else max(float(box[k]) / float(volume[k]) for k in range(3)))
     largest: dict[str, Any] = {"largest_volume_mm": None, "largest_fill_ratio": None, "fits_largest": None}
     if machine.get("largest_mm"):
         most = lie(points, np.array(machine["largest_mm"], dtype=float), sides)["fill_ratio"]
@@ -1686,12 +1703,15 @@ def down_to(normal: np.ndarray) -> np.ndarray:
 def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndarray], angle_limit: float,
                      pitch: float, shallow_deg: float = 20.0, owners: np.ndarray | None = None,
                      cosmetic: set[int] | None = None,
-                     at_limit: Callable[[np.ndarray], np.ndarray] | None = None) -> list[dict[str, Any]]:
+                     at_limit: Callable[[np.ndarray], np.ndarray] | None = None, *,
+                     machine: dict[str, Any]) -> list[dict[str, Any]]:
     """Each candidate rotation's facts: support volume and contact area (and the contact on ``cosmetic``
     owners), build height, bed contact area, the down-facing area under ``angle_limit``, the area under
     ``shallow_deg`` from horizontal (not flat) that stair-steps, and the box. ``at_limit(R)``: the triangles
     (a mask) that, turned by ``R``, read under the limit and are at it (``support``'s ``skip``)."""
     rows = []
+    volume = machine["volume_mm"]
+    bed_radius = machine.get("bed_radius_mm")
     for name, R in candidates.items():
         W = V @ R.T
         normals, areas = frame(W, F)
@@ -1705,6 +1725,14 @@ def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndar
         under = (tilt < angle_limit - ANGLE_EPS) & (~skip if skip is not None else True)
         on_cosmetic = sum(area for owner, area in held["per_owner_mm2"].items() if cosmetic and owner in cosmetic)
         box = W.max(axis=0) - W.min(axis=0)
+        bbox = [round(float(v), 3) for v in box]
+        if bed_radius is not None:
+            fill = _round_fill(_outline(W[:, :2]), float(box[2]), bed_radius, float(volume[2]))
+            fits = fill <= 1.0 + FIT_EPS
+        else:
+            xy = max(float(a) / float(b) for a, b in zip(sorted(bbox[:2]), sorted(volume[:2])))
+            fill = round(max(xy, bbox[2] / float(volume[2])), 4)
+            fits = fill <= 1.0 + 1e-9
         rows.append({"orientation": name, "rotation": np.round(R, 6).tolist(), "rotate": rot_text(R),
                      "support_volume_mm3": round(held["volume_mm3"], 2),
                      "support_contact_mm2": round(held["contact_area_mm2"], 2),
@@ -1713,7 +1741,7 @@ def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndar
                      "bed_contact_mm2": round(float(areas[down & on_plate & (tilt < 1.0)].sum()), 2),
                      "overhang_area_mm2": round(float(areas[down & ~on_plate & under].sum()), 2),
                      "stair_step_area_mm2": round(float(areas[(tilt > 0.5) & (tilt < shallow_deg)].sum()), 2),
-                     "bbox_mm": [round(float(v), 3) for v in box]})
+                     "bbox_mm": bbox, "fill_ratio": round(fill, 4), "fits": fits})
     return rows
 
 
