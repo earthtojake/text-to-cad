@@ -1809,8 +1809,9 @@ class Daemon:
         if found is None:
             return {"failed": f"the update could not begin, so cad {judged['from']} stays as it is"}
         named = "the newest release" if found["release"] == auto_update.LATEST else f"cad {found['release']}"
-        print(f"cad: updating cad to {named}, as `cad update` asked: this server stops, what is in flight with it, "
-              "and the next starts", file=sys.stderr, flush=True)
+        if found.get("outcome") == "underway":  # else uv could not build it, and the attempt has ended
+            print(f"cad: updating cad to {named}, as `cad update` asked: this server stops, what is in flight with "
+                  "it, and the next starts", file=sys.stderr, flush=True)
         return {**judged, "updating": found["release"], "since": found["at"]}
 
     def retoken(self) -> dict[str, Any]:

@@ -311,10 +311,9 @@ class WriteBytesAtomicTest(unittest.TestCase):
 
 # The one module allowed a bare ``os.replace``, by its path from the repository's root, and why.
 EXEMPT = {
-    # cad's update helper runs from the standard library alone (``python -I -S``, its copy in the state folder) while uv replaces cad's
-    # files, so it cannot import the helper. Its rename writes no file: it moves a running cad.exe aside, under a
-    # name of its own, before uv runs. A rename that fails is skipped on purpose, and the helper's own tries of
-    # the install (``WAITS``) are its retry.
+    # cad's update worker: its rename writes no file. It moves a running cad.exe aside, under a name of its own, before
+    # uv runs, and puts it back where uv left none. A rename that fails is skipped on purpose: uv then meets the file,
+    # and the worker's repair follows.
     "packages/cad/src/cad_server/_internal/auto_update_helper.py",
     # BRIDGE-ONLY: the global install moves the cad command of 0.10.0 to 0.11.11 aside before uv runs, and back where
     # uv failed. Its rename writes no file either. The helper's fallback would copy the command and leave it where it

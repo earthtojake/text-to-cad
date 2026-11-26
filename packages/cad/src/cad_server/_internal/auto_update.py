@@ -14,8 +14,9 @@ from). What cad adds is what makes that safe where processes run cad, which on W
 downloads and prepares the release before it changes the environment, so a download that fails leaves cad as it was):
 the server stopped, on Windows every other process of the environment stopped and its ``cad`` command moved aside,
 the upgrade, a check that the release runs, a repair in place where it does not, and, where that leaves no cad that
-runs, cad installed again whole from outside its environment (``repair_command``). That work is the worker's
-(``auto_update_helper``, ``auto_update_repair``); this module decides when it runs and keeps its record.
+runs, cad installed again whole. That work is the worker's (``auto_update_helper``), run from the release it updates to
+in uv's cache, never from the environment it replaces (``from_cache``): the newest release's code does the update.
+This module decides when it runs and keeps its record.
 
 **A global install** (``global_install``) is a cad whose environment uv's ``uv tool install cad`` made (uv's receipt
 there names ``cad``) or pipx's ``pipx install cad`` (pipx's ``venvs/cad``, its metadata naming ``cad``): either updates
@@ -56,11 +57,14 @@ it cuts short says cad updated itself while it ran.
 
 **The trigger** (``trigger``) begins the update in one step across processes (``_claim``, under the state folder's
 lock): where an attempt is underway none begins (an automatic update) or it is joined (``cad update``); else the
-attempt before counted where it was not, and this one kept as underway, its ``phase`` ``switching``. Then the worker starts, detached, by this environment's own interpreter (``helper_command``), told the
-release the record names. The attempt is kept in the state folder (``RECORD``: ``release``, ``wanted``, ``from``,
+attempt before counted where it was not, and this one kept as underway, its ``phase`` ``switching``. Then uv builds
+the environment of the release the record names in its cache (``build``: where it cannot, the attempt ends ``failed``
+with uv's cause, nothing touched), and the worker starts from it, detached (``from_cache``, ``helper_command``). The
+attempt is kept in the state folder (``RECORD``: ``release``, ``wanted``, ``from``,
 ``at``, ``tries``, ``installer``, ``asked`` -- a person's own update --, ``phase``, ``beat``, then the worker's
 ``ended``, ``outcome``,
-``detail``, ``restored``, ``started`` and, where it did not install what it was for, ``cause``: one word of
+``detail``, ``restored``, ``started``, ``worker`` (its own release) and, where it did not install what it was for,
+``cause``: one word of
 ``auto_update_helper.CAUSES``, said in plain words by ``SAID``, and what to do about it by ``advice``, the one line
 ``cad doctor``, ``cad update`` and ``notice`` give; ``dismissed`` once the person put its failure away), which ``cad
 doctor`` and the viewer's update button (``button``) show, with the worker's log (``LOG``; the attempt before's
@@ -133,7 +137,9 @@ LATEST = "latest"
 UPGRADE_SECONDS = 900.0
 # Who makes a global install of cad (``global_install``), named in the record and its count.
 INSTALLERS = ("uv", "pipx")
-# The worker, run as a module by this environment's interpreter (``helper_command``).
+# The worker's entry: ``python -P -m <HELPER> <told>``, run by uv from the release it updates to (``from_cache``). A
+# contract every later release keeps, with ``told`` (``helper_command``): an older release starts a newer one's worker
+# by it.
 HELPER = "cad_server._internal.auto_update_helper"
 # One update begun at a time in a process: the check and the trigger together (``restart``, ``begin``).
 _BEGIN = threading.Lock()
@@ -507,12 +513,12 @@ def tool_bin(install: Global | None = None, timeout: float = 30.0) -> Path | Non
 
 
 def tidy(windows: bool = os.name == "nt") -> list[str]:
-    """On Windows, for a global install: each ``cad.exe`` cad's update moved aside (``auto_update_sweep.ASIDE``) and
+    """On Windows, for a global install: each ``cad.exe`` cad's update moved aside (``auto_update_helper.ASIDE``) and
     could not remove then, as a process still ran it, removed where none does now. The paths removed. Elsewhere
     nothing. Never raises."""
     if not windows or uv_tool() is None and pipx_tool() is None:
         return []
-    from cad_server._internal.auto_update_sweep import ASIDE
+    from cad_server._internal.auto_update_helper import ASIDE
 
     folder, removed = tool_bin(), []
     for path in sorted(folder.glob(ASIDE.format(pid="*"))) if folder is not None else ():
@@ -740,54 +746,87 @@ def requirement(target: str | None, version: str) -> str:
     return f"cad=={target}" if target is not None else bound(version)
 
 
-def repair_command(install: Global, version: str) -> list[str] | None:
-    """The installer's command that installs cad again whole, the update's last resort (``auto_update_repair``): uv's
-    ``uv tool install --force`` of the newest of release ``version``'s major (``tool_install.command``: ``cad<N>``, as
-    cad's installers write it, never one release); pipx's ``pipx install --force cad``, unpinned. None where the
-    installer is not found."""
-    if install.installer == "pipx":
-        return [*install.pipx, "install", "--force", "cad"] if install.pipx else None
-    if install.uv is None:
-        return None
-    from cad_server._internal import tool_install
-
-    command = tool_install.command(install.uv, version)
-    return [*command[:3], "--force", *command[3:]]
-
-
 def helper_command(target: str | None, *, now: float, version: str, record: str, install: Global, tries: int = 1,
                    asked: bool = False, start: bool = True, wanted: str | None = None,
-                   log: str | None = None, python: str | None = None,
+                   log: str | None = None, python: str = "python",
                    spare: list[int] | None = None) -> list[str]:
-    """The worker's command line: this environment's interpreter (``python``: ``sys.executable``), the worker as a
-    module, and its one argument: ``target``, the release asked for (None: whatever uv gets), what to install
-    (``requirement``), the global install ``install``'s ``cad`` command, who made it, its uv and pipx, and the command
-    that installs it again whole (``repair_command``); ``wanted``, the
-    release the attempt is for (``target`` or ``LATEST`` by default), ``tries``, ``asked`` (a typed update), ``start``
-    (whether a server is wanted at the end though none runs now), ``spare`` (on Windows, the processes the switch leaves running: ``spared``), ``record``
-    and ``log``, the files it keeps the attempt and each command in."""
+    """The worker's entry (``HELPER``): ``python`` (the one of the environment uv runs it from: ``from_cache``; the
+    bridge's, the installed environment's own, ``cli.setup.move``), the worker as a module, and its one argument,
+    ``told``: ``target``, the release asked for (None: whatever uv gets), what to install (``requirement``), the global
+    install ``install``'s environment and its ``cad`` command, who made it, its uv and pipx; ``wanted``, the release
+    the attempt is for (``target`` or ``LATEST`` by default), ``tries``, ``asked`` (a typed update), ``start`` (whether
+    a server is wanted at the end though none runs now), ``spare`` (on Windows, the processes the switch leaves
+    running: ``spared``), ``record`` and ``log``, the files it keeps the attempt and each command in."""
     told = {"record": record, "log": log, "from": version, "at": now, "tries": tries,
             "wanted": wanted or target or LATEST, "asked": asked, "start": start, "target": target,
-            "requirement": requirement(target, version), "cad": str(tool_command(install.prefix)),
-            "uv": install.uv, "pipx": install.pipx, "installer": install.installer,
-            "repair": repair_command(install, version), "spare": spare or []}
-    return [python or sys.executable, "-P", "-m", HELPER, json.dumps(told)]
+            "requirement": requirement(target, version), "prefix": str(install.prefix),
+            "cad": str(tool_command(install.prefix)), "uv": install.uv, "pipx": install.pipx,
+            "installer": install.installer, "spare": spare or []}
+    return [python, "-P", "-m", HELPER, json.dumps(told)]
+
+
+def from_cache(uv: str, wanted: str, *command: str) -> list[str]:
+    """``command`` run by uv from an environment of ``wanted`` (a requirement) in its cache, isolated from the uv tool
+    ``cad`` installed (which uv would reuse where it holds the release asked for), on the Python of cad's own uv calls
+    (``launch.PYTHON``), with the person's own uv settings, as the update installs by them."""
+    from cad_server._internal.launch import PYTHON
+
+    return [uv, "tool", "run", "--isolated", "--managed-python", "--python", PYTHON, "--from", wanted, *command]
+
+
+def build(uv: str, wanted: str, timeout: float = UPGRADE_SECONDS) -> tuple[str | None, int | None, str]:
+    """uv's environment of ``wanted`` built in its cache, as the worker runs from it (``from_cache``), and asked its
+    release (``cad --version``, which every release answers): ``(that release or None, uv's exit status, all it
+    printed)``, the status None where uv could not run or did not end within ``timeout``. Run with no window, in the
+    worker's environment (``environ``)."""
+    command = from_cache(uv, wanted, "cad", "--version")
+    try:
+        done = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, encoding="utf-8", errors="replace", timeout=timeout, env=environ(),
+                              creationflags=0x08000000 if os.name == "nt" else 0)  # CREATE_NO_WINDOW
+    except (OSError, subprocess.SubprocessError) as error:
+        return None, None, f"{type(error).__name__}: {error}"
+    lines = [line.strip() for line in (done.stdout or "").splitlines() if line.strip()]
+    found = re.fullmatch(r"cad (\d+\.\d+\.\d+)", lines[-1]) if done.returncode == 0 and lines else None
+    return (found[1] if found else None), done.returncode, done.stdout or ""
+
+
+def _unbuilt(kept: dict[str, Any], line: list[str], uv: str, wanted: str,
+             found: tuple[str | None, int | None, str], seconds: float) -> dict[str, Any]:
+    """The attempt ``kept`` ended where uv could not build the worker's environment of ``wanted`` (``build``'s
+    ``found``, in ``seconds``): ``failed``, with uv's cause (``auto_update_helper.cause_of``), its last line, and
+    ``restored``: nothing was touched, and the release before runs on. Written to the record and the log."""
+    from cad_server._internal import auto_update_helper as helper
+
+    _named, code, said = found
+    log = helper.Log(str(_data() / LOG))
+    log.begin(json.loads(line[-1]))
+    log.ran(from_cache(uv, wanted, "cad", "--version"), code, seconds, said)
+    ended = {**{name: value for name, value in kept.items() if name not in ("phase", "beat")}, "outcome": "failed",
+             "ended": time.time(), "restored": True,
+             "cause": helper.cause_of(1 if code == 0 else code, said, log),  # 0: uv named no release
+             "detail": f"uv could not build {wanted} to update cad, and nothing was changed: "
+                       f"{helper.last_line(said) or 'uv said nothing'}"}
+    log.end(ended)
+    _keep(_data() / RECORD, ended)
+    return ended
 
 
 def spared(waiting: int | None = None) -> list[int]:
     """On Windows, the processes the switch must leave running though they run from the environment: this one, which
     starts the worker, and ``waiting``, the ``cad update`` that waits on it, each with the processes that started it
     (a ``cad.exe`` and the environment's ``python.exe`` launch the Python under them, and ending either ends it), as
-    they are now: the worker cannot ask after this process ends (``auto_update_sweep.lineage``). Elsewhere none. Never
+    they are now: the worker cannot ask after this process ends (``auto_update_helper.lineage``). They leave the
+    environment before it is installed again whole (``auto_update_helper.reinstall``). Elsewhere none. Never
     raises."""
     if os.name != "nt":
         return []
     try:
-        from cad_server._internal import auto_update_sweep as sweep
+        from cad_server._internal import auto_update_helper as helper
 
-        table = sweep.Windows().processes()
-        return sorted(set().union(*(sweep.lineage(pid, table) for pid in (os.getpid(), waiting) if pid)))
-    except Exception:  # noqa: BLE001 - the worker spares its own line, and the rest is stopped
+        table = helper.Windows().processes()
+        return sorted(set().union(*(helper.lineage(pid, table) for pid in (os.getpid(), waiting) if pid)))
+    except Exception:  # noqa: BLE001 - the rest is stopped
         return [os.getpid(), *([waiting] if waiting else [])]
 
 
@@ -853,9 +892,11 @@ def _claim(*, release: str, wanted: str, version: str, installer: str, automatic
 def _start(target: str | None, *, automatic: bool, start: bool, wanted: str | None,
            waiting: int | None = None) -> tuple[str, dict[str, Any]]:
     """The update to ``target`` begun (``trigger``'s work), or the attempt underway found: ``(BEGUN, the attempt)``,
-    ``(UNDERWAY, the attempt underway)``, or ``("", {})`` where none could begin (``NOT_YET`` too). The worker is
-    told what the claimed record names (``_claim``). ``waiting``: the process that waits on the attempt (``spared``). The
-    worker starts outside any Windows app package (``places.outside_package``)."""
+    ``(UNDERWAY, the attempt underway)``, or ``("", {})`` where none could begin (``NOT_YET`` too). Once claimed
+    (``_claim``), uv builds the environment of the release the record names (``build``): where it cannot, the attempt
+    has ended (``_unbuilt``: ``(BEGUN, that record)``); else the worker starts from it, of the very release uv built
+    (``from_cache``), told what the record names (``helper_command``), outside any Windows app package
+    (``places.outside_package``). ``waiting``: the process that waits on the attempt (``spared``)."""
     from cad.engine.places import detached, outside_package
 
     found = global_install()
@@ -870,12 +911,18 @@ def _start(target: str | None, *, automatic: bool, start: bool, wanted: str | No
         return (said if said == UNDERWAY else ""), kept
     record = _data() / RECORD
     try:
-        command = helper_command(None if kept["release"] == LATEST else kept["release"], now=kept["at"],
-                                 version=version, record=str(record), install=found, tries=kept["tries"],
-                                 asked=kept["asked"], start=start, wanted=kept["wanted"],
-                                 log=str(record.with_name(LOG)), spare=spared(waiting))
-        outside_package(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                        env=environ(), cwd=str(record.parent), **detached())
+        line = helper_command(None if kept["release"] == LATEST else kept["release"], now=kept["at"],
+                              version=version, record=str(record), install=found, tries=kept["tries"],
+                              asked=kept["asked"], start=start, wanted=kept["wanted"],
+                              log=str(record.with_name(LOG)), spare=spared(waiting))
+        wanted_ = json.loads(line[-1])["requirement"]
+        began = time.monotonic()
+        built = build(found.uv, wanted_)
+        if built[0] is None:
+            return BEGUN, _unbuilt(kept, line, found.uv, wanted_, built, time.monotonic() - began)
+        outside_package(from_cache(found.uv, f"cad=={built[0]}", *line), stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environ(), cwd=str(record.parent),
+                        **detached())
     except Exception as error:
         # Kept as underway, an attempt whose worker never started would hold every update for the hour: it failed.
         _keep(record, {**kept, "outcome": "failed", "ended": time.time(), "cause": "helper_start",
@@ -889,15 +936,15 @@ def trigger(target: str | None, *, automatic: bool = True, start: bool = True, w
     """The update to ``target`` (None: whatever uv gets) begun, for ``wanted`` (``target`` by default): in one step
     across processes (``_claim``) the attempt before counted where it was not and this one kept (``RECORD``, outcome
     ``underway``), unless one is underway (or, ``automatic``, ``wanted`` was tried since the check); then the worker
-    started (``helper_command``), detached, with no window, in ``environ``; ``automatic``: the server's own update,
-    else a typed one (``asked`` in the record); ``start``: a server wanted at the end though none runs now;
-    ``waiting``: the process that waits on it (``spared``). The attempt this call began (its record), or None; never
-    raises."""
+    started from the release in uv's cache (``_start``), detached, with no window, in ``environ``; ``automatic``: the
+    server's own update, else a typed one (``asked`` in the record); ``start``: a server wanted at the end though none
+    runs now; ``waiting``: the process that waits on it (``spared``). The attempt this call began and its worker
+    carries out (its record), or None; never raises."""
     try:
         said, kept = _start(target, automatic=automatic, start=start, wanted=wanted, waiting=waiting)
     except Exception:  # noqa: BLE001 - an update that cannot begin leaves cad as it is
         return None
-    return kept if said == BEGUN else None
+    return kept if said == BEGUN and kept.get("outcome") == "underway" else None
 
 
 def _keep(path: Path, record: dict[str, Any]) -> None:
@@ -1166,7 +1213,8 @@ def begin(target: str | None, *, start: bool = True, waiting: int | None = None)
     new attempt. Never a second at once, never the install command after it. ``start``: a server wanted after it
     though none runs (false where ``cad update`` found none running); ``waiting``: the ``cad update`` that waits on
     it, which the switch leaves running (``spared``; this process where it is that one). The attempt's record
-    (``release``, ``at``), or None where it could not begin."""
+    (``release``, ``at``; ended already where uv could not build the release, ``_unbuilt``), or None where it could
+    not begin."""
     with _BEGIN:
         try:
             said, found = _start(target, automatic=False, start=start, wanted=None, waiting=waiting)

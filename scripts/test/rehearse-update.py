@@ -34,7 +34,9 @@ the new one and ``updater`` the shipped release the old.
 
 **cad updating itself** (a computer the install command set up, but where a route says otherwise: cad a uv tool, its
 automatic updates on). uv installed cad, and cad's update has the computer's own uv upgrade it where it is (``uv tool
-upgrade "cad==<release>"``, by the worker, ``auto_update_helper``), at two moments alone: a person's ask (the viewer's
+upgrade "cad==<release>"``, by the worker, ``auto_update_helper``, which uv runs from that release in its cache, ``uv
+tool run --isolated --from "cad==<release>"``: the computer's folder of releases resolves it as it does the upgrade,
+and the record names it as the ``worker``), at two moments alone: a person's ask (the viewer's
 button, ``POST /api/v1/local/update``; a typed ``cad update``) and the server's next start, where the feed as last read
 names a newer release of its major (the start becomes the update). So an update ends, wherever it is checked
 (``in_place``), with uv listing the new release as its tool in the same environment, that environment holding its one
@@ -62,8 +64,9 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   uv's tool the release before again, serving the pages' port), counted; another start does not try it again; a
   typed ``cad update`` does, and says in one line that the release before runs again; then the release after it
   updates at the next start.
-- ``self-uninstallable``: a release uv cannot install (it requires a package no index has): uv fails before it
-  touches the environment, so every file there is as it was, cad runs and its server answers again; the cause read from
+- ``self-uninstallable``: a release uv cannot install (it requires a package no index has): uv cannot build the
+  worker's environment of it, so no worker starts, every file there is as it was, cad runs and its server answers; the
+  cause read from
   uv's words (``no_release``, or ``config_index`` where an index setting of uv's is there, as the computer's folder of
   releases is), the log naming the package.
 - ``self-held``: a source file of cad (``cad_server/__init__.py``) held open by another process, as a scanner holds
@@ -80,17 +83,17 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
 - ``self-major``: never across a major: with only a release a major up newer, the start begins nothing and ``cad
   update`` says this is the newest of its major and names the higher one; ``cad update --major`` is refused (exit 2);
   with the next release of this major out too, ``cad update`` takes it, never the higher one, and names it.
-- ``self-stopped-midway``: the worker of the update a start began stopped the moment it is seen, before it reaches
-  uv: the record left underway, cad as it was; twenty minutes pass with no beat (its last beat set back) and the
-  attempt is lost; the next start begins nothing (the schedule waits an hour after a try); a typed ``cad update``
+- ``self-stopped-midway``: the worker of the update a start began stopped the moment it is seen (uv's run of it
+  and the worker both), before it reaches uv's upgrade: the record left underway, cad as it was; twenty minutes
+  pass with no beat (its last beat set back) and the attempt is lost; the next start begins nothing (the schedule waits an hour after a try); a typed ``cad update``
   installs the release, the automatic try before kept as lost.
 - ``self-hop``: the shipped ``SHIPPED`` (0.11.17) installed from PyPI as a uv tool, its server running: its own ``cad
   update`` upgrades uv's tool in place into this tree, and this tree's ``cad update`` takes it on, in place.
 - ``self-forced``: the last resort, where the repair in place cannot bring cad back: uv's receipt one uv cannot read
   (every ``uv tool upgrade`` fails on it, ``--reinstall`` too) and a cad that does not start; the button: the worker's
-  upgrade and its repairs fail, and the repairer, run outside the environment by the Python it was made from, makes
-  it anew (``uv tool install --force "cad<N>"``): healthy at the next release, its server started, uv's receipt the
-  range, the repairer's copy gone.
+  upgrade and its repairs fail, and the worker itself, which runs from uv's cache, makes it anew (``uv tool install
+  --force "cad<N>"``): healthy at the next release, its server started, uv's receipt the range, the record's worker
+  the next release.
 - ``self-pipx``: cad installed with pipx (pipx itself by uv) updates itself as uv's does: the button while three
   callers run its ``cad``, then the server's next start, each by pip inside pipx's environment (``pipx runpip cad
   install``), healthy, pipx's pin as it was; then the person's ``pipx pin cad``: the start counts the update
@@ -428,10 +431,10 @@ class Box:
                 raise Failed(f"{self.label}: {what}, not within {seconds:.0f} s\n{self.said()}")
             time.sleep(0.5)
 
-    def fetch(self, path: str, method: str = "GET", *, body: bytes | None = None, headers: dict | None = None
-              ) -> tuple[int | None, bytes]:
+    def fetch(self, path: str, method: str = "GET", *, body: bytes | None = None, headers: dict | None = None,
+              timeout: float = 30.0) -> tuple[int | None, bytes]:
         """``path`` asked of the computer's port with the page token: its status and body; None where none answers."""
-        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=timeout)
         try:
             connection.request(method, path, body=body, headers={"Authorization": f"Bearer {self.token}",
                                                                  **(headers or {})})
@@ -442,9 +445,9 @@ class Box:
         finally:
             connection.close()
 
-    def http(self, method: str, path: str, *, body: bytes | None = None, headers: dict | None = None
-             ) -> tuple[int | None, dict]:
-        status, data = self.fetch(path, method, body=body, headers=headers)
+    def http(self, method: str, path: str, *, body: bytes | None = None, headers: dict | None = None,
+             timeout: float = 30.0) -> tuple[int | None, dict]:
+        status, data = self.fetch(path, method, body=body, headers=headers, timeout=timeout)
         if status is None:
             return None, {}
         try:
@@ -980,8 +983,8 @@ def typed_update(box: Box, was: str, target: str, *, server: bool | None = True,
             or said not in (*steps, []):
         raise Failed(f"{box.label}: cad update exited {done.returncode}:\n{done.stdout}\n{done.stderr}\n{box.said()}")
     record = updated(box, target, after=began - 1)
-    if (record.get("asked"), record.get("from")) != (True, was):
-        raise Failed(f"{box.label}: the record of a typed update: {record}")
+    if (record.get("asked"), record.get("from"), record.get("worker")) != (True, was, target):
+        raise Failed(f"{box.label}: the record of a typed update (its worker the release it updates to): {record}")
     return record
 
 
@@ -1006,9 +1009,10 @@ def button(box: Box) -> tuple[int | None, dict]:
 
 
 def click(box: Box) -> tuple[int | None, dict]:
-    """The viewer's update button clicked: ``POST /api/v1/local/update`` ``{}``, as a page posts it."""
+    """The viewer's update button clicked: ``POST /api/v1/local/update`` ``{}``, as a page posts it, answered once uv
+    has built the release the worker runs from."""
     return box.http("POST", "/api/v1/local/update", body=b"{}",
-                    headers={"x-cad-viewer": "1", "Content-Type": "application/json"})
+                    headers={"x-cad-viewer": "1", "Content-Type": "application/json"}, timeout=SECONDS)
 
 
 def nothing_begun(box: Box, why: str, *, at: object = None) -> None:
@@ -1364,8 +1368,9 @@ def self_rollback(box: Box) -> None:
 
 
 def self_uninstallable(box: Box) -> None:
-    """A release uv cannot install (it requires a package no index has): uv fails before it touches the environment,
-    so cad is as it was and runs; the cause read from uv's words; the log names the package."""
+    """A release uv cannot install (it requires a package no index has): uv cannot build the worker's environment of
+    it, so no worker starts and cad is as it was and runs; the cause read from uv's words; the log names the
+    package."""
     box.set_up("off")
     before = Tool(box)
     box.out(UNBUILDABLE)
@@ -1377,7 +1382,7 @@ def self_uninstallable(box: Box) -> None:
             or not line[0].startswith(f"cad update: could not update cad {NEW} to {UNBUILDABLE}, as "):
         raise Failed(f"{box.label}: cad update to {UNBUILDABLE} exited {done.returncode}:\n{done.stdout}\n{done.stderr}")
     if record.get("cause") not in ("no_release", "config_index") or record.get("restored") is not True \
-            or MISSING.split("==")[0] not in log:
+            or MISSING.split("==")[0] not in log or " tool upgrade " in log or "worker" in record:
         raise Failed(f"{box.label}: the update to {UNBUILDABLE}: {record}; its log:\n{log[-3000:]}\n{box.said()}")
     changed = before.changed()
     if changed:
@@ -1385,7 +1390,7 @@ def self_uninstallable(box: Box) -> None:
                      + "\n  ".join(changed[:20]))
     in_place(box, before, NEW)
     say(f"        {UNBUILDABLE}, which requires {MISSING}: not installed (cause {record['cause']}: {line[0]!r}); "
-        f"every file of the environment as it was, uv lists {NEW}, its server answers again")
+        f"no worker started, every file of the environment as it was, uv lists {NEW}, its server answers")
     pages(box, NEW)
 
 
@@ -1604,19 +1609,19 @@ def self_stopped_midway(box: Box) -> None:
     feed_read(box, NEXT)
     start = subprocess.Popen([str(box.cad()), "server", "start"], env=box.env, cwd=box.work,
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # The worker, stopped the moment it is seen: it starts as a Python that imports what it needs before it does
-    # anything, so it is stopped before it runs uv (its log, which names each command, says so after).
-    deadline, worker = time.monotonic() + 120, None
+    # The worker, stopped the moment it is seen: uv's run of it and the worker, each (whichever is seen first; the
+    # worker would outlive uv), looked for until none is seen for a moment. It imports what it needs before it does
+    # anything, so it is stopped before it runs uv's upgrade (its log, which names each command, says so after).
+    deadline, worker, quiet = time.monotonic() + 120, None, None
     try:
-        while worker is None:
+        while worker is None or time.monotonic() < quiet:
             if time.monotonic() > deadline:
                 raise Failed(f"{box.label}: the update's worker never seen\n{box.said()}")
             for pid, command in box.computer.processes():
                 line = (rc.windows_command_line(pid) or "") if WINDOWS else command
                 if "-m cad_server._internal.auto_update_helper" in line:
                     end_process(pid)
-                    worker = pid
-                    break
+                    worker, quiet = worker or pid, time.monotonic() + 2.0
     finally:
         end_process(start.pid, tree=True)
         start.wait(60)
@@ -1695,9 +1700,9 @@ def self_forced(box: Box) -> None:
     """The last resort: an environment the repair in place cannot bring back -- uv's receipt one uv cannot read (its
     entrypoints in a shape uv does not know: every ``uv tool upgrade`` fails, ``--reinstall`` too, and uv itself says
     to run ``uv tool install --force``) and a cad that does not start (a source file of it gone) --, updated by the
-    button. The worker's upgrade and its repairs in place fail, it hands the repair to the repairer, which runs outside
-    the environment by the Python it was made from, and ``uv tool install --force "cad<N>"`` makes the environment anew:
-    cad healthy at the newest of its major, its server started, uv's receipt the range."""
+    button. The worker's upgrade and its repairs in place fail, and the worker, which runs from uv's cache, has ``uv
+    tool install --force "cad<N>"`` make the environment anew: cad healthy at the newest of its major, its server
+    started, uv's receipt the range, the record's worker that release."""
     box.set_up("off")
     before = Tool(box)
     receipt = before.env / "uv-receipt.toml"
@@ -1712,8 +1717,7 @@ def self_forced(box: Box) -> None:
     box.out(NEXT)
     record = clicked(box, NEW, NEXT)
     log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
-    for said in ("--reinstall", "cad is installed again from outside its environment", "the repair outside cad's "
-                 "environment, begun", " tool install --force --managed-python --python 3.14 "):
+    for said in ("--reinstall", " tool install --force --managed-python --python 3.14 "):
         if said not in log:
             raise Failed(f"{box.label}: the log does not say {said!r}:\n{log[-4000:]}")
     tool = box.tool() or {}
@@ -1726,13 +1730,13 @@ def self_forced(box: Box) -> None:
         problems.append(f"cad --version says {box.version()!r}")
     if requires != [{"name": "cad", "specifier": f"<{MAJOR + 1}"}]:
         problems.append(f"uv's receipt requires {requires}, not the range")
-    if (box.state / "auto-update-repair").exists():
-        problems.append("the repairer's copy is still in the state folder")
+    if record.get("worker") != NEXT:
+        problems.append(f"the record's worker is {record.get('worker')!r}, not the release it updates to")
     if problems:
         raise Failed(f"{box.label}: cad installed again from outside:\n  " + "\n  ".join(problems) + f"\n{box.said()}")
     serves(box, before.env, NEXT)
     say(f"        uv's receipt unreadable to uv, cad not starting: the button; uv's upgrade and `--reinstall` failed, "
-        f"the repairer ran `uv tool install --force \"cad<{MAJOR + 1}\"` from outside the environment: "
+        f"the worker, from uv's cache, ran `uv tool install --force \"cad<{MAJOR + 1}\"`: "
         f"{record['detail'][:120]!r}; cad {NEXT} healthy, its server started, uv's receipt `cad<{MAJOR + 1}`")
     pages(box, NEXT)
 

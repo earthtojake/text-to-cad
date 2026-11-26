@@ -557,8 +557,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             # ...and the code of this build the update rehearsal runs, beside the packages' suites.
             **{f"packages/cad/src/cad_server/{path}": packages | jobs_on("installer") for path in (
                 "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
-                "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/auto_update_repair.py",
-                "_internal/auto_update_sweep.py", "_internal/installations.py",
+                "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
                 "engine/daemon.py",
                 # ...and what the install command hands the apps to: `cad plugin install`, its table and its run.
                 "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/apps.py", "plugin/run.py",

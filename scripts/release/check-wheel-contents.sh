@@ -94,13 +94,10 @@ REQUIRED=(
   "cad_server/cli/server.py"
   "cad_server/cli/cache.py"
   "cad_server/_internal/engine_daemon.py"
-  # cad's own update: the switches and their command, and the worker the update runs as a module
-  # (auto_update.HELPER), with the repairer it copies and runs outside the environment and the sweep both use:
-  # without the file no cad ever updates itself.
+  # cad's own update: the switches and their command, and the worker an older release runs as a module of this one
+  # (auto_update.HELPER): without the file no cad ever updates itself.
   "cad_server/_internal/auto_update.py"
   "cad_server/_internal/auto_update_helper.py"
-  "cad_server/_internal/auto_update_repair.py"
-  "cad_server/_internal/auto_update_sweep.py"
   "cad_server/cli/auto_update.py"
   # The install command as the bridge's install mode runs it, once (`install_script`); and `cad plugin`, its command:
   # `cad plugin install`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
