@@ -118,14 +118,16 @@ is decided with it ([Before the first release of a higher major](#before-the-fir
 - **cad updates itself, inside its major.** A global install that uv made does, unless `cad update
   auto off`, and only at a person's ask (the viewer's button, `cad update`) or as its server next
   starts: nothing is done in the background. Where the feed names a newer release of its major, a
-  worker stops the server and runs the person's own uv on the installed cad, `uv tool upgrade
-  "cad==X"`, in place; on Windows after moving uv's `cad.exe` aside and stopping every process of
-  the environment, since uv deletes the old files one by one with no rollback and a running process
-  holds them. It checks that the new release runs and starts its server, and repairs the environment
-  where it does not. A typed `cad update` does the same at once, asking PyPI instead, and names a
-  higher major. A pipx install updates the same way by pipx (`pipx runpip cad install "cad==X"`);
-  one pinned to a release by hand is left alone; where the repair leaves no cad that runs, cad is
-  installed again whole (`uv tool install --force "cad<N>"`, `pipx install --force cad`). Nothing installs an older release.
+  worker of that release, which uv runs from its cache (an older release starts a newer one's worker
+  by its entry, `auto_update.HELPER`, which every release keeps), stops the server and runs the
+  person's own uv on the installed cad, `uv tool upgrade "cad==X"`, in place; on Windows after
+  moving uv's `cad.exe` aside and stopping every process of the environment, since uv deletes the
+  old files one by one with no rollback and a running process holds them. It checks that the new
+  release runs and starts its server, and repairs the environment where it does not. A typed `cad
+  update` does the same at once, asking PyPI instead, and names a higher major. A pipx install
+  updates the same way by pipx (`pipx runpip cad install "cad==X"`); one pinned to a release by hand
+  is left alone; where the repair leaves no cad that runs, cad is installed again whole (`uv tool
+  install --force "cad<N>"`, `pipx install --force cad`). Nothing installs an older release.
 - **No command crosses a major.** `cad update` and `cad doctor` name a higher major where one is
   out, with the migration guides, and nothing more. What cad runs of its own is bounded to a major: its update, and its install of itself where a computer has
   none, by the plugin's server line and by the bridge (`tool_install`: `cad<N>`, never over a `cad`

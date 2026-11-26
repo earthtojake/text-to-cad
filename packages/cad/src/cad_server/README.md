@@ -55,7 +55,7 @@ cad_server/
                          #   and to the viewer (`cadNotices`)
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base, extras, scan), cad's own update
-                         #   (auto_update, auto_update_helper, auto_update_repair, auto_update_sweep),
+                         #   (auto_update, auto_update_helper),
                          #   the plugin kept as new as cad
                          #   (plugin_catch_up), cad installed globally by a cad run
                          #   from uv's cache (tool_install), the hosted install command as the bridge
@@ -182,7 +182,8 @@ PowerShell pipeline is still wrong there, and that is PowerShell's to set.
 by itself any newer release of its own major version, and never a release of a higher major: no command crosses one.
 Only a global install updates itself, one uv made (`uv tool install cad`) or pipx (`pipx install cad`): it is updated
 where it is, by the person's own installer (`base.find_uv`: uv's default install place, then PATH, else a one-line
-error saying how to get uv; `find_pipx` for pipx, which needs uv too, for the kernel), with the person's settings and
+error saying how to get uv; `find_pipx` for pipx, which needs uv too, for the kernel and the worker), with the
+person's settings and
 uv's receipt left as it is (pipx: `pipx runpip cad install`). One a person pinned (`uv tool install cad==X`, `pipx pin
 cad`) is left alone (cause `pinned`). Two switches in the person's settings:
 `auto_update.on`, whether cad updates itself, on unless turned off (`cad update auto`); and `plugin.auto_update`,
@@ -210,10 +211,15 @@ person's own (`asked`) counts among them and spends no try. The attempt is kept 
 under the state folder's lock, so two servers begin one; its worker beats in it every minute, and one silent for 20
 minutes is `lost`. It ends `installed`, `current` or `failed`, with `detail`, `restored`, `started` and, where it did
 not install what it was for, `cause`, one word of a closed list (`auto_update_helper.CAUSES`), said in plain words by
-`auto_update.SAID`.
+`auto_update.SAID`, and `worker`, the release whose worker ran. The release that began the attempt reads the record its
+worker writes, so the record only gains fields.
 
-**The worker** (`auto_update_helper.py`), started detached, with no window and outside any Windows app package
-(by Task Scheduler, `places.outside_package`), by the environment's own interpreter, which an upgrade does not touch. uv deletes the old
+**The worker** (`auto_update_helper.py`) runs from the release the update goes to, never from the environment it
+replaces: uv builds that release in its cache first (`build`: where it cannot, the attempt fails with uv's cause and
+nothing is touched), then the worker starts from it, detached, with no window and outside any Windows app package (by
+Task Scheduler, `places.outside_package`): `uv tool run --isolated --managed-python --python 3.14 --from "cad==<X>"
+python -P -m cad_server._internal.auto_update_helper <told>` (`from_cache`, `helper_command`). That entry and `told`
+are a contract every later release keeps: an older release starts a newer one's worker by them. uv deletes the old
 files one by one, in the order of the package's `RECORD`, and stops at the first it cannot delete, with nothing put
 back; on Windows a file a running process holds cannot be deleted, so the worker makes the upgrade safe and repairs it
 where it fails anyway. uv prepares the release before it changes anything, so a download that fails leaves cad as it
@@ -222,7 +228,7 @@ was. In order:
 1. **Switch** (the record's `phase` is `switching`: a server of the release being left starts none, `leaving`). On
    Windows inside an app package: refused, cause `packaged`. The server that answers is stopped at once, as `cad server
    stop` stops it; a `cad` command it cuts short says cad updated itself while it ran. On Windows, uv's bin `cad.exe` is
-   moved aside, then every other process of the environment stopped, until none is left (`auto_update_sweep.py`).
+   moved aside, then every other process of the environment stopped but those it spares, until none is left.
    Then `uv tool upgrade "cad==<release>"` (pipx: `pipx runpip cad install --upgrade "cad==<release>"`); the moment it
    returns a bin `cad` is back.
 2. **Check**: `cad server start` where a server ran or one is wanted, which must leave a server of the release, else
@@ -231,10 +237,10 @@ was. In order:
    `*.dist-info` left without its `RECORD` deleted and `uv tool upgrade --reinstall` (pipx: `--force-reinstall`) of the
    release, then of the release before. Cause `start_failed` where the release did not start and the one before runs
    again. Where neither runs, the last resort: the installer makes the environment anew (`uv tool install --force
-   "cad<N>"`, `pipx install --force cad`; never one release, which would pin it), which removes the folder the worker
-   runs from, so `auto_update_repair.py` does it: copied into the state folder with the sweep and run, standard library
-   alone, by the Python the environment was made from, once the worker has ended (the attempt `repairing` meanwhile;
-   `cad update` says so and ends). Cause `broken` where that leaves no cad that runs either.
+   "cad<N>"`, `pipx install --force cad`; never one release, which would pin it), which removes the environment, so
+   the worker does it once nothing of it runs: the attempt `repairing` first, on which the processes the switch spared
+   leave (`cad update` says so and ends), waited for, then every process of it stopped. Cause `broken` where that
+   leaves no cad that runs either.
 
 No step is tried twice in a run. Each command, its status, time and the end of its output go to `auto-update.log` in the
 state folder (the attempt before's, `auto-update.1.log`), which nothing sends. A worker that raises leaves the attempt

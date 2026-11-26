@@ -101,17 +101,18 @@ that no longer ran at all, and 758 of their 791 calls failed. uv's source says h
 running `cad.exe` it deletes the environment it has just upgraded, and it deletes a package's record of its
 own files before the files, so one held file leaves an install no later run can repair. Anywhere, a process
 that started before an update and imported a module after it ran two releases at once. So the update,
-by a worker that runs from the environment's interpreter, which an upgrade does not touch: stops the server;
+by a worker uv runs from the new release in its cache (`uv tool run --isolated --from "cad==X"`), so the
+newest code does it and none of it runs from the environment it replaces: stops the server;
 on Windows moves uv's bin `cad.exe` aside (a new `cad` then fails at once, rather than hold the files) and
 stops every other process of the environment; runs uv, which downloads and prepares the release before it
 changes anything, so a failed download leaves cad as it was; puts `cad.exe` back; checks that the release
 runs; and, where it does not, deletes the folders uv left without their record and runs `uv tool upgrade
 --reinstall` (pipx: `--force-reinstall`) of the release, then of the release before. Where that leaves no
 cad that runs, the installer makes the environment anew, `uv tool install --force "cad<N>"` or `pipx install
---force cad`: a range, never one release, which would pin it. That removes the folder the worker runs from, so
-the worker hands it to a standard-library script copied out of the environment and run by the Python the
-environment was made from, which stops cad's processes first. Inside a Windows app's package the
-update is refused, and the server and the worker are started outside it by Task Scheduler
+--force cad`: a range, never one release, which would pin it. That removes the environment, so the worker
+waits for the processes it spared to leave and stops the rest first. Where uv cannot build the new release
+(offline, no such release), the attempt fails with uv's cause and nothing is touched. Inside a Windows
+app's package the update is refused, and the server and the worker are started outside it by Task Scheduler
 ([below](#inside-a-windows-apps-package-say-so)).
 
 0.11.12 to 0.11.17 update in place too, with none of these steps: that is the failure above. Also built and
