@@ -86,7 +86,7 @@ jobs:
       # (a past release's tag), which carries no check and needs none.
       - name: Set up uv
         if: ${{ !inputs.preview && hashFiles('scripts/release/newest_cad.py') != '' }}
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
         with:
           # One question, asked of PyPI as it is now: nothing of it is worth keeping for a later run.
           enable-cache: false
