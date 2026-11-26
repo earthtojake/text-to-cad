@@ -19,6 +19,12 @@ ANGULAR = math.radians(28.5)
 # The pair, by name: what a served part's URL carries (the structure's ``tessellation``).
 TESSELLATION = f"{DEVIATION:g}-{math.degrees(ANGULAR):g}"
 
+# The rules a part's facts are made by (``mesh.Topology``, ``mesh.measured``), by number: whatever keeps facts (the
+# engine's ``FactCache``, a view bundle) keeps them by it too, so facts made by other rules are never answered.
+# 2: the part's box is the union of its faces' boxes, areas, centroids and volumes are integrated adaptively, and a
+# face's checker verdict is in the part's whole table only where its mesh left the face without triangles.
+FACTS_VERSION = 2
+
 MAGIC = b"XBM2"
 VERSION = 2
 HEADER = struct.Struct("<4sI6I7I2f3I")

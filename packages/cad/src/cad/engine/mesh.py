@@ -87,7 +87,7 @@ from OCP.GeomAbs import GeomAbs_G1
 from OCP.TopoDS import TopoDS
 from OCP.collections import List_TopoDS_Shape
 
-__all__ = ["ANGULAR", "BOUNDARY", "DEVIATION", "FEATURE", "HEADER", "MAGIC", "Mesh", "NONMANIFOLD", "SEAM",
+__all__ = ["ANGULAR", "BOUNDARY", "DEVIATION", "FACTS_VERSION", "FEATURE", "HEADER", "MAGIC", "Mesh", "NONMANIFOLD", "SEAM",
            "TANGENT", "TESSELLATION", "Topology", "check", "deflection", "measured", "mesh_shape"]
 
 
@@ -98,7 +98,7 @@ from cad.engine.kernel.bounds import box_limits, optimal_box
 # BRepMesh_Status bits, as the mesher's GetStatusFlags reports them.
 _MESH_FLAGS = ((1, "Failure"), (2, "ReMesh"), (4, "SelfIntersectingWire"), (8, "UserBreak"))
 
-from cad.engine.mesh_format import (ANGULAR, BOUNDARY, CLASS_NAMES, DEVIATION, FEATURE, HEADER, MAGIC, NONMANIFOLD, SEAM, TANGENT, TESSELLATION, VERSION, Mesh)
+from cad.engine.mesh_format import (ANGULAR, BOUNDARY, CLASS_NAMES, DEVIATION, FACTS_VERSION, FEATURE, HEADER, MAGIC, NONMANIFOLD, SEAM, TANGENT, TESSELLATION, VERSION, Mesh)
 
 
 def deflection(shape: Any) -> float:
@@ -318,6 +318,11 @@ def _point(point: Any) -> list[float]:
     return [point.X(), point.Y(), point.Z()]
 
 
+# The facts' rules are ``FACTS_VERSION``'s (``mesh_format``): areas, centroids and volumes integrated adaptively to a
+# relative ``GPROP_EPS`` (BRepGProp's Eps form: its fixed Gauss points cost 3x as much and were 5e-4 off on trimmed
+# spheres), the part's box the union of its faces', a face checked in the whole table only where its mesh has none.
+GPROP_EPS = 1e-3
+
 # How nearly two edges must run on through a vertex, opposed, to continue one chain where more
 # than one could: a STEP's selector table's alignment.
 CHAIN_ALIGNMENT_DEG = 3.0
@@ -347,6 +352,7 @@ class Topology:
             TopExp.MapShapes_s(self.shape, kind, found)
             self.maps[name] = found
         self._ancestors: Any = None
+        self._boxes: dict[int, Any] = {}  # each face's box, once: the part's box is their union (``measured``)
 
     def _get(self, kind: str, ordinal: int) -> Any:
         from OCP.TopoDS import TopoDS
@@ -357,20 +363,29 @@ class Topology:
         shape = found.FindKey(ordinal)
         return {"face": TopoDS.Face, "edge": TopoDS.Edge, "vertex": TopoDS.Vertex}[kind](shape)
 
-    def face(self, ordinal: int) -> dict[str, Any]:
+    def _box(self, ordinal: int) -> Any:
+        found = self._boxes.get(ordinal)
+        if found is None:
+            found = self._boxes[ordinal] = optimal_box(self._get("face", ordinal))
+        return found
+
+    def face(self, ordinal: int, checked: bool = True) -> dict[str, Any]:
+        """One face's facts; ``checked``, with its checker's verdict (``check``), as a pick asks."""
         from OCP.BRepAdaptor import BRepAdaptor_Surface
         from OCP.BRepGProp import BRepGProp
         from OCP.GProp import GProp_GProps
 
         face = self._get("face", ordinal)
         props = GProp_GProps()
-        BRepGProp.SurfaceProperties_s(face, props)
-        box = optimal_box(face)
+        BRepGProp.SurfaceProperties_s(face, props, GPROP_EPS)
+        box = self._box(ordinal)
         bounds = list(box_limits(box)) if not box.IsVoid() else None
         surface = BRepAdaptor_Surface(face, False)
         kind = _kind(surface.GetType())
         found = {"kind": "face", "ordinal": ordinal, "area": props.Mass(), "centroid": _point(props.CentreOfMass()),
-                 "surface": kind, "box": None if bounds is None else {"min": bounds[:3], "max": bounds[3:]}, "check": check(face)}
+                 "surface": kind, "box": None if bounds is None else {"min": bounds[:3], "max": bounds[3:]}}
+        if checked:
+            found["check"] = check(face)
         # A round face's radii, as a STEP's pick data carries them: what its card reads.
         if kind == "cylinder":
             found["radius"] = surface.Cylinder().Radius()
@@ -521,15 +536,37 @@ class Topology:
         return {"kind": "vertex", "ordinal": ordinal, "position": _point(BRep_Tool.Pnt_s(vertex)),
                 "tolerance": BRep_Tool.Tolerance_s(vertex)}
 
-    def elements(self) -> dict[str, Any]:
+    def elements(self, unmeshed: Any = ()) -> dict[str, Any]:
         """The part's whole table: every face's, edge's and vertex's facts (``face``, ``edge``,
-        ``vertex``: each exactly what asking for that one answers), keyed by ordinal as text, and how
-        a pick grows (``groups``). A function of the part's shape bytes alone, as each of them is: what
-        a view bundle holds of a part, since no kernel answers its reader."""
-        return {**{plural: {str(ordinal): getattr(self, kind)(ordinal)
+        ``vertex``: each what asking for that one answers, but that a face says its checker's verdict only
+        where its mesh left it without triangles, ``unmeshed``'s ordinals), keyed by ordinal as text, and how
+        a pick grows (``groups``). A function of the part's shape bytes and its mesh: what a view bundle
+        holds of a part, since no kernel answers its reader."""
+        unmeshed = set(unmeshed)
+        faces = {str(ordinal): self.face(ordinal, ordinal in unmeshed)
+                 for ordinal in range(1, self.maps["face"].Extent() + 1)}
+        return {"faces": faces,
+                **{plural: {str(ordinal): getattr(self, kind)(ordinal)
                             for ordinal in range(1, self.maps[kind].Extent() + 1)}
-                   for plural, kind in (("faces", "face"), ("edges", "edge"), ("vertices", "vertex"))},
+                   for plural, kind in (("edges", "edge"), ("vertices", "vertex"))},
                 "groups": self.groups()}
+
+    def measured(self) -> dict[str, Any]:
+        """The part measured as a whole (module ``measured``), its box the union of its faces' boxes (those
+        its facts made already, and the rest), and of its edges outside faces and vertices outside edges."""
+        from OCP.Bnd import Bnd_Box
+        from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
+        from OCP.TopExp import TopExp_Explorer
+
+        box = Bnd_Box()
+        for ordinal in range(1, self.maps["face"].Extent() + 1):
+            box.Add(self._box(ordinal))
+        for kind, avoid in ((TopAbs_EDGE, TopAbs_FACE), (TopAbs_VERTEX, TopAbs_EDGE)):
+            free = TopExp_Explorer(self.shape, kind, avoid)
+            while free.More():
+                box.Add(optimal_box(free.Current()))
+                free.Next()
+        return _whole(self.shape, box)
 
 def measured(data: Any) -> dict[str, Any]:
     """What the kernel measures of a part as a whole, from its shape bytes (``shape_bytes``) read
@@ -538,11 +575,12 @@ def measured(data: Any) -> dict[str, Any]:
     weigh -- how many of them are inside out (``inverted``: faces pointing inward, a negative volume,
     which a boolean of build123d can make), and its box in its own frame (``{"min", "max"}``, None for
     an empty part), which ``cad <type> inspect`` places where each occurrence stands for the document's
-    bounds. A function of those bytes alone, so the engine keeps it by the part's geometry key."""
-    return _whole(read_shape(data))
+    bounds. A function of those bytes alone, so the engine keeps it by the part's geometry key (and
+    ``FACTS_VERSION``). Its box is the union of its faces' (``Topology.measured``)."""
+    return Topology(data).measured()
 
 
-def _whole(shape: Any) -> dict[str, Any]:
+def _whole(shape: Any, box: Any) -> dict[str, Any]:
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
     from OCP.TopAbs import TopAbs_SOLID
@@ -554,10 +592,9 @@ def _whole(shape: Any) -> dict[str, Any]:
     total, inverted = 0.0, 0
     for at in range(1, solids.Extent() + 1):
         props = GProp_GProps()
-        BRepGProp.VolumeProperties_s(solids.FindKey(at), props)
+        BRepGProp.VolumeProperties_s(solids.FindKey(at), props, GPROP_EPS)
         total += abs(props.Mass())
         inverted += props.Mass() < -_INSIDE_OUT
-    box = optimal_box(shape)
     bounds = list(box_limits(box)) if not box.IsVoid() else None
     return {"volume": total, "solids": solids.Extent(), "inverted": inverted,
             "box": None if bounds is None else {"min": bounds[:3], "max": bounds[3:]}}

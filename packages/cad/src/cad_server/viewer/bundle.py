@@ -44,6 +44,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from cad.engine.atomic_replace import replace_atomic, same_bytes, staging
+from cad.engine.mesh_format import FACTS_VERSION
 from cad.engine.export import ExportRefused
 from cad.registry import DOCUMENT_TYPES
 
@@ -147,10 +148,11 @@ class _Bundle:
     def __init__(self, app, folder: Path, stage: Path, previous: dict, release: str, roots: list[str],
                  prefix: str = "") -> None:
         self.app, self.folder, self.stage, self.release, self.prefix = app, folder, stage, release, prefix
-        # What an earlier writing by this release left, by its path in the bundle: a content-named file among them
-        # is kept.
+        # What an earlier writing by this release, by the facts' same rules, left, by its path in the bundle: a
+        # content-named file among them is kept (a part's table is named by its key, and its facts' rules can change).
         made = previous.get("made") if isinstance(previous.get("made"), dict) else {}
-        same = previous.get("format") == FORMAT and made.get("release") == release
+        same = (previous.get("format") == FORMAT and made.get("release") == release
+                and made.get("facts") == FACTS_VERSION)
         self.kept = {path: entry for path, entry in (previous.get("files") or {}).items()
                      if _named(path) and isinstance(entry, dict)} if same else {}
         # This bundle's files, by their paths in it (below ``prefix``); ``staged``, the bundle's paths written.
@@ -177,8 +179,8 @@ class _Bundle:
     def manifest(self, document: dict) -> bytes:
         """The manifest of ``document``'s bundle as this writing holds it: every file by its path, sorted."""
         files = {path: self.files[path] for path in sorted(self.files)}
-        manifest = {"format": FORMAT, "document": document, "made": {"tool": "cad", "release": self.release},
-                    "files": files}
+        manifest = {"format": FORMAT, "document": document,
+                    "made": {"tool": "cad", "release": self.release, "facts": FACTS_VERSION}, "files": files}
         return (json.dumps(manifest, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
 
     # --- asking this application ------------------------------------------------------------

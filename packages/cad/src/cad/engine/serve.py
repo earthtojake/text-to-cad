@@ -817,10 +817,20 @@ def _topology_fact(key: str, data: bytes, method: str, args: tuple) -> Any:
     return getattr(found, method)(*args)
 
 
-def _table(key: str, data: bytes) -> bytes:
-    """A part's whole table (``mesh.Topology.elements``) as the JSON its route answers: a pool process's job
-    (``Server.table``), encoded where it is made, so the server keeps and sends its bytes as they come."""
-    return json.dumps(_topology_fact(key, data, "elements", ()), separators=(",", ":")).encode()
+def _table(key: str, data: bytes, unmeshed: tuple[int, ...] = ()) -> bytes:
+    """A part's whole table (``mesh.Topology.elements``, its mesh's ``unmeshed`` faces checked) as the JSON its
+    route answers: a pool process's job (``Server.table``), encoded where it is made, so the server keeps and
+    sends its bytes as they come."""
+    return json.dumps(_topology_fact(key, data, "elements", (unmeshed,)), separators=(",", ":")).encode()
+
+
+def _held(key: str, unmeshed: tuple[int, ...] = ()) -> str:
+    """What a part's facts are kept by (``FactCache``): its geometry key, the rules they are made by
+    (``mesh.FACTS_VERSION``), so facts made by other rules are never answered, and for its table the faces its
+    mesh left without triangles, which the table checks."""
+    from cad.engine.mesh_format import FACTS_VERSION
+
+    return f"{key}@facts{FACTS_VERSION}" + (f"/unmeshed{','.join(map(str, unmeshed))}" if unmeshed else "")
 
 
 class _RemoteTopology:
@@ -1402,7 +1412,7 @@ class Server:
                 for key in held.oldest():
                     if total <= target:
                         break
-                    if key not in spared:
+                    if key.split("@", 1)[0] not in spared:  # a table's or facts' key names the part first (``_held``)
                         total -= held.evict(key)
             with self.load_lock:
                 order = sorted((ident for ident in self.served if ident not in kept),
@@ -1865,31 +1875,33 @@ class Server:
         -- a job of the pool's facts queue, so tables asked at once are made in as many of its processes, or
         in this process for a server of its own. A part the kernel refuses is every asker's error, and is
         asked of it again next time."""
+        unmeshed = tuple(sorted(self.cache.unmeshed(key) or ()))
+        kept = _held(key, unmeshed)
         with self.tables.lock:
-            held = self.tables.items.get(key)
+            held = self.tables.items.get(kept)
             if held is not None:
-                self.tables.items.move_to_end(key)
+                self.tables.items.move_to_end(kept)
                 return held
-            waiting = self.tables.pending.get(key)
+            waiting = self.tables.pending.get(kept)
             making: concurrent.futures.Future = concurrent.futures.Future()
             if waiting is None:
-                self.tables.pending[key] = making
+                self.tables.pending[kept] = making
         if waiting is not None:
             return waiting.result()
         try:
             data = self.shape_of(doc, key)
             if self.isolated:
-                made = self.mesher.run(_table, key, data, priority=FACT).result()
+                made = self.mesher.run(_table, key, data, unmeshed, priority=FACT).result()
             else:
-                made = json.dumps(self.topology(key, data).elements(), separators=(",", ":")).encode()
+                made = json.dumps(self.topology(key, data).elements(unmeshed), separators=(",", ":")).encode()
         except BaseException as error:  # every asker hears why; this one raises it
             with self.tables.lock:
-                self.tables.pending.pop(key, None)
+                self.tables.pending.pop(kept, None)
             making.set_exception(error)
             raise
         with self.tables.lock:
-            self.tables.pending.pop(key, None)
-            self.tables._put(key, made)
+            self.tables.pending.pop(kept, None)
+            self.tables._put(kept, made)
         making.set_result(made)
         self._grown()
         return made
@@ -1921,14 +1933,14 @@ class Server:
         fresh: list[str] = []
         with self.facts.lock:
             for key in wanted:
-                held = self.facts.items.get(key)
+                held = self.facts.items.get(_held(key))
                 if held is not None:
-                    self.facts.items.move_to_end(key)
+                    self.facts.items.move_to_end(_held(key))
                     found[key] = held
                     continue
-                measuring = self.facts.pending.get(key)
+                measuring = self.facts.pending.get(_held(key))
                 if measuring is None:
-                    measuring = self.facts.pending[key] = concurrent.futures.Future()
+                    measuring = self.facts.pending[_held(key)] = concurrent.futures.Future()
                     fresh.append(key)
                 waiting[key] = measuring
         if fresh:
@@ -1961,11 +1973,9 @@ class Server:
             self._measured(keys, None, error)
             return
         if not self.isolated:
-            from cad.engine.mesh import measured
-
             for key, data in parts:
                 try:
-                    facts = measured(data)
+                    facts = self.topology(key, data).measured()  # its faces' boxes, kept from its table if made
                 except BaseException as error:  # noqa: BLE001 - the kernel's refusal is the asker's answer
                     self._measured([key], None, error)
                     continue
@@ -1991,10 +2001,10 @@ class Server:
         """A batch measured (``found``), or not (``error``): held by key, and every asker answered."""
         facts = dict(found or [])
         with self.facts.lock:
-            settled = [(key, self.facts.pending.pop(key, None)) for key in keys]
+            settled = [(key, self.facts.pending.pop(_held(key), None)) for key in keys]
             if error is None:
                 for key in keys:
-                    self.facts._put(key, facts[key])
+                    self.facts._put(_held(key), facts[key])
         for key, measuring in settled:
             if measuring is None:
                 continue
