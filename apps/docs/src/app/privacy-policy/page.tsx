@@ -360,8 +360,8 @@ export default function PrivacyPolicyPage() {
             <strong>Sharing never happens on its own.</strong> Only <code>cad share</code> uploads a file.
             A build, an edit or a later run changes no share until you run <code>cad share</code> again. The
             first share on a computer is refused until you agree: text-to-cad says what goes, where, who can
-            open it, for how long and how to delete it, and your agent asks you before it runs the command
-            again. <code>cad share off</code> stops sharing on that computer, even for a command that says
+            open it, for how long and how to delete it, and text-to-cad’s skills tell your agent to ask you
+            before it runs the command again. <code>cad share off</code> stops sharing on that computer, even for a command that says
             yes, until <code>cad share on</code>.
           </li>
           <li>
@@ -388,8 +388,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Where it goes.</strong> To cad.fun, a service we run as a Cloudflare Worker, which keeps
-            the share in Cloudflare’s storage. Your computer makes the connection itself, not the text-to-cad
-            server or your agent.
+            the share in Cloudflare’s storage. The upload is made by the <code>cad</code> program on your
+            computer.
           </li>
           <li>
             <strong>How it is protected.</strong> Each share is sealed at rest with AES-256-GCM under a key
@@ -402,8 +402,10 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>What the service keeps, and for how long.</strong> A share’s sealed files, the hashes of
             its write and delete secrets, and its expiry, size and number of files, and nothing else: there
-            are no accounts, no database and no log of requests (the Worker logs no path, header or body, and
-            Cloudflare’s own record of each request to it is turned off). To refuse a flood, uploads and
+            are no accounts and no database, and the service keeps no log of requests (the Worker writes no
+            path, header or body anywhere, and its request logs in Cloudflare are turned off). Cloudflare
+            carries the traffic under its own privacy policy, and while a request is being served, whoever runs
+            the service could see its link in Cloudflare’s live view of requests. To refuse a flood, uploads and
             downloads of the files’ zip are counted per minute for each address and location. A share lives 7
             days after its last share, and is deleted when someone asks for it after that. Sharing the same
             file again keeps the link and starts the 7 days again. A storage rule also deletes every object 8
