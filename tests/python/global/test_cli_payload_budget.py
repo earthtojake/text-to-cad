@@ -23,6 +23,8 @@ class CompactStdoutTests(unittest.TestCase):
         "packages/cad/src/cad_server/cli/requirement.py",
         # `cad doctor --json`: each check of the report.
         "packages/cad/src/cad_server/cli/doctor.py",
+        # `cad cache prune --json`: what it removed and freed, by kind, and what it kept and why.
+        "packages/cad/src/cad_server/cli/cache.py",
         # Every command's failure under --json: the contract's one document.
         "packages/cad/src/cad_server/_internal/cli_errors.py",
         # The checks' Result dataclasses.

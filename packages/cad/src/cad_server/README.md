@@ -117,7 +117,9 @@ cad_server/
   0.11.11 and earlier left, a file's folder once its file is gone (its note names the file), one whose note
   names none (an earlier build's) once nothing in it was written for 30 days, and, past 1 GiB, the meshes cad
   keeps by geometry (a shared file's part meshes, a part's hulls) used longest ago -- each said, with what it
-  freed; `clean` removes all of it, refused while the server runs. `prune` runs beside a server: it keeps what is
+  freed (`--json`: one document, by kind -- `environments`, `releases`, `gone`, `unused`, `meshes` -- the paths
+  removed and the bytes freed, the bytes freed in all, and each path kept, of which kind, and why); `clean` removes
+  all of it, refused while the server runs. `prune` runs beside a server: it keeps what is
   in use (an environment a process runs from, a file's folder while it is being shared) and says so. The cap is
   about what the CAD kernel's environment takes, so meshes never cost more than the kernel; each is made again
   when it is next needed. Nothing else of cad deletes a past release's files.

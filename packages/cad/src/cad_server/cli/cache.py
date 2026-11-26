@@ -19,7 +19,8 @@ another program's.
 - ``clean``: all of the cache but the documents' folders (``OWN``), and what ``prune`` removes; refused while a
   server runs, which runs from it.
 
-Neither asks first: each says what it removed, and the disk that freed (``freed``). Neither removes what is in use:
+Neither asks first: each says what it removed, and the disk that freed (``freed``); ``prune --json`` says it as one
+document, what it removed and freed by kind (``KINDS``) and what it kept and why. Neither removes what is in use:
 a folder a process runs from is kept, and said (``releases.running``), and so is a document's folder a share of its
 file is being made in, whose share holds its lock the while (``sharing.held``), with its view bundle's meshes. Nothing
 else of the cache is held open by a running engine (a hull is read whole, and a note, a picture and a kept check are
@@ -34,8 +35,9 @@ import json
 import os
 import sys
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 DEFAULT_PROG = "cad cache"
 COMMANDS = ("dir", "prune", "clean")
@@ -54,6 +56,10 @@ UNUSED_DAYS = 30
 MESH_BYTES = 2**30
 # What cad keeps in its cache folder, each made again on demand (the module): ``documents/`` is its documents', and stays.
 OWN = ("base", "pycache", "hulls", "mjcf", "homes", "interference")
+#: What ``prune`` removes, by kind, as its ``--json`` document names each: the environments made for another release,
+#: the release folders of 0.11.11 and earlier, a document's folder whose file is gone, one whose note names no file
+#: unwritten for ``UNUSED_DAYS``, and the meshes kept by geometry past ``MESH_BYTES``.
+KINDS = ("environments", "releases", "gone", "unused", "meshes")
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -63,14 +69,18 @@ def build_parser(prog: str = DEFAULT_PROG):
                                               "bytecode, meshes it derived). Never your documents or settings.")
     commands = parser.add_subparsers(dest="command", metavar="{" + ",".join(COMMANDS) + "}", required=True)
     commands.add_parser("dir", help="print where cad's cache is", description="Print where cad's cache is.")
-    commands.add_parser("prune", help="remove what no file and no release of cad needs",
-                        description="Remove what no file and no release of cad needs: environments made for other "
-                                    "releases; the release folders of 0.11.11 and earlier; the cache's folder of a "
-                                    f"file that is gone, and of a file no note names once unused for {UNUSED_DAYS} "
-                                    f"days; and, past {size(MESH_BYTES)}, the meshes cad keeps by geometry (shared "
-                                    "files' part meshes, parts' hulls) used longest ago: about what the CAD kernel "
-                                    "takes, each made again when next needed. What is in use stays: an environment a "
-                                    "process runs from, a file's folder while it is being shared.")
+    prune = commands.add_parser(
+        "prune", help="remove what no file and no release of cad needs",
+        description="Remove what no file and no release of cad needs: environments made for other releases; the "
+                    "release folders of 0.11.11 and earlier; the cache's folder of a file that is gone, and of a file "
+                    f"no note names once unused for {UNUSED_DAYS} days; and, past {size(MESH_BYTES)}, the meshes cad "
+                    "keeps by geometry (shared files' part meshes, parts' hulls) used longest ago: about what the CAD "
+                    "kernel takes, each made again when next needed. What is in use stays: an environment a process "
+                    "runs from, a file's folder while it is being shared.")
+    prune.add_argument("--json", action="store_true",
+                       help="one JSON document: by kind (environments, releases, gone, unused, meshes) the paths "
+                            "removed and the bytes freed, the bytes freed in all, and each path kept, of which kind, "
+                            "and why")
     commands.add_parser("clean", help="remove all of cad's cache; cad makes it again as it needs it",
                         description="Remove all of cad's cache, and what prune removes; cad makes it again as it needs "
                                     "it. Refused while the cad server runs.")
@@ -98,26 +108,26 @@ def _inside(path: str, parent: Path) -> bool:
         os.path.normcase(os.path.realpath(parent)).rstrip(os.sep) + os.sep)
 
 
-def prunable() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
-    """What ``prune`` removes, each with what it is, and what it keeps of that, each with why: the environments made
-    for another release, and the release folders of 0.11.11 and earlier but ``installations/current``'s; a folder a
-    process runs from kept."""
+def prunable() -> tuple[list[tuple[Path, str, str]], list[tuple[Path, str, str]]]:
+    """What ``prune`` removes, each with what it is and its kind (``KINDS``), and what it keeps of that, each with why
+    and its kind: the environments made for another release, and the release folders of 0.11.11 and earlier but
+    ``installations/current``'s; a folder a process runs from kept."""
     from cad.engine.places import current
     from cad.engine.previous import version
     from cad_server._internal import base, releases
 
-    found: list[tuple[Path, str]] = []
-    kept: list[tuple[Path, str]] = []
+    found: list[tuple[Path, str, str]] = []
+    kept: list[tuple[Path, str, str]] = []
     for env in _folders(base.folder()):
         release = _release(env)
         if release is not None and release != version():
-            found.append((env, f"an environment of cad {release}"))
+            found.append((env, f"an environment of cad {release}", "environments"))
     record = current()
     for old in _folders(releases.root()):
         if record is not None and _inside(record["prefix"], old):
-            kept.append((old, "the release 0.11.11 and earlier start (installations/current)"))
+            kept.append((old, "the release 0.11.11 and earlier start (installations/current)", "releases"))
         else:
-            found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier"))
+            found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier", "releases"))
     return _running(found, kept)
 
 
@@ -131,15 +141,15 @@ def _release(env: Path) -> str | None:
     return release if isinstance(release, str) else None
 
 
-def _running(found: list[tuple[Path, str]], kept: list[tuple[Path, str]]):
+def _running(found: list[tuple[Path, str, str]], kept: list[tuple[Path, str, str]]):
     from cad_server._internal.releases import running
 
     going = []
-    for path, what in found:
+    for path, what, kind in found:
         if running(path, asking=os.getpid()):
-            kept.append((path, "a process runs from it"))
+            kept.append((path, "a process runs from it", kind))
         else:
-            going.append((path, what))
+            going.append((path, what, kind))
     return going, kept
 
 
@@ -173,24 +183,25 @@ def _written(found: Path) -> float:
     return newest
 
 
-def documents(now: float | None = None) -> list[tuple[Path, str]]:
-    """The documents' folders ``prune`` removes, each with what it is: one whose file, as its note names it, is gone;
-    one whose note names no file, or that has none, nothing in it written for ``UNUSED_DAYS``. A folder whose file is
-    there stays, whatever its age."""
+def documents(now: float | None = None) -> list[tuple[Path, str, str]]:
+    """The documents' folders ``prune`` removes, each with what it is and its kind: one whose file, as its note names
+    it, is gone (``gone``); one whose note names no file, or that has none, nothing in it written for ``UNUSED_DAYS``
+    (``unused``). A folder whose file is there stays, whatever its age."""
     from cad.engine.ids import is_id
     from cad_server.engine.library import DOCUMENTS
 
     now = time.time() if now is None else now
-    found: list[tuple[Path, str]] = []
+    found: list[tuple[Path, str, str]] = []
     for kept in _folders(folder() / DOCUMENTS):
         if not is_id(kept.name):
             continue  # no document's: another program's, or a person's
         path = _noted(kept)
         if path is not None:
             if not os.path.isfile(path):
-                found.append((kept, f"what the cache kept of {path}, which is gone"))
+                found.append((kept, f"what the cache kept of {path}, which is gone", "gone"))
         elif now - _written(kept) >= UNUSED_DAYS * 86400:
-            found.append((kept, f"what the cache kept of a file no note names, unwritten for {UNUSED_DAYS} days"))
+            found.append((kept, f"what the cache kept of a file no note names, unwritten for {UNUSED_DAYS} days",
+                          "unused"))
     return found
 
 
@@ -274,13 +285,13 @@ def _drop_document(found: Path, what: str) -> None:
     # The lock goes with the folder as it is let go: it holds none of a share's files now.
 
 
-def _drop_meshes(going: list[tuple[Path, int]]) -> tuple[list[tuple[Path, int]], list[tuple[Path, str]]]:
+def _drop_meshes(going: list[tuple[Path, int]]) -> tuple[list[tuple[Path, int]], list[tuple[Path, str, str]]]:
     """``going``'s meshes removed, a view bundle's under its file's share's lock (``sharing.held``), which keeps those
     of a file being shared: the meshes removed, each with the disk it took, and what was kept, with why."""
     from cad_server import sharing
 
     removed: list[tuple[Path, int]] = []
-    kept: list[tuple[Path, str]] = []
+    kept: list[tuple[Path, str, str]] = []
     by_folder: dict[Path | None, list[tuple[Path, int]]] = {}
     for path, disk in going:
         by_folder.setdefault(_document_of(path), []).append((path, disk))
@@ -303,7 +314,7 @@ def _drop_meshes(going: list[tuple[Path, int]]) -> tuple[list[tuple[Path, int]],
             with sharing.held(document):
                 drop(meshes_here)
         except sharing.Busy:
-            kept.append((document, "a share of its file is being made"))
+            kept.append((document, "a share of its file is being made", "meshes"))
         except FileNotFoundError:
             continue  # its folder went meanwhile
     return removed, kept
@@ -312,19 +323,31 @@ def _drop_meshes(going: list[tuple[Path, int]]) -> tuple[list[tuple[Path, int]],
 def freed(paths: Iterable[Path]) -> int:
     """The disk removing ``paths`` frees: each file's blocks, counted once, and only where every link to it is among
     them -- an environment's files are links into uv's own cache, which removing it does not free."""
-    seen: dict[tuple, list[int]] = {}
-    for path in paths:
-        for parent, _folders_here, files in os.walk(path):
-            for name in files:
-                try:
-                    found = os.lstat(os.path.join(parent, name))
-                except OSError:
-                    continue
-                key = (found.st_dev, found.st_ino) if found.st_ino else (parent, name)
-                blocks = getattr(found, "st_blocks", None)
-                entry = seen.setdefault(key, [found.st_nlink or 1, 0, found.st_size if blocks is None else blocks * 512])
-                entry[1] += 1
-    return sum(size for links, count, size in seen.values() if count >= links)
+    return sum(freed_by({"": paths}).values())
+
+
+def freed_by(groups: Mapping[str, Iterable[Path]]) -> dict[str, int]:
+    """``freed`` of every group's paths removed together, by group: a file is counted once, in the group it is found
+    in first, so the groups' sum is what removing them all frees."""
+    seen: dict[tuple, list[Any]] = {}
+    for group, paths in groups.items():
+        for path in paths:
+            for parent, _folders_here, files in os.walk(path):
+                for name in files:
+                    try:
+                        found = os.lstat(os.path.join(parent, name))
+                    except OSError:
+                        continue
+                    key = (found.st_dev, found.st_ino) if found.st_ino else (parent, name)
+                    blocks = getattr(found, "st_blocks", None)
+                    entry = seen.setdefault(key, [found.st_nlink or 1, 0,
+                                                  found.st_size if blocks is None else blocks * 512, group])
+                    entry[1] += 1
+    totals = dict.fromkeys(groups, 0)
+    for links, count, disk, group in seen.values():
+        if count >= links:
+            totals[group] += disk
+    return totals
 
 
 def size(count: int) -> str:
@@ -340,35 +363,48 @@ def _say(line: str) -> None:
     sys.stdout.flush()
 
 
-def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]],
-            over: list[tuple[Path, int]] | None = None) -> int:
+def _remove(going: list[tuple[Path, str, str]], kept: list[tuple[Path, str, str]],
+            over: list[tuple[Path, int]] | None = None, *, said: bool = True) -> tuple[int, dict[str, Any]]:
     """``going`` removed, each said, then ``over``'s meshes, said in one line, and ``kept`` said; then what that freed.
-    A document's folder a share of its file is being made in is kept, and said. 1 where one could not be removed."""
+    A document's folder a share of its file is being made in is kept, and said. Its exit status, 1 where one could not
+    be removed, and what it did as ``prune --json`` answers it: by kind (``KINDS``) the paths removed and the disk that
+    freed, the disk freed in all, and each path kept, of which kind and why, one that could not be removed among them
+    (``"ok": false``, a ``failed`` failure's ``error`` and ``reason``). Not ``said``, it says nothing as it goes."""
     from cad_server import sharing
     from cad_server._internal import base
     from cad_server.engine.library import DOCUMENTS
 
-    space, failed, removed = freed(path for path, _what in going), False, 0
-    for path, what in going:
+    say = _say if said else (lambda _line: None)
+    kinds = list(dict.fromkeys([*KINDS, *(kind for _path, _what, kind in going)]))
+
+    def by_kind(entries: Iterable[tuple[Path, str, str]]) -> dict[str, list[Path]]:
+        listed = list(entries)
+        return {kind: [path for path, _what, of in listed if of == kind] for kind in kinds}
+
+    before = freed_by(by_kind(going))
+    removed: dict[str, list[Path]] = {kind: [] for kind in kinds}
+    failed: list[tuple[Path, str, str]] = []
+    for path, what, kind in going:
         try:
             if path.parent == folder() / DOCUMENTS:
                 _drop_document(path, what)
             else:
                 base._remove(path, what)
         except sharing.Busy:
-            kept.append((path, "a share of its file is being made"))
+            kept.append((path, "a share of its file is being made", kind))
             continue
         except base.Refused as refused:
-            _say(f"kept {path}: {refused}")
-            failed = True
+            say(f"kept {path}: {refused}")
+            failed.append((path, str(refused), kind))
             continue
         except OSError as error:  # a document's folder this user may not change
-            _say(f"kept {path}: {error}")
-            failed = True
+            say(f"kept {path}: {error}")
+            failed.append((path, str(error), kind))
             continue
-        removed += 1
-        _say(f"removed {path} ({what})")
-    space -= freed(path for path, _what in going if os.path.lexists(path))  # what stayed frees nothing
+        removed[kind].append(path)
+        say(f"removed {path} ({what})")
+    stayed = freed_by(by_kind(entry for entry in going if os.path.lexists(entry[0])))  # what stayed frees nothing
+    space = {kind: before[kind] - stayed[kind] for kind in kinds}
     if over:
         used = {path: max(found.st_atime, found.st_mtime) for path, found in
                 ((path, _stat(path)) for path, _disk in over) if found is not None}
@@ -376,16 +412,27 @@ def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]],
         kept += held
         if dropped:
             disk = sum(taken for _path, taken in dropped)
-            removed, space = removed + len(dropped), space + disk
+            removed["meshes"] += [path for path, _taken in dropped]
+            space["meshes"] += disk
             when = [used[path] for path, _taken in dropped if path in used]
             last = time.strftime("%Y-%m-%d", time.localtime(max(when))) if when else "long ago"
-            _say(f"removed {len(dropped)} {'mesh' if len(dropped) == 1 else 'meshes'} last used {last} or before "
-                 f"({size(disk)}): the meshes cad keeps by geometry are held to {size(MESH_BYTES)}, the least recently "
-                 "used going first")
-    for path, why in kept:
-        _say(f"kept {path}: {why}")
-    _say(f"{removed} removed, {size(max(0, space))} freed" if removed else "nothing removed")
-    return 1 if failed else 0
+            say(f"removed {len(dropped)} {'mesh' if len(dropped) == 1 else 'meshes'} last used {last} or before "
+                f"({size(disk)}): the meshes cad keeps by geometry are held to {size(MESH_BYTES)}, the least recently "
+                "used going first")
+    for path, why, _kind in kept:
+        say(f"kept {path}: {why}")
+    count, total = sum(len(paths) for paths in removed.values()), max(0, sum(space.values()))
+    say(f"{count} removed, {size(total)} freed" if count else "nothing removed")
+    answer: dict[str, Any] = {
+        "ok": not failed,
+        "removed": {kind: {"paths": [str(path) for path in removed[kind]], "freed": max(0, space[kind])}
+                    for kind in kinds},
+        "freed": total,
+        "kept": [{"path": str(path), "kind": kind, "why": why} for path, why, kind in [*failed, *kept]]}
+    if failed:
+        answer.update(error="could not remove " + ", ".join(str(path) for path, _why, _kind in failed),
+                      reason="failed")
+    return (1 if failed else 0), answer
 
 
 def _clean() -> int:
@@ -404,15 +451,17 @@ def _clean() -> int:
                          "first\n")
         return 1
     root, envs = folder(), base.folder()
-    found = [(env, f"an environment of cad {_release(env) or 'no release it names'}") for env in _folders(envs)]
-    found += [(root / name, f"cad's {name}") for name in OWN if name != base.BASE and os.path.lexists(root / name)]
+    found = [(env, f"an environment of cad {_release(env) or 'no release it names'}", "environments")
+             for env in _folders(envs)]
+    found += [(root / name, f"cad's {name}", name) for name in OWN
+              if name != base.BASE and os.path.lexists(root / name)]
     going, kept = _running(found, [])
     pruned, also = prunable()  # its release folders of 0.11.11 and earlier: the environments are all above
 
-    def outside(entries: list[tuple[Path, str]]) -> list[tuple[Path, str]]:
+    def outside(entries: list[tuple[Path, str, str]]) -> list[tuple[Path, str, str]]:
         return [entry for entry in entries if not _inside(str(entry[0]), envs)]
 
-    code = _remove(going + outside(pruned), kept + outside(also))
+    code, _answer = _remove(going + outside(pruned), kept + outside(also))
     with contextlib.suppress(OSError):
         for lock in envs.glob("*.lock"):  # each removed environment's lock beside it
             if not (envs / lock.stem).exists():
@@ -430,7 +479,10 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if args.command == "prune":
         going, kept = prunable()
         gone = documents()
-        return _remove(going + gone, kept, meshes(path for path, _what in gone)[0])
+        code, answer = _remove(going + gone, kept, meshes(path for path, _what, _kind in gone)[0], said=not args.json)
+        if args.json:
+            _say(json.dumps(answer, separators=(",", ":")))
+        return code
     return _clean()
 
 

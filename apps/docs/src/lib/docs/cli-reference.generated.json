@@ -839,32 +839,40 @@
   {
    "command": "cad cache prune",
    "summary": "remove what no file and no release of cad needs",
-   "usage": "cad cache prune",
-   "description": 80
+   "usage": "cad cache prune [--json]",
+   "description": 80,
+   "options": [
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 81
+    }
+   ]
   },
   {
    "command": "cad cache clean",
    "summary": "remove all of cad's cache; cad makes it again as it needs it",
    "usage": "cad cache clean",
-   "description": 81
+   "description": 82
   },
   {
    "command": "cad doctor",
    "summary": "report this cad, its folders, its kernel and the server; it changes nothing",
    "usage": "cad doctor [--check] [--json]",
-   "description": 82,
+   "description": 83,
    "options": [
     {
      "flags": [
       "--check"
      ],
-     "help": 83
+     "help": 84
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 84
+     "help": 85
     }
    ]
   },
@@ -872,15 +880,15 @@
    "command": "cad import",
    "summary": "write a shared file's files into a folder and add it to the library, running nothing",
    "usage": "cad import [--json] LINK [FOLDER]",
-   "description": 85,
+   "description": 86,
    "arguments": [
     {
      "name": "LINK",
-     "help": 86
+     "help": 87
     },
     {
      "name": "FOLDER",
-     "help": 87,
+     "help": 88,
      "optional": true
     }
    ],
@@ -889,7 +897,7 @@
      "flags": [
       "--json"
      ],
-     "help": 88
+     "help": 89
     }
    ]
   },
@@ -897,13 +905,13 @@
    "command": "cad mcp",
    "summary": "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout",
    "usage": "cad mcp",
-   "description": 89
+   "description": 90
   },
   {
    "command": "cad plugin",
    "summary": "the plugin in your agent apps: `install` puts it in or updates it; `update auto`: whether cad's updates update it too",
    "usage": "cad plugin {install} ...",
-   "description": 90,
+   "description": 91,
    "arguments": [
     {
      "name": "{install} ...",
@@ -918,7 +926,7 @@
    "command": "cad plugin install",
    "summary": "install the plugin in every agent app found on this computer, or update it there",
    "usage": "cad plugin install",
-   "description": 91
+   "description": 92
   },
   {
    "command": "cad plugin update",
@@ -937,7 +945,7 @@
    "command": "cad plugin update auto",
    "summary": "show or change whether cad's updates update the plugin too",
    "usage": "cad plugin update auto [{status,on,off}]",
-   "description": 92,
+   "description": 93,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -954,13 +962,13 @@
    "command": "cad run",
    "summary": "run a script (or -m, -c) as uv run does, cad pinned at this device's release with the integrations its imports use",
    "usage": "cad run [uv run's options] SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE [ARGS...] | COMMAND [ARGS...]",
-   "description": 93
+   "description": 94
   },
   {
    "command": "cad server",
    "summary": "the cad server: start, stop, status",
    "usage": "cad server [--rotate-token] [--yes] {start,stop,status} ...",
-   "description": 94,
+   "description": 95,
    "arguments": [
     {
      "name": "{start,stop,status} ...",
@@ -976,14 +984,14 @@
      "flags": [
       "--rotate-token"
      ],
-     "help": 95
+     "help": 96
     },
     {
      "flags": [
       "-y",
       "--yes"
      ],
-     "help": 96
+     "help": 97
     }
    ]
   },
@@ -991,20 +999,20 @@
    "command": "cad server start",
    "summary": "start the cad server where it is not running",
    "usage": "cad server start [--port PORT] [--foreground]",
-   "description": 97,
+   "description": 98,
    "options": [
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 98
+     "help": 99
     },
     {
      "flags": [
       "--foreground"
      ],
-     "help": 99
+     "help": 100
     }
    ]
   },
@@ -1017,7 +1025,7 @@
      "flags": [
       "--json"
      ],
-     "help": 100
+     "help": 101
     }
    ]
   },
@@ -1030,7 +1038,7 @@
      "flags": [
       "--json"
      ],
-     "help": 101
+     "help": 102
     }
    ]
   },
@@ -1038,15 +1046,15 @@
    "command": "cad share",
    "summary": "share a file (a model by its .xbf) by a link anyone can open for 7 days: status, on, off, delete",
    "usage": "cad share FILE [--yes] [--json]\ncad share status|on|off [--json]\ncad share delete FILE|LINK [--yes] [--json]",
-   "description": 102,
+   "description": 103,
    "arguments": [
     {
      "name": "FILE",
-     "help": 103
+     "help": 104
     },
     {
      "name": "FILE|LINK",
-     "help": 104,
+     "help": 105,
      "optional": true
     }
    ],
@@ -1056,13 +1064,13 @@
       "-y",
       "--yes"
      ],
-     "help": 105
+     "help": 106
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 88
+     "help": 89
     }
    ]
   },
@@ -1070,7 +1078,7 @@
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 106,
+   "description": 107,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -1087,7 +1095,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 107,
+   "description": 108,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -1101,7 +1109,7 @@
      "flags": [
       "--major"
      ],
-     "help": 108
+     "help": 109
     }
    ]
   },
@@ -1109,7 +1117,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 109,
+   "description": 110,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -1126,11 +1134,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 110,
+   "description": 111,
    "arguments": [
     {
      "name": "FILE",
-     "help": 111,
+     "help": 112,
      "optional": true,
      "repeatable": true
     }
@@ -1141,39 +1149,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 112
+     "help": 113
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 113
+     "help": 114
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 114
+     "help": 115
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 115
+     "help": 116
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 116
+     "help": 117
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 117
+     "help": 118
     }
    ]
   }
@@ -1260,6 +1268,7 @@
   "cad's cache: what cad makes again when it needs it (environments, bytecode, meshes it derived). Never your documents or settings.",
   "Print where cad's cache is.",
   "Remove what no file and no release of cad needs: environments made for other releases; the release folders of 0.11.11 and earlier; the cache's folder of a file that is gone, and of a file no note names once unused for 30 days; and, past 1.0 GB, the meshes cad keeps by geometry (shared files' part meshes, parts' hulls) used longest ago: about what the CAD kernel takes, each made again when next needed. What is in use stays: an environment a process runs from, a file's folder while it is being shared.",
+  "one JSON document: by kind (environments, releases, gone, unused, meshes) the paths removed and the bytes freed, the bytes freed in all, and each path kept, of which kind, and why",
   "Remove all of cad's cache, and what prune removes; cad makes it again as it needs it. Refused while the cad server runs.",
   "Report this cad: its release, its data and cache folders and what `cad cache prune` would free, the CAD kernel environment and the integrations', and the server. It changes nothing. Exit 1 when the CAD kernel is installed and does not load.",
   "the same report",

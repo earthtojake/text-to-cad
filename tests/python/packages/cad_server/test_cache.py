@@ -250,6 +250,78 @@ class CacheTest(unittest.TestCase):
         self.assertFalse(old.exists() or new.exists() or old.parent.exists())
         self.assertTrue(read.is_file() and hull.is_file())
 
+    def test_prune_json_answers_in_one_document_by_kind_what_it_removed_and_freed_and_what_it_kept(self) -> None:
+        """``prune --json``: one document and nothing else -- by kind (``KINDS``) the paths removed and the disk that
+        freed, the disk freed in all, and each path kept, of which kind and why -- of the removal the text says."""
+        from cad_server import sharing
+
+        mine, theirs = self.environment("mine0000", version()), self.environment("theirs00", OTHER, 2 * 1024 * 1024)
+        old, current, running = self.release(OTHER), self.release("0.11.10"), self.release("0.11.8")
+        base.interpreter(old).write_bytes(b"p" * 4096)
+        installations.register("0.11.10", (str(releases.console(current)), str(base.interpreter(current)), str(current)))
+        installations.point("0.11.10")
+        gone, shared = self.note("gone.stl", gone=True), self.note("shared.step", gone=True)
+        unused = self.cache / "documents" / "22222222-2222-5222-8222-222222222222"  # no note: an earlier build's
+        (unused / "checks").mkdir(parents=True)
+        (unused / "checks" / "a.json").write_text("{}", encoding="utf-8")
+        self.aged(unused, cache.UNUSED_DAYS + 1)
+        here = self.note("here.step")
+        mesh = here / "view" / "parts" / "k" / "t.xbm"
+        mesh.parent.mkdir(parents=True)
+        mesh.write_bytes(b"m" * 8192)
+        disk = cache._disk(os.lstat(mesh))
+        with mock.patch.object(releases, "running", side_effect=lambda path, **_: Path(path) == running), \
+                mock.patch.object(cache, "MESH_BYTES", 0), sharing.held(shared):
+            code, out, err = _run("prune", "--json")
+            again = _run("prune", "--json")
+        self.assertEqual((code, err), (0, ""))
+        [line] = out.splitlines()
+        answer = json.loads(line)
+        self.assertEqual(list(answer), ["ok", "removed", "freed", "kept"])
+        self.assertTrue(answer["ok"])
+        self.assertEqual({kind: found["paths"] for kind, found in answer["removed"].items()}, {
+            "environments": [str(theirs)], "releases": [str(old)], "gone": [str(gone)], "unused": [str(unused)],
+            "meshes": [str(mesh)]})
+        self.assertGreaterEqual(answer["removed"]["environments"]["freed"], 2 * 1024 * 1024)
+        self.assertEqual(answer["removed"]["meshes"]["freed"], disk)
+        self.assertTrue(all(found["freed"] > 0 for found in answer["removed"].values()), answer)
+        self.assertEqual(answer["freed"], sum(found["freed"] for found in answer["removed"].values()))
+        kept = [{"path": str(current), "kind": "releases",
+                 "why": "the release 0.11.11 and earlier start (installations/current)"},
+                {"path": str(running), "kind": "releases", "why": "a process runs from it"},
+                {"path": str(shared), "kind": "gone", "why": "a share of its file is being made"}]
+        self.assertEqual(answer["kept"], kept)
+        self.assertFalse(any(path.exists() for path in (theirs, old, gone, unused, mesh)))
+        self.assertTrue(all(path.exists() for path in (mine, current, running, shared, here)))
+        self.assertEqual((again[0], again[2]), (0, ""))
+        self.assertEqual(json.loads(again[1]), {
+            "ok": True, "removed": {kind: {"paths": [], "freed": 0} for kind in cache.KINDS}, "freed": 0, "kept": kept})
+
+    def test_prune_json_names_what_it_could_not_remove_and_fails(self) -> None:
+        """A folder prune could not remove is kept, with why, and fails the run (exit 1): under ``--json`` the document
+        is the failure's too (``"ok": false``, ``error``, ``reason`` ``failed``), with what was removed beside it."""
+        theirs = self.environment("theirs00", OTHER)
+        gone = self.note("gone.stl", gone=True)
+        remove = base._remove
+
+        def refused(path: Path, what: str = base.WHAT) -> None:
+            if Path(path) == theirs:
+                raise base.Refused(f"cannot remove {what} at {path}: Permission denied", "denied")
+            remove(path, what)
+
+        with mock.patch.object(base, "_remove", refused):
+            code, out, err = _run("prune", "--json")
+            said = _run("prune")
+        self.assertEqual((code, err), (1, ""))
+        answer = json.loads(out)
+        why = f"cannot remove an environment of cad {OTHER} at {theirs}: Permission denied"
+        self.assertEqual((answer["ok"], answer["error"], answer["reason"]), (False, f"could not remove {theirs}",
+                                                                              "failed"))
+        self.assertEqual(answer["kept"], [{"path": str(theirs), "kind": "environments", "why": why}])
+        self.assertEqual((answer["removed"]["environments"]["paths"], answer["removed"]["gone"]["paths"]),
+                         ([], [str(gone)]))
+        self.assertEqual(said, (1, f"kept {theirs}: {why}\nnothing removed\n", ""), "the text says the same")
+
     def test_what_a_removal_frees_counts_no_file_another_link_keeps(self) -> None:
         env = self.environment("theirs00", OTHER, 8192)
         outside = self.root / "uv-cache" / "file"

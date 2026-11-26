@@ -124,6 +124,22 @@ class TheParser(unittest.TestCase):
         self.assertTrue(err.startswith("usage: cad sample") and err.endswith(
             "cad sample: error: the following arguments are required: source\n"), err)
 
+    def test_what_a_subcommand_does_not_take_is_refused_under_its_own_json(self) -> None:
+        # `cad cache prune --bogus --json`: argparse finds the extra word above the subcommand, whose --json it is.
+        made = parser("cad sample")
+        commands = made.add_subparsers(dest="command", required=True)
+        commands.add_parser("plain")
+        commands.add_parser("sub").add_argument("--json", action="store_true")
+        found, out, err = _parse(made, ["sub", "--bogus", "--json"])
+        self.assertEqual((found, err), (2, ""))
+        self.assertEqual(json.loads(out), {"ok": False, "error": "unrecognized arguments: --bogus", "reason": "usage"})
+        found, out, err = _parse(made, ["sub", "--jsn"])
+        self.assertEqual((found, out), (2, ""))
+        self.assertTrue(err.endswith("cad sample: error: unrecognized arguments: --jsn (did you mean --json?)\n"), err)
+        found, out, err = _parse(made, ["plain", "--json"])  # a subcommand that takes no --json answers in none
+        self.assertEqual((found, out), (2, ""))
+        self.assertTrue(err.endswith("cad sample: error: unrecognized arguments: --json\n"), err)
+
     def test_a_check_s_failure_is_the_command_line_s_with_its_status(self) -> None:
         def check(parsed) -> None:
             raise Failure(f"{parsed.source} is a glb, not a stl", "wrong_type")

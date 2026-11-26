@@ -7,9 +7,9 @@ speaks the failure contract (``cli_errors``).
   argparse's words, on a Python before 3.14, whose argparse names none and, on 3.12, lists the choices
   bare), and an option it does not take the closest of its own (``unrecognized``), never more than one, and nothing is run on a guess.
 - **Its usage errors are the contract's.** A command line it cannot read (``error``) is a ``usage``
-  failure, exit 2: under ``--json`` -- when the parser takes ``--json`` and the command line gives it -- its
-  one JSON document on stdout and nothing else; without it, the usage and the error on stderr, as argparse
-  says them.
+  failure, exit 2: under ``--json`` -- when the parser takes ``--json``, or the subcommand the command line
+  names does (``cad cache prune --json``), and the command line gives it -- its one JSON document on stdout and
+  nothing else; without it, the usage and the error on stderr, as argparse says them.
 - **Its checks are the command line's too.** ``checks`` run on what it read, before anything else does --
   a document type's file of another type, an input that is not there -- and a ``Failure`` one raises is said
   as a usage error is, with the exit status of its class.
@@ -76,8 +76,9 @@ class Parser(argparse.ArgumentParser):
 
     def parse_args(self, args: Sequence[str] | None = None, namespace: Any = None) -> Any:  # type: ignore[override]
         parsed, extras = self.parse_known_args(args, namespace)
-        if extras:
-            self.error(unrecognized(self, extras))
+        if extras:  # what the subcommand it names does not take either: refused as that subcommand's options are
+            self.fail(Failure(unrecognized(self.chosen(parsed) or self, extras), "usage"),
+                      as_json=self.answers_json(parsed))
         for check in self.checks:
             try:
                 check(parsed)
@@ -92,12 +93,23 @@ class Parser(argparse.ArgumentParser):
                 return action.dest
         return None
 
+    def chosen(self, parsed: argparse.Namespace | None) -> Parser | None:
+        """The parser of the subcommand ``parsed`` names (``cad cache prune``), or None for a parser that has none."""
+        for action in self._actions:
+            if isinstance(action, argparse._SubParsersAction) and parsed is not None:  # noqa: SLF001
+                found = action.choices.get(getattr(parsed, action.dest, None))
+                if isinstance(found, Parser):
+                    return found.chosen(parsed) or found
+        return None
+
     def answers_json(self, parsed: argparse.Namespace | None = None) -> bool:
-        """Whether this command answers in JSON: it takes ``--json``, and its command line gave it (as
-        ``parsed`` read it; else as its words name it, for a command line it could not read)."""
+        """Whether this command answers in JSON: it takes ``--json``, or the subcommand ``parsed`` names does, and its
+        command line gave it (as ``parsed`` read it; else as its words name it, for a command line it could not
+        read)."""
         dest = self.json_dest()
         if dest is None:
-            return False
+            chosen = self.chosen(parsed)
+            return chosen is not None and chosen.answers_json(parsed)
         if parsed is not None:
             return bool(getattr(parsed, dest, False))
         return wants_json(self._tokens)
