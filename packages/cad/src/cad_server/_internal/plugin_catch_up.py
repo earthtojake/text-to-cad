@@ -41,7 +41,8 @@ and the other without), where an app's step kept failing, each began a run at ev
 end. It is a state record, not a choice, so it lives in the state
 folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
 
-**The rule** (``due``), asked by the server as it tends itself, only once nothing is in flight, never in its first
+**The rule** (``due``), asked by the server as it tends itself, whatever is in flight (the run touches only the agent
+apps, never the server), never in its first
 ``START_SECONDS`` (by its monotonic clock) and never while a run holds the lock (``Catcher``): the switch on; the update
 check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a development build); no test
 saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the variable that names the bridge's

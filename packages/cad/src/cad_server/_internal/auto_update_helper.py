@@ -41,7 +41,7 @@ In order (``update``):
    was wanted) -- or ``ready``, kept as step 2 decided it; then the store tidied (``store.clean``), the release built
    kept where it was installed or is ready. The release switched away from is not kept: the way back needed only
    the pointer read in memory, and that release goes once no process runs it (this worker, when it ran it, runs
-   it to its end, so then at a later tidying: the server's, within the hour).
+   it to its end, so then at a later tidying: the server's, within the hour, however busy it is).
 
 No step is tried twice in a run: the schedule tries a failed release again (``auto_update.next_try``). uv stopped at
 its deadline leaves only a folder that is no release yet. Why a build failed is told from uv's words (``cause_of``:

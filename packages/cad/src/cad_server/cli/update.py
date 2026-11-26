@@ -58,8 +58,8 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
         "automatic updates off: cad asks PyPI, installs it beside the cad that runs, and switches to it (where cad "
         "has it installed and ready already, it only switches, even without PyPI). A cad server that was running "
         "restarts on it once nothing is running; with none running, none is started. By itself, cad installs a new "
-        "release beside the cad that runs and restarts the server on it as the server next starts or, a day on, once "
-        "nothing has run for a minute. `cad update auto` shows or changes whether cad updates itself."))
+        "release beside the cad that runs as soon as it is out, and restarts the server on it as the server next "
+        "starts. `cad update auto` shows or changes whether cad updates itself."))
     parser.add_argument("--major", action="store_true",
                         help="install the newest release of all, a new major version included, which may ask for "
                              f"changes ({MIGRATIONS})")

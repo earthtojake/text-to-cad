@@ -160,7 +160,8 @@ viewer` and open the link it prints; it keeps asking, never reloads for the refu
 once that link, opened beside it, has left the new cookie.
 
 A page closing never stops the engine, and no timer does: it runs until `cad server stop`, or
-until cad's own update restarts it on a newer release while nothing uses it.
+until cad's own update restarts it on a newer release: at a person's ask (the update button, `cad update`), or as
+the server next starts, never by how busy or idle it is.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
 

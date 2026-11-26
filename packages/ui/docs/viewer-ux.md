@@ -87,8 +87,9 @@ chrome that floats over the picture. The home is the navbar over the library.
   automatic update underway shows the same. The page reads the server again once a minute while it is seen, and as it
   is shown again, so the button changes by itself, and never while it is hidden. Why: it is the one thing the chrome
   asks a person to act on, so it is always in the same corner; a restart reloads the page, which is why it has its own
-  icon and says so; and cad installs a release in the background and restarts onto it only when the person says so or
-  when nobody is looking, which a hidden page that kept asking would never let it be. A failed update, automatic or
+  icon and says so; and cad installs a release in the background at once and restarts onto it only when the person
+  says so or as the server next starts, never by how busy the server is, so no page, seen or hidden, can hold an
+  update off. A failed update, automatic or
   not, is the viewer's alert card, the one every error is said in ([the alert card](#loading-and-status-screens)), and
   the button shows as it is offered; the card's Try again is its click. Why: automatic updates fail on some
   computers, and this is where the person learns why and what to do; nothing is blocked, and an error looks like every

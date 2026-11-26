@@ -619,7 +619,7 @@ def _reportable(report: dict[str, Any]) -> bool:
         return True
 
 
-# How often a quiet server tidies the store of cad's update beyond its start (``Daemon.caught_up``).
+# How often a server tidies the store of cad's update beyond its start, however busy it is (``Daemon.caught_up``).
 TIDY_SECONDS = 3600.0
 
 class Daemon:
@@ -657,7 +657,8 @@ class Daemon:
         self.busy = 0
         self.busy_lock = threading.Lock()
         # When the last command ended (monotonic): a build, draw, export or request that serves, any other request
-        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``).
+        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``). BRIDGE-ONLY: the
+        # bridge's part of the tending waits for a quiet moment by it (``tend``); cad's own update never does.
         self.worked = self.began = self.last
         self.stopping = threading.Event()
         # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
@@ -1927,9 +1928,10 @@ class Daemon:
             self.tend()
 
     def caught_up(self, *, starting: bool = False) -> None:
-        """What follows cad's own update, at the server's start and at each quiet tending (``tend``): the store tidied
-        where no attempt is underway (``store.clean``: releases nothing runs or points at but the one that is ready,
-        ``auto_update.kept``, a pointer that means nothing), at the start (``starting``) and then at most once each
+        """What follows cad's own update, at the server's start and at every tending (``tend``), whatever is in flight
+        -- each part minds only its own: the store tidied where no attempt is underway (``store.clean``: releases
+        nothing runs or points at but the one that is ready, ``auto_update.kept``, a pointer that means nothing; a
+        release a process runs is never removed), at the start (``starting``) and then at most once each
         ``TIDY_SECONDS`` -- so the release a switch left, which the switch's own worker still ran as it tidied, goes
         within that time of the switch, not only at the server's next start; the install command run
         once where cad is newer than the release it is up to date for and the person's switch says so
@@ -1963,13 +1965,13 @@ class Daemon:
         the memory budget sends unwatched documents out of memory, least recently used
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
-        is due (``updates.refresh``), and cad's own update looked after where nothing is in flight (``auto_update.tend``,
-        told how long since the last command ended, ``worked``): a release that is due got ready beside this one, nothing restarted; or this server drained and
-        the next release's started where one is ready and the moment is right (``auto_update.restart``);
-        then, BRIDGE-ONLY, the install
-        command run once where it is owed for a computer a shipped updater brought (``install_script.Carrier``), and
-        the bridge's part (``cli.setup.Tending``: such a server, once cad is installed globally, hands over to the
-        global cad's); then, where nothing is in flight, what follows cad's update (``caught_up``). The engine stops on
+        is due (``updates.refresh``), and cad's own update looked after (``auto_update.tend``), whatever is in flight
+        and however lately anything was asked: a release that is due got ready beside this one, nothing restarted --
+        the switch to it is a person's ask or the server's next start (``auto_update.restart``), never a tending's;
+        then, BRIDGE-ONLY, the install command run once where it is owed for a computer a shipped updater brought
+        (``install_script.Carrier``), and the bridge's part (``cli.setup.Tending``, where nothing is in flight and no
+        command has run for ``setup.QUIET_SECONDS``: such a server, once cad is installed globally, hands over to the
+        global cad's); then what follows cad's update (``caught_up``), whatever is in flight. The engine stops on
         ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
@@ -1988,28 +1990,25 @@ class Daemon:
             return
         from cad_server import updates
         from cad_server._internal import auto_update
+        from cad_server.cli import setup
 
         updates.refresh()
-        now = time.monotonic()
-        working, ran, quiet_for = self.working(), self.worked != self.began, now - self.worked
-        begun = auto_update.tend(working=working, ran=ran, quiet_for=quiet_for)
+        begun = auto_update.tend()
         if begun:
             named = ("the newest release" if begun.get("release") == auto_update.LATEST
                      else f"cad {begun.get('release')}")
-            print(f"cad: installing {named} beside this cad: this server restarts on it as it next starts, a day "
-                  "on, or with `cad update`" if begun.get("switch") is False else
-                  f"cad: restarting this server on {named}, which is installed beside this cad, once nothing is in "
-                  "flight", file=sys.stderr, flush=True)
-            return
+            print(f"cad: installing {named} beside this cad: this server restarts on it as it next starts, or with "
+                  "`cad update`", file=sys.stderr, flush=True)
         told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
-        quiet = not working and (not ran or quiet_for >= auto_update.IDLE_SECONDS)
+        # BRIDGE-ONLY: the bridge's moment, by what is in flight and the last command (``worked``).
+        quiet = not self.working() and (self.worked == self.began
+                                        or time.monotonic() - self.worked >= setup.QUIET_SECONDS)
         try:
             self.handover.tend(version(), told)
             self.bridge.tend(version(), told, quiet=quiet)
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the install command
             told(f"the install command's run could not be looked after: {type(error).__name__}: {error}")
-        if quiet:
-            self.caught_up()
+        self.caught_up()
 
     def working(self) -> bool:
         """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a
@@ -2415,13 +2414,13 @@ def _leaving() -> bool:
 
 def _restarted() -> dict[str, Any] | None:
     """The switch to the release cad's own update made ready, begun as this server starts, where automatic updates
-    allow it (``auto_update.restart``, ``starting``): the attempt begun, its record ``switching`` with a fresh beat,
+    allow it (``auto_update.restart``): the attempt begun, its record ``switching`` with a fresh beat,
     so the start stands aside for it (``_leaving``); else None. Never raises: what cannot be told is no reason for a
     server not to start."""
     try:
         from cad_server._internal import auto_update
 
-        return auto_update.restart(quiet_for=0.0, starting=True)
+        return auto_update.restart()
     except Exception:  # noqa: BLE001 - see above
         return None
 
@@ -2438,8 +2437,8 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
     Where cad's own update made a release ready, a detached start is that switch (``_restarted``), begun before this
     server serves anything, and stands aside for it so; a start in the foreground, or one that names its port (``cad
     server start --port``: the person's word for where this server serves, which the next release's server the
-    update starts would not take), is the person's own, and starts as it is: the other moments of the restart reach
-    it later."""
+    update starts would not take), is the person's own, and starts as it is: the switch waits for a later start, or a
+    person's ask."""
     from cad.engine.serve import Pressure
 
     if argv:

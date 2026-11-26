@@ -38,18 +38,21 @@ restarting for nothing once a day is worse than waiting for the next release; ``
 already runs ``wanted`` or newer while this older server runs (``stale``): ``cad server start`` replaces the server.
 Nor where ``wanted`` is the release that is ready already (``ready``): only its switch is left. Where an update is due
 and none can begin (``blocked``: no uv, or an environment that does not read the pointer), the check counts it once
-for that release (``BLOCKED``). The check is asked as the server tends itself (``tend``, with nothing in flight and
-no command run for ``IDLE_SECONDS``) and by ``cad server start`` when the start failed (``after_failed_start``): a
-release whose server cannot start still updates.
+for that release (``BLOCKED``). The check is asked as the server tends itself (``tend``, at every tending, however
+busy the server is: nothing that keeps asking it things can hold an update off) and by ``cad server start`` when the
+start failed (``after_failed_start``): a release whose server cannot start still updates.
 
 **Ready, then the switch.** The server's own update only gets the release ready (``"switch": false`` in its record):
-built and run once in the store, it ends ``ready`` with nothing pointing at it, so no server restarts under a viewer
-page someone is looking at (a page's requests are no commands). The viewer's button then offers the restart
-(``button``), which is ``cad update``'s; else the switch begins by itself where automatic updates are on, the check is
-on and the feed as last read calls for that release still (``restart``): as the server starts (the start becomes the
-switch: ``cad_server.engine.daemon.main``, never for ``--foreground`` or ``--port``), or, once the release has been
-ready a ``DAY``, at the first ``IDLE_SECONDS`` with no command. That sitting resumes the attempt (``_claim``): no try spent, held by no schedule. The release that is ready
-is the one ``ready`` names, and the store's tidying keeps it (``kept``).
+built and run once in the store beside the release that runs, at once, whatever is in flight, it ends ``ready`` with
+nothing pointing at it, and nothing restarts. The switch then comes at one of two moments, never by how busy or idle
+the server is, so nothing that keeps talking to it can put it off for ever: a person's ask (the viewer's button,
+``button``, which is ``cad update``'s), or the server's next start, where automatic updates are on, the check is on
+and the feed as last read calls for that release still (``restart``: the start becomes the switch,
+``cad_server.engine.daemon.main``, never for ``--foreground`` or ``--port``). A server never restarted, whose person
+never asks, stays on the release it runs, the button showing the restart and ``notice`` and ``cad doctor`` saying so.
+That sitting resumes the attempt (``_claim``): no try spent, held by no schedule. The release that is ready is the one
+``ready`` names, and the store's tidying keeps it (``kept``). Only the switch's drain minds what is in flight, and
+only for a bound (``auto_update_helper.DRAIN_SECONDS``).
 
 **The trigger** (``trigger``) begins the update in one step across processes (``_claim``, under the state folder's
 lock): where an attempt is underway none begins (an automatic update) or it is joined (``cad update``, which makes
@@ -119,7 +122,6 @@ BLOCKED = "auto-update-blocked.json"  # the last release no update could begin f
 # Each release's automatic tries, and the attempts of the last day (``tries``): the name every release from 0.11.12
 # keeps them under.
 TRIED = "tried"
-IDLE_SECONDS = 60.0
 HOUR, DAY = 3600.0, 86400.0
 WAIT_HOURS = 24  # the longest wait between two automatic tries of one release: 1, 2, 4, 8, 16, then 24 hours
 DAILY = 4  # the most attempts begun in a day, of every release, that an automatic one may begin beside
@@ -938,41 +940,27 @@ def _begin_due(*, fetch: bool = False, switch: bool = True) -> dict[str, Any] | 
         return trigger(found.target, wanted=found.wanted, switch=switch) if found is not None else None
 
 
-def tend(*, working: bool, ran: bool, quiet_for: float) -> dict[str, Any] | None:
-    """As the server tends itself, in order: nothing where anything is in flight (``working``); else, where an update
-    is due and nothing has run since the server started (``ran``) or no command for ``IDLE_SECONDS`` (``quiet_for``),
-    its release got ready, begun as an attempt that switches nothing (``"switch": false``: no server restarts under
-    a page someone looks at); else, where a release is ready and the moment is right (``restart``, by ``quiet_for``),
-    the switch to it begun. The attempt begun (its record: ``"switch": false`` for the first, phase ``switching`` for
-    the second), or None."""
-    if working:
-        return None
-    if not ran or quiet_for >= IDLE_SECONDS:
-        found = _begin_due(switch=False)
-        if found is not None:
-            return found
-    return restart(quiet_for=quiet_for)
+def tend() -> dict[str, Any] | None:
+    """As the server tends itself, at every tending, whatever is in flight and however lately anything was asked of
+    it: where an update is due, its release got ready, begun as an attempt that switches nothing (``"switch":
+    false``: building restarts nothing). Never the switch: that waits for a person's ask or the server's next start
+    (``restart``). The attempt begun (its record), or None."""
+    return _begin_due(switch=False)
 
 
-def restart(*, quiet_for: float, starting: bool = False, now: float | None = None) -> dict[str, Any] | None:
-    """The switch to the release that is ready begun by itself, where the moment is right: the attempt resumed (its
-    record, ``_claim``), or None. All of: a release is ready (``ready``); this cad is a global install; automatic
-    updates are on (``switches``) and the check is not turned off for this process (``updates.checking``); the
-    version feed as last read calls for exactly that release still (``choose``, by ``wanted``: one taken back from
-    the feed since, or a feed that cannot be read, is never switched to by itself, nor with a newer one out, whose
-    own attempt takes the record's place); and one of: the server is starting (``starting``: the start itself
-    becomes the switch, ``cad_server.engine.daemon.main``), or the release has been ready for a ``DAY`` (its
-    ``ended``; a clock set back counts as not yet) and no command has run for ``IDLE_SECONDS`` (``quiet_for``), so a
-    page always shown or a computer always busy is never left behind for good. With automatic updates off a ready release waits for a person (``cad update``, the viewer's
-    button). Never raises."""
+def restart() -> dict[str, Any] | None:
+    """The switch to the release that is ready begun by itself as the server starts (the start becomes the switch,
+    ``cad_server.engine.daemon.main``; ``after_failed_start``): the attempt resumed (its record, ``_claim``), or None.
+    All of: a release is ready (``ready``); this cad is a global install; automatic updates are on (``switches``) and
+    the check is not turned off for this process (``updates.checking``); and the version feed as last read calls for
+    exactly that release still (``choose``, by ``wanted``: one taken back from the feed since, or a feed that cannot
+    be read, is never switched to by itself, nor with a newer one out, whose own attempt takes the record's place).
+    With automatic updates off a ready release waits for a person (``cad update``, the viewer's button). Never
+    raises."""
     try:
         with _BEGIN:
             held = ready()
             if held is None or global_install() is None or not switches()["on"] or not called_for(held):
-                return None
-            now = time.time() if now is None else now
-            ended = held.get("ended")
-            if not (starting or _time(ended) and now - ended >= DAY and quiet_for >= IDLE_SECONDS):
                 return None
             return trigger(held["release"], wanted=_wanted(held))
     except Exception:  # noqa: BLE001 - a switch that cannot begin leaves cad as it is
@@ -996,7 +984,7 @@ def after_failed_start() -> str | None:
     """``cad server start`` failed: the update begun where it is due, the feed read first where an hour has passed,
     else the switch to a release that is ready, as a start's (``restart``). What it updates to, in words (the release,
     or the newest release of this major), or None."""
-    found = _begin_due(fetch=True) or restart(quiet_for=0.0, starting=True)
+    found = _begin_due(fetch=True) or restart()
     if found is None:
         return None
     numbers = release(_version())

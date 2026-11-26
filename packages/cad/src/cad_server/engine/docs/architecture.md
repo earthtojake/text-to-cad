@@ -141,17 +141,17 @@ newer releases of its own major unless the person turned it off (`cad update aut
 worker (`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the
 state folder (`cad_server._internal.store`) beside the server, drains the server, points the environment at that
 folder (the pointer, which `_cad_release` reads as each interpreter starts) and starts the new release's server, or
-goes back where it does not start. By itself that is two sittings, so no server restarts under a viewer page someone
-is looking at: as the server tends itself once no command has run for a minute (or nothing since it started), where
-the version feed as last read names a newer release of its major, the worker builds the release and stops there
-(`ready`, nothing switched); the switch follows, where the feed still calls for that release, as the server next
-starts (the start is the switch, begun before it serves anything, and stands aside for it: `daemon.main`, never in the
-foreground nor on a port the start names), or, the release ready a day, at the first minute with no command
-(`auto_update.restart`); at once on `cad update` or the viewer's button. Meanwhile a command that finds no server
+goes back where it does not start. By itself that is two sittings, neither of which waits on how busy or idle the
+server is (anything that keeps talking to it would hold such a wait off for ever): at the server's next tending,
+whatever is in flight, where the version feed as last read names a newer release of its major, the worker builds the
+release and stops there (`ready`, nothing switched, nothing restarted); the switch follows, where the feed still calls
+for that release, as the server next starts (the start is the switch, begun before it serves anything, and stands
+aside for it: `daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`), or at
+once on `cad update` or the viewer's button. Only the switch's drain minds what is in flight, ten minutes at most. Meanwhile a command that finds no server
 waits for the next (`client.SWITCHING`), and a server of the release being left starts none in its place
 (`daemon.main`, `auto_update.leaving`); a `cad server start` that fails asks for the update before it gives up; a
 start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With `cad plugin
-update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which updates the
+update auto` on, the server, at its start and at each tending, whatever is in flight, runs `cad plugin install` (which updates the
 plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is newer than the
 release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then
 counts the last update attempt once (`auto_update.report`); the worker and `cad update` run none. Where no server

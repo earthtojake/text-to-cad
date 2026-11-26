@@ -962,7 +962,7 @@ class SweepTest(unittest.TestCase):
 class TendTest(unittest.TestCase):
     def test_every_server_reads_the_version_feed_and_looks_after_the_hand_over_as_it_tends_itself(self) -> None:
         # The "newer version" line is said from the feed the server reads (``updates.refresh``), whoever runs it; and
-        # cad's own update is asked with what is in flight and what has run (``auto_update.tend``).
+        # cad's own update is asked at every tending, told nothing of what is in flight (``auto_update.tend``).
         from cad.engine.previous import version
         from cad_server import updates
         from cad_server._internal import auto_update
@@ -972,44 +972,96 @@ class TendTest(unittest.TestCase):
         engine.stopping.is_set.return_value = False
         engine.working.return_value = False
         with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"), \
-                mock.patch.object(auto_update, "tend", return_value=False) as tended:
+                mock.patch.object(auto_update, "tend", return_value=None) as tended:
             daemon.Daemon.tend(engine)
         refresh.assert_called_once_with()
-        self.assertEqual(tended.call_args.kwargs["working"], False)
-        self.assertEqual(tended.call_args.kwargs["ran"], False, "nothing has run since the server started")
+        tended.assert_called_once_with()
         self.assertEqual(engine.handover.tend.call_args.args[0], version(), "the bridge's, named by this release")
+        self.assertIs(engine.bridge.tend.call_args.kwargs["quiet"], True, "nothing has run since the server started")
+        engine.caught_up.assert_called_once_with()
 
-    def test_the_tending_tells_the_update_since_the_last_command_and_says_what_it_began(self) -> None:
-        """``quiet_for``: since the last command (``worked``), whatever a page asked since (``last``); and one line for
-        what the update began."""
+    def test_a_busy_server_still_gets_an_update_ready_and_looks_after_what_follows_one(self) -> None:
+        """Work in flight and a command a moment ago, as an agent at work keeps a server: cad's own update is asked
+        all the same (``auto_update.tend``), and what follows an update is looked after (``caught_up``); only the
+        bridge's part waits for a quiet moment (``setup.QUIET_SECONDS``)."""
         import io
         from contextlib import redirect_stderr
 
         from cad_server import updates
         from cad_server._internal import auto_update
+        from cad_server.cli import setup
         from cad_server.engine import daemon
 
         now = time.monotonic()
-        engine = mock.Mock(address=None, door=None, draining=False, worked=now - 600.0, began=now - 900.0,
-                           last=now - 30.0)
+        for working, worked in ((True, now - 3600.0), (False, now - 1.0), (True, now)):
+            with self.subTest(working=working, since=now - worked):
+                engine = mock.Mock(address=None, door=None, draining=False, worked=worked, began=now - 7200.0,
+                                   last=now)
+                engine.stopping.is_set.return_value = False
+                engine.working.return_value = working
+                begun = {"release": "0.2.0", "switch": False, "phase": "building"}
+                with mock.patch.object(updates, "refresh"), mock.patch.object(daemon, "_send_counts"), \
+                        mock.patch.object(auto_update, "tend", return_value=begun) as tended, \
+                        redirect_stderr(io.StringIO()) as err:
+                    daemon.Daemon.tend(engine)
+                tended.assert_called_once_with()
+                self.assertEqual(err.getvalue(), "cad: installing cad 0.2.0 beside this cad: this server restarts on "
+                                                 "it as it next starts, or with `cad update`\n")
+                engine.caught_up.assert_called_once_with()
+                engine.handover.tend.assert_called_once()
+                self.assertIs(engine.bridge.tend.call_args.kwargs["quiet"], False, "the bridge waits")
+        engine = mock.Mock(address=None, door=None, draining=False, worked=now - setup.QUIET_SECONDS - 1,
+                           began=now - 7200.0, last=now)
         engine.stopping.is_set.return_value = False
         engine.working.return_value = False
-        for begun, said in (({"release": "0.2.0", "switch": False, "phase": "building"},
-                             "cad: installing cad 0.2.0 beside this cad: this server restarts on it as it next starts, "
-                             "a day on, or with `cad update`\n"),
-                            ({"release": "0.2.0", "phase": "switching"},
-                             "cad: restarting this server on cad 0.2.0, which is installed beside this cad, once "
-                             "nothing is in flight\n")):
-            with self.subTest(begun=begun), mock.patch.object(updates, "refresh"), \
-                    mock.patch.object(daemon, "_send_counts"), \
-                    mock.patch.object(auto_update, "tend", return_value=begun) as tended, \
-                    redirect_stderr(io.StringIO()) as err:
-                daemon.Daemon.tend(engine)
-            told = tended.call_args.kwargs
-            self.assertEqual((sorted(told), told["working"], told["ran"]), (["quiet_for", "ran", "working"], False, True))
-            self.assertAlmostEqual(told["quiet_for"], 600.0, delta=30.0, msg="a page that asked since is no command")
-            self.assertEqual(err.getvalue(), said)
-        engine.handover.tend.assert_not_called()
+        with mock.patch.object(updates, "refresh"), mock.patch.object(daemon, "_send_counts"), \
+                mock.patch.object(auto_update, "tend", return_value=None):
+            daemon.Daemon.tend(engine)
+        self.assertIs(engine.bridge.tend.call_args.kwargs["quiet"], True, "a page's asking since is no command")
+
+    def test_a_server_that_stops_looks_after_nothing_of_the_update(self) -> None:
+        from cad_server import updates
+        from cad_server._internal import auto_update
+        from cad_server.engine import daemon
+
+        engine = mock.Mock(address=None, door=None, draining=True)
+        engine.stopping.is_set.return_value = False
+        with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"), \
+                mock.patch.object(auto_update, "tend") as tended:
+            daemon.Daemon.tend(engine)
+        self.assertEqual((refresh.call_count, tended.call_count, engine.caught_up.call_count), (0, 0, 0))
+
+
+class DrainTest(unittest.TestCase):
+    def test_the_switch_s_drain_waits_for_what_is_in_flight_then_stops(self) -> None:
+        """An update's drain (``Daemon.drain``): what is in flight gets to finish -- the door closed once it is idle --,
+        then the switch's ``then`` and the stop. Its bound is the update worker's (``auto_update_helper.DRAIN_SECONDS``,
+        after which the next start replaces the server all the same)."""
+        import threading
+        import types
+
+        from cad_server.engine.daemon import Daemon
+
+        busy, looked, asked = threading.Event(), threading.Event(), [0]
+        busy.set()
+        done: list[str] = []
+
+        def working() -> bool:
+            asked[0] += 1
+            if asked[0] >= 5:
+                looked.set()
+            return busy.is_set()
+
+        engine = types.SimpleNamespace(busy_lock=threading.Lock(), draining=False, stopping=threading.Event(),
+                                       working=working, door=mock.Mock(), listener=None, checks=mock.Mock())
+        engine.door.close.side_effect = lambda: done.append("door")
+        Daemon.drain(engine, then=lambda: done.append("then"))
+        self.assertTrue(engine.draining)
+        self.assertTrue(looked.wait(10), "it looks again and again while a build is in flight")
+        self.assertEqual((engine.stopping.is_set(), done), (False, []), "a build in flight: not stopped")
+        busy.clear()
+        self.assertTrue(engine.stopping.wait(10), "stopped once it ended")
+        self.assertEqual(done, ["door", "then"])
 
 
 class OwnFilesTest(unittest.TestCase):

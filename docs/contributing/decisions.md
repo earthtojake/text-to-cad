@@ -13,7 +13,7 @@ The decisions, by what they govern:
   installs cad; the install command gets cad and hands the apps to it; no Skills CLI route; inside a
   Windows app's package
 - **Updating**: the feed says when; notices reach what a release cannot; a major version never
-  installs itself; who updates which copy; the restart waits until nobody would notice; forward only;
+  installs itself; who updates which copy; ready at once, restarted at a start or a person's ask; forward only;
   the 30-day rule
 - **Past releases**: the bridge for 0.10.0 to 0.11.11; old releases are carried through the newest
   0.11; no version left behind
@@ -89,8 +89,8 @@ runs the installer on the installed cad. It installs the newer release whole int
 in cad's state folder (the store), with uv (`uv pip install --target`, for the installed cad's own
 Python), runs it once, and then names that folder in one small file, the pointer. Every `cad` reads
 the pointer as its Python starts and runs that release in place of the installed files: in the same
-process, with no second program started. The server restarts onto it later, once nothing is in
-flight ([when](#the-restart-waits-until-nobody-would-notice)). A
+process, with no second program started. The server restarts onto it later, as it next starts or at a
+person's ask ([when](#ready-at-once-restarted-at-a-start-or-a-persons-ask)). A
 release no process runs any more is removed, but the current one and one waiting for its restart. Installing
 cad again with uv always runs what uv installed: a pointer holds only for the install it was written
 for.
@@ -345,20 +345,21 @@ fails for good builds the release beside itself once a day for as long as it sta
 that runs is touched by it, and the server is not stopped for it. A store's copy of the skills lags
 cad by however long its store takes.
 
-## The restart waits until nobody would notice
+## Ready at once, restarted at a start or a person's ask
 
 **Decision.** cad's automatic update is two steps with a wait between them. First it gets the release
-ready: built beside the release that runs and run once there, in the first minute with no command, in
-the background; nothing that runs is touched and nothing restarts. Then the server restarts onto it.
-By itself it does that only where nobody would notice: as the server next starts (the start becomes
-the switch, and no server of the release before serves anything; not a start in the foreground or one
-that names its port, which are the person's own), or, once the release has been ready for a day, in
-the first minute with no command, as every automatic update did before. Until then the update button is
-a restart icon, and a click restarts now, as a typed `cad update` does. A person's update
-is never left halfway: one asked for while the release is being got ready goes on to the restart, and
-one asked for with a release ready has only the restart left, whether PyPI answers or not. A release
-the feed has stopped naming since it got ready is never switched to by itself. With automatic updates
-off nothing is got ready, and a release that was ready waits for the person.
+ready: built beside the release that runs and run once there, in the background, at the server's next
+tending once the feed names it (the schedule, its tries and its hold-backs as for every attempt),
+whatever is in flight; nothing that runs is touched and nothing restarts. Then the server restarts onto
+it, and by itself only as the server next starts (the start becomes the switch, and no server of the
+release before serves anything; not a start in the foreground or one that names its port, which are
+the person's own). Until then the update button is a restart icon, and a click restarts now, as a
+typed `cad update` does. A person's update is never left halfway: one asked for while the release is
+being got ready goes on to the restart, and one asked for with a release ready has only the restart
+left, whether PyPI answers or not. At the restart, what is in flight gets ten minutes to end, and then
+the server stops all the same. A release the feed has stopped naming since it got ready is never
+switched to by itself. With automatic updates off nothing is got ready, and a release that was ready
+waits for the person.
 
 The button is a small icon and nothing else, always the last control at the navbar's right end, over
 the home as over a file. Where a release is out it is a download arrow that says "Update", and one
@@ -366,13 +367,16 @@ click installs the release and restarts. Where a release is installed and waitin
 arrow that says "Restart to update", and one click restarts. Nothing opens, by itself or on a click.
 
 **Why.** The restart is the one part of an update a person can feel: a page they are looking at loses
-its server, says so, and reloads. A minute with no command says nothing about a person looking at a
-model, since looking runs no command. Waiting costs nothing in safety: the release before runs on,
-whole, and the way back at the switch is the same. A start is the moment with nobody there: no server
-yet, so no page has one to lose. The day is there so a page always shown, or a computer always busy,
-is never left behind for good. A third moment, once nothing at all had been asked of the server for an
-hour, was built first and taken out on the owner's word: it held only where every page stayed quiet
-while hidden, and an open CAD app view, which asks once a second, kept it from ever coming. The button
+its server, says so, and reloads. A start is the moment with nobody there: no server yet, so no page
+has one to lose; a person's ask is theirs. No step waits on how busy or idle the server looks: such a
+rule can be held off for ever by anything that keeps talking to the server (a busy agent, a CAD app
+view that syncs every second, a feature added later), and it held cad's own update off silently.
+Getting ready touches nothing that runs, so it needs no quiet moment; the restart's only wait is its
+drain, which is bounded. Waiting costs nothing in safety: the release before runs on, whole, and the
+way back at the switch is the same. Two moments for the restart by itself were built first and taken
+out on the owner's word: once nothing at all had been asked of the server for an hour (an open CAD
+app view, which asks once a second, kept it from ever coming), and once the release had been ready a
+day, in the first minute with no command (an agent always at work kept that from coming too). The button
 is what the apps people use every day show: a quiet mark, always in the same corner, that an update is there (Discord's arrow, Slack's
 badge, Spotify's dot). Two shapes were built first and taken out on the owner's word: a wide button
 that read "Restart to update", which shouted from the navbar, and a prompt that asked Later or
@@ -380,10 +384,11 @@ Restart on every click, a second step for every update. The icon says which clic
 says so before the click: the arrow installs and restarts, the restart arrow restarts. Anything that
 opens by itself over a model someone is looking at interrupts them, so nothing does.
 
-**What it costs.** Where the server does not start again, a release runs up to a day later than
-before. For that time a second copy of cad's packages is in the store. A page that is shown a day
-after the release got ready still loses its server once. A click on the button restarts with no
-further question: what is in flight ends first, and the page reloads.
+**What it costs.** A computer whose server is never restarted and whose person never clicks stays on
+the release it runs for as long as that lasts: the button shows the restart, and after three days the
+stayed-behind line and `cad doctor` say so. For that time a second copy of cad's packages is in the
+store. A click on the button restarts with no
+further question: what is in flight ends first, up to ten minutes, and the page reloads.
 A `cad server start` that becomes the switch answers a second or two later than one
 that does not (2.9 s against 1.7 s on a Windows test machine, 1.1 s against 1.0 s on Linux). The
 record of the last attempt has one more outcome, `ready`, which is not counted:

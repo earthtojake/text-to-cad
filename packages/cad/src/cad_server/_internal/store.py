@@ -33,7 +33,8 @@ process has loaded through a link to the same file) waits in its ``.trash-`` fol
 
 **What it keeps** (``clean``): the release each pointer names and the one an update has ready (``keep``). Any other
 goes once no process runs it, the one an update switched away from too: the way back at a switch puts back the
-pointer it read, and nothing tidies the store while an update is underway.
+pointer it read, and nothing tidies the store while an update is underway. The server tidies it as it starts and at
+most hourly after, however busy it is (a release a process runs is never removed), and a switch's worker as it ends.
 
 Everything here asks ``sys.modules`` for ``_cad_release`` and never imports it: it acts as the interpreter starts,
 and only then.

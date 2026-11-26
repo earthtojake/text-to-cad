@@ -210,8 +210,8 @@ which the system refuses while a file in it is open; elsewhere by taking the mar
 that runs it shares. The tidying (`store.clean`) keeps what a pointer names, and removes pointers that mean
 nothing (once ten minutes old), builds that died (an hour old) and every other release no process runs but the
 one that is ready (`auto_update.kept`, below): the one an update switched away from too, as the way back needs
-only the pointer it read. The worker tidies as it ends; a server as it starts and then at most once an hour, and
-`cad cache prune`, where no attempt is underway. The worker runs the release it switches away from where that was
+only the pointer it read. The worker tidies as it ends; a server as it starts and then at most once an hour, however
+busy it is, and `cad cache prune`, where no attempt is underway. The worker runs the release it switches away from where that was
 a stored one, so that one goes at a later tidying: within the hour, by the server the switch started.
 
 **When** (`due`). The server reads the version feed (`updates.py`, at most once an hour, in the background):
@@ -223,8 +223,8 @@ of this major and its `latest` is of a higher one, PyPI's newest of this major (
 where the environment runs it already under this older server (`stale`: `cad server start` replaces the server),
 nor for a release whose last automatic try ended `start_failed` (`given_up`: a server restarting for nothing
 once a day is worse than waiting; `cad doctor` says it is held back, and `cad update` tries it), nor for the
-release that is ready already. The server asks as it tends itself with nothing in flight (no command run for a
-minute, or nothing since it started), and `cad server start` asks when its start fails. One due that cannot begin
+release that is ready already. The server asks at every tending, whatever is in flight and however lately
+anything was asked of it, and `cad server start` asks when its start fails. One due that cannot begin
 (`blocked`: `no_switch`, the environment does not read the pointer or its cad is damaged; `no_installer`, no uv)
 is counted once for its release.
 `CAD_UPDATE_CHECK=0` turns the check off for a process; with no answer from the feed, nothing happens. A global
@@ -245,15 +245,17 @@ ends `installed`, `current` or `failed`, with `detail`, `restored`, `started` an
 it was for, `cause`, one word of a closed list (`auto_update_helper.CAUSES`), said in plain words by
 `auto_update.SAID` -- or `ready`, below.
 
-**Ready, then the switch.** The server's own update only gets the release ready: its record says `"switch": false`,
-and its worker, once the release is built and checked, ends it `ready` (nothing points at it; no event is counted,
-and no cause) in one step under the lock, so no server restarts under a viewer page someone is looking at. A release
-is ready (`auto_update.ready`) where the last record says so, it began from the release that runs, and its folder is
-still a stored release; the tidying keeps it. The switch to it begins by itself, where automatic updates are on, the
-check is on and the feed as last read still calls for that release (`auto_update.restart`): as the server starts
-(`daemon.main`, before it serves anything: that start stands aside, and its starter waits for the next release's
-server; never for `--foreground`, nor a start that names its port, `--port`), or, the release ready a day, at the
-first minute with no command. A person's ask (`cad update`, the button) switches to it
+**Ready, then the switch.** The server's own update only gets the release ready, at once, whatever is in flight:
+its record says `"switch": false`, and its worker, once the release is built and checked beside the one that runs,
+ends it `ready` (nothing points at it; no event is counted, and no cause) in one step under the lock; building
+restarts nothing. A release is ready (`auto_update.ready`) where the last record says so, it began from the release
+that runs, and its folder is still a stored release; the tidying keeps it. The switch to it never waits on how busy
+or idle the server is, since anything that keeps talking to it (an agent, a page that syncs every second) would
+hold such a wait off for ever. It begins by itself only as the server starts, where automatic updates are on, the
+check is on and the feed as last read still calls for that release (`auto_update.restart`, from `daemon.main`,
+before it serves anything: that start stands aside, and its starter waits for the next release's server; never for
+`--foreground`, nor a start that names its port, `--port`). A server never restarted stays on its release, the
+button offering the restart. A person's ask (`cad update`, the button) switches to it
 at once, even where PyPI cannot be reached, and one made during the silent build makes that attempt theirs
 (`"switch": true, "asked": true`, in the step that joins it). The switch resumes the attempt: a new record at
 `switching`, its tries the ready one's, held by no schedule and counted among none of the day's attempts. A newer
@@ -315,7 +317,7 @@ has 15 minutes: each command it runs is given what is left of them and stopped w
 begun past them, and it exits non-zero (in a Windows session where `taskkill` is refused, only the command's own
 process is ended). A hard stop (`plugin_catch_up.HardStop`, a thread of its own) ends a run not ended a minute
 past its 15: counted as stopped, its record closed, exit 124, its lock freed. The server asks at
-each tending once nothing is in flight, from a minute after its start (`START_SECONDS`: the install command that
+each tending, whatever is in flight, from a minute after its start (`START_SECONDS`: the install command that
 just updated cad goes on to the plugin in that minute), never while a run holds the lock, so the rule holds
 however cad got newer: its own update, `cad update`, `uv tool upgrade cad` or `pipx upgrade cad`. The release is
 kept in `install-command.json` in the data folder: written when `cad plugin install` ends with every app it
@@ -336,7 +338,7 @@ first); a second run waits, but one a server began exits 75 and is tried again a
 does not wait for a run: a run keeps the release it started with.
 
 **Each attempt is counted once** (`auto_update.report`), where telemetry is on: the server that runs after it,
-at its start or a quiet tending, sends one `update` event from the record (the release before, how it ended,
+at its start or any tending, sends one `update` event from the record (the release before, how it ended,
 which step failed, where it did not install a newer cad its `cause` -- `already` where the environment held the
 release already, `none` where the record names none --, the tries, the installer, whether it was typed, and how
 the server's run of `cad plugin install` for a newer cad went) and marks the record `reported`. An attempt whose

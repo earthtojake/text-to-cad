@@ -90,6 +90,9 @@ STOP_SECONDS = 60.0
 SHIPPED = ((0, 10, 0), (0, 11, 11))
 # How long step 4b's install may take (``tool_install.install``).
 CARRY_SECONDS = 600.0
+# How long no command must have run before the bridge's part of a tending goes on (``Tending``, told it as ``quiet``
+# by ``daemon.Daemon.tend``); none need have where none has run since the server started.
+QUIET_SECONDS = 60.0
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -557,8 +560,9 @@ def once(told: Callable[[str], None]) -> subprocess.Popen | None:
 
 class Tending:
     """The bridge's part of a server's tending (``daemon.Daemon.tend``): ``follow`` once, at the first; the rest only
-    where nothing is in flight (``quiet``): ``once`` (step 7) at the first such; ``move`` once, where install mode's
-    report said cad was installed and no attempt runs; else step 4b (``carry``)."""
+    where nothing is in flight and no command has run for ``QUIET_SECONDS`` (``quiet``): ``once`` (step 7) at the
+    first such; ``move`` once, where install mode's report said cad was installed and no attempt runs; else step 4b
+    (``carry``)."""
 
     def __init__(self) -> None:
         self.followed = False
