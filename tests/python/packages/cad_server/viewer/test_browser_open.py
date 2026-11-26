@@ -95,7 +95,8 @@ class BrowserOpenTest(unittest.TestCase):
     def test_the_launcher_opens_the_file_not_the_url(self):
         given = []
         answer = {'url': URL, 'documents': []}
-        with mock.patch('cad.engine.client.request', return_value=answer), \
+        # The server it asks for first, then its page: a server's stand-in answers both.
+        with mock.patch('cad.engine.client.connect'), mock.patch('cad.engine.client.request', return_value=answer), \
                 mock.patch.object(viewer_main, 'resolve_dist_dir', return_value='/dist'), \
                 mock.patch.object(viewer_main.webbrowser, 'open', side_effect=lambda target: given.append(target) or True), \
                 mock.patch('builtins.print'):
