@@ -14,6 +14,7 @@
 #include <NCollection_IndexedDataMap.hxx>
 #include <NCollection_IndexedMap.hxx>
 #include <NCollection_List.hxx>
+#include <Bnd_Box.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
@@ -48,8 +49,14 @@ struct Topology {
   ShapeMap faces, edges, vertices;
   bool encoded = false;  // edge(): regularity encoded and ancestors mapped, once
   AncestorMap ancestors;
+  bool solids_mapped = false;
+  ShapeMap solids;
+  std::vector<std::optional<Bnd_Box>> face_boxes;  // by ordinal, as face() made them
 
   explicit Topology(const std::string& data);
+  void encode();
+  const ShapeMap& solid_map();
+  const Bnd_Box& face_box(int ordinal);
   void face(Json& out, int ordinal);
   void edge(Json& out, int ordinal);
   void vertex(Json& out, int ordinal);
@@ -57,7 +64,8 @@ struct Topology {
   void elements(Json& out);
 };
 
-void measured(Json& out, const std::string& data);
+// mesh.measured; `shared` (VC_SHARED_PART) is the part's topology, read once for its facts too.
+void measured(Json& out, const std::string& data, Topology* shared = nullptr);
 
 // --- the mesh (mesh.cpp)
 std::string mesh_bytes(const std::string& data);  // mesh.mesh_shape(data, parallel=False).to_bytes()

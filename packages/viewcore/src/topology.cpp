@@ -38,6 +38,7 @@
 #include <gp_Torus.hxx>
 
 #include "core.hpp"
+#include "profile.hpp"
 
 namespace vc {
 
@@ -84,7 +85,9 @@ void put_box(Json& out, const Bnd_Box& box) {
 }
 
 // kernel/bounds._support_box: a free-form shape's box from its distances to six exterior planes.
+#if !defined(VC_PLAIN_BOX) && !defined(VC_OPTIMAL_BOX)
 Bnd_Box support_box(const TopoDS_Shape& shape) {
+  VC_SCOPE(box_support_setup);
   Bnd_Box box;
   BRepBndLib::Add(shape, box, false);
   if (box.IsVoid()) return box;
@@ -117,28 +120,50 @@ Bnd_Box support_box(const TopoDS_Shape& shape) {
       origin[axis] += side * reach;
       gp_Pln plane(gp_Pnt(origin[0], origin[1], origin[2]), gp_Dir(direction[0], direction[1], direction[2]));
       TopoDS_Face face = BRepBuilderAPI_MakeFace(plane, -reach, reach, -reach, reach).Face();
-      BRepExtrema_DistShapeShape distance(boundary, face, Precision::Confusion());
-      if (!distance.IsDone() || distance.InnerSolution() || !std::isfinite(distance.Value()))
-        throw std::runtime_error("the kernel could not measure a shape's support plane distance");
-      measured[axis + offset] = origin[axis] - side * distance.Value();
+      double value = 0;
+      VC_TIMED(box_support_distance, {
+        BRepExtrema_DistShapeShape distance(boundary, face, Precision::Confusion());
+        if (!distance.IsDone() || distance.InnerSolution() || !std::isfinite(distance.Value()))
+          throw std::runtime_error("the kernel could not measure a shape's support plane distance");
+        value = distance.Value();
+      });
+      measured[axis + offset] = origin[axis] - side * value;
     }
   }
   Bnd_Box result;
   result.Update(measured[0], measured[1], measured[2], measured[3], measured[4], measured[5]);
   return result;
 }
+#endif
 
-// kernel/bounds.optimal_box
+// kernel/bounds.optimal_box. Variants: VC_PLAIN_BOX, the kernel's plain box (BRepBndLib::Add, no triangulation: a
+// face's tolerance and its surface's control points or analytic bounds); VC_OPTIMAL_BOX, AddOptimal for every shape,
+// free-form ones too (no support planes: OCCT #1604 can miss a spline's extremum).
 Bnd_Box optimal_box(const TopoDS_Shape& shape) {
-  for (TopExp_Explorer faces(shape, TopAbs_FACE); faces.More(); faces.Next()) {
-    GeomAbs_SurfaceType type = BRepAdaptor_Surface(TopoDS::Face(faces.Current()), false).GetType();
-    if (type != GeomAbs_Plane && type != GeomAbs_Cylinder && type != GeomAbs_Cone && type != GeomAbs_Sphere &&
-        type != GeomAbs_Torus)
-      return support_box(shape);
-  }
   Bnd_Box box;
-  BRepBndLib::AddOptimal(shape, box, false, false);
+#if defined(VC_PLAIN_BOX)
+  VC_TIMED(box_plain, BRepBndLib::Add(shape, box, false); box.SetGap(0.0));
   return box;
+#else
+#if !defined(VC_OPTIMAL_BOX)
+  bool analytic = true, torus = false;
+  VC_TIMED(box_scan, {
+    for (TopExp_Explorer faces(shape, TopAbs_FACE); faces.More() && analytic; faces.Next()) {
+      GeomAbs_SurfaceType type = BRepAdaptor_Surface(TopoDS::Face(faces.Current()), false).GetType();
+      analytic = type == GeomAbs_Plane || type == GeomAbs_Cylinder || type == GeomAbs_Cone ||
+                 type == GeomAbs_Sphere || type == GeomAbs_Torus;
+      torus = torus || type == GeomAbs_Torus;
+    }
+  });
+  (void)torus;
+  if (!analytic) return support_box(shape);
+#else
+  const bool torus = false;
+  (void)torus;
+#endif
+  VC_TIMED_AS(torus ? box_analytic_torus : box_analytic, BRepBndLib::AddOptimal(shape, box, false, false));
+  return box;
+#endif
 }
 
 // kernel/checks.probed_statuses: what the per-type checkers name of one entity.
@@ -236,8 +261,12 @@ int edge_class(const TopoDS_Edge& edge, const std::vector<TopoDS_Face>& faces) {
 }
 
 std::string check(const TopoDS_Face& face) {
-  BRepCheck_Analyzer analyzer(face);
-  if (analyzer.IsValid()) return "valid";
+  std::optional<BRepCheck_Analyzer> held;
+  bool valid = false;
+  VC_TIMED(check_analyzer, held.emplace(face); valid = held->IsValid());
+  if (valid) return "valid";
+  VC_SCOPE(check_probed);
+  BRepCheck_Analyzer& analyzer = *held;
   // OCP cannot read a result's status list, so cad names the faults the scalar checkers find (kernel/checks.py).
   std::vector<std::string> found;
   const std::pair<TopAbs_ShapeEnum, const char*> kinds[2] = {{TopAbs_WIRE, "wire"}, {TopAbs_EDGE, "edge"}};
@@ -265,10 +294,29 @@ std::string check(const TopoDS_Face& face) {
   return out;
 }
 
-Topology::Topology(const std::string& data) : shape(read_shape(data)) {
-  TopExp::MapShapes(shape, TopAbs_FACE, faces);
-  TopExp::MapShapes(shape, TopAbs_EDGE, edges);
-  TopExp::MapShapes(shape, TopAbs_VERTEX, vertices);
+Topology::Topology(const std::string& data) {
+  VC_TIMED(read, shape = read_shape(data));
+  VC_TIMED(maps, {
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
+    TopExp::MapShapes(shape, TopAbs_EDGE, edges);
+    TopExp::MapShapes(shape, TopAbs_VERTEX, vertices);
+  });
+}
+
+// The regularity encoded on the part and its edges' faces mapped (edge(), and groups() under VC_SHARED_PART).
+void Topology::encode() {
+  if (encoded) return;
+  VC_TIMED(edge_encode, BRepLib::EncodeRegularity(shape, 1e-3));  // as the mesher classes edges
+  VC_TIMED(edge_ancestors, TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, ancestors));
+  encoded = true;
+}
+
+const ShapeMap& Topology::solid_map() {
+  if (!solids_mapped) {
+    VC_TIMED(maps, TopExp::MapShapes(shape, TopAbs_SOLID, solids));
+    solids_mapped = true;
+  }
+  return solids;
 }
 
 static void in_range(const char* kind, int ordinal, int extent) {
@@ -280,67 +328,90 @@ static void in_range(const char* kind, int ordinal, int extent) {
 void Topology::face(Json& out, int ordinal) {
   in_range("face", ordinal, faces.Extent());
   const TopoDS_Face face = TopoDS::Face(faces.FindKey(ordinal));
+  std::optional<BRepAdaptor_Surface> surface;
+  GeomAbs_SurfaceType type;
+  VC_TIMED(face_adaptor, surface.emplace(face, false); type = surface->GetType());
   GProp_GProps props;
-  BRepGProp::SurfaceProperties(face, props);
-  Bnd_Box box = optimal_box(face);
-  BRepAdaptor_Surface surface(face, false);
-  GeomAbs_SurfaceType type = surface.GetType();
+#if defined(VC_GPROP_EPS)  // the adaptive integration, to this relative error, in place of the fixed Gauss points
+  VC_TIMED_AS(type <= GeomAbs_Torus ? face_gprop : face_gprop_freeform,
+              BRepGProp::SurfaceProperties(face, props, VC_GPROP_EPS));
+#else
+  VC_TIMED_AS(type <= GeomAbs_Torus ? face_gprop : face_gprop_freeform, BRepGProp::SurfaceProperties(face, props));
+#endif
+#if !defined(VC_NO_FACE_BOX)
+  const Bnd_Box& box = face_box(ordinal);
+#endif
   out.open().key("kind").str("face").key("ordinal").integer(ordinal).key("area").num(props.Mass());
   out.key("centroid");
   put_point(out, props.CentreOfMass());
-  out.key("surface").str(SURFACE_KINDS[type]).key("box");
+  out.key("surface").str(SURFACE_KINDS[type]);
+#if !defined(VC_NO_FACE_BOX)
+  out.key("box");
   put_box(out, box);
+#endif
+#if !defined(VC_NO_CHECK)
   out.key("check").str(check(face));
-  if (type == GeomAbs_Cylinder) {
-    out.key("radius").num(surface.Cylinder().Radius());
-  } else if (type == GeomAbs_Sphere) {
-    out.key("radius").num(surface.Sphere().Radius());
-  } else if (type == GeomAbs_Torus) {
-    gp_Torus torus = surface.Torus();
-    out.key("majorRadius").num(torus.MajorRadius()).key("minorRadius").num(torus.MinorRadius());
-  }
+#endif
+  VC_TIMED(face_adaptor, {
+    if (type == GeomAbs_Cylinder) {
+      out.key("radius").num(surface->Cylinder().Radius());
+    } else if (type == GeomAbs_Sphere) {
+      out.key("radius").num(surface->Sphere().Radius());
+    } else if (type == GeomAbs_Torus) {
+      gp_Torus torus = surface->Torus();
+      out.key("majorRadius").num(torus.MajorRadius()).key("minorRadius").num(torus.MinorRadius());
+    }
+  });
   out.close();
 }
 
 void Topology::edge(Json& out, int ordinal) {
   in_range("edge", ordinal, edges.Extent());
   const TopoDS_Edge edge = TopoDS::Edge(edges.FindKey(ordinal));
-  if (!encoded) {
-    BRepLib::EncodeRegularity(shape, 1e-3);  // as the mesher classes edges
-    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, ancestors);
-    encoded = true;
-  }
+  encode();
   const bool degenerate = BRep_Tool::Degenerated(edge);
-  int at = ancestors.FindIndex(edge);
   std::vector<TopoDS_Face> owners;
-  if (at) owners = unique_faces(ancestors.FindFromIndex(at));
-  int kind = degenerate ? 0 : (owners.empty() ? BOUNDARY : edge_class(edge, owners));
+  VC_TIMED(edge_owners, {
+    int at = ancestors.FindIndex(edge);
+    if (at) owners = unique_faces(ancestors.FindFromIndex(at));
+  });
+  int kind = 0;
+  VC_TIMED(edge_class, kind = degenerate ? 0 : (owners.empty() ? BOUNDARY : edge_class(edge, owners)));
   GProp_GProps props;
-  BRepGProp::LinearProperties(edge, props);
-  TopoDS_Vertex ends[2] = {TopExp::FirstVertex(edge, true), TopExp::LastVertex(edge, true)};
+  VC_TIMED(edge_gprop, BRepGProp::LinearProperties(edge, props));
+  TopoDS_Vertex ends[2];
+  VC_TIMED(edge_ends, ends[0] = TopExp::FirstVertex(edge, true); ends[1] = TopExp::LastVertex(edge, true));
   std::optional<BRepAdaptor_Curve> curve;
-  if (!degenerate) curve.emplace(edge);
-  std::string curve_kind = degenerate ? "degenerate" : CURVE_KINDS[curve->GetType()];
+  std::string curve_kind;
+  VC_TIMED(edge_curve, {
+    if (!degenerate) curve.emplace(edge);
+    curve_kind = degenerate ? "degenerate" : CURVE_KINDS[curve->GetType()];
+  });
   out.open().key("kind").str("edge").key("ordinal").integer(ordinal).key("length").num(props.Mass());
   out.key("curve").str(curve_kind).key("class").str(class_name(kind)).key("classCode").integer(kind);
   out.key("faces").open_list();
-  for (const TopoDS_Face& face : owners) out.integer(faces.FindIndex(face));
+  VC_TIMED(edge_owners, for (const TopoDS_Face& face : owners) out.integer(faces.FindIndex(face)));
   out.close_list().key("endpoints").open_list();
-  for (const TopoDS_Vertex& v : ends)
-    if (!v.IsNull()) put_point(out, BRep_Tool::Pnt(v));
-  out.close_list().key("vertices").open_list();
-  for (const TopoDS_Vertex& v : ends)
-    if (!v.IsNull()) out.integer(vertices.FindIndex(v));
+  VC_TIMED(edge_ends, {
+    for (const TopoDS_Vertex& v : ends)
+      if (!v.IsNull()) put_point(out, BRep_Tool::Pnt(v));
+    out.close_list().key("vertices").open_list();
+    for (const TopoDS_Vertex& v : ends)
+      if (!v.IsNull()) out.integer(vertices.FindIndex(v));
+  });
   out.close_list();
   if (curve_kind == "circle") {
-    out.key("radius").num(curve->Circle().Radius());
-    out.key("sweepRadians").num(std::abs(curve->LastParameter() - curve->FirstParameter()));
+    VC_TIMED(edge_curve, {
+      out.key("radius").num(curve->Circle().Radius());
+      out.key("sweepRadians").num(std::abs(curve->LastParameter() - curve->FirstParameter()));
+    });
   }
   out.close();
 }
 
 void Topology::vertex(Json& out, int ordinal) {
   in_range("vertex", ordinal, vertices.Extent());
+  VC_SCOPE(vertex);
   const TopoDS_Vertex vertex = TopoDS::Vertex(vertices.FindKey(ordinal));
   out.open().key("kind").str("vertex").key("ordinal").integer(ordinal).key("position");
   put_point(out, BRep_Tool::Pnt(vertex));
@@ -349,18 +420,25 @@ void Topology::vertex(Json& out, int ordinal) {
 
 void Topology::groups(Json& out) {
   static const double CHAIN_ALIGNMENT_COS = -std::cos(3.0 * (3.141592653589793 / 180.0));
-  BRepLib::EncodeRegularity(shape, 1e-3);
+  VC_SCOPE(groups_chains);
+#if defined(VC_SHARED_PART)
+  encode();  // the edges' facts encoded and mapped it already: once is enough
+  const AncestorMap& owners_of = ancestors;
+#else
+  VC_TIMED(groups_encode, BRepLib::EncodeRegularity(shape, 1e-3));
   AncestorMap owners_of;
-  TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, owners_of);
+  VC_TIMED(groups_ancestors, TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, owners_of));
+#endif
   // Each face's solid (the first that holds it): neither grouping crosses solids.
   std::map<int, int> solid_of;
-  ShapeMap solids;
-  TopExp::MapShapes(shape, TopAbs_SOLID, solids);
-  for (int at = 1; at <= solids.Extent(); ++at) {
-    ShapeMap held;
-    TopExp::MapShapes(solids.FindKey(at), TopAbs_FACE, held);
-    for (int i = 1; i <= held.Extent(); ++i) solid_of.emplace(faces.FindIndex(held.FindKey(i)), at);
-  }
+  VC_TIMED(groups_solids, {
+    const ShapeMap& solids = solid_map();
+    for (int at = 1; at <= solids.Extent(); ++at) {
+      ShapeMap held;
+      TopExp::MapShapes(solids.FindKey(at), TopAbs_FACE, held);
+      for (int i = 1; i <= held.Extent(); ++i) solid_of.emplace(faces.FindIndex(held.FindKey(i)), at);
+    }
+  });
   auto solid = [&](int face) -> std::optional<int> {
     auto found = solid_of.find(face);
     return found == solid_of.end() ? std::nullopt : std::optional<int>(found->second);
@@ -372,6 +450,8 @@ void Topology::groups(Json& out) {
   std::vector<int> tangent_order;  // the edges with tangents, in ordinal order
   std::map<int, std::array<std::array<double, 3>, 2>> tangents;
   std::map<int, std::array<int, 2>> ends;
+  {
+  VC_SCOPE(groups_edges);
   for (int ordinal = 1; ordinal <= edges.Extent(); ++ordinal) {
     const TopoDS_Edge edge = TopoDS::Edge(edges.FindKey(ordinal));
     int at = owners_of.FindIndex(edge);
@@ -407,6 +487,7 @@ void Topology::groups(Json& out) {
       tangents[ordinal] = {{{into_first[0], into_first[1], into_first[2]}, {into_last[0], into_last[1], into_last[2]}}};
       tangent_order.push_back(ordinal);
     }
+  }
   }
 
   std::map<int, std::vector<std::pair<int, int>>> at_vertex;
@@ -474,20 +555,66 @@ void Topology::elements(Json& out) {
   out.close();
 }
 
-void measured(Json& out, const std::string& data) {
-  TopoDS_Shape shape = read_shape(data);
-  ShapeMap solids;
-  TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+// A face's box, once per topology (the part's box is their union under VC_UNION_BOX).
+const Bnd_Box& Topology::face_box(int ordinal) {
+  if (face_boxes.empty()) face_boxes.resize(faces.Extent() + 1);
+  std::optional<Bnd_Box>& held = face_boxes[ordinal];
+  if (!held) held = optimal_box(faces.FindKey(ordinal));
+  return *held;
+}
+
+#if defined(VC_UNION_BOX)
+// VC_UNION_BOX: the part's box as the union of its faces' (kept from its elements when they share the topology), and
+// of its edges outside faces and vertices outside edges.
+static Bnd_Box union_box(Topology& topology) {
+  Bnd_Box box;
+  for (int ordinal = 1; ordinal <= topology.faces.Extent(); ++ordinal) box.Add(topology.face_box(ordinal));
+  for (TopExp_Explorer free(topology.shape, TopAbs_EDGE, TopAbs_FACE); free.More(); free.Next())
+    box.Add(optimal_box(free.Current()));
+  for (TopExp_Explorer free(topology.shape, TopAbs_VERTEX, TopAbs_EDGE); free.More(); free.Next())
+    box.Add(optimal_box(free.Current()));
+  return box;
+}
+#endif
+
+void measured(Json& out, const std::string& data, Topology* shared) {
+  std::optional<Topology> own;
+  if (!shared) {
+#if defined(VC_UNION_BOX)
+    own.emplace(data);
+    shared = &*own;
+#endif
+  }
+  TopoDS_Shape shape;
+  ShapeMap own_solids;
+  const ShapeMap* solids = &own_solids;
+  if (shared) {
+    shape = shared->shape;
+    solids = &shared->solid_map();
+  } else {
+    VC_TIMED(read, shape = read_shape(data));
+    VC_TIMED(measure_solids, TopExp::MapShapes(shape, TopAbs_SOLID, own_solids));
+  }
   double total = 0.0;
   int inverted = 0;
-  for (int at = 1; at <= solids.Extent(); ++at) {
-    GProp_GProps props;
-    BRepGProp::VolumeProperties(solids.FindKey(at), props);
-    total += std::abs(props.Mass());
-    inverted += props.Mass() < -1e-9;  // inside out; nearer zero, degenerate
-  }
+  VC_TIMED(measure_volume, {
+    for (int at = 1; at <= solids->Extent(); ++at) {
+      GProp_GProps props;
+#if defined(VC_GPROP_EPS)
+      BRepGProp::VolumeProperties(solids->FindKey(at), props, VC_GPROP_EPS);
+#else
+      BRepGProp::VolumeProperties(solids->FindKey(at), props);
+#endif
+      total += std::abs(props.Mass());
+      inverted += props.Mass() < -1e-9;  // inside out; nearer zero, degenerate
+    }
+  });
+#if defined(VC_UNION_BOX)
+  Bnd_Box box = union_box(*shared);
+#else
   Bnd_Box box = optimal_box(shape);
-  out.open().key("volume").num(total).key("solids").integer(solids.Extent()).key("inverted").integer(inverted);
+#endif
+  out.open().key("volume").num(total).key("solids").integer(solids->Extent()).key("inverted").integer(inverted);
   out.key("box");
   put_box(out, box);
   out.close();

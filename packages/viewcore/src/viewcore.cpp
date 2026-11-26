@@ -13,6 +13,7 @@
 
 #include "../include/viewcore.h"
 #include "core.hpp"
+#include "profile.hpp"
 
 namespace {
 
@@ -59,6 +60,26 @@ T guarded(T fallback, F&& call) {
   return fallback;
 }
 
+// The part's topology kept for its picks (and, under VC_SHARED_PART, for its whole table, groups and measures too).
+static vc::Topology& kept(vc::Part& p) {
+  if (!p.topology) p.topology = std::make_unique<vc::Topology>(p.bytes);
+  return *p.topology;
+}
+
+// As cad does, each whole-part answer reads its own shape from the bytes, unless VC_SHARED_PART.
+template <typename F>
+static uint8_t* with_topology(int32_t doc, int32_t index, uint32_t* out_len, F&& answer) {
+  vc::Part& p = part(doc, index);
+  vc::Json out;
+#if defined(VC_SHARED_PART)
+  answer(kept(p), out);
+#else
+  vc::Topology topology(p.bytes);
+  answer(topology, out);
+#endif
+  return result(out.out, out_len);
+}
+
 }  // namespace
 
 extern "C" {
@@ -75,6 +96,7 @@ void vc_free(void* ptr) { std::free(ptr); }
 
 int32_t vc_open_xbf(const uint8_t* data, uint32_t size) {
   return guarded<int32_t>(0, [&] {
+    VC_SCOPE(open_rest);
     if (!data && size) throw std::invalid_argument("no data");
     auto doc = vc::open_xbf(data, size);
     int32_t handle = next_handle++;
@@ -99,18 +121,21 @@ uint8_t* vc_shape_bytes(int32_t doc, int32_t index, uint32_t* out_len) {
 }
 
 uint8_t* vc_mesh(int32_t doc, int32_t index, uint32_t* out_len) {
-  return guarded<uint8_t*>(nullptr, [&] { return result(vc::mesh_bytes(part(doc, index).bytes), out_len); });
+  return guarded<uint8_t*>(nullptr, [&] {
+    VC_SCOPE(mesh_rest);
+    return result(vc::mesh_bytes(part(doc, index).bytes), out_len);
+  });
 }
 
 uint8_t* vc_fact(int32_t doc, int32_t index, int32_t kind, int32_t ordinal, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
-    vc::Part& p = part(doc, index);
-    if (!p.topology) p.topology = std::make_unique<vc::Topology>(p.bytes);
+    VC_SCOPE(fact_rest);
+    vc::Topology& topology = kept(part(doc, index));
     vc::Json out;
     switch (kind) {
-      case VC_FACE: p.topology->face(out, ordinal); break;
-      case VC_EDGE: p.topology->edge(out, ordinal); break;
-      case VC_VERTEX: p.topology->vertex(out, ordinal); break;
+      case VC_FACE: topology.face(out, ordinal); break;
+      case VC_EDGE: topology.edge(out, ordinal); break;
+      case VC_VERTEX: topology.vertex(out, ordinal); break;
       default: throw std::invalid_argument("no element kind " + std::to_string(kind));
     }
     return result(out.out, out_len);
@@ -119,26 +144,28 @@ uint8_t* vc_fact(int32_t doc, int32_t index, int32_t kind, int32_t ordinal, uint
 
 uint8_t* vc_groups(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
-    vc::Topology topology(part(doc, index).bytes);
-    vc::Json out;
-    topology.groups(out);
-    return result(out.out, out_len);
+    VC_SCOPE(groups_rest);
+    return with_topology(doc, index, out_len, [](vc::Topology& t, vc::Json& out) { t.groups(out); });
   });
 }
 
 uint8_t* vc_elements(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
-    vc::Topology topology(part(doc, index).bytes);
-    vc::Json out;
-    topology.elements(out);
-    return result(out.out, out_len);
+    VC_SCOPE(elements_rest);
+    return with_topology(doc, index, out_len, [](vc::Topology& t, vc::Json& out) { t.elements(out); });
   });
 }
 
 uint8_t* vc_measure(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
+    VC_SCOPE(measure_rest);
+    vc::Part& p = part(doc, index);
     vc::Json out;
-    vc::measured(out, part(doc, index).bytes);
+#if defined(VC_SHARED_PART)
+    vc::measured(out, p.bytes, &kept(p));
+#else
+    vc::measured(out, p.bytes);
+#endif
     return result(out.out, out_len);
   });
 }

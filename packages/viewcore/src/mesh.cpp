@@ -23,6 +23,7 @@
 #include <gp_Trsf.hxx>
 
 #include "core.hpp"
+#include "profile.hpp"
 
 namespace vc {
 
@@ -86,8 +87,11 @@ double deflection(const TopoDS_Shape& shape) {
 }
 
 std::string mesh_bytes(const std::string& data) {
-  TopoDS_Shape shape = read_shape(data);
-  const double linear = deflection(shape), angular = ANGULAR;
+  TopoDS_Shape shape;
+  VC_TIMED(read, shape = read_shape(data));
+  double linear = 0;
+  VC_TIMED(mesh_deflection, linear = deflection(shape));
+  const double angular = ANGULAR;
   IMeshTools_Parameters parameters;
   parameters.Deflection = linear;
   parameters.Angle = angular;
@@ -95,7 +99,9 @@ std::string mesh_bytes(const std::string& data) {
   parameters.InParallel = false;
   parameters.EnableControlSurfaceDeflectionAllSurfaces = true;
   parameters.ForceFaceDeflection = false;
-  BRepMesh_IncrementalMesh mesher(shape, parameters);
+  VC_TIMED(mesh_brepmesh, BRepMesh_IncrementalMesh mesher(shape, parameters));
+  VC_PHASES();
+  VC_PHASE(mesh_extract);
 
   // _extract: the faces' triangulations, each distinct one once.
   ShapeMap faces;
@@ -177,6 +183,7 @@ std::string mesh_bytes(const std::string& data) {
   ShapeMap vertex_map;
   TopExp::MapShapes(shape, TopAbs_VERTEX, vertex_map);
 
+  VC_PHASE(mesh_assemble);
   // _assemble: the meshed faces' nodes, joined, transformed, in float64.
   std::vector<double> positions, normals;  // 3 per node
   std::vector<int64_t> corners;            // 3 per triangle, into the joined nodes
