@@ -12,13 +12,16 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from cad.engine import places
+from cad.engine import handoff, places
 
 EVERYTHING = ["settings.json", "documents", "recents", "install-receipt.json"]
 
@@ -214,74 +217,251 @@ class WindowsTest(Folders):
 
 class OutsidePackageTest(unittest.TestCase):
     """On Windows, from inside an app package, the server and cad's update start outside it (``places.outside_package``):
-    a go-between started with the desktop app policy that breaks its children away; elsewhere, and where that start
-    fails, ``subprocess.Popen`` as before. Windows' calls are a stand-in here."""
+    Task Scheduler starts a go-between (``cad.engine.handoff``) that starts them; elsewhere, and where that hand-off
+    cannot be made, ``subprocess.Popen`` as before. ``schtasks`` and kernel32 are stand-ins here; the go-between is the
+    real one, its start of the command a stand-in."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory(prefix="handoff-")
+        self.addCleanup(scratch.cleanup)
+        self.state = Path(scratch.name) / "state"
+        patched = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.state)})
+        patched.start()
+        self.addCleanup(patched.stop)
 
     def test_not_packaged_starts_as_popen_does(self) -> None:
         with mock.patch.object(places, "packaged", return_value=False), \
-                mock.patch.object(places, "_breakaway") as breakaway, \
+                mock.patch.object(places, "_hand_off") as hand_off, \
                 mock.patch.object(places.subprocess, "Popen", return_value="started") as popen:
             self.assertEqual(places.outside_package(["cad"], env={"A": "1"}, cwd="here", creationflags=8,
                                                     stdin=-3), "started")
-        breakaway.assert_not_called()
+        hand_off.assert_not_called()
         popen.assert_called_once_with(["cad"], env={"A": "1"}, cwd="here", creationflags=8, stdin=-3)
         self.assertFalse(places.packaged() if os.name != "nt" else False, "never packaged off Windows")
 
-    def test_packaged_starts_the_go_between_with_the_breakaway_policy(self) -> None:
+    def test_packaged_hands_the_command_to_task_scheduler(self) -> None:
         with mock.patch.object(places, "packaged", return_value=True), \
-                mock.patch.object(places, "_breakaway", return_value="between") as breakaway, \
+                mock.patch.object(places, "_hand_off", return_value="started") as hand_off, \
                 mock.patch.object(places.subprocess, "Popen") as popen:
             self.assertEqual(places.outside_package(["py", "-m", "daemon"], env={"A": "1"}, cwd="here",
-                                                    creationflags=0x08000200, stdin=-3), "between")
+                                                    creationflags=0x08000200, stdin=-3), "started")
+            places.outside_package(["py"], creationflags=8)
         popen.assert_not_called()
-        breakaway.assert_called_once_with(["py", "-m", "daemon"], env={"A": "1"}, cwd="here", flags=0x08000200)
-        kernel = Kernel()
-        started = places._breakaway(["py", "-m", "daemon"], env={"A": "1"}, cwd="here", flags=0x08000200,
-                                    kernel=kernel)
-        self.assertEqual(started.pid, 4321)
-        self.assertEqual(kernel.policy, (places.PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY,
-                                         places.DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE))
-        self.assertEqual(kernel.flags, 0x08000200 | places.EXTENDED_STARTUPINFO_PRESENT
-                         | places.CREATE_UNICODE_ENVIRONMENT)
-        self.assertIn(places.BETWEEN.splitlines()[1], kernel.line.replace('\\"', '"'), "the go-between")
-        self.assertIn('"argv": ["py", "-m", "daemon"]', kernel.line.replace('\\"', '"'))
-        self.assertEqual((kernel.environment[:5], kernel.cwd), ("A=1\0\0", "here"), "the block ends in two nulls")
+        self.assertEqual(hand_off.call_args_list[0], mock.call(["py", "-m", "daemon"], env={"A": "1"}, cwd="here",
+                                                               flags=0x08000200))
+        self.assertEqual(hand_off.call_args_list[1], mock.call(["py"], env=dict(os.environ), cwd=os.getcwd(), flags=8),
+                         "the caller's environment and folder, as Popen would inherit them")
 
-    def test_a_failed_breakaway_starts_as_popen_does_and_never_raises_past_it(self) -> None:
-        with mock.patch.object(places, "packaged", return_value=True), \
-                mock.patch.object(places, "_breakaway", side_effect=OSError(5, "refused")), \
-                mock.patch.object(places.subprocess, "Popen", return_value="started") as popen:
-            self.assertEqual(places.outside_package(["cad"], creationflags=8), "started")
-        popen.assert_called_once_with(["cad"], creationflags=8)
+    def test_a_hand_off_that_fails_starts_as_popen_does_logged_once_and_never_raises_past_it(self) -> None:
+        for failure in (OSError(5, "refused"), TimeoutError("no answer"), FileNotFoundError("schtasks.exe"),
+                        ValueError("anything")):
+            with self.subTest(failure=failure), mock.patch.object(places, "packaged", return_value=True), \
+                    mock.patch.object(places, "_hand_off", side_effect=failure), \
+                    mock.patch.object(places.subprocess, "Popen", return_value="started") as popen, \
+                    self.assertLogs("cad.engine.places", "WARNING") as logged:
+                self.assertEqual(places.outside_package(["C:/env/python.exe", "-m", "x"], creationflags=8), "started")
+                popen.assert_called_once_with(["C:/env/python.exe", "-m", "x"], creationflags=8)
+                self.assertEqual(len(logged.output), 1)
+                self.assertIn("python.exe outside this Windows app package, so it starts inside it", logged.output[0])
+
+    def test_the_task_has_no_trigger_runs_on_battery_as_the_user_with_no_password(self) -> None:
+        from xml.etree import ElementTree
+
+        data = places._task_definition([r"C:\Program Files\py\pythonw.exe", "-I", r"C:\a b\handoff.py", "r&<.json"],
+                                       user=r"PC\jo")
+        self.assertTrue(data.startswith(b"\xff\xfe"), "UTF-16 with its byte order mark, as schtasks /XML reads it")
+        text = data[2:].decode("utf-16-le")
+        self.assertTrue(text.startswith('<?xml version="1.0" encoding="UTF-16"?>'))
+        task = ElementTree.fromstring(text.split("\n", 1)[1])
+        ns = {"t": places.TASK}
+
+        def said(path: str) -> str | None:
+            found = task.find(path, ns)
+            return None if found is None else found.text
+
+        self.assertIsNone(task.find("t:Triggers", ns), "no trigger: it runs only on /Run")
+        self.assertEqual([said(f"t:Settings/t:{name}") for name in ("DisallowStartIfOnBatteries",
+                                                                     "StopIfGoingOnBatteries")], ["false", "false"])
+        self.assertEqual(said("t:Settings/t:MultipleInstancesPolicy"), "Parallel")
+        self.assertEqual(said("t:Settings/t:Hidden"), "true")
+        self.assertEqual(said("t:Settings/t:Priority"), "5", "normal: the default, 7, is below normal and inherited")
+        self.assertEqual(said("t:Principals/t:Principal/t:LogonType"), "InteractiveToken")
+        self.assertEqual(said("t:Principals/t:Principal/t:RunLevel"), "LeastPrivilege")
+        self.assertEqual(said("t:Principals/t:Principal/t:UserId"), r"PC\jo")
+        self.assertNotIn("Password", text)
+        self.assertEqual(said("t:Actions/t:Exec/t:Command"), r'"C:\Program Files\py\pythonw.exe"')
+        self.assertEqual(said("t:Actions/t:Exec/t:Arguments"), r'-I "C:\a b\handoff.py" r&<.json')
+        bare = places._task_definition(["py"])[2:].decode("utf-16-le").split("\n", 1)[1]
+        self.assertIsNone(ElementTree.fromstring(bare).find("t:Principals/t:Principal/t:UserId", ns),
+                          "no user named: the current one's")
+
+    def test_the_go_between_runs_isolated_from_the_module_file(self) -> None:
+        command = places._between(Path("state/handoff/x.json"))
+        self.assertEqual(command[1:], ["-I", str(Path(places.__file__).with_name("handoff.py")),
+                                       str(Path("state/handoff/x.json"))])
+        self.assertTrue(Path(command[2]).is_file())
+
+    def test_a_hand_off_starts_the_command_by_the_go_between_and_leaves_nothing(self) -> None:
+        schtasks, kernel = Schtasks(self, between=True), Kernel()
+        given = {"Path": "caller-path", "CAD_ENGINE_DIR": "e", "uv_cache_dir": "u", "PYTHONPATH": "src",
+                 "https_proxy": "h", "SSL_CERT_FILE": "c", "OPENAI_API_KEY": "sk-never-written", "A": "1"}
+        own = {"PERSONS_OWN": "theirs", "PYTHONDONTWRITEBYTECODE": "1", "PATH": "default-path"}
+        with mock.patch.dict(os.environ, own), \
+                mock.patch.object(handoff.subprocess, "Popen", side_effect=[OSError(5, "no breakaway"), Child(4321)]) \
+                as popen:
+            os.environ.pop("OPENAI_API_KEY", None)
+            started = places._hand_off(["py", "-m", "daemon"], env=given, cwd="here", flags=0x08000200,
+                                       run=schtasks, kernel=kernel, seconds=5)
+        schtasks.thread.join(5)
+        self.assertEqual((started.pid, started.handle), (4321, 104321))
+        self.assertEqual([call[0] for call in schtasks.calls], ["/Create", "/Run", "/Delete"])
+        create, name = schtasks.calls[0], schtasks.calls[0][4]
+        self.assertEqual(create[1:3], ("/XML", str(self.state / "handoff" / f"{name}.xml")))
+        self.assertEqual(schtasks.calls[1:], [("/Run", "/TN", name), ("/Delete", "/TN", name, "/F")])
+        self.assertEqual(schtasks.request.parent, self.state / "handoff", "in the state folder, never under AppData")
+        self.assertEqual(schtasks.told["argv"], ["py", "-m", "daemon"])
+        carried = {name: value for name, value in given.items() if name not in ("OPENAI_API_KEY", "A")}
+        self.assertEqual((schtasks.told["env"], schtasks.told["cwd"]), (carried, "here"), "only what cad needs")
+        self.assertNotIn("sk-never-written", schtasks.text)
+        self.assertNotIn("OPENAI_API_KEY", schtasks.text, "never the whole environment on disk")
+        if os.name != "nt":
+            self.assertEqual(schtasks.mode, 0o600, "its owner's alone")
+        breakaway, kept = popen.call_args_list
+        self.assertEqual(breakaway.kwargs["creationflags"], 0x08000200 | handoff.CREATE_BREAKAWAY_FROM_JOB)
+        self.assertEqual(kept.kwargs["creationflags"], 0x08000200, "in the job where it allows no breakaway")
+        self.assertEqual({kept.kwargs[name] for name in ("stdin", "stdout", "stderr")}, {subprocess.DEVNULL})
+        self.assertEqual((kept.args[0], kept.kwargs["cwd"]), (["py", "-m", "daemon"], "here"))
+        env = kept.kwargs["env"]
+        self.assertEqual({name: env[name] for name in carried}, carried, "what cad needs, from its caller")
+        self.assertEqual(env["PERSONS_OWN"], "theirs", "the rest the person's own, as the task has it")
+        self.assertFalse({"PATH", "PYTHONDONTWRITEBYTECODE", "OPENAI_API_KEY", "A"} & set(env),
+                         "a carried name the caller had not set is not set: the default's PATH gives way to Path")
+        self.assertEqual(schtasks.between_code, 0)
+        self.assertIn(os.getpid() + 100000, kernel.waited, "the go-between waited for before its task goes")
+        self.assertEqual(list((self.state / "handoff").iterdir()), [], "no request, definition or answer left")
+        self.assertIsNone(started.poll())
+        kernel.ended[104321] = 3
+        self.assertEqual((started.poll(), started.poll()), (3, 3))
+        self.assertIn(104321, kernel.closed)
+
+    def test_a_refused_task_or_one_that_never_runs_raises_and_leaves_nothing(self) -> None:
+        refused = Schtasks(self, refuse="/Create")
+        with self.assertRaisesRegex(OSError, "refused by policy"):
+            places._hand_off(["py"], env={}, cwd="here", flags=0, run=refused, kernel=Kernel(), seconds=5)
+        self.assertEqual([call[0] for call in refused.calls], ["/Create"], "nothing made, nothing to delete")
+        never = Schtasks(self)  # /Run says yes, and no session runs the task
+        with self.assertRaisesRegex(TimeoutError, "did not answer"):
+            places._hand_off(["py"], env={}, cwd="here", flags=0, run=never, kernel=Kernel(), seconds=0.2)
+        self.assertEqual([call[0] for call in never.calls], ["/Create", "/Run", "/Delete"])
+        self.assertEqual(handoff.main([str(never.request)]), 1, "a go-between that starts late starts nothing")
+        self.assertEqual(list((self.state / "handoff").iterdir()), [])
+
+    def test_a_command_the_go_between_cannot_start_raises_and_leaves_nothing(self) -> None:
+        schtasks = Schtasks(self, between=True)
+        with mock.patch.object(handoff.subprocess, "Popen", side_effect=FileNotFoundError(2, "no such file")), \
+                self.assertRaisesRegex(OSError, "the go-between could not start it: FileNotFoundError"):
+            places._hand_off(["nothing"], env={}, cwd="here", flags=0, run=schtasks, kernel=Kernel(), seconds=5)
+        schtasks.thread.join(5)
+        self.assertEqual(schtasks.between_code, 1)
+        self.assertEqual([call[0] for call in schtasks.calls], ["/Create", "/Run", "/Delete"])
+        self.assertEqual(list((self.state / "handoff").iterdir()), [])
+
+    def test_what_a_crash_left_goes_at_the_next_hand_off_and_at_the_servers_start(self) -> None:
+        folder = self.state / "handoff"
+        folder.mkdir(parents=True)
+        old, fresh = write(folder / "cad-1-old.json", '{"env": {}}'), write(folder / "cad-2-fresh.pid", "{}")
+        left = write(folder / "cad-1-old.pid.part", "{")
+        os.utime(old, (time.time() - 61, time.time() - 61))
+        os.utime(left, (time.time() - 3600, time.time() - 3600))
+        self.assertEqual(sorted(places.tidy_handoff()), sorted([old, left]))
+        self.assertEqual(list(folder.iterdir()), [fresh], "one a hand-off underway may be using stays")
+        self.assertEqual(places.tidy_handoff(now=time.time() + 61), [fresh])
+        stale = write(folder / "cad-3-old.xml", "")
+        os.utime(stale, (time.time() - 120, time.time() - 120))
+        refused = Schtasks(self, refuse="/Create")
+        with self.assertRaises(OSError):
+            places._hand_off(["py"], env={}, cwd="here", flags=0, run=refused, kernel=Kernel(), seconds=5)
+        self.assertEqual(list(folder.iterdir()), [], "a hand-off removes what a crash left first")
+        shutil.rmtree(folder)
+        self.assertEqual(places.tidy_handoff(), [], "no folder: nothing to do, and no error")
+
+    def test_a_request_taken_late_is_waited_for_once_more(self) -> None:
+        folder = self.state / "handoff"
+        folder.mkdir(parents=True)
+        request, reply = folder / "x.json", folder / "x.pid"
+        self.assertFalse(request.exists())  # taken by a go-between: it answers within the second wait
+        timer = threading.Timer(0.6, handoff.answer, (str(reply), {"pid": 9, "between": 8}))
+        timer.start()
+        self.addCleanup(timer.cancel)
+        self.assertEqual(places._answer(request, reply, 0.5), {"pid": 9, "between": 8})
+        if os.name != "nt":
+            self.assertEqual(reply.stat().st_mode & 0o777, 0o600, "the answer its owner's alone")
+        reply.unlink()
+        with self.assertRaises(TimeoutError):
+            places._answer(request, reply, 0.05)
+
+
+class Child:
+    """A process the go-between started."""
+
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+
+
+class Schtasks:
+    """``schtasks`` as ``places._hand_off`` runs it: each call kept, the definition read as it is registered, and on
+    ``/Run`` (``between``) the go-between run from it, on a thread, as Task Scheduler would run it."""
+
+    def __init__(self, test: unittest.TestCase, *, between: bool = False, refuse: str | None = None) -> None:
+        self.test, self.between, self.refuse = test, between, refuse
+        self.calls: list[tuple[str, ...]] = []
+        self.request = self.told = self.thread = self.between_code = self.text = self.mode = None
+
+    def __call__(self, *arguments: str) -> None:
+        from xml.etree import ElementTree
+
+        self.calls.append(arguments)
+        if arguments[0] == self.refuse:
+            raise OSError(f"schtasks {arguments[0]} exited 1: ERROR: refused by policy")
+        if arguments[0] == "/Create":
+            text = Path(arguments[2]).read_bytes()[2:].decode("utf-16-le").split("\n", 1)[1]
+            line = ElementTree.fromstring(text).find(f"{{{places.TASK}}}Actions/{{{places.TASK}}}Exec/"
+                                                     f"{{{places.TASK}}}Arguments").text
+            self.request = Path(line.split()[-1])
+            self.text = self.request.read_text(encoding="utf-8")
+            self.told, self.mode = json.loads(self.text), self.request.stat().st_mode & 0o777
+            self.test.assertEqual(line.split()[:2], ["-I", str(Path(places.__file__).with_name("handoff.py"))])
+        if arguments[0] == "/Run" and self.between:
+            def go() -> None:
+                self.between_code = handoff.main([str(self.request)])
+
+            self.thread = threading.Thread(target=go)
+            self.thread.start()
 
 
 class Kernel:
-    """kernel32 as ``places._breakaway`` calls it: what it was handed, kept."""
+    """kernel32 as ``places._hand_off`` and ``places.Started`` call it: a handle is its process's id plus 100000;
+    ``ended`` the processes that ended, by handle, with their exit status."""
 
     def __init__(self) -> None:
-        self.policy = self.flags = self.line = self.environment = self.cwd = None
+        self.ended: dict[int, int] = {}
+        self.waited: list[int] = []
+        self.closed: list[int] = []
 
-    def InitializeProcThreadAttributeList(self, buffer, count, flags, size):  # noqa: N802 - Windows' names
-        return buffer is not None
+    def OpenProcess(self, access, inherit, pid):  # noqa: N802 - Windows' names
+        assert access == places.SYNCHRONIZE | places.PROCESS_QUERY_LIMITED_INFORMATION and not inherit
+        return pid + 100000
 
-    def UpdateProcThreadAttribute(self, buffer, flags, attribute, value, size, previous, returned):  # noqa: N802
-        import ctypes
+    def WaitForSingleObject(self, handle, milliseconds):  # noqa: N802
+        self.waited.append(handle)
+        return 0 if handle in self.ended or milliseconds else 258
 
-        self.policy = (attribute.value, ctypes.cast(value, ctypes.POINTER(ctypes.c_uint32)).contents.value)
+    def GetExitCodeProcess(self, handle, code):  # noqa: N802
+        code._obj.value = self.ended[handle]
         return True
-
-    def CreateProcessW(self, application, line, process, thread, inherit, flags, environment, cwd, startup, info):  # noqa: N802
-        import ctypes
-
-        self.flags, self.line, self.cwd = flags, line.value, cwd
-        self.environment = ctypes.wstring_at(ctypes.addressof(environment), len(environment)) if environment else None
-        info._obj.hProcess, info._obj.dwProcessId = 7, 4321
-        return True
-
-    def DeleteProcThreadAttributeList(self, buffer):  # noqa: N802
-        pass
 
     def CloseHandle(self, handle):  # noqa: N802
+        self.closed.append(handle)
         return True
 
 
