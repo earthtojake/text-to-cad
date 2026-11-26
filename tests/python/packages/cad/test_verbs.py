@@ -165,6 +165,27 @@ class TheEarlierSpellings(unittest.TestCase):
                 pass
         self.assertEqual([], _deprecations(caught))
 
+    def test_a_check_s_alias_keeps_the_annotations_its_command_line_is_made_from(self) -> None:
+        """Each check's alias answers ``typing.get_type_hints`` as the operation it runs does, a hint for every
+        parameter of its signature: the command line is generated from them (``cad dfm --help``). Python 3.14's
+        ``functools.wraps`` copies ``__annotate__`` and no ``__annotations__``, and a check whose annotations were
+        set by hand has none to copy (``aliases.ASSIGNED``)."""
+        import inspect
+        import typing
+
+        from cad.registry import DOCUMENT_TYPES
+
+        checks = [(entry.id, name) for entry in DOCUMENT_TYPES.values() for name in entry.operation_names
+                  if name in ("dfm", "interference", "solve", "ranges", "validate")]
+        checks += [("kicad_pcb", "drc"), ("kicad_sch", "erc")]
+        self.assertGreater(len(checks), 10)
+        for document_type, name in checks:
+            with self.subTest(alias=f"cad.{document_type}.{name}"):
+                alias = getattr(getattr(cad, document_type), name)
+                hints = typing.get_type_hints(alias)
+                self.assertEqual(typing.get_type_hints(verbs.operation(document_type, name)), hints)
+                self.assertLessEqual(set(inspect.signature(alias).parameters), set(hints), "a hint for each parameter")
+
 
 class AShape(unittest.TestCase):
     """A shape a program holds: saved as a model's ``.xbf`` (``cad.save``), exported to any other file

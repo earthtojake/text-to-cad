@@ -25,6 +25,7 @@ under the working folder is named relative to it, as the person wrote it (``arm.
 
 from __future__ import annotations
 
+import functools
 import importlib
 import importlib.abc
 import importlib.util
@@ -34,8 +35,8 @@ from pkgutil import resolve_name as _resolve
 import warnings
 from typing import Any
 
-__all__ = ["CadDeprecationWarning", "MODULE_ALIASES", "NAME_ALIASES", "OPERATION_VERBS", "SPELLINGS_WARN", "current",
-           "lookup", "spelled", "warn"]
+__all__ = ["ASSIGNED", "CadDeprecationWarning", "MODULE_ALIASES", "NAME_ALIASES", "OPERATION_VERBS", "SPELLINGS_WARN",
+           "current", "lookup", "spelled", "warn"]
 
 
 class CadDeprecationWarning(FutureWarning):
@@ -103,6 +104,12 @@ MODULE_ALIASES: dict[str, str] = {
     # cad.xbf.export).
     "cad.model": "cad.xbf",
 }
+
+#: What an alias keeps of the function it runs (``functools.wraps(done, assigned=ASSIGNED)``): its annotations too,
+#: which a command line is made from (``cad_server._internal.cli_from_function``). From Python 3.14
+#: ``functools.WRAPPER_ASSIGNMENTS`` copies ``__annotate__`` in their place, which is None for a function whose
+#: annotations were set by hand (a check's: ``manufacturing.dfm_for``), and so left the alias none.
+ASSIGNED = (*functools.WRAPPER_ASSIGNMENTS, "__annotations__")
 
 #: Whether the document types' operations and the file types' callable forms say they are deprecated (``spelled``):
 #: the one switch. Off, each answers as its verb does and says nothing.

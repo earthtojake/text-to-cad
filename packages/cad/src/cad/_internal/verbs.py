@@ -191,12 +191,12 @@ def per_type(document_type: str, name: str) -> Callable[..., Any]:
     """``cad.<document_type>.<name>``: the alias of the verb that does it now (``aliases.OPERATION_VERBS``) -- its
     type's operation (``operation``), with its signature and words, saying once a process that it is deprecated
     where a program calls it (``aliases.spelled``)."""
-    from cad._internal.aliases import OPERATION_VERBS, spelled
+    from cad._internal.aliases import ASSIGNED, OPERATION_VERBS, spelled
 
     done = operation(document_type, name)
     old, new = f"cad.{document_type}.{name}", OPERATION_VERBS[name]
 
-    @functools.wraps(done)
+    @functools.wraps(done, assigned=ASSIGNED)
     def alias(*args: Any, **kwargs: Any) -> Any:
         spelled(old, new)
         return done(*args, **kwargs)
@@ -309,10 +309,12 @@ def _kicad_check(document_type: str, name: str) -> Callable[..., Any]:
     (``cad.kicad.drc``, ``cad.kicad.erc``), for a file of this type alone."""
     import importlib
 
+    from cad._internal.aliases import ASSIGNED
+
     module, attribute = FORMER[document_type][name]
     check = getattr(importlib.import_module(module), attribute)
 
-    @functools.wraps(check)
+    @functools.wraps(check, assigned=ASSIGNED)
     def done(path: Any) -> Any:
         from cad._internal.document_type import refuse_other
 
