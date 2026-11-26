@@ -16,7 +16,9 @@ plugin install``, which carries the one table of them. It does these things alon
    no second cad. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
    provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line. On Windows a
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
-   could not delete, a later run deletes (``tidy``). Before uv runs, a ``cad-*.dist-info`` of uv's cad that has no
+   could not delete, a later run deletes (``tidy``). Where uv is about to install cad's environment again on Windows,
+   every process that runs from it (or from uv's ``cad.exe``) is stopped first and waited for until it is gone
+   (``stop_environment``): uv cannot remove the environment's folders while one runs, and fails leaving cad broken. Before uv runs, a ``cad-*.dist-info`` of uv's cad that has no
    ``RECORD`` is deleted (``repair``): an uninstall that stopped midway (on Windows, a file of the old cad held as uv
    removed it) leaves one, and every later uv run on the tool fails on it, this command's reinstall too, so this
    is what repairs a computer left so;
@@ -586,6 +588,143 @@ def put_back(moved: List[Tuple[Path, Path]], done: bool) -> None:
             pass
 
 
+# How long the processes of cad's environment stopped before uv installs it again are waited for, each look, and how
+# many looks are made until none is left (``stop_environment``).
+END_SECONDS, ROUNDS = 15.0, 5
+
+
+def running_from(image: Optional[str], env: Path, folder: Path) -> bool:
+    """Whether a process whose program is ``image`` runs cad from its environment ``env``: its program inside it, or
+    uv's ``cad.exe`` in uv's bin folder ``folder``, or one of those set aside there (``set_aside``'s name, and cad's own
+    update's, ``.cad-<pid>.exe.old``), which runs on from its new name."""
+    if not image:
+        return False
+    path = os.path.normcase(os.path.abspath(image))
+    if path.startswith(os.path.normcase(os.path.abspath(env)).rstrip("\\/") + os.sep):
+        return True
+    where, name = os.path.split(path)
+    return where == os.path.normcase(os.path.abspath(folder)) and (
+        name == "cad.exe" or re.fullmatch(r"\.cad\.exe\.[\d-]+\.\d+\.old|\.cad-\d+\.exe\.old", name) is not None)
+
+
+def lineage(pid: int, table: Dict[int, Tuple[int, Optional[str]]]) -> set:
+    """``pid`` and each process that started it, as far as ``table`` knows them: never stopped (a cad that ran this
+    command runs it still)."""
+    found = set()
+    while pid and pid in table and pid not in found:
+        found.add(pid)
+        pid = table[pid][0]
+    return found | ({pid} if pid else set())
+
+
+def stop_environment(here: Here, env: Path, folder: Path, system: Any = None, seconds: float = END_SECONDS,
+                     rounds: int = ROUNDS) -> Tuple[List[str], List[int]]:
+    """Windows, before uv installs cad's environment ``env`` again: uv fails while any process runs from it (it cannot
+    remove the folder of a program that runs, ``Access is denied``, measured) and leaves cad broken. So every process
+    that runs from it (``running_from``), but this one and those that started it (``lineage``), is stopped and waited
+    for until it is gone, ``seconds`` at most; then looked for again, until none is left, ``rounds`` looks at most, as
+    cad's own update stops them before uv upgrades it. ``system``: Windows' process calls (``Processes``). Elsewhere,
+    or where they cannot be made, nothing. What was stopped (``<pid> (<program>)``), and what is still there."""
+    if not here.windows:
+        return [], []
+    stopped: List[str] = []
+    left: List[int] = []
+    try:
+        system = system or Processes()
+        for _round in range(rounds):
+            table = system.processes()
+            kept = lineage(os.getpid(), table)
+            ending = sorted(pid for pid, (_parent, image) in table.items()
+                            if pid not in kept and running_from(image, env, folder))
+            if not ending:
+                return stopped, []
+            stopped += [f"{pid} ({table[pid][1]})" for pid in ending]
+            left = system.end(ending, seconds)
+    except Exception:  # noqa: BLE001 - uv is run all the same, and says what it meets
+        pass
+    return stopped, left
+
+
+class Processes:
+    """Windows' own process calls, by ctypes: every process and its program (a Toolhelp snapshot,
+    ``QueryFullProcessImageNameW``), and their end (``TerminateProcess``, then ``WaitForSingleObject``). cad's update
+    has its own; this program imports nothing of cad's."""
+
+    def __init__(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        self.ctypes = ctypes
+        kernel = self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+
+        class Entry(ctypes.Structure):  # PROCESSENTRY32W
+            _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                        ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD),
+                        ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
+                        ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
+                        ("szExeFile", ctypes.c_wchar * 260)]
+
+        self.Entry = Entry
+        for name, arguments, result in (
+                ("CreateToolhelp32Snapshot", [wintypes.DWORD, wintypes.DWORD], wintypes.HANDLE),
+                ("Process32FirstW", [wintypes.HANDLE, ctypes.POINTER(Entry)], wintypes.BOOL),
+                ("Process32NextW", [wintypes.HANDLE, ctypes.POINTER(Entry)], wintypes.BOOL),
+                ("OpenProcess", [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD], wintypes.HANDLE),
+                ("QueryFullProcessImageNameW", [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+                                                ctypes.POINTER(wintypes.DWORD)], wintypes.BOOL),
+                ("TerminateProcess", [wintypes.HANDLE, wintypes.UINT], wintypes.BOOL),
+                ("WaitForSingleObject", [wintypes.HANDLE, wintypes.DWORD], wintypes.DWORD),
+                ("CloseHandle", [wintypes.HANDLE], wintypes.BOOL)):
+            function = getattr(kernel, name)
+            function.argtypes, function.restype = arguments, result
+        self.DWORD = wintypes.DWORD
+
+    def processes(self) -> Dict[int, Tuple[int, Optional[str]]]:
+        """``{pid: (its parent's pid, its program's path or None)}`` of every process now."""
+        kernel, ctypes = self.kernel, self.ctypes
+        snapshot = kernel.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+        if not snapshot or snapshot == ctypes.c_void_p(-1).value:
+            raise ctypes.WinError(ctypes.get_last_error())  # type: ignore[attr-defined]
+        parents: Dict[int, int] = {}
+        try:
+            entry = self.Entry()
+            entry.dwSize = ctypes.sizeof(self.Entry)
+            more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
+            while more:
+                parents[entry.th32ProcessID] = entry.th32ParentProcessID
+                more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
+        finally:
+            kernel.CloseHandle(snapshot)
+        return {pid: (parent, self.image(pid)) for pid, parent in parents.items()}
+
+    def image(self, pid: int) -> Optional[str]:
+        handle = self.kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return None
+        try:
+            size = self.DWORD(32768)
+            buffer = self.ctypes.create_unicode_buffer(size.value)
+            found = self.kernel.QueryFullProcessImageNameW(handle, 0, buffer, self.ctypes.byref(size))
+            return buffer.value if found else None
+        finally:
+            self.kernel.CloseHandle(handle)
+
+    def end(self, pids: List[int], seconds: float) -> List[int]:
+        """Each of ``pids`` terminated, then waited for, ``seconds`` in all: those still there."""
+        handles = {}
+        for pid in pids:
+            handle = self.kernel.OpenProcess(0x0001 | 0x00100000, False, pid)  # PROCESS_TERMINATE | SYNCHRONIZE
+            if handle:
+                self.kernel.TerminateProcess(handle, 1)
+                handles[pid] = handle
+        deadline, left = time.monotonic() + seconds, []
+        for pid, handle in handles.items():
+            if self.kernel.WaitForSingleObject(handle, max(0, int((deadline - time.monotonic()) * 1000))) != 0:
+                left.append(pid)
+            self.kernel.CloseHandle(handle)
+        return left
+
+
 def on_path(here: Here, uv: str, folder: Path) -> None:
     """Where uv's bin folder is not on this shell's PATH, uv's own ``uv tool update-shell`` puts it there for new
     terminals, as uv's and Codex's installers do for their own folders: on Windows the user's PATH (winget's uv puts
@@ -814,6 +953,16 @@ def install_cad(here: Here) -> Cad:
         again = True
     # Windows: a cad.exe that runs (the typed `cad update` of 0.11.0-0.11.11 that ran this, say) is out of uv's way.
     aside = set_aside(folder, tool) if here.windows else []
+    if env is not None and env.is_dir():
+        # Windows: uv installs the environment again only once nothing runs from it; then nothing is left without
+        # its RECORD that a process kept from being deleted.
+        stopped, left = stop_environment(here, env, folder)
+        if stopped:
+            print(f"Stopped what ran from cad's environment, so uv can install it again: {', '.join(stopped)}"
+                  + (f" (still there: {', '.join(map(str, left))})" if left else "") + ".", flush=True)
+            for name in repair(env):
+                print(f"Removed {name} from cad's environment: an install that stopped midway left it without its "
+                      "RECORD.", flush=True)
     if not again:
         print("Installing cad with uv. The first run downloads it, which takes a minute.", flush=True)
     try:

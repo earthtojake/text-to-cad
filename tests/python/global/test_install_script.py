@@ -552,6 +552,66 @@ class InstallScriptTests(AgentApps):
         install.tidy(here, self.uv_bin)
         self.assertTrue(kept.is_file())
 
+    def test_on_windows_what_runs_from_cad_s_environment_is_stopped_before_uv_installs_it_again(self) -> None:
+        """uv cannot install cad's environment again while any process runs from it (``failed to remove directory
+        ...\\Scripts: Access is denied``, measured) and leaves cad broken: before it runs, every process whose program is
+        inside the environment, or is uv's cad.exe or one set aside, is stopped and waited for, looked for again until
+        none is left; never this run nor what started it, nor anything else. Then what an install stopped midway left
+        without its RECORD goes, and uv installs."""
+        here = install.Here(self.environ(UV=str(self.bin / "uv"), FAKE_FAIL="cad:--version"), platform="win32")
+        self.tools(cad="1.0.0")
+        env = self.root / "uv.tools" / "cad"
+        site = env / "Lib" / "site-packages"
+        env.mkdir(parents=True)
+        folder = self.uv_bin
+        me = os.getpid()
+        table = {me: (90, sys.executable), 90: (91, str(env / "Scripts" / "python.exe")),  # what started this run
+                 91: (1, str(folder / "cad.exe")),
+                 100: (1, str(env / "Scripts" / "python.exe")), 101: (1, str(folder / "cad.exe")),
+                 102: (1, str(folder / install.ASIDE.format(stamp="12-34", n=1))), 103: (1, str(folder / ".cad-7.exe.old")),
+                 110: (1, str(env) + "-other\\python.exe"), 111: (1, str(folder / "ruff.exe")), 112: (1, None)}
+        test = self
+
+        class Fake:
+            ended: list = []
+
+            def processes(self) -> dict:
+                return dict(table)
+
+            def end(self, pids: list, seconds: float) -> list:
+                test.assertEqual(test.installs(), [], "stopped before uv runs")
+                self.ended.append(pids)
+                for pid in pids:
+                    table.pop(pid)
+                if len(self.ended) == 1:  # one more began meanwhile: found at the next look
+                    table[120] = (1, str(env / "Scripts" / "cad.exe"))
+                    (site / "cad-1.0.0.dist-info").mkdir(parents=True)  # a file of it was held: it goes now
+                return []
+
+        fake = Fake()
+        said = io.StringIO()
+        with mock.patch.object(install, "Processes", lambda: fake), contextlib.redirect_stdout(said):
+            cad = install.install_cad(here)
+        self.assertEqual((cad.code, cad.release), (0, "0.13.0"), said.getvalue())
+        self.assertEqual(fake.ended, [[100, 101, 102, 103], [120]])
+        self.assertEqual(sorted(table), sorted([me, 90, 91, 110, 111, 112]))
+        self.assertIn("Stopped what ran from cad's environment, so uv can install it again: 100 (", said.getvalue())
+        self.assertIn("Removed cad-1.0.0.dist-info from cad's environment", said.getvalue())
+        self.assertFalse((site / "cad-1.0.0.dist-info").exists())
+        self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
+        # A cad that starts is installed again by nothing, and nothing is stopped; nor elsewhere than on Windows.
+        table[130] = (1, str(env / "Scripts" / "python.exe"))
+        fake.ended.clear()
+        with mock.patch.object(install, "Processes", lambda: fake), contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(install.install_cad(install.Here(self.environ(UV=str(self.bin / "uv")),
+                                                             platform="win32")).there)
+            install.install_cad(install.Here(self.environ(UV=str(self.bin / "uv"), FAKE_FAIL="cad:--version"),
+                                             platform="linux"))
+        self.assertEqual(fake.ended, [])
+        # Windows' calls that cannot be made stop nothing, and uv runs all the same.
+        self.assertEqual(install.stop_environment(here, env, folder, mock.Mock(processes=mock.Mock(
+            side_effect=OSError(5, "Access is denied")))), ([], []))
+
     def test_its_output_is_utf_8_on_windows_where_it_is_no_console(self) -> None:
         # As cad's and uv's, which it runs on the same streams: a pipe or a file on Windows; never a console, never
         # another system.
