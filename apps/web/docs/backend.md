@@ -236,9 +236,9 @@ host only.
 
 ## A DXF's `drawing`
 
-A 2D drawing is rendered on the SERVER. `cad_server.drawing_payload` runs ezdxf's
-drawing add-on over the `.dxf`'s modelspace and returns what every entity
-flattens to — text placed, dimensions exploded, hatches filled or patterned,
+A 2D drawing is rendered on the SERVER. `cad.engine.drawing_payload` runs ezdxf's
+drawing add-on over the `.dxf`'s modelspace, in a kernel process (ezdxf is the kernel
+environment's, never the server's own), and returns what every entity flattens to — text placed, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
 `cad <type> snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
@@ -249,7 +249,8 @@ hairlines in their pens, on white paper (every snapshot is light). This route
 The drawing is opened by its absolute path (`POST /api/v1/documents`), as every file is: a
 relative ref, or anything that is not a CAD file, is 400, and a missing file 404. An unreadable drawing is 400 with the
 reason and the repair; the server retries a damaged file through
-`ezdxf.recover` before giving up. The answer is `application/json;
+`ezdxf.recover` before giving up. Where no kernel process can start, the drawing is 400 with the
+engine's one line, as a STEP's open is, and the next request tries again. The answer is `application/json;
 charset=utf-8`, uncompressed (the backend has no gzip helper and this route did
 not add one).
 

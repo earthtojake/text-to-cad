@@ -30,7 +30,7 @@ cad_server/
                          #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
+                         #   payload, drawn in a kernel process (drawings), a KiCad board's or schematic's plot (plots), a robot's
                          #   (robots), Quick Edit's packets (prompt_files)
   plugin/                # the plugin in the agent apps, and the one place that names an app, a plugin or
                          #   a skill: the table of apps (apps), this computer and its files (computer),
@@ -44,7 +44,6 @@ cad_server/
                          #   (tunnel), the page (ui), and the viewer link for a call that shows no
                          #   view (browser)
   robot_payload.py       # a robot description resolved for the viewer's page
-  drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
   jobs.py                # the viewer exports' admission, progress, waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no

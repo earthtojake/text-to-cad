@@ -514,8 +514,8 @@ cad. What uv downloaded stays in uv's cache until you run `uv cache prune`.
 
 ## What it needs
 
-- A network connection to install cad, and again the first time a model is built, when cad fetches
-  the CAD kernel (OCP and build123d). cad itself is about 110 MB on disk; the kernel about 620 MB.
+- A network connection to install cad, and again the first time a model is built or a STEP or DXF is
+  opened, when cad fetches the CAD kernel (OCP and build123d). cad itself is about 130 MB on disk; the kernel about 620 MB.
 - On Linux, the system's OpenGL library, `libGL.so.1` (the `libgl1` package on Debian and Ubuntu).
 - On Windows 11, Smart App Control turned off, or WSL. The CAD kernel's wheel ships an unsigned
   native module, which Smart App Control blocks: every `cad` command and `import build123d` then

@@ -46,7 +46,7 @@
 
 /**
  * The payload shape this module understands. Must match
- * `cad_server.drawing_payload.DRAWING_PAYLOAD_SCHEMA_VERSION`.
+ * `cad.engine.drawing_payload.DRAWING_PAYLOAD_SCHEMA_VERSION`.
  */
 export const DRAWING_SCHEMA_VERSION = 3;
 

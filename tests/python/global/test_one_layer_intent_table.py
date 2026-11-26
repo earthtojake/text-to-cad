@@ -3,7 +3,7 @@ engine's drawing checks (``cad.engine.export.dxf``).
 
 There used to be a second table, in JavaScript, because the viewer parsed DXF itself; the two
 were hand-copied and nothing pinned them, so validation could accept a drawing the viewer then
-rendered as cut paths. Drawing is flattening now (``cad_server.drawing_payload``), which reads no
+rendered as cut paths. Drawing is flattening now (``cad.engine.drawing_payload``), which reads no
 layer NAMES at all, so the engine's classifier is the only one -- and must stay the only one.
 """
 

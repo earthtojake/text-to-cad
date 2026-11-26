@@ -402,7 +402,7 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit's bar at the bot
 - **The picture comes from the BACKEND.** `client.drawing(file)` is the DXF document's
   `drawing` (`GET /api/v1/documents/dxf/<id>/drawing`, `apps/web/docs/backend.md`), asked again while the server
   renders a drawing it has not drawn before: ezdxf flattens the modelspace on the
-  server — text placed, dimensions exploded, hatches filled, blocks placed — and the
+  server, in a kernel process — text placed, dimensions exploded, hatches filled, blocks placed — and the
   client receives five primitive shapes and `text` in DXF coordinates, y up. **This
   renderer never parses DXF.** The payload is cached server-side by the document's
   content hash, so reopening a file costs a round trip and nothing else.

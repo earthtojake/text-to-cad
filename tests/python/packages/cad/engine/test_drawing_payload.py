@@ -1,4 +1,4 @@
-"""``cad_server.drawing_payload``: what a DXF becomes.
+"""``cad.engine.drawing_payload``: what a DXF becomes.
 
 Every fixture here is generated with ezdxf into a fresh temporary directory --
 nothing reads the sample corpus. The drawings are deliberately tiny and
@@ -20,8 +20,8 @@ add_repo_path("packages/cad/src")
 
 import ezdxf  # noqa: E402
 
-from cad_server import drawing_payload  # noqa: E402
-from cad_server.drawing_payload import (DRAWING_PAYLOAD_SCHEMA_VERSION, DrawingReadError, build_drawing_payload, encode_drawing_payload)
+from cad.engine import drawing_payload  # noqa: E402
+from cad.engine.drawing_payload import (DRAWING_PAYLOAD_SCHEMA_VERSION, DrawingReadError, build_drawing_payload, encode_drawing_payload)
 
 PRIMITIVE_TYPES = frozenset(
     {"point", "lines", "path", "filled-paths", "filled-polygon", "text"}

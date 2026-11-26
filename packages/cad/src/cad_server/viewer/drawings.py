@@ -2,9 +2,10 @@
 
 This module is the route's decisions — what may be opened, when a drawing is
 rendered, what the HTTP answer is, and which answers it keeps. The payload
-itself is cadgen's (``cad_server.drawing_payload``), imported inside the render so
-that ezdxf never loads at ``cad_server.viewer`` import time and a held answer never
-loads it at all.
+itself is the library's (``cad.engine.drawing_payload``), drawn by ezdxf in the
+drawing process, a kernel process started on the first render and kept warm for
+the next (``drawing_processes``): ezdxf is the kernel environment's, and the
+server never imports it. A held answer starts nothing.
 
 The drawing is named by its absolute path, as every file is (``backend``), and
 read whole on every request: its answer is held by those bytes, in this
@@ -21,6 +22,11 @@ Statuses, in the order they are decided:
 * no such file -> 404, like the asset route.
 * an unreadable or damaged DXF -> ``DrawingReadError`` (a ``ValueError``) ->
   400 with the teaching message, through the GET funnel's JSON error shape.
+* no kernel process can start (``serve.KernelProcessesUnavailable``: the kernel
+  environment could not be made, or the system refused the pool) -> 400 in its
+  one line, as a STEP's open answers it; that answer is not held, so the next
+  request tries again. The drawing process gone mid-render -> 400 saying so,
+  not held either.
 * an answer held for the file's bytes, or a render that finishes within the
   request's hold -> its status, 200 with the payload's bytes.
 * a render still running -> 202 ``{"state": "drawing", "retryMs": N}``: ask
@@ -37,6 +43,7 @@ runs joins it, and its answer is held when it ends.
 
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import os
 import threading
@@ -80,6 +87,16 @@ def resolve_drawing_path(file_ref) -> str | None:
     return candidate if os.path.isfile(candidate) else None
 
 
+class NoDrawingProcess(Exception):
+    """No drawing process drew the drawing: ``error`` is why -- none could start (the engine's
+    ``KernelProcessesUnavailable``, which ``on_crash`` hears), or it died drawing it (a ``ValueError``
+    saying so). Its answer is not held: the next request tries again."""
+
+    def __init__(self, error: BaseException, *, crash: bool = True) -> None:
+        super().__init__(str(error))
+        self.error, self.crash = error, crash
+
+
 class _Render:
     """One drawing's render, which every request for its bytes joins, and its answer."""
 
@@ -110,6 +127,10 @@ class DrawingRenders:
         # Renders running, and the answers held (the most recently asked for last), by bytes.
         self._renders: dict[str, _Render] = {}
         self._held: OrderedDict[str, _Render] = OrderedDict()
+        # The drawing process (``cad.engine.drawing_payload.drawing_processes``), started by the first render
+        # under a lock of its own: starting it may make the kernel environment first, and no request waits on that.
+        self._processes: concurrent.futures.ProcessPoolExecutor | None = None
+        self._processes_lock = threading.Lock()
 
     def response(self, file_ref) -> tuple[int, bytes | dict]:
         """``(status, body)``: the payload's bytes at 200, 202 while it renders, or a JSON error dict."""
@@ -139,11 +160,52 @@ class DrawingRenders:
             return render.status, render.body
         return 202, {"state": "drawing", "retryMs": self.retry_ms}
 
-    def _render(self, render: _Render, key: str, path: str, data: bytes) -> None:
-        from cad_server.drawing_payload import build_drawing_payload, encode_drawing_payload
+    def close(self) -> None:
+        """The drawing process ended, if one was started; the next render starts another."""
+        with self._processes_lock:
+            processes, self._processes = self._processes, None
+        if processes is not None:
+            processes.shutdown(wait=False, cancel_futures=True)
+
+    def _drawing_processes(self) -> concurrent.futures.ProcessPoolExecutor:
+        """The drawing process, started when there is none (or the last one broke)."""
+        from cad.engine.drawing_payload import drawing_processes
+
+        with self._processes_lock:
+            if self._processes is not None and getattr(self._processes, "_broken", False):
+                self._processes.shutdown(wait=False, cancel_futures=True)
+                self._processes = None
+            if self._processes is None:
+                self._processes = drawing_processes()
+            return self._processes
+
+    def _drawn(self, path: str, data: bytes) -> bytes:
+        """The payload's bytes for a drawing's bytes, drawn in the drawing process. ``NoDrawingProcess``
+        where none could start or it died drawing them."""
+        from cad.engine.drawing_payload import drawn
 
         try:
-            render.status, render.body = 200, encode_drawing_payload(build_drawing_payload(path, data))
+            processes = self._drawing_processes()
+        except Exception as error:  # noqa: BLE001 - the engine's KernelProcessesUnavailable, in its one line
+            raise NoDrawingProcess(error) from error
+        try:
+            return processes.submit(drawn, path, data).result()
+        except concurrent.futures.BrokenExecutor:  # the drawing process died mid-render
+            with self._processes_lock:
+                self._processes = None  # the next render starts one afresh
+            gone = ValueError(f"the DXF drawing process exited drawing {node_basename(path)}")
+            raise NoDrawingProcess(gone, crash=False) from None
+
+    def _render(self, render: _Render, key: str, path: str, data: bytes) -> None:
+        held = True
+        try:
+            render.status, render.body = 200, self._drawn(path, data)
+        except NoDrawingProcess as refused:
+            # No kernel process drew it: said as a STEP's open says it, and tried again by the next request.
+            held, error = False, refused.error
+            if refused.crash and self._on_crash is not None:
+                self._on_crash(error)
+            render.status, render.body = 400, {"error": str(error) or type(error).__name__}
         except ValueError as error:
             # A drawing that will not read (``DrawingReadError``): its message says why and what to do.
             render.status, render.body = 400, {"error": str(error)}
@@ -154,7 +216,8 @@ class DrawingRenders:
         finally:
             with self._lock:
                 self._renders.pop(key, None)
-                self._held[key] = render
-                while len(self._held) > HELD:
-                    self._held.popitem(last=False)
+                if held:
+                    self._held[key] = render
+                    while len(self._held) > HELD:
+                        self._held.popitem(last=False)
             render.done.set()
