@@ -10,7 +10,7 @@ The holes are the board's: twin_orbit.panel_parts() reads each jack, pot and LED
 Run: cad run src/panel.py"""
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib.twin_orbit import (HOLE_D, MOUNT_X, MOUNT_Y, PANEL_FRONT_Z, PANEL_H, PANEL_T, PANEL_W, PANEL_X0,
                         PANEL_Y_TOP, SLOT_TRAVEL, SLOT_W, panel_parts)
@@ -69,14 +69,14 @@ def art_faces() -> list:
     return items
 
 
-@model
+@xbf
 def panel_cut():
     face = cut_face()
     face.label = "CUT"
     return face
 
 
-@model
+@xbf
 def panel_art():
     profile = cut_face()
     profile.label = "CUT"
@@ -89,7 +89,7 @@ def place(shape):
     return bd.Pos(PANEL_X0, PANEL_Y_TOP - PANEL_H, PANEL_FRONT_Z - PANEL_T) * shape
 
 
-@model
+@xbf
 def panel():
     plate = place(bd.extrude(cut_face(), PANEL_T))
     plate.label, plate.color = "plate", "#1d1f22"

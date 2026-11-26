@@ -98,8 +98,8 @@ const ROBOT_FAMILY = Object.freeze({
   release: () => {}
 });
 
-const MODEL_FAMILY = Object.freeze({
-  name: "model",
+const XBF_FAMILY = Object.freeze({
+  name: "xbf",
   // The document the xbf renderer loads (`useXbfScene`): its structure and part buffers, read
   // from the engine that serves it (`resolved.url`, the document's API URL).
   load: job => loadXbfDocument(jobUrl(job)),
@@ -118,9 +118,8 @@ const FAMILY_BY_KIND = Object.freeze({
   "3mf": MESH_FAMILY,
   urdf: ROBOT_FAMILY,
   srdf: ROBOT_FAMILY,
-  // A model's document, the engine's (and a STEP, which opens as one); `xbf`, its earlier kind, the same.
-  model: MODEL_FAMILY,
-  xbf: MODEL_FAMILY
+  // The engine's document, a model's (and a STEP, which opens as one).
+  xbf: XBF_FAMILY
 });
 
 /**

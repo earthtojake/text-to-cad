@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 import build123d as bd
 
 from lib.part_common import line_edges_at_z, safe_chamfer
@@ -17,7 +17,7 @@ HOLE_LOCATIONS = ((-35.0, -20.0), (-35.0, 20.0), (35.0, -20.0), (35.0, 20.0))
 TOP_CHAMFER = 2.0
 
 
-@model
+@xbf
 def rectangular_calibration_block():
     """Return the rectangular calibration block model in millimeters."""
     with bd.BuildPart() as block:

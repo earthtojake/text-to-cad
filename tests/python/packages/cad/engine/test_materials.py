@@ -32,7 +32,7 @@ FULL = FinishedMaterial(metals.aluminum().material, pbr=PbrProperties.create(
 SOURCE = '''
 import build123d as bd
 from bd_materials import metals
-from cad import model, glb, step
+from cad import xbf, glb, step
 from cad.build123d import memo, paint
 
 FINISH = metals.aluminum()
@@ -45,7 +45,7 @@ FINISH.pbr = FINISH.pbr.override(roughness=ROUGHNESS, anisotropy=0.4,
 def block():
     return bd.Box(20, 10, 4)
 
-@model("assembly.xbf")
+@xbf("assembly.xbf")
 @glb("assembly.glb")
 @step("assembly.step")
 def assembly():
@@ -356,7 +356,7 @@ class MaterialsTest(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import build123d as bd
             from bd_materials import metals, plastics
-            from cad import glb, model
+            from cad import glb, xbf
             from cad.build123d import materials
 
             def pane(label, at, material, color=None):
@@ -366,7 +366,7 @@ class MaterialsTest(unittest.TestCase):
                     part.color = bd.Color(*color)  # after the material: the colour's alpha set by hand
                 return part
 
-            @model("panes.xbf")
+            @xbf("panes.xbf")
             @glb("panes.glb")
             def panes():
                 faded = plastics.pmma(opacity=0.4)
@@ -395,10 +395,10 @@ class MaterialsTest(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import build123d as bd
             from bd_materials import metals, plastics
-            from cad import glb, model
+            from cad import glb, xbf
             from cad.build123d import paint
 
-            @model("painted.xbf")
+            @xbf("painted.xbf")
             @glb("painted.glb")
             def painted():
                 glass = bd.Box(10, 10, 2)
@@ -456,9 +456,9 @@ class MaterialsTest(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import build123d as bd
             from bd_materials import plastics
-            from cad import glb, model
+            from cad import glb, xbf
 
-            @model("pane.xbf")
+            @xbf("pane.xbf")
             @glb("pane.glb")
             def pane():
                 part = bd.Box(20, 10, 2)

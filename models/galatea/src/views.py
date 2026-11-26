@@ -10,7 +10,7 @@ Three passes, the camera going round the robot through the first two:
     x-ray     one gait cycle of the `walk` motion, the mechanism showing through the skins. The pelvis is the
               mechanism's fixed link, so the feet tread under it, as they do when the viewer plays the motion.
 
-Every frame is one `cad model snapshot` job: the engine draws it with the renderer and the display modes of the
+Every frame is one `cad xbf snapshot` job: the engine draws it with the renderer and the display modes of the
 viewer's page, from the document it holds. `film.py`'s cut takes the frames as they are.
 """
 

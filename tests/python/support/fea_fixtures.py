@@ -59,7 +59,7 @@ def quiet():
 
 
 def study_of(document: Path):
-    """``cad.<type>.solve`` for the document's type: ``cad.step.solve`` for a STEP, ``cad.model.solve`` for an .xbf."""
+    """``cad.<type>.solve`` for the document's type: ``cad.step.solve`` for a STEP, ``cad.xbf.solve`` for an .xbf."""
     import importlib
 
     from cad.registry import type_of

@@ -51,7 +51,7 @@ class DrawnByTheBase(unittest.TestCase):
         self.assertTrue(source.endswith("robot.urdf") and os.path.isabs(source))
         self.assertEqual({"camera": "iso", "pose": '{"elbow": 30}'}, options)
         _found, called = self.elsewhere(_no_gl(), ID)
-        self.assertEqual(("model", [ID, "robot.png"]), called.call_args.args[1:4:2])
+        self.assertEqual(("xbf", [ID, "robot.png"]), called.call_args.args[1:4:2])
 
     def test_the_engine_s_failure_stands_otherwise(self) -> None:
         for name, error, options in (("another failure", api.EngineError("MemoryError"), {}),

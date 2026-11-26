@@ -8,7 +8,7 @@ import { createGlbRenderer } from "./glb/index.js";
 import { createMeshRenderer } from "./mesh/index.js";
 import { createRobotRenderer } from "./robot/index.js";
 import { createSchematicRenderer } from "./schematic/index.js";
-import { createModelRenderer } from "./xbf/index.js";
+import { createXbfRenderer } from "./xbf/index.js";
 
 // A registration loads its component beside its document; these tests are about the document.
 vi.mock("./board/BoardRenderer.jsx", () => ({ default: () => null }));
@@ -33,9 +33,8 @@ describe("viewer renderer registrations", () => {
   const client = {} as never;
   it("gives .dxf its own renderer", () => {
     const dxf = createDxfRenderer({ client });
-    const xbf = createModelRenderer({ client });
-    // A model's renderer is `model`, and answers for the id it had while an .xbf was a kind of its own.
-    expect([dxf.id, xbf.id, xbf.aliases]).toEqual(["dxf", "model", ["xbf"]]);
+    const xbf = createXbfRenderer({ client });
+    expect([dxf.id, xbf.id]).toEqual(["dxf", "xbf"]);
     expect(selectRenderer([xbf, dxf], file("plate.dxf", "cad"))).toBe(dxf);
     expect(selectRenderer([xbf, dxf], file("part.step", "cad"))).toBe(xbf);
     // Preview is each viewer's own mode, never a flag a registration offers a host.
@@ -44,8 +43,8 @@ describe("viewer renderer registrations", () => {
 
   it("opens a STEP and an .xbf in the model's renderer, and nothing else in it", () => {
     const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
-      createRobotRenderer({ client }), createSchematicRenderer({ client }), createModelRenderer({ client })];
-    for (const path of ["part.step", "PART.STP", "model.xbf"]) expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe("model");
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
+    for (const path of ["part.step", "PART.STP", "model.xbf"]) expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe("xbf");
     for (const [path, id] of [["plate.dxf", "dxf"], ["blinky.kicad_pcb", "board"], ["divider.kicad_sch", "schematic"], ["arm.glb", "glb"], ["arm.stl", "mesh"], ["bot.urdf", "robot"]]) {
       expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe(id);
     }
@@ -59,7 +58,7 @@ describe("viewer renderer registrations", () => {
       createRenderSession: () => ({ dispose: () => { disposed += 1; } }),
     } as never;
     const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
-      createRobotRenderer({ client }), createSchematicRenderer({ client }), createModelRenderer({ client })];
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
     for (const renderer of renderers) {
       const prepared = await renderer.prepare({ file: file("part.step", "cad"), source: {} as never, signal: new AbortController().signal });
       prepared.dispose?.();

@@ -140,7 +140,7 @@ class TheParser(unittest.TestCase):
                 if "_runtime" not in path.relative_to(PACKAGE).parts  # the bundled plugin: skills, not the server
                 and re.search(r"\bArgumentParser\(", path.read_text(encoding="utf-8"))]
         self.assertEqual(made, [])
-        for name in ("status", "model export", "mujoco check", "kicad_pcb inspect", "setup", "telemetry"):
+        for name in ("status", "xbf export", "mujoco check", "kicad_pcb inspect", "setup", "telemetry"):
             with self.subTest(command=name):
                 found = cli.build_parser_for(name)
                 self.assertIsInstance(found, Parser)
@@ -257,7 +257,7 @@ class EndToEnd(unittest.TestCase):
             env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_STATE_DIR": os.path.join(folder, "state"),
                    "CAD_CACHE_DIR": os.path.join(folder, "cache"), "CAD_ENGINE_DIR": os.path.join(folder, "engine")}
             for argv, reason in ((["stl", "snapshot", "part.glb", "out.png", "--json"], "wrong_type"),
-                                 (["model", "export", "--json"], "usage"), (["stats", "--json"], "usage")):
+                                 (["xbf", "export", "--json"], "usage"), (["stats", "--json"], "usage")):
                 with self.subTest(argv=argv):
                     done = subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
                                           capture_output=True, text=True, encoding="utf-8", timeout=120)

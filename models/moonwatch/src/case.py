@@ -4,12 +4,12 @@ z = 0 at the case-middle / caseback joint plane, +Z through the crystal,
 crown at +X (see `lib/spec.py`).
 """
 
-from cad import model
+from cad import xbf
 
 from lib import watch
 
 
-@model
+@xbf
 def case():
     return watch.case()
 

@@ -410,7 +410,7 @@ class OptionsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "--candidates is true or false"):
             manufacturing.options("stl", "printing", {}, candidates=1)
         with self.assertRaisesRegex(ValueError, "--axes is a whole number"):  # before the process is read
-            manufacturing.options("model", None, {"axes": 3.5})
+            manufacturing.options("xbf", None, {"axes": 3.5})
 
     def test_each_type_takes_its_processes_and_their_options_alone(self) -> None:
         import inspect
@@ -809,13 +809,13 @@ class DeclaredProcessTest(unittest.TestCase):
 
         from cad._internal.dfm import processes
 
-        self.assertIsNone(manufacturing.options("model", None, {"material": "aluminum"}))
+        self.assertIsNone(manufacturing.options("xbf", None, {"material": "aluminum"}))
         with self.assertRaisesRegex(ValueError, "give --process"):  # a STEP keeps none
             manufacturing.options("step", None, {})
         for given, said in (({"units": "cm"}, "a model is in millimetres"),
                             ({"material": "cheese"}, "--material is one of")):
             with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
-                manufacturing.options("model", None, given)
+                manufacturing.options("xbf", None, given)
         # duck typed: a route's value, an FDM skin's pitch is its line width, not a layer height
         route = SimpleNamespace(value="fdm")
         self.assertEqual(processes.declared(SimpleNamespace(process=route, pitch_mm=0.12)), ("printing", "fdm", 0.12))
@@ -1749,7 +1749,7 @@ class PythonCallTest(unittest.TestCase):
 
         import cad
 
-        for document_type in ("step", "model", "threemf", "glb"):
+        for document_type in ("step", "xbf", "threemf", "glb"):
             self.assertNotIn("units", inspect.signature(getattr(cad, document_type).dfm).parameters, document_type)
             with self.assertRaises(TypeError):
                 getattr(cad, document_type).dfm("part", units="in")

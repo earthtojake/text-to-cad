@@ -5,7 +5,7 @@ model here is the robot at one pose, moved as a whole until it stands: lowered, 
 onto its lowest sole point, or (for a pose that tips the pelvis) set down flat on one foot.
 """
 
-from cad import model
+from cad import xbf
 from cad.build123d import posed
 
 from galatea import assemble
@@ -22,47 +22,47 @@ def standing(name, foot=None):
     return location(transform) * posed(assemble(), pose)
 
 
-@model
+@xbf
 def galatea_ready():
     return standing("ready")
 
 
-@model
+@xbf
 def galatea_stride():
     return standing("stride")
 
 
-@model
+@xbf
 def galatea_contrapposto():
     return standing("contrapposto")
 
 
-@model
+@xbf
 def galatea_reach():
     return standing("reach")
 
 
-@model
+@xbf
 def galatea_wave():
     return standing("wave")
 
 
-@model
+@xbf
 def galatea_present():
     return standing("present")
 
 
-@model
+@xbf
 def galatea_poise():
     return standing("poise")
 
 
-@model
+@xbf
 def galatea_crouch():
     return standing("crouch", foot="l_foot")
 
 
-@model
+@xbf
 def galatea_bow():
     return standing("bow", foot="l_foot")
 

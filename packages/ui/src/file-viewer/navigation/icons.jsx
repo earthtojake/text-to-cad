@@ -136,7 +136,7 @@ export function fileIconFor(filePath) {
 export function FileIcon({ path, className, strokeWidth = 1.75 }) {
   // A model's file (`.xbf`) is the engine's, never opened by its extension's renderer, but it
   // is a CAD file all the same: a solid in a file, as a STEP is.
-  const renderFormat = renderFormatFromPath(path) || (fileExtensionFromPath(path) === ".xbf" ? RENDER_FORMAT.MODEL : "");
+  const renderFormat = renderFormatFromPath(path) || (fileExtensionFromPath(path) === ".xbf" ? RENDER_FORMAT.XBF : "");
   if (renderFormat) {
     // A file the viewer renders: its own per-format glyph, from the one
     // table every surface that lists files already reads.

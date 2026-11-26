@@ -8,13 +8,13 @@ has its own geometry and its own place in the assembly.
 from __future__ import annotations
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from handlebar import MIRROR_MOUNT_RIGHT
 from lib import trim as T
 
 
-@model
+@xbf
 def mirror_right():
     return bd.Compound(children=T.build_mirror(-1.0, MIRROR_MOUNT_RIGHT), label="mirror")
 

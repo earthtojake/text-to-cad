@@ -23,7 +23,7 @@ holds the model as its last run left it: after an edit, run the script first. Th
 export the same files from the viewer, as downloads.
 
 ```bash
-cad model export src/bracket.xbf STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad xbf export src/bracket.xbf STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 Any other file exports through its own type (a `.step` by `cad step export`), and a mesh file
@@ -61,7 +61,7 @@ A mesh never becomes an `.xbf`, `.step` or `.dxf`: it has no B-rep, so model it 
 The model's page is the default. A project can instead revolve around its exported files, where
 the person asks to iterate on the file or the project already works that way (an `exports.py`, a
 consumer reading the files). Each change then ends in the export too, by `exports.py` in place of
-the model's script or by `cad model export` after its run; the person looks at the file's page;
+the model's script or by `cad xbf export` after its run; the person looks at the file's page;
 and checks read the file (`cad <type> snapshot` or `inspect` with its path, or `step.read` in a
 check).
 
@@ -76,14 +76,14 @@ check).
 A project whose files are delivered again after each change (a print set, a STEP for a
 supplier) keeps one script beside its models. It calls each model first, so its `.xbf` is
 current (an unchanged model runs nothing), then exports from the `.xbf`; a one-off file is a
-`cad model export`. `model.export(xbf, path, ...)` is that command from Python, and a file of
+`cad xbf export`. `xbf.export(xbf, path, ...)` is that command from Python, and a file of
 another type exports through its own (`step.export`).
 
 ```python
 # src/exports.py
 from pathlib import Path
 
-from cad import model
+from cad import xbf
 
 from bracket import bracket, bracket_wide
 
@@ -93,8 +93,8 @@ ROOT = HERE.parent                                  # the project's folder
 if __name__ == "__main__":
     bracket()
     bracket_wide()
-    model.export(HERE / "bracket.xbf", ROOT / "STEP/bracket.step", ROOT / "STL/bracket.stl")
-    model.export(HERE / "bracket_wide.xbf", ROOT / "STEP/bracket_wide.step")
+    xbf.export(HERE / "bracket.xbf", ROOT / "STEP/bracket.step", ROOT / "STL/bracket.stl")
+    xbf.export(HERE / "bracket_wide.xbf", ROOT / "STEP/bracket_wide.step")
 ```
 
 ```bash
@@ -108,19 +108,19 @@ A posed file is a model that returns the assembly at a named mechanism state
 
 ```python
 # src/arm_poses.py
-from cad import model
+from cad import xbf
 from cad.build123d import posed
 
 from arm import arm                              # an assembly with a mechanism state "folded"
 
 
-@model
+@xbf
 def arm_folded():
     return posed(arm(), "folded")
 ```
 
 A part meant to ship on its own (a printable bracket, a robot link's mesh in the link's frame) is a
-`@model` returning that part where it should sit, which the assembly calls and places; export that
+`@xbf` returning that part where it should sit, which the assembly calls and places; export that
 model.
 
 ## The `.xbf` is the model
@@ -128,7 +128,7 @@ model.
 The `.xbf` is text-to-cad's own document: the parts and placements, names, colours,
 materials, element names and mechanism, read back losslessly, and the compiled tracks of
 the model's animations, which only a GLB exported from it reads. Every run writes it, beside the
-script or at the path `@model("../XBF/arm.xbf")` gives, relative to the script. A copy of the file
+script or at the path `@xbf("../XBF/arm.xbf")` gives, relative to the script. A copy of the file
 is a model of its own: copy it to share a model without its code, or to compose it in another
 project, where `model.read` reads it as an input.
 
@@ -173,8 +173,8 @@ cylinders show their facets. `--tolerance MM` and `--angle DEG` mesh an STL, a 3
 either alone:
 
 ```bash
-cad model export src/hopper.xbf STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
-cad model export src/hopper.xbf GLB/hero.glb --tolerance 0.05 --angle 5
+cad xbf export src/hopper.xbf STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
+cad xbf export src/hopper.xbf GLB/hero.glb --tolerance 0.05 --angle 5
 ```
 
 - `--tolerance` is an absolute chord deviation in millimetres, at least 0.001. For a print with
@@ -182,7 +182,7 @@ cad model export src/hopper.xbf GLB/hero.glb --tolerance 0.05 --angle 5
   is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints).
 - `--angle` is a ceiling in degrees, from 1 to 28.5 (the viewer's): it draws small radii in more
   segments, where a tolerance does not reach them.
-- From Python they are `model.export(xbf, path, tolerance=0.02, angle=5)`.
+- From Python they are `xbf.export(xbf, path, tolerance=0.02, angle=5)`.
 
 Each part is meshed again at the finer of the option and its own, for that file alone: a file is
 never coarser than the viewer's mesh, and the viewer, snapshots and every other export keep
@@ -202,8 +202,8 @@ A mechanism exports as a robot description for a simulator or ROS, by the destin
 `.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF.
 
 ```bash
-cad model export src/arm.xbf sim/arm.xml description/arm.urdf
-cad model export src/arm.xbf sim/arm.xml --zero home
+cad xbf export src/arm.xbf sim/arm.xml description/arm.urdf
+cad xbf export src/arm.xbf sim/arm.xml --zero home
 ```
 
 Each is one description of the model in SI units at its as-built state, and writes its meshes as

@@ -70,9 +70,8 @@ test("every file family the parity page draws reaches its viewer builder; a STEP
   for (const kind of ["step", "stp", "dxf", ""]) assert.equal(headlessSceneFamily(job(kind)), null, kind || "(none)");
   assert.equal(headlessSceneFamily(job("stl")), headlessSceneFamily(job("3mf")), "STL and 3MF are one family: the mesh renderer's");
   assert.equal(headlessSceneFamily(job("urdf")), headlessSceneFamily(job("srdf")), "URDF and SRDF are one family: the robot renderer's");
-  // A model's document is the model's family, under its kind and the one its file had.
-  assert.equal(headlessSceneFamily(job("model")).name, "model");
-  assert.equal(headlessSceneFamily(job("xbf")), headlessSceneFamily(job("model")), "xbf, a model's file, is the model's");
+  // A model's document, held or its file, is the engine document's family.
+  assert.equal(headlessSceneFamily(job("xbf")).name, "xbf");
 
   // What each family's build returns IS its builder's scene: the viewer renderer's own object.
   const document = await buildGlbDocumentFromBuffer(glbBytes());

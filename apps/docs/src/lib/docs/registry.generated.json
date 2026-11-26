@@ -25,9 +25,9 @@
   ],
   "documentTypes": [
     {
-      "id": "model",
-      "title": "model",
-      "summary": "a model built from code: held in the engine's memory, addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns, and saved as a file, its .xbf: the engine's own document, an XCAF document as BinXCAF, with its build closure",
+      "id": "xbf",
+      "title": "XBF",
+      "summary": "the engine's own document, an XCAF document as BinXCAF with its build closure, saved as a file, its .xbf: every model built from code writes one, and holds it in the engine's memory too, addressed by its document id (cad run SCRIPT.py prints it) or the handle its call returns",
       "extensions": [
         ".xbf"
       ],
@@ -617,7 +617,7 @@
     }
   ],
   "aliases": {
-    "xbf": "model"
+    "model": "xbf"
   },
   "integrations": [
     {

@@ -37,14 +37,14 @@ on a base with a gasket gap:
 
 ```python
 import build123d as bd
-from cad import model
+from cad import xbf
 
 BASE_HEIGHT = 30.0
 LID_THICKNESS = 3.0
 GASKET_GAP = 0.5
 
 
-@model
+@xbf
 def enclosure():
     base = bd.Box(80, 50, BASE_HEIGHT)
     lid = bd.Box(80, 50, LID_THICKNESS)

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 from math import tau
 
 import build123d as bd
@@ -135,7 +135,7 @@ def _planet_center(index: int) -> tuple[float, float]:
     return polar_point(PLANET_CENTER_RADIUS, tau * index / PLANET_COUNT)
 
 
-@model
+@xbf
 def planetary_gear_stage():
     """Return the simplified planetary gear assembly in millimeters."""
     parts = [

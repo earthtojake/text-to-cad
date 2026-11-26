@@ -41,11 +41,11 @@ if __name__ == "__main__":
 """
 # A model that reads a STEP and imports nothing of build123d: 0.11's spelling, and 0.10's, an alias of it.
 READS = {
-    "new.py": "from pathlib import Path\nfrom cad import model, step\n\n\n@model\ndef holder():\n"
+    "new.py": "from pathlib import Path\nfrom cad import xbf, step\n\n\n@xbf\ndef holder():\n"
               "    return step.read(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder()\n",
-    "old.py": "from pathlib import Path\nfrom cad import model, read_step\n\n\n@model\ndef holder2():\n"
+    "old.py": "from pathlib import Path\nfrom cad import xbf, read_step\n\n\n@xbf\ndef holder2():\n"
               "    return read_step(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder2()\n",
-    "earlier.py": "from pathlib import Path\nfrom cadgen import model, step\n\n\n@model\ndef holder3():\n"
+    "earlier.py": "from pathlib import Path\nfrom cadgen import xbf, step\n\n\n@xbf\ndef holder3():\n"
                   "    return step.read(Path(__file__).parent / 'part.step')\n\n\nif __name__ == '__main__':\n    holder3()\n",
 }
 

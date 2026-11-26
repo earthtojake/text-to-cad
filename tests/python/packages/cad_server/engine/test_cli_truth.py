@@ -27,21 +27,21 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 # ``bad``, which fails once the script says so. cadgen is imported first, so its lazy kernel binds
 # ``build123d`` (an editable install has no ``.pth`` to do it sooner).
 SCRIPT = """
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
 FAIL = {fail}
 
 
-@model
+@xbf
 def box():
     link = bd.Pos(30, 5, 0) * bd.Rot(0, 0, 90) * bd.Box(4, 8, 2)
     link.label = "link"
     return bd.Compound(children=[link], label="box")
 
 
-@model
+@xbf
 def bad():
     assert not FAIL, "blade count must be positive"
     return bd.Box(1, 1, 1)

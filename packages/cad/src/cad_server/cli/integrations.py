@@ -55,7 +55,7 @@ def _refuse_other_file(integration: str, operation: str, source: str) -> None:
     if suffix not in entry.files:
         found = by_extension(suffix) if suffix else None
         if found is not None:
-            named = found.id  # the command that takes the file: an .xbf's is `cad model`
+            named = found.id  # the command that takes the file: an .xbf's is `cad xbf`
             checks = [name for name in type_operations(named) if name in ("validate", "drc", "erc", "dfm")]
             use = (f": use cad {named} {checks[0]}" if checks and (named, checks[0]) in TYPE_OPERATIONS
                    else f"; cad {named} takes {', '.join(type_operations(named))}")

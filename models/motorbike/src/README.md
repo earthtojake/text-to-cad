@@ -1,7 +1,7 @@
 # motorbike models
 
-`motorbike.py` is the assembly (`@model`; a run writes nothing). Every other `.py`
-directly under `src/` is one part of it, a `@model` of its own, as the original's parts
+`motorbike.py` is the assembly (`@xbf`; a run writes nothing). Every other `.py`
+directly under `src/` is one part of it, a `@xbf` of its own, as the original's parts
 each were: the assembly calls it (`frame()`, `seat()`, …), so it builds in the
 assembly's run as a child, and running its own script (`python seat.py`) shows it alone,
 on a page of its own. A part called twice is one prototype placed twice. No part is a

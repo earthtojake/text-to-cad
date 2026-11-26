@@ -558,7 +558,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(script.returncode, 0, script.stderr)
         self.assertEqual(self.run_in("plate.py").returncode, 0)  # unchanged: its xbf taken whole
         # A command exports the xbf the script built: counted by the command, its warm worker no health of its.
-        command = self.run_in("-m", "cad_server.cli", "model", "export", "XBF/plate.xbf", "plate.step")
+        command = self.run_in("-m", "cad_server.cli", "xbf", "export", "XBF/plate.xbf", "plate.step")
         self.assertEqual(command.returncode, 0, command.stderr)
         self.assertEqual(self.run_in("raises.py").returncode, 1)  # the person's script: count alone
         self.assertEqual(self.run_in("dies.py").returncode, 1)  # its worker died under it: crashed
@@ -616,15 +616,15 @@ class ThroughTheDaemonTest(unittest.TestCase):
                 raise ValueError(f"broken in {__file__}")
         """), encoding="utf-8")
         run = self.run_in("-c", "import part, build123d as bd, cad\npart.part()\n"
-                                "print('SHAPE', cad.model(bd.Box(1, 2, 3), name='handed').id)\n"
+                                "print('SHAPE', cad.xbf(bd.Box(1, 2, 3), name='handed').id)\n"
                                 "try:\n    part.broken()\nexcept Exception:\n    pass\n")
         self.assertEqual(run.returncode, 0, run.stderr)
         pointer, handed = model_id(self.folder / "part.py", "part"), run.stdout.split("SHAPE ", 1)[1].split()[0]
         refused = model_id(self.folder / "part.py", "nowhere")
         for ident in (pointer, handed):
-            done = self.run_in("-m", "cad_server.cli", "model", "export", ident, str(self.folder / f"{ident}.stl"))
+            done = self.run_in("-m", "cad_server.cli", "xbf", "export", ident, str(self.folder / f"{ident}.stl"))
             self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "model", "export", refused, str(self.folder / "x.stl")).returncode, 0)
+        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "xbf", "export", refused, str(self.folder / "x.stl")).returncode, 0)
         from tests.python.packages.cad_server.engine.test_snapshot import gl
 
         try:
@@ -633,7 +633,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         except unittest.SkipTest:
             drawn = False
         if drawn:
-            done = self.run_in("-m", "cad_server.cli", "model", "snapshot", pointer, str(self.folder / "part.png"))
+            done = self.run_in("-m", "cad_server.cli", "xbf", "snapshot", pointer, str(self.folder / "part.png"))
             self.assertEqual(done.returncode, 0, done.stderr)
         spool = self.state / analytics.SPOOL
         spooled = spool.read_text(encoding="utf-8")

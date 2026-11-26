@@ -442,13 +442,13 @@ from pathlib import Path
 
 import build123d as bd
 from bd_materials import plastics
-from cad import model
+from cad import xbf
 from cad.build123d import leaves
 
 
-@model("XBF/painted.xbf")
+@xbf("XBF/painted.xbf")
 def painted():
-    parts = leaves(model.read(Path(__file__).parent / "vendor.xbf"))
+    parts = leaves(xbf.read(Path(__file__).parent / "vendor.xbf"))
     for part in parts:
         part.material = plastics.pe()
     return bd.Compound(children=parts, label="painted")

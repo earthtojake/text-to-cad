@@ -23,7 +23,7 @@ Parts
 """
 
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 from math import cos, radians, sin, tau
 
@@ -149,7 +149,7 @@ def _make_parts():
     return parts
 
 
-@model
+@xbf
 def motorcycle_wheel_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_wheel_fidget"

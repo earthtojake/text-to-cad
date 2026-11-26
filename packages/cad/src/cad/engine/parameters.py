@@ -2,10 +2,10 @@
 
 A script declares a parameter at its module's top level, and uses the number it returns::
 
-    from cad import model
+    from cad import xbf
 
-    WALL = model.param("wall", 2.0, min=1, max=5)        # a float; WALL is 2.0
-    HOLES = model.param("holes", 6, min=3, max=12)       # an integer; HOLES is 6
+    WALL = xbf.param("wall", 2.0, min=1, max=5)        # a float; WALL is 2.0
+    HOLES = xbf.param("holes", 6, min=3, max=12)       # an integer; HOLES is 6
 
 ``param`` returns its default unchanged, a plain ``int`` or ``float``: nothing of a build -- the memo's
 keys, what a body retains, a document's closure -- knows a parameter from any other number of the
@@ -122,7 +122,7 @@ def _number(value: Any, what: str) -> int | float:
 
 def param(name: str, default: int | float, *, min: int | float | None = None, max: int | float | None = None,
           step: int | float | None = None, unit: str | None = None, **unknown: Any) -> int | float:
-    """Declare a parameter of this script's models: ``WALL = model.param("wall", 2.0, min=1, max=5)``.
+    """Declare a parameter of this script's models: ``WALL = xbf.param("wall", 2.0, min=1, max=5)``.
 
     Returns ``default`` unchanged, the plain number the script goes on with. An ``int`` default declares an
     integer parameter, a ``float`` default a float one; ``min`` and ``max`` bound the values it may be

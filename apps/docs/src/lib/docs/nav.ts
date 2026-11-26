@@ -30,7 +30,7 @@ const planetary: DocModel = {
   src: "/hero/planetary.glb",
   label: "A planetary gear set turning: a sun gear, three planets on a carrier and a ring gear.",
   caption:
-    "A planetary gear set, modelled as a Python script and exported with cad model export as one GLB: its parts, their colours and the motion of its joints, baked into a clip. Drag to turn it.",
+    "A planetary gear set, modelled as a Python script and exported with cad xbf export as one GLB: its parts, their colours and the motion of its joints, baked into a clip. Drag to turn it.",
   clip: "meshCycle",
   clipSpeed: 0.25,
 };

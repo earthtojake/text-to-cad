@@ -2,14 +2,14 @@
  "usage": "cad <document_type> <operation> FILE [args...] | cad <integration> <operation> [FILE] [args...] | cad <command> [args...]",
  "documentTypes": [
   {
-   "name": "model",
-   "summary": "model",
-   "usage": "cad model <operation> ID|FILE.xbf [options]",
+   "name": "xbf",
+   "summary": "XBF",
+   "usage": "cad xbf <operation> ID|FILE.xbf [options]",
    "operations": [
     {
-     "command": "cad model export",
+     "command": "cad xbf export",
      "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
-     "usage": "cad model export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
+     "usage": "cad xbf export [--tolerance MM] [--angle DEG] [--zero STATE] [--json] SRC DST [DST ...]",
      "arguments": [
       {
        "name": "SRC",
@@ -52,9 +52,9 @@
      ]
     },
     {
-     "command": "cad model snapshot",
+     "command": "cad xbf snapshot",
      "summary": "draw it as the viewer does, into a PNG",
-     "usage": "cad model snapshot SRC OUT.png [options] | --job PACKET [SRC] [--out DIR] [options]",
+     "usage": "cad xbf snapshot SRC OUT.png [options] | --job PACKET [SRC] [--out DIR] [options]",
      "arguments": [
       {
        "name": "SRC",
@@ -167,9 +167,9 @@
      ]
     },
     {
-     "command": "cad model inspect",
+     "command": "cad xbf inspect",
      "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
-     "usage": "cad model inspect [--query {summary,structure,closure,geometry,build}] [--json] document [ref]",
+     "usage": "cad xbf inspect [--query {summary,structure,closure,geometry,build}] [--json] document [ref]",
      "arguments": [
       {
        "name": "document",
@@ -205,9 +205,9 @@
      ]
     },
     {
-     "command": "cad model dfm",
+     "command": "cad xbf dfm",
      "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
-     "usage": "cad model dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--axes AXES] [--turning] [--tools TOOLS] [--stock STOCK] [--thickness THICKNESS] [--k-factor FACTOR] [--bend-radius RADIUS] [--kerf KERF] [--sheet-size SIZE] [--pull PULL] [--wall-limit WALL_LIMIT] [--zero-tol TOL] [--cavities CAVITIES] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit ANGLE_LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--printer PRINTER] [--candidates] [--strict] [--json] SOURCE",
+     "usage": "cad xbf dfm [--process {cnc,sheet,molding,printing}] [--material MATERIAL] [--axes AXES] [--turning] [--tools TOOLS] [--stock STOCK] [--thickness THICKNESS] [--k-factor FACTOR] [--bend-radius RADIUS] [--kerf KERF] [--sheet-size SIZE] [--pull PULL] [--wall-limit WALL_LIMIT] [--zero-tol TOL] [--cavities CAVITIES] [--technology {fdm,sls,sla,mjf,pbf}] [--build-volume VOLUME] [--angle-limit ANGLE_LIMIT] [--samples SAMPLES] [--layer-height HEIGHT] [--nozzle NOZZLE] [--printer PRINTER] [--candidates] [--strict] [--json] SOURCE",
      "description": 21,
      "arguments": [
       {
@@ -403,9 +403,9 @@
      ]
     },
     {
-     "command": "cad model interference",
+     "command": "cad xbf interference",
      "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
-     "usage": "cad model interference [--pose POSE] [--fit A B A B] [--min-volume MM3] [--json] ID",
+     "usage": "cad xbf interference [--pose POSE] [--fit A B A B] [--min-volume MM3] [--json] ID",
      "arguments": [
       {
        "name": "ID",
@@ -445,9 +445,9 @@
      ]
     },
     {
-     "command": "cad model solve",
+     "command": "cad xbf solve",
      "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
-     "usage": "cad model solve [--study STUDY] [--out OUT] [--occurrence OCCURRENCE] [--deck] [--verbose] [--json] SOURCE",
+     "usage": "cad xbf solve [--study STUDY] [--out OUT] [--occurrence OCCURRENCE] [--deck] [--verbose] [--json] SOURCE",
      "description": 52,
      "arguments": [
       {
@@ -498,9 +498,9 @@
      ]
     },
     {
-     "command": "cad model ranges",
+     "command": "cad xbf ranges",
      "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
-     "usage": "cad model ranges [--step STEP] [--clearance CLEARANCE] [--joint JOINT] [--verbose] [--json] SOURCE",
+     "usage": "cad xbf ranges [--step STEP] [--clearance CLEARANCE] [--joint JOINT] [--verbose] [--json] SOURCE",
      "description": 59,
      "arguments": [
       {
@@ -3355,14 +3355,14 @@
   "two parts meant to share volume (a press-fit pin, a bearing in its bore), each a ref or a glob: their overlap is listed as a fit and is no overlap to fix. Repeatable",
   "a shared volume at or below this is none (default 0.001: the rounding along a face where two parts touch)",
   "A linear static stress study of a part or an assembly bonded where its parts touch.",
-  "the part or the assembly: a .step or .xbf, or a model's document id the engine holds (cad model solve), or the handle its call returns.",
+  "the part or the assembly: a .step or .xbf, or a model's document id the engine holds (cad xbf solve), or the handle its call returns.",
   "the study: a JSON file path, inline JSON, or (a library caller) a dict: the fixed faces, the loads (forces, pressures, gravity, acceleration), a material where the model has none, an assembly's parts and connections and the checks to judge. Without it, the setup.",
   "the folder a solve writes its results into, made when missing; a study's alone.",
   "the part whose faces the setup lists, by its name or ref, where the document holds several.",
   "also write ccx.inp, the input CalculiX solved (the finer solve's when there were two); a study's alone.",
   "say every progress line and the timings on stderr. Without it a long solve still says how far it has got about every 10 s.",
   "Each joint's stops, found from the geometry: where its parts first meet another part.",
-  "the document: a .step or .xbf, or a model's document id the engine holds (cad model ranges), or the handle its call returns.",
+  "the document: a .step or .xbf, or a model's document id the engine holds (cad xbf ranges), or the handle its call returns.",
   "the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.",
   "how near two parts' surfaces come before they count as touching, in millimetres; default 0.3, the least (where they all but touch): a larger one stops each joint where its parts first come that near; in a turn, a point nearer the axis than ten times the clearance counts as touching only within a tenth of its distance from the axis.",
   "sweep this joint alone (repeat it for several); default every joint a person moves. A name the document has no such joint by is refused, naming its joints.",

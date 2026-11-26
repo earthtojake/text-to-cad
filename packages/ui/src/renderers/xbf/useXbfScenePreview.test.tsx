@@ -20,11 +20,11 @@ it('a preview is drawn in the document\'s place, read beside its parts, and the 
   const fetch = vi.fn((_url: string, { signal }: { signal: AbortSignal }) => new Promise<Response>((_resolve, reject) => {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true });
   }));
-  const served = { url: 'https://cad.test/api/v1/documents/model/one', fetch };
+  const served = { url: 'https://cad.test/api/v1/documents/xbf/one', fetch };
   const client = { engineDocument: vi.fn().mockResolvedValue(served) };
   const part = (key: string) => ({ key, retain: vi.fn(), release: vi.fn() });
   const read = (version: string, keys: string[]) => ({
-    version, source: { url: served.url, origin: 'https://cad.test', base: 'https://cad.test', doc: 'one', kind: 'model' },
+    version, source: { url: served.url, origin: 'https://cad.test', base: 'https://cad.test', doc: 'one', kind: 'xbf' },
     structure: { instances: [{}] }, parts: new Map(keys.map(key => [key, part(key)])), look: { looked: true }, fetch,
     load: { fetched: [], kept: [], structureMs: 0, partsMs: 0, bytes: 0 }, release: vi.fn(),
   });
@@ -63,9 +63,9 @@ it('a preview that cannot be read leaves the scene on screen as it is', async ()
   const fetch = vi.fn((_url: string, { signal }: { signal: AbortSignal }) => new Promise<Response>((_resolve, reject) => {
     signal.addEventListener('abort', () => reject(signal.reason), { once: true });
   }));
-  const served = { url: 'https://cad.test/api/v1/documents/model/one', fetch };
+  const served = { url: 'https://cad.test/api/v1/documents/xbf/one', fetch };
   const client = { engineDocument: vi.fn().mockResolvedValue(served) };
-  const base = { version: 'v1', source: { url: served.url, origin: 'https://cad.test', base: 'https://cad.test', doc: 'one', kind: 'model' },
+  const base = { version: 'v1', source: { url: served.url, origin: 'https://cad.test', base: 'https://cad.test', doc: 'one', kind: 'xbf' },
     structure: { instances: [{}] }, parts: new Map(), look: {}, fetch, load: { fetched: [], kept: [], structureMs: 0, partsMs: 0, bytes: 0 }, release: vi.fn() };
   const gone = Object.assign(new Error('no such preview'), { status: 404 });
   vi.mocked(loadXbfDocument).mockResolvedValueOnce(base as never).mockRejectedValueOnce(gone);

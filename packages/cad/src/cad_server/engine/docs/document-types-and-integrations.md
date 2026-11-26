@@ -20,16 +20,16 @@ against it. `wire` is the one other spelling, the frozen
 protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the analytics schemas.
 
 **A type's object.** Each `cad/<type>/__init__.py` ends by binding its module to `DocumentType`
-(`cad._internal.document_type.bind`), the module class of every type (`ModelType` for `cad.model`, whose
+(`cad._internal.document_type.bind`), the module class of every type (`XbfType` for `cad.xbf`, whose
 `__call__` is the engine's `model` itself): `__call__` is the decorator (`cad.engine.model`'s, for a type
 with one), `read` the type's reader, and `export`, `snapshot` and `inspect` the engine's functions (`api`)
-behind a check that the source is the type's (`refuse_other`: no file of another type; for `model`, a
+behind a check that the source is the type's (`refuse_other`: no file of another type; for `xbf`, a
 handle, an id or the `.xbf` a model is saved as, and no other file; for a file's type, no handle or id):
-`cad.model`'s operations given that file read it as the file it is (`is_file`), so `model` is a model held or
-saved, one type in every layer, and `.xbf` names it (`by_extension(".xbf")`). `cad.model.read` is the reader
-of that file (`cad.engine.model.read_xbf`). `xbf`, the earlier id of that file's type, is an alias of `model`
-in the registry (`ALIASES`: `DOCUMENT_TYPES["xbf"]` is `model`'s, listed nowhere), and `cad.xbf` a module
-alias of `cad.model` (below); a mesh's `export` takes no `tolerance` or `angle`.
+`cad.xbf`'s operations given that file read it as the file it is (`is_file`), so `xbf` is a model held or
+saved, one type in every layer, and `.xbf` names it (`by_extension(".xbf")`). `cad.xbf.read` is the reader
+of that file (`cad.engine.model.read_xbf`). `model`, the earlier id of that document, is an alias of `xbf`
+in the registry (`ALIASES`: `DOCUMENT_TYPES["model"]` is `xbf`'s, listed nowhere), and `cad.xbf` a module
+alias of `cad.xbf` (below); a mesh's `export` takes no `tolerance` or `angle`.
 `dfm` is the manufacturing check's (below); `drc`, `erc` and `validate` are the type's own functions. Each attribute is resolved on first use and kept, so `cad.step.read
 is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spellings resolve through
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
@@ -71,22 +71,22 @@ parser's usage error, naming the flag; a value the function itself refuses by na
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
 reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
 its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
-...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. `model`'s
-runs take its file too, the `.xbf` a model is saved as, and `cad xbf`, the earlier id's command, runs `cad
-model` saying it is deprecated (**CLI**). An
+...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. `xbf`'s
+runs take its file too, the `.xbf` a model is saved as, and `cad model`, the earlier id's command, runs `cad
+xbf` saying it is deprecated (**CLI**). An
 integration's operations on its tool's own files are made the same way, by `cad_server.cli.integrations`
 (`INTEGRATION_COMMANDS`, `cad_server.cli.<integration>`): each generated from its function's signature,
 its file refused by name where it is a document type's (which names that type's own check), any other
 file's, or not there, and run in this process where it holds the integration, else in that integration's
 environment. A name is a type's or an integration's, never both.
 
-**The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
+**The manufacturing check.** A 3D type's `dfm` (`xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
 sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library
 makes for each type (`cad._internal.manufacturing.dfm_for`, bound by `DocumentType`), its signature the
 type's: its processes the `--process` choices (a mesh's `printing`, its default -- `cnc`, `sheet` and
 `molding` offered and refused with the reason and the fix, judged on exact geometry -- a DXF's `sheet`, its
 default), and their options alone; the operation names
-the integration that measures the type: `build123d` for `model`, `step`, `xbf` and `dxf`, `trimesh` for the meshes.
+the integration that measures the type: `build123d` for `xbf`, `step` and `dxf`, `trimesh` for the meshes.
 Its options belong to a process -- `cnc`, `sheet`, `molding`, `printing`, each a module of
 `cad._internal.dfm` with its options, its rules, findings and summary -- or to all (`material`,
 `units`), and are resolved there, the standard library alone: an option of another process, a process the
@@ -270,7 +270,7 @@ the declared process does not take, an id the engine does not hold -- comes back
 here. The families, the JSON and
 every rule are the library's `src/cad/_internal/dfm/README.md`.
 
-**The stress study.** A B-rep type's `solve` (`model`, `xbf`, `step`: the registry's `solve` operation of the
+**The stress study.** A B-rep type's `solve` (`xbf`, `step`: the registry's `solve` operation of the
 `calculix` integration) is one function the library makes for each (`cad._internal.fea.operation.solve_for`, bound by
 `DocumentType`): with no study, the study's setup, which writes nothing; with a study and `--out`, the solve.
 The options of the other use (`--out` or `--deck` with no study, `--occurrence` beside one, an `--out` that is a

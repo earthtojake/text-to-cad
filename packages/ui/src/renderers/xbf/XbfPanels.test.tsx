@@ -19,7 +19,7 @@ import { NO_EXPANSION, openRows, personsRows, shutOpenedBy, toggleRow } from '..
 import { xbfModelMenu, xbfPartMenu, xbfTangentSources, xbfTopologyMenu } from '../../../dist/renderers/xbf/xbfMenus.js';
 import { assemblyPartMenuEntries, viewportMenuEntries } from '../../../dist/renderers/xbf/xbfMenuItems.js';
 import { selectRenderer } from '../../../dist/file-viewer/registry.js';
-import { createModelRenderer } from '../../../dist/renderers/xbf/index.js';
+import { createXbfRenderer } from '../../../dist/renderers/xbf/index.js';
 import QuickEdit from '../../../dist/renderers/kit/tools/quick-edit/QuickEdit.js';
 import { ViewerHostContext } from '../../../dist/host/context.js';
 import { testHost } from '../../../dist/host/testing/host.js';
@@ -829,12 +829,12 @@ it("the view's menu offers Select tangent faces over a face or while faces are s
     .toEqual(['i3', 'i0/face/3', 'i0/face/2', 'i0/face/4', 'i0/edge/9']);
 });
 
-it('an .xbf and a STEP have the model renderer, prepared from the catalog entry', async () => {
+it('an .xbf and a STEP have the xbf renderer, prepared from the catalog entry', async () => {
   let disposed = 0;
   const client = { resolveEntry: async (path: string) => ({ file: path, kind: 'xbf' }), createRenderSession: () => ({ dispose: () => { disposed += 1; } }) } as never;
-  const xbf = createModelRenderer({ client });
+  const xbf = createXbfRenderer({ client });
   const file = (path: string) => ({ path, name: path, kind: 'file', size: 1, extension: path.split('.').at(-1), mediaType: 'cad' });
-  expect(xbf.id).toBe('model');
+  expect(xbf.id).toBe('xbf');
   for (const path of ['arm.xbf', 'arm.step', 'ARM.STP']) expect(selectRenderer([xbf], file(path) as never)).toBe(xbf);
   const prepared = await xbf.prepare({ file: file('arm.xbf'), source: {}, signal: new AbortController().signal } as never);
   prepared.dispose?.();

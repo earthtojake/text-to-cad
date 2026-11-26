@@ -40,7 +40,7 @@ from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entr
 from .documents import EngineDocuments
 from cad.registry import DOCUMENT_TYPES
 
-from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, MODEL, ROBOT_KINDS, document_api, exports_of, file_format, file_kind
+from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, XBF, document_api, exports_of, file_format, file_kind
 from .kinds import kind as current_kind
 from .projects import NoFolder, Projects, Refused, locate, public
 
@@ -237,7 +237,7 @@ _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, so
 # run, a build of it running, a build at the new values that failed (the script put back as it was).
 PARAMETER_STATUS = {"unknown_parameter": 400, "not_a_number": 400, "out_of_range": 400, "no_worker": 409,
                     "not_writable": 409, "script_changed": 409, "busy": 409, "build_failed": 409}
-# A model's: a held one's and its file's (``_MODEL_ROUTES``); an earlier kind (``xbf``) its kind's.
+# An xbf's: a held model's and its file's (``_MODEL_ROUTES``); an alias (``model``) its kind's.
 _KIND_ROUTES = {entry.wire: _MODEL_ROUTES if entry.held else _VIEW_ROUTES[entry.view] for entry in DOCUMENT_TYPES.values()}
 _KIND_ROUTES.update({named: _KIND_ROUTES[current_kind(named)] for named in KINDS if named not in _KIND_ROUTES})
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
@@ -738,7 +738,7 @@ class CadApp:
         if kind is not None and kind not in KINDS:
             raise ApiError(404, f"no kind {kind}", f"the kinds are {', '.join(KINDS)}")
         if kind is not None:
-            kind = current_kind(kind)  # ``xbf``: a model's, its file and every other
+            kind = current_kind(kind)  # ``model``: the ``xbf`` kind's, a model's, its file and every other
         if query.get("path") is not None:
             catalog, model = self._catalog(query.get("path"), None)
             found = [self._envelope(catalog, model)] if catalog["entries"] else []
@@ -775,7 +775,7 @@ class CadApp:
         row as the page shows it (``entry``) with that row's digest (``revision``, which a page that
         only watches for change compares). A document the engine serves (a model's, an ``.xbf``'s,
         a STEP's) says whether the engine holds its read now (``held``), asked without starting one. An
-        ``.xbf`` is a model's document opened from disk (kind ``model``): its ``source`` the file, no producer,
+        ``.xbf`` is a model's document opened from disk (kind ``xbf``): its ``source`` the file, no producer,
         and what that file exports (``kinds.exports_of``)."""
         from cad_server import __version__
 
@@ -784,7 +784,7 @@ class CadApp:
         if model is not None:
             source = model.get("source") or {}
             state = str(model.get("state") or "held")
-            kind = "model"
+            kind = XBF
             found = {"name": str(source.get("name") or row.get("name") or ""),
                      "version": str(model.get("version") if model.get("version") is not None else row.get("hash") or ""),
                      "state": state,
@@ -895,7 +895,7 @@ class CadApp:
 
     def kind_of(self, ident) -> str | None:
         """The kind of the document ``ident`` names (a pose's id, ``<id>~<digest>``, its document's):
-        a file's by its extension (a model's ``.xbf``, ``model``), a model's the engine holds ``model``; None for
+        a file's by its extension (a model's ``.xbf``, ``xbf``), a model's the engine holds ``xbf``; None for
         no document."""
         base = str(ident or "").split("~", 1)[0]
         if not is_id(base):
@@ -903,7 +903,7 @@ class CadApp:
         kind = self._kinds.get(base)
         if kind is None:
             path = self._file_of(base)
-            kind = file_kind(path) if path is not None else MODEL if self._holds_model(base) else None
+            kind = file_kind(path) if path is not None else XBF if self._holds_model(base) else None
             if kind is not None:
                 self._kinds[base] = kind
         return kind
@@ -921,7 +921,7 @@ class CadApp:
             raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
         if actual != current_kind(kind):
             raise ApiError(404, f"{ident} is a {actual}", f"read it at {document_api(actual, ident)}")
-        kind = actual  # an earlier kind (``xbf``) answers as the one it names now: the same bodies
+        kind = actual  # an alias (``model``) answers as the kind it names: the same bodies
         # A pose's id (``<id>~<digest>``) reads its document's file: a model's its .xbf.
         path = self._file_of(ident.split("~", 1)[0])
         if rest == ["source"] and path is not None:
@@ -960,9 +960,9 @@ class CadApp:
             return self._methods(request, {"POST": lambda: self._pose(request, response, kind, doc)})
         if rest == ["mesh"]:
             return self._methods(request, {"POST": lambda: self._relay(request, response, f"{doc}/mesh", query)})
-        if rest == ["parameters"] and kind == MODEL:
+        if rest == ["parameters"] and kind == XBF:
             return self._methods(request, {"POST": lambda: self._parameters(request, response, ident)})
-        if rest == ["preview"] and kind == MODEL:
+        if rest == ["preview"] and kind == XBF:
             return self._methods(request, {"POST": lambda: self._preview(request, response, ident)})
         if len(rest) >= 2 and rest[0] == "parts" and rest[1]:
             part = f"{doc}/part/{rest[1]}"

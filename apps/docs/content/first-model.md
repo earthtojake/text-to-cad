@@ -17,11 +17,11 @@ You do not name a skill. The agent picks the [cad skill](repo:skills/cad/SKILL.m
 
 ## What the agent writes
 
-The agent writes a Python script. A model is a function with no parameters, marked `@model`, that returns a build123d shape. Units are millimetres, with +Z up. A script such as `src/bracket.py` looks like this:
+The agent writes a Python script. A model is a function with no parameters, marked `@xbf`, that returns a build123d shape. Units are millimetres, with +Z up. A script such as `src/bracket.py` looks like this:
 
 ```python
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
 def bracket_body(width, thickness, bore):
@@ -33,7 +33,7 @@ def bracket_body(width, thickness, bore):
     return body
 
 
-@model
+@xbf
 def bracket():
     return bracket_body(40, 6, 8)
 
@@ -86,10 +86,10 @@ A run writes one file, `src/bracket.xbf` beside the script: the model's own docu
 Export the bracket as a STEP file and an STL.
 ```
 
-The agent runs `cad model export` on that file:
+The agent runs `cad xbf export` on that file:
 
 ```bash
-cad model export src/bracket.xbf STEP/bracket.step STL/bracket.stl
+cad xbf export src/bracket.xbf STEP/bracket.step STL/bracket.stl
 ```
 
 The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's **⋯** menu, beside the file's name, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 from math import degrees, cos, sin, sqrt
 
@@ -505,7 +505,7 @@ def _make_surface_decal_box(
     return _set_metadata(box, label, color)
 
 
-@model
+@xbf
 def photo_coffee_cup():
     """Return a photo-inspired takeaway coffee cup model in millimeters."""
     parts: list[object] = [

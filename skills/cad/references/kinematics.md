@@ -47,13 +47,13 @@ connected at another value, it moves there, and that value is as built.
 ```python
 # src/hinge.py
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import configuration_sequence, mechanism_state
 
 ELBOW = ((40, 0, 20), (0, -1, 0))   # the elbow's origin and direction: +angle lifts the arm
 
 
-@model
+@xbf
 def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -110,7 +110,7 @@ if __name__ == "__main__":
   `warning:` line (`sequences 0 · warnings 1`).
 - **A pair is named by its moving joint's label** (`elbow`). A label two pairs share
   takes the path of the part that holds it (`hand/left:knuckle`);
-  `cad model inspect "$ID"` lists the names a pose takes.
+  `cad xbf inspect "$ID"` lists the names a pose takes.
 - **Links are parts that move as one**: parts whose rigid joints are connected are one
   link, and a part below a jointed sub-assembly moves with it. The ground is every link
   no `connect_to` moved, and every part no joint places.
@@ -140,13 +140,13 @@ motions in the viewer.
 
 ```python
 # src/hinge_poses.py
-from cad import model
+from cad import xbf
 from cad.build123d import posed
 
 from hinge import hinge
 
 
-@model
+@xbf
 def hinge_open():
     return posed(hinge(), "open")
 ```
@@ -235,7 +235,7 @@ hinge("pin", rocker, coupler, C, connect=False)   # the loop's last joint: the c
 The document keeps every pair, and poses none of a loop's (there is no solver): a
 configuration sequence that moves one is left out with a warning, a pose that moves one
 (a `--pose`, or a mechanism state where it is drawn or checked) is refused, and
-`cad model ranges` sweeps none of them. A robot description follows the pairs from the
+`cad xbf ranges` sweeps none of them. A robot description follows the pairs from the
 ground and leaves out the pair that reaches a link a second time, the one paired last.
 The MJCF closes the loop there with an equality between two sites, one on each body where
 the joint stands (a hinge is two `connect`s, a ball one), and does not enforce that
@@ -252,8 +252,8 @@ the stops into the joint's `angular_range` or `linear_range` in the body, rounde
 run the model again.
 
 ```bash
-cad model ranges "$ID"
-cad model ranges "$ID" --joint gripper
+cad xbf ranges "$ID"
+cad xbf ranges "$ID" --joint gripper
 cad step ranges arm.step --step 0.5 --json
 ```
 
@@ -271,7 +271,7 @@ Reading a finding:
   that does not limit the hardware (a vendor's servo cover the jaw clears) is not the joint's range,
   and neither is a stop wider than the actuator's own travel: write the datasheet's travel instead.
   A stop is where surfaces come near, not where solids overlap, so it reads a little short of
-  contact (a lid that folds back flat at 180 reads 174): `cad model interference "$ID" --pose
+  contact (a lid that folds back flat at 180 reads 174): `cad xbf interference "$ID" --pose
   '{"hinge": 178}'` at and past it is the exact answer, with the joint's range widened for the test.
 - **No stop.** A turn is swept a full turn each way and a slide the document's extent; a joint clear
   that far has none (`why`: `clear all the way round`). A cylindrical or spherical joint and a joint
@@ -429,9 +429,9 @@ waypoints and sweeps like a joint's.
 A pose is drawn on demand:
 
 ```bash
-cad model snapshot "$ID" tmp/open.png --pose open
-cad model snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
-cad model snapshot "$ID" tmp/stride.png --pose walk@0.6
+cad xbf snapshot "$ID" tmp/open.png --pose open
+cad xbf snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
+cad xbf snapshot "$ID" tmp/stride.png --pose walk@0.6
 ```
 
 `--pose` takes a mechanism state's name, joint and coupling values as JSON (a turn in
@@ -446,7 +446,7 @@ as `--pose` takes it. A preset camera is fitted to each picture:
 how to hold one.
 
 ```bash
-cad model snapshot --job tmp/frames.json
+cad xbf snapshot --job tmp/frames.json
 ```
 
 ```json
@@ -461,7 +461,7 @@ configuration sequences.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. `cad model interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
+mid-motion. `cad xbf interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
 parts at each pose it is given: give it every state, and each sequence at the times that matter
 ([interference](inspection-and-validation.md#interference)). To measure one pair at a pose in a
 check script, pose the model there and take its parts with `find_part`, copied from

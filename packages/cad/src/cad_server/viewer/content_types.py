@@ -36,8 +36,8 @@ _STATIC_CONTENT_TYPES = {
 #
 # Exactly the extensions that route can emit: the cataloged formats (scanner.SOURCE_EXTENSIONS,
 # scanner.is_served_cad_asset), each with its document type's MIME type (``cad.registry``).
-# A model's .xbf is no asset: the engine serves it as a document (``scanner.SOURCE_KINDS``).
-_ASSET_CONTENT_TYPES = {extension: entry.mime for entry in DOCUMENT_TYPES.values() if entry.id != "model"
+# An .xbf is no asset: the engine serves it as a document (``scanner.SOURCE_KINDS``).
+_ASSET_CONTENT_TYPES = {extension: entry.mime for entry in DOCUMENT_TYPES.values() if entry.id != "xbf"
                         for extension in entry.extensions}
 
 

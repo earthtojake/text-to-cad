@@ -12,4 +12,4 @@ Make that hole 8 mm in diameter and leave the other three as they are. And tell 
 
 ## Expect
 
-The hole at (30, 20) has radius 4.0 and the other three 2.5 (`cad model inspect <id> 'plate/face N'` for faces 7 to 10). The reply gives the centre, (30, 20).
+The hole at (30, 20) has radius 4.0 and the other three 2.5 (`cad xbf inspect <id> 'plate/face N'` for faces 7 to 10). The reply gives the centre, (30, 20).

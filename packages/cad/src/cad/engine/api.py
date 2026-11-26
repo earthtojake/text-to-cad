@@ -15,7 +15,7 @@ document does the work and keeps what it made in memory for the next call. No ve
 source text: a script's models build when called by the script (``python model.py``), each call
 returning the document's handle (``Document``), or from Python by ``Model.build()`` (``build_script``,
 the debug seam), a ``Report``. ``hand_over`` makes a document of a shape a program holds
-(``model(shape, name=...)``). Each verb takes a handle, a document id or a file path. A build writes the model as its
+(``xbf(shape, name=...)``). Each verb takes a handle, a document id or a file path. A build writes the model as its
 joints place it, and ``export`` writes that document as it is: a posed or partial file is a
 function in the model's code. A picture, and the state a mechanism is drawn in, are
 ``snapshot``'s, never cached.
@@ -260,10 +260,10 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
     from cad.engine.animations import ANIMATIONS, Animation
 
     if not isinstance(shape, bd.Shape):
-        raise TypeError(f"model() takes a function to declare, or a build123d shape and its path or name=; "
+        raise TypeError(f"xbf() takes a function to declare, or a build123d shape and its path or name=; "
                         f"not {type(shape).__name__}")
     if shape.__dict__.get("_wrapped") is None:
-        raise ValueError(f"model(shape, name={name!r}): the shape is empty")
+        raise ValueError(f"xbf(shape, name={name!r}): the shape is empty")
     given = list(animations or [])
     if given:
         below: list[Any] = []
@@ -314,7 +314,7 @@ def write_shape(shape: Any, kind: str, out: Any, name: Any, frame: Any = None, t
 
 
 def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = None, out: Any = None) -> Document:
-    """``model(shape, name=...)``: a document made of a shape this program holds -- from a script or a
+    """``xbf(shape, name=...)``: a document made of a shape this program holds -- from a script or a
     REPL, no function, no body -- handed to the engine, which writes it as its ``.xbf``, serves its page from
     that file and exports it, and records that a program it did not run showed it: there is no command that
     builds it again. A model's document is its ``.xbf`` (law 10): at ``out`` where given, else ``<name>.xbf``,
@@ -325,10 +325,10 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     from cad.engine.ids import canonical, check_name, file_id
 
     if getattr(declaring._CONTEXT, "build", None) is not None:
-        raise TypeError("model(shape, name=...) hands a shape over from a script or a REPL; a model's body returns "
+        raise TypeError("xbf(shape, name=...) hands a shape over from a script or a REPL; a model's body returns "
                         "its shape, and calls its children")
     if name is None and out is None:
-        raise TypeError("model(shape, 'path.xbf'): a shape handed over takes its path, or name=")
+        raise TypeError("xbf(shape, 'path.xbf'): a shape handed over takes its path, or name=")
     if name is None:  # named by its file, as a file of a shape is (``write_shape``)
         name = Path(os.fspath(out)).stem
     check_name(name)
@@ -1059,7 +1059,7 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
     name (``refs.RefError``). No query builds a missing model or writes its declared
     outputs. ``query="build"`` returns file metadata/closure or live build metadata;
     ``query="geometry"`` requires a ref, and ``query="closure"`` accepts none.
-    ``query="summary"`` (``cad model inspect DOC`` with no ref) is ``{"summary", "closure"}``:
+    ``query="summary"`` (``cad xbf inspect DOC`` with no ref) is ``{"summary", "closure"}``:
     what the document holds at a glance (``_summary``), and its closure, as the engine holds it; of
     a GLB, ``{"mesh"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).
     ``query="structure"`` is the summary without bounds, volume or mass and requests no measurements.
@@ -1269,7 +1269,7 @@ def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any], ident: str,
              progress: Callable[[dict], None] | None = None, *, measured: bool = True) -> dict[str, Any]:
-    """What a served document holds, at a glance (``cad model inspect DOC``): its name and id; its
+    """What a served document holds, at a glance (``cad xbf inspect DOC``): its name and id; its
     state -- a model's a live worker holds (``live``, ``building``, ``failed``: ``Models.state``), or ``file``
     for a document read from its file; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the

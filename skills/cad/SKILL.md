@@ -18,17 +18,17 @@ Files are exports, written when asked.
 | Task | Start with | Reference |
 | --- | --- | --- |
 | Create or edit a part or assembly | A model script ([below](#write-a-model-and-run-it)) | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
-| Let the person tune a number (a wall, a fit, a count) | `model.param(...)` at the script's top level; change a value by editing its number and running the script | [Parameters](references/model-contract.md#parameters-a-person-tunes) |
+| Let the person tune a number (a wall, a fit, a count) | `xbf.param(...)` at the script's top level; change a value by editing its number and running the script | [Parameters](references/model-contract.md#parameters-a-person-tunes) |
 | Organize a project | Its existing layout | [Project layout](references/project-layout.md) |
-| Export STEP, STL, 3MF or GLB | `cad model export src/bracket.xbf <file>` | [Exports](references/exports.md) |
+| Export STEP, STL, 3MF or GLB | `cad xbf export src/bracket.xbf <file>` | [Exports](references/exports.md) |
 | A 2D profile, flat pattern or DXF | A model that returns 2D geometry on z=0, exported as `.dxf` | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
 | Use a vendor STEP, an xbf or a scan | `step.read`, `model.read` or `stl.read` in the body | [Inputs](references/model-contract.md#inputs) |
-| Resolve a reference or a Quick Edit prompt | `cad model inspect <id> '<ref>'` | [References](references/inspection-and-validation.md#references) |
+| Resolve a reference or a Quick Edit prompt | `cad xbf inspect <id> '<ref>'` | [References](references/inspection-and-validation.md#references) |
 | Measure or check geometry | A check script that calls the model | [Inspection](references/inspection-and-validation.md) |
-| See a model, a view or a pose | `cad model snapshot <id> out.png` | [Snapshots](references/snapshot-review.md) |
-| Articulate a mechanism, find joint limits | build123d joints in the body; `cad model ranges <id>` | [Kinematics](references/kinematics.md) |
+| See a model, a view or a pose | `cad xbf snapshot <id> out.png` | [Snapshots](references/snapshot-review.md) |
+| Articulate a mechanism, find joint limits | build123d joints in the body; `cad xbf ranges <id>` | [Kinematics](references/kinematics.md) |
 | Explode, reveal or showcase a model | `animation()` in the body | [Animation](references/animation.md) |
-| Can it be machined, bent, molded or printed? | `cad model dfm <id> --process ...` | [Can it be made?](#can-it-be-made) |
+| Can it be machined, bent, molded or printed? | `cad xbf dfm <id> --process ...` | [Can it be made?](#can-it-be-made) |
 | Open an existing CAD file | Show it | [Show the model](#show-the-model) |
 
 Whether a part holds under load is the fea skill's; a robot description, the robot-simulation skill's.
@@ -57,7 +57,7 @@ directory.
 
 ```python
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
 def bracket_body(width, thickness, bore):
@@ -67,12 +67,12 @@ def bracket_body(width, thickness, bore):
     return body
 
 
-@model
+@xbf
 def bracket():
     return bracket_body(40, 6, 8)
 
 
-@model
+@xbf
 def bracket_wide():
     return bracket_body(60, 6, 8)
 
@@ -99,7 +99,7 @@ id is that of the `.xbf` the run saves it as, so it is the same on every run: us
 every command, and give the person the page once ([Show the model](#show-the-model)).
 
 - **A model function takes no arguments.** Dimensions are arguments of a plain helper, and each
-  configuration is a `@model` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
+  configuration is a `@xbf` of its own. Calling one returns a handle: `.id`, `.url`, `.shape`, `.export(...)`.
 - **Running the script is the rebuild**, and it saves each model as `<name>.xbf` beside it. The
   server replays whatever an edit did not reach, so reruns are cheap; `@memo` marks a stage of seconds of kernel work, or a body several models share
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Keep the calls under
@@ -125,12 +125,12 @@ file takes the operations its own type lists (`cad step|stl|threemf|glb|dxf --he
 
 | Command | Gives |
 | --- | --- |
-| `cad model inspect "$ID" ['<ref>']` | The document's parts, bounds, volume, mass and joints; with a ref, one part, face or edge as JSON, with `made_by`: the function, file and line that made it |
-| `cad model snapshot "$ID" out.png` | A picture, drawn as the viewer draws it: `--camera top`, `--display hidden-line`, `--pose open`, `--preview` (lit, for a person) |
-| `cad model export src/bracket.xbf a.step b.stl c.glb` | Files, by suffix, from the model's `.xbf`; nothing rebuilds ([exports](references/exports.md)) |
-| `cad model interference "$ID" [--pose P]` | Every pair of parts that shares volume, exactly, as built and at each pose |
-| `cad model dfm "$ID" --process ...` | A manufacturing check ([Can it be made?](#can-it-be-made)) |
-| `cad model ranges "$ID"` | Each joint's stops, swept from the parts ([joint stops](references/kinematics.md#joint-stops)) |
+| `cad xbf inspect "$ID" ['<ref>']` | The document's parts, bounds, volume, mass and joints; with a ref, one part, face or edge as JSON, with `made_by`: the function, file and line that made it |
+| `cad xbf snapshot "$ID" out.png` | A picture, drawn as the viewer draws it: `--camera top`, `--display hidden-line`, `--pose open`, `--preview` (lit, for a person) |
+| `cad xbf export src/bracket.xbf a.step b.stl c.glb` | Files, by suffix, from the model's `.xbf`; nothing rebuilds ([exports](references/exports.md)) |
+| `cad xbf interference "$ID" [--pose P]` | Every pair of parts that shares volume, exactly, as built and at each pose |
+| `cad xbf dfm "$ID" --process ...` | A manufacturing check ([Can it be made?](#can-it-be-made)) |
+| `cad xbf ranges "$ID"` | Each joint's stops, swept from the parts ([joint stops](references/kinematics.md#joint-stops)) |
 | `cad step export vendor.step vendor.xbf` | A vendor STEP as an xbf, which `model.read` loads many times faster |
 
 `--tolerance MM` and `--angle DEG` mesh an STL, a 3MF or a GLB finer (a print with fits, a close
@@ -138,15 +138,15 @@ render) and apply to nothing else: an export that takes them names only mesh fil
 DXF beside them refuses the whole export.
 
 ```bash
-cad model export src/bracket.xbf STEP/bracket.step GLB/bracket.glb
-cad model export src/bracket.xbf STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
+cad xbf export src/bracket.xbf STEP/bracket.step GLB/bracket.glb
+cad xbf export src/bracket.xbf STL/bracket.stl 3MF/bracket.3mf --tolerance 0.02
 ```
 
 A reference such as `0dc50a92-...#bracket/face 7` is what the viewer copies when the person picks
 something: a document, a part by its labels, then an element. Resolve it with `inspect`, then edit the
 code `made_by` names. A Quick Edit prompt carries its document under `File:`, its picks under
 `References:` and a snapshot packet, inline JSON. Where the person drew on the view, look at what they
-drew before editing: `cad model snapshot --job '<packet>'` draws each view with their ink
+drew before editing: `cad xbf snapshot --job '<packet>'` draws each view with their ink
 ([annotations](references/snapshot-review.md#annotations-and-quick-edit-views)). A cad.fun
 link names a shared model: `cad import LINK` writes its files into a folder; work on those.
 
@@ -157,9 +157,9 @@ first thing to fix. Then check the change the way it can be checked:
 
 | The change | Check it with |
 | --- | --- |
-| A number the person gave (a size, a distance, a volume) | An assert in the model's body on what the geometry measures, or `cad model inspect` |
+| A number the person gave (a size, a distance, a volume) | An assert in the model's body on what the geometry measures, or `cad xbf inspect` |
 | A number the design implies (a clearance, a fit, a mass) | A check script that calls the model and measures what it returns ([inspection](references/inspection-and-validation.md)) |
-| An assembly's parts or a joint's travel | `cad model interference "$ID"`, with a `--pose` for each mechanism state |
+| An assembly's parts or a joint's travel | `cad xbf interference "$ID"`, with a `--pose` for each mechanism state |
 | Shape, placement, colour, a mechanism | The snapshots it takes to judge it, posed where it moves |
 | A 2D profile or DXF | The export, which runs the drawing checks, then `cad dxf snapshot` of the file |
 | A part made by a named process | Its manufacturing check ([below](#can-it-be-made)) |
@@ -181,7 +181,7 @@ first thing to fix. Then check the change the way it can be checked:
 
 ## Can it be made?
 
-`cad model dfm` says whether a part can be made by a process and what to change where it cannot. Run
+`cad xbf dfm` says whether a part can be made by a process and what to change where it cannot. Run
 it when the request names or implies a process (machined, sheet metal or laser cut, injection molded,
 3D printed, or a printer, resin, filament or cutting service named), or the person asks. A material
 alone names no process, but a thickness with a metal ("2 mm steel") is sheet. With none, build what was asked: no check, and no draft, reliefs or tool radii
@@ -195,7 +195,7 @@ added.
 | 3D printing | `--process printing --technology T` (`--material`, `--build-volume`, `--layer-height`) | [3D printing](references/manufacturing-printing.md) |
 
 ```bash
-cad model dfm "$ID" --process cnc --material aluminum --tools 3,6,10
+cad xbf dfm "$ID" --process cnc --material aluminum --tools 3,6,10
 ```
 
 A named process is part of the design, not a review at the end:
@@ -204,7 +204,7 @@ A named process is part of the design, not a review at the end:
 2. Record the process in the model, so every later check is the same one: the material with its
    process on each part (`part.material = metals.aluminum(process=machined())`, with `machined` from
    `bd_materials.processes`), and the shop's flags in the module docstring
-   (`Check: cad model dfm "$ID" --tools 3,6,10`).
+   (`Check: cad xbf dfm "$ID" --tools 3,6,10`).
 3. Run that check after every run. The last line and the exit status are the result: `OK` (0, though
    warnings may remain), `FAILED` (1: the part cannot be made as drawn), `NOT CHECKED` (3: something
    was not judged, never a pass) and 2 for a refused command. Fix errors from each finding's `refs`,

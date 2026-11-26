@@ -8,7 +8,7 @@
     "listChanged": false
    }
   },
-  "instructions": "CAD shows local CAD models (XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic) in a viewer tab beside the chat. To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see. To export a model, inspect it or snapshot it for yourself, run `cad model export <id> <file>`, `cad model inspect <id>` or `cad model snapshot <id> out.png` in a shell (a file: `cad <type> ...` with its path, as `cad step inspect part.step`).",
+  "instructions": "CAD shows local CAD models (XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic) in a viewer tab beside the chat. To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see. To export a model, inspect it or snapshot it for yourself, run `cad xbf export <id> <file>`, `cad xbf inspect <id>` or `cad xbf snapshot <id> out.png` in a shell (a file: `cad <type> ...` with its path, as `cad step inspect part.step`).",
   "protocolVersion": "2025-06-18",
   "serverInfo": {
    "icons": [

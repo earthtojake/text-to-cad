@@ -1,9 +1,9 @@
-from cad import model
+from cad import xbf
 
 from lib.logo_shape import make_logo
 
 
-@model
+@xbf
 def logo_texttocad():
     # "TO" (letters 5 and 6) is the lighter blue.
     return make_logo("TEXTTOCAD", lighter=(4, 5))

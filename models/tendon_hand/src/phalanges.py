@@ -11,7 +11,7 @@ place `continuous_supports()`, a `@memo` stage (about 20 s of kernel work), clip
 
 import copy
 
-from cad import memo, model
+from cad import memo, xbf
 from cad.ap242 import gear_pair, mechanism_state
 
 import build123d as bd
@@ -73,7 +73,7 @@ def _fasten(link, part):
     bd.RigidJoint(part.label, part, part.location)
 
 
-@model
+@xbf
 def anatomy_layout():
     """Neutral anatomy integration study. This is not the complete hand assembly.
 
@@ -147,7 +147,7 @@ def anatomy_layout():
     return hand
 
 
-@model
+@xbf
 def phalanx_review():
     """Three actual middle-finger phalanges, laid out with joint clearance."""
     return bd.Compound(label="skeletal_phalanx_family", children=[
@@ -157,7 +157,7 @@ def phalanx_review():
     ])
 
 
-@model
+@xbf
 def phalanx_variants_review():
     """Every actual hand phalanx, in five rows from index through thumb."""
     children = []
@@ -171,19 +171,19 @@ def phalanx_variants_review():
     return bd.Compound(label="all_actual_phalanx_variants", children=children)
 
 
-@model
+@xbf
 def phalanx_continuous_r5():
     """The continuous-waist middle proximal phalanx, candidate R5."""
     return make_continuous_phalanx(45, 18, label="middle_proximal_frame")
 
 
-@model
+@xbf
 def phalanx_continuous_supports_r5():
     """The R5 rail's matched guide supports, in the assembled neutral fan."""
     return continuous_supports()
 
 
-@model
+@xbf
 def phalanx_continuous_representative_r5():
     """The continuous rail, as STEP gives it back, with its actual guide supports."""
     host = finish(_middle_place() * warm_host(), "aluminum", "middle_proximal_frame")
@@ -191,7 +191,7 @@ def phalanx_continuous_representative_r5():
                        children=[host, *[copy.copy(s) for s in _leaves(continuous_supports())]])
 
 
-@model
+@xbf
 def fingertip_pad_review():
     """Five mounted pads at real scale, plus an isolated index pad macro specimen."""
     parts = []
@@ -203,25 +203,25 @@ def fingertip_pad_review():
     return bd.Compound(label="five_anatomical_fingertip_pad_mounts", children=parts)
 
 
-@model
+@xbf
 def fingertip_pad_export_repair():
     """Export-stable fingertip pads and their actual mounting hardware."""
     return bd.Compound(label="export_stable_fingertip_pad_systems", children=[s for s, *_ in fingertip_pad_bodies()])
 
 
-@model
+@xbf
 def fingertip_bridge_repair_review():
     """Five mounting bridge export repairs; silicone and all hardware are retained."""
     return bd.Compound(label="fingertip_bridge_export_repair", children=[s for s, *_ in bridge_bodies()])
 
 
-@model
+@xbf
 def fingernail_export_repair_review():
     """Export-stable dorsal nail systems with their unchanged mounting datums."""
     return bd.Compound(label="export_stable_dorsal_nail_systems", children=[s for s, *_ in fingernail_bodies()])
 
 
-@model
+@xbf
 def fingernail_review():
     """Actual assembled terminal fingers: host, palmar pad, dorsal nail, hardware."""
     parts = [p for p, f, s, k in fingernail_bodies()] + [p for p, f, s, k in fingertip_pad_bodies()]

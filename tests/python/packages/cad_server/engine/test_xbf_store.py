@@ -260,8 +260,8 @@ class XbfStoreTest(store_fixtures.StoreCase):
     def test_a_step_alone_writes_its_file_alone_says_so_and_builds_again_after_a_restart(self) -> None:
         (self.project / "plate.py").write_text(textwrap.dedent(STEPPED.format(width=4)), encoding="utf-8")
         declared = self.project / "plate.step"
-        warning = ("warning: plate saves no .xbf (no @model): once the CAD server restarts, its next run builds it again "
-                   "from scratch; add @model to save it")
+        warning = ("warning: plate saves no .xbf (no @xbf): once the CAD server restarts, its next run builds it again "
+                   "from scratch; add @xbf to save it")
         done = self.run_script("plate")
         self.assertIn("the body ran", done.stderr)
         self.assertIn(warning, done.stdout)
@@ -280,7 +280,7 @@ class XbfStoreTest(store_fixtures.StoreCase):
         cold = self.run_script("plate")
         self.assertIn("the body ran", cold.stderr)
         self.assertIn(warning, cold.stdout)
-        # With @model, no warning.
+        # With @xbf, no warning.
         self.write("cube")
         self.assertNotIn("warning:", self.run_script("cube").stdout)
 

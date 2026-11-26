@@ -183,7 +183,7 @@ class PackageScriptTest(unittest.TestCase):
         helper.write_text("WIDTH=1\n", encoding="utf-8")
         editable.write_text("HEIGHT=1\n", encoding="utf-8")
         script, xbf = self.root / "body.py", self.root / "XBF" / "body.xbf"
-        script.write_text("import build123d as bd\nfrom cad import model\n@model('XBF/body.xbf')\n"
+        script.write_text("import build123d as bd\nfrom cad import xbf\n@xbf('XBF/body.xbf')\n"
                           "def body():\n    from body_helper import WIDTH\n    from body_editable import HEIGHT\n"
                           "    return bd.Box(WIDTH,HEIGHT,1)\n", encoding="utf-8")
 
@@ -428,16 +428,16 @@ class LibraryRootsTest(unittest.TestCase):
         prefix, site = root / "proj", root / "proj" / "lib" / "python3" / "site-packages"
         write(root, {"proj/pyvenv.cfg": "include-system-site-packages = false\n", "proj/work/helpers.py": "WIDTH = 3\n",
                      "proj/lib/python3/site-packages/installed.py": "",
-                     "proj/lib/python3/site-packages/shipped.py": "import build123d as bd\nfrom cad import model\n"
-                                                                  "@model\ndef shipped():\n    return bd.Box(1, 1, 1)\n",
+                     "proj/lib/python3/site-packages/shipped.py": "import build123d as bd\nfrom cad import xbf\n"
+                                                                  "@xbf\ndef shipped():\n    return bd.Box(1, 1, 1)\n",
                      "proj/work/block.py": """
             import build123d as bd
-            from cad import model
+            from cad import xbf
 
             import helpers
 
 
-            @model
+            @xbf
             def block():
                 return bd.Box(helpers.WIDTH, 2, 1)
         """})

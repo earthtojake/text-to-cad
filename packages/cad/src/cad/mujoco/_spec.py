@@ -9,7 +9,7 @@ the same bodies, joints, classes, equalities and keys the ``.xml`` export holds,
 ``thing`` is what a program holds of a document: a ``.xml`` or ``.mjcf`` path (an authored model, a
 Menagerie robot, an export), a ``.step``/``.stp`` or an ``.xbf`` path (the document it holds), a model
 call's handle (``api.Document``: the document the engine holds, transferred into this process), or a
-build123d shape, in a build or outside one (made a document here as ``model(shape, name=...)`` makes
+build123d shape, in a build or outside one (made a document here as ``xbf(shape, name=...)`` makes
 one, and never handed to the engine). An undecorated function, a ``Model`` not called, a mesh file and
 anything else is refused by name.
 
@@ -20,7 +20,7 @@ so the saved scene finds nothing the child's folder held: a Menagerie robot read
 and texture by its absolute path and clears the spec's own folders (``meshdir``, ``texturedir``,
 ``modelfiledir``), for an MJCF path as for a document: a scene composed from them compiles, and saved
 anywhere on this computer loads again. The price is that the saved scene's paths are this computer's;
-a robot meant to travel as a folder is an export (``cad model export <id> robot/robot.xml``, meshes
+a robot meant to travel as a folder is an export (``cad xbf export <id> robot/robot.xml``, meshes
 relative beside it) that the scene ``<include>``s or attaches without saving.
 
 MuJoCo reads a mesh's file when the spec is compiled, not when it is made, so a document's files must
@@ -185,7 +185,7 @@ class _source:
                         f"not {type(thing).__name__}")
 
     def _shape(self, shape: Any, name: str) -> Any:
-        """A shape made a document in this process, as ``model(shape, name=...)`` makes one (``api._handed_bytes``),
+        """A shape made a document in this process, as ``xbf(shape, name=...)`` makes one (``api._handed_bytes``),
         and read back from those bytes: the engine is not asked."""
         from cad.engine import api
         from cad.engine.export import Source

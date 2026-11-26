@@ -19,7 +19,7 @@ pivots are passive differential joints and are not counted as actuators.
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 from dataclasses import asdict, dataclass
 from math import sqrt
@@ -637,7 +637,7 @@ def design_metrics() -> dict[str, object]:
     }
 
 
-@model
+@xbf
 def compact_humanoid() -> object:
     """Return the labeled build123d assembly."""
 

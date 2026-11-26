@@ -83,7 +83,7 @@ export async function runHeadlessRenderJob(job) {
   if (family) {
     return captureFamilyScene(family, job);
   }
-  // A STEP is drawn as the engine document it opens as (`resolved.kind` "model").
+  // A STEP is drawn as the engine document it opens as (`resolved.kind` "xbf").
   throw new Error(`a snapshot job draws a DXF or a file family (GLB, STL, 3MF, URDF, SRDF, an engine document), `
     + `not ${JSON.stringify(String(job?.resolved?.kind || job?.kind || ""))}: a STEP is drawn as the engine document it opens as`);
 }

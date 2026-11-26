@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from math import asin, cos, hypot, radians, sin, tau
 
 import build123d as bd
@@ -182,7 +182,7 @@ def _blade_root_edges(part):
     return edges
 
 
-@model
+@xbf
 def centrifugal_impeller():
     """Return a single solid centrifugal impeller in millimeters."""
     total_height = BACKPLATE_THICKNESS + HUB_HEIGHT_ABOVE_BACKPLATE

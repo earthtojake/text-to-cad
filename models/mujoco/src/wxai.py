@@ -21,7 +21,7 @@ from pathlib import Path
 import build123d as bd
 from bd_materials import FinishedMaterial, metals, plastics
 from bd_materials.core import RangeMaterial
-from cad import model, step
+from cad import xbf, step
 from cad.build123d import frame, limits, mechanism_state
 from threejs_materials import PbrProperties
 
@@ -204,7 +204,7 @@ def own(part: bd.Shape, world: bd.Location) -> bd.Location:
     return part.location.inverse() * world
 
 
-@model
+@xbf
 def wxai():
     parts = read_parts()
 

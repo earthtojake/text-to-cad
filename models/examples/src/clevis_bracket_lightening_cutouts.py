@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from math import cos, radians, sin
 
 import build123d as bd
@@ -113,7 +113,7 @@ def _subtract_rounded_triangle(vertices: list[tuple[float, float]]):
     bd.extrude(cutout.sketch, amount=BASE_THICKNESS + 2.0, mode=bd.Mode.SUBTRACT)
 
 
-@model
+@xbf
 def clevis_bracket_lightening_cutouts():
     """Return the clevis bracket model in millimeters."""
     positive_lug_y_min = LUG_GAP_Y / 2.0 + LUG_THICKNESS_Y

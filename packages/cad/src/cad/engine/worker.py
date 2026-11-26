@@ -679,7 +679,7 @@ def _result(request: dict[str, Any]) -> tuple[dict[str, Any], bytes]:
               "shapes": [[key, len(part)] for key, part in zip(keys, data)],
               "placements": [[list(path), matrix] for path, matrix in source.locals().items()]}
     if request.get("whole"):
-        # A check's: the whole document as the xbf bytes ``@model('….xbf')`` writes, after the shapes -- for
+        # A check's: the whole document as the xbf bytes ``@xbf('….xbf')`` writes, after the shapes -- for
         # one taken from its .xbf, the bytes it was taken with (a read is never written).
         from cad.engine import document
 

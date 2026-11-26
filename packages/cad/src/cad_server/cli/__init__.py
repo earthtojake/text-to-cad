@@ -2,7 +2,7 @@
 
 Three kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
-(``cad_server.cli.document_types``: ``cad step export``, ``cad stl snapshot``, ``cad urdf validate``; ``cad model``
+(``cad_server.cli.document_types``: ``cad step export``, ``cad stl snapshot``, ``cad urdf validate``; ``cad xbf``
 takes a model's document id, or the ``.xbf`` file a model is saved as). An
 integration's, for its tool's own files, which are no document type, which cad checks or writes and never
 shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
@@ -77,11 +77,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
 # Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their
 # updaters (`cad setup`) -- and gone with the bridge. And commands for programs, not people: `serve` (a document served
 # over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs). And a
-# type's earlier id (``cad.registry.ALIASES``): `cad xbf`, which runs `cad model` and says so (``cad_server.cli.xbf``).
+# type's alias (``cad.registry.ALIASES``): `cad xbf`, which runs `cad xbf` (``cad_server.cli.model``).
 _UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement", *ALIASES})
 
 # Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``); and a
-# type's earlier id, which runs its type's command saying it is deprecated, unlisted.
+# type's alias, which runs its type's command, unlisted.
 TYPE_COMMANDS: dict[str, str] = {**{document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES},
                                  **{alias: f"cad_server.cli.{alias}" for alias in ALIASES}}
 
@@ -106,7 +106,7 @@ def _command_lines(names) -> str:
 
 
 def _type_lines() -> str:
-    """The document types, grouped: each with its operations and what it is (``cad.registry``); ``model`` a
+    """The document types, grouped: each with its operations and what it is (``cad.registry``); ``xbf`` a
     document id the engine holds, or its file."""
     from cad_server.cli.document_types import operations_of
 
@@ -152,7 +152,7 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
     if argv[:1] and argv[0] in TYPE_COMMANDS:
         from cad_server.cli.document_types import OPERATIONS
 
-        named = ALIASES.get(argv[0], argv[0])  # an earlier id as the command it runs
+        named = ALIASES.get(argv[0], argv[0])  # an alias as the command it runs
         if len(argv) > 1 and (named, argv[1]) in OPERATIONS:
             return f"{named} {argv[1]}", argv[2:]
         return None

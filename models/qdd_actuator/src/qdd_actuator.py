@@ -35,7 +35,7 @@ from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
 
 
-from cad import model
+from cad import xbf
 from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
 from cad.gltf import animation
 
@@ -1208,7 +1208,7 @@ def _clips(actuator: bd.Compound) -> None:
     _explode_animation(actuator, "teardown", 10, keep_mesh=False, drive=False)
 
 
-@model
+@xbf
 def qdd_actuator():
     return build_actuator(explode=0.0)
 

@@ -1,7 +1,7 @@
 # w16 models
 
 `models/w16` on cad: a quad-turbo 8.0 L W16, a sectioned museum cutaway with
-working kinematics. `w16.py` is the one model (`@model`; a run writes nothing):
+working kinematics. `w16.py` is the one model (`@xbf`; a run writes nothing):
 
 | Script | Model | What it is |
 | --- | --- | --- |
@@ -9,12 +9,12 @@ working kinematics. `w16.py` is the one model (`@model`; a run writes nothing):
 | `block.py` ... `ancillaries.py` (13) | nothing | One system each, a `@memo` stage the engine calls in its body |
 
 Build from this folder: `cad run w16.py`. The GLB is exported on demand
-(`cad model export "$ID" GLB/w16.glb`, the id the run prints), its three clips baked.
+(`cad xbf export "$ID" GLB/w16.glb`, the id the run prints), its three clips baked.
 
 ```
 cad run w16.py
-cad model snapshot "$ID" w16.png
-cad model export "$ID" STEP/w16.step
+cad xbf snapshot "$ID" w16.png
+cad xbf export "$ID" STEP/w16.step
 ```
 
 ## How it is built

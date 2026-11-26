@@ -22,12 +22,12 @@ one (an export is a download of a new file, and nothing in the viewer deletes a 
 viewer tool (Select, Measure, Draw, Quick Edit, the filters and displays) exists to show the
 person the design and to give the agent feedback. The exception is a model's **Params** tab
 ([Parameters](docs/viewer-ux.md#parameters)): its Save asks the engine to set the named numbers
-the model's script declares (`client.setModelParameters`, `POST /api/v1/documents/model/<id>/parameters`),
+the model's script declares (`client.setModelParameters`, `POST /api/v1/documents/xbf/<id>/parameters`),
 the one way the engine writes them. The engine, not the page, rewrites each number in
 the script where its last run recorded it, after checking the script is the one that ran, and builds
 the model again; the page then reads the rebuilt document as it reads any new version. Before a Save,
 the view draws the model at the drafts (`client.previewModelParameters`,
-`POST /api/v1/documents/model/<id>/preview`): the engine builds it for this page alone and writes
+`POST /api/v1/documents/xbf/<id>/preview`): the engine builds it for this page alone and writes
 nothing, and the preview is never the document (what Export, a snapshot, another page or the agent
 reads). Nothing else in the viewer changes a design: no other control writes a script, a document or a
 file, and a document read from a file (an `.xbf`) shows its parameters read-only. A host whose client
@@ -116,7 +116,7 @@ src/
   search/            the search of every document (⌘K), over a document and the home
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
-    xbf/            the model renderer (id `model`; `xbf` an alias): a model, held or its .xbf, and a STEP: model tree, Params, Joints
+    xbf/            the xbf renderer (id `xbf`): a model, held or its .xbf, and a STEP: model tree, Params, Joints
     robot/          URDF and SRDF: Links and Joints
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
@@ -153,14 +153,14 @@ import { createDxfRenderer } from '@cad/ui/renderers/dxf';
 import { createGlbRenderer } from '@cad/ui/renderers/glb';
 import { createMeshRenderer } from '@cad/ui/renderers/mesh';
 import { createRobotRenderer } from '@cad/ui/renderers/robot';
-import { createModelRenderer } from '@cad/ui/renderers/xbf';
+import { createXbfRenderer } from '@cad/ui/renderers/xbf';
 import '@cad/ui/tokens.css';
 import '@cad/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
 const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }),
   createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences }),
-  createModelRenderer({ client, preferences })];
+  createXbfRenderer({ client, preferences })];
 // The host supplies storage, actions, navigation and environmental ports.
 <FileViewer file={selectedFile} host={host} renderers={renderers}
   state={state} onStateChange={setState} />;

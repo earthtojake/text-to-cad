@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 import build123d as bd
 
 from lib.part_common import safe_fillet
@@ -64,7 +64,7 @@ def _transition_edges(part):
     return edges
 
 
-@model
+@xbf
 def l_bracket():
     """Return the L-bracket model in millimeters."""
     with bd.BuildPart() as bracket:

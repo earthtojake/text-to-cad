@@ -171,7 +171,7 @@ the share, so that a shared page's prompt reads here as a local page's does:
 - **else** -- neither, or an import whose file is gone -- it is refused in one line, ``<link> is a shared model this
   computer has no copy of: run `cad import <link>`.`` (`not_found`, exit 2, with `next`).
 
-A selector after the link, `<link>#<selector>`, is the same in the copy as in the share: `cad model inspect
+A selector after the link, `<link>#<selector>`, is the same in the copy as in the share: `cad xbf inspect
 'https://cad.fun/<id>#head_shell/f:...'`. A link of another origin, or a files' link (`.zip`), is no document's name.
 Nothing of it goes through the engine's knowledge of a model: the library's entries are this computer's own.
 

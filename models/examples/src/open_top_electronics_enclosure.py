@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 import build123d as bd
 
 
@@ -21,7 +21,7 @@ STANDOFF_HOLE_DEPTH = 8.0
 STANDOFF_LOCATIONS = ((-35.0, -25.0), (-35.0, 25.0), (35.0, -25.0), (35.0, 25.0))
 
 
-@model
+@xbf
 def open_top_electronics_enclosure():
     """Return the open-top electronics enclosure model in millimeters."""
     inner_length = OUTER_LENGTH - 2.0 * WALL_THICKNESS

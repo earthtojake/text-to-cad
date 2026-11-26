@@ -78,10 +78,10 @@ OURS, OLD_OURS = f"{PLUGIN}@{CATALOG}", f"{PLUGIN}@{OLD_CATALOG}"
 PLUGIN_SWITCH = "plugin update auto: on"
 GITHUB = f"https://github.com/{rc.REPOSITORY}"
 CI = rc.CI
-BOX = '''from cad import model
+BOX = '''from cad import xbf
 
 
-@model
+@xbf
 def box():
     import build123d as bd
 

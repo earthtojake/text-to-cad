@@ -43,7 +43,7 @@ from __future__ import annotations
 import math
 import re
 
-from cad import model
+from cad import xbf
 from cad.gltf import animation
 
 import build123d as bd
@@ -230,7 +230,7 @@ def _teardown_animation(aircraft, groups: dict, name: str, duration: float, expl
         show.channel(refs, path="translation", keys=keys, interpolation="LINEAR")
 
 
-@model
+@xbf
 def f14d():
     groups = [system() for system in SYSTEMS]
     aircraft = bd.Compound(children=groups, label="f14d_super_tomcat")

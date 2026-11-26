@@ -1,11 +1,11 @@
 """A two-joint arm as a vendor ships it: three solids in one assembly, placed as built, and no joints."""
 import build123d as bd
-from cad import model
+from cad import xbf
 
 MIN = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 
 
-@model
+@xbf
 def vendor_arm():
     base = bd.Cylinder(30, 20, align=MIN)
     base.label = "RA2-BASE-01"

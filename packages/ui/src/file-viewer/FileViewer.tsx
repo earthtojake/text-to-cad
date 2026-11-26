@@ -91,7 +91,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     if (mayTakeKeyboard(element.ownerDocument, element.ownerDocument.defaultView as Window)) element.focus({ preventScroll: true });
   }, [ready, key, appearance.compact]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
-  // A view saved under an id the renderer had before (`aliases`: the model renderer's `xbf`) is its own.
+  // A view saved under an id the renderer had before (`aliases`) is its own.
   const aliasStateKeys = loaded.status === "ready" ? (loaded.renderer.aliases ?? []).map(id => JSON.stringify([loaded.file.path, id])) : [];
 
   // The renderer is re-rendered only when what it is handed changes: not by a navbar action it

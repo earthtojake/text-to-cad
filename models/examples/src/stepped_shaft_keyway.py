@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 import build123d as bd
 
 from lib.part_common import circular_edges, safe_chamfer
@@ -34,7 +34,7 @@ def _add_shaft_section(x_start: float, x_end: float, diameter: float):
         )
 
 
-@model
+@xbf
 def stepped_shaft_keyway():
     """Return the stepped shaft with keyway model in millimeters."""
     with bd.BuildPart() as shaft:

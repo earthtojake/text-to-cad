@@ -335,7 +335,7 @@ class ChoosingTest(unittest.TestCase):
                                     "    return bd.Box(1, 1, 1)\n")
         self.write("boards.py", "from cad import kicad_pcb as board\n\nwith board.edit('b.kicad_pcb') as b:\n    pass\n")
         self.write("model.py", "import numpy\nfrom lib import plate\nimport boards\n")
-        self.write("plain.py", "import json\nfrom cad import model\n")
+        self.write("plain.py", "import json\nfrom cad import xbf\n")
         self.write("attribute.py", "import cad.kicad_pcb\n\nwith cad.kicad_pcb.edit('x.kicad_pcb') as b:\n    pass\n")
         self.write("schematic.py", "from cad.kicad_sch import edit\n\nwith edit('d.kicad_sch') as s:\n    pass\n")
         self.write("dynamic.py", "import importlib\nimportlib.import_module('build' + '123d')\n")
@@ -356,7 +356,7 @@ class ChoosingTest(unittest.TestCase):
         # cad's own namespace of an integration (the registry's) is that integration, however it is imported.
         for code, found in (("from cad.build123d import paint", {"build123d"}), ("from cad import build123d", {"build123d"}),
                             ("import cad.kicad._session", {"kicad"}), ("from cadgen.build123d import memo", {"build123d"}),
-                            ("from cad import step, model", set())):
+                            ("from cad import step, xbf", set())):
             with self.subTest(code=code):
                 self.assertEqual(scan.scan(code=code, cwd=self.folder), found)
         self.assertEqual(self.spec("model.py").integrations, ("build123d", "kicad"))
@@ -369,8 +369,8 @@ class ChoosingTest(unittest.TestCase):
         from cad_server._internal import scan
 
         for code, found in (
-                ("from cad import model, step\n@model\ndef h():\n    return step.read('p.step')\n", {"build123d"}),
-                ("from cad import model, read_step\n@model\ndef h():\n    return read_step('p.step')\n", {"build123d"}),
+                ("from cad import xbf, step\n@xbf\ndef h():\n    return step.read('p.step')\n", {"build123d"}),
+                ("from cad import xbf, read_step\n@xbf\ndef h():\n    return read_step('p.step')\n", {"build123d"}),
                 ("import cad.step\ncad.step.read('p.step')\n", {"build123d"}),
                 ("from cad.step import read\n", {"build123d"}),
                 ("import cad as c\nc.read_xbf('p.xbf')\n", {"build123d"}),
@@ -384,7 +384,7 @@ class ChoosingTest(unittest.TestCase):
                 # that reads the part and netgen that meshes it (the registry's alongside). The tool alone is
                 # calculix's, as is its command.
                 ("import cad\ncad.step.solve('p.step', study='s.json', out='r')\n", {"build123d", "calculix", "netgen"}),
-                ("from cad.model import solve\n", {"build123d", "calculix", "netgen"}),
+                ("from cad.xbf import solve\n", {"build123d", "calculix", "netgen"}),
                 ("import cad_ccx\ncad_ccx.run('job.inp')\n", {"calculix"}),
                 ("from cad.calculix import _program\n", {"calculix"}),
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
@@ -393,7 +393,7 @@ class ChoosingTest(unittest.TestCase):
                 ("from cad import kicad_pcb\nkicad_pcb.read('b.kicad_pcb')\n", set())):
             with self.subTest(code=code):
                 self.assertEqual(scan.scan(code=code, cwd=self.folder), found)
-        self.write("read.py", "from pathlib import Path\nfrom cad import model, step\n\n@model\ndef holder():\n"
+        self.write("read.py", "from pathlib import Path\nfrom cad import xbf, step\n\n@xbf\ndef holder():\n"
                               "    return step.read(Path(__file__).parent / 'part.step')\n")
         self.assertTrue(self.spec("read.py").default(), "a STEP read runs on the base: cad[build123d]")
 
@@ -589,10 +589,10 @@ def _wheel(folder: Path, width: int = 42, requires: tuple[str, ...] = (), versio
 
 
 PLATE = """{header}import localpkg
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def plate():
     import build123d as bd
 

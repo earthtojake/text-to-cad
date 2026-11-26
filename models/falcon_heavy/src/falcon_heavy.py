@@ -25,7 +25,7 @@ project's RESEARCH.md, PROVENANCE.md and DIMENSIONS.md (models/falcon_heavy).
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -39,21 +39,21 @@ OFFSETS = {
 }
 
 
-@model
+@xbf
 def falcon_heavy():
     groups = fc.build_vehicle()
     return bd.Compound(obj=groups, children=groups,
                        label="falcon_heavy__educational_public_source_reconstruction")
 
 
-@model
+@xbf
 def falcon_heavy_cutaway():
     groups = fc.build_vehicle(cutaway=True)
     return bd.Compound(obj=groups, children=groups,
                        label="falcon_heavy_cutaway__educational_nonfunctional")
 
 
-@model
+@xbf
 def falcon_heavy_exploded():
     groups = []
     for g in fc.build_vehicle():

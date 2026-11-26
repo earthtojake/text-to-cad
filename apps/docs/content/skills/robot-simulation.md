@@ -23,9 +23,9 @@ The CAD model declares what the geometry determines: joints (build123d `Revolute
 
 ```bash
 cad run src/gripper.py
-cad model ranges "$ID"
-cad model export src/gripper.xbf sim/gripper.xml
-cad model export src/gripper.xbf description/gripper.urdf --zero home
+cad xbf ranges "$ID"
+cad xbf export src/gripper.xbf sim/gripper.xml
+cad xbf export src/gripper.xbf description/gripper.urdf --zero home
 ```
 
 `$ID` is the `id:` line the run printed, `src/gripper.xbf` the model the run saved, and `--zero home` counts every joint from the named pose. An MJCF export also writes a `scene.xml` beside it with a floor, a light and a skybox, unless one exists. In the export's log, a mass of 0 or a missing joint means the model needs fixing.

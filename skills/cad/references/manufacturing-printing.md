@@ -48,7 +48,7 @@ moves them.
 ## Check it
 
 ```bash
-cad model dfm "$ID" --process printing --technology sla --build-volume 145x145x185
+cad xbf dfm "$ID" --process printing --technology sla --build-volume 145x145x185
 cad stl dfm stand.stl --technology fdm --material petg --candidates
 ```
 

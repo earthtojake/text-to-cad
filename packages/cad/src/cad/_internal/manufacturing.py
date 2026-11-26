@@ -16,7 +16,7 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
-finding at a ref ``cad model inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
+finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
 processes (``_held``, ``cad.engine.api.check``), a file by this caller only where no engine can be reached;
 an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), by this caller, each finding at
 ``x, y, z``. What a caller measures itself it measures in a process of its own that it holds to a check's
@@ -75,7 +75,7 @@ Technology = Literal["fdm", "sls", "sla", "mjf", "pbf"]
 PROCESSES = dfm.PROCESSES
 #: The types measured on their B-rep (the build123d integration); the rest are meshes (trimesh), but a DXF,
 #: a sheet's cut file, checked by the build123d integration's DXF library (ezdxf).
-BREP_TYPES = ("model", "step")
+BREP_TYPES = ("xbf", "step")
 CUT_TYPES = ("dxf",)
 #: Length units a file may carry, as a factor to millimetres. An STL is unitless, so the caller says which
 #: one (millimetres unless said); a DXF may declare none (``$INSUNITS`` unset: every R12 file), and is then
@@ -118,7 +118,7 @@ def processes_for(document_type: str) -> tuple[str, ...]:
 # The types that always declare their own units, read as millimetres: a units option is the STL's and the
 # DXF's.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
-             "step": "a STEP declares its units", "model": "a model is in millimetres"}
+             "step": "a STEP declares its units", "xbf": "a model is in millimetres"}
 _UNITS_OF = "--units is an STL's or a DXF's, which may declare none"
 # Why a mesh is not checked for each process measured on exact geometry alone, and what to check instead.
 _MESH_REFUSED = {
@@ -251,7 +251,7 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
     if "mesh" not in module.MEASURED_FROM and document_type not in (*BREP_TYPES, *CUT_TYPES):
         reason = _MESH_REFUSED.get(process, f"a {process} check measures exact geometry, which a mesh does not hold")
         raise ArgumentRefused(f"{reason}: check the part's STEP or model instead (cad step dfm part.step --process "
-                              f"{process}, or cad model dfm <id> --process {process})")
+                              f"{process}, or cad xbf dfm <id> --process {process})")
     if document_type in CUT_TYPES and process != "sheet":
         raise ArgumentRefused(f"a DXF is checked as a sheet's cut file: --process sheet, not {process}")
     own = {**dfm.COMMON, **module.OPTIONS}
@@ -925,7 +925,7 @@ def _kind_of(document_type: str) -> str:
 
 
 def _source_help(document_type: str) -> str:
-    if document_type == "model":
+    if document_type == "xbf":
         return ("a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call "
                 "returns; or the .xbf file a model is saved as, checked as the file it is.")
     from cad.registry import DOCUMENT_TYPES

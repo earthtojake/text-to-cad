@@ -12,6 +12,7 @@ import { Kbd } from "../primitives/kbd.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
 import { TREE_GLYPH_STROKE } from "../primitives/tree-row.jsx";
+import { documentKind } from "@cad/core/lib/fileFormats.js";
 import { useI18n } from "../i18n/index.js";
 import type { LibraryLayout, LibrarySort } from "../tab-store/tabRecord.js";
 import { DocumentGlyph } from "../file-viewer/navigation/DocumentGlyph.jsx";
@@ -136,7 +137,7 @@ const extensionOf = (path: string) => {
  * Whether a row is a model: an `.xbf`, the engine's own document saved as a file (the same thing a model's page shows),
  * by its type where the host names it, else by its extension. Only its label: an xbf is a file, kept as one.
  */
-const isModel = (item: LibraryModel) => String(item.documentKind ?? "").toLowerCase() === "model" || extensionOf(item.path) === "xbf";
+const isModel = (item: LibraryModel) => documentKind(item.documentKind) === "xbf" || extensionOf(item.path) === "xbf";
 /**
  * What a model (`isModel`) is called, as desktop CAD calls its own documents: a `part` when its document holds one part
  * occurrence, an `assembly` when it holds more, and where the host does not know how many (`parts`) its format, `xbf`

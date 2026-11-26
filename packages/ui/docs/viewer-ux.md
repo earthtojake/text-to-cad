@@ -249,7 +249,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   opens what it hides is how Drive and Finder do it; it is the way a file browser says where you are, and the one way
   back up, with no Back button of its own.
 - **A document is its file, one card.** Every row is a file: a model's document is its `.xbf` (every model has one:
-  `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it; a shape's handed over too), and its id is
+  `<name>.xbf` beside its script, or the path `@xbf("arm.xbf")` gives it; a shape's handed over too), and its id is
   that file's: one file, one row, one card, in Recents, Starred, a folder's page and the search, named by
   its file's name. Opening the file opens the model, live while the engine holds its build, else read from the file.
   Why: one document, one identity, one "model" type; two Assembly cards of the same thing asked the person which to
@@ -327,7 +327,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
     (under 560px), then Last viewed (440). Why that tall: a row with a picture is as tall as its
     picture needs, the same in the search; a list's emphasis is colour, never a second size.
   - An `.xbf` file is badged "Part" when its document holds one part and
-  "Assembly" when it holds more (the row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the
+  "Assembly" when it holds more (the row's `parts`: its parts' occurrences, as `cad xbf inspect` counts them and the
   Model tree shows them), and "XBF", its format, where the host does not know for the file as it now is: never a
   guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and
   a person reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's

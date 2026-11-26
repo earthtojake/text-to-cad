@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 from math import atan2, cos, degrees, radians, sin, tau
 
 import build123d as bd
@@ -533,7 +533,7 @@ def _make_axis_label_ring_set(parts: list):
     parts.append(_make_axis_ring("orange_accent_ring_axis6_tool_roll_x", "x", (196.0, 0.0, 128.0), 14.0, 12.0, 2.0, ORANGE_ACCENT))
 
 
-@model
+@xbf
 def six_axis_industrial_robot_arm():
     """Return a labeled six-axis industrial robot arm display assembly in millimeters."""
     parts = [

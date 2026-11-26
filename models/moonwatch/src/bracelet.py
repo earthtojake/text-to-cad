@@ -6,12 +6,12 @@ colored body; rows articulate about shared pin axes with 0.06 radial
 clearance.
 """
 
-from cad import model
+from cad import xbf
 
 from lib import watch
 
 
-@model
+@xbf
 def bracelet():
     return watch.bracelet()
 

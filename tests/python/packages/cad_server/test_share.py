@@ -128,12 +128,12 @@ PLATE = """import json
 from pathlib import Path
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib.sizes import WIDTH
 
 
-@model
+@xbf
 def plate():
     here = Path(__file__).parent
     hole = json.loads((here / "data" / "hole.json").read_text(encoding="utf-8"))["radius"]
@@ -482,7 +482,7 @@ def _bundle(folder: Path, files: dict[str, bytes], listed: dict[str, Any] | None
     entries = {path: {"bytes": len(data), "sha256": _sha(data), "type": "application/octet-stream"}
                for path, data in files.items()}
     (folder / "manifest.json").write_text(json.dumps({"format": "view-bundle/1", "document": {
-        "id": "1024a2f2-2b65-5151-8299-282973f2a9fc", "kind": "model", "name": "arm", "version": "1"},
+        "id": "1024a2f2-2b65-5151-8299-282973f2a9fc", "kind": "xbf", "name": "arm", "version": "1"},
         "files": entries if listed is None else listed}, indent=1), encoding="utf-8")
     return folder
 
@@ -818,7 +818,7 @@ class ShareTest(unittest.TestCase):
                                                                    for path in expected),
                                           "entry": "plate.py", "file": "plate.xbf",
                                           "left_out": [{"path": stock, "reason": "outside"}], "unseen": False})
-        self.assertEqual(found["document"], {"id": ident, "kind": "model", "name": found["document"]["name"],
+        self.assertEqual(found["document"], {"id": ident, "kind": "xbf", "name": found["document"]["name"],
                                              "path": str(xbf)})
         # By its document's id, the same file and the same share; and so after the engine restarts, when no worker
         # holds the model and its .xbf is what the engine reads, by its path and by its id alike.
@@ -933,7 +933,7 @@ class ShareTest(unittest.TestCase):
             return engine_daemon.run([sys.executable, "-m", "cad_server.cli", *args, "--json"], env=self.env(),
                                      cwd=workspace, input=given)
 
-        shared = cad("model", "inspect", f"{link}#plate")
+        shared = cad("xbf", "inspect", f"{link}#plate")
         self.assertEqual(shared.returncode, 0, shared.stdout + shared.stderr)
         volume = json.loads(shared.stdout)["volume"]
 
@@ -942,13 +942,13 @@ class ShareTest(unittest.TestCase):
         imported = self.import_(link, "copy", cwd=place)
         self.assertEqual(imported.returncode, 0, imported.stdout + imported.stderr)
         copy = place / "copy" / "plate.xbf"
-        for args in (("model", "inspect", f"{link}#plate"), ("model", "inspect", link, f"{link}#plate"),
-                     ("model", "inspect", str(copy), f"{link}#plate")):
+        for args in (("xbf", "inspect", f"{link}#plate"), ("xbf", "inspect", link, f"{link}#plate"),
+                     ("xbf", "inspect", str(copy), f"{link}#plate")):
             with self.subTest(args=args):
                 built = cad(*args)
                 self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
                 self.assertAlmostEqual(json.loads(built.stdout)["volume"], volume, places=3)
-        exported = cad("model", "export", link, str(place / "out.step"))
+        exported = cad("xbf", "export", link, str(place / "out.step"))
         self.assertEqual(exported.returncode, 0, exported.stdout + exported.stderr)
         self.assertTrue((place / "out.step").is_file())
         with mock.patch.dict(os.environ, {"CAD_SHARE_URL": self.service.url}):
@@ -965,11 +965,11 @@ class ShareTest(unittest.TestCase):
                    "error": f"{other} is a shared model this computer has no copy of: run `cad import {other}`."}
         packet = json.dumps({"input": other, "jobs": [{"camera": "iso", "outputs": [{"label": "view 1"}]}]})
         for args, given, answer in (
-                (("model", "inspect", link), None, refusal), (("model", "inspect", f"{other}#plate"), None, unknown),
-                (("model", "inspect", str(project / "plate.xbf"), f"{other}#plate"), None, unknown),
-                (("model", "snapshot", other, "out.png"), None, unknown),
-                (("model", "export", other, "out.step"), None, unknown),
-                (("model", "snapshot", "--job", "-"), packet, unknown)):
+                (("xbf", "inspect", link), None, refusal), (("xbf", "inspect", f"{other}#plate"), None, unknown),
+                (("xbf", "inspect", str(project / "plate.xbf"), f"{other}#plate"), None, unknown),
+                (("xbf", "snapshot", other, "out.png"), None, unknown),
+                (("xbf", "export", other, "out.step"), None, unknown),
+                (("xbf", "snapshot", "--job", "-"), packet, unknown)):
             with self.subTest(args=args):
                 missing = cad(*args, given=given)
                 self.assertEqual((missing.returncode, json.loads(missing.stdout)), (2, answer))
@@ -1353,11 +1353,11 @@ class SourcesTest(unittest.TestCase):
         file = sharing.File("arm.py", _sha(b""), 0, Path("/p/arm.py"))
         self.assertEqual(_notes(sharing.Sources((file,), "arm.py", {}, "/p", (("/q/a.json", "outside"),
                                                                               ("/p/b.json", "gone")), True),
-                                "model", "arm"), [
+                                "xbf", "arm"), [
             "Left out, outside the project: /q/a.json", "Left out, no longer on the disk: /p/b.json",
             "Its build read a file cad could not see, which the share does not hold: an import may not rebuild it "
             "without that file"])
-        self.assertEqual(_notes(sharing.Sources(), "model", "crate"), [
+        self.assertEqual(_notes(sharing.Sources(), "xbf", "crate"), [
             "Its .xbf alone went: no build closure names the code that made crate (a shape a program handed over, or a "
             "file exported from another)"])
         self.assertEqual(_notes(sharing.Sources(), "stl", "tetra.stl"), [])
@@ -1710,7 +1710,7 @@ class ImportTest(unittest.TestCase):
                               timeout=engine_daemon.TIMEOUT_SECONDS)
 
     def recorded(self, path: Path | str, *, files: dict[str, Any] | None = None, service: str | None = None,
-                 expires: str = "2030-01-08T00:00:00Z", kind: str = "model") -> None:
+                 expires: str = "2030-01-08T00:00:00Z", kind: str = "xbf") -> None:
         """This computer's share, as ``cad share`` keeps it in the library: of the file at ``path``, at ``service``
         (the share's own by default), expiring at ``expires``, the files that made it where ``files`` says (by
         default, a model's in the project and a file document's beside it)."""
@@ -1718,7 +1718,7 @@ class ImportTest(unittest.TestCase):
 
         share = self.share
         if files is None:
-            files = ({"root": str(self.project), "entry": "modèle.py"} if kind == "model" else
+            files = ({"root": str(self.project), "entry": "modèle.py"} if kind == "xbf" else
                      {"root": os.path.dirname(path), "entry": None})
         service = service or share.service
         _library(self.state, [{"id": share.id, "write": share.write, "delete": share.delete, "service": service,

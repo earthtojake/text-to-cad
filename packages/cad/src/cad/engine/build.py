@@ -139,7 +139,7 @@ def _uncached_said(call: str, count: int) -> str:
     times = f"{count} call{'' if count == 1 else 's'}"
     if call.startswith("OCCT's "):
         return (f"runs {call} uncached ({times}): it is never retained; use build123d's operation for it, "
-                "or an engine reader (step.read, model.read, stl.read)")
+                "or an engine reader (step.read, xbf.read, stl.read)")
     return (f"runs {call} uncached ({times}) on a shape no keyed call made (OCCT called past build123d, say): it is "
             "never retained; make that shape with build123d's operation, read it with an engine reader, or make it in "
             "a @memo function of values that returns it as made")
@@ -652,7 +652,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 body_script, _, function = body_name.rpartition("::")
                 retention["fallbacks"].setdefault(f"{Path(body_script).name}::{function}", []).extend(
                     f"reads {_shown(Path(path), Path(body_script).parent) if path else 'a file'} through {call}: "
-                    "its body is never retained (any edit runs it whole); use step.read/model.read/stl.read" for call, path in reads)
+                    "its body is never retained (any edit runs it whole); use step.read/xbf.read/stl.read" for call, path in reads)
             # Each call a body ran uncached (``memo._ran_uncached``), which keeps it from being retained:
             # an OCCT maker no key names, or a build123d call given what no keyed call made.
             for body_name, counts in run.uncached.items():
@@ -783,8 +783,8 @@ def _unsaved(model: Any, report: dict[str, Any]) -> None:
     run's lines do (``said.describe``), since no restart of the engine finds its document."""
     if model.xbf is None:
         report.setdefault("warnings", []).append(
-            f"{model.name} saves no .xbf (no @model): once the CAD server restarts, its next run builds it again "
-            "from scratch; add @model to save it")
+            f"{model.name} saves no .xbf (no @xbf): once the CAD server restarts, its next run builds it again "
+            "from scratch; add @xbf to save it")
 
 
 def _written(model: Any, result: Any, run: Any, report: dict[str, Any], log: Callable[[str], None], plan: list,
@@ -1194,7 +1194,7 @@ def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict,
     else:
         where = "xbf"
         if xbf is None:
-            return {"used": False, "reason": "it saves no .xbf (no @model)"}, None
+            return {"used": False, "reason": "it saves no .xbf (no @xbf)"}, None
         if not xbf.is_file():
             return {"used": False, "reason": "it has no .xbf"}, None
         writer, text = previous.scan(xbf)

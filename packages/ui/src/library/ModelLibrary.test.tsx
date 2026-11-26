@@ -336,13 +336,13 @@ it('has no kind tabs in Recents, Starred, a project\'s page or a search, nor any
   expect(none()).toEqual([null, null, null]);
 });
 
-it('takes an .xbf the server lists (kind model, record file) as a model: a Part or an Assembly, by its parts', async () => {
+it('takes an .xbf the server lists (kind xbf, record file) as a model: a Part or an Assembly, by its parts', async () => {
   // As the server lists them: a document's kind, and its record's (`libraryRow` hands the library the record's as `kind`).
   const listed = (name: string, extra: Record<string, unknown>) => libraryRow({ ...model(name), ...extra }) as LibraryModel;
-  const saved = listed('rig.xbf', { id: 'id-rig', kind: 'model', record: 'file', parts: 3 });
-  const single = listed('pin.xbf', { id: 'id-pin', kind: 'model', record: 'file', parts: 1 });
+  const saved = listed('rig.xbf', { id: 'id-rig', kind: 'xbf', record: 'file', parts: 3 });
+  const single = listed('pin.xbf', { id: 'id-pin', kind: 'xbf', record: 'file', parts: 1 });
   const step = listed('rig.step', { kind: 'step', record: 'file', parts: 3 });
-  expect([saved, step].map(item => item.documentKind)).toEqual(['model', 'step']);
+  expect([saved, step].map(item => item.documentKind)).toEqual(['xbf', 'step']);
   const labels = { xbf: 'XBF', part: 'Part', assembly: 'Assembly' };
   expect([saved, single, step].map(item => formatLabel(item, labels))).toEqual(['Assembly', 'Part', 'STEP']);
 });
@@ -696,7 +696,7 @@ it("lists every file of a folder, the documents first; a press on one that is no
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   const tag = project('p1', 'heart-tag');
   const other = (below: string) => file(tag, below, { documentKind: null, thumbnail: null });
-  const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), other('datasheet.pdf'), other('build.py'), other('Makefile'), other('run.sh'), other('locked.pdf'), file(tag, 'lid.step', { documentKind: 'step' })];
+  const files = [file(tag, 'arm.xbf', { documentKind: 'xbf' }), other('datasheet.pdf'), other('build.py'), other('Makefile'), other('run.sh'), other('locked.pdf'), file(tag, 'lid.step', { documentKind: 'step' })];
   const asked: string[] = [], opened: unknown[] = [], done: string[] = [];
   // Open in's answer for each, as a CAD host gives it: one target, the file; `default` there only as false.
   const answers: Record<string, object> = {
@@ -812,7 +812,7 @@ it("lists every file of a folder, the documents first; a press on one that is no
 it("orders a folder's page in groups, each in the Sort's order: its folders, its documents, then the files no page opens", async () => {
   const tag = project('p1', 'heart-tag');
   const files = [file(tag, 'zeta.step', { documentKind: 'step', updated: 50 }), file(tag, 'beta.pdf', { documentKind: null, updated: 90 }),
-    file(tag, 'alpha.xbf', { documentKind: 'model', updated: 10 }), file(tag, 'gamma.py', { documentKind: null, updated: 20 }), file(tag, 'sub/inner.step')];
+    file(tag, 'alpha.xbf', { documentKind: 'xbf', updated: 10 }), file(tag, 'gamma.py', { documentKind: null, updated: 20 }), file(tag, 'sub/inner.step')];
   // A host that shows a file in its file manager: each file is a press.
   const fileActions = { platform: 'linux' as const, perform: { 'copy-path': () => {}, reveal: () => {} } };
   const page = (sort: 'activity' | 'name', layout: 'grid' | 'list') => <ModelLibrary library={library([], hosted([tag], files))} fileActions={fileActions} layout={layout}
@@ -831,7 +831,7 @@ it("orders a folder's page in groups, each in the Sort's order: its folders, its
 
 it("groups a search's results as a folder's page is, the documents' cards then the other files' tiles; and while a file's tile is being opened, a spinner stands where its glyph is", async () => {
   const tag = project('p1', 'heart-tag');
-  const host = hosted([tag], [file(tag, 'arm.xbf', { documentKind: 'model' }), file(tag, 'build.py', { documentKind: null }), file(tag, 'build.step', { documentKind: 'step' })]);
+  const host = hosted([tag], [file(tag, 'arm.xbf', { documentKind: 'xbf' }), file(tag, 'build.py', { documentKind: null }), file(tag, 'build.step', { documentKind: 'step' })]);
   let answer!: (files: unknown) => void;
   const openApp = vi.fn(async () => {});
   const fileActions = { platform: 'linux' as const, perform: { 'copy-path': () => {} }, apps: () => new Promise(resolve => { answer = resolve; }) as never, openApp };
@@ -874,7 +874,7 @@ it("groups a search's rows in the list the documents' first, then the other file
 
 it('a file that is no document does what its host can: shown in the file manager where the host opens no apps, and no control at all where it can do neither', async () => {
   const tag = project('p1', 'heart-tag');
-  const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), file(tag, 'notes.md', { documentKind: null })];
+  const files = [file(tag, 'arm.xbf', { documentKind: 'xbf' }), file(tag, 'notes.md', { documentKind: null })];
   const done: string[] = [];
   const page = (fileActions?: object) => <ModelLibrary library={library([], hosted([tag], files))} fileActions={fileActions as never} place={{ view: 'project', project: 'p1' }} />;
   // A host that opens no apps: a press shows the file in its file manager, and the ⋯ has what the host can do.

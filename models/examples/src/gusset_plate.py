@@ -3,13 +3,13 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 # Prompt: Gusset plate with a triangular web, base holes, and softened perimeter edges.
 
 from lib.simple_model_library import make_gusset_plate
 
 
-@model
+@xbf
 def gusset_plate():
     part = make_gusset_plate()
     authored_color = part.color

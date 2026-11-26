@@ -2,7 +2,7 @@
 
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
-`step.read(path)` reads a `.step`/`.stp`, `model.read(path)` an engine document; both copy the
+`step.read(path)` reads a `.step`/`.stp`, `xbf.read(path)` an engine document; both copy the
 file's geometry into the model's document (`reader.py`). The result is a compound tree of the
 file's assembly: an assembly a `Compound` of its components, a part a handle of its own on its
 product's geometry (a move places that occurrence, never its siblings), every node named as the
@@ -22,7 +22,7 @@ and builds B-rep from its numbers. Its read is keyed by the file's bytes as the 
 the same object again for the same bytes, and the file is one of the closure's inputs:
 
 ```python
-@model("XBF/enclosure.xbf")
+@xbf("XBF/enclosure.xbf")
 def enclosure():
     pcb = stl.read(HERE / "scans/pcb.stl").bounding_box()   # keyed by the scan's bytes
     return bd.Box(pcb.size.X + 6, pcb.size.Y + 6, pcb.size.Z + 4)
@@ -50,7 +50,7 @@ cad step export vendor.step vendor.xbf
 ```
 
 The conversion is the author's: the engine writes no derived file beside an input of its own.
-`model.read` of a converted STEP is `step.read` of the STEP: the same geometry, names, colours and
+`xbf.read` of a converted STEP is `step.read` of the STEP: the same geometry, names, colours and
 materials.
 
 **A STEP is parsed in a reader process.** OCCT's XCAF reader works in many times the memory of

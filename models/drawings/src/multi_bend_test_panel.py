@@ -23,7 +23,7 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -74,7 +74,7 @@ def _outline() -> list[tuple[float, float]]:
     ]
 
 
-@model
+@xbf
 def multi_bend_test_panel():
     with bd.BuildSketch() as cut:
         with bd.BuildLine():

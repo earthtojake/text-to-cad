@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import drivetrain as B
 
 
-@model
+@xbf
 def engine():
     built = B.build_engine()
     if isinstance(built, list):

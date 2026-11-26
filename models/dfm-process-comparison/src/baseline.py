@@ -2,11 +2,11 @@
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from lib.tray_geometry import tray
 
 
-@model
+@xbf
 def baseline():
     part = tray("baseline")
     # the thin-wall FDM starting point: PLA (README)

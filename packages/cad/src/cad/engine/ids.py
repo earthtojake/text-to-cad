@@ -5,8 +5,8 @@ An id is a lower-case canonical UUID string, made by one formula (``derived_id``
     uuid5(NAMESPACE, canonical(scope) + "::" + name)
 
 ``scope`` is a path and ``name`` a name in it: a file's path and no name (``file_id``). A model's document is
-its ``.xbf``, so a model's id is that file's (``Model.id``: its ``.xbf`` at ``@model``'s path, else ``<name>.xbf``
-beside its script), and so is a shape handed over's (``model(shape, name=...)``: its ``.xbf`` at the path given,
+its ``.xbf``, so a model's id is that file's (``Model.id``: its ``.xbf`` at ``@xbf``'s path, else ``<name>.xbf``
+beside its script), and so is a shape handed over's (``xbf(shape, name=...)``: its ``.xbf`` at the path given,
 else ``<name>.xbf`` beside the calling script, or in the working folder where there is none). Any process that
 knows the path knows the id without asking the engine. Whether a text is an id is ``is_id``; what an id names is
 the engine's to say, never the uuid's version.

@@ -270,7 +270,7 @@ export const XBF_PART_VIEW_FEATURES = STEP_PART_VIEW_FEATURES;
  * and Parts where it has several parts, objects or links (`parts`); Clip cuts whatever it draws
  * (`lib/viewer/sceneClip.js`), and a GLB of several parts explodes (`explodeParts`,
  * `sceneExplode.js`). A drawing (DXF) no more than an edgeless view: nothing in it to cut.
- * @param {string} kind  The file's render kind (`model` for a model and a STEP; `xbf`, its earlier word, too), without a dot.
+ * @param {string} kind  The file's render kind (`xbf` for a model's document and a STEP; `model`, its earlier word, too), without a dot.
  * @param {{ parts?: number, explodeParts?: number }} [scene]
  * @returns {ViewFeatures}
  */
@@ -278,7 +278,7 @@ export function viewFeaturesForKind(kind, { parts = 0, explodeParts = 0 } = {}) 
   const normalized = String(kind || "").trim().toLowerCase();
   if (normalized === "dxf") return EDGELESS_VIEW_FEATURES;
   // A model's document, the engine's: an assembly everything, a part no Parts or Explode.
-  if (documentKind(normalized) === "model") return parts > 1 ? XBF_VIEW_FEATURES : XBF_PART_VIEW_FEATURES;
+  if (documentKind(normalized) === "xbf") return parts > 1 ? XBF_VIEW_FEATURES : XBF_PART_VIEW_FEATURES;
   return {
     modes: parts > 1 ? ["solid", "parts"] : ["solid"],
     settings: normalized === "glb" && explodeParts > 1 ? ["clip", "exploded"] : ["clip"]

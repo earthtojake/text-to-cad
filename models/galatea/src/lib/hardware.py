@@ -26,7 +26,7 @@ import math
 from pathlib import Path
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from . import finish, geo
 from .dims import ACTUATORS, DRIVES, PLATE_T, ROTOR_PROUD, SCREWS
@@ -54,7 +54,7 @@ def _vendor(size, spec):
     if not path.exists():
         raise FileNotFoundError(f"{path.name} is not in {VENDOR}: run `cad run src/vendor.py` once; it fetches "
                                 "RobStride's STEP files (53 MB, from github.com/RobStride/Product_Information)")
-    solids = sorted(model.read(path).solids(), key=lambda solid: -solid.volume)
+    solids = sorted(xbf.read(path).solids(), key=lambda solid: -solid.volume)
     body = solids[0]
     for extra in solids[1:]:                       # the RS00's two connector sockets are solids of their own
         body = geo.fuse(body, extra, f"{size}'s sockets")

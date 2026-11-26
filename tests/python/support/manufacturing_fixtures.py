@@ -30,17 +30,17 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 # turned -- a part with two occurrences, placed off the identity.
 MODELS = """
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def plate():
     part = bd.Box(40, 30, 10) - bd.Pos(0, 0, 3) * bd.Box(20, 10, 4.01)
     part.label = "plate"
     return part
 
 
-@model
+@xbf
 def pair():
     sheet = bd.Box(60, 40, 2) - bd.Pos(10, 0, 0) * bd.Cylinder(3, 2)
     sheet.label = "sheet"
@@ -62,10 +62,10 @@ DECLARED = """
 import build123d as bd
 from bd_materials import metals
 from bd_materials.processes import machined
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def block():
     part = bd.Box(30, 20, 12) - bd.Pos(0, 0, 4) * bd.Box(12, 8, 4.01)
     part.label, part.material = "block", metals.aluminum(process=machined())

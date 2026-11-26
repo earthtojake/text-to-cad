@@ -14,18 +14,18 @@ existing `.dxf`. Whether a cut file is ready for a shop is the sheet-metal revie
 
 ## A drawing is a model
 
-A drawing is a `@model` that returns build123d 2D geometry on z=0 (a sketch, a face, wires or
+A drawing is a `@xbf` that returns build123d 2D geometry on z=0 (a sketch, a face, wires or
 edges). Exporting its document to a `.dxf` runs the drawing checks and writes the file, which is
 the one the viewer and `cad dxf snapshot` draw and a cutting service gets.
 
 ```python
 import build123d as bd
-from cad import model
+from cad import xbf
 
 HOLE_D = 4.5
 
 
-@model
+@xbf
 def gasket():
     with bd.BuildSketch() as cut:
         bd.Rectangle(60, 40)
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
 ```bash
 cad run src/gasket.py                              # saves src/gasket.xbf
-cad model export src/gasket.xbf DXF/gasket.dxf     # runs the drawing checks, then writes
+cad xbf export src/gasket.xbf DXF/gasket.dxf     # runs the drawing checks, then writes
 ```
 
 - **One shape is one layer, `CUT`.** For more than one CAM operation, return a `Compound` of
@@ -82,7 +82,7 @@ only when there is no reliable 3D topology. The calls are build123d's own, with
 """Flat patterns of plate.py and bracket.py: their geometry reused, not redrawn."""
 
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import unfold
 
 from bracket import bracket        # the models: importing builds nothing
@@ -91,13 +91,13 @@ from plate import plate
 KERF = 0.1                         # how far each edge moves: half the cut's width
 
 
-@model
+@xbf
 def plate_drawing():               # a flat plate: its top face, laid on z=0
     top = plate().shape.faces().filter_by(bd.Axis.Z).sort_by(bd.Axis.Z)[-1]
     return bd.offset(bd.Pos(0, 0, -top.center().Z) * top, amount=KERF)
 
 
-@model
+@xbf
 def bracket_drawing():             # a bent part, unrolled, its bend lines on a layer of their own
     return unfold(bracket().shape, k_factor=0.4, bend_lines=True)
 
@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
 | The change | Check it with |
 | --- | --- |
-| Any drawing | `cad model export`: the drawing checks run on the document it is about to write |
+| Any drawing | `cad xbf export`: the drawing checks run on the document it is about to write |
 | A dimension the person gave | A targeted `ezdxf` read of the exported `.dxf` (below): extents, a circle's radius, counts by layer |
 | Layout, layers, marking | `cad dxf snapshot` of the exported file ([below](#see-a-drawing)) |
 | A file from elsewhere | `validate_dxf_file` (below), then the same reads |

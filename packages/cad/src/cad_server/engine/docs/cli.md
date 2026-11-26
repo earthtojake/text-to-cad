@@ -15,7 +15,7 @@ cad run mujoco-studio --model scene.xml      MuJoCo Studio's web viewer on the m
                                              changes: the person opens the URL it prints
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
-cad model export ID|FILE.xbf DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
+cad xbf export ID|FILE.xbf DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
                                              a model, by its document id: the document the engine holds;
                                              or saved as a file, its .xbf: that file, read as it is
 cad step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
@@ -38,7 +38,7 @@ cad TYPE snapshot --job PACKET|JSON|- [SRC] [--out DIR] [the same flags, each ov
                                              a packet's input and inspect's DOC or a ref's FILE may be a
                                              share's link: this computer's copy of it (Sharing)
 cad serve DOC [--port N]
-cad model inspect ID|FILE.xbf [REF] [--query Q] [--json] | step|glb inspect FILE [REF] [...]
+cad xbf inspect ID|FILE.xbf [REF] [--query Q] [--json] | step|glb inspect FILE [REF] [...]
                                              what the document holds, then its build closure; with REF
                                              (**References**): an element's facts and
                                              what made it, or a part's or an assembly's volume, mass and
@@ -63,12 +63,12 @@ cad orcaslicer presets KIND [--match TEXT] [--profiles DIR] [--json]
 cad orcaslicer complete --printer P --process P --filament F [--out DIR] [--profiles DIR] [--json]
                                              those presets written complete for OrcaSlicer's command
                                              line, and the files it wrote; always in this process
-cad model|step dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
-cad model|step dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+cad xbf|step dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
+cad xbf|step dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
-cad model|step dfm SRC [--process molding] [--pull AXIS|X,Y,Z] [--wall-limit DEG] [--zero-tol DEG]
+cad xbf|step dfm SRC [--process molding] [--pull AXIS|X,Y,Z] [--wall-limit DEG] [--zero-tol DEG]
                 [--cavities N] [--candidates]
-cad model|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pbf] [--build-volume XxYxZ]
+cad xbf|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pbf] [--build-volume XxYxZ]
                 [--angle-limit DEG] [--layer-height H] [--nozzle D] [--samples N] [--candidates]
 cad stl|glb|threemf dfm FILE [--process printing] [printing's options as above] [--units U]
 cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
@@ -84,16 +84,16 @@ cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius
                                              trimesh integration's (at x, y, z); the general
                                              rules' verdicts (no shop's limits) and
                                              every measurement
-cad model|step interference SRC [--pose NAME|NAME@SECONDS|JSON]...
+cad xbf|step interference SRC [--pose NAME|NAME@SECONDS|JSON]...
                 [--fit A B]... [--min-volume MM3] [--json]
                                              which parts share volume: every pair whose boxes meet
                                              answered, by the kernel wherever their meshes do not show
                                              air between them, as built and at each pose given; a named fit
                                              listed apart; each pair not measured said, and never passed
-cad model|step solve SRC [--occurrence PART] [--json]
+cad xbf|step solve SRC [--occurrence PART] [--json]
                                              a stress study's setup, the kernel's: the parts, the pairs
                                              that touch and a part's faces by ref; writes nothing
-cad model|step solve SRC --study STUDY --out DIR [--deck] [--verbose] [--json]
+cad xbf|step solve SRC --study STUDY --out DIR [--deck] [--verbose] [--json]
                                              the solve, meshed by netgen and solved by CalculiX's ccx
                                              (cad[calculix]): result.json, result.glb, result.vtu and a
                                              picture of each field written into DIR, its findings and
@@ -137,21 +137,21 @@ file of no type (`robot.dae is not a urdf file: cad urdf takes .urdf`), and a fi
 there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
 names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
 schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
-is a type of its own, `model`, held by the engine or saved as its `.xbf`: `cad model export ID ...` takes its id,
-a file's type refuses one (`ID is a model's document id, not a .step file: use cad model export`), and `cad model`
-refuses a file the same way, but its `.xbf`, which the registry names `model`'s. `cad model <operation>
+is a type of its own, `xbf`, held by the engine or saved as its `.xbf`: `cad xbf export ID ...` takes its id,
+a file's type refuses one (`ID is a model's document id, not a .step file: use cad xbf export`), and `cad xbf`
+refuses a file the same way, but its `.xbf`, which the registry names `xbf`'s. `cad xbf <operation>
 arm.xbf` reads the file as the file it is, never as the model the engine holds, so its `inspect` says the
 file's state, lists its parameters read-only and names no `made_by`; the engine's verbs and the library's
 functions tell an id from the file themselves (`cad._internal.document_type.is_file`). An argument is
 that file where its suffix is `.xbf`, in any case, which no document id ends in. Every refusal that sends an
-`.xbf` on names `cad model`. `cad xbf <operation> ...`, the earlier spelling, runs `cad model <operation> ...`
-(`cad_server.cli.xbf`): the same output, `--json` and exit status, after one line on stderr but under `--json`,
-`cad xbf: deprecated and will be removed: use cad model`. Unlisted, it is kept for the skill text of releases up
-to 0.11.17, which says it, and goes 30 days after the release whose skills stop (law 14's first tier). The commands are the server's
+`.xbf` on names `cad xbf`. `cad model <operation> ...`, the earlier spelling, runs `cad xbf <operation> ...`
+(`cad_server.cli.model`): the same output, `--json` and exit status, after one line on stderr but under `--json`,
+`cad model: deprecated and will be removed: use cad xbf`. Unlisted, it is kept for the skill text of releases up
+to 0.12, which says it, and goes 30 days after the release whose skills stop (law 14's first tier). The commands are the server's
 (`cad_server.cli.document_types`), each type's its own module (`python -m cad_server.cli.step export ...`);
 `python -m cad_server.engine VERB ...` takes the engine's verbs, its own entry.
 
-Every `SRC` and `DOC` is an on-disk CAD file's path, for the file's type, or, for `cad model`, a model's document id
+Every `SRC` and `DOC` is an on-disk CAD file's path, for the file's type, or, for `cad xbf`, a model's document id
 (`ids`) or its `.xbf`: a model's id is what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
 id is read as the engine holds it, never built: one it does not hold is refused with the command
 that builds it again, `cad run <the script that defines it>`. A script is never a source: `x.py`

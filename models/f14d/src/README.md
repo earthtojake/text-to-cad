@@ -1,7 +1,7 @@
 # f14d models
 
 `models/f14d` on cadgen 0.8: a Grumman F-14D Super Tomcat, wings at 20 degrees,
-canopy closed, gear down, a clean airframe. `f14d.py` is the one model (`@model`; a run
+canopy closed, gear down, a clean airframe. `f14d.py` is the one model (`@xbf`; a run
 writes nothing):
 
 | Script | Model | What it is |
@@ -13,8 +13,8 @@ Build from this folder: `python f14d.py`.
 
 ```
 python f14d.py                                # prints the aircraft's id: and view:
-cad model snapshot "$ID" f14d.png
-cad model export "$ID" GLB/f14d.glb              # bakes the two animations into clips
+cad xbf snapshot "$ID" f14d.png
+cad xbf export "$ID" GLB/f14d.glb              # bakes the two animations into clips
 ```
 
 ## How it is built
@@ -91,7 +91,7 @@ each group's count against the old lists.
 `teardown` walks the ramp out and back on a raised cosine (`0.5 - 0.5 cos(2 pi t /
 60)`), so the loop point is the built aircraft; `explodedHold` opens over the first
 third, holds fully apart, and closes over the last (the old 0.33/0.67 trapezoid,
-smoothstepped). `cad model export "$ID" GLB/f14d.glb` bakes both into clips. One
+smoothstepped). `cad xbf export "$ID" GLB/f14d.glb` bakes both into clips. One
 deliberate difference: the old clips faded the airframe skin to 0.22 opacity over the
 first 0.45 of the ramp so the internals read while it cleared them; a GLB has no
 opacity channel, so the skin stays opaque as it travels its 5.4 m.

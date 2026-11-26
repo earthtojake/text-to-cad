@@ -156,7 +156,7 @@ for package in (cad, cad_server, cad_mcp, cadgen):
         sys.exit(f"FAIL: imported {package.__name__} from {where}, not an installed wheel")
     print(f"   {package.__name__} at {where.parent}")
 import cad.build123d
-if cadgen.build123d is not cad.build123d or cadgen.model is not cad.model:
+if cadgen.build123d is not cad.build123d or cadgen.model is not cad.xbf:
     sys.exit("FAIL: the cadgen alias is not the library's own modules and names")
 # One distribution, cad: each package that reports a release reports cad's, never an alias's (cad_mcp, the
 # transport inside cad, reports none of its own).
@@ -389,7 +389,7 @@ from cad.engine import step, stl, model
 import build123d as bd
 
 
-@model("XBF/probe.xbf")
+@xbf("XBF/probe.xbf")
 @step("probe.step")
 @stl("probe.stl")
 def probe():

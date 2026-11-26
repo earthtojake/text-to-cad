@@ -1,4 +1,4 @@
-"""The interference check a B-rep type shares (``cad.model.interference``, of a model held or saved,
+"""The interference check a B-rep type shares (``cad.xbf.interference``, of a model held or saved,
 ``cad.step.interference``): which parts of a document share volume.
 
 The engine measures it, in one of its checks processes (``cad.engine.api.check``, by

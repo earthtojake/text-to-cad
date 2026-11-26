@@ -61,7 +61,7 @@ cad step dfm part.step --process sheet --material aluminum --thickness 3 --json
 cad dxf dfm part.dxf --material aluminum --thickness 3 --json
 ```
 
-A text-to-cad model's upload is the file `cad model export part.xbf part.step` (or `part.dxf`) wrote.
+A text-to-cad model's upload is the file `cad xbf export part.xbf part.step` (or `part.dxf`) wrote.
 The sheet check gives measurements and general findings (one thickness, bends, the flat pattern, hole
 and feature distances, cut-file defects); give it the SKU's own `--bend-radius` and `--k-factor`
 where the specs list them, the radius converted to millimetres (the specs are in inches). Its rules are general practice, not SendCutSend's: use its

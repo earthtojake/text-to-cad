@@ -156,13 +156,13 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
 
     def test_main_calls_bare_and_file_models_in_order_and_keeps_its_arguments(self) -> None:
         self.script.write_text("""import sys
-from cad import model, step
+from cad import xbf, step
 import build123d as bd
-@model
+@xbf
 def bare(): return bd.Box(1, 2, 3)
 @step('saved.step')
 def saved(): return bd.Box(2, 2, 3)
-@model("XBF/document.xbf")
+@xbf("XBF/document.xbf")
 def document(): return bd.Box(3, 2, 3)
 if __name__ == '__main__':
     print('before', sys.argv[1:])
@@ -182,8 +182,8 @@ if __name__ == '__main__':
         self.assertFalse((self.folder / 'XBF/bare.xbf').exists())
 
     def where(self, ref: str, doc: str = "XBF/block.xbf") -> dict:
-        # ``cad model inspect``: of a model's id, or of the .xbf it is saved as.
-        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "model", "inspect", doc, ref], cwd=self.folder,
+        # ``cad xbf inspect``: of a model's id, or of the .xbf it is saved as.
+        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "xbf", "inspect", doc, ref], cwd=self.folder,
                                   env=self.env)
         self.assertEqual(found.returncode, 0, found.stderr)
         return json.loads(found.stdout)
@@ -261,13 +261,13 @@ if __name__ == '__main__':
     def test_decoration_only_declares_and_main_calls_only_its_selected_model(self) -> None:
         self.own()
         self.script.write_text(textwrap.dedent("""
-            from cad import model
+            from cad import xbf
 
-            @model
+            @xbf
             def unused():
                 raise AssertionError("uncalled model ran")
 
-            @model("XBF/block.xbf")
+            @xbf("XBF/block.xbf")
             def block():
                 import build123d as bd
                 return bd.Box(1, 2, 3)

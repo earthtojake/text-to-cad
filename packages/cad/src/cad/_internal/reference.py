@@ -352,9 +352,9 @@ def _type_members(entry: Any) -> list[dict[str, Any]]:
     owner = getattr(cad, entry.id)
     members: list[dict[str, Any]] = []
     if entry.decorator:
-        # ``cad.model`` is its own ``__call__``; a file's type hands its call to the engine's decorator of
+        # ``cad.xbf`` is its own ``__call__``; a file's type hands its call to the engine's decorator of
         # that type, whose signature and words are the type's own (a mesh's alone takes a tolerance).
-        if entry.id == "model":
+        if entry.id == "xbf":
             call = type(owner).__call__
             signature, doc = _runtime_signature(call, drop_first=True), _doc(call.__doc__)
         else:

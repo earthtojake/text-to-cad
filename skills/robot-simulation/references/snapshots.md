@@ -45,7 +45,7 @@ first.
 
 No `cad` command draws a MuJoCo model's file. In its place:
 
-- **The robot's kinematics, posed**: snapshot the CAD model it was generated from (`cad model snapshot
+- **The robot's kinematics, posed**: snapshot the CAD model it was generated from (`cad xbf snapshot
   "$ID" out.png --pose home`) or the URDF exported beside it (`cad urdf snapshot robot.urdf out.png
   --pose '{"elbow": 45}'`): the same links, joints and zero.
 - **What it collides as**: the `collisions` and `excludes` lines of `cad mujoco check`

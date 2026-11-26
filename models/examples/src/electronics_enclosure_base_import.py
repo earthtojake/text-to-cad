@@ -9,7 +9,7 @@ as every export is; Git holds no CAD files) and reads them back from there, so r
 before opening either import model.
 """
 
-from cad import model, step
+from cad import xbf, step
 
 from pathlib import Path
 
@@ -20,18 +20,18 @@ ENCLOSURE_STEP = Path(__file__).parent / "../STEP/electronics_enclosure_base.ste
 FIXTURE_STEP = Path(__file__).parent / "../STEP/basic_shape_mating_test_fixture.step"
 
 
-@model
+@xbf
 def electronics_enclosure_base_import():
     return step.read(ENCLOSURE_STEP)
 
 
-@model
+@xbf
 def basic_shape_mating_test_fixture_import():
     return step.read(FIXTURE_STEP)
 
 
 if __name__ == "__main__":
-    model.export(electronics_enclosure_base, ENCLOSURE_STEP)
-    model.export(basic_shape_mating_test_fixture, FIXTURE_STEP)
+    xbf.export(electronics_enclosure_base, ENCLOSURE_STEP)
+    xbf.export(basic_shape_mating_test_fixture, FIXTURE_STEP)
     electronics_enclosure_base_import()
     basic_shape_mating_test_fixture_import()

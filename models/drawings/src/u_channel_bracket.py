@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -22,7 +22,7 @@ BLANK_LENGTH_MM = FLANGE_LENGTH_MM + WEB_LENGTH_MM + FLANGE_LENGTH_MM
 BEND_XS_MM = (FLANGE_LENGTH_MM, FLANGE_LENGTH_MM + WEB_LENGTH_MM)
 
 
-@model
+@xbf
 def u_channel_bracket():
     with bd.BuildSketch() as cut:
         with bd.Locations((BLANK_LENGTH_MM / 2.0, BLANK_WIDTH_MM / 2.0)):

@@ -3,13 +3,13 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 # Prompt: Small enclosure cover with raised rim, corner screw holes, and shallow recessed center.
 
 from lib.simple_model_library import make_small_enclosure_cover
 
 
-@model
+@xbf
 def small_enclosure_cover():
     part = make_small_enclosure_cover()
     authored_color = part.color

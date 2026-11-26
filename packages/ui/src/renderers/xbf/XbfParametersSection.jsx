@@ -3,6 +3,7 @@ import {
   PARAMETER_REASONS, PARAMETER_REFUSALS, changedParameters, formatParameterValue, parameterIsRanged, parameterStep, parameterValue,
   sameParameterValue, savedParametersNote, settledDrafts, unsavedParametersNote, xbfParameters
 } from "@cad/core/lib/xbf/xbfParameters.js";
+import { documentKind } from "@cad/core/lib/fileFormats.js";
 import { Button } from "@cad/ui/primitives/button";
 import { Spinner } from "@cad/ui/primitives/spinner";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
@@ -144,7 +145,7 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
   const structure = document?.structure || null;
   const parameters = useMemo(() => xbfParameters(structure), [structure]);
   // Only a model has a script to write: the engine says so of every parameter of any other document.
-  const model = document?.source?.kind === "model" ? String(document.source.doc || "") : "";
+  const model = documentKind(document?.source?.kind) === "xbf" ? String(document.source.doc || "") : "";
   // A host that cannot make the request leaves the client's method out: its view shows the values alone.
   const savable = Boolean(model) && typeof client?.setModelParameters === "function";
   const previewable = savable && typeof client?.previewModelParameters === "function";

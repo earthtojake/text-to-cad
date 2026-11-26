@@ -27,10 +27,10 @@ from cad.engine import client, contract  # noqa: E402
 # script afresh -- and the kernel in the body alone, so the script's own process never loads it.
 SCRIPT = """
 import ownpackage
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def plate():
     import build123d as bd
 

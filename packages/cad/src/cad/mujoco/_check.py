@@ -1,6 +1,6 @@
 """``check``: a MuJoCo model (an MJCF) compiled by MuJoCo and checked, as ``cad mujoco check FILE`` does.
 
-An MJCF is MuJoCo's own file, and no document type: cad writes one (``cad model export ID robot.xml``, a
+An MJCF is MuJoCo's own file, and no document type: cad writes one (``cad xbf export ID robot.xml``, a
 MuJoCo function's ``save``) and never shows one -- MuJoCo Studio does (``cad run mujoco-studio --model FILE``).
 What cad does with one is ask MuJoCo: ``check`` compiles the file with MuJoCo's own compiler, the one reader
 that knows every rule of the format, and answers a check's result (``cad.results.CheckResult``):

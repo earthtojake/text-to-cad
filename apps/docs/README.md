@@ -44,7 +44,7 @@ Vercel, not this repo) must point at `apps/docs`.
 
 The hero is one GLB, `public/hero/planetary.glb`: the planetary gear model
 (`models/assemblies/src/planetary_gear_assembly/`) exported from its document by
-`cad model export`, its parts, colours and its `meshCycle` motion, which the export bakes
+`cad xbf export`, its parts, colours and its `meshCycle` motion, which the export bakes
 into a clip. It is committed as a PLAIN file (never LFS: Vercel serves it statically
 with no backend), one of the few CAD files Git holds
 (`tests/python/global/test_no_cad_assets_tracked.py` lists it, with a size cap). The page
@@ -53,7 +53,7 @@ with its hidden lines removed, and plays the clip slowed to a background's pace.
 checks read only that committed file;
 nothing in the docs app's build or `npm run check` reads the sample corpus. Refresh it
 by hand after changing the model: run its script, which prints its document id, then
-`cad model export <id> apps/docs/public/hero/planetary.glb`. Preserve the `meshCycle`
+`cad xbf export <id> apps/docs/public/hero/planetary.glb`. Preserve the `meshCycle`
 clip and verify playback before committing the refreshed GLB.
 
 ## The shape of the app

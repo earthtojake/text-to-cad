@@ -121,8 +121,8 @@ test("a document read under a page's origin is read under it, every read of it w
   // The viewer's own page: a page-relative URL, read against the page.
   globalThis.location = { href: "http://127.0.0.1:3245/?file=/models/a.step" };
   try {
-    assert.deepEqual(xbfDocumentSource("/api/v1/documents/model/abc123"), { url: "http://127.0.0.1:3245/api/v1/documents/model/abc123",
-      origin: "http://127.0.0.1:3245", base: "http://127.0.0.1:3245", doc: "abc123", kind: "model" });
+    assert.deepEqual(xbfDocumentSource("/api/v1/documents/xbf/abc123"), { url: "http://127.0.0.1:3245/api/v1/documents/xbf/abc123",
+      origin: "http://127.0.0.1:3245", base: "http://127.0.0.1:3245", doc: "abc123", kind: "xbf" });
   } finally {
     delete globalThis.location;
   }

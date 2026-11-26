@@ -91,7 +91,7 @@ class LibraryTest(unittest.TestCase):
         status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
         entry = answer["documents"][0]
         # Filtered by kind, searched by name or path, at most a number.
-        for query, found in (("?kind=stl", 1), ("?kind=model", 0), ("?q=A.ST", 1), ("?q=nothing", 0), ("?limit=1", 1)):
+        for query, found in (("?kind=stl", 1), ("?kind=xbf", 0), ("?q=A.ST", 1), ("?q=nothing", 0), ("?limit=1", 1)):
             with self.subTest(query=query):
                 self.assertEqual(len(json.loads(self.request("GET", "/api/v1/documents" + query)[1])["documents"]), found)
         self.assertEqual(json.loads(self.request("GET", "/api/v1/documents/stl")[1])["documents"], [entry])
@@ -138,7 +138,7 @@ class LibraryTest(unittest.TestCase):
         status, body = self.request("GET", "/api/v1/documents")
         [entry] = json.loads(body)["documents"]
         self.assertEqual((status, entry["path"], entry["id"], entry["kind"], entry["record"], entry["name"]),
-                         (200, str(saved), ident, "model", "file", "cube.xbf"), "the home opens it by its id: /<id>")
+                         (200, str(saved), ident, "xbf", "file", "cube.xbf"), "the home opens it by its id: /<id>")
         self.assertEqual((entry["updated"], entry["opened"]), (1_700_000_000, None), "no page opened it yet")
         [entry] = self.change("open", ident)[1]["documents"]
         self.assertGreater(entry["opened"], 1_700_000_000, "a page's open of its id says when")

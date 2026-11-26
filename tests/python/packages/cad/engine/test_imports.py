@@ -351,7 +351,7 @@ class ReadsTest(unittest.TestCase):
                 if status == "loaded":
                     break
                 self.assertEqual(report["retention"]["fallbacks"], {f"reads.py::{name}": [
-                    f"reads {path} through {call}: its body is never retained (any edit runs it whole); use step.read/model.read/stl.read"]})
+                    f"reads {path} through {call}: its body is never retained (any edit runs it whole); use step.read/xbf.read/stl.read"]})
                 # The report is the build's, its memo tally whole: `python model.py` prints it.
                 self.assertIn("misses", report["memo"], name)
                 self.assertTrue(said.describe(report, 1.0, None).startswith(f"built reads.py::{name} in"), name)

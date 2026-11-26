@@ -1,4 +1,4 @@
-"""``cad model inspect DOC`` without a ref: what the document holds, on one screen, before its build
+"""``cad xbf inspect DOC`` without a ref: what the document holds, on one screen, before its build
 closure -- its state, parts, bounds, volume, materials, joints, states, sequences and declared
 files -- read from the document the engine holds, and nothing built; ``--json`` the same as data;
 ``--query structure`` the same lists with nothing measured. Measuring is lazy: a build no inspection
@@ -25,14 +25,14 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 HINGE = """
 import pathlib
 import build123d as bd
-from cad import model
+from cad import xbf
 from bd_materials import metals
 from cad.build123d import configuration_sequence, mechanism_state
 
 pathlib.Path(__file__).with_suffix(".ran").write_text("ran", encoding="utf-8")
 
 
-@model
+@xbf
 def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -109,8 +109,8 @@ class SummaryTest(unittest.TestCase):
         # A script asks the same of the handle its model call returns, as every verb takes one: each
         # material's density and parts, no solid transferred to it.
         (self.folder / "ask.py").write_text(
-            "import json\nfrom cad import model\nfrom hinge import hinge\n"
-            "print(json.dumps(model.inspect(hinge(), query='structure')['summary']['materials']))\n", encoding="utf-8")
+            "import json\nfrom cad import xbf\nfrom hinge import hinge\n"
+            "print(json.dumps(xbf.inspect(hinge(), query='structure')['summary']['materials']))\n", encoding="utf-8")
         asked = self.run_("ask.py")
         self.assertEqual(asked.returncode, 0, asked.stderr)
         self.assertEqual(json.loads(asked.stdout.splitlines()[-1]), structure["materials"])

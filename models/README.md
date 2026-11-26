@@ -7,10 +7,10 @@ fixtures in fresh temporary directories. The manual-validation cases live in
 [tests/](tests/README.md).
 
 Each project has one layout, the cad skill's: its sources in `src/` (shared modules in
-`src/lib/`), each model a `@model` function its script calls under `if __name__ ==
+`src/lib/`), each model a `@xbf` function its script calls under `if __name__ ==
 "__main__":`. A run writes nothing: it builds the model in the engine and prints its
 document's `id:` and page (`view:`), which every later run updates. A file is written
-on request, `cad model export <id> STEP/<name>.step`, into the project's root-level
+on request, `cad xbf export <id> STEP/<name>.step`, into the project's root-level
 `STEP/`, `STL/`, `GLB/`, `3MF/` or `DXF/`, which each project's `.gitignore` keeps out
 of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the link meshes
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
@@ -29,7 +29,7 @@ and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git hi
 `tests/unported/joint_playground/joint_playground.urdf`, named nowhere, kept with its README.
 
 **Where does a new model go?** A standalone part that is one script goes in
-`examples/src/` (a `@model`), an assembly gets a group in `assemblies/`
+`examples/src/` (a `@xbf`), an assembly gets a group in `assemblies/`
 (`src/<group>/`), and a 2D drawing a script in `drawings/src/`, its DXF added to
 `drawings/src/exports.py`. A model that needs helper modules, several scripts or notes
 of its own gets a project of its own here. A KiCad board is no model: it lives one folder each in
@@ -73,8 +73,8 @@ project delivers them and because something outside the model reads them:
 | `drawings` (all eight) | `DXF/<name>.dxf` | `src/exports.py` | the DXF deliverables, flat patterns among them; a drawing exists for its DXF |
 | `juno`, `lyra` (every link model) | `3MF/<link>.3mf` | `src/exports.py` | the URDFs reference them |
 | `examples` (`electronics_enclosure_base_drawing`) | `PDF/electronics_enclosure_base_drawing.pdf` | `@eng_drawing` | an engineering drawing is its PDF |
-| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.model.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
-| `radial` | `XBF/radial.xbf` | `@model("….xbf")` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
+| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.xbf.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
+| `radial` | `XBF/radial.xbf` | `@xbf("….xbf")` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
 | `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`, `pinball`) | the KiCad project: the board, the schematic's sheets, the project file and rules, the project's libraries and their tables (each sample's `.gitignore` names them) | `cad run build.py` (`pinball`: `board/build.py`), the board's scripts in order | the board is made by its scripts, which are its source; ERC, DRC, the checks, the viewer, KiCad and the CAD scripts read it, so build before any of them |
 | `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`, `pinball`) | `macropad.3dshapes/`, `3dmodels/`, `orbit.3dshapes/`, `board/pinball.3dshapes/` (a STEP each) | `@step` on each part model (`src/vendor_parts.py`, `src/footprint_models.py`, `src/part_models.py`, `board/scripts/part_models.py`) | the footprints KiCad's library has no model for name them (`${KIPRJMOD}/...`): the board's 3D view and its STEP and GLB exports read them, so run the script before either |
 | `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`) | `3MF/`, `STEP/`, `GLB/`, `DXF/` | `src/exports.py` | the printed parts in their print orientation, the panel's cut and art DXFs, the assemblies' STEP and GLB (the GLB carries the explode) |
@@ -85,8 +85,8 @@ From a model's `src/` folder, with the engine's environment (the library on the 
 
 ```
 python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
-cad model snapshot "$ID" OUT.png            # drawn by OCCT
-cad model export "$ID" GLB/NAME.glb         # a file of it, on request
+cad xbf snapshot "$ID" OUT.png            # drawn by OCCT
+cad xbf export "$ID" GLB/NAME.glb         # a file of it, on request
 ```
 
 A model script is Python and takes no options: running it asks the engine to build each
@@ -101,10 +101,10 @@ cache.
 The migration a user makes ([the migration guide](../docs/migrations/migrating-0.7-to-0.8.md)),
 and nothing more:
 
-- `from cadgen import step` -> `from cad import model` (`from cadgen import model` in 0.8; and
+- `from cadgen import step` -> `from cad import xbf` (`from cadgen import xbf` in 0.8; and
   `memo`, `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); 0.7's build123d proxy ->
   `import build123d as bd`; `cad.ap242` for the mechanism and `cad.gltf` for a GLB's animations.
-- `@step(out=...)` -> `@model`, and nothing else, but where the table above keeps a file.
+- `@step(out=...)` -> `@xbf`, and nothing else, but where the table above keeps a file.
   Every script calls its models under `__main__`; a module of `@memo` stages or plain
   helpers calls nothing there.
 - `materials=` finishes -> native `bd_materials.FinishedMaterial` values with
@@ -130,7 +130,7 @@ and nothing more:
   old clip keeps its name and duration in one or the other; what neither can say (an
   opacity fade, a tube deformation, a chain link riding its loop, a body that leaves the
   ground) is written in each project's README as a deliberate difference.
-- `@dxf` -> `@model` returning the drawing's 2D geometry, a compound of labelled
+- `@dxf` -> `@xbf` returning the drawing's 2D geometry, a compound of labelled
   children a layer each; `drawings/src/exports.py` writes the DXFs.
 
 ### When to use `@memo`
@@ -152,7 +152,7 @@ marker costs a model body that is no longer one piece.
 | --- | --- | --- |
 | [`dfm-process-comparison`](dfm-process-comparison/README.md) | 5 single-part trays | per-part catalogue materials (PLA, aluminium, ABS); lofts, fillets, drafted cones |
 | [`qdd_actuator`](qdd_actuator/src/README.md) | one file, 153 occurrences | a 102-part assembly, modules as nested compounds; one body (no `@memo`: its makers save under 0.1 s); build123d joints (each module fastened, the drive train's revolutes); the drive train one coupling, `drive` (a constraint), two configurations, the old clip `drive` a motion and `inspect` and `teardown` GLB animations at the old stations, the planets' radial spread restored |
-| [`motorbike`](motorbike/src/README.md) | 21 part models + the assembly | each part a `@model` the assembly calls, a child of its run and a page of its own, a part placed twice; revolute and rigid joints across parts; the old poses as three configurations (`stand_down`, `turned_left`, `bump`) and one motion, `steer` (a GLB export carries it as a clip) |
+| [`motorbike`](motorbike/src/README.md) | 21 part models + the assembly | each part a `@xbf` the assembly calls, a child of its run and a page of its own, a part placed twice; revolute and rigid joints across parts; the old poses as three configurations (`stand_down`, `turned_left`, `bump`) and one motion, `steer` (a GLB export carries it as a clip) |
 | [`moonwatch`](moonwatch/src/README.md) | `case.py`, `dial.py`, `bracelet.py`, `finishing_sampler.py`, `movement.py` (3 `@memo` layers), and `moonwatch.py`, the full watch composing case, dial, movement and bracelet in one body | finishes as materials on every part: catalogue entries in each finish's look (coat, grain, transmission), own materials (sapphire, ruby, print ink, lacquer, lume), a painted face finish, transparent parts; the full watch (258 parts, 301 instances): its mates as 17 joints paired by label (the hands, going train, escapement, chronograph, crown and pushers) and rigid fastenings, its gear trains as two couplings (`running`, `chrono`: constraints its wheels and hands move only through), 7 configurations, the `running` motion and the `reveal`, `showcase` and `grand_tour` GLB animations (the escapement posed at every key, the parts translated, the movement turned about X with its tiers fanned inside it) |
 | [`examples`](examples/src/README.md) | all 29 scripts: 27 parts and assemblies, a `read_step` import and an `@eng_drawing` | fillets, chamfers, swept blades; assemblies placed by joints (the fixture's `connect_to` moving parts, the print-in-place hinges' pivots revolute joints paired by label); `read_step` of a part and of an assembly (imported naming), from the STEPs its script exports first; STL, 3MF and GLB declared on the model (`mounting_plate`, `spur_gear_blank`); an `@eng_drawing` PDF of the enclosure, calling its model; the hinged box's motion and its showcase `animation()` |
 | [`hypercar`](hypercar/src/README.md) | 13 system files (`@memo` stages, 1,250-24,000 kernel calls each) + one model | a 706-part car whose panels share one master surface; a placed wheel prototype per axle; doors as cylindrical joints on the chassis paired by label across systems' groups, riders fastened by rigid-joint pairs; a configuration (`open`), the motion `doors`, and the `showcase` tour and `explode` as GLB animations of the old groups, each door with its flank and each rider with its own group |
@@ -160,7 +160,7 @@ marker costs a model body that is no longer one piece.
 | [`drawings`](drawings/src/README.md) | all eight scripts of the old `drawings`, and `exports.py` | drawings as models of planar documents, their DXFs written by `exports.py`: a layer per part (`CUT`, open `BEND` and `ENGRAVE` lines, a layer of several shapes one part of them all), bend fixtures in every orientation, `bd.Text` outlines engraved, a workshop drawing of three views and eleven dimensions, and a profile laid out from a solid's top face; byte-for-byte the old emitter's for the gasket |
 | [`juno`](juno/src/README.md) | one script: the robot and its 28 URDF links, 29 models | 27 revolute joints connected at the athletic stance (absolute angles, the URDF's travel as ranges) and the SRDF's five group states as configurations and the seven gait clips as motions of time (a root-held vertical slide, `pelvis_lift`, for the bounce); each link a model whose 3MF `juno.urdf` references `exports.py` writes; one `@memo` stage, `links()`, shared by all 29 (30.8 s cold against 56.2 s without it) |
 | [`assemblies`](assemblies/src/README.md) | 23 models in 21 groups | the demo assemblies: `AssemblyHelper` frames as build123d joints, the planetary gear's `drive` coupling, its `meshCycle` motion (its GLB, the docs hero) and `inspectExplode` animation, the mars rover's joints, its differential's coupling (`rocker_split`), 4 configurations, three motions and the `explodedAssembly` animation; no `@memo`, no model calling another |
-| [`tendon_hand`](tendon_hand/src/README.md) | 56 of the 112 one-model scripts, folded into 5 scripts by subsystem | the research hand's components, phalanges, routing, guide mounts and forearm, each model a `@model`; four shared `@memo` stages (each finger's guide combs, the forearm frame, its guide banks, the R5 supports) placed by several models; a STEP round trip made in memory, a `@memo` call that keys what OCCT's reader made; `anatomy_layout`'s finger joints with a curl coupling per finger and two configurations; the other 56, reviews on frozen STEP snapshots, dropped |
+| [`tendon_hand`](tendon_hand/src/README.md) | 56 of the 112 one-model scripts, folded into 5 scripts by subsystem | the research hand's components, phalanges, routing, guide mounts and forearm, each model a `@xbf`; four shared `@memo` stages (each finger's guide combs, the forearm frame, its guide banks, the R5 supports) placed by several models; a STEP round trip made in memory, a `@memo` call that keys what OCCT's reader made; `anatomy_layout`'s finger joints with a curl coupling per finger and two configurations; the other 56, reviews on frozen STEP snapshots, dropped |
 | [`radial`](radial/src/README.md) | 19 scripts -> one model, 18 `@memo` system stages | a sectioned nine-cylinder radial, 473 parts in 2,400 placements: finishes as catalogue materials on every part; the old animation's label contract made its joints (revolute and prismatic, fastened links), the gear train one coupling (`drive`, a constraint), two configurations, the `running` motion, and `explode` and `exploded-running` as GLB animations of the old plan, `lib/explode_plan.json` (the teardown's 1,360 units, the running layout and its 466 hidden parts) |
 | [`lyra`](lyra/src/README.md) | one script: the hand and its 17 URDF links, 18 models | 16 revolute joints connected at the relaxed pose (absolute angles, the URDF's travel as ranges), the SRDF's seven group states as configurations and the five clips as motions of time (joint-space already); each link a model whose 3MF `lyra.urdf` references `exports.py` writes; one `@memo` stage, `links()`, shared by all 18 (7.7 s cold against 11.1 s without it) |
 | [`falcon_heavy`](falcon_heavy/src/README.md) | 3 scripts -> one script, 3 models | the full stack, a 270° cutaway and an exploded view of one vehicle library: 85 parts in 2,142 placements, 27 engines as `moved` placements of one Merlin; two `@memo` stages, `engine_prototype()` (one Merlin per build, not nine) and `build_vehicle(cutaway)` (the exploded view's vehicle a placement of the stack's): 7.1 s cold with none, 5.0 s with both |

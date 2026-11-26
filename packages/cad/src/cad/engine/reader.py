@@ -510,7 +510,7 @@ def written_by_build(path: Any) -> str | None:
 
 
 # The reader of each kind of file a model reads, as a refusal names the one to use instead.
-_READERS = {".xbf": "a model saved as a file with model.read", ".step": "a STEP with step.read",
+_READERS = {".xbf": "a model saved as a file with xbf.read", ".step": "a STEP with step.read",
             ".stp": "a STEP with step.read", ".stl": "an STL with stl.read"}
 
 
@@ -559,8 +559,8 @@ def read_xbf(path: Any) -> Any:
     from cad.engine.document import _read
 
     path = Path(os.fspath(path))
-    refuse_other_file(path, "model.read", ".xbf")
-    refuse_written(path, "model.read")
+    refuse_other_file(path, "xbf.read", ".xbf")
+    refuse_written(path, "xbf.read")
     if not path.is_file():
         raise FileNotFoundError(f"no document {path}")
     doc = _read(path)

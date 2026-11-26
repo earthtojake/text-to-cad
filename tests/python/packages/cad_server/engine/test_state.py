@@ -68,7 +68,7 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(self.define(source, str(saved)).name, "cell")
         self.assertFalse(hasattr(self.define(source, str(saved)), "store"), "no store to choose")
         for nowhere in ("<stdin>", str(folder / "ipykernel_1" / "2.py")):  # a REPL's, a notebook cell's
-            with self.subTest(file=nowhere), self.assertRaisesRegex(ValueError, r"model\(shape, name='cell'\)"):
+            with self.subTest(file=nowhere), self.assertRaisesRegex(ValueError, r"xbf\(shape, name='cell'\)"):
                 self.define(source, nowhere)
         # store= is gone: an unexpected keyword argument, as any name that never was (law 14).
         for given in ("@model(store='memory')", "@model('XBF/cell.xbf', store='memory')"):
@@ -92,7 +92,7 @@ class StoreTest(unittest.TestCase):
         # Its own .xbf twice, bare or given: nothing says which is the model's.
         for stack in ("@model\n@model('XBF/cell.xbf')", "@model('XBF/cell.xbf')\n@model", "@model('a.xbf')\n@model('b.xbf')"):
             with self.subTest(stack=stack), self.assertRaisesRegex(
-                    TypeError, r"^model 'cell' declares its \.xbf twice: keep one @model$"):
+                    TypeError, r"^model 'cell' declares its \.xbf twice: keep one @xbf$"):
                 self.define(f"from cad.engine import model\n\n{stack}\ndef cell():\n    return None\n", str(saved))
         both = self.define("from cad.engine import model, step\n\n@model('XBF/cell.xbf')\n@step('cell.step')\n"
                            "def cell():\n    return None\n", str(saved))

@@ -120,7 +120,7 @@ ever. The files at the bundle's root are the document's own and change with it.
 ```json
 {
  "format": "view-bundle/1",
- "document": {"id": "64e0eca9-…", "kind": "model", "name": "arm", "version": "2d7477b07ccdfa4c"},
+ "document": {"id": "64e0eca9-…", "kind": "xbf", "name": "arm", "version": "2d7477b07ccdfa4c"},
  "made": {"tool": "cad", "release": "0.11.17"},
  "files": {
   "structure.json": {"bytes": 4082, "sha256": "…", "type": "application/json"},
@@ -130,10 +130,9 @@ ever. The files at the bundle's root are the document's own and change with it.
 ```
 
 `format` names the layout: a change within `view-bundle/1` only adds, and a reader of another number reads
-none of it (law 14, tier 4). `document` is the document's `id`, its `kind` (the API's: `model`, `step`,
-`stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`; a reader takes `xbf` too, an `.xbf`'s kind
-while it was a type of its own), its `name` and the `version` its files are of (the structure's, for a model and a
-STEP; else the envelope's). `files` is every other file of the
+none of it (law 14, tier 4). `document` is the document's `id`, its `kind` (the API's: `xbf`, `step`,
+`stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`), its `name` and the `version` its files are
+of (the structure's, for a model and a STEP; else the envelope's). `files` is every other file of the
 bundle by its path, with its size, its SHA-256 and the content type its answer was sent with, which a file
 server that knows no `.xbm` or `.hdr` is told from here. The manifest holds no time and no path: a document
 the engine holds gives the same manifest each time it is written. A model built again has a new

@@ -22,7 +22,7 @@ arguments -- is one coarse entry above its calls, kept in the worker's memory
   (`trace._library_roots`), never its whole prefix: a project inside its own
   virtual environment's folder is first-party, and a model script that does lie
   in a library folder is said on the build's log, since its edits rebuild nothing;
-- every file it reads through the engine, by its bytes: `step.read`, `model.read`, `stl.read`,
+- every file it reads through the engine, by its bytes: `step.read`, `xbf.read`, `stl.read`,
   and build123d's importers (`import_step`, `import_brep`, `import_stl`), which the memo keys
   as it keys the engine's readers;
 - every file it reads itself, observed, by its bytes: an audit hook on `open`
@@ -48,7 +48,7 @@ readers, `RWStl.ReadFile_s`, `StlAPI`, `BRepTools.Read_s` and `BinTools.Read_s` 
 path, `RWMesh_CafReader.Perform`: glTF's and OBJ's; `kernel/memo.py`, `_READER_TARGETS`).
 A body that calls one is never retained, so any edit runs it whole, and `retention.fallbacks`
 names the call: `reads ../part.brep through OCCT's BRepTools.Read_s: its body is never retained
-(any edit runs it whole); use step.read/model.read/stl.read`. (build123d's `import_step`,
+(any edit runs it whole); use step.read/xbf.read/stl.read`. (build123d's `import_step`,
 `import_brep` and `import_stl` are not on that list: the memo wraps them as operations keyed by
 the file's bytes, as the engine's readers are, so a body that calls one is kept.) The file it named is one of its
 inputs all the same, held to its bytes (a read of what is no regular file leaves its closure with no

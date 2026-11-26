@@ -1467,7 +1467,7 @@ def _row(ident: str, path: str, service: str, share: dict[str, Any]) -> dict[str
     return {"id": view.rsplit("/", 1)[1], "write": share["write"], "delete": share["delete"], "service": service,
             "view": view, "remove": f"{view}#delete={share['delete']}", "expires": share["expires"],
             "document": {"id": ident, "kind": kind,
-                         "name": share_name(Path(path).stem if kind == "model" else os.path.basename(path)),
+                         "name": share_name(Path(path).stem if kind == "xbf" else os.path.basename(path)),
                          "path": path},
             "files": {"root": share.get("root"), "entry": share.get("entry")}}
 

@@ -8,11 +8,11 @@ const pathOf = resource => resource.kind === "url" ? new URL(resource.url).pathn
 const stemOf = resource => stem(pathOf(resource));
 // What draws the packet again: the file's document type's snapshot (`cad <type> snapshot`), the type read off
 // the registry by the extension of the file the view shows; a model's document, which has no file of its own, is
-// the engine's.
+// the xbf's.
 const typeOf = path => {
   const name = String(path || "").split("/").pop().toLowerCase();
   const found = DOCUMENT_TYPE_REGISTRY.documentTypes.find(type => type.extensions.some(extension => name.endsWith(extension)));
-  return found ? found.id : "model";
+  return found ? found.id : "xbf";
 };
 // Made the first time something reads it: no host carries the packet's bytes beside its text.
 const lazy = start => {
