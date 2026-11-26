@@ -14,7 +14,7 @@ There is no separate text-to-cad board model. The skill edits the native files i
 - A STEP or GLB of the board and its parts, for enclosure design. A part without a 3D model is named in the result and left out. The GLB also holds copper, mask and silkscreen.
 - A pre-order review of the board, with each finding marked pass, fail, review or unverified.
 
-In the [viewer](/docs/viewer), a board shows in 2D and 3D with layers, selection, Measure and annotations, and a schematic shows one sheet at a time with a parts, nets and hierarchy panel.
+In the [viewer](/docs/viewer), a board shows in 2D and 3D with layers, selection, Measure and annotations, and a schematic shows one sheet at a time with a parts, nets and hierarchy panel. A board shared with `cad share` shows in 2D; for its 3D, your agent exports the board's GLB and shares that.
 
 ## How it works
 

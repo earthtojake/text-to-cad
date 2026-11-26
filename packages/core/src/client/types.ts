@@ -301,7 +301,8 @@ export interface CadWorkspaceService {
   plotPayload?(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
   /**
    * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
-   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
+   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path. A
+   * service without an engine (a view bundle's) has none, and its board is drawn in 2D alone.
    */
   boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */

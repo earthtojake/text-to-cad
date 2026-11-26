@@ -113,6 +113,11 @@ const BoardPreview = props => <Suspense fallback={null}><BoardPreviewView {...pr
  * canvas has painted it). Which of the two is up, and the 3D camera and projection, are the file's view
  * (`board3d`).
  *
+ * The board in 3D and its Preview stand its parts on its 3D models table (`boardModels`). A client that has none (a
+ * view bundle's: a share shows a board in 2D, and its 3D is a GLB of its own, shared as a file of its own) has the
+ * board in 2D alone: Display has no Mode, 3 does nothing, a file left in 3D opens in 2D, there is no Preview and no 3D
+ * models row in the Layers tab, and neither 3D chunk loads.
+ *
  * **Preview**, as every 3D file's (`kit/shell/useFlatPreview.jsx`, the frame's `usePreviewFrame.jsx`): its button
  * after Display, and while it is up the whole page Preview's — the board as it is made, lit, in a view of its own
  * (`BoardPreviewView.jsx`, a lazy chunk), under Preview's bar, with its settings (Orbit, Render's lighting, background
@@ -175,14 +180,19 @@ function BoardSurface({ view, data }) {
   // The board's outline (page millimetres): where a face's overlay in 3D lays the dim.
   const outlineRef = useRef(null);
   outlineRef.current = plot?.board?.outline ?? null;
-  const models = useBoardModels({ client: workspace.client, file, revision: workspace.resource.revision, enabled: Boolean(index) });
+  // 3D, and Preview, where the client has the models table they stand the parts on; else the board is 2D alone.
+  const offers3d = typeof workspace.client?.boardModels === "function";
+  const models = useBoardModels({ client: workspace.client, file, revision: workspace.resource.revision, enabled: offers3d && Boolean(index) });
 
   // ---- the file's view: the transform, the board's Display, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
   // The flat canvas's view as it was left, with the pane it was framed in (`kit/viewport/flatView.js`).
   const [restored] = useState(() => readFlatView(stored.camera));
-  // 2D or 3D, the 3D camera and its projection: the file's, as it was left.
-  const [restored3d] = useState(() => readBoard3d(stored.renderer.board3d));
+  // 2D or 3D, the 3D camera and its projection: the file's, as it was left; 2D where there is no 3D.
+  const [restored3d] = useState(() => {
+    const kept = readBoard3d(stored.renderer.board3d);
+    return offers3d ? kept : { ...kept, mode: "2d" };
+  });
   // In 3D the side shown is the side the camera is on (Flip's icon follows it): a file left in 3D opens on its
   // camera, so on that camera's side, whatever its Display last said.
   const [display, setDisplay] = useState(() => {
@@ -227,9 +237,10 @@ function BoardSurface({ view, data }) {
   }, []);
 
   // ---- Preview: the board as it is made, lit, in a view of its own ---------------
-  // Offered where 3D is (a board read with its layers); its view is built as it opens, from the plot, the parts and
-  // the models table (`BoardPreviewView.jsx`), which says while the parts' bodies are still arriving (`complete`).
-  const previewable = Boolean(layered && plot);
+  // Offered where 3D is (a board read with its layers, through a client with a models table); its view is built as it
+  // opens, from the plot, the parts and the models table (`BoardPreviewView.jsx`), which says while the parts' bodies
+  // are still arriving (`complete`).
+  const previewable = Boolean(offers3d && layered && plot);
   // The parts the 3D views stand models on: the index's (page millimetres, as the stage's outline is), each with its models.
   const boardParts = useMemo(() => (index ? [...index.parts.values()] : null), [index]);
   const [previewComplete, setPreviewComplete] = useState(true);
@@ -719,15 +730,18 @@ function BoardSurface({ view, data }) {
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE, onChord: cycleOthers,
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences,
-    // 3, as KiCad's Alt+3 opens its 3D viewer: the board in 3D, and back. ⇧F, Flip's: the board seen from
-    // its other side (in 3D the camera turned over), as Flip's tile on the strip does.
+    // 3, as KiCad's Alt+3 opens its 3D viewer: the board in 3D, and back (where there is a 3D). ⇧F, Flip's: the board
+    // seen from its other side (in 3D the camera turned over), as Display's Side does. Each counted as Display's are.
     onViewKey: event => {
       if (!layered) return false;
       if (event.key === BOARD_DIMENSION_SHORTCUT && !event.shiftKey) {
+        if (!offers3d) return false;
+        controls.used("board_dimension");
         switchDimension(dimensionRef.current === "3d" ? "2d" : "3d");
         return true;
       }
       if (shortcutOfEvent(event) !== BOARD_FLIP_SHORTCUT) return false;
+      controls.used("board_side");
       chooseSide(displayRef.current.side === "bottom" ? "top" : "bottom");
       return true;
     },
@@ -788,7 +802,7 @@ function BoardSurface({ view, data }) {
     ...(index || document.loading ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: index ? list("parts") : null }] : []),
     ...(index ? [{ id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),
     ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme}
-      models={index ? { shown: showModels, onChange: setShowModels, count: modelCount } : null} /> }] : [])
+      models={index && offers3d ? { shown: showModels, onChange: setShowModels, count: modelCount } : null} /> }] : [])
   ];
   const panel = panelTabs.length ? { kind: "board", label: t("board.text.board_panel"), searchLabel: t("board.text.search_board"),
     tabs: panelTabs } : null;
@@ -807,10 +821,11 @@ function BoardSurface({ view, data }) {
   const solid = dimension === "3d" && layered && plot;
   // The board in 3D is mounted while it is the view, and while it leaves (`closing3d`).
   const mounted3d = (dimension === "3d" || closing3d) && layered && plot;
-  // The board's settings as Display's card draws them (`kit/shell/DisplaySettings.jsx`): Side, Mode, in 3D Projection,
-  // then Style and Background. Its Reset puts the side, the mode, the preset and the projection back to what a board
-  // opened for the first time gets (`BOARD_VIEW_DEFAULTS`), leaving its Background, the person's.
-  const viewGroups = layered ? boardViewGroups({ t, used: controls.used, display, sheet, onChange: setDisplay, dimension, onDimensionChange: switchDimension,
+  // The board's settings as Display's card draws them (`kit/shell/DisplaySettings.jsx`): Side, Mode (where there is a
+  // 3D), in 3D Projection, then Style and Background. Its Reset puts the side, the mode, the preset and the projection
+  // back to what a board opened for the first time gets (`BOARD_VIEW_DEFAULTS`), leaving its Background, the person's.
+  const viewGroups = layered ? boardViewGroups({ t, used: controls.used, display, sheet, onChange: setDisplay, dimension,
+    onDimensionChange: offers3d ? switchDimension : null,
     onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null,
     background: { value: viewport.background, onChange: viewport.setBackground }, defaults: BOARD_VIEW_DEFAULTS }) : null;
   const resetView = () => {

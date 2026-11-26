@@ -21,10 +21,10 @@ const NOWHERE = () => {};
  * viewer with no library (no home, no Recents, no explorer, no link to another file) and only the host's
  * ports that need no engine: the clipboard (Quick Edit's Copy), this build's links, the tab's appearance and
  * the person's language, kept in this browser (`host/browserLanguage.js`). Everything the engine answered
- * is left out where the viewer reads it: the client has no exports, no parameters to save or preview and no
- * next version, and the host no file actions, no folders to name files from, no Telemetry and no What's new. A Quick
- * Edit carries its snapshot packet as on any page (the page makes it). A prompt from the page names the document
- * by the share's link, not as the view does (`promptSubject`): the host's.
+ * is left out where the viewer reads it: the client has no exports, no parameters to save or preview, no board's 3D
+ * models table (a board is drawn in 2D) and no next version, and the host no file actions, no folders to name files
+ * from, no Telemetry and no What's new. A Quick Edit carries its snapshot packet as on any page (the page makes it). A
+ * prompt from the page names the document by the share's link, not as the view does (`promptSubject`): the host's.
  */
 export default function BundleApp({ client, tabStore, language: chosenLanguage = null, promptSubject }: { client: CadViewBundleClient; tabStore: TabStore;
   language?: string | null; promptSubject: PromptSubject }) {

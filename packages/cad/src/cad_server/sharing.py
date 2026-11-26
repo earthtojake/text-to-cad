@@ -659,8 +659,8 @@ def _on_disk(path: str) -> str | None:
 
 def _model_files(board: str) -> list[str]:
     """The 3D model files a board's footprints name in its project (``models3d.model_names``): each name that is a
-    place of the project (``_placed``), the file it names, and for a VRML name the STEP beside it, which the viewer
-    draws. A name in a library of KiCad's is the library's, as is a relative name the board's folder lacks (KiCad
+    place of the project (``_placed``), the file it names, and for a VRML name the STEP beside it, which the viewer's
+    3D draws. A name in a library of KiCad's is the library's, as is a relative name the board's folder lacks (KiCad
     looks for it in its 3D library too), and so is a file inside a 3D library (``models3d.library_roots``); a model
     embedded in the board is the board's. A name of the project's whose file is gone is its place."""
     from cad.engine.formats.kicad.models3d import _project_variables, library_roots, model_names

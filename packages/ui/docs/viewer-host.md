@@ -280,6 +280,8 @@ tool the document cannot use is absent, never drawn disabled:
   `setModelParameters` or `previewModelParameters`.
 - **No next version**: its engine document is `final`, so the view reads it once and waits on nothing.
 - **No Export**: the service has no `exports` and the host no `downloads`.
+- **A board in 2D alone**: the service has no `boardModels`, so a board's view has no Mode, no 3D and no Preview
+  (a share's 3D is a GLB of its own, shared as a file of its own).
 - **No home, Recents, projects, Open, Open in, Reveal, Copy path or Copy link**: no `library`, a file source
   that only reads its one document (`createCadFileSource`), no `projectFolder` to step through, and no
   `fileActions`, so the navbar draws no ⋯.

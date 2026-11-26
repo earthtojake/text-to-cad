@@ -312,6 +312,11 @@ is, both out of sight (Preview's Background may be see-through), and the flat vi
 (`useFlatHandover`'s `previewing`). A live `capture` and `resetCamera` act on the view on screen, Preview's while it
 is up. Preview's settings and Orbit's speed are written with the file's view (`preview`, `playback`).
 
+The board in 3D and Preview are offered where the client has the models table they stand the parts on
+(`boardModels`). A client without one (a view bundle's: a share shows a board in 2D, its 3D a GLB of its own) has the
+board in 2D alone: `boardViewGroups` is handed no `onDimensionChange`, so the card has no Mode; 3 does nothing; a
+file's view left in 3D opens in 2D; there is no Preview and no 3D models row; and neither lazy chunk loads.
+
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState.read()` is called at the moment the view is
 written, so the last write before unmount is saved; `shell.scheduleStateSave()`

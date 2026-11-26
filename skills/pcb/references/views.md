@@ -32,7 +32,7 @@ colours on the dark canvas, the same colours darkened to read on the light one.
 
 In 3D the board is a slab whose two faces are drawn as the 2D view draws them, each part standing
 on its 3D model. A pick there takes what the 2D view would take at that point of the face, or the
-part whose body is in front of it.
+part whose body is in front of it. A shared board's page has no 3D: it draws the board in 2D alone.
 
 A part's model is the STEP its footprint names, looked for only in these folders, in this order:
 

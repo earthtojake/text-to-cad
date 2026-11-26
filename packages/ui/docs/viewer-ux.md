@@ -623,6 +623,9 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
   the opening tilt (or the last 3D camera) on the same side. **Leaving** restores 2D's own window. Each mode keeps its
   own last view; only the side carries over. The home's picture of a board is the flat board. Its Preview:
   [Camera, animation and Preview](#camera-animation-and-preview).
+- **A shared board is 2D alone**: the card has no Mode, 3 does nothing, and there is no Preview and no 3D models row;
+  a view left in 3D opens in 2D. Why: a share shows a board in 2D, and its 3D is a GLB of its own, shared as a file of
+  its own.
 
 ## The panel's tabs
 

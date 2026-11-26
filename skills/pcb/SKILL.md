@@ -204,5 +204,8 @@ The page follows every run of the model. A file you export is a download: give i
 for the person: to check your own work, review with `cad snapshot`, never a screenshot
 of the page. If it fails to launch, say so.
 
+A shared board opens in 2D. For its 3D, run `cad export board.kicad_pcb tmp/glb --to glb` and share the
+`tmp/glb/board.glb` it writes. An import of the board's share gets the whole project, its 3D models included.
+
 What the board and schematic pages offer the person (layers, selection, 3D, part models), and what
 they approximate, is in [views](references/views.md).

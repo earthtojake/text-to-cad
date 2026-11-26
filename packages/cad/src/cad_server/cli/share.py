@@ -57,8 +57,8 @@ DESCRIPTION = (
     "that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf "
     "records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's "
     "project file, local libraries, 3D models and sheets -- and its view: its shapes as meshes with their names, "
-    "measurements and joints, a board's layers and its parts' 3D models, a schematic's sheets. Never an installed "
-    "library. Sharing it again keeps the link "
+    "measurements and joints, a board's layers in 2D (its 3D is a GLB of its own: `cad export BOARD DIR --to glb`, "
+    "then share that), a schematic's sheets. Never an installed library. Sharing it again keeps the link "
     "and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether "
     "sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a "
     "share.")
@@ -190,7 +190,7 @@ def _goes(kind: str, sources: Any) -> str:
         files = "the file itself"
     view = ("its shapes as meshes, with their names, measurements and joints" if kind in ("xbf", "step") else
             "its drawing" if kind == "dxf" else "its links, joints and meshes" if kind in ("urdf", "srdf") else
-            "its layers as KiCad draws them, and its parts' 3D models" if kind == "kicad_pcb" else
+            "its layers as KiCad draws them, in 2D" if kind == "kicad_pcb" else
             "its sheets as KiCad draws them" if kind == "kicad_sch" else "the mesh as the viewer draws it")
     return f"{files}, which anyone with the link can download, and its view: {view}"
 
@@ -467,8 +467,8 @@ def _refused(refusal: Any) -> Any:
 
 def _what(kind: str, paths: list[str], sources: Any) -> dict[str, Any]:
     """What the share holds, in words (``what``): the files that made it (``sources``), and its view, from its
-    files' paths, with its parts (``parts``: a robot's mesh files, a board's 3D models; None for a mesh's, a drawing's
-    or a schematic's view)."""
+    files' paths, with its parts (``parts``: a model's or a STEP's parts, a robot's mesh files; None for a mesh's, a
+    drawing's, a board's or a schematic's view)."""
     parts = sorted({path.split("/")[1] for path in paths if path.startswith("parts/") and path.count("/") >= 2})
     meshes = [path for path in paths if path.startswith("meshes/") or (path.startswith("parts/")
                                                                        and path.count("/") == 1)]
@@ -487,10 +487,7 @@ def _what(kind: str, paths: list[str], sources: Any) -> dict[str, Any]:
     elif kind == "dxf":
         view, counted = "its view (its drawing, as the viewer draws it)", None
     elif kind == "kicad_pcb":
-        models = [path for path in paths if path.startswith("documents/") and path.count("/") == 2
-                  and path.endswith("/manifest.json")]
-        view = f"its view (its layers, with {len(models)} 3D model{'s' if len(models) != 1 else ''})"
-        counted = len(models)
+        view, counted = "its view (its layers, in 2D)", None
     elif kind == "kicad_sch":
         sheets = [path for path in paths if path.startswith("sheets/")]
         view, counted = f"its view ({len(sheets)} sheet{'s' if len(sheets) != 1 else ''})", None

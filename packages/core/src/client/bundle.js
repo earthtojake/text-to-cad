@@ -23,15 +23,15 @@
 // - a drawing's (`drawing`), a robot's (`robot`) and a mesh file's bytes, through the service's
 //   resources, which read bundle paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb`
 //   and `meshes/<sha256>.<format>`, as its structure names them);
-// - a KiCad board's plot and 3D models table (`plotPayload`, `boardModels`: `plot.json`, `models.json`), and each
-//   model the table names by a document id, a bundle of its own at `documents/<id>/`, read as an engine document by
-//   that id (`engineDocument`), as the board's page reads it; a schematic's plot a sheet at a time
-//   (`sheets/<path>.json`), the hierarchy's index (`schematic.json`) put back where the page asks for it.
+// - a KiCad board's plot (`plotPayload`: `plot.json`), and a schematic's a sheet at a time (`sheets/<path>.json`), the
+//   hierarchy's index (`schematic.json`) put back where the page asks for it.
 //
 // Whatever needs an engine is no method here, so the viewer leaves out what calls it: saving or
 // previewing a model's parameters, exports, a version to wait on, the library, the projects, the
-// person's settings and everything under `/api/v1/local`. A path the manifest does not list is
-// answered 404, and a file whose size is not what the manifest says fails loudly.
+// person's settings and everything under `/api/v1/local`. A board's 3D models table (`boardModels`) is no method
+// either, so a board's view offers no 3D: a share shows a board in 2D, and its 3D is a GLB of its own, shared as a
+// file of its own. A path the manifest does not list is answered 404, and a file whose size is not what the
+// manifest says fails loudly.
 
 import { retainGlbMeshWorker } from '../lib/render/glbMeshWorkerClient.js';
 import { retainStlMeshWorker } from '../lib/render/stlMeshWorkerClient.js';
@@ -50,8 +50,6 @@ export const VIEW_BUNDLE_ORIGIN = 'http://view-bundle.invalid';
 const ENGINE_KINDS = new Set(['xbf', 'step']);
 // Every kind a manifest may name (the API's), and the renderer's.
 const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srdf', 'kicad_pcb', 'kicad_sch']);
-// Where a board's bundle holds each 3D model's, by the model's document id.
-const MODELS = 'documents/';
 // A part's elements, as the API's routes name them, and as a table keys them.
 const ELEMENT_ROUTES = new Set(['faces', 'edges', 'vertices']);
 // What a prototype's names file holds, in the order the engine's structure gives them.
@@ -333,25 +331,6 @@ export function createViewBundleClient(source, manifest) {
   };
   const resources = scopeCadResources(provider, lifetime.signal);
 
-  // ---- a board's 3D models: each a bundle of its own, at `documents/<id>/`, by its document id ---------------
-  const models = new Map();
-  /**
-   * The bundle of the 3D model a board's table names by its document id `id`, read through this one (its files are
-   * listed in this manifest too): opened once; null where this bundle holds none.
-   */
-  function modelBundle(id) {
-    if (typeof id !== 'string' || !id) return null;
-    let held = models.get(id);
-    if (held) return held;
-    let prefix;
-    try { prefix = `${MODELS}${viewBundleSegment(id)}/`; } catch { return null; }
-    if (!Object.hasOwn(files, `${prefix}${VIEW_BUNDLE_MANIFEST}`)) return null;
-    held = openViewBundle({ read: (path, options) => read(`${prefix}${path}`, options) });
-    models.set(id, held);
-    held.catch(() => { if (models.get(id) === held) models.delete(id); });
-    return held;
-  }
-
   const catalog = Object.freeze({ entries: [entry], revision: document.version });
   const snapshot = Object.freeze({ entries: Object.freeze([entry]), revision: 1, hydrated: true, refreshing: false, error: '',
     engineGone: false, engineRefused: false, catalogRevision: document.version });
@@ -373,13 +352,7 @@ export function createViewBundleClient(source, manifest) {
     refresh: async () => catalog,
     async resolveEntry(path) { return own(path, entry); },
     entryOf: path => (names(path) ? entry : null),
-    async engineDocument(file, options = {}) {
-      // A 3D model a board's table names, by its document id: the bundle of its own this one holds.
-      const model = names(file) ? null : modelBundle(file);
-      if (model) {
-        if (disposed) throw abortError();
-        return (await model).engineDocument(file, options);
-      }
+    async engineDocument(file) {
       await own(file, null);
       if (!ENGINE_KINDS.has(document.kind)) throw new Error(`A view bundle of a ${document.kind} is no engine document.`);
       // Read as the document written down, which is what an .xbf is: whatever kind the manifest names, the
@@ -407,12 +380,6 @@ export function createViewBundleClient(source, manifest) {
       const plot = await readJson(page, { signal });
       return index === false ? plot : { ...plot, schematic: await readJson('schematic.json', { signal }) };
     },
-    async boardModels(file, { signal } = {}) {
-      await own(file, null);
-      if (!Object.hasOwn(files, 'models.json')) return {};
-      const reply = await readJson('models.json', { signal });
-      return reply?.models && typeof reply.models === 'object' ? reply.models : {};
-    },
     createRenderSession() {
       if (disposed) throw new Error('This view bundle has been closed.');
       const controller = new AbortController();
@@ -433,8 +400,6 @@ export function createViewBundleClient(source, manifest) {
       disposed = true;
       lifetime.abort();
       for (const session of [...sessions]) session.dispose();
-      for (const model of models.values()) model.then(client => client.dispose(), () => {});
-      models.clear();
       tables.clear();
       source.dispose?.();
     },

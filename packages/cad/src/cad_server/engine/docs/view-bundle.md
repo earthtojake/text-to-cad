@@ -34,8 +34,6 @@ for every document, are at the root likewise. So a reader maps each read of a pa
 | `GET <api>/parts/<digest>` | `parts/<digest>.glb`: a primitive cad meshed | a robot description |
 | `GET /api/v1/local/files?path=<a link's mesh>` | `meshes/<sha256>.<format>`: the mesh file, named by its bytes | a robot description |
 | `GET <api>/plot` | `plot.json`: the board as geometry per layer, its pours KiCad's refill where KiCad could refill them (below) | a KiCad board |
-| `GET <api>/models` | `models.json`: its 3D models table, each model a STEP by its document id, or why it has none | a KiCad board |
-| each model's reads, `/api/v1/documents/step/<model id>/...` | `documents/<model id>/`: that STEP's own bundle, its manifest beside its files (below) | a KiCad board whose table names a STEP |
 | `GET <api>/plot?sheet=<path>&index=0` | `sheets/<path>.json`: each sheet's page | a KiCad schematic |
 | `GET <api>/plot?sheet=<path>` | `sheets/<path>.json` with `schematic.json`, the hierarchy's index, put back as its `schematic` (below) | a KiCad schematic |
 | `GET /api/v1/documents/<id>/thumbnail` | `thumbnail.png` | a document whose page kept a picture |
@@ -45,19 +43,16 @@ previewed, an export and everything under `/api/v1/local` need an engine. A bund
 stood, so its reader offers none of them, and reads a parameter's `writable` as said of the engine that
 answered.
 
-`<key>`, `<tessellation>`, `<digest>`, `<model id>` and a sheet's `<path>` are path segments: ASCII letters,
+`<key>`, `<tessellation>`, `<digest>` and a sheet's `<path>` are path segments: ASCII letters,
 digits, `.`, `_` and `-` as they are, every other byte `~` and its two hex digits (a STEP part's key
 `step-0a1b-0:1:2` is `step-0a1b-0~3A1~3A2`, a schematic's sheet `/Power/` is `~2FPower~2F`), so a segment is a
 file name on every system and reads the same in a URL as on a disk.
 
-**A board's 3D models, each a bundle of its own.** A board's page stands each part on the STEP its table names
-by a document id (`models.json`, the answer as it is), which it reads as an engine document: its structure and its
-parts' buffers. So each STEP the table names is a bundle of its own in the board's, at `documents/<model id>/`: its
-own `manifest.json` (its document a `step`) and the files a page reads of a STEP, by every rule here (its
-structure, its parts' buffers and tables, its measures, the look), none of it the picture a page kept. The board's manifest
-lists them too, at their paths below that folder, so a share holds them and a reader resolves the model's id to
-them. A STEP the engine will not open has no bundle, and its part stands as a block, as on the engine's page. A
-model the table finds in KiCad's 3D library is in the view as any is; it is no file of a share (**Sharing**).
+**A board, in 2D.** A board's bundle is its plot alone: a share shows a board in 2D, its layers as KiCad draws
+them. Its 3D -- the slab, and each part standing on the STEP its footprint names -- is a GLB of its own, an export
+(`cad export BOARD DIR --to glb`), shared as a file of its own; so a board's 3D models table (`GET <api>/models`)
+and the STEPs it names are no files of a bundle, and its reader answers no 3D of a board. The 3D model files of a
+board's project are among the files that made it, which its share holds and an import writes (**Sharing**).
 
 **A schematic, a sheet at a time.** A schematic's page reads the sheet it shows, the first with the hierarchy's
 index (every sheet, part, pin and net) and each other without it (`index=0`). The index is the same in every
@@ -172,7 +167,6 @@ so.
 **A KiCad board's and schematic's.** A board's plot is made off the request, as its page waits for it (a 202
 while it is made): its pours KiCad's refill of a copy, in the kicad integration's environment, the person's file
 never written; without KiCad, or where the refill is off (`CAD_KICAD_REFILL=0`) or fails, the board as saved, the
-plot's `pours` saying so, which the shared page shows as the engine's does. Then its 3D models table, and each
-STEP it names by a document id, opened by that id as the page opens it and written as a bundle of its own
-(above). A schematic's sheets are read from its index, the root's page first: a sheet rewritten while they are
-read changes that page or the index, and the writing begins again.
+plot's `pours` saying so, which the shared page shows as the engine's does; and nothing else of the board (above).
+A schematic's sheets are read from its index, the root's page first: a sheet rewritten while they are read changes
+that page or the index, and the writing begins again.

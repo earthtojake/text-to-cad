@@ -4,13 +4,12 @@ another computer imports a share.
 
 What a share of each holds, as its manifest says once unsealed: the file itself and what an import needs to open it and
 work on it -- of a board, its project file, its custom rules, its project's footprint and symbol libraries and the 3D
-model files its footprints name in the project (a VRML name with the STEP beside it, which the view draws); of a
-schematic, every sheet of its hierarchy, its project file and its project's symbol libraries -- each at its path under
-the files' root, which a checkout's root caps; never a file of the folder that neither names (a note, the person's
-local settings, a sheet no sheet draws), nor a library of KiCad's. A file outside the root, and one named and gone, is
-left out and said. Its view is the one the engine wrote into the file's folder of cad's cache: the board's plot, its 3D
-models table and each model the table names a bundle of its own; a schematic's sheets, a page each, and its
-hierarchy's index. An import writes every file byte for byte, and says which is the file the share is of: the board, or
+model files its footprints name in the project (a VRML name with the STEP beside it, which the viewer's 3D draws); of
+a schematic, every sheet of its hierarchy, its project file and its project's symbol libraries -- each at its path
+under the files' root, which a checkout's root caps; never a file of the folder that neither names (a note, the
+person's local settings, a sheet no sheet draws), nor a library of KiCad's. A file outside the root, and one named and
+gone, is left out and said. Its view is the one the engine wrote into the file's folder of cad's cache: the board's
+plot alone, in 2D, whatever models its project holds; a schematic's sheets, a page each, and its hierarchy's index. An import writes every file byte for byte, and says which is the file the share is of: the board, or
 the root of the hierarchy, whichever of its sheets was shared, since its root draws the same pages.
 
 An engine of this file's own writes each view; no KiCad runs (the board is drawn as saved, as where its refill is
@@ -159,15 +158,13 @@ class KiCadShare(unittest.TestCase):
                                 (str(self.board / "models" / "gone.step"), "gone")})
         self.assertEqual((found["document"]["kind"], found["files"]["file"], found["files"]["count"]),
                          ("kicad_pcb", "blinky.kicad_pcb", len(expected)))
-        # Its view is the bundle the engine wrote, but the picture a page kept: the board's plot, its 3D models table,
-        # and the two models the table found in the project, the LED's and the lens's, each a bundle of its own.
+        # Its view is the bundle the engine wrote, but the picture a page kept: the board's plot alone, in 2D, though
+        # its project holds the LED's and the lens's STEPs, which went among its files.
         view = set(manifest["view"])
         self.assertEqual(view, self.view_of(self.board / "blinky.kicad_pcb") - {"thumbnail.png"})
-        models = {path.split("/")[1] for path in view if path.startswith("documents/") and path.count("/") == 2
-                  and path.endswith("/manifest.json")}
-        self.assertLessEqual({"manifest.json", "plot.json", "models.json"}, view)
-        self.assertEqual(len(models), 2, sorted(view))
-        self.assertIn("its view (its layers, with 2 3D models)", found["sent"]["what"])
+        self.assertEqual(view, {"manifest.json", "plot.json"})
+        self.assertIn("its view (its layers, in 2D)", found["sent"]["what"])
+        self.assertIsNone(found["sent"]["parts"])
 
         imported, folder = self.imported(found["view"])
         self.assertEqual((imported["file"], imported["entry"], imported["files"]["count"]), ("blinky.kicad_pcb", None,
