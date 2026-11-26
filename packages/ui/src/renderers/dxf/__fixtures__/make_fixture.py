@@ -30,7 +30,7 @@ from pathlib import Path
 
 import ezdxf
 
-from cad_server.drawing_payload import build_drawing_payload
+from cad.engine.drawing_payload import build_drawing_payload
 
 HERE = Path(__file__).resolve().parent
 DXF_PATH = HERE / "sample.dxf"

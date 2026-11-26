@@ -7,7 +7,7 @@ reads its document's kind's routes (`/api/v1/documents/<kind>/<id>/structure`, `
 waits on `/api/v1/documents/<id>/version`; dispatch calls the engine's own reads directly, in process
 (`/api/doc/<id>...`, `serve.py`'s, which binds no listener of its own: the engine's reads are served
 only through the daemon's).
-XBF/STEP loading and geometry facts run in child processes. A launcher starts or reuses the
+XBF/STEP loading, the DXF pane's drawing (`drawing_payload.py`) and geometry facts run in child processes. A launcher starts or reuses the
 engine's one page, prints its authenticated URL -- a file's page, `/<id>`, for each file it names,
 else the home's -- and exits. A library server made without the daemon's listener (a render
 process's) binds nothing and is read in process.

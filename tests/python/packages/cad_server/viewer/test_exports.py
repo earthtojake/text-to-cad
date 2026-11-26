@@ -184,9 +184,11 @@ class ExportsTest(unittest.TestCase):
         self.finish.clear(); self.entered.clear()
         running = self.jobs.create(self.request("two"))
         self.assertTrue(self.entered.wait(10))
-        engine = SimpleNamespace(lock=threading.RLock(), _default=SimpleNamespace(_exports=self.jobs), _mcp=None,
-                                 analytics=Mock(), viewer_analytics=Mock())
+        drawings = Mock()
+        engine = SimpleNamespace(lock=threading.RLock(), _default=SimpleNamespace(_exports=self.jobs, drawings=drawings),
+                                 _mcp=None, analytics=Mock(), viewer_analytics=Mock())
         EngineApp.close(engine)
+        drawings.close.assert_called_once_with()  # the DXF pane's drawing process ends with the engine
         self.assertEqual(list(Path(self.tmp.name).iterdir()), [])
         self.finish.set()
         self.assertEqual(self.settled(running["id"])["state"], "cancelled")

@@ -31,9 +31,9 @@ cad_server/
                          #   projects, each shown a folder at a time (projects), the library's rows
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
-                         #   (robots), a document's view bundle, its page's reads written as a
-                         #   folder (bundle)
+                         #   payload, drawn in a kernel process (drawings), a KiCad board's or
+                         #   schematic's plot (plots), a robot's (robots), a document's view bundle,
+                         #   its page's reads written as a folder (bundle)
   plugin/                # the plugin in the agent apps, and the one place that names an app, a plugin or
                          #   a skill: the table of apps (apps), this computer and its files (computer),
                          #   where the plugin comes from and what is ours (source), what a person's
@@ -46,7 +46,6 @@ cad_server/
                          #   (tunnel), the page (ui), and the viewer link for a call that shows no
                          #   view (browser)
   robot_payload.py       # a robot description resolved for the viewer's page
-  drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
   jobs.py                # the viewer exports' admission, progress, waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no

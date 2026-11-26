@@ -1,4 +1,4 @@
-"""A DXF flattened into a 2D render payload by ezdxf's drawing add-on.
+"""A DXF flattened into the viewer's 2D render payload by ezdxf's drawing add-on, in a kernel process.
 
 One function does the work: ``ezdxf``'s frontend walks the modelspace and
 hands a backend the primitives every entity reduces to — dimensions exploded
@@ -59,11 +59,22 @@ happens to equal it exactly would be read as the default pen; that is the one
 degenerate case, and it costs a near-black line the theme's foreground instead
 of its own near-black.
 
+Where it runs
+-------------
+In a kernel process, never in the server's: ezdxf is the build123d extra's,
+which the kernel environment holds and the server's core does not. The
+viewer's route starts one drawing process as the engine starts a STEP's
+reader (``drawing_processes``: ``serve._process_pool``, the kernel
+environment made first where it is not) and hands it each drawing's bytes
+(``drawn``), and the process answers the payload's bytes. Where no kernel
+process can start, the route answers as a STEP's open does: the engine's
+``KernelProcessesUnavailable`` in its one line.
+
 Storage
 -------
 Nothing is stored. The viewer's route holds the payloads it rendered in its
 own memory, by the bytes it read, and renders those bytes
-(``build_drawing_payload(path, data)``; ``cad_server.viewer.drawings``).
+(``drawn(path, data)``; the server's ``viewer/drawings.py``).
 """
 
 from __future__ import annotations
@@ -79,6 +90,8 @@ __all__ = [
     "DRAWING_PAYLOAD_SCHEMA_VERSION",
     "DrawingReadError",
     "build_drawing_payload",
+    "drawing_processes",
+    "drawn",
     "encode_drawing_payload",
     "read_drawing_document",
 ]
@@ -681,3 +694,30 @@ def encode_drawing_payload(payload) -> bytes:
             "coincident control points) in the program that made it"
         ) from None
     return text.encode("utf-8")
+
+
+# --- the drawing process ----------------------------------------------------
+
+
+def drawn(path, data) -> bytes:
+    """The payload's bytes for a drawing's bytes (``build_drawing_payload``, ``encode_drawing_payload``):
+    the drawing process's job. ``path`` only names them."""
+    return encode_drawing_payload(build_drawing_payload(path, data))
+
+
+def _drawing_ready() -> None:
+    """The drawing process's start: ezdxf and its drawing add-on imported, so a first drawing waits
+    on nothing but itself."""
+    from cad.engine.serve import exit_with_parent
+
+    exit_with_parent()
+    import ezdxf.addons.drawing.frontend  # noqa: F401
+    import ezdxf.recover  # noqa: F401
+
+
+def drawing_processes():
+    """The drawing process: a pool of one kernel process (``serve._process_pool``), kept warm for the
+    drawings after the first. ``serve.KernelProcessesUnavailable`` where none can start."""
+    from cad.engine.serve import _process_pool
+
+    return _process_pool(1, initializer=_drawing_ready)
