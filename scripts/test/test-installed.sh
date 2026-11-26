@@ -385,7 +385,7 @@ mkdir -p "$EMPTY/models"
 cat >"$EMPTY/models/probe.py" <<'PY'
 # A model script explicitly calls its model, writing what its decorators declare. Deliberately the simplest one that
 # exists: this checks that an installed server can build at all, not that it models anything interesting.
-from cad.engine import step, stl, model
+from cad.engine import step, stl, xbf
 import build123d as bd
 
 

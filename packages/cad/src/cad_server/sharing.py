@@ -627,9 +627,34 @@ def _library_files(table: Path, folder: str) -> list[str]:
                             if not name.startswith(".") and os.path.isfile(os.path.join(place, name)))
         else:
             found.append(place)
-            if place.lower().endswith(".lib") and os.path.isfile(place[:-4] + ".dcm"):
-                found.append(place[:-4] + ".dcm")
+            documentation = _on_disk(place[:-4] + ".dcm") if place.lower().endswith(".lib") else None
+            if documentation is not None:
+                found.append(documentation)
     return found
+
+
+def _on_disk(path: str) -> str | None:
+    """The file ``path`` reaches, as its folder spells it, or None where it reaches none. A disk blind to case
+    (Windows', a Mac's) opens ``lens.step`` for a file named ``lens.STEP``; a share keeps the file's own name, so an
+    import on any disk writes the file its board names."""
+    if not os.path.isfile(path):
+        return None
+    folder, name = os.path.split(path)
+    try:
+        entries = os.listdir(folder or ".")
+    except OSError:
+        return path
+    if name in entries:
+        return path
+    for entry in entries:
+        if entry.lower() == name.lower():
+            candidate = os.path.join(folder, entry)
+            try:
+                if os.path.samefile(candidate, path):
+                    return candidate
+            except OSError:
+                continue
+    return path
 
 
 def _model_files(board: str) -> list[str]:
@@ -656,7 +681,11 @@ def _model_files(board: str) -> list[str]:
             continue
         stem, suffix = os.path.splitext(place)
         beside = [stem + ending for ending in (".step", ".stp", ".STEP", ".STP")] if suffix.lower() in _VRML else []
-        there = [each for each in [place, *beside] if os.path.isfile(each)]
+        there: list[str] = []
+        for each in [place, *beside]:
+            real = _on_disk(each)
+            if real is not None and real not in there:
+                there.append(real)
         if there or not relative:
             found += there or [place]
     return found
