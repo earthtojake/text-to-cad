@@ -209,9 +209,10 @@ for word, and tests keep the copies from drifting:
   install script, and no skill pre-approves a tool (`allowed-tools`). A new skill copies the block
   from one beside it.
   It changes only with a person's approval ([below](#what-changes-only-with-a-persons-approval)).
-- **Commands that last** (no test holds this one): a command, an option or a spelling the skills
-  stop using keeps working, hidden if need be, for 30 days after the release that stopped using it.
-  Say so in the pull request that removes it.
+- **Commands replaced, not kept** (`tests/python/packages/cad_server/test_cli.py` holds the table): a command
+  or an option the skills stop using answers in one line with the one that replaced it, from one table
+  (`_hint`, in `packages/cad/src/cad_server/cli/__init__.py`); a library spelling keeps working, with a
+  warning, for at least one minor release. Say so in the pull request that replaces it.
 - **Show the model** (`tests/python/global/test_skill_show_the_model.py`): how to show the person what
   was made, in every skill that makes something they look at. It covers an agent with the CAD app's
   tools (`cad_show`) and one without (the page's link).
@@ -247,7 +248,7 @@ part of a rewrite, a tidy-up or a fix that happens to reach them. Propose the ch
       a person's behalf are as they were, or a person approved the change by name.
 - [ ] A rewrite or a change of method was run A/B, with the table in the pull request, and a
       rewrite was audited against the text it replaced.
-- [ ] A command the skill stops using still works for 30 days.
+- [ ] A command the skill stops using answers with its replacement (a row of `_hint`'s table).
 - [ ] Its name is in `SKILLS` in `packages/cad/src/cad_server/plugin/source.py`, in the same release (a
       skill taken out moves to `RETIRED_SKILLS`): the names `cad plugin install` takes as ours. A copy
       under a name it does not know is someone else's, never replaced or removed

@@ -55,8 +55,10 @@ Read the one document for what you are changing, then the link it gives you. Not
 - A pull request that changes `VERSION` is a release, and merging it ships it to every computer. Never
   bump it during other work, never pick the bump yourself (ask: patch, minor or major), and merge a
   release only on the user's explicit word. Never hand-edit a stamped version.
-- A `cad` command, option or tool the skills used keeps working for 30 days after they stop using it,
-  hidden if need be. A breaking change comes with a migration guide.
+- A `cad` command or option the skills used is replaced, not kept: its old spelling answers in one line
+  with the new one. A library spelling keeps working, with a warning, for at least one minor release.
+  Nothing another program calls (an installer, an earlier release's updater, an agent app's launch) is
+  removed before its replacement ships. A breaking change comes with a migration guide.
 
 **Skills**
 

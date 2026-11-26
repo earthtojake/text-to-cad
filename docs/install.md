@@ -445,8 +445,8 @@ They are off until the install command turns them on, or you do: `cad plugin ins
 changes them, and cad never changes your apps where you did not ask it to.
 
 A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
-skills may then be older than cad. That is fine: a command the skills used keeps working for at least
-30 days after the skills stop using it.
+skills may then be older than cad. That is fine: a command they run that cad has replaced answers in one
+line with the command that does it now, which the agent runs instead.
 
 ### Staying on an older release
 
