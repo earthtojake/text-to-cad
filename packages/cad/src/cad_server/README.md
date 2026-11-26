@@ -211,7 +211,7 @@ not install what it was for, `cause`, one word of a closed list (`auto_update_he
 `auto_update.SAID`.
 
 **The worker** (`auto_update_helper.py`), started detached, with no window and outside any Windows app package
-(`places.outside_package`), by the environment's own interpreter, which an upgrade does not touch. uv deletes the old
+(by Task Scheduler, `places.outside_package`), by the environment's own interpreter, which an upgrade does not touch. uv deletes the old
 files one by one, in the order of the package's `RECORD`, and stops at the first it cannot delete, with nothing put
 back; on Windows a file a running process holds cannot be deleted, so the worker makes the upgrade safe and repairs it
 where it fails anyway. uv prepares the release before it changes anything, so a download that fails leaves cad as it

@@ -107,7 +107,7 @@ changes anything, so a failed download leaves cad as it was; puts `cad.exe` back
 runs; and, where it does not, deletes the folders uv left without their record and runs `uv tool upgrade
 --reinstall` of the release, then of the release before. Never `uv tool install --force "cad==X"`: it pins
 the release in uv's record and removes the folder the worker runs from. Inside a Windows app's package the
-update is refused, and the server and the worker start outside it
+update is refused, and the server and the worker are started outside it by Task Scheduler
 ([below](#inside-a-windows-apps-package-say-so)).
 
 0.11.12 to 0.11.17 update in place too, with none of these steps: that is the failure above. Also built and
@@ -583,16 +583,23 @@ alone.
 ## Inside a Windows app's package, say so
 
 **Decision.** Inside a Windows packaged app (the Claude desktop app, Codex's Store app), Windows can
-keep what uv writes under AppData in a private copy only that app sees. We do not work around it.
-Where uv cannot set up Python there, `install.ps1` prints one line: run the install command once from
+keep what uv writes under AppData in a private copy only that app sees. We do not work around it for uv:
+where uv cannot set up Python there, `install.ps1` prints one line: run the install command once from
 PowerShell opened from the Start menu. `cad server start` and `cad doctor` name a uv folder in an
 app's private copy, say why it matters, and say to delete it in File Explorer; cad never deletes it.
+cad's own server and update worker, started from inside such an app, are started outside it by Task
+Scheduler (`places.outside_package`): a task of the person's own, with no trigger and no password, that
+runs once, starts them detached and is deleted. Where that cannot be done, they start inside the app,
+and the update refuses to run there.
 
-**Why.** No tool we found works around it from inside someone else's package: a way out of the
-package is reported to fail inside these apps, and uv, pip and CPython document the problem and stop.
-Detecting and saying what to do is what they do. The lines say File Explorer because a delete from
-inside the app does not reach the folder: `Remove-Item` there reported the folder gone and left every
-file, and the same delete from outside the app removed it (both measured).
+**Why.** uv, pip and CPython document the problem and stop: detecting and saying what to do is what
+they do. The lines say File Explorer because a delete from inside the app does not reach the folder:
+`Remove-Item` there reported the folder gone and left every file, and the same delete from outside the
+app removed it (both measured). The server and the update run uv on the installed cad, so they must not
+run inside a package. The desktop-app breakaway attribute did not take effect from inside a test package:
+the process started with it stayed packaged and wrote into the private copy. A task is started by the
+scheduler, never as the app's child: its process ran outside the package and wrote into the real AppData,
+about a second after the task was made, with no prompt (all measured).
 
 **What it costs.** On such a computer a person may have to run one command or delete one folder by
 hand.
