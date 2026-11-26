@@ -181,7 +181,7 @@ class CommandTest(Case):
                 _code, out, err = self.run_cad(*argv)
                 self.assertNotIn(LINE, out + err)
         self.assertFalse((self.state / notices.FILE).exists(), "none of them noted it said")
-        with mock.patch("cad_server.analytics.stdout_closed", return_value=True):
+        with mock.patch("cad_server.cli._output_gone", return_value=True):
             self.assertNotIn(LINE, self.run_cad("cache", "dir")[2], "its output's reader gone")
         # Whatever automatic updates are set to.
         auto_update.change(False)

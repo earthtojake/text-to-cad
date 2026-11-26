@@ -3963,7 +3963,7 @@ class NoticeTest(Case):
                                                          return_value=("ok", "/site/OCP.pyd")):
                     _code, out, err = self.run_cad(*argv)
                     self.assertNotIn(line, out + err)
-            with mock.patch("cad_server.analytics.stdout_closed", return_value=True):
+            with mock.patch("cad_server.cli._output_gone", return_value=True):
                 self.assertNotIn(line, self.run_cad("cache", "dir")[2], "its output's reader gone")
             code, out, err = self.run_cad("cache", "dir")
             self.assertEqual((code, out), (0, f"{cache}\n"), "never on stdout")

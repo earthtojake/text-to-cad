@@ -10,13 +10,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad-server"
-version = "0.11.17"
+version = "0.11.18"
 description = "Alias of cad, still published: installs cad at the same release, which carries the CAD server, and keeps the cad command."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [{ name = "earthtojake" }]
-dependencies = ["cad==0.11.17"]
+dependencies = ["cad==0.11.18"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

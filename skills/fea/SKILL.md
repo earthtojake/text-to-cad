@@ -35,7 +35,7 @@ export it as a document of its own.
 
 ## Setup
 
-Written for `cad==0.11.17`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
+Written for `cad==0.11.18`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
 0.11.12, run `uv tool install --force cad`. If it is older than the release this skill was written for, run
 `cad update`.
 

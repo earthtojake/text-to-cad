@@ -345,7 +345,7 @@ jobs:
 
       - name: Set up uv
         timeout-minutes: 5
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -487,7 +487,7 @@ jobs:
 
       - name: Set up uv
         timeout-minutes: 5
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
 
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.

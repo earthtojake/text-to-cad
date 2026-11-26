@@ -1606,10 +1606,11 @@ class Server:
             state.update(building=frame, failed=failed, progress=state["progress"] + 1)
         self._changed()
 
-    def document(self, ident: str) -> Served:
+    def document(self, ident: str, *, fresh: bool = False) -> Served:
         """The document as the server holds it, read from its file again only when some
         other process rewrote the file (and no build is writing it now). A STEP is read
-        again in the background (the module docstring): until it is in, this is the last."""
+        again in the background (the module docstring): until it is in, this is the last.
+        A fresh read for inspection waits for a changed STEP instead."""
         if ident in self.model_loaders:
             # No kernel work on the HTTP thread: the loader asks the owning worker, and one no
             # worker holds any more says so (``NotHeld``): nothing is run to bring it back.
@@ -1635,15 +1636,32 @@ class Server:
         with self.load_lock:
             doc = self.served[ident]
             self.used[ident] = next(self.uses)
-            stat = _stat(doc.path)
-            if stat is None or stat == doc.stat:
+            path = doc.path
+            if not isinstance(path, Path):
                 return doc
-            if doc.path.suffix.lower() in FOREIGN:
-                if ident not in self.rereading and self.unreadable.get(ident, ()) != stat:
-                    self.rereading.add(ident)
-                    threading.Thread(target=self._reread, args=(ident, doc, stat), daemon=True).start()
+            stat = _stat(path)
+            step = path.suffix.lower() in FOREIGN
+            if stat is None:
+                if fresh and step:
+                    raise ValueError(f"cannot read {path}")
                 return doc
-            doc = self.served[ident] = self._read(ident, doc.path)
+            if stat == doc.stat:
+                return doc
+            if step:
+                if not fresh:
+                    if ident not in self.rereading and self.unreadable.get(ident, ()) != stat:
+                        self.rereading.add(ident)
+                        threading.Thread(target=self._reread, args=(ident, doc, stat), daemon=True).start()
+                    return doc
+            else:
+                doc = self.served[ident] = self._read(ident, path)
+        if step:
+            # The reader shares an import of the same bytes with any background read.
+            doc = self._read_step(ident, path)
+            with self.load_lock:
+                if doc.stat != _stat(path):
+                    raise ValueError(f"{path} changed during inspection; inspect it again")
+                self.served[ident] = doc
         self._changed()
         self._grown(ident)
         return doc
@@ -2123,7 +2141,10 @@ class Server:
                         return self.error(handler, 404, "not found")
                     build = self.build_of(ident)
                     return self.json(handler, {"version": doc.version, **build})
-                doc = self.document(ident)
+                doc = self.document(ident, fresh=getattr(handler, "fresh", False))
+                version = getattr(handler, "version", None)
+                if version is not None and version != doc.version:
+                    return self.error(handler, 409, f"{doc.path} changed during inspection; inspect it again")
                 if len(parts) == 3:
                     from cad.engine.mesh_format import TESSELLATION
 
@@ -2282,12 +2303,14 @@ class Server:
 
     # --- responses -------------------------------------------------------------------
 
-    def read(self, path: str, counted: Callable[[int, int, str], None] | None = None) -> tuple[int, bytes]:
+    def read(self, path: str, counted: Callable[[int, int, str], None] | None = None, *,
+             fresh: bool = False, version: str | None = None) -> tuple[int, bytes]:
         """A document read (``GET /api/doc/<id>...``) answered in process, as a page would be
         answered over HTTP: its status and body -- but for the structure's, which meshes nothing
         here. What a client of the daemon asks through its door (``inspect``), so a shell that may
         not open a loopback socket reads it all the same. ``counted``: a read of the parts' facts
-        (``.../volumes``) tells it each part's as it comes in (``measure``)."""
+        (``.../volumes``) tells it each part's as it comes in (``measure``). ``fresh`` waits for a
+        rewritten STEP, and ``version`` refuses to read facts from a different revision."""
         import io
 
         class Reading:
@@ -2300,6 +2323,7 @@ class Server:
             def __init__(self) -> None:
                 self.path = path
                 self.counted = counted
+                self.fresh, self.version = fresh, version
                 self.status = 200
                 self.rfile = io.BytesIO()
                 self.wfile = io.BytesIO()

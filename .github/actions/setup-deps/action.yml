@@ -39,7 +39,7 @@ runs:
     # of every Windows job even from its cache). uv's own cache is keyed on the lock.
     - name: Set up uv
       if: inputs.python == 'true'
-      uses: astral-sh/setup-uv@v10.3.3
+      uses: astral-sh/setup-uv@v10.4.0
       with:
         enable-cache: true
         cache-dependency-glob: uv.lock
