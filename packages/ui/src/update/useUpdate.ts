@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useI18n } from "../i18n/index.js";
 import type { HostAlert } from "../file-viewer/types.js";
 import { updateAlert } from "./updateAlert.js";
+import { dismissedOf, keepDismissed, noticeAlert, noticesOf, type Notice, type NoticeDismissals } from "./notices.js";
 
 /**
  * What the update button shows, as the server says it (`GET /api/v1/server`'s `cadUpdate`:
@@ -45,6 +46,8 @@ export interface UpdateReply {
   /** This start of the server: another one answering is a server that restarted. */
   instance?: string;
   cadUpdate?: UpdateState | null;
+  /** The project's notices for this cad (`notices.ts`); none from an older server. */
+  cadNotices?: Notice[];
 }
 
 /** The host's calls to its server. */
@@ -117,14 +120,19 @@ const refusalOf = (error: unknown): UpdateFailure => {
  * keeps across the reload) shows the spinner while the update's end is still being written, then its failure -- or, on another release, that it is updated, once,
  * as a toast (`restartForSkills`: a host app that reads a release's skills only in a new session
  * suggests restarting it). A read that fails changes nothing, but while an update is followed it is the
- * server gone for the install.
+ * server gone for the install. A host that keeps dismissals (`notices`: the viewer's, in its browser) also has the
+ * project's notices that every answer carries (`cadNotices`) said in the same card, one at a time, each until the
+ * person dismisses it (its Dismiss or Escape), which the host keeps; a failure on screen comes first, and one put away
+ * waits behind them. A host that keeps none shows none.
  */
 export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | undefined,
-  { instance, followed = null, onRestarted, restartForSkills = false }: { instance?: string; followed?: string | null;
-    onRestarted?: (reply: UpdateReply) => void; restartForSkills?: boolean } = {}) {
+  { instance, followed = null, onRestarted, restartForSkills = false, notices: dismissals }: { instance?: string; followed?: string | null;
+    onRestarted?: (reply: UpdateReply) => void; restartForSkills?: boolean; notices?: NoticeDismissals } = {}) {
   const [state, setState] = useState<UpdateState | null>(initial?.cadUpdate ?? null);
   const [phase, setPhase] = useState<UpdatePhase>({ phase: "idle" });
   const [failure, setFailure] = useState<UpdateFailure | null>(null);
+  const [notices, setNotices] = useState<Notice[]>(() => noticesOf(initial?.cadNotices));
+  const [hidden, setHidden] = useState<Set<string>>(() => (dismissals ? dismissedOf(dismissals) : new Set()));
   const polling = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
   // Whether the page follows an update now: a read that fails is then the server gone for the install.
@@ -151,6 +159,10 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
   /** An answer of the server's: whether the page goes on asking. */
   const apply = useCallback((reply: UpdateReply): boolean => {
     if (!alive.current || restarted.current) return false;
+    setNotices(current => {
+      const next = noticesOf(reply.cadNotices);
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    });
     const mine = server.current;
     const release = reply.release ?? reply.cadUpdate?.version ?? "";
     if (following.current && mine.version && release && release !== mine.version) {
@@ -268,8 +280,14 @@ export function useUpdate(calls: UpdateCalls, initial: UpdateReply | null | unde
   }, [read]);
   const shown = Boolean(state?.latest) || state?.state === "ready" || phase.phase !== "idle";
   const version = (state?.state === "ready" && state.ready) || (state?.latest ?? "");
-  const alert = useMemo<HostAlert | null>(() => failure ? { alert: updateAlert(failure, version, t),
-    dismissed: Boolean(failure.dismissed), onDismiss: dismiss, onReopen: reopen, ...(version ? { onRetry: update } : {}) } : null,
-  [failure, version, t, dismiss, reopen, update]);
+  const notice = (dismissals && notices.find(each => !hidden.has(each.id))) || null;
+  const alert = useMemo<HostAlert | null>(() => {
+    if (notice && dismissals && (!failure || failure.dismissed)) {
+      const put = () => { keepDismissed(dismissals, notice.id); setHidden(current => new Set(current).add(notice.id)); };
+      return { alert: noticeAlert(notice, t), dismissed: false, onDismiss: put, onReopen: () => {} };
+    }
+    return failure ? { alert: updateAlert(failure, version, t), dismissed: Boolean(failure.dismissed), onDismiss: dismiss,
+      onReopen: reopen, ...(version ? { onRetry: update } : {}) } : null;
+  }, [notice, dismissals, failure, version, t, dismiss, reopen, update]);
   return { state, phase, failure, alert, shown, update, dismiss, reopen };
 }

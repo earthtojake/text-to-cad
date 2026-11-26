@@ -538,7 +538,10 @@ finds underway is followed the same way. A failed one, automatic or not, is the 
 error is said in (`CadViewer`'s `alert`, `useUpdate`'s), over a file and on the home, from the server's record (so
 through a reload too): why and what to do, Try again, Details with `cad update` and the update's log, Report Issue
 where the cause is cad's own. Its X puts it away on the server (`POST /api/v1/local/update {dismiss}`), so every page
-keeps it behind its icon in the navbar until another attempt begins.
+keeps it behind its icon in the navbar until another attempt begins. The project's notices for this cad
+(`cadNotices`, `cad_server/notices.py`) are said in the same card, one at a time, after a failure on screen: the
+notice's words as text, Learn more to its link where it has one, and Dismiss, which this browser keeps
+(`host/dismissedNotices.js`, its local storage; a browser that keeps nothing shows it again next time).
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and "text-to-cad" on the home.
 A document's id is never its name, in the navbar or the title: the page asks for the document its URL names
 beside the server's description (`main.tsx`), into the client's catalog, so its first frame has its name where the

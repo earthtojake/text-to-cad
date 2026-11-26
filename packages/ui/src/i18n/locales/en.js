@@ -337,6 +337,7 @@ export default {
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",
   "alert.dismiss": "Dismiss",
+  "alert.learnMore": "Learn more",
   "alert.details": "Details",
   "alert.copy": "Copy",
   "alert.copied": "Copied",

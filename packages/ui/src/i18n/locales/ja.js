@@ -322,6 +322,7 @@ export default {
 
   "alert.undisplayable": "モデルを表示できませんでした",
   "alert.dismiss": "閉じる",
+  "alert.learnMore": "詳しく見る",
   "alert.details": "詳細",
   "alert.copy": "コピー",
   "alert.copied": "コピーしました",

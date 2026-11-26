@@ -323,6 +323,7 @@ export default {
 
   "alert.undisplayable": "無法顯示這個模型",
   "alert.dismiss": "關閉",
+  "alert.learnMore": "了解更多",
   "alert.details": "詳細資料",
   "alert.copy": "複製",
   "alert.copied": "已複製",

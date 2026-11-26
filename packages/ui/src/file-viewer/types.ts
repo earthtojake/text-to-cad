@@ -123,7 +123,8 @@ export interface FileNavigationAction {
  * its title and short name (`summary`), the words under it, the whole diagnostic (`details`, English, as it is
  * reported), whether it has Retry (`reload`, and `retryLabel` where that is said otherwise), whether Report Issue is
  * offered (`reportable: false`: no issue of the project's) and whether the person can work on under it (`blocking:
- * false`: it can be put away).
+ * false`: it can be put away). A notice of the project's also has a link (`link`: "Learn more", opened as the viewer
+ * opens every link) and a button in words that puts it away (`dismissLabel`, in place of the X).
  */
 export interface ViewerAlert {
   severity: "error" | "warning";
@@ -138,10 +139,12 @@ export interface ViewerAlert {
   retryLabel?: string;
   reportable?: boolean;
   blocking?: boolean;
+  link?: { label: string; href: string };
+  dismissLabel?: string;
 }
 
 /**
- * A host's own alert (`CadViewer`'s `alert`: a failed update of cad), which the viewer shows in its alert card, with
+ * A host's own alert (`CadViewer`'s `alert`: a failed update of cad, or a notice of the project's), which the viewer shows in its alert card, with
  * the X, the navbar's icon and Retry a file's has. Its dismissal is the host's (`dismissed`: put away; `onDismiss`, by
  * the X or Escape; `onReopen`, by the navbar's icon), so it can outlast a page; `onRetry`, the card's Retry.
  */

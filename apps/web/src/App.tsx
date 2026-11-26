@@ -9,6 +9,7 @@ import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { reloadWhenClean } from './host/reloadWhenClean.js';
 import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
+import { browserNoticeDismissals } from './host/dismissedNotices.js';
 import { UpdateButton, useUpdate, type UpdateCalls } from '@cad/ui/update';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
@@ -164,7 +165,8 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   // on it is unsaved. The tab notes the release it followed the update from (`followedUpdate`), so the page loaded
   // after the restart says it is updated, or, the update failed and the release before started again, why. A
   // failure is the viewer's alert (`updater.alert`, the card every error is said in), from the server's record, so
-  // through a reload too; put away, it stays behind its icon in the navbar, for every page.
+  // through a reload too; put away, it stays behind its icon in the navbar, for every page. The project's notices
+  // for this cad are said in the same card, each until it is dismissed in this browser (`browserNoticeDismissals`).
   const [followed] = useState(() => followedUpdate());
   useEffect(() => { forgetFollowedUpdate(); }, []);
   const reloading = useRef(false);
@@ -175,7 +177,7 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   }, []);
   const updateCalls = useMemo<UpdateCalls>(() => ({ read: () => client.serverInfo({ fresh: true }),
     start: () => client.startUpdate(), dismiss: at => client.dismissUpdate(at) }), [client]);
-  const updater = useUpdate(updateCalls, server, { instance: server.instance, followed,
+  const updater = useUpdate(updateCalls, server, { instance: server.instance, followed, notices: browserNoticeDismissals,
     onRestarted: () => { noteFollowedUpdate(String(server.release || '')); reload(); } });
   // The server gone for the install, or back and restarting: the page that reloads after it follows it still.
   const away = updater.phase.phase === 'restarting' || (updater.phase.phase === 'working' && updater.phase.done >= 2);

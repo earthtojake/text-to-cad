@@ -53,7 +53,15 @@ export interface CadServerInfo {
   instance?: string;
   /** What the update button shows (`auto_update.button`: `@cad/ui/update`'s `UpdateState`), null where cad cannot update itself. */
   cadUpdate?: CadUpdateState | null;
+  /** The project's notices for this cad (`cad_server/notices.py`), each a card until the person dismisses it; `[]` where there is none. */
+  cadNotices?: CadNotice[];
   [key: string]: unknown;
+}
+/** One of the project's notices, as `GET /api/v1/server` says it: its id, its words (English, plain text) and its link, where it has one. */
+export interface CadNotice {
+  id: string;
+  text: string;
+  url?: string;
 }
 /** What `GET /api/v1/server` says of cad's own update, for the update button (`cad_server/_internal/auto_update.py`'s `button`). */
 export interface CadUpdateState {

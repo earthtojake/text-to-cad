@@ -157,7 +157,8 @@ function AlertDetails({ details, clipboard }) {
  * where its retry is no reload: a failed update's "Try again"); where
  * the host has a tracker (`links.issues`), Report Issue beside it opens a new issue saying what the
  * card says, about `file` (its path as the alert names it, absolute: the issue names only the file,
- * and carries no path of this machine). `closeOnEscape`: Escape puts a card that can be put away
+ * and carries no path of this machine). An alert's `link` is a link beside them, followed as every link of the
+ * viewer's is, and its `dismissLabel` a button in words that puts it away, in place of the X (a notice of the project's). `closeOnEscape`: Escape puts a card that can be put away
  * away too, before the view's own steps and after whatever spends it first (a popup, a field, a card of the view's
  * own): a host's card, which stands over every view.
  *
@@ -206,7 +207,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
               <CircleAlert className={cn("mt-0.5 size-4 shrink-0", alertTone(shown))} aria-hidden="true" />
               {title}
             </h2>
-            {dismissible ? (
+            {dismissible && !shown.dismissLabel ? (
               <Button type="button" variant="ghost" size="icon-xs" className="-mr-1 -mt-0.5" aria-label={t("alert.dismiss")} onClick={onDismiss}>
                 <X aria-hidden="true" />
               </Button>
@@ -223,7 +224,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
                 <AlertDetails key={shown.details} details={shown.details} clipboard={host?.clipboard} />
               </details>
             ) : null}
-            {shown.reload || report ? (
+            {shown.reload || report || shown.link || (dismissible && shown.dismissLabel) ? (
               <div className="flex flex-wrap gap-2 pt-0.5">
                 {shown.reload ? (
                   <Button type="button" variant="outline" size="xs" onClick={onReload} disabled={!onReload}>
@@ -234,6 +235,14 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload, fi
                   <Button asChild variant="outline" size="xs">
                     <a href={report} target="_blank" rel="noreferrer" onClick={follow} data-report-issue="">{t("alert.reportIssue")}</a>
                   </Button>
+                ) : null}
+                {shown.link ? (
+                  <Button asChild variant="outline" size="xs">
+                    <a href={shown.link.href} target="_blank" rel="noreferrer" onClick={follow} data-alert-link="">{shown.link.label}</a>
+                  </Button>
+                ) : null}
+                {dismissible && shown.dismissLabel ? (
+                  <Button type="button" variant="outline" size="xs" onClick={onDismiss}>{shown.dismissLabel}</Button>
                 ) : null}
               </div>
             ) : null}

@@ -322,6 +322,7 @@ export default {
 
   "alert.undisplayable": "모델을 표시할 수 없습니다",
   "alert.dismiss": "닫기",
+  "alert.learnMore": "자세히 알아보기",
   "alert.details": "세부 정보",
   "alert.copy": "복사",
   "alert.copied": "복사됨",
