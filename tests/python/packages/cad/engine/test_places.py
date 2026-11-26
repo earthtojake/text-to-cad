@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -302,9 +303,14 @@ class OutsidePackageTest(unittest.TestCase):
 
     def test_a_hand_off_starts_the_command_by_the_go_between_and_leaves_nothing(self) -> None:
         schtasks, kernel = Schtasks(self, between=True), Kernel()
-        with mock.patch.object(handoff.subprocess, "Popen", side_effect=[OSError(5, "no breakaway"), Child(4321)]) \
+        given = {"Path": "caller-path", "CAD_ENGINE_DIR": "e", "uv_cache_dir": "u", "PYTHONPATH": "src",
+                 "https_proxy": "h", "SSL_CERT_FILE": "c", "OPENAI_API_KEY": "sk-never-written", "A": "1"}
+        own = {"PERSONS_OWN": "theirs", "PYTHONDONTWRITEBYTECODE": "1", "PATH": "default-path"}
+        with mock.patch.dict(os.environ, own), \
+                mock.patch.object(handoff.subprocess, "Popen", side_effect=[OSError(5, "no breakaway"), Child(4321)]) \
                 as popen:
-            started = places._hand_off(["py", "-m", "daemon"], env={"A": "1"}, cwd="here", flags=0x08000200,
+            os.environ.pop("OPENAI_API_KEY", None)
+            started = places._hand_off(["py", "-m", "daemon"], env=given, cwd="here", flags=0x08000200,
                                        run=schtasks, kernel=kernel, seconds=5)
         schtasks.thread.join(5)
         self.assertEqual((started.pid, started.handle), (4321, 104321))
@@ -314,13 +320,22 @@ class OutsidePackageTest(unittest.TestCase):
         self.assertEqual(schtasks.calls[1:], [("/Run", "/TN", name), ("/Delete", "/TN", name, "/F")])
         self.assertEqual(schtasks.request.parent, self.state / "handoff", "in the state folder, never under AppData")
         self.assertEqual(schtasks.told["argv"], ["py", "-m", "daemon"])
-        self.assertEqual((schtasks.told["env"], schtasks.told["cwd"]), ({"A": "1"}, "here"))
+        carried = {name: value for name, value in given.items() if name not in ("OPENAI_API_KEY", "A")}
+        self.assertEqual((schtasks.told["env"], schtasks.told["cwd"]), (carried, "here"), "only what cad needs")
+        self.assertNotIn("sk-never-written", schtasks.text)
+        self.assertNotIn("OPENAI_API_KEY", schtasks.text, "never the whole environment on disk")
+        if os.name != "nt":
+            self.assertEqual(schtasks.mode, 0o600, "its owner's alone")
         breakaway, kept = popen.call_args_list
         self.assertEqual(breakaway.kwargs["creationflags"], 0x08000200 | handoff.CREATE_BREAKAWAY_FROM_JOB)
         self.assertEqual(kept.kwargs["creationflags"], 0x08000200, "in the job where it allows no breakaway")
         self.assertEqual({kept.kwargs[name] for name in ("stdin", "stdout", "stderr")}, {subprocess.DEVNULL})
-        self.assertEqual((kept.args[0], kept.kwargs["env"], kept.kwargs["cwd"]), (["py", "-m", "daemon"], {"A": "1"},
-                                                                                 "here"))
+        self.assertEqual((kept.args[0], kept.kwargs["cwd"]), (["py", "-m", "daemon"], "here"))
+        env = kept.kwargs["env"]
+        self.assertEqual({name: env[name] for name in carried}, carried, "what cad needs, from its caller")
+        self.assertEqual(env["PERSONS_OWN"], "theirs", "the rest the person's own, as the task has it")
+        self.assertFalse({"PATH", "PYTHONDONTWRITEBYTECODE", "OPENAI_API_KEY", "A"} & set(env),
+                         "a carried name the caller had not set is not set: the default's PATH gives way to Path")
         self.assertEqual(schtasks.between_code, 0)
         self.assertIn(os.getpid() + 100000, kernel.waited, "the go-between waited for before its task goes")
         self.assertEqual(list((self.state / "handoff").iterdir()), [], "no request, definition or answer left")
@@ -351,6 +366,25 @@ class OutsidePackageTest(unittest.TestCase):
         self.assertEqual([call[0] for call in schtasks.calls], ["/Create", "/Run", "/Delete"])
         self.assertEqual(list((self.state / "handoff").iterdir()), [])
 
+    def test_what_a_crash_left_goes_at_the_next_hand_off_and_at_the_servers_start(self) -> None:
+        folder = self.state / "handoff"
+        folder.mkdir(parents=True)
+        old, fresh = write(folder / "cad-1-old.json", '{"env": {}}'), write(folder / "cad-2-fresh.pid", "{}")
+        left = write(folder / "cad-1-old.pid.part", "{")
+        os.utime(old, (time.time() - 61, time.time() - 61))
+        os.utime(left, (time.time() - 3600, time.time() - 3600))
+        self.assertEqual(sorted(places.tidy_handoff()), sorted([old, left]))
+        self.assertEqual(list(folder.iterdir()), [fresh], "one a hand-off underway may be using stays")
+        self.assertEqual(places.tidy_handoff(now=time.time() + 61), [fresh])
+        stale = write(folder / "cad-3-old.xml", "")
+        os.utime(stale, (time.time() - 120, time.time() - 120))
+        refused = Schtasks(self, refuse="/Create")
+        with self.assertRaises(OSError):
+            places._hand_off(["py"], env={}, cwd="here", flags=0, run=refused, kernel=Kernel(), seconds=5)
+        self.assertEqual(list(folder.iterdir()), [], "a hand-off removes what a crash left first")
+        shutil.rmtree(folder)
+        self.assertEqual(places.tidy_handoff(), [], "no folder: nothing to do, and no error")
+
     def test_a_request_taken_late_is_waited_for_once_more(self) -> None:
         folder = self.state / "handoff"
         folder.mkdir(parents=True)
@@ -360,6 +394,8 @@ class OutsidePackageTest(unittest.TestCase):
         timer.start()
         self.addCleanup(timer.cancel)
         self.assertEqual(places._answer(request, reply, 0.5), {"pid": 9, "between": 8})
+        if os.name != "nt":
+            self.assertEqual(reply.stat().st_mode & 0o777, 0o600, "the answer its owner's alone")
         reply.unlink()
         with self.assertRaises(TimeoutError):
             places._answer(request, reply, 0.05)
@@ -379,7 +415,7 @@ class Schtasks:
     def __init__(self, test: unittest.TestCase, *, between: bool = False, refuse: str | None = None) -> None:
         self.test, self.between, self.refuse = test, between, refuse
         self.calls: list[tuple[str, ...]] = []
-        self.request = self.told = self.thread = self.between_code = None
+        self.request = self.told = self.thread = self.between_code = self.text = self.mode = None
 
     def __call__(self, *arguments: str) -> None:
         from xml.etree import ElementTree
@@ -392,7 +428,8 @@ class Schtasks:
             line = ElementTree.fromstring(text).find(f"{{{places.TASK}}}Actions/{{{places.TASK}}}Exec/"
                                                      f"{{{places.TASK}}}Arguments").text
             self.request = Path(line.split()[-1])
-            self.told = json.loads(self.request.read_text(encoding="utf-8"))
+            self.text = self.request.read_text(encoding="utf-8")
+            self.told, self.mode = json.loads(self.text), self.request.stat().st_mode & 0o777
             self.test.assertEqual(line.split()[:2], ["-I", str(Path(places.__file__).with_name("handoff.py"))])
         if arguments[0] == "/Run" and self.between:
             def go() -> None:

@@ -43,7 +43,7 @@ __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME"
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
            "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation",
            "kernel", "lock", "lock_path", "make_engine_dir", "outside_package", "packaged", "port_path", "registered",
-           "run_with", "state_dir", "windowless"]
+           "run_with", "state_dir", "tidy_handoff", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -696,8 +696,10 @@ NO_PACKAGE = 15700
 # measured, 0.8 to 1.6 s from the task's creation to the go-between's first line.
 HANDOFF = "handoff"
 HANDOFF_SECONDS = 5.0
-# How long the go-between is waited for to end, once it has answered, before its task is deleted.
+# How long the go-between is waited for to end, once it has answered, before its task is deleted; and how old a file
+# in ``HANDOFF`` is when it is a crash's leftover (``tidy_handoff``): no hand-off lasts a minute.
 BETWEEN_MS = 2000
+HANDOFF_STALE_SECONDS = 60.0
 # The task's definition: Task Scheduler's schema, and the access a handle on a process started needs (``Started``).
 TASK = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 SYNCHRONIZE, PROCESS_QUERY_LIMITED_INFORMATION = 0x00100000, 0x1000
@@ -761,23 +763,29 @@ def outside_package(command: list[str], **options: Any) -> Any:
 
 def _hand_off(command: list[str], *, env: dict[str, str], cwd: str | None, flags: int,
               run: Callable[..., Any] | None = None, kernel: Any = None, seconds: float = HANDOFF_SECONDS) -> Started:
-    """``command`` started by Task Scheduler (``outside_package``): its request (``argv``, ``env``, ``cwd``, ``flags``)
-    written to ``HANDOFF`` in the state folder, a task of the current user's that runs it registered from a definition
-    (``_task_definition``: no trigger, run only by ``/Run``), run, and its go-between (``cad.engine.handoff``) waited
-    for until it says the process it started (``seconds`` at most); then the task deleted and every file of it
-    removed, whatever happened. ``run``: ``schtasks`` with its arguments (``_schtasks``; a test's stand-in), ``kernel``:
-    kernel32 (a test's). ``OSError`` where a ``schtasks`` call fails or the go-between could not start ``command``,
-    ``TimeoutError`` where it never answered."""
+    """``command`` started by Task Scheduler (``outside_package``): its request (``argv``, ``env`` -- only the variables
+    cad and the tools it runs need, ``handoff.carried``, never the whole environment --, ``cwd``, ``flags``) written
+    to ``HANDOFF`` in the state folder, what a crash left there first removed (``tidy_handoff``), a task of the
+    current user's that runs it registered from a definition (``_task_definition``: no trigger, run only by ``/Run``),
+    run, and its go-between (``cad.engine.handoff``) waited for until it says the process it started (``seconds`` at
+    most); then the task deleted and every file of it removed, whatever happened. ``run``: ``schtasks`` with its
+    arguments (``_schtasks``; a test's stand-in), ``kernel``: kernel32 (a test's). ``OSError`` where a ``schtasks``
+    call fails or the go-between could not start ``command``, ``TimeoutError`` where it never answered."""
+    from cad.engine.handoff import carried
+
     run = run or _schtasks
     kernel = kernel or _kernel32()
     folder = state_dir() / HANDOFF
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tidy_handoff()
     name = f"cad-{os.getpid()}-{secrets.token_hex(6)}"
     request, definition, reply = (folder / f"{name}{suffix}" for suffix in (".json", ".xml", ".pid"))
     made = False
     try:
-        request.write_text(json.dumps({"argv": command, "env": env, "cwd": cwd, "flags": flags, "reply": str(reply),
-                                       "wait": seconds}), encoding="utf-8")
+        told = {"argv": command, "env": {name: value for name, value in env.items() if carried(name)}, "cwd": cwd,
+                "flags": flags, "reply": str(reply), "wait": seconds}
+        with open(os.open(request, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
+            json.dump(told, handle)  # its owner's alone where the system says so: on Windows the folder's permissions
         definition.write_bytes(_task_definition(_between(request), user=_user()))
         run("/Create", "/XML", str(definition), "/TN", name, "/F")
         made = True
@@ -804,6 +812,26 @@ def _hand_off(command: list[str], *, env: dict[str, str], cwd: str | None, flags
                 run("/Delete", "/TN", name, "/F")
             except Exception:  # noqa: BLE001 - a task left behind runs only on /Run
                 pass
+
+
+def tidy_handoff(now: float | None = None) -> list[Path]:
+    """What a hand-off that crashed left in ``HANDOFF`` (a request, which can carry a proxy's credentials, a definition,
+    an answer): each file older than ``HANDOFF_STALE_SECONDS`` removed, at each hand-off and at the server's start.
+    The paths removed. Never raises."""
+    removed, now = [], time.time() if now is None else now
+    try:
+        entries = list(os.scandir(state_dir() / HANDOFF))
+    except OSError:
+        return removed
+    for entry in entries:
+        try:
+            if entry.is_file(follow_symlinks=False) and now - entry.stat(follow_symlinks=False).st_mtime > \
+                    HANDOFF_STALE_SECONDS:
+                os.remove(entry.path)
+                removed.append(Path(entry.path))
+        except OSError:
+            continue  # in use: the next tidying
+    return removed
 
 
 def _between(request: Path) -> list[str]:

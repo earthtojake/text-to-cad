@@ -1931,10 +1931,11 @@ class Daemon:
         -- each part minds only its own: where no attempt is underway, on Windows each ``cad.exe`` an update moved
         aside and could not remove then (``auto_update.tidy``), and the cache's environments made for another release,
         as ``cad cache prune`` removes them, quietly (``base.tidy``: never one a process runs from, never this
-        release's), at the start (``starting``) and then at most once each ``TIDY_SECONDS``; the install command run
-        once where cad is newer than the release it is up to date for and the person's switch says so
-        (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its lock),
-        then the last update attempt counted once, where it ended and nothing it waits for is underway
+        release's), at the start (``starting``) and then at most once each ``TIDY_SECONDS``; at the start, what a
+        start outside a Windows app package that crashed left in the state folder (``places.tidy_handoff``); the
+        install command run once where cad is newer than the release it is up to date for and the person's switch
+        says so (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its
+        lock), then the last update attempt counted once, where it ended and nothing it waits for is underway
         (``auto_update.report``). Never on a server that stops; never fails the server."""
         if self.draining or self.stopping.is_set():
             return
@@ -1947,6 +1948,8 @@ class Daemon:
                 self.tidied = now
                 auto_update.tidy()
                 base.tidy()
+            if starting:
+                _places.tidy_handoff()
             self.catching.tend(told)
             auto_update.report()
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for what follows an update
