@@ -10,8 +10,9 @@ fixed number, so it holds on a computer that has not updated for months.
 ``uv tool upgrade "cad==<release>"`` on the environment, with the person's uv settings. What cad adds is what makes that
 safe where processes run cad, which on Windows hold its files (uv downloads and prepares the release before it changes
 the environment, so a download that fails leaves cad as it was): the server stopped, on Windows every other process of the environment stopped and its ``cad``
-command moved aside, the upgrade, a check that the release runs, and a repair where it does not. That work is the
-worker's (``auto_update_helper``); this module decides when it runs and keeps its record.
+command moved aside, the upgrade, a check that the release runs, a repair in place where it does not, and, where that
+leaves no cad that runs, cad installed again whole from outside its environment (``repair_command``). That work is the
+worker's (``auto_update_helper``, ``auto_update_repair``); this module decides when it runs and keeps its record.
 
 **A global install** (``global_install``) is a cad whose environment uv's ``uv tool install cad`` made (uv's receipt
 there names ``cad``) or pipx's ``pipx install cad`` (pipx's ``venvs/cad``, its metadata naming ``cad``). Only uv's
@@ -486,12 +487,6 @@ def installed_tool(uv: str | None = None, *, timeout: float = 30.0, pipx: list[s
         return None
 
 
-# On Windows, the name the worker gives the ``cad.exe`` of uv's bin folder as it moves it aside for the upgrade, in that
-# folder (``auto_update_helper.aside``): new ``cad`` commands fail at once meanwhile, rather than open the files being
-# replaced; and the files of that name ``tidy`` removes, one a process still ran then.
-ASIDE = ".cad-{pid}.exe.old"
-
-
 def tool_bin(uv: str | None = None, timeout: float = 30.0) -> Path | None:
     """uv's bin folder, where ``uv tool`` puts each tool's command (``uv tool dir --bin``, which reads
     ``UV_TOOL_BIN_DIR`` as every uv command does), or None where uv cannot say. Never raises."""
@@ -504,10 +499,13 @@ def tool_bin(uv: str | None = None, timeout: float = 30.0) -> Path | None:
 
 
 def tidy(windows: bool = os.name == "nt") -> list[str]:
-    """On Windows, for a uv tool: each ``cad.exe`` cad's update moved aside (``ASIDE``) and could not remove then, as a
-    process still ran it, removed where none does now. The paths removed. Elsewhere nothing. Never raises."""
+    """On Windows, for a uv tool: each ``cad.exe`` cad's update moved aside (``auto_update_sweep.ASIDE``) and could not
+    remove then, as a process still ran it, removed where none does now. The paths removed. Elsewhere nothing. Never
+    raises."""
     if not windows or uv_tool() is None:
         return []
+    from cad_server._internal.auto_update_sweep import ASIDE
+
     folder, removed = tool_bin(), []
     for path in sorted(folder.glob(ASIDE.format(pid="*"))) if folder is not None else ():
         try:
@@ -733,20 +731,34 @@ def requirement(target: str | None, version: str) -> str:
     return f"cad=={target}" if target is not None else bound(version)
 
 
+def repair_command(install: Global, version: str) -> list[str] | None:
+    """uv's command that installs cad again whole, the update's last resort (``auto_update_repair``): ``uv tool install
+    --force`` of the newest of release ``version``'s major (``tool_install.command``: ``cad<N>``, as cad's installers
+    write it, never one release, which would pin it). None where uv is not found."""
+    if install.uv is None:
+        return None
+    from cad_server._internal import tool_install
+
+    command = tool_install.command(install.uv, version)
+    return [*command[:3], "--force", *command[3:]]
+
+
 def helper_command(target: str | None, *, now: float, version: str, record: str, install: Global, tries: int = 1,
                    asked: bool = False, start: bool = True, wanted: str | None = None,
                    log: str | None = None, python: str | None = None,
                    spare: list[int] | None = None) -> list[str]:
     """The worker's command line: this environment's interpreter (``python``: ``sys.executable``), the worker as a
     module, and its one argument: ``target``, the release asked for (None: whatever uv gets), what to install
-    (``requirement``), the global install ``install``'s ``cad`` command, the uv it runs and who made it; ``wanted``, the
+    (``requirement``), the global install ``install``'s ``cad`` command, the uv it runs, who made it and the command
+    that installs it again whole (``repair_command``); ``wanted``, the
     release the attempt is for (``target`` or ``LATEST`` by default), ``tries``, ``asked`` (a typed update), ``start``
     (whether a server is wanted at the end though none runs now), ``spare`` (on Windows, the processes the switch leaves running: ``spared``), ``record``
     and ``log``, the files it keeps the attempt and each command in."""
     told = {"record": record, "log": log, "from": version, "at": now, "tries": tries,
             "wanted": wanted or target or LATEST, "asked": asked, "start": start, "target": target,
             "requirement": requirement(target, version), "cad": str(tool_command(install.prefix)),
-            "uv": install.uv, "installer": install.installer, "spare": spare or []}
+            "uv": install.uv, "installer": install.installer, "repair": repair_command(install, version),
+            "spare": spare or []}
     return [python or sys.executable, "-P", "-m", HELPER, json.dumps(told)]
 
 
@@ -754,15 +766,15 @@ def spared(waiting: int | None = None) -> list[int]:
     """On Windows, the processes the switch must leave running though they run from the environment: this one, which
     starts the worker, and ``waiting``, the ``cad update`` that waits on it, each with the processes that started it
     (a ``cad.exe`` and the environment's ``python.exe`` launch the Python under them, and ending either ends it), as
-    they are now: the worker cannot ask after this process ends (``auto_update_helper.lineage``). Elsewhere none. Never
+    they are now: the worker cannot ask after this process ends (``auto_update_sweep.lineage``). Elsewhere none. Never
     raises."""
     if os.name != "nt":
         return []
     try:
-        from cad_server._internal import auto_update_helper as helper
+        from cad_server._internal import auto_update_sweep as sweep
 
-        table = helper.Windows().processes()
-        return sorted(set().union(*(helper.lineage(pid, table) for pid in (os.getpid(), waiting) if pid)))
+        table = sweep.Windows().processes()
+        return sorted(set().union(*(sweep.lineage(pid, table) for pid in (os.getpid(), waiting) if pid)))
     except Exception:  # noqa: BLE001 - the worker spares its own line, and the rest is stopped
         return [os.getpid(), *([waiting] if waiting else [])]
 

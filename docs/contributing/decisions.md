@@ -105,8 +105,10 @@ on Windows moves uv's bin `cad.exe` aside (a new `cad` then fails at once, rathe
 stops every other process of the environment; runs uv, which downloads and prepares the release before it
 changes anything, so a failed download leaves cad as it was; puts `cad.exe` back; checks that the release
 runs; and, where it does not, deletes the folders uv left without their record and runs `uv tool upgrade
---reinstall` of the release, then of the release before. Never `uv tool install --force "cad==X"`: it pins
-the release in uv's record and removes the folder the worker runs from. Inside a Windows app's package the
+--reinstall` of the release, then of the release before. Where that leaves no cad that runs, uv makes the
+environment anew, `uv tool install --force "cad<N>"`: a range, never one release, which would pin it. That
+removes the folder the worker runs from, so the worker hands it to a standard-library script copied out of the
+environment and run by the Python the environment was made from, which stops cad's processes first. Inside a Windows app's package the
 update is refused, and the server and the worker are started outside it by Task Scheduler
 ([below](#inside-a-windows-apps-package-say-so)).
 

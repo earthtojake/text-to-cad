@@ -55,7 +55,8 @@ cad_server/
                          #   and to the viewer (`cadNotices`)
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base, extras, scan), cad's own update
-                         #   (auto_update, auto_update_helper), the plugin kept as new as cad
+                         #   (auto_update, auto_update_helper, auto_update_repair, auto_update_sweep),
+                         #   the plugin kept as new as cad
                          #   (plugin_catch_up), cad installed globally by a cad run
                          #   from uv's cache (tool_install), the hosted install command as the bridge
                          #   runs it (install_script), the daemon's entry (engine_daemon,
@@ -220,14 +221,19 @@ was. In order:
 1. **Switch** (the record's `phase` is `switching`: a server of the release being left starts none, `leaving`). On
    Windows inside an app package: refused, cause `packaged`. The server that answers is stopped at once, as `cad server
    stop` stops it; a `cad` command it cuts short says cad updated itself while it ran. On Windows, uv's bin `cad.exe` is
-   moved aside, then every other process of the environment stopped, until none is left. Then `uv tool upgrade
+   moved aside, then every other process of the environment stopped, until none is left (`auto_update_sweep.py`).
+   Then `uv tool upgrade
    "cad==<release>"`; on Windows the moment uv returns a `cad.exe` is back.
 2. **Check**: `cad server start` where a server ran or one is wanted, which must leave a server of the release, else
    `cad --version` naming it.
 3. **Repair**, where uv or the check failed: where uv changed nothing and the release before runs, that; else each
    `*.dist-info` left without its `RECORD` deleted and `uv tool upgrade --reinstall` of the release, then of the release
-   before. Never `uv tool install --force "cad==X"`, which pins the receipt and removes the folder the worker runs from.
-   Cause `start_failed` where the release did not start and the one before runs again, `broken` where neither runs.
+   before. Cause `start_failed` where the release did not start and the one before runs again. Where neither runs, the
+   last resort: uv makes the environment anew (`uv tool install --force "cad<N>"`; never one release, which would pin
+   it), which removes the folder the worker runs from, so `auto_update_repair.py` does it: copied into the state folder
+   with the sweep and run, standard library alone, by the Python the environment was made from, once the worker has
+   ended (the attempt `repairing` meanwhile; `cad update` says so and ends). Cause `broken` where that leaves no cad
+   that runs either.
 
 No step is tried twice in a run. Each command, its status, time and the end of its output go to `auto-update.log` in the
 state folder (the attempt before's, `auto-update.1.log`), which nothing sends. A worker that raises leaves the attempt

@@ -86,6 +86,11 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   installs the release, the automatic try before kept as lost.
 - ``self-hop``: the shipped ``SHIPPED`` (0.11.17) installed from PyPI as a uv tool, its server running: its own ``cad
   update`` upgrades uv's tool in place into this tree, and this tree's ``cad update`` takes it on, in place.
+- ``self-forced``: the last resort, where the repair in place cannot bring cad back: uv's receipt one uv cannot read
+  (every ``uv tool upgrade`` fails on it, ``--reinstall`` too) and a cad that does not start; the button: the worker's
+  upgrade and its repairs fail, and the repairer, run outside the environment by the Python it was made from, makes
+  it anew (``uv tool install --force "cad<N>"``): healthy at the next release, its server started, uv's receipt the
+  range, the repairer's copy gone.
 - ``install-repair``: the install command, the advised repair, over a cad that does not start, whose dist-info has no
   ``RECORD``, with a process running from its environment: it removes the dist-info, on Windows stops that process
   and waits for it, installs cad again with uv: healthy, uv's receipt as it was.
@@ -148,7 +153,7 @@ Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the thirteen of cad updating itself and of its repair; ``bridge`` the ten from a shipped
+``all`` (the default) is every route; ``self`` the fourteen of cad updating itself and of its repair; ``bridge`` the ten from a shipped
 release; ``plugin-update`` is of neither group, and runs with ``all`` or by its name. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -1682,6 +1687,52 @@ def self_hop(box: Box) -> None:
     say(f"        then this tree's `cad update`: {NEW} -> {NEXT} in place")
 
 
+def self_forced(box: Box) -> None:
+    """The last resort: an environment the repair in place cannot bring back -- uv's receipt one uv cannot read (its
+    entrypoints in a shape uv does not know: every ``uv tool upgrade`` fails, ``--reinstall`` too, and uv itself says
+    to run ``uv tool install --force``) and a cad that does not start (a source file of it gone) --, updated by the
+    button. The worker's upgrade and its repairs in place fail, it hands the repair to the repairer, which runs outside
+    the environment by the Python it was made from, and ``uv tool install --force "cad<N>"`` makes the environment anew:
+    cad healthy at the newest of its major, its server started, uv's receipt the range."""
+    box.set_up("off")
+    before = Tool(box)
+    receipt = before.env / "uv-receipt.toml"
+    receipt.write_text(receipt.read_text(encoding="utf-8").replace("entrypoints = [", "entrypoints = 3\nold = [", 1),
+                       encoding="utf-8")
+    (site_packages(before.env) / "cad_server" / "cli" / "__init__.py").unlink()
+    if box.run([box.cad(), "--version"], check=False).returncode == 0:
+        raise Failed(f"{box.label}: cad still starts")
+    refused = box.run(["uv", "tool", "upgrade", f"cad=={NEW}"], check=False)
+    if refused.returncode == 0 or "missing a valid receipt" not in refused.stderr:
+        raise Failed(f"{box.label}: uv upgraded a tool whose receipt it cannot read: {refused.stderr}")
+    box.out(NEXT)
+    record = clicked(box, NEW, NEXT)
+    log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
+    for said in ("--reinstall", "cad is installed again from outside its environment", "the repair outside cad's "
+                 "environment, begun", " tool install --force --managed-python --python 3.14 "):
+        if said not in log:
+            raise Failed(f"{box.label}: the log does not say {said!r}:\n{log[-4000:]}")
+    tool = box.tool() or {}
+    requires = Tool(box).receipt
+    problems = [] if (tool.get("version"), os.path.realpath(tool.get("env") or "/")) == (
+        NEXT, os.path.realpath(before.env)) else [f"uv's tool is {tool}"]
+    if dist_infos(before.env) != [f"cad-{NEXT}.dist-info"] or unrecorded(before.env):
+        problems.append(f"the environment holds {dist_infos(before.env)}, without RECORD {unrecorded(before.env)}")
+    if box.version() != f"cad {NEXT}":
+        problems.append(f"cad --version says {box.version()!r}")
+    if requires != [{"name": "cad", "specifier": f"<{MAJOR + 1}"}]:
+        problems.append(f"uv's receipt requires {requires}, not the range")
+    if (box.state / "auto-update-repair").exists():
+        problems.append("the repairer's copy is still in the state folder")
+    if problems:
+        raise Failed(f"{box.label}: cad installed again from outside:\n  " + "\n  ".join(problems) + f"\n{box.said()}")
+    serves(box, before.env, NEXT)
+    say(f"        uv's receipt unreadable to uv, cad not starting: the button; uv's upgrade and `--reinstall` failed, "
+        f"the repairer ran `uv tool install --force \"cad<{MAJOR + 1}\"` from outside the environment: "
+        f"{record['detail'][:120]!r}; cad {NEXT} healthy, its server started, uv's receipt `cad<{MAJOR + 1}`")
+    pages(box, NEXT)
+
+
 # A process of cad's environment that runs until its input ends (``install-repair``): an agent's ``cad`` command at
 # work, as far as Windows is concerned.
 RUNS = "import sys\nprint('running', flush=True)\nsys.stdin.read()\n"
@@ -2139,7 +2190,8 @@ def plugin_update(box: Box) -> None:
 SELF = {"self-at-start": self_at_start, "self-button": self_button, "self-typed": self_typed, "self-waits": self_waits,
         "self-rollback": self_rollback, "self-uninstallable": self_uninstallable, "self-held": self_held,
         "self-called": self_called, "self-pinned": self_pinned, "self-major": self_major,
-        "self-stopped-midway": self_stopped_midway, "self-hop": self_hop, "install-repair": install_repair}
+        "self-stopped-midway": self_stopped_midway, "self-hop": self_hop, "self-forced": self_forced,
+        "install-repair": install_repair}
 BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
           "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,
           "uv-line": uv_line, "store-uv-line": store_uv_line}

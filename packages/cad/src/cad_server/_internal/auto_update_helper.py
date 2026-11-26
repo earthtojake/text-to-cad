@@ -2,16 +2,18 @@
 Windows app package (``places.outside_package``), as ``python -P -m cad_server._internal.auto_update_helper <told>``
 by the environment's own interpreter. ``told`` is one JSON argument: ``record`` (the attempt's file), ``log``, ``from``
 (the release that runs), ``at``, ``tries``, ``wanted``, ``asked``, ``start`` (a server wanted at the end though none
-runs), ``target`` (the release asked for, or null), ``requirement`` (what uv installs: ``cad==<target>``; with no
+runs), ``target`` (the release asked for, or null), ``requirement`` (what is installed: ``cad==<target>``; with no
 target the bound of ``from``'s major), ``cad`` (the environment's own ``cad`` command), ``uv`` (the person's uv,
-``base.find_uv``), ``installer`` (kept in the record) and ``spare`` (on Windows, the processes the switch leaves running: ``auto_update.spared``).
+``base.find_uv``), ``installer`` (kept in the record), ``repair`` (the command that installs cad again whole,
+``auto_update.repair_command``) and ``spare`` (on Windows, the processes the switch leaves running:
+``auto_update.spared``).
 
-uv installed cad and updates it where it is, with the person's own uv and uv's settings, its receipt untouched. On
-Windows a file a process has open or loaded cannot be deleted, and uv's upgrade deletes the old files in the order of
-the package's ``RECORD`` and stops at the first it cannot delete, with nothing put back; one stopped past the
-``RECORD`` leaves a ``cad-*.dist-info`` without it that every later uv run fails on. uv downloads and prepares the
-release before it changes the environment, so a download that fails leaves cad as it was. What follows is what makes
-the upgrade safe where processes run cad, and repairs it where it fails anyway. In order (``update``):
+uv installed cad and updates it where it is, with the person's own uv and uv's settings, its receipt untouched
+(``installing``). On Windows a file a process has open or loaded cannot be deleted, and uv's upgrade deletes the old
+files in the order of the package's ``RECORD`` and stops at the first it cannot delete, with nothing put back; one
+stopped past the ``RECORD`` leaves a ``cad-*.dist-info`` without it that every later uv run fails on. uv downloads and prepares the release before it changes the environment, so a
+download that fails leaves cad as it was. What follows is what makes the upgrade safe where processes run cad, and
+repairs it where it fails anyway. In order (``update``):
 
 1. **Current**: where the environment holds ``target`` or newer already (``auto_update.installed``: another update
    got there first), nothing is upgraded: outcome ``current``, and a server of an older release, or of another
@@ -21,17 +23,18 @@ the upgrade safe where processes run cad, and repairs it where it fails anyway. 
 
    a. On Windows inside an app package (``places.packaged``): refused, nothing touched, cause ``packaged``.
    b. The server that answers stopped at once, as ``cad server stop`` stops it (``stop``).
-   c. On Windows, uv's bin ``cad.exe`` moved aside (``aside``), so a new ``cad`` fails at once rather than open the
-      files being replaced; then every other process running from the environment stopped, and looked for again
-      until none is left (``stop_environment``). In that order: a ``cad`` launched between a sweep and the rename
-      would hold the files uv replaces.
+   c. On Windows, uv's bin ``cad.exe`` (``tool_command``) moved aside, so a
+      new ``cad`` fails at once rather than open the files being replaced; then every other process running from the
+      environment stopped, and looked for again until none is left (``auto_update_sweep``). In that order: a ``cad``
+      launched between a sweep and the rename would hold the files being replaced.
    d. Nothing of what the worker needs from here on is read from the environment's files: every module it uses is
-      imported as it starts (this module's imports), none compiled, and after the upgrade it runs only programs.
-      Its own interpreter is the environment's ``python``, which an upgrade does not touch.
-   e. ``uv tool upgrade <requirement>`` (``cad==<target>``, or the bound of ``from``'s major): the release it leaves
-      is the one installed (``auto_update.installed``); ``from`` itself is ``current``. uv's own failure to write the
-      bin ``cad.exe`` (a file in use) leaves the environment upgraded and whole: that is checked as an upgrade.
-   f. The moment uv returns, uv's bin ``cad`` again where uv left none (``command_back``; an upgrade uv fails after it
+      imported as it starts (this module's imports), none compiled, the repairer's files are read (``CARRIED``), and
+      after the upgrade it runs only programs. Its own interpreter is the environment's ``python``, which an upgrade
+      does not touch.
+   e. ``uv tool upgrade <requirement>`` (``installing``): the release it leaves is the one installed
+      (``auto_update.installed``); ``from`` itself is ``current``. uv's own failure to write the bin ``cad.exe`` (a file
+      in use) leaves the environment upgraded and whole: that is checked as an upgrade.
+   f. The moment uv returns, its bin ``cad`` again where it left none (``command_back``: an upgrade uv fails after it
       took the tool's commands out leaves none, and ``--reinstall`` makes none): on Windows the environment's own
       ``cad.exe`` copied there, else the one moved aside put back, and the one moved aside removed where it can be
       (else the server's next tidying does, ``auto_update.tidy``); elsewhere a link to the environment's own, as uv
@@ -39,17 +42,20 @@ the upgrade safe where processes run cad, and repairs it where it fails anyway. 
    g. A server of another release that came up meanwhile stopped (``clear``), and the release checked (``runs``):
       ``cad server start`` where a server ran or ``start`` asks for one, ending 0 with a server whose greeting names
       it; else ``cad --version`` saying it.
-   h. Where e or g failed, the repair (``recover``): where uv changed nothing and the release before runs as it is,
-      that; else each ``*.dist-info`` without its ``RECORD`` deleted and ``uv tool upgrade --reinstall`` of the
-      release, then of the release before, each made safe as e is (c, f) and checked. ``--reinstall`` keeps uv's
-      receipt and the environment's ``Scripts`` folder; never ``uv tool install --force "cad==X"``, which removes that
-      folder (refused while this worker's interpreter runs from it) and writes the pin into the receipt.
+   h. Where e or g failed, the repair in place (``recover``): where nothing changed and the release before runs as it
+      is, that; else each ``*.dist-info`` without its ``RECORD`` deleted and the release installed again
+      (``installing``: ``uv tool upgrade --reinstall``), then the release before, each made safe as e is (c, f) and
+      checked. It keeps uv's receipt and the environment's ``Scripts`` folder, which this worker's interpreter holds on Windows.
+   i. Where that left no cad that runs, the last resort (``hand_off``): the installer installs cad again whole
+      (``uv tool install --force "cad<N>"``), which removes the environment, so it runs
+      from outside it once this worker has ended (``auto_update_repair``): the attempt is kept underway in its
+      ``repairing`` phase, and the repairer writes its outcome. Where it cannot start, the attempt is ``broken``.
 
 3. **Outcome**, kept in the record: ``installed``, ``current`` or ``failed``, with ``detail``, ``cause`` where it did
-   not install what it was for (one of ``CAUSES``: uv's words where the upgrade failed, ``cause_of``;
+   not install what it was for (one of ``CAUSES``: the installer's words where the upgrade failed, ``cause_of``;
    ``start_failed`` where the release did not start and the one before runs again; ``broken`` where neither runs),
    ``restored`` (whether the release before runs again) and ``started`` (``"start": false`` where no server was
-   wanted).
+   wanted); or ``underway``, ``repairing``, handed to the repairer (step i).
 No step is tried twice in a run: the schedule tries a failed release again (``auto_update.next_try``). As it runs the
 worker writes the time into the record every ``BEAT_SECONDS`` (``Beat``), by which the server tells it is underway,
 never over another attempt's record, and, as every write of the record that another process may make at the same
@@ -78,6 +84,7 @@ from cad._internal import atomic_replace  # noqa: F401 - ``auto_update._keep``'s
 from cad.engine import atomic_replace as _engine_atomic_replace  # noqa: F401 - ``client.sweep``'s
 from cad.engine import client, places
 from cad_server._internal import auto_update, file_lock
+from cad_server._internal import auto_update_sweep as sweep
 
 WINDOWS = os.name == "nt"
 NO_WINDOW = 0x08000000 if WINDOWS else 0  # CREATE_NO_WINDOW: no console flashes for uv or cad
@@ -135,10 +142,12 @@ def update(told, run=run, mark=lambda phase: None):
                  **replace(told, run, named(held), log, mark)}
     else:
         found = switch(told, run, log)
-    found = {**found, "from": told["from"], "at": told["at"], "tries": told.get("tries", 1), "ended": time.time(),
+    found = {**found, "from": told["from"], "at": told["at"], "tries": told.get("tries", 1),
+             **({} if found["outcome"] == "underway" else {"ended": time.time()}),
              **{name: told[name] for name in ("installer", "wanted", "asked") if name in told}}
     log.end(found)
     return found
+
 
 
 def answering():
@@ -209,7 +218,7 @@ def switch(told, run, log, system=None):
     if server is not None:
         stop(server, log)
     wanted = server is not None or told.get("start") is True
-    code, said = upgrade(told, run, [told["requirement"]], command, log, system)
+    code, said = upgrade(told, run, installing(told, told["requirement"]), command, log, system)
     got = auto_update.installed()
     if code != 0 and got is not None and got == target and not unrecorded(prefix):
         # The environment is upgraded and whole: what failed after it is the bin command, which is back (``upgrade``).
@@ -235,38 +244,40 @@ def switch(told, run, log, system=None):
         return {**named_, "outcome": "installed", "detail": f"cad {got} runs, installed again after: {detail}",
                 **started(wanted, True, again)}
     if back is None:
+        detail = f"{detail}; and the repair in place left no cad that runs: {last_line(again) or 'no word'}"
+        if hand_off(told, log, release_=named_["release"], command=command, wanted=wanted, cause=cause, detail=detail):
+            return {**named_, "outcome": "underway", "phase": "repairing", "beat": time.time(), "detail": detail}
         cause = "broken"
-        detail = f"{detail}; and the repair left no cad that runs: {last_line(again) or 'no word'}"
     return {**named_, "outcome": "failed", "cause": cause, "restored": back is not None, "detail": detail,
             **started(wanted, back is not None, again)}
 
 
-def upgrade(told, run, arguments, command, log, system=None):
-    """One ``uv tool upgrade <arguments>``, made safe on Windows: uv's bin ``cad.exe`` (``command``) moved aside first,
-    so a new ``cad`` fails at once (``aside``), then every process running from the environment stopped, looked for
-    again until none is left (``stop_environment``), and the moment uv returns a bin ``cad.exe`` there again
-    (``command_back``, on every system), before anything is checked. uv's exit status and words."""
+def upgrade(told, run, argv, command, log, system=None):
+    """One run of the installer's ``argv`` (``installing``), made safe on Windows: its bin ``cad.exe`` (``command``)
+    moved aside first, so a new ``cad`` fails at once, then every process running from the environment stopped, looked
+    for again until none is left (``auto_update_sweep``), and the moment the installer returns a bin ``cad`` there again
+    (``command_back``, on every system), before anything is checked. The installer's exit status and words."""
     moved = None
     if WINDOWS:
-        moved = aside(command, log) if command is not None else None
-        stop_environment(Path(sys.prefix), command, told.get("spare") or (), log, system)
+        moved = sweep.aside(command, log) if command is not None else None
+        sweep.stop_environment(Path(sys.prefix), command, told.get("spare") or (), log, system)
     try:
-        return run([told["uv"], "tool", "upgrade", *arguments], auto_update.UPGRADE_SECONDS)
+        return run(argv, auto_update.UPGRADE_SECONDS)
     finally:
         if command is not None:
-            command_back(command, moved, Path(sys.prefix), log)
+            sweep.command_back(command, moved, Path(sys.prefix), log, windows=WINDOWS)
 
 
 def recover(told, run, target, wanted, log, *, upgraded, command=None, system=None):
     """Step h (see the module), where the upgrade to ``target`` failed (``upgraded`` false) or its check did: the release
-    that runs after it, or None, and what its check said. Where uv changed nothing (no ``*.dist-info`` without its
-    ``RECORD``) the release before is checked as it is first; else, or where it does not run, ``uv tool upgrade
-    --reinstall`` of ``target``, then of the release before, each after a server of another release is stopped
-    (``clear``) and the records uv left half removed are deleted (``unrecorded``), made safe as the upgrade is
-    (``upgrade``); each checked (``runs``). Never ``uv tool install --force``: it removes the environment's
-    ``Scripts`` folder, which this worker's own interpreter holds, and pins uv's receipt."""
+    that runs after it, or None, and what its check said. Where nothing changed (no ``*.dist-info`` without its
+    ``RECORD``) the release before is checked as it is first; else, or where it does not run, ``target`` installed
+    again in place (``installing``: ``uv tool upgrade --reinstall``), then the release before, each after a server of another release is stopped (``clear``) and the records left half
+    removed are deleted (``unrecorded``), made safe as the upgrade is (``upgrade``); each checked (``runs``). Never a
+    whole new install from here (``uv tool install --force``): it removes the environment's ``Scripts`` folder, which
+    this worker's own interpreter holds (``hand_off`` runs it from outside)."""
     prefix, before, said = Path(sys.prefix), told["from"], ""
-    if target is None:  # uv named none it got: the release before alone
+    if target is None:  # the installer named none it got: the release before alone
         target = before
     if not upgraded and not unrecorded(prefix):
         clear(before, log)
@@ -278,7 +289,7 @@ def recover(told, run, target, wanted, log, *, upgraded, command=None, system=No
         for path in unrecorded(prefix):
             shutil.rmtree(path, ignore_errors=True)
             log.write(f"removed {path}, which uv left without its RECORD")
-        code, said = upgrade(told, run, ["--reinstall", f"cad=={release_}"], command, log, system)
+        code, said = upgrade(told, run, installing(told, f"cad=={release_}", again=True), command, log, system)
         if code == 0:
             ok, said = runs(told, run, release_, wanted)
             if ok:
@@ -327,7 +338,13 @@ def replace(told, run, held, log, mark=lambda phase: None):
     return started(True, ok, said)
 
 
-# --- Windows: the tool's command, and every process of the environment -----------------------------------------------
+# --- the installer's commands, and the repair from outside the environment -------------------------------------------
+
+
+def installing(told, requirement, again=False):
+    """uv's command that installs ``requirement`` in cad's environment where it is: ``uv tool upgrade [--reinstall]
+    <requirement>``, which keeps its receipt."""
+    return [told["uv"], "tool", "upgrade", *(["--reinstall"] if again else []), requirement]
 
 
 def tool_command(told, run):
@@ -338,195 +355,57 @@ def tool_command(told, run):
     return Path(folder) / ("cad.exe" if WINDOWS else "cad") if folder else None
 
 
-def aside(command, log):
-    """Step c: ``command`` (uv's bin ``cad.exe``) renamed beside itself (``auto_update.ASIDE``): Windows lets a running
-    program be renamed, never deleted. Where it was moved, or None (none there, or the rename refused: uv then warns
-    that it cannot remove it, and the upgrade goes on)."""
-    moved = command.with_name(auto_update.ASIDE.format(pid=os.getpid()))
-    try:
-        os.replace(command, moved)
-    except FileNotFoundError:
-        return None
-    except OSError as error:
-        log.write(f"{command} could not be moved aside: {type(error).__name__}: {error}")
-        return None
-    log.write(f"{command} moved aside to {moved.name}")
-    return moved
+# The repairer and the sweep it shares with the worker, read as the worker starts (step d: nothing of the environment's
+# files is read once the installer runs), copied into this folder of the state folder where the repair in place left
+# no cad that runs (``hand_off``); None where they cannot be read.
+REPAIRER = "auto-update-repair"
+try:
+    CARRIED = {name: Path(__file__).with_name(name).read_bytes()
+               for name in ("auto_update_repair.py", "auto_update_sweep.py")}
+except OSError:
+    CARRIED = None
 
 
-def command_back(command, moved, prefix, log):
-    """Step f: uv's bin ``cad`` at ``command`` again where uv left none -- on Windows the environment's own
-    (``Scripts/cad.exe``) copied there, elsewhere a link to its ``bin/cad`` as uv makes one; else the one moved aside
-    (``moved``) put back --; then the one moved aside
-    removed where it can be (a process may run it still: the server's next tidying removes it, ``auto_update.tidy``).
-    What is left of it there, or None."""
-    if not os.path.lexists(command):
+def outside(python):
+    """Whether the Python ``python`` can run the repairer from outside cad's environment: a file, not inside it
+    (``auto_update._outside``), and no Windows app's (a Store Python runs inside its app's package, where what it writes
+    under AppData is the app's own copy)."""
+    return auto_update._outside(python, sys.prefix) and "\\windowsapps\\" not in python.lower()  # noqa: SLF001
+
+
+def hand_off(told, log, *, release_, command, wanted, cause, detail):
+    """The last resort (step i): the repairer (``auto_update_repair``) and the sweep copied into ``REPAIRER`` in the
+    state folder, then started detached, outside any Windows app package (``places.outside_package``), by the Python the
+    environment was made from (``sys._base_executable``), isolated, with what it is to do (``told["repair"]``, the
+    installer's command that installs cad again, ``auto_update.repair_command``). Whether it started; where it cannot
+    (no such command, nothing to copy, no Python outside the environment, a start that fails), the log says why."""
+    python = getattr(sys, "_base_executable", None) or ""
+    why = ("the installer names no command that installs cad again" if not told.get("repair") else
+           "the repairer's files could not be read as the worker started" if CARRIED is None else
+           f"no Python outside cad's environment runs it ({python or 'none'})" if not outside(python) else None)
+    if why is None:
+        copy = Path(told["record"]).parent / REPAIRER
+        repairing = {"record": told["record"], "log": told.get("log"), "at": told["at"], "from": told["from"],
+                     "release": release_, "prefix": sys.prefix, "cad": told["cad"],
+                     "command": str(command) if command is not None else None, "install": told["repair"],
+                     "start": wanted, "cause": cause, "detail": detail, "worker": os.getpid(),
+                     "spare": told.get("spare") or [], "copy": str(copy)}
         try:
-            if WINDOWS:
-                shutil.copy2(auto_update.tool_command(prefix, windows=True), command)
-                log.write(f"{command} copied from the environment's own")
-            else:  # as uv makes it: a link to the environment's own
-                own = auto_update.tool_command(prefix, windows=False)
-                if not own.is_file():
-                    raise FileNotFoundError(own)
-                os.symlink(own, command)
-                log.write(f"{command} linked to the environment's own")
-        except OSError:
-            if moved is not None:
-                with contextlib.suppress(OSError):
-                    os.replace(moved, command)
-                    log.write(f"{command} put back as it was")
-                    return None
-    if moved is not None:
-        try:
-            os.unlink(moved)
-        except OSError:
-            return moved if os.path.lexists(moved) else None
-    return None
-
-
-def lineage(pid, table):
-    """``pid`` and each process that started it, as far as ``table`` (``Windows.processes``) knows them: the processes
-    ending which ends ``pid`` (a ``cad.exe``, the environment's ``python.exe``, each ends the Python under it)."""
-    found = set()
-    while pid and pid in table and pid not in found:
-        found.add(pid)
-        pid = table[pid][0]
-    if pid:
-        found.add(pid)
-    return found
-
-
-def running_from(image, prefix, command):
-    """Whether a process whose program is ``image`` runs from the environment at ``prefix``: its program inside it, or
-    uv's bin ``cad.exe`` of the tool (``command``), or one moved aside beside it (``auto_update.ASIDE``)."""
-    if not image:
+            shutil.rmtree(copy, ignore_errors=True)
+            copy.mkdir(parents=True)
+            for name, data in CARRIED.items():
+                (copy / name).write_bytes(data)
+            places.outside_package([python, "-I", "-B", str(copy / "auto_update_repair.py"), json.dumps(repairing)],
+                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   cwd=str(copy.parent), **places.detached())
+        except Exception as error:  # noqa: BLE001 - said, and the attempt ends broken
+            why = f"its start failed: {type(error).__name__}: {error}"
+    if why is not None:
+        log.write(f"cad could not be installed again from outside its environment: {why}")
         return False
-    path = os.path.normcase(os.path.abspath(image))
-    inside = os.path.normcase(os.path.abspath(prefix)).rstrip("\\/") + os.sep
-    if path.startswith(inside):
-        return True
-    if command is None:
-        return False
-    if path == os.path.normcase(os.path.abspath(command)):
-        return True
-    folder, name = os.path.split(path)
-    return folder == os.path.normcase(os.path.abspath(Path(command).parent)) \
-        and re.fullmatch(r"\.cad-\d+\.exe\.old", name) is not None
-
-
-def stop_environment(prefix, command, spare, log, system=None, seconds=END_SECONDS, rounds=ROUNDS):
-    """Step c, on Windows: every process running from the environment at ``prefix`` (``running_from``) stopped -- but
-    this worker and each process in ``spare``, with those that started them (``lineage``) -- and waited for until it
-    is gone, with the processes each started directly (the Python a launcher started, which ends with it: killing a
-    ``cad.exe`` takes its Python down in milliseconds), ``seconds`` at most; then looked for again, until none is left,
-    ``rounds`` looks at most. As Scoop finds what to stop before it updates an app. Each written to the log. Never
-    raises. ``system``: Windows' process calls (``Windows``)."""
-    try:
-        system = system or Windows()
-        for _round in range(rounds):
-            table = system.processes()
-            kept = set()
-            for pid in (os.getpid(), *spare):
-                kept |= lineage(pid, table)
-            ending = sorted(pid for pid, (_parent, image) in table.items()
-                            if pid not in kept and running_from(image, prefix, command))
-            if not ending:
-                return
-            watched = sorted(pid for pid, (parent, _image) in table.items()
-                             if parent in ending and pid not in kept and pid not in ending)
-            left = system.end(ending, watched, seconds)
-            log.write("stopped the processes running from cad's environment: "
-                      + ", ".join(f"{pid} ({table[pid][1]})" for pid in ending)
-                      + (f"; still there after {seconds:g} s: {', '.join(map(str, left))}" if left else ""))
-    except Exception as error:  # noqa: BLE001 - the upgrade goes on, and says what it met
-        log.write(f"the processes running from cad's environment could not be stopped: {type(error).__name__}: {error}")
-
-
-class Windows:
-    """Windows' own calls for ``stop_environment``, by ctypes: the processes (a Toolhelp snapshot, each program's path
-    by ``QueryFullProcessImageNameW``) and their end (``TerminateProcess``, ``WaitForSingleObject``)."""
-
-    SNAPPROCESS, QUERY, TERMINATE, SYNCHRONIZE = 0x2, 0x1000, 0x0001, 0x00100000
-
-    def __init__(self):
-        import ctypes
-        from ctypes import wintypes
-
-        self.ctypes, self.wintypes = ctypes, wintypes
-        kernel = self.kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-
-        class Entry(ctypes.Structure):  # PROCESSENTRY32W
-            _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
-                        ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD),
-                        ("cntThreads", wintypes.DWORD), ("th32ParentProcessID", wintypes.DWORD),
-                        ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
-                        ("szExeFile", ctypes.c_wchar * 260)]
-
-        self.Entry = Entry
-        for name, arguments, result in (
-                ("CreateToolhelp32Snapshot", [wintypes.DWORD, wintypes.DWORD], wintypes.HANDLE),
-                ("Process32FirstW", [wintypes.HANDLE, ctypes.POINTER(Entry)], wintypes.BOOL),
-                ("Process32NextW", [wintypes.HANDLE, ctypes.POINTER(Entry)], wintypes.BOOL),
-                ("OpenProcess", [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD], wintypes.HANDLE),
-                ("QueryFullProcessImageNameW", [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
-                                                ctypes.POINTER(wintypes.DWORD)], wintypes.BOOL),
-                ("TerminateProcess", [wintypes.HANDLE, wintypes.UINT], wintypes.BOOL),
-                ("WaitForSingleObject", [wintypes.HANDLE, wintypes.DWORD], wintypes.DWORD),
-                ("CloseHandle", [wintypes.HANDLE], wintypes.BOOL)):
-            function = getattr(kernel, name)
-            function.argtypes, function.restype = arguments, result
-
-    def processes(self):
-        """``{pid: (parent pid, its program's path or None)}`` of every process now."""
-        kernel, ctypes = self.kernel, self.ctypes
-        snapshot = kernel.CreateToolhelp32Snapshot(self.SNAPPROCESS, 0)
-        if not snapshot or snapshot == ctypes.c_void_p(-1).value:
-            raise ctypes.WinError(ctypes.get_last_error())
-        table = {}
-        try:
-            entry = self.Entry()
-            entry.dwSize = ctypes.sizeof(self.Entry)
-            more = kernel.Process32FirstW(snapshot, ctypes.byref(entry))
-            while more:
-                table[entry.th32ProcessID] = (entry.th32ParentProcessID, None)
-                more = kernel.Process32NextW(snapshot, ctypes.byref(entry))
-        finally:
-            kernel.CloseHandle(snapshot)
-        return {pid: (parent, self.image(pid)) for pid, (parent, _none) in table.items()}
-
-    def image(self, pid):
-        kernel, ctypes = self.kernel, self.ctypes
-        handle = kernel.OpenProcess(self.QUERY, False, pid)
-        if not handle:
-            return None
-        try:
-            size = self.wintypes.DWORD(32768)
-            buffer = ctypes.create_unicode_buffer(size.value)
-            return buffer.value if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)) else None
-        finally:
-            kernel.CloseHandle(handle)
-
-    def end(self, ending, watched, seconds):
-        """Each of ``ending`` terminated, then it and each of ``watched`` waited for, ``seconds`` in all: the pids still
-        there."""
-        kernel, handles = self.kernel, {}
-        for pid in ending:
-            handle = kernel.OpenProcess(self.TERMINATE | self.SYNCHRONIZE, False, pid)
-            if handle:
-                kernel.TerminateProcess(handle, 1)
-                handles[pid] = handle
-        for pid in watched:
-            handle = kernel.OpenProcess(self.SYNCHRONIZE, False, pid)
-            if handle:
-                handles[pid] = handle
-        deadline, left = time.monotonic() + seconds, []
-        for pid, handle in handles.items():
-            wait = max(0, int((deadline - time.monotonic()) * 1000))
-            if kernel.WaitForSingleObject(handle, wait) != 0:
-                left.append(pid)
-            kernel.CloseHandle(handle)
-        return left
+    log.write(f"cad is installed again from outside its environment: `{' '.join(map(str, told['repair']))}` by "
+              f"{python}, its log below")
+    return True
 
 
 # --- why an attempt did not install what it was for: one word ------------------------------------------------------
@@ -738,6 +617,9 @@ class Log:
             pass
 
     def end(self, found):
+        if found.get("outcome") == "underway":  # handed to the repairer (``hand_off``), whose end the log says
+            self.write(f"the worker ended {_when(time.time())}, cad being installed again: {found.get('detail')}")
+            return
         self.write(f"ended {_when(found.get('ended') or time.time())}: {found.get('outcome')}"
                    + (f", the cause: {found['cause']}" if found.get("cause") else "")
                    + (f"; {found['detail']}" if found.get("detail") else ""))

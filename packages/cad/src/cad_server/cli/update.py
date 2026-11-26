@@ -16,7 +16,8 @@ Then it waits for the update to end, saying once on stderr that cad is updating 
 failure: why, what to do and where its log is, ``ended``), as the server that answers afterwards tells it (``{"op":
 "update", "begin": false}``), else as the attempt's record in the state folder does; ``WAIT_SECONDS`` at most. uv
 upgrades cad in place meanwhile; this process, which imported what it needs before, is left running by the update on
-Windows (it sends its ``pid``: ``auto_update.spared``).
+Windows (it sends its ``pid``: ``auto_update.spared``). Where the update left no cad that runs and cad is being
+installed again from outside its environment, it says so and ends (``REPAIRING``).
 
 A cad that is no global install does not update itself, and is refused. ``cad update auto [status|on|off]`` shows or
 changes whether cad updates itself (``cad_server.cli.auto_update``).
@@ -39,6 +40,10 @@ WAIT_SECONDS = 1800.0
 LOOK_SECONDS = 0.5
 NOT_A_TOOL = ("refused: this cad is not a global install, so it does not update itself: update it the way it was "
               "installed (for pip, `pip install --upgrade cad`), or install it globally with `uv tool install cad`")
+# Where the update left no cad that runs and cad is being installed again from outside its environment
+# (``auto_update_helper.hand_off``): the command ends, and the person looks later.
+REPAIRING = ("the update of cad {was} left cad unable to run, so cad is being installed again: run `cad --version` in "
+             "a few minutes to see where it ended{log}")
 OLD_SERVER = ("the cad server running cannot update cad: run `cad server stop`, then `cad server start`, then "
               "`cad update` again")
 
@@ -151,8 +156,8 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
          higher: str | None = None, server: bool = True) -> int:
     """The update that began at ``since`` (by the server's clock: an attempt begun then or later serves it) waited for
     until its record says it ended, each step said once on stderr as it begins (``step``; ``server``: one was running,
-    and is restarted), and the end said in one line (``higher``: a release of a higher major is out): its exit
-    status."""
+    and is restarted), and the end said in one line (``higher``: a release of a higher major is out); or, where it is
+    being repaired from outside cad's environment, that (``REPAIRING``), at once: its exit status."""
     clock, sleep = clock or time.monotonic, sleep or time.sleep
     deadline = clock() + seconds
     told_of: set[str] = set()
@@ -161,6 +166,8 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
         attempt = record if isinstance(record, dict) and isinstance(record.get("at"), (int, float)) \
             and record["at"] >= since else None
         if attempt is not None and attempt.get("outcome") == "underway":
+            if attempt.get("phase") == "repairing":  # the repairer waits for this process to end (on Windows)
+                return said(REPAIRING.format(was=was, log=log_line()))
             step(attempt, was, told_of, server=server)
         if attempt is not None and attempt.get("outcome") not in (None, "underway"):
             return ended(attempt, was, running, said, higher=higher)
@@ -182,6 +189,15 @@ def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) 
     told_of.add("switching")
     print(f"cad: updating cad {was} to {named}" + (", then restarting the cad server" if server else ""),
           file=sys.stderr, flush=True)
+
+
+def log_line() -> str:
+    """``; its log: <the worker's log>`` where there is one, else nothing."""
+    from cad.engine.places import state_dir
+    from cad_server._internal import auto_update
+
+    log = state_dir() / auto_update.LOG
+    return f"; its log: {log}" if log.is_file() else ""
 
 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,
@@ -214,11 +230,7 @@ def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable
             why += f" (cad {was})"
             if attempt.get("restored") is False:
                 why, what = f"{why}, but its server did not start either", "`cad server start` starts it"
-        from cad.engine.places import state_dir
-
-        log = state_dir() / auto_update.LOG
-        where = f"; its log: {log}" if log.is_file() else ""
-        return said(f"could not update cad {was} to {newest}, as {why}: {what}{where}")
+        return said(f"could not update cad {was} to {newest}, as {why}: {what}{log_line()}")
     if running:
         serving = f"; cad {running} is running"
     else:

@@ -379,8 +379,8 @@ cad updates itself to every new release of its major version (the first number: 
 with your own uv, as its server next starts, or when you ask: the viewer's update button, which shows
 while a newer release is out, does it with one click. It does nothing in the background. An update stops
 the server at once, as `cad server stop` does; a command it cuts short says cad updated itself while it
-ran, and runs again as it was. A cad you pinned to a release (`uv tool install cad==X`) is left as it
-is, and one installed with pipx is yours to update: `pipx upgrade cad`. To update it now:
+ran, and runs again as it was. Where an update leaves cad unable to run, cad installs itself again. A cad
+you pinned to a release (`uv tool install cad==X`) is left as it is, and one installed with pipx is yours to update: `pipx upgrade cad`. To update it now:
 
 ```bash
 cad update

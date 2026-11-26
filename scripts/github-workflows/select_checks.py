@@ -228,8 +228,8 @@ RULES: tuple[Rule, ...] = (
          select(flags=["installer"]), final=True),
     Rule(tuple(f"packages/cad/src/cad_server/{path}" for path in (
         "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
-        "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
-        "engine/daemon.py", "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/**",
+        "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/auto_update_repair.py",
+        "_internal/auto_update_sweep.py", "_internal/installations.py", "engine/daemon.py", "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/**",
         # ...and what a command says while the update switches releases: `cad update`'s steps and end, a failed
         # start's update, a command that meets the next release's server.
         "cli/update.py", "cli/server.py", "_internal/cli_errors.py")),

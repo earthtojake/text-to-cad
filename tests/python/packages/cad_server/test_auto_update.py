@@ -29,7 +29,8 @@ import cad_server
 from cad.engine import client
 from cad.engine.previous import version
 from cad_server import updates
-from cad_server._internal import auto_update, auto_update_helper as helper
+from cad_server._internal import auto_update, auto_update_helper as helper, auto_update_sweep as sweep
+from cad_server._internal import auto_update_repair as repairer
 from cad_server.cli import auto_update as command, plugin as plugin_command
 from tests.python.support.agent_apps import a_home_of_its_own
 
@@ -1152,7 +1153,10 @@ class HelperCommandTest(Case):
             "record": "/s/auto-update.json", "log": "/s/auto-update.log", "from": "0.1.0", "at": 5.0, "tries": 1,
             "wanted": "0.2.0", "asked": False, "start": True, "target": "0.2.0",
             "requirement": "cad==0.2.0", "cad": str(auto_update.tool_command(self.tool)), "uv": "/u/uv",
-            "installer": "uv", "spare": []})
+            "installer": "uv", "spare": [],
+            # The last resort: uv installs cad again whole, the newest of this major, never one release.
+            "repair": ["/u/uv", "tool", "install", "--force", "--managed-python", "--python", "3.14", "cad<1"]})
+        self.assertIsNone(auto_update.repair_command(auto_update.Global("uv", self.tool, None), "0.1.0"))
         self.assertEqual(auto_update.tool_command(self.tool, windows=True), self.tool / "Scripts/cad.exe")
         found = auto_update.Global("pipx", self.tool, "/u/uv")
         told = json.loads(auto_update.helper_command(None, now=5.0, version="0.1.0", record="r", install=found,
@@ -1525,11 +1529,11 @@ class WorkerTest(unittest.TestCase):
         command = folder / "cad.exe"
         command.write_bytes(b"old launcher")
         log = helper.Log(None)
-        moved = helper.aside(command, log)
+        moved = sweep.aside(command, log)
         self.assertEqual((moved.name, command.exists()), (f".cad-{os.getpid()}.exe.old", False))
-        self.assertIsNone(helper.command_back(command, moved, self.prefix, log), "no Scripts/cad.exe to copy")
+        self.assertIsNone(sweep.command_back(command, moved, self.prefix, log), "no Scripts/cad.exe to copy")
         self.assertEqual((command.read_bytes(), moved.exists()), (b"old launcher", False), "put back as it was")
-        self.assertIsNone(helper.aside(command.with_name("none.exe"), log), "none there: nothing moved")
+        self.assertIsNone(sweep.aside(command.with_name("none.exe"), log), "none there: nothing moved")
 
     def test_on_windows_the_processes_stopped_spare_the_worker_and_those_waiting_and_are_looked_for_again(self):
         env, folder, base_python = self.tmp / "uv" / "tools" / "cad", self.tmp / ".local" / "bin", self.tmp / "py"
@@ -1545,16 +1549,16 @@ class WorkerTest(unittest.TestCase):
         system = FakeWindows(table, later={42: (1, str(scripts / "cad.exe"))})
         log = helper.Log(str(self.tmp / "log"))
         with mock.patch.object(helper.os, "getpid", return_value=21):
-            helper.stop_environment(env, command, [12], log, system)
+            sweep.stop_environment(env, command, [12], log, system)
         self.assertEqual(system.ended, [[30, 31], [42]], "looked for again until none is left")
         self.assertEqual(system.watched[0], [32], "what an ended one started directly, waited for")
         self.assertIn("stopped the processes running from cad's environment: 30", Path(self.tmp / "log").read_text(encoding="utf-8"))
         # Nothing found: nothing ended; a failing call never stops the update.
         quiet = FakeWindows({40: (1, str(folder / "ruff.exe"))})
-        helper.stop_environment(env, command, [], log, quiet)
+        sweep.stop_environment(env, command, [], log, quiet)
         self.assertEqual(quiet.ended, [])
         broken = mock.Mock(processes=mock.Mock(side_effect=OSError(5, "Access is denied")))
-        helper.stop_environment(env, command, [], log, broken)
+        sweep.stop_environment(env, command, [], log, broken)
         self.assertIn("could not be stopped: OSError", Path(self.tmp / "log").read_text(encoding="utf-8"))
 
     def test_the_worker_imports_everything_it_needs_and_nothing_compiled_before_uv_runs(self) -> None:
@@ -1705,8 +1709,45 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(found["outcome"], "installed")
 
 
+    def test_where_the_repair_in_place_leaves_no_cad_that_runs_cad_is_installed_again_from_outside(self) -> None:
+        """The last resort: the repairer and the sweep copied into the state folder and started, isolated, by the Python
+        the environment was made from, told the installer's command that installs cad again whole; the attempt kept
+        underway, ``repairing``, with no cause yet. Where no Python outside the environment runs it, ``broken``."""
+        self.midway, self.upgrade = True, (2, "error: (os error 32)")
+        self.reinstalls = {"0.2.0": 1, "0.1.0": 1}
+        install = ["uv", "tool", "install", "--force", "--managed-python", "--python", "3.14", "cad<1"]
+        base = self.tmp / "python" / "python3"
+        base.parent.mkdir()
+        base.write_text("", encoding="utf-8")
+        with mock.patch.object(sys, "_base_executable", str(base), create=True), \
+                mock.patch.object(helper.places, "outside_package") as started:
+            found = self.update(repair=install)
+        (line,), options = started.call_args
+        copy = self.tmp / helper.REPAIRER
+        self.assertEqual(line[:4], [str(base), "-I", "-B", str(copy / "auto_update_repair.py")])
+        self.assertEqual(sorted(path.name for path in copy.iterdir()), ["auto_update_repair.py", "auto_update_sweep.py"])
+        self.assertEqual((copy / "auto_update_sweep.py").read_bytes(), Path(sweep.__file__).read_bytes())
+        told = json.loads(line[4])
+        self.assertEqual((told["install"], told["start"], told["cause"], told["worker"], told["prefix"], told["at"]),
+                         (install, True, "in_use", os.getpid(), sys.prefix, 1.0))
+        self.assertEqual(options["cwd"], str(self.tmp))
+        self.assertEqual((found["outcome"], found["phase"]), ("underway", "repairing"))
+        self.assertFalse({"ended", "cause", "restored"} & set(found), found)
+        self.assertIn("cad is installed again from outside its environment", Path(self.told["log"]).read_text(
+            encoding="utf-8"))
+        inside = self.prefix / "bin" / "python"
+        inside.parent.mkdir(exist_ok=True)
+        inside.write_text("", encoding="utf-8")
+        with mock.patch.object(sys, "_base_executable", str(inside), create=True), \
+                mock.patch.object(helper.places, "outside_package") as started:
+            found = self.update(repair=install)
+        started.assert_not_called()
+        self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "broken", False))
+        self.assertIn("no Python outside cad's environment runs it", Path(self.told["log"]).read_text(encoding="utf-8"))
+
+
 class FakeWindows:
-    """Windows' process calls as ``auto_update_helper.stop_environment`` makes them: ``table`` the processes
+    """Windows' process calls as ``auto_update_sweep.stop_environment`` makes them: ``table`` the processes
     (``{pid: (parent, program)}``), ``later`` those that start once the first are ended; what was ended and waited
     for, kept."""
 
@@ -1727,6 +1768,152 @@ class FakeWindows:
         self.table.update(self.later)
         self.later = {}
         return []
+
+
+class RepairTest(unittest.TestCase):
+    """The repairer (``auto_update_repair``), the update's last resort from outside cad's environment: a stand-in
+    ``run`` for the installer and the environment's ``cad``, over an environment and a record of the test's own."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.prefix = self.tmp / "tools" / "cad"
+        self.packages = self.prefix / ("Lib/site-packages" if os.name == "nt" else "lib/python3.14/site-packages")
+        self.packages.mkdir(parents=True)
+        (self.packages / "cad-0.1.0.dist-info").mkdir()  # left without its RECORD
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        self.copy = self.tmp / "state" / "auto-update-repair"
+        self.copy.mkdir(parents=True)
+        self.record = self.tmp / "state" / "auto-update.json"
+        self.kept = {"release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1.0, "tries": 1,
+                     "installer": "uv", "asked": True, "outcome": "underway", "phase": "repairing", "beat": 1.0,
+                     "detail": "the repair in place left no cad that runs"}
+        self.record.write_text(json.dumps(self.kept), encoding="utf-8")
+        self.install = ["uv", "tool", "install", "--force", "cad<1"]
+        self.told = {"record": str(self.record), "log": str(self.tmp / "state" / "auto-update.log"), "at": 1.0,
+                     "from": "0.1.0", "release": "0.2.0", "prefix": str(self.prefix), "cad": "cad",
+                     "command": str(self.bin / ("cad.exe" if os.name == "nt" else "cad")), "install": self.install,
+                     "start": True, "cause": "in_use", "detail": "error: (os error 32)", "worker": 20, "spare": [],
+                     "copy": str(self.copy)}
+        self.held: str | None = None  # the release the environment runs
+        self.made = "0.2.0"  # what the install makes
+        self.ran: list[list[str]] = []
+
+    def installer(self, command, timeout):
+        self.ran.append(list(command))
+        if command == self.install:
+            self.assertEqual(json.loads(self.record.read_text(encoding="utf-8"))["phase"], "repairing")
+            self.assertFalse(list(self.packages.glob("*.dist-info")), "what was left without its RECORD went first")
+            own = sweep.own_command(self.prefix)
+            own.parent.mkdir(parents=True, exist_ok=True)
+            own.write_text("cad", encoding="utf-8")
+            self.held = self.made
+            return (0, "Installed 1 executable: cad\n") if self.made else (2, "error: failed to remove directory")
+        if command[1:] == ["--version"]:
+            return (0, f"cad {self.held}\n") if self.held else (1, "ModuleNotFoundError: No module named 'cad'")
+        if command[1:] == ["server", "start"]:
+            return 0, f"started the cad server (cad {self.held})\n"
+        raise AssertionError(command)
+
+    def repaired(self, **told) -> dict:
+        repairer.main({**self.told, **told}, run=self.installer, system=FakeWindows({}), seconds=1)
+        return json.loads(self.record.read_text(encoding="utf-8"))
+
+    def test_cad_installed_again_whole_runs_the_release_and_its_server_and_the_record_says_so(self) -> None:
+        found = self.repaired()
+        self.assertEqual([command[1:] for command in self.ran], [self.install[1:], ["--version"], ["server", "start"]])
+        self.assertEqual({**found, "ended": 0}, {
+            "release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": 1.0, "tries": 1, "installer": "uv",
+            "asked": True, "outcome": "installed", "ended": 0, "started": "started the cad server (cad 0.2.0)",
+            "detail": "cad 0.2.0 runs, installed again by `uv tool install --force cad<1` after: error: (os error 32)"})
+        self.assertFalse(self.copy.exists(), "its copy removed")
+        if os.name != "nt":
+            self.assertEqual(os.readlink(self.told["command"]), str(sweep.own_command(self.prefix)),
+                             "the bin command there again")
+        log = Path(self.told["log"]).read_text(encoding="utf-8")
+        for said in ("the repair outside cad's environment, begun", "which an install left without its RECORD",
+                     "$ uv tool install --force cad<1", "ended ", ": installed"):
+            self.assertIn(said, log)
+        self.assertEqual(auto_update.event(found)["outcome"], "installed")
+
+    def test_the_release_before_running_again_is_a_failure_restored_and_none_running_is_broken(self) -> None:
+        self.made = "0.1.0"
+        found = self.repaired(start=False)
+        self.assertEqual((found["outcome"], found["cause"], found["restored"], found["start"]),
+                         ("failed", "in_use", True, False))
+        self.assertEqual(auto_update.event(found)["outcome"], "restored")
+        self.record.write_text(json.dumps(self.kept), encoding="utf-8")
+        self.made, self.ran = None, []
+        found = self.repaired()
+        self.assertEqual((found["outcome"], found["cause"], found["restored"], found["started"]),
+                         ("failed", "broken", False, "not started: no cad that runs"))
+        self.assertIn("left no cad that runs: error: failed to remove directory", found["detail"], "the install's words")
+        self.assertEqual(auto_update.advice("broken", "uv"), "install cad again: `uv tool install --force cad`")
+
+    def test_it_writes_over_no_other_attempt_and_an_error_of_its_own_ends_the_attempt_broken(self) -> None:
+        self.record.write_text(json.dumps({**self.kept, "at": 2.0}), encoding="utf-8")
+        self.assertEqual(self.repaired()["at"], 2.0, "another attempt's record, left as it is")
+        self.record.write_text(json.dumps(self.kept), encoding="utf-8")
+        with mock.patch.object(repairer, "repair", side_effect=KeyError("install")):
+            found = self.repaired()
+        self.assertEqual((found["outcome"], found["cause"]), ("failed", "broken"))
+        self.assertIn("the repair stopped with an error: KeyError", found["detail"])
+
+    def test_on_windows_it_waits_for_the_worker_then_moves_the_command_aside_and_stops_the_environment(self) -> None:
+        """The worker (20) and the ``cad update`` that waited on it (10) are waited for until they end; then the bin
+        ``cad.exe`` moved aside, and every process of the environment stopped, before the install; the environment's
+        own ``cad.exe`` copied there after it, the one moved aside removed."""
+        scripts, command = self.prefix / "Scripts", self.bin / "cad.exe"
+        scripts.mkdir()
+        command.write_bytes(b"old launcher")
+        system = FakeWindows({20: (1, str(scripts / "python.exe")), 10: (1, str(command)),
+                              31: (1, str(self.packages / "cad_ccx" / "ccx.exe")), 40: (1, str(self.bin / "ruff.exe"))},
+                             folder=self.bin)
+        slept = []
+
+        def sleep(seconds):
+            slept.append(seconds)
+            system.table.pop(20 if len(slept) == 1 else 10, None)
+
+        def run(argv, timeout):
+            if argv == self.install:
+                self.assertEqual((system.ended, command.exists()), ([[31]], False))
+                (scripts / "cad.exe").write_bytes(b"new launcher")
+            return self.installer(argv, timeout) if argv != self.install else (0, "Installed")
+
+        self.held = "0.2.0"
+        with mock.patch.object(repairer, "WINDOWS", True), mock.patch.object(sweep, "WINDOWS", True):
+            found = repairer.repair({**self.told, "command": str(command), "spare": [10, 11]}, run=run, system=system,
+                                    sleep=sleep)
+        self.assertEqual((len(slept), found["outcome"]), (2, "installed"))
+        self.assertEqual(sorted(path.name for path in self.bin.iterdir()), ["cad.exe"], "the one moved aside removed")
+        self.assertEqual(command.read_bytes(), b"new launcher", "the environment's own, copied there")
+
+    def test_its_copy_runs_by_its_file_isolated_on_the_standard_library_and_the_sweep_beside_it(self) -> None:
+        """As the worker starts it: both files copied to a folder of their own, run by a Python with ``-I -B``: it ends,
+        says how in the record and the log, and removes its copy. Neither file imports anything but the standard
+        library and the sweep."""
+        import ast
+
+        for module in (repairer, sweep):
+            tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+            names = {alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import)
+                     for alias in node.names}
+            names |= {node.module.split(".")[0] for node in ast.walk(tree)
+                      if isinstance(node, ast.ImportFrom) and node.module}
+            self.assertLessEqual(names - {"cad_server", "auto_update_sweep"}, set(sys.stdlib_module_names), module)
+        for module in (repairer, sweep):
+            shutil.copy2(module.__file__, self.copy / Path(module.__file__).name)
+        told = {**self.told, "install": [sys.executable, "-c", "pass"], "cad": sys.executable, "start": False,
+                "worker": None}
+        done = subprocess.run([sys.executable, "-I", "-B", str(self.copy / "auto_update_repair.py"), json.dumps(told)],
+                              capture_output=True, text=True, timeout=120, cwd=str(self.tmp))
+        self.assertEqual((done.returncode, done.stderr), (0, ""))
+        found = json.loads(self.record.read_text(encoding="utf-8"))
+        self.assertEqual((found["outcome"], found["cause"]), ("failed", "broken"), "`python --version` is no cad")
+        self.assertFalse(self.copy.exists())
+        self.assertIn("ended ", Path(told["log"]).read_text(encoding="utf-8"))
 
 
 class CauseTest(unittest.TestCase):
@@ -2543,6 +2730,18 @@ class UpdateCommandTest(Case):
                           sleep=lambda _s: None)
         self.assertEqual((code, said), (1, ["the update of cad 0.1.0 is still underway after 30 minutes: run "
                                             "`cad --version` later to see where it ended"]))
+
+
+    def test_a_repair_from_outside_the_environment_is_said_at_once_and_the_command_ends(self) -> None:
+        """The worker handed the update to the repairer (``repairing``): ``cad update`` says so and ends, so it holds
+        nothing of the environment the repairer installs again (on Windows, it waits for this process to end)."""
+        answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
+        switching = {"release": "0.2.0", "at": 5.0, "outcome": "underway", "phase": "switching"}
+        looks = [(None, switching, None, False), (None, {**switching, "phase": "repairing"}, None, False)]
+        code, out, err = self.typed(answer, looks=looks)[:3]
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("cad update: the update of cad 0.1.0 left cad unable to run, so cad is being installed again: "
+                      "run `cad --version` in a few minutes to see where it ended", err)
 
 
 class DoctorTest(Case):
