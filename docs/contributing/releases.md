@@ -115,13 +115,16 @@ is decided with it ([Before the first release of a higher major](#before-the-fir
 
 ## How a release reaches a computer
 
-- **cad updates itself, inside its major.** A global install (uv's or pipx's) does, unless `cad
-  update auto off`. Where the feed names a newer release of its major and nothing has run for a
-  minute, its server starts a worker that installs exactly that release with `uv pip install
-  --target` into a folder of its own in cad's state folder, runs it once, stops the server at once, writes
-  the pointer that names that folder, and starts the new release's server, or puts the pointer back.
-  Nothing uv made changes: `uv tool upgrade cad` is the person's own. A typed `cad update` does the
-  same at once, asking PyPI instead, and names a higher major. Nothing installs an older release.
+- **cad updates itself, inside its major.** A global install that uv made does, unless `cad update
+  auto off`, and only at a person's ask (the viewer's button, `cad update`) or as its server next
+  starts: nothing is done in the background. Where the feed names a newer release of its major, a
+  worker stops the server and runs the person's own uv on the installed cad, `uv tool upgrade
+  "cad==X"`, in place; on Windows after moving uv's `cad.exe` aside and stopping every process of
+  the environment, since uv deletes the old files one by one with no rollback and a running process
+  holds them. It checks that the new release runs and starts its server, and repairs the environment
+  where it does not. A typed `cad update` does the same at once, asking PyPI instead, and names a
+  higher major. A pipx install is told to run `pipx upgrade cad`; one pinned to a release by hand is
+  left alone. Nothing installs an older release.
 - **No command crosses a major.** `cad update` and `cad doctor` name a higher major where one is
   out, with the migration guides, and nothing more. What cad runs of its own is bounded to a major: its update, and its install of itself where a computer has
   none, by the plugin's server line and by the bridge (`tool_install`: `cad<N>`, never over a `cad`
@@ -195,28 +198,6 @@ the agents running them reach for them, and nothing shipped later can change wha
    address answering (web links, and `git clone`, `fetch` and `push`) after a rename or a move to an
    organisation, until a repository is made at the old address again; whether a renamed branch
    redirects is not known, so the three branch names are held fixed.
-8. **What `_cad_release` reads.** It ships once in each install and no update replaces it, so what it
-   reads never changes: the state folder (`CAD_STATE_DIR`, else `~/Library/Application Support/cad`
-   on macOS, `$XDG_STATE_HOME/cad` or `~/.local/state/cad` elsewhere, Windows too); the pointer,
-   `store/pointer-<crc32 of the environment's folder, resolved and case-folded, 8 hex digits>.json`,
-   and its six keys (`pointer` 1, `python` the interpreter's `cache_tag`, `prefix` that folder,
-   `record` and `stamp` the installed cad's `RECORD` and its time and size, `path`); the marker,
-   `cad-store.json`; that a stored release is one folder of the import path whose `.pth` and `.start` files
-   are read; and `_cad_release.start`, which a stored release's `cad.start` names. So every release keeps the
-   wheel's `cad.pth` line, `import _cad_release; import cad._internal.lazy_kernel`, and its `cad.start`, the same
-   two steps as entry points (`_cad_release:start`, `cad._internal.lazy_kernel:install`) for Python 3.15 and
-   later, which ignore the `.pth` file's import lines beside it (PEP 829; from 3.18, every `.pth` file's), keeps `cad_server.cli:main` as the `cad` command, and has
-   `cad_server._internal.selftest`, run as `__main__` with its folder and the standard library alone on
-   the path, print `cad <release>` last: the release being left checks the next one by that alone. A
-   stored release is what `uv pip install --target` makes, so all it needs is found from that folder:
-   its own files beside its code (package data), never under the environment (`sys.prefix`), which
-   still holds the release that was installed; and a dependency that keeps files where a wheel's data
-   files go under an environment, or finds a program in the environment's scripts folder, finds the
-   installed release's after an update, or nothing. cad's own calls to uv take the uv it carries from
-   beside the `uv` package (`auto_update.carried_uv`), never from the environment's scripts folder. A
-   module that must import on every computer is listed in the release's check of itself
-   (`selftest.MODULES`).
-
 **Everything else follows one rule: a new release carries the old ones, and an old release never
 needs to know a new one.** A name, a place or a layout may change in any release, on the condition
 that the release that changes it brings along every computer an earlier one is on, by its own code or
@@ -251,9 +232,8 @@ As many past releases as reasonable can reach the latest one:
   `remove_loose_skills`).
 - **0.11.12 and 0.11.13** update themselves, and their plugin's catch-up downloads the hosted install
   command, which finds no `cad plugin install` in them and runs the newest release's from uv's cache.
-- **0.11.12 to 0.11.17** update once more as they shipped, by their installer's upgrade of the
-  installed cad (`uv tool install --upgrade`, `pipx upgrade`), to a release that reads the pointer;
-  from then on they update by the store.
+- **0.11.12 to 0.11.17** update by a store of their own that their `cad` reads through a pointer; the
+  release after them updates in place, with uv.
 
 Check a change to the install script, to `cad plugin install`, to cad's update or to the list above
 against these paths before it ships.

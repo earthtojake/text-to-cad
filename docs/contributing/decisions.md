@@ -9,11 +9,11 @@ server README's [cad's own update](../../packages/cad/src/cad_server/README.md#c
 The decisions, by what they govern:
 
 - **The two layers**: two layers, one direction of knowledge; cad says `cad`
-- **Installing**: one cad per computer; uv installs cad, and cad's update changes none of it; one line
+- **Installing**: one cad per computer; uv installs cad, and uv updates it where it is; one line
   installs cad; the install command gets cad and hands the apps to it; no Skills CLI route; inside a
   Windows app's package
 - **Updating**: the feed says when; notices reach what a release cannot; a major version never
-  installs itself; who updates which copy; ready at once, restarted at a start or a person's ask; forward only;
+  installs itself; who updates which copy; updated at a start or a person's ask; forward only;
   the 30-day rule
 - **Past releases**: the bridge for 0.10.0 to 0.11.11; old releases are carried through the newest
   0.11; no version left behind
@@ -73,63 +73,60 @@ aliases of `cad`, so older installs that name them keep working.
 
 **Why.** Releases a person chooses between, with every command pinned to its release, need a
 launcher and version machinery of our own and data copied between versions, and show people two
-servers. One cad is what every other command-line tool does. The releases cad's own update keeps
-([below](#uv-installs-cad-and-cads-update-changes-none-of-it)) are not that: nobody chooses one, no
-command names one, and the newest that runs is the cad.
+servers. One cad is what every other command-line tool does. The update
+([below](#uv-installs-cad-and-uv-updates-it-where-it-is)) is not that: it replaces the one cad, nobody
+chooses a release, and no command names one.
 
 **What it costs.** A chat that is open while cad updates meets the new release. Skills may be older
 than cad, which [the 30-day rule](#the-30-day-rule) covers. A server started from uv's cache would
 never update itself, which is why the CAD app's line installs cad first.
 
-## uv installs cad, and cad's update changes none of it
+## uv installs cad, and uv updates it where it is
 
 **Decision.** cad is installed and removed with its installer's own commands, `uv tool install cad` and
-`uv tool uninstall cad`, and has no installer, uninstaller or launcher of its own. Its update never
-runs the installer on the installed cad. It installs the newer release whole into a folder of its own
-in cad's state folder (the store), with uv (`uv pip install --target`, for the installed cad's own
-Python), runs it once, and then names that folder in one small file, the pointer. Every `cad` reads
-the pointer as its Python starts and runs that release in place of the installed files: in the same
-process, with no second program started. The server restarts onto it later, as it next starts or at a
-person's ask ([when](#ready-at-once-restarted-at-a-start-or-a-persons-ask)). A
-release no process runs any more is removed, but the current one and one waiting for its restart. Installing
-cad again with uv always runs what uv installed: a pointer holds only for the install it was written
-for.
+`uv tool uninstall cad`, and has no installer, uninstaller or launcher of its own. Its update runs the
+person's own uv on the installed cad, in place: `uv tool upgrade "cad==X"`, with the release by name and uv's
+settings as the person has them. uv's record of the install stays as the install made it. cad carries no uv
+of its own: one function finds the person's (uv's default install place, then PATH) and, where there is none,
+says in one line how to get it. cad's part is what makes that safe where processes run cad (below).
+A global install pipx made is told to run `pipx upgrade cad`; one the person pinned (`uv tool install
+cad==X`) is left alone, and told how to unpin it.
 
-**Why.** An installer updates a tool where it is: it deletes the old files, writes the new ones, and
-stops at the first file it cannot delete, with nothing put back. On Windows a file a process holds
-cannot be deleted, and agents call `cad` all the time. Updating the shipped 0.11.13 on Windows while
-three callers ran `cad` every 50 ms left a cad that no longer ran at all, and 758 of their 791 calls
-failed. uv's source says how: where it cannot remove a running `cad.exe` it deletes the environment
-it has just upgraded, and it deletes a package's record of its own files before the files, so one
-held file leaves an install no later run can repair. Anywhere, a process that started before an
-update and imported a module after it ran two releases at once. Chrome, VS Code and Claude Code
-update the same way for the same reason: build the new version beside the one that runs, switch by
-one small write, and remove the old one when nothing runs it. What reads the pointer is not a
-launcher: the command on PATH, its Python and uv's record of the tool are uv's, unchanged, and a
-`cad` costs no more to start (half a millisecond, measured).
+**Why.** Installers update a tool where it is, and uv is the one the person chose. But uv deletes the old
+files one by one, in the order of the package's record, and stops at the first it cannot delete, with
+nothing put back; and on Windows a file a running process holds cannot be deleted, while agents call `cad`
+all the time. Updating the shipped 0.11.13 on Windows while three callers ran `cad` every 50 ms left a cad
+that no longer ran at all, and 758 of their 791 calls failed. uv's source says how: where it cannot remove a
+running `cad.exe` it deletes the environment it has just upgraded, and it deletes a package's record of its
+own files before the files, so one held file leaves an install no later run can repair. Anywhere, a process
+that started before an update and imported a module after it ran two releases at once. So the update,
+by a worker that runs from the environment's interpreter, which an upgrade does not touch: stops the server;
+on Windows moves uv's bin `cad.exe` aside (a new `cad` then fails at once, rather than hold the files) and
+stops every other process of the environment; runs uv, which downloads and prepares the release before it
+changes anything, so a failed download leaves cad as it was; puts `cad.exe` back; checks that the release
+runs; and, where it does not, deletes the folders uv left without their record and runs `uv tool upgrade
+--reinstall` of the release, then of the release before. Never `uv tool install --force "cad==X"`: it pins
+the release in uv's record and removes the folder the worker runs from. Inside a Windows app's package the
+update is refused, and the server and the worker start outside it
+([below](#inside-a-windows-apps-package-say-so)).
 
-**What it costs.** Code of our own again, where earlier releases failed with it: the store, the
-pointer and the cleanup (`cad_server/_internal/store.py`), and the one module that reads the pointer
-(`_cad_release`). No update can replace that module, since it runs from the files uv installed: what
-it reads can never change ([What must stay the same](releases.md#what-must-stay-the-same)). `uv tool
-list` names the release uv installed, not the newer one that runs; `cad --version` and `cad doctor`
-say which runs. uv's record of the install stays as the install made it. A plain `uv tool install
-cad` keeps no range, so a person's own `uv tool upgrade cad` takes the newest of all, a higher major
-included. A computer that 0.11.12 to 0.11.17 updated keeps the range their update wrote there
-(`cad>=X,<1`), which cad never rewrites: uv's own upgrade there stays below the next major until
-`uv tool install --force cad` clears it, and whatever moves computers to a next major must mind it
-([Before the first release of a higher major](releases.md#before-the-first-release-of-a-higher-major)). Besides what uv
-installed, the store keeps the release that runs and one waiting for its restart, each linked from uv's
-cache where the file system links; every tidying of the store (each update's end, each server start and then
-hourly, `cad cache prune`) removes the rest, and a release a process still runs once nothing does. The
-cache's environments go the same way: the server's tidying removes those made for another release, as
-`cad cache prune` does, never one a process runs from, so with releases shipping several times a day
-the cache holds this release's (about 1 GB each on paper, a full copy where the cache and uv's cache
-are on different file systems), not one per release since cad was installed. The way back at a
-switch needs no release kept for it: nothing tidies while an update is underway, so the release before is
-whole until the switch has ended, and going back is writing the pointer read before it. `uv tool uninstall cad` leaves
-the store in the state folder ([Removing](../install.md#removing)). A release needs the installed
-cad's Python: one that asks for a newer Python waits until the person installs cad again.
+An update that builds a second copy beside the one that runs, switched to by a pointer every `cad` reads,
+was the design of 0.11.12 to 0.11.17. It avoided that failure, and cost code of our own: a store of releases,
+a module that reads the pointer as every interpreter starts (which no update can ever replace), a check of each
+release, a tidying of what nothing ran, and a `uv` dependency to run all that. It was removed for the one
+update uv already does.
+
+**What it costs.** Where a release is held open by a process the worker cannot stop, the update fails (cause
+`in_use`) and is tried again later. A computer without uv, or with one cad cannot find (a Windows batch shim
+alone), does not update itself; `cad doctor` says so. A plain `uv tool install cad` keeps no range, so a
+person's own `uv tool upgrade cad` takes the newest of all, a higher major included. A computer that 0.11.12
+to 0.11.17 updated keeps the range their update wrote (`cad>=X,<1`), which cad never rewrites: uv's own
+upgrade there stays below the next major until `uv tool install --force cad` clears it, and whatever moves
+computers to a next major must mind it ([Before the first release of a higher
+major](releases.md#before-the-first-release-of-a-higher-major)). A release needs the installed cad's Python:
+one that asks for a newer Python waits until the person installs cad again. The cache holds the kernel
+environment of the release that runs; the server's tidying removes those made for another release, never
+one a process runs from.
 
 ## One line installs cad
 
@@ -170,8 +167,8 @@ PyPI holds that is not yanked, the install command (which installs cad where the
 by a person, runs `cad update` on the one there), the skills' line and the CAD app's line.
 
 **Why.** The hour keeps automatic updates from spreading a release the moment it is out, and a hold
-stops them without a new release. The update installs the release by name, into a folder of its
-own, so what the feed does not name is not installed, whatever PyPI holds. Someone who asks for an
+stops them without a new release. The update installs the release by name, so what the feed does not name is
+not installed, whatever PyPI holds. Someone who asks for an
 update wants the newest now, not the feed's hour-old answer.
 
 **What it costs.** A hold stops the automatic update on every computer that has not taken the
@@ -208,7 +205,7 @@ own, a patch and a minor alike; cad's own update never crosses a major. Where a 
 major is out, `cad update` and `cad doctor` say so in one line, with the migration guides, and
 nothing more: how computers move to a next major is decided with it (the last release of a major
 carries what moves them). The automatic update and a typed `cad update` install a release of the installed
-major by name ([how](#uv-installs-cad-and-cads-update-changes-none-of-it)); where none is named (a
+major by name ([how](#uv-installs-cad-and-uv-updates-it-where-it-is)); where none is named (a
 feed with no release of this major, PyPI out of reach), the newest release the range
 `cad>=<installed>,<<next major>` allows. The CAD app's line installs the newest
 of its own major where a computer has no cad, and never over a `cad` of a higher major. The bound is
@@ -235,7 +232,7 @@ version ahead of them.
 and gets no fixes made only in a later major. A minor that breaks reaches everyone by itself. The bound is
 cad's own and no longer the installer's: a person's own `uv tool upgrade cad` or `pipx upgrade cad`
 takes the newest of all, unless uv's record still holds the range an earlier release's update left
-there ([what that costs](#uv-installs-cad-and-cads-update-changes-none-of-it)).
+there ([what that costs](#uv-installs-cad-and-uv-updates-it-where-it-is)).
 
 ## Who updates which copy
 
@@ -244,9 +241,8 @@ its major version, on by default (`cad update auto off` stops it). `cad update` 
 inside its major, with or without a server running and with automatic
 updates off too, and touches nothing else. The viewer and the CAD app show an update button while a
 global install is behind a newer release of its own major, automatic updates on or off: a click is
-the same request as `cad update` (never across a major), which installs the release and restarts in
-one step, or, where the release is installed already, only restarts (the button is then a restart
-icon); an update that failed, automatic or
+the same request as `cad update` (never across a major), which updates in place and restarts in
+one step (or only restarts, where the release is installed already); an update that failed, automatic or
 not, says why in the viewer's alert card, in plain words, and what to do, with `cad update` to copy,
 until another attempt begins; put away, it waits behind its icon in the navbar. A person's own update (the button, `cad update`) spends none of the
 tries the automatic update has for a release. A cad that is not a global install, such as one installed
@@ -256,8 +252,7 @@ On the command line, a global install with automatic updates on that has stayed 
 its own major for three days says so: one line on standard error, after a command's own output and
 at most once a day, with both releases, what to do, and why where an attempt failed or none can
 begin. Never in a command's output, never under
-`--json`, and never with automatic updates off. `cad doctor` says where cad runs from, whether the
-release that runs passes its own check, and why its update is not working, and ends with the one
+`--json`, and never with automatic updates off. `cad doctor` says where cad runs from, and why its update is not working, and ends with the one
 thing to do next. Each cause has one line of what to do, the same in `cad doctor`, in that line and
 at the end of a failed `cad update`; where the way out is to install cad again, it names the command
 of whoever installed it.
@@ -267,8 +262,9 @@ release's first try, then 2, 4, 8 and 16 hours, then once a day, and no more tha
 day of any release, a typed `cad update` among them (it spends none of a release's tries). The tries
 are counted for each release apart from the record of the last attempt, so a newer release starts
 afresh, and a server of another release, an older one too, never sets the count back. A try that
-fails touched nothing that runs: the release was not built, or did not run when it was checked. The
-one release not tried again by itself is one whose server did not start once cad was switched to it:
+fails leaves cad as it was, or repairs it: the release was not downloaded, or did not run when it was
+checked and the one before runs again. The
+one release not tried again by itself is one whose server did not start once cad was updated to it:
 cad went back, and waits for the next release ([forward only](#forward-only)).
 
 The plugin is `cad plugin install`'s, the one command that installs it: in every agent app it finds,
@@ -309,8 +305,8 @@ install command is an older release's server, bounded as above
 One run at a time. A run holds a lock in cad's state folder from its start to its end, and tries for
 it for two seconds first. A second run waits; one a server began runs nothing and is tried again as a
 failed run is, and a server begins none while the lock is held, spending none of its tries. cad's own
-update does not wait for a run: a run keeps the release it started with, whose files no update
-changes.
+update does not wait for a run: on Windows it stops it with every process of cad's environment, and a
+later run begins again.
 
 **Why.** People install and forget, and they should get our fixes without being asked. Nothing of
 ours asks a person to update in their way: in blind tests, agents would not install without the
@@ -346,73 +342,53 @@ Released 0.11.12 and 0.11.13 still download the hosted install command and run i
 [SECURITY.md](../../SECURITY.md) says so, and nothing shipped later can change them. An app that
 fails for good costs up to three background runs a release, each running every app found again. The
 hard stop cannot end a process none of whose threads runs (one a signal stopped). A cad whose update
-fails for good builds the release beside itself once a day for as long as it stays behind; nothing
-that runs is touched by it, and the server is not stopped for it. A store's copy of the skills lags
+fails for good tries it again at a start, up to once a day, for as long as it stays behind, and each
+try stops the server. A store's copy of the skills lags
 cad by however long its store takes.
 
-## Ready at once, restarted at a start or a person's ask
+## Updated at a start or a person's ask
 
-**Decision.** cad's automatic update is two steps with a wait between them. First it gets the release
-ready: built beside the release that runs and run once there, in the background, at the server's next
-tending once the feed names it (the schedule, its tries and its hold-backs as for every attempt),
-whatever is in flight; nothing that runs is touched and nothing restarts. Then the server restarts onto
-it, and by itself only as the server next starts (the start becomes the switch, and no server of the
-release before serves anything; not a start in the foreground or one that names its port, which are
-the person's own). Until then the update button is a restart icon, and a click restarts now, as a
-typed `cad update` does. A person's update is never left halfway, and always ends on the newest: one asked for while the
-release is being got ready goes on to the restart, and where PyPI names a newer release than the one
-being got ready, that one ends first and the newer is installed, then switched to; one asked for with
-the newest ready has only the restart left, and so has one where PyPI does not answer. At the restart the server stops at once, as `cad server stop`
-stops it: a restart asked for stops the work in flight, and a command cut short says cad updated
-itself while it ran. A release the feed has stopped naming since it got ready is never
-switched to by itself. With automatic updates off nothing is got ready, and a release that was ready
-waits for the person.
+**Decision.** cad updates itself at two moments alone, and nothing runs in the background: a person's ask
+(`cad update`, the viewer's button), and the server's start, where the feed as last read names a newer
+release of its major (the start becomes the update, and no server of the release before serves anything; not
+a start in the foreground or one that names its port, which are the person's own; and a `cad server start`
+that failed asks for the update before it gives up). The server's tending only reads the feed. An update
+stops the server at once, as `cad server stop` stops it: what is in flight stops, and a command cut short
+says cad updated itself while it ran. With automatic updates off, only a person's ask updates.
 
-The button is a small icon and nothing else, always the last control at the navbar's right end, over
-the home as over a file. Where a release is out it is a download arrow that says "Update", and one
-click installs the release and restarts. Where a release is installed and waiting it is a restart
-arrow that says "Restart to update", and one click restarts. Nothing opens, by itself or on a click.
+The button is a small icon and nothing else, always the last control at the navbar's right end, over the
+home as over a file. It has one state: where a release is out it is a download arrow that says "Update", and
+one click updates in place and restarts. Nothing opens, by itself or on a click.
 
-**Why.** The restart is the one part of an update a person can feel: a page they are looking at loses
-its server, says so, and reloads. A start is the moment with nobody there: no server yet, so no page
-has one to lose; a person's ask is theirs. No step waits on how busy or idle the server looks: such a
-rule can be held off for ever by anything that keeps talking to the server (a busy agent, a CAD app
-view that syncs every second, a feature added later), and it held cad's own update off silently.
-Getting ready touches nothing that runs, so it needs no quiet moment; the restart's only wait is its
-drain, which is bounded. Waiting costs nothing in safety: the release before runs on, whole, and the
-way back at the switch is the same. Two moments for the restart by itself were built first and taken
-out on the owner's word: once nothing at all had been asked of the server for an hour (an open CAD
-app view, which asks once a second, kept it from ever coming), and once the release had been ready a
-day, in the first minute with no command (an agent always at work kept that from coming too). The button
-is what the apps people use every day show: a quiet mark, always in the same corner, that an update is there (Discord's arrow, Slack's
-badge, Spotify's dot). Two shapes were built first and taken out on the owner's word: a wide button
-that read "Restart to update", which shouted from the navbar, and a prompt that asked Later or
-Restart on every click, a second step for every update. The icon says which click it is, and its tooltip
-says so before the click: the arrow installs and restarts, the restart arrow restarts. Anything that
+**Why.** The restart is the one part of an update a person can feel: a page they are looking at loses its
+server, says so, and reloads. A start is the moment with nobody there: no server yet, so no page has one to
+lose; a person's ask is theirs. No step waits on how busy or idle the server looks: such a rule can be held
+off for ever by anything that keeps talking to the server (a busy agent, a CAD app view that syncs every
+second, a feature added later), and it held cad's own update off silently. Getting a release ready in the
+background was built first, with a "Restart to update" state, and taken out: it needed a second copy of cad
+beside the one that runs, which the in-place update does not make. The button is what the apps people use
+every day show: a quiet mark, always in the same corner, that an update is there (Discord's arrow, Slack's
+badge, Spotify's dot). A wide labelled button, which shouted from the navbar, and a prompt that asked Later
+or Restart on every click, were built first and taken out on the owner's word. Anything that
 opens by itself over a model someone is looking at interrupts them, so nothing does.
 
-**What it costs.** A computer whose server is never restarted and whose person never clicks stays on
-the release it runs for as long as that lasts: the button shows the restart, and after three days the
-stayed-behind line and `cad doctor` say so. For that time a second copy of cad's packages is in the
-store. A click on the button restarts with no
-further question: what is in flight stops, and the page reloads.
-A `cad server start` that becomes the switch answers a second or two later than one
-that does not (2.9 s against 1.7 s on a Windows test machine, 1.1 s against 1.0 s on Linux). The
-record of the last attempt has one more outcome, `ready`, which is not counted:
-the update is counted when its restart ends.
+**What it costs.** A computer whose server is never restarted and whose person never clicks stays on the
+release it runs for as long as that lasts: the button shows the update, and after three days the
+stayed-behind line and `cad doctor` say so. A click on the button, and an update at a start, stop what is in
+flight and reload the page with no further question. A `cad server start` that becomes the update answers
+later than one that does not, by as long as the update takes.
 
 ## Forward only
 
 **Decision.** Nothing installs a release older than the one installed: not the install command, not
 cad's update. An older starter never replaces a newer running server; it joins it. The one way back
-is at the switch itself: where the release an update has just pointed at does not run, or its server
-does not start, the pointer is put back at once and the release before runs again. After that there
-is no automatic way back.
+is at the update itself: where the release it has just installed does not run, or its server does not
+start, the worker reinstalls the release before with uv and it runs again. After that there is no
+automatic way back.
 
-**Why.** A way back that reinstalls is machinery that must work on every computer when something has
-already gone wrong. This one reinstalls nothing: the release before is still in its folder, untouched,
-and going back is writing the pointer again. Past the switch, holding the release back, yanking it on
-PyPI and shipping a fix is simpler and reaches everyone.
+**Why.** A way back is machinery that must work on every computer when something has already gone wrong,
+so it is the one uv gives the update (`--reinstall`, kept to the release before and tried once). Past it,
+holding the release back, yanking it on PyPI and shipping a fix is simpler and reaches everyone.
 
 **What it costs.** A release that starts and then misbehaves stays on the computers that took it until
 the next one. A release whose server does not start on some computer is not tried there again by

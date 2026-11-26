@@ -255,15 +255,11 @@ its pull request. The tier holds:
   computers it installs the real releases 0.11.11, 0.11.0 and 0.10.4 from PyPI (and 0.10.0, on
   Windows) and brings each to this tree's build by the route it takes (where the new server runs the
   install command once, that command hands the apps to the cad it installed); then cad's own update
-  through the store, automatic and typed, inside its major, never across one (`cad update` names it):
-  the automatic one gets the release ready with nothing restarted, at once even while a page asks and a
-  command runs every few seconds, then the server restarts on it at its next start, by the viewer's button
-  or by a typed `cad update` (PyPI reachable or not), and never by itself at a tending, however long it has
-  been ready, nor with automatic updates off or a feed that no longer names it; back by itself from a release whose server does not start, typed or at a start, and
-  then held back; a ready release damaged before its restart built again; untouched by one that cannot be
-  built or does not run, while `cad` is called every 50 ms and while its files are held open, after a
-  person's own reinstall, after its worker was stopped midway, and from the shipped 0.11.17's update in
-  place; and after an update, the new server's one `cad plugin install`, read from cad's record of it.
+  in place with uv, at the server's next start, by the viewer's button or by a typed `cad update`
+  (PyPI reachable or not), inside its major, never across one (`cad update` names it), and never by
+  itself in the background, nor with automatic updates off or a feed that no longer names it; back by
+  itself from a release whose server does not start, and then held back; with `cad` called every
+  50 ms and its files held open, and after a person's own reinstall or a worker stopped midway; and after an update, the new server's one `cad plugin install`, read from cad's record of it.
   One more route starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each system): its own
   `cad plugin update` runs this tree's install command, which finds no `cad plugin install` there and
   has the newest release's do the work (`uv tool run ... cad@latest plugin install`: this tree's), then

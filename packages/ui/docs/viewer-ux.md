@@ -76,20 +76,16 @@ chrome that floats over the picture. The home is the navbar over the library.
   right end over the home too, past the home's own controls on the grid's column, so the update button is always the
   navbar's top-right corner.
 - **The update button** (`@cad/ui/update`), over every file and over the home, always the navbar's rightmost control:
-  a 24px brand-blue icon and nothing else, in one of two looks, automatic updates on or off; none where cad cannot
+  a 24px brand-blue icon and nothing else, in one look, automatic updates on or off; none where cad cannot
   update itself. While a global install of cad is behind a newer release of its own major, as 0.11.1 had it, a download
-  arrow, its tooltip "Update": a click installs the release and restarts onto it in one step, the icon a ring that fills
-  a stage at a time (the release installing beside the one that runs, the switch to it, the server away while it
-  restarts), each step eased, then a spinner, never the restart icon. While a release is already installed beside the
-  one that runs and only the server's restart is left (whatever else is offered), a restart arrow (lucide's RotateCcw),
-  its tooltip "Restart to update": a click restarts the server onto it, the spinner at once. Either way the page then
-  reloads into the new release once nothing on it is unsaved, and nothing opens: one click, no popover, no prompt. An
+  arrow, its tooltip "Update": a click updates cad in place and restarts onto it in one step, the icon a ring that fills
+  a stage at a time (asked, the update underway, the server gone while it restarts), each step eased, then a spinner.
+  The page then reloads into the new release once nothing on it is unsaved, and nothing opens: one click, no popover, no prompt. An
   automatic update underway shows the same. The page reads the server again once a minute while it is seen, and as it
   is shown again, so the button changes by itself, and never while it is hidden. Why: it is the one thing the chrome
-  asks a person to act on, so it is always in the same corner; a restart reloads the page, which is why it has its own
-  icon and says so; and cad installs a release in the background at once and restarts onto it only when the person
-  says so or as the server next starts, never by how busy the server is, so no page, seen or hidden, can hold an
-  update off. A failed update, automatic or
+  asks a person to act on, so it is always in the same corner; cad updates only when the person asks
+  or as the server next starts, never in the background and never by how busy the server is, so no page, seen or
+  hidden, can hold an update off. A failed update, automatic or
   not, is the viewer's alert card, the one every error is said in ([the alert card](#loading-and-status-screens)), and
   the button shows as it is offered; the card's Try again is its click. Why: automatic updates fail on some
   computers, and this is where the person learns why and what to do; nothing is blocked, and an error looks like every

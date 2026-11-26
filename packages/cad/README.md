@@ -502,11 +502,8 @@ src/cad/
                          #   study file, the mesh, the solve, the checks and the files it writes)
 src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 14's earlier name)
-src/_cad_release.py      # which release an environment runs, its own or the one cad's update keeps
-                         #   beside it: imported by cad.pth as each interpreter starts, the standard
-                         #   library alone, and never changed once shipped
-cad.pth                  # at the wheel's root: _cad_release, then the lazy kernel (setup.py puts it there)
-cad.start                # the same two steps for Python 3.15 and later, which ignore cad.pth's imports (PEP 829)
+cad.pth                  # at the wheel's root: the lazy kernel (setup.py puts it there)
+cad.start                # the same step for Python 3.15 and later, which ignore cad.pth's imports (PEP 829)
 ```
 
 The server and the transport say their own shapes and commands in their own READMEs,

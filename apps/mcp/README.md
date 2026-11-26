@@ -478,8 +478,7 @@ The card shows the update button the browser viewer shows (`@cad/ui/update`, [th
 outermost in its navbar, while a global install of cad is behind a newer release of its own major: its launch carries
 what the server last knew (`cadUpdate`, `auto_update.button`, left out where cad cannot update itself), so it draws with
 the card, and the card reads `GET /api/v1/server` again, through `cad_http`, when the person comes back to it and once
-a minute while it is seen; it shows too where a release is installed and only the server's restart is left. A click
-(the restart icon, "Restart to update", where only the restart is left; the download icon, "Update", else) is, at once,
+a minute while it is seen. A click (the download icon, "Update") is, at once,
 `POST /api/v1/local/update` through
 `cad_http`, the same request as `cad update`. While the update runs the card
 asks where it is; the server restarts onto the new release, and the four failed syncs that would say the plugin stopped say

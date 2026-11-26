@@ -12,9 +12,7 @@ cad the install command installs (a uv tool) runs no
 model itself: it makes environments with uv, and every process that loads the kernel starts from one.
 
 **The base** is the environment of the build123d integration alone: `cad[build123d]` at the engine's
-own release -- or the source tree, or the wheel, the installation was made from -- but for the `uv` package cad
-depends on, which nothing run there uses (an override uv reads, `base.LEFT_OUT`: the engine's own uv makes
-environments; a base made before, which holds it, is used as it is), on the engine's own
+own release -- or the source tree, or the wheel, the installation was made from -- on the engine's own
 Python, made by uv at `base/<key>` in the cache folder (`base.folder`), its files hard links into uv's cache; uv is
 asked `--offline` first and goes to the network only for what its cache lacks, saying so first
 (`cad_server._internal.base`). One per installation, keyed by it (the version it runs as, its release

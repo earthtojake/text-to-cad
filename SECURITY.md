@@ -208,23 +208,23 @@ It starts no server. To read the scripts first, take the copies attached to a
 release on GitHub and check them against the release's `SHA256SUMS`; they install
 the newest release, not that one.
 
-**Automatic updates.** A cad installed globally (`uv tool install cad`) installs
-new releases of its own major version by itself, with no one asked, unless you turn
-that off with `cad update auto off`; a new major version never installs itself, and no
-command of cad's installs one. At most once an hour, and as its server starts, cad asks
+**Automatic updates.** A cad installed globally with uv (`uv tool install cad`) installs
+new releases of its own major version by itself unless you turn that off with `cad update
+auto off`, and only at two moments: as its server starts, or when you ask (`cad update`, the
+viewer's update button). A new major version never installs itself, and no command of cad's
+installs one. At most once an hour, and as its server starts, cad asks
 `api.texttocad.dev/v1/releases` which release is newest, of each major (releases before
 0.11.12 ask `api.texttocad.dev/v1/versions`, which names nothing from 0.12.0 on). The feed
 names a release only once it has been on PyPI for an hour, and we can hold a release back
-from it. When the feed names a release of cad's major newer than cad's and nothing has
-run for a minute, cad downloads exactly that release from PyPI into a folder of its own in
-cad's state folder (`uv pip install --target`, with the uv cad carries), runs it once to
-check it, stops its server at once, writes the pointer, a file beside it
-naming the release every `cad` then runs, and starts the server again; where that server
-does not start, the pointer is put back. It never installs an older release, nor changes
-the installed cad's files. A typed `cad update` asks PyPI which release of its major is
-newest and installs it the same way, never across a major. The store
-and the pointer are code cad runs, so whoever can write cad's state folder can change what
-`cad` runs, as whoever can write cad's environment always could. Then, where `cad plugin update auto` is on, the
+from it. When the feed names a release of cad's major newer than cad's, cad stops its server
+at once and runs your own uv, with your uv's settings, on its own environment: `uv tool
+upgrade "cad==<that release>"`, which downloads exactly that release from the package index
+uv uses and replaces cad's files where they are, then checks that it runs and starts the
+server again. It never installs an older release, and leaves uv's record of the install as it
+is; a cad you pinned to a release is left alone, and one pipx installed is told to run
+`pipx upgrade cad`. A typed `cad update` asks PyPI which release of its major is
+newest and updates to it the same way, never across a major. It is what you could run
+yourself, so whoever can write cad's environment can change what `cad` runs, as always. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an
 install by hand) runs its own `cad plugin install` once, unattended: code of the cad
 just installed, which fetches the plugin from GitHub and runs each agent app's own

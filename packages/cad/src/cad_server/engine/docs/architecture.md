@@ -131,24 +131,22 @@ server where the bridge pointed it there (below). Such a client's builds are ref
 (`contract.refusal`).
 
 The version feed (`cad_server.updates`): the server reads it in the background at most once an hour as it tends
-itself (`updates.refresh`), never waited on, for cad's automatic update alone; `cad update` asks PyPI instead
+itself (`updates.refresh`), never waited on, for the update at a start and the button's release alone; `cad update` asks PyPI instead
 (`updates.pypi`), at once; nothing says a newer release to a person or an agent unasked (`cad update` and `cad
 doctor` name a release of a higher major, which never installs itself).
 
 A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself to
-newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad update`:
-`Daemon.update`, begun at once, whatever the switch says; never across a major). A detached
-worker (`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the
-state folder (`cad_server._internal.store`) beside the server, stops the server at once, points the environment at that
-folder (the pointer, which `_cad_release` reads as each interpreter starts) and starts the new release's server, or
-goes back where it does not start. By itself that is two sittings, neither of which waits on how busy or idle the
-server is (anything that keeps talking to it would hold such a wait off for ever): at the server's next tending,
-whatever is in flight, where the version feed as last read names a newer release of its major, the worker builds the
-release and stops there (`ready`, nothing switched, nothing restarted); the switch follows, where the feed still calls
-for that release, as the server next starts (the start is the switch, begun before it serves anything, and stands
-aside for it: `daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`), or at
-once on `cad update` or the viewer's button. The switch stops the server at once, as `cad server stop` does, whatever is
-in flight; a command it cuts short says cad updated itself while it ran (`client._cut_short`). Meanwhile a command that finds no server
+newer releases of its own major, in place, with the person's own uv (`base.find_uv`), at two moments alone: when
+asked (`cad update`, the viewer's button: `Daemon.update`, begun at once, whatever the switch says; never across a
+major), and, unless the person turned it off (`cad update auto off`), as the server next starts where the version feed
+as last read names a newer release of its major (the start is the update, begun before it serves anything:
+`daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`). Nothing runs in the
+background: the server's tending only reads the feed. A detached worker (`auto_update_helper`, by the environment's own
+interpreter, outside any Windows app package) stops the server at once, as `cad server stop` does, runs `uv tool
+upgrade "cad==X"` (on Windows after moving uv's `cad.exe` aside and stopping every process of the environment, since a
+process holds the files uv deletes one by one with no rollback), checks that the release runs and starts its server, and
+repairs the environment where it does not. A command it cuts short says cad updated itself while it ran
+(`client._cut_short`). Meanwhile a command that finds no server
 waits for the next (`client.SWITCHING`), and a server of the release being left starts none in its place
 (`daemon.main`, `auto_update.leaving`); a `cad server start` that fails asks for the update before it gives up; a
 start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With `cad plugin
