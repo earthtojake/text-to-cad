@@ -912,6 +912,21 @@ class SweepTest(unittest.TestCase):
         self.assertEqual(cad("stop")[0], 2, "the short form runs nothing")
         self.assertEqual(cad("server", "status"), (0, f"{NOT_RUNNING}\n", ""))
 
+    def test_a_start_s_wait_takes_a_door_gone_for_the_server_gone_whoever_holds_the_lock(self) -> None:
+        """What a start waits for once it told an older server to stop (``client.wait_gone`` with ``leave``): its door
+        gone is it gone, by the wait's end, though the lock is held still -- by its last moments, or by a server
+        another start began, which takes the lock before its door opens. A stop's wait, which leaves nothing running,
+        waits for the lock too."""
+        from cad.engine import client, places
+
+        gone = places.Endpoint(self.state / "x.door", self.state / "x.lock")  # no door: nothing answers there
+        held = places.lock(gone.lock)  # as a server holds it while it starts, its door not open yet
+        self.addCleanup(held.close)
+        self.assertTrue(client.wait_gone(0.2, endpoint=gone, leave="0.0.1"))
+        self.assertFalse(client.wait_gone(0.2, endpoint=gone))
+        held.close()
+        self.assertTrue(client.wait_gone(0.2, endpoint=gone), "nothing answers and nobody holds the lock: gone")
+
     def test_a_start_replaces_a_server_of_another_release_and_starts_at_once_end_with_one(self) -> None:
         """A server of another release refuses a ``cad`` command in one line, never a person's own Python;
         ``cad server start`` stops it at once and starts its own, which keeps the release it started as and the one

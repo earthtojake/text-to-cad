@@ -267,7 +267,8 @@ def make_way() -> str | None:
     started it --: the stop is asked of the server it reaches only once that server's own greeting names an older
     release (``sweep``'s ``leave``), so no start stops a server of this release or a newer one, however the moments
     fall. ``ConnectionError`` in one line where room cannot be made: in a shell whose sandbox refuses the loopback port
-    a server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop did not go."""
+    a server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop still answers at its
+    door (``wait_gone``)."""
     found = _connect()
     if found is not None:
         found.close()
@@ -375,13 +376,17 @@ def connect(*, start: bool = True) -> Connection | None:
 def wait_gone(timeout: float = 60.0, endpoint: places.Endpoint | None = None, *, leave: str | None = None) -> bool:
     """Wait until the daemon, told to stop, is gone: its door no longer answers -- its port file,
     refused as it is removed, does not (``_connect``) -- and its lock, held until its workers have
-    stopped, is free. With ``leave`` (``sweep``'s), a server of that release or a newer one answering in its place
-    -- a start at the same moment started it, once the one told to stop had gone -- says it is gone too."""
+    stopped, is free. With ``leave`` (``sweep``'s, a start's), a server of that release or a newer one answering in its
+    place -- a start at the same moment started it, once the one told to stop had gone -- says it is gone too, and so
+    does a door that answers no more by ``timeout``, whoever holds the lock: the lock cannot tell the last moments of
+    the server told to stop from the first of one a start at the same moment began, which takes it before its door
+    opens (``daemon.main``), and a start waits for whichever holds it as it waits for its own (``start``)."""
     deadline = time.monotonic() + timeout
     lock = endpoint.lock if endpoint else places.lock_path()
     address = endpoint.address if endpoint else places.address()
-    while time.monotonic() < deadline:
-        if not _answering(address, stopping=True):
+    while True:
+        answering = _answering(address, stopping=True)
+        if not answering:
             if not lock.exists():
                 return True  # it removed its lock as it let it go (``daemon.let_go``)
             held = _lock(lock)
@@ -392,8 +397,9 @@ def wait_gone(timeout: float = 60.0, endpoint: places.Endpoint | None = None, *,
             found.close()
             if _at_least(found.release, leave):
                 return True
+        if time.monotonic() >= deadline:
+            return leave is not None and not answering
         time.sleep(0.05)
-    return False
 
 
 def hold(*, start: bool = True, host: Callable[[], str | None] | None = None,
@@ -545,7 +551,8 @@ def sweep(*, stop: bool, seconds: float = 60.0, leave: str | None = None) -> dic
     daemon starting or stopping holds its lock before it listens and until it has left, so its files are never
     taken. ``leave``: a release whose servers, and a newer one's, are left running, never told to stop (``make_way``,
     this release): read from the greeting of the very connection the stop would go by, and a server of it answering
-    while the one told to stop goes is that one gone (``wait_gone``)."""
+    while the one told to stop goes is that one gone, as is a door that answers no more by ``seconds``
+    (``wait_gone``)."""
     found: dict[str, list[str]] = {"stopped": [], "running": [], "removed": []}
     for endpoint in places.endpoints():
         if _answering(endpoint.address):
