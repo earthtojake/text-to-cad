@@ -11,7 +11,6 @@ there at once with nothing run; the share's link then names that copy wherever c
 
 ```bash
 cad share arm.xbf --yes        # the first time on a computer: the person's yes, kept
-cad share <id>                 # by a document's id: the file it is of, a model's .xbf
 cad share status               # on or off, agreed or not, and this computer's live shares with their links
 cad share off                  # every share refused, --yes or not, until `cad share on`
 cad share delete arm.xbf --yes # the share of a file this computer shared
@@ -19,8 +18,8 @@ cad share delete 'https://cad.fun/<id>#delete=<secret>' --yes
 cad import https://cad.fun/<id> arm # its files written into ./arm, its file the library's; it runs nothing
 ```
 
-FILE|ID is turned into the file's canonical path (`ids.canonical`) before anything else: a path read from the folder
-the command runs in, a document id the file the engine names by it (`inspect`'s `build` query: a model's `.xbf`, a
+FILE is turned into the file's canonical path (`ids.canonical`) before anything else: a path read from the folder
+the command runs in, a document id (which the command takes too) the file the engine names by it (`inspect`'s `build` query: a model's `.xbf`, a
 file's own path), a share's link this computer's copy of it (**A share's link names this computer's copy**). A
 model's script is refused in one line that says to share the model's `.xbf`, which running the script writes
 (`wrong_type`, exit 2). The same file is the same share wherever it is named from; a file that moves is another
@@ -39,7 +38,7 @@ file, and shares to a link of its own.
 - **Who.** Anyone with the view link. No account, no sign-in.
 - **For how long.** 7 days after the last share. The same file shared again from the same computer is the same
   share: the link stays, the 7 days start again, and only the files that changed travel.
-- **Delete.** The delete link removes it, from any computer and any browser; `cad share delete FILE|ID` removes
+- **Delete.** The delete link removes it, from any computer and any browser; `cad share delete FILE` removes
   a share this computer made; asked first, as every command that destroys is (`--yes` where nobody can be asked).
   An expired share is deleted by the service. Either way what the share kept in the file's folder of cad's cache
   goes too (**What is kept**).
@@ -101,7 +100,7 @@ library (named by its version in `made`).
 
 ## Where each step runs
 
-1. The command turns FILE|ID into the file's path, and, of a model, reads the closure its `.xbf` holds and its files,
+1. The command turns FILE into the file's path, and, of a model, reads the closure its `.xbf` holds and its files,
    checking each against the time the model was made (the engine's `model_info`, for a live worker's last run).
 2. The command holds the file's lock in cad's cache: one `cad share` of a file at a time. Another says so in a
    line, waits for it 60 seconds at most, then is refused in one.
@@ -154,14 +153,14 @@ service's origin and that id), whose file is still where it was shared from, is 
 nothing, FOLDER included (said where one is given), and says where its files are, which is where to work on them:
 `arm was shared from this computer: it is <root>/XBF/arm.xbf, its files in <root>, its script <root>/arm.py. Nothing
 was downloaded; work there.`, or a file document's own file. `--json`: `local` (true), `name`, `file`, `root`,
-`entry` (a model's), `ignored` (the FOLDER given, or null) and `next` (`cad run <root>/<script>`, or `cad viewer
+`entry` (a model's), `ignored` (the FOLDER given, or null) and `next` (`cad run <root>/<script>`, or `cad show
 <file>`: these files are this computer's own). A share of another service, one expired, or one whose file moved or
 went is no such share: its link is downloaded as any other.
 
 ## A share's link names this computer's copy
 
 Wherever cad takes a document -- the source of every `cad <type> <operation>` (`snapshot`, `inspect`, `export`, a
-check), a Quick Edit packet's `input` (and a job's), a ref's FILE, `cad viewer`'s FILEs and `cad share`'s -- a share's
+check), a Quick Edit packet's `input` (and a job's), a ref's FILE, `cad show`'s FILEs and `cad share`'s -- a share's
 view link, `<origin>/<id>` of the service `CAD_SHARE_URL` names or of `https://cad.fun`, names this computer's copy of
 the share, so that a shared page's prompt reads here as a local page's does:
 
@@ -171,7 +170,7 @@ the share, so that a shared page's prompt reads here as a local page's does:
 - **else** -- neither, or an import whose file is gone -- it is refused in one line, ``<link> is a shared model this
   computer has no copy of: run `cad import <link>`.`` (`not_found`, exit 2, with `next`).
 
-A selector after the link, `<link>#<selector>`, is the same in the copy as in the share: `cad xbf inspect
+A selector after the link, `<link>#<selector>`, is the same in the copy as in the share: `cad inspect
 'https://cad.fun/<id>#head_shell/f:...'`. A link of another origin, or a files' link (`.zip`), is no document's name.
 Nothing of it goes through the engine's knowledge of a model: the library's entries are this computer's own.
 

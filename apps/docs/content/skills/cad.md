@@ -50,7 +50,7 @@ if __name__ == "__main__":
 cad run src/bracket.py
 ```
 
-Each call in `__main__` prints how its model built, its `id:` and its `view:` page. The id is that of the `.xbf` the run saves it as, so it is the same on every run and the open page follows it. A warm worker in the server keeps every kernel operation the script ran: a comment re-runs nothing, and a changed dimension re-runs only what reads it. Your agent checks each change with `cad xbf snapshot "$ID" tmp/review.png` and an `assert` on the dimensions you gave, and resolves a face you picked in the viewer with `cad xbf inspect`.
+Each call in `__main__` prints how its model built, the `.xbf` the run saves it as and its `view:` page. That `.xbf` is the model's document, the same file on every run, so the open page follows it. A warm worker in the server keeps every kernel operation the script ran: a comment re-runs nothing, and a changed dimension re-runs only what reads it. Your agent checks each change with `cad snapshot src/bracket.xbf tmp/review.png` and an `assert` on the dimensions you gave, and resolves a face you picked in the viewer with `cad inspect`.
 
 A number you are likely to tune, such as a wall, a fit or a hole count, can be declared as a parameter at the top of the script, with its range and unit: `WALL = xbf.param("wall", 2.0, min=1, max=5, unit="mm")`. The viewer's Params tab lists the model's parameters: change one there and save it, and the number is rewritten in the script and the model rebuilt. Or ask your agent, which edits the number in the script and runs it.
 
@@ -72,7 +72,7 @@ Running a child's script alone leaves its assemblies as they were, so the assemb
 Exports are written from the model's `.xbf`, so no code changes and nothing rebuilds:
 
 ```bash
-cad xbf export src/bracket.xbf STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad export src/bracket.xbf STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 | Format | What it carries |
@@ -96,11 +96,11 @@ return configuration_sequence(assembly, "cycle", [(0, "closed"), (2, "open"), (5
 
 Couplings (`gear_pair`, `rack_and_pinion_pair`, `screw_pair`) make joints move together by a ratio.
 
-`cad xbf ranges "$ID"` finds joint stops: it turns or slides each joint alone, a degree or a millimetre at a time, until its parts meet, and names the two parts. It writes nothing; your agent writes the stops into the joint's range. `cad xbf interference "$ID"` answers exactly, on the parts' own solids, which pairs share volume, at the poses it is given:
+`cad inspect src/arm.xbf --ranges` finds joint stops: it turns or slides each joint alone, a degree or a millimetre at a time, until its parts meet, and names the two parts. It writes nothing; your agent writes the stops into the joint's range. `cad inspect src/arm.xbf --interference` answers exactly, on the parts' own solids, which pairs share volume, at the poses it is given:
 
 ```bash
-cad xbf interference "$ID" --pose open --pose cycle@2.5
-cad xbf interference "$ID" --fit pin base
+cad inspect src/arm.xbf --interference --pose open --pose cycle@2.5
+cad inspect src/arm.xbf --interference --fit pin base
 ```
 
 `--fit` names a pair meant to overlap, such as a pin in a bore. Exit 0 is clear, 1 means a pair shares volume, and 3 means a pair could not be measured, which is not a pass.
@@ -125,12 +125,12 @@ def gasket():
 
 A drawing with more than one CAM operation returns a `Compound` whose children's labels are their layers (`CUT`, `ENGRAVE`). From a 3D part, the drawing script calls the model and lays one of its faces on z=0 with build123d's own calls (`Plane(face).to_local_coords(face)`); a bent part is unrolled with `unfold(shape, k_factor=)` from `cad.build123d`, which can put the bend lines on a `BEND` layer; a vendor STEP is read with `step.read` first. Kerf is added with build123d's `offset`, never by hand-offsetting coordinates.
 
-`cad xbf export src/gasket.xbf DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad dxf snapshot` draws the file itself, and the viewer opens it as a read-only 2D drawing with its layers.
+`cad export src/gasket.xbf DXF/gasket.dxf` runs the drawing checks and refuses the file if one fails: units are set, nothing is drawn twice, no entity has zero length, every cut profile closes, and something is drawn. The file is in millimetres, arcs stay arcs and holes stay circles, and an unchanged drawing exports an identical file on any machine. `cad snapshot` draws the file itself, and the viewer opens it as a read-only 2D drawing with its layers.
 
 For sheet work, a cut-file check reads every entity on a cut layer as a cutter would:
 
 ```bash
-cad dxf dfm part.dxf --process sheet --material aluminum --thickness 3 --kerf 0.2
+cad dfm part.dxf --process sheet --material aluminum --thickness 3 --kerf 0.2
 ```
 
 It reports open contours, curves cut twice, crossing contours, pieces that fall out of a hole, and holes, webs and gaps small against the thickness. A file with no units is `NOT CHECKED` until `--units mm` states them. A folded STEP or model is unfolded with a K-factor; without the shop's `--k-factor` one is read from a chart, and the flat is not a production blank. The verdicts are those of the [manufacturing checks](/docs/cad#manufacturing-checks).
@@ -150,7 +150,7 @@ The rules are general practice from published design guides, plus text-to-cad's 
 | Injection molding | Draft, undercuts, wall thickness, ribs, bosses, projected area, clamp force |
 | 3D printing | Walls, overhangs, bridges, clearances, trapped volume, build-volume fit |
 
-It checks a model by its id or its `.xbf` (`cad xbf dfm`), or another file: `cad step dfm`, `cad stl dfm`, `cad threemf dfm` and `cad glb dfm`. A mesh is checked for printing only. A cut file is checked with `cad dxf dfm` ([DXF profiles](/docs/cad#dxf-profiles-and-flat-patterns)).
+It checks a model by its `.xbf` (`cad dfm part.xbf`), or another file: a STEP, an STL, a 3MF or a GLB (`cad dfm part.step`). A mesh is checked for printing only. A cut file is checked as one, `cad dfm plate.dxf` ([DXF profiles](/docs/cad#dxf-profiles-and-flat-patterns)).
 
 ### How the check runs
 
@@ -161,18 +161,18 @@ The material in the model carries the process (`metals.aluminum(process=machined
 ```python
 """A motor mount, CNC milled from 6061 on 3 axes.
 
-Check: cad xbf dfm "$ID" --tools 3,6,10
+Check: cad dfm src/mount.xbf --tools 3,6,10
 """
 ```
 
-The check runs after every change, on the part's own id:
+The check runs after every change, on the part's own `.xbf`:
 
 | Process | Example |
 | --- | --- |
-| CNC | `cad xbf dfm "$ID" --process cnc --material aluminum --tools 3,6,10` |
-| Sheet | `cad xbf dfm "$ID" --process sheet --material aluminum --bend-radius 2 --k-factor 0.42` |
-| Molding | `cad xbf dfm "$ID" --process molding --pull y --material pc --cavities 4` |
-| Printing | `cad xbf dfm "$ID" --process printing --technology sla --build-volume 145x145x185` |
+| CNC | `cad dfm src/mount.xbf --process cnc --material aluminum --tools 3,6,10` |
+| Sheet | `cad dfm src/mount.xbf --process sheet --material aluminum --bend-radius 2 --k-factor 0.42` |
+| Molding | `cad dfm src/mount.xbf --process molding --pull y --material pc --cavities 4` |
+| Printing | `cad dfm src/mount.xbf --process printing --technology sla --build-volume 145x145x185` |
 
 The last line of the output leads with one of three states, and the exit status matches:
 
@@ -184,7 +184,7 @@ The last line of the output leads with one of three states, and the exit status 
 
 Exit 2 means the command itself was refused, and `--strict` fails on a warning too. `--json` holds every measurement and every rule with its outcome.
 
-Each finding carries a rule id, the measured `value`, the `limit`, the `source` of the rule and the face or edge refs involved. Your agent resolves a ref with `cad xbf inspect`, edits the code that made it, and repeats the check until no error remains. A feature you specified is never dropped or shrunk to clear a finding: your agent says so instead. `--candidates` ranks molding pulls or print orientations but judges nothing, so the chosen one is checked again.
+Each finding carries a rule id, the measured `value`, the `limit`, the `source` of the rule and the face or edge refs involved. Your agent resolves a ref with `cad inspect`, edits the code that made it, and repeats the check until no error remains. A feature you specified is never dropped or shrunk to clear a finding: your agent says so instead. `--candidates` ranks molding pulls or print orientations but judges nothing, so the chosen one is checked again.
 
 ### What the check leaves out
 

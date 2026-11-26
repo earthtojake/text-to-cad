@@ -1,6 +1,6 @@
 # The plot payload (schema 4)
 
-`GET /api/v1/documents/kicad_pcb/<id>/plot` (the board opened by its absolute path) and `cad <type> snapshot` draw a KiCad board from
+`GET /api/v1/documents/kicad_pcb/<id>/plot` (the board opened by its absolute path) and `cad snapshot` draw a KiCad board from
 one payload, built by `cad.engine.formats.kicad.plot` from the `.kicad_pcb` and drawn by
 `@cad/core/lib/plot2d` on a 2D canvas. Its pours are KiCad's refill of them, not the fills the file
 saved, which go stale: KiCad refills the zones of a temporary copy of the board (kicode's headless
@@ -43,7 +43,7 @@ block) is drawn: the board is the board alone, which the fit frames.
 
 `GET /api/v1/documents/kicad_pcb/<id>/drc` is KiCad's design rule check of the saved board, kept by the
 same key and made off the request the same way (202 `{"state": "checking", "retryMs"}` while it runs):
-the `CheckResult` `cad kicad_pcb drc --json` prints, as data.
+the `CheckResult` `cad kicad drc --json` prints, as data.
 
 ```jsonc
 {
@@ -67,7 +67,7 @@ outline is framed on everything it draws, 1 mm around. Every coordinate is round
 decimals. The sheet is what the renderer frames; the whole canvas is its background: `background` is
 a neutral dark grey (`#292929`, where KiCad's theme has navy), what a reader with no theme draws
 on. The viewer draws on its theme's own (`plot2d/theme.js`'s `boardPalette`: the app's canvas,
-`lib/appTheme.js`) and `cad kicad_pcb snapshot` on its own (white or that grey), each in its
+`lib/appTheme.js`) and `cad snapshot` on its own (white or that grey), each in its
 palette; no colour is the payload's. It
 clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one — is drawn
 where it falls (`layoutPlot`'s `extent` is the box of everything drawn).
@@ -100,7 +100,7 @@ A view (`plot2d.drawPlot`'s `view`) chooses layers by id and orders them: withou
 vertical centre line. A via's copper is drawn
 while `vias` is, and a name while `names` is, so a view hides a via, or every name, as one. The
 board's Display (`plot2d/boardDisplay.js`: `{ mode, side, poured, layers, active, others, zones, tracks }`, the viewer's and
-`cad <type> snapshot --display`'s one contract) is a view over these ids: a mode is a set of layer
+`cad snapshot --display`'s one contract) is a view over these ids: a mode is a set of layer
 kinds, `layers` an explicit set of ids (one that differs from its mode's reads as Custom), `poured`
 and `side` switches of their own, `active` the layer drawn on top of the stack (null: KiCad's order,
 its active layer the copper facing the eye), `others` KiCad's high-contrast modes (`shown`, `dimmed`:
@@ -232,7 +232,7 @@ read through `GET /api/v1/documents/step/<id>/structure` and `/parts/<key>`), or
 
 ## The schematic payload
 
-`GET /api/v1/documents/kicad_sch/<id>/plot` and `cad kicad_sch snapshot` draw a KiCad schematic
+`GET /api/v1/documents/kicad_sch/<id>/plot` and `cad snapshot` draw a KiCad schematic
 from the same shape, built by `cad.engine.formats.kicad.schematic_plot` from the sheet files alone:
 `kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page; the
 route's `?sheet=<path>` answers that sheet's page alone and `index=0` leaves the `schematic` index out
@@ -246,7 +246,7 @@ point the viewer reads off a page is the one the file holds; `width` and `height
 (`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the
 sheet's, `/` the root, `/Power/`), `number` (its page number), `file` and `title` (its title block's
 fields, as data). Every page the route answers is on KiCad's drawing sheet (`drawing_sheet`, below), which
-the viewer draws always, as KiCad's schematic editor shows it; `cad kicad_sch snapshot` asks for it too
+the viewer draws always, as KiCad's schematic editor shows it; `cad snapshot` asks for it too
 and draws the title block (the frame with `border`). `build_schematic_plot` leaves it out unless asked.
 
 ```jsonc

@@ -18,6 +18,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import cad  # noqa: E402
 from cad import kicad_pcb, kicad_sch  # noqa: E402
 from cad.engine.formats.kicad import sexpr as S  # noqa: E402
 from kicode.board_types import (ArcTrack, BoardArc, BoardSegment, BoardText, Track, Via, Zone)  # noqa: E402
@@ -77,7 +78,7 @@ def setup(b):
         b.create_items([arc, flat])
     # The schematic's parts and nets
     with tempfile.TemporaryDirectory() as tmp:
-        (netlist,) = kicad_sch.export(str(SCHEMATIC), "netlist", tmp).written
+        (netlist,) = cad.export(str(SCHEMATIC), tmp, to="netlist").written
         result = b.import_netlist(str(netlist))
         print("netlist:", result.report.strip().splitlines()[-3:] if result.report else "", "new footprints",
               result.new_footprint_count, "errors", result.error_count)

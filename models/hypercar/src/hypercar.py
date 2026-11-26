@@ -24,8 +24,8 @@ The assembly tree is grouped BY SYSTEM -- thirteen sibling stages under
 
 The car is one model, ``hypercar``, holding the doors' motion, ``doors``, and two
 GLB animations, the ``showcase`` tour and the ``explode``. Its GLB, whose clips they
-are, is exported on demand (``cad xbf export <id> GLB/hypercar.glb``, the id its run
-prints).
+are, is exported on demand (``cad export src/hypercar.xbf GLB/hypercar.glb``, the .xbf its run
+saves).
 """
 
 from __future__ import annotations

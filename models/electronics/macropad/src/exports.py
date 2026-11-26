@@ -5,7 +5,7 @@ print orientation (3MF/, STEP/), and the assembly's STEP and GLB (the GLB carrie
 """
 from pathlib import Path
 
-from cad import xbf
+import cad
 
 from assembly import nine
 from case import keycap_print, knob_print, plate_print, tray_print
@@ -14,5 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent      # the project folder
 
 if __name__ == "__main__":
     for name, part in (("tray", tray_print), ("plate", plate_print), ("keycap", keycap_print), ("knob", knob_print)):
-        xbf.export(part(), ROOT / "3MF" / f"{name}.3mf", ROOT / "STEP" / f"{name}.step")
-    xbf.export(nine(), ROOT / "STEP" / "nine.step", ROOT / "GLB" / "nine.glb")
+        handle = part()
+        cad.export(handle, ROOT / "3MF" / f"{name}.3mf")
+        cad.export(handle, ROOT / "STEP" / f"{name}.step")
+    assembly = nine()
+    cad.export(assembly, ROOT / "STEP" / "nine.step")
+    cad.export(assembly, ROOT / "GLB" / "nine.glb")

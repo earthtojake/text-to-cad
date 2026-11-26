@@ -64,14 +64,14 @@ python scripts/verify.py
 From the repository root, run these for `fdm` and `injection`:
 
 ```sh
-cad stl dfm models/dfm-process-comparison/STL/fdm.stl --process printing --angle-limit 45 --json
-cad stl dfm models/dfm-process-comparison/STL/fdm.stl --process printing --candidates --angle-limit 45 --json
-cad step dfm models/dfm-process-comparison/STEP/injection.step --process molding --pull z --json
-cad step dfm models/dfm-process-comparison/STEP/injection.step --process molding --candidates --json
+cad dfm models/dfm-process-comparison/STL/fdm.stl --process printing --angle-limit 45 --json
+cad dfm models/dfm-process-comparison/STL/fdm.stl --process printing --candidates --angle-limit 45 --json
+cad dfm models/dfm-process-comparison/STEP/injection.step --process molding --pull z --json
+cad dfm models/dfm-process-comparison/STEP/injection.step --process molding --candidates --json
 ```
 
 Molding is judged on exact geometry, so `injection` is checked from its STEP export
-(`cad xbf export <id> STEP/injection.step`, as `verify.py` reads it), never from a mesh.
+(`cad export src/injection.xbf STEP/injection.step`, as `verify.py` reads it), never from a mesh.
 
 (The checks above were run with the skills' measurement scripts these commands replaced; the figures are
 the same measurements.)

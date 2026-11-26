@@ -3,13 +3,14 @@ when it is not there yet). Run: cad run scripts/step1_import.py   (from the proj
 import os
 from pathlib import Path
 
+import cad
 from cad import kicad_pcb, kicad_sch
 
 PROJ = Path(__file__).resolve().parent.parent
 os.chdir(PROJ)
 SCH, BOARD = "macropad.kicad_sch", "macropad.kicad_pcb"
 
-(netlist,) = kicad_sch.export(SCH, "netlist", "tmp/netlist").written
+(netlist,) = cad.export(SCH, "tmp/netlist", to="netlist").written
 with kicad_pcb.edit(BOARD) as b:
     dry = b.import_netlist(str(Path(netlist).resolve()), dry_run=True)
     print("dry run:", dry.report[:3000])

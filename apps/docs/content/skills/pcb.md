@@ -21,8 +21,8 @@ In the [viewer](/docs/viewer), a board shows in 2D and 3D with layers, selection
 The work starts from the saved parts, nets, outline and constraints, and from the schematic. Each sheet is checked with ERC (electrical rules check, KiCad's check of a schematic) and a snapshot:
 
 ```bash
-cad kicad_sch erc board.kicad_sch
-cad kicad_sch snapshot board.kicad_sch tmp/sheet.png --sheet /Power/
+cad kicad erc board.kicad_sch
+cad snapshot board.kicad_sch tmp/sheet.png --sheet /Power/
 ```
 
 Parts and footprints are checked against the datasheet: pad numbering, pitch, polarity, connector mating side.
@@ -44,8 +44,8 @@ with kicad_pcb.edit("board.kicad_pcb") as b:
 Every step is followed by DRC (design rule check, KiCad's check of a board against its own rules) and a picture:
 
 ```bash
-cad kicad_pcb drc board.kicad_pcb
-cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement
+cad kicad drc board.kicad_pcb
+cad snapshot board.kicad_pcb tmp/placement.png --display placement
 ```
 
 DRC exits 1 on errors or unconnected items. The warnings are read too, because a fab's CAM engineer flags them.
@@ -55,10 +55,10 @@ Before you order, the board is reviewed against the fab's capability page for yo
 Exports come from the revision that was checked, and only the files you asked for:
 
 ```bash
-cad kicad_pcb export board.kicad_pcb --to gerbers -o fab/gerbers
+cad export board.kicad_pcb fab/gerbers --to gerbers
 ```
 
-The `--to` kinds are `gerbers`, `drill`, `pos`, `bom`, `step`, `glb`, `odb`, `ipc2581`, `pdf` and `dxf`. A schematic exports `pdf`, `svg`, `netlist` and `bom` with `cad kicad_sch export`.
+The `--to` kinds are `gerbers`, `drill`, `pos`, `bom`, `step`, `glb`, `odb`, `ipc2581`, `pdf` and `dxf`. A schematic exports `pdf`, `svg`, `netlist` and `bom` with `cad export`.
 
 ## What it needs
 

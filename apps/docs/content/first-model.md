@@ -52,21 +52,22 @@ The agent builds the script with the `cad` command:
 cad run src/bracket.py
 ```
 
-`cad run` works like `uv run`, so the script's own packages come from its header. It needs the server running, which your agent starts with `cad server start`. It prints how the model built, then two lines that matter to you:
+`cad run` works like `uv run`, so the script's own packages come from its header. It needs the server running, which your agent starts with `cad server start`. It prints how the model built, then the lines that matter to you:
 
 ```text
+  src/bracket.xbf (written, 11.8 KB)
   id: 0dc50a92-a21f-5895-a245-ebdeb5352f3b
   view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
 ```
 
-The `id:` names the model's document, its `.xbf`, which the run saves beside the script. It is the file's, so it is the same on every run. The `view:` line is its page in the viewer. Your port and token will differ.
+`src/bracket.xbf` is the model's document, which the run saves beside the script: the same file on every run, and the one every `cad` command takes (`cad snapshot src/bracket.xbf bracket.png`). The `view:` line is its page in the viewer, and the `id:` the name that page has. Your port and token will differ.
 
 > [!NOTE]
 > The first build downloads the CAD kernel, about 240 MB, and a first model waits for it. It is made once, in a cache folder, and every later build reuses it. [What it needs](/docs/install#what-it-needs) has the sizes, and [Removing](/docs/install#removing) says where the folders are.
 
 ## See it on screen
 
-Your agent shows you the model. In the Codex app, the viewer opens in a CAD tab beside the thread. In every other app the agent opens the page in the app's browser, or gives you the `view:` link to open in yours. You can also run `cad viewer` yourself, which opens the viewer's home. See [the viewer](/docs/viewer).
+Your agent shows you the model. In the Codex app, the viewer opens in a CAD tab beside the thread. In every other app the agent opens the page in the app's browser, or gives you the `view:` link to open in yours. You can also run `cad show` yourself, which opens the viewer's home. See [the viewer](/docs/viewer).
 
 ## Ask for a change
 
@@ -86,10 +87,10 @@ A run writes one file, `src/bracket.xbf` beside the script: the model's own docu
 Export the bracket as a STEP file and an STL.
 ```
 
-The agent runs `cad xbf export` on that file:
+The agent runs `cad export` on that file:
 
 ```bash
-cad xbf export src/bracket.xbf STEP/bracket.step STL/bracket.stl
+cad export src/bracket.xbf STEP/bracket.step STL/bracket.stl
 ```
 
 The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's **⋯** menu, beside the file's name, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.

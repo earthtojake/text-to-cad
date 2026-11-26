@@ -23,12 +23,12 @@ The CAD model declares what the geometry determines: joints (build123d `Revolute
 
 ```bash
 cad run src/gripper.py
-cad xbf ranges "$ID"
-cad xbf export src/gripper.xbf sim/gripper.xml
-cad xbf export src/gripper.xbf description/gripper.urdf --zero home
+cad inspect src/gripper.xbf --ranges
+cad export src/gripper.xbf sim/gripper.xml
+cad export src/gripper.xbf description/gripper.urdf --zero home
 ```
 
-`$ID` is the `id:` line the run printed, `src/gripper.xbf` the model the run saved, and `--zero home` counts every joint from the named pose. An MJCF export also writes a `scene.xml` beside it with a floor, a light and a skybox, unless one exists. In the export's log, a mass of 0 or a missing joint means the model needs fixing.
+`src/gripper.xbf` is the model the run saved, and `--zero home` counts every joint from the named pose. An MJCF export also writes a `scene.xml` beside it with a floor, a light and a skybox, unless one exists. In the export's log, a mass of 0 or a missing joint means the model needs fixing.
 
 The plain export holds no chosen collision shape, joint dynamics or actuator. For a simulation, a MuJoCo function replaces it: a Python script that turns the model into a `mujoco.MjSpec` with `spec()` and chooses collision shapes (`fit` for a box, sphere, cylinder or capsule; `decompose` for a concave part), friction, joint damping and actuators.
 
@@ -37,8 +37,8 @@ An SRDF is written by hand against a valid URDF, with every link and joint name 
 Every file is then checked:
 
 ```bash
-cad urdf validate path/to/robot.urdf
-cad srdf validate path/to/robot.srdf --strict
+cad inspect path/to/robot.urdf
+cad inspect path/to/robot.srdf --strict
 cad mujoco check path/to/scene.xml
 ```
 
@@ -46,13 +46,13 @@ Each run checks one file and collects every finding. `--strict` fails on warning
 
 | Command | Checks |
 | --- | --- |
-| `cad urdf validate` | One root, a connected tree, joint types and limits, axes, inertial tensors, mimic joints, geometry, mesh paths |
-| `cad srdf validate` | Its own structure, then every group, chain, state and disabled pair against the paired URDF |
+| `cad inspect` | One root, a connected tree, joint types and limits, axes, inertial tensors, mimic joints, geometry, mesh paths |
+| `cad inspect` | Its own structure, then every group, chain, state and disabled pair against the paired URDF |
 | `cad mujoco check` | MuJoCo's own compile, model health, and what collides and what is excluded |
 
 MuJoCo's model-health findings include contacts at rest, mass counted twice, a suspect scale (millimetres read as metres) and joints outside their range at rest. They are cleared before any physics is tuned.
 
-`cad urdf snapshot` and `cad srdf snapshot` draw a robot at a pose (`--pose '{"shoulder_pitch": 30}'` takes degrees). For an MJCF, `cad run mujoco-studio --model path/to/scene.xml` starts MuJoCo Studio and prints the URL to open.
+`cad snapshot` and `cad snapshot` draw a robot at a pose (`--pose '{"shoulder_pitch": 30}'` takes degrees). For an MJCF, `cad run mujoco-studio --model path/to/scene.xml` starts MuJoCo Studio and prints the URL to open.
 
 ## What it needs
 

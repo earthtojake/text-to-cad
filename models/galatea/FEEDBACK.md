@@ -127,7 +127,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    output folder after the process was killed mid-draw. They should live under the
    system temp folder, or be swept on the next run.
 
-4. **`cad xbf inspect <id>` prints every occurrence path of every material on one
+4. **`cad inspect <id>` prints every occurrence path of every material on one
    line.** For this model that is one line of several hundred paths per material, about
    50 kB to say twelve numbers. Cap the list (first three, "and 847 more") unless asked.
 
@@ -241,7 +241,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    pair (a lofted back plate against the frame under it) four minutes by itself, so a
    check needs a per-pair time limit and must report what it could not measure.
 
-12. **A motion cannot be drawn.** `cad xbf snapshot` takes a pose, not a
+12. **A motion cannot be drawn.** `cad snapshot` takes a pose, not a
    configuration sequence and a time, and has no frame output. To review the gait I
    recomputed each frame's joint values in my own code and called the command sixty
    times. `--motion walk --at 0.6`, or `--frames 30` into a folder, would make motion
@@ -429,7 +429,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     on one foot still fall, for a reason no path answers (entry 48). What would have helped: a word in the skill where it tells a
     robot's builder to fix the base link ("the fixed link is a choice of frame: a motion
     written under it needs checking in the frame of whatever the robot stands on"); a
-    `plant=<link>` on `cad xbf snapshot` and on the viewer's playbar, so that a motion
+    `plant=<link>` on `cad snapshot` and on the viewer's playbar, so that a motion
     can be watched standing on a foot; and, further off, a sequence that names a second
     link to keep still and solves the chain between.
 
@@ -472,7 +472,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     A link's mass needs each part's density, and a simulator's meshes each part's look.
     The way that works is `handle.shape`: every solid of the robot transferred into the
     script (8 s, 1.5 GB resident) to read `node.material` off 689 leaves.
-    `cad xbf inspect <id> --query structure --json` has density by label in 3 s, but
+    `cad inspect <id> --query structure --json` has density by label in 3 s, but
     not the look, and there is no Python call for either. `inspect` also gives a part's
     volume, mass and bounds and stops there: a robot description needs the centre of
     mass and the inertia tensor too, and `references/inertials.md` itself says the
@@ -484,7 +484,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     assembly of 73 links with its joints in the document, so the engine knows each
     link's parts and the joint that carries it, and the sim's `mjcf.py` regroups the
     GLB's nodes by link and moves each into its joint's frame in a hundred lines.
-    `cad xbf export <id> --links DIR` (one mesh per link in the frame of the joint
+    `cad export <id> --links DIR` (one mesh per link in the frame of the joint
     that carries it, optionally one per material) is the export a robot description
     needs, for URDF as much as MJCF. (b) A mesh export can only get finer:
     `export(tolerance=, angle=)` "meshes again at the finer of each". A simulator wants
@@ -583,8 +583,8 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   for the housings, then twenty minutes of the build line's part count and the exact
   check saying which brackets no longer fitted. A parametric model in a real language is
   what made a change of that size affordable in an afternoon.
-- A maker's STEP into the model: `cad step export RS04.stp RS04.xbf` once, then
-  `model.read` in the build, and `cad step inspect` and `cad step snapshot` to find a
+- A maker's STEP into the model: `cad export RS04.stp RS04.xbf` once, then
+  `model.read` in the build, and `cad inspect` and `cad snapshot` to find a
   mounting face and a bolt circle on it. Five drives were in the robot, aligned and
   mirrored, in an afternoon, and their real shapes found five interferences my cans
   drawn from the datasheet had hidden.
@@ -598,10 +598,10 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 - The exploded view as an `animation()` on the model: 73 link channels, a radial
   `.explode` per link and a slide per skin, written in sixty lines, rebuilt in 2.4 s, and
   there in the GLB as a clip that `cad.blender` plays like any motion.
-- `cad xbf snapshot --job` with a list of jobs draws the viewer's own display modes
+- `cad snapshot --job` with a list of jobs draws the viewer's own display modes
   (`solid` with the grid, `parts`, `xray`, `exploded`) at any pose from any camera:
   120 frames of plain CAD footage for the film from one short script, 3.7 s a frame.
-- A pose can be looked at before the model has it: `cad xbf snapshot --job` with
+- A pose can be looked at before the model has it: `cad snapshot --job` with
   `jointValues` drew sixteen pictures of eight new poses on the document the engine
   already held, in 66 s, while the sources were mid-edit and a render had the machine.
 - A motion as dense samples: five motions of 40 to 63 waypoints, 72 joints each, went
@@ -676,7 +676,7 @@ that did not hold as written, and what a reader should take from them instead.
   its label first (`galatea/lumbar_yoke`). The refusal listed the paths without that label, the
   first of which was the refused name itself, which is what hid it.
 - **43.** A part's density was to be had without its solids, from Python:
-  `cad.xbf.inspect(id, query="structure")["summary"]["materials"]`. A centre of mass and an
+  `cad.inspect(handle, query="structure")["summary"]["materials"]`. A centre of mass and an
   inertia tensor of several parts at their own densities is `cad.build123d.mass_properties`. The
   look's name is still not there.
 
@@ -688,7 +688,7 @@ that did not hold as written, and what a reader should take from them instead.
   shapes made before it (25). The build's line counts the calls that ran uncached and says why a
   body is not retained (32), and a cold run whose worker was retired says why (17). A worker
   holding an older state takes the document another environment's worker built (42).
-- `cad xbf interference "$ID"`: every pair of parts whose boxes meet, measured exactly, as built
+- `cad inspect "$ID" --interference`: every pair of parts whose boxes meet, measured exactly, as built
   and at the poses, states and sequences asked, the named fits apart, a pair it could not measure
   said and never passed (11).
 - `hidden` and `isolated` take globs (`*skin*`, `*/skin_screw`), and a name an assembly shares with

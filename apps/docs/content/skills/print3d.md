@@ -3,15 +3,15 @@ title: print3d
 description: The print3d skill slices a part into printer-ready G-code with OrcaSlicer and hands it to your printer's app.
 ---
 
-The `print3d` skill slices a part into printer-ready G-code with OrcaSlicer and hands the result to your printer's app. For a Bambu Lab printer that is Bambu Connect or Bambu Studio, where you press Print yourself. Whether a part will print well at all is a separate question, answered by the printing check in the `cad` skill's [manufacturing checks](/docs/cad#manufacturing-checks), for example `cad xbf dfm "$ID" --process printing --technology fdm`.
+The `print3d` skill slices a part into printer-ready G-code with OrcaSlicer and hands the result to your printer's app. For a Bambu Lab printer that is Bambu Connect or Bambu Studio, where you press Print yourself. Whether a part will print well at all is a separate question, answered by the printing check in the `cad` skill's [manufacturing checks](/docs/cad#manufacturing-checks), for example `cad dfm part.xbf --process printing --technology fdm`.
 
 ## How it works
 
 OrcaSlicer's command line reads `.stl`, `.3mf`, `.obj` and `.amf`, so a model or a STEP is exported to a mesh first:
 
 ```bash
-cad xbf export part.xbf part.3mf
-cad step export part.step part.3mf
+cad export part.xbf part.3mf
+cad export part.step part.3mf
 ```
 
 OrcaSlicer's command line slices with the settings it is given: a printer, a process and a filament preset. The sure way to give them is a project you saved from the OrcaSlicer app (File > Save Project): the `.3mf` holds its models and every setting, and slices as it is. Your own preset files work too. Your agent uses the presets you print with and never invents one, because a wrong bed size or temperature can damage a printer.

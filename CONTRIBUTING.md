@@ -117,7 +117,7 @@ export CAD_ENGINE_DIR=$PWD/tmp/cad/engine CAD_STATE_DIR=$PWD/tmp/cad/state \
        CAD_CACHE_DIR=$PWD/tmp/cad/cache CAD_UPDATE_CHECK=0
 uv run cad server start
 uv run python models/examples/src/l_bracket.py    # builds on this worktree's server, prints its id and page
-uv run cad viewer                                 # the home, served from this worktree's bundle
+uv run cad show                                 # the home, served from this worktree's bundle
 ```
 
 On Windows, in PowerShell:

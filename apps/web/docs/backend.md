@@ -21,7 +21,7 @@ engine rolled to when another program held it (`cad server status` says which an
 or the one `--port N` or `CAD_ENGINE_PORT` names. Run the installed CLI from anywhere:
 
 ```bash
-cad viewer --host 127.0.0.1 --json
+cad show --host 127.0.0.1 --json
 ```
 
 The equivalent Python entry point is `python -m cad_server.viewer`, using the
@@ -32,7 +32,7 @@ select it explicitly:
 ```bash
 npm run build:web
 export CAD_VIEWER_DIST="$PWD/apps/web/dist"
-cad viewer --host 127.0.0.1 --json
+cad show --host 127.0.0.1 --json
 ```
 
 `--dist <directory>` is the command-line equivalent of `CAD_VIEWER_DIST`.
@@ -127,7 +127,7 @@ request and has no row on the next.
 
 Nothing browses the disk but a project's folder (`cad_server.viewer.projects`). A project is a folder a person
 opened as one -- `POST /api/v1/projects` with `{"path"}` (Import's Folder on the home, a standalone document's Import
-its folder as a project), or `cad viewer <folder>` -- kept in the library in the state folder (its id derived from the
+its folder as a project), or `cad show <folder>` -- kept in the library in the state folder (its id derived from the
 folder's canonical path); nothing is written to the folder. A folder inside a project is that project (`made:
 false`): projects do not nest by accident. The home folder, a folder above it and a disk's root are no project (a 400
 saying what to open instead); a path that is not a folder is a 404, one that is not absolute a 400. A document is in
@@ -248,7 +248,7 @@ drawing add-on over the `.dxf`'s modelspace, in a kernel process (ezdxf is the k
 environment's, never the server's own), and returns what every entity flattens to — text placed, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
-`cad <type> snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
+`cad snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
 from the engine's own reading of the file, as this pane draws it: from above, fitted,
 hairlines in their pens, on white paper (every snapshot is light). This route
 (`GET /api/v1/documents/dxf/<id>/drawing`) is the pane's alone.

@@ -8,7 +8,7 @@ import {
 } from "@cad/core/lib/render/glbAnimationRuntime.js";
 import { buildGlbDocumentFromBuffer, disposeGlbDocument } from "@cad/core/lib/render/glbMeshData.js";
 
-// A model on a page of the documentation: a GLB `cad xbf export` wrote, read the way the CAD
+// A model on a page of the documentation: a GLB `cad export` wrote, read the way the CAD
 // Viewer reads any GLB (`buildGlbDocumentFromBuffer`), lit and framed by core's `renderModel`, with
 // its parts' own colours, and its clip played by the viewer's GLB animation runtime. Drag turns it;
 // the wheel is left to the page.

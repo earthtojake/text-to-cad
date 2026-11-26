@@ -147,7 +147,7 @@ def hypercar():
     return mechanism_state(car, "open", **SWEEP)                      # shut is as built
 ```
 
-`cad xbf snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
+`cad snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
 knuckles at 54, 60 and 42 degrees: the picture of the same finger with no coupling at
 `--pose '{"index_mcp_flexion": 54, "index_pip": 60, "index_dip": 42}'`; its range, `[0, 1]`, is
 where every knuckle stays within its own. A model returning `posed(car().shape, {"left": -35,
@@ -172,7 +172,7 @@ segment's `discontinuous_interpolation_type`), and a coupling is its couplers un
 range null where nothing bounds it. **STEP carries none of it**: OCCT reads AP242
 kinematics but cannot write them, so every STEP, posed or not, is placements only.
 
-`--pose` on `cad <type> snapshot` poses the mechanism at a
+`--pose` on `cad snapshot` poses the mechanism at a
 mechanism state (its name, among the structure's `configurations`) or at joint and coupling values (`'{"elbow": 45}'`, `'{"curl": 0.6}'`:
 a turn in degrees, a slide in millimetres, the rest as built): the engine places each link by composing its pairs from the ground down,
 exact forward kinematics, and draws that. No flag is as built. An unknown configuration, joint or

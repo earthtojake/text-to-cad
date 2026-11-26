@@ -10,7 +10,7 @@ Each project has one layout, the cad skill's: its sources in `src/` (shared modu
 `src/lib/`), each model a `@xbf` function its script calls under `if __name__ ==
 "__main__":`. A run writes nothing: it builds the model in the engine and prints its
 document's `id:` and page (`view:`), which every later run updates. A file is written
-on request, `cad xbf export <id> STEP/<name>.step`, into the project's root-level
+on request, `cad export <name>.xbf STEP/<name>.step`, into the project's root-level
 `STEP/`, `STL/`, `GLB/`, `3MF/` or `DXF/`, which each project's `.gitignore` keeps out
 of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the link meshes
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
@@ -67,13 +67,13 @@ project delivers them and because something outside the model reads them:
 
 | Project | Files | How | Why |
 | --- | --- | --- | --- |
-| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad <type> export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
+| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
 | `examples` (`mounting_plate`, `spur_gear_blank`) | `STL/`, `3MF/`, `GLB/<name>.*` | `@stl`, `@threemf`, `@glb` on the model | the example of declared files: a print part whose files every run writes |
 | `branding` (the three logos) | `STEP/logo_*.step` | `src/exports.py` | the STEP deliverable, kept current by an `exports.py` |
 | `drawings` (all eight) | `DXF/<name>.dxf` | `src/exports.py` | the DXF deliverables, flat patterns among them; a drawing exists for its DXF |
 | `juno`, `lyra` (every link model) | `3MF/<link>.3mf` | `src/exports.py` | the URDFs reference them |
 | `examples` (`electronics_enclosure_base_drawing`) | `PDF/electronics_enclosure_base_drawing.pdf` | `@eng_drawing` | an engineering drawing is its PDF |
-| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.xbf.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
+| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
 | `radial` | `XBF/radial.xbf` | `@xbf("….xbf")` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
 | `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`, `pinball`) | the KiCad project: the board, the schematic's sheets, the project file and rules, the project's libraries and their tables (each sample's `.gitignore` names them) | `cad run build.py` (`pinball`: `board/build.py`), the board's scripts in order | the board is made by its scripts, which are its source; ERC, DRC, the checks, the viewer, KiCad and the CAD scripts read it, so build before any of them |
 | `electronics` (`macropad`, `eurorack_lfo`, `orbit_clock`, `pinball`) | `macropad.3dshapes/`, `3dmodels/`, `orbit.3dshapes/`, `board/pinball.3dshapes/` (a STEP each) | `@step` on each part model (`src/vendor_parts.py`, `src/footprint_models.py`, `src/part_models.py`, `board/scripts/part_models.py`) | the footprints KiCad's library has no model for name them (`${KIPRJMOD}/...`): the board's 3D view and its STEP and GLB exports read them, so run the script before either |
@@ -84,9 +84,9 @@ project delivers them and because something outside the model reads them:
 From a model's `src/` folder, with the engine's environment (the library on the path):
 
 ```
-python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
-cad xbf snapshot "$ID" OUT.png            # drawn by OCCT
-cad xbf export "$ID" GLB/NAME.glb         # a file of it, on request
+python SCRIPT.py                         # the models its __main__ calls: each saves NAME.xbf, prints view:
+cad snapshot NAME.xbf OUT.png            # drawn by OCCT
+cad export NAME.xbf GLB/NAME.glb         # a file of it, on request
 ```
 
 A model script is Python and takes no options: running it asks the engine to build each

@@ -7,15 +7,17 @@ orbit_assembly so they never take the place of the board's own STEP/orbit.step, 
 """
 from pathlib import Path
 
-from cad import xbf
+import cad
 
 from orbit import baffle, diffuser_print, front_print, orbit, stand
 
 ROOT = Path(__file__).resolve().parent.parent      # the project folder
 
 if __name__ == "__main__":
-    xbf.export(baffle(), ROOT / "3MF" / "baffle.3mf", tolerance=0.02)
-    xbf.export(diffuser_print(), ROOT / "3MF" / "diffuser.3mf", tolerance=0.02)
-    xbf.export(stand(), ROOT / "3MF" / "stand.3mf", tolerance=0.03)
-    xbf.export(front_print(), ROOT / "3MF" / "front_two_material.3mf", tolerance=0.02)
-    xbf.export(orbit(), ROOT / "STEP" / "orbit_assembly.step", ROOT / "GLB" / "orbit_assembly.glb")
+    cad.export(baffle(), ROOT / "3MF" / "baffle.3mf", tolerance=0.02)
+    cad.export(diffuser_print(), ROOT / "3MF" / "diffuser.3mf", tolerance=0.02)
+    cad.export(stand(), ROOT / "3MF" / "stand.3mf", tolerance=0.03)
+    cad.export(front_print(), ROOT / "3MF" / "front_two_material.3mf", tolerance=0.02)
+    assembly = orbit()
+    cad.export(assembly, ROOT / "STEP" / "orbit_assembly.step")
+    cad.export(assembly, ROOT / "GLB" / "orbit_assembly.glb")

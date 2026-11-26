@@ -13,10 +13,10 @@ is the one model (`@xbf`; a run writes nothing):
 Build from this folder: `python f1.py`.
 
 ```
-python f1.py                                         # prints the car's id: and view:
-cad xbf snapshot "$ID" drs.png --pose drs_open
-cad xbf snapshot "$ID" lock.png --pose full_lock_left
-cad xbf export "$ID" GLB/f1.glb                       # the five clips
+python f1.py                                         # saves the car as f1.xbf, printing its view:
+cad snapshot f1.xbf drs.png --pose drs_open
+cad snapshot f1.xbf lock.png --pose full_lock_left
+cad export f1.xbf GLB/f1.glb                         # the five clips
 ```
 
 ## How it is built

@@ -15,67 +15,70 @@ cad run mujoco-studio --model scene.xml      MuJoCo Studio's web viewer on the m
                                              changes: the person opens the URL it prints
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
-cad xbf export ID|FILE.xbf DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
-                                             a model, by its document id: the document the engine holds;
-                                             or saved as a file, its .xbf: that file, read as it is
-cad step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
-                                             SRC a .step; --tolerance and --angle (a model's, an
-                                             xbf's, a STEP's) mesh a .glb, an .stl or a .3mf to MM and
-                                             DEG (Mesh)
-                                             DST .step, .glb, .stl, .3mf, .dxf, .xbf, or .xml: an MJCF of the
-                                             document (the robot description), its meshes in assets/ beside it,
-                                             a scene.xml beside it where none is; .urdf: the same as ROS reads
-                                             it, meshes/ beside it; --zero takes either at a mechanism state;
-                                             what each holds said on stderr (--json: its row's robot)
-cad glb|stl|threemf export SRC DST [DST ...] [--json]
-                                             a mesh to the other two mesh kinds
-cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
+cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]
+                                             one file a command, as cp writes one, its format by DST's
+                                             suffix; SRC a model's .xbf (the file, read as it is, never as
+                                             the model the engine holds), a .step or a mesh; --tolerance
+                                             and --angle (a model's, an xbf's, a STEP's) mesh a .glb, an
+                                             .stl or a .3mf to MM and DEG (Mesh)
+                                             DST .step, .glb, .stl, .3mf, .dxf, .xbf (a copy of the
+                                             document), or .xml: an MJCF of the document (the robot
+                                             description), its meshes in assets/ beside it, a scene.xml
+                                             beside it where none is; .urdf: the same as ROS reads it,
+                                             meshes/ beside it; --zero takes either at a mechanism state;
+                                             what each holds said on stderr (--json: its row's robot); of
+                                             a mesh, the other two mesh kinds
+cad export BOARD|SCHEMATIC DIR --to KIND [--json]
+                                             KiCad's outputs, by kicad-cli, into the folder DIR: a board's
+                                             gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or
+                                             dxf; a schematic's pdf, svg, netlist or bom, run on the
+                                             project's root sheet whichever sheet is named
+cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
                 [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE|JSON|-] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
-cad TYPE snapshot --job PACKET|JSON|- [SRC] [--out DIR] [the same flags, each over every job]
+cad snapshot --job PACKET|JSON|- [SRC] [--out DIR] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names, one
                                              that names no path in DIR as <input's stem>-<label>.png; SRC,
-                                             a packet's input and inspect's DOC or a ref's FILE may be a
+                                             a packet's input and inspect's FILE or a ref's FILE may be a
                                              share's link: this computer's copy of it (Sharing)
-cad serve DOC [--port N]
-cad xbf inspect ID|FILE.xbf [REF] [--query Q] [--json] | step|glb inspect FILE [REF] [...]
-                                             what the document holds, then its build closure; with REF
-                                             (**References**): an element's facts and
-                                             what made it, or a part's or an assembly's volume, mass and
-                                             world bounds (a part's placement too); of a GLB, its nodes,
-                                             meshes and animations (an STL or a 3MF, and a ref into any
-                                             mesh, is refused, saying what shows it); Q summary (the default
-                                             without REF), structure (the summary with nothing measured),
-                                             closure, geometry (the default with REF) or build
-cad urdf|srdf validate FILE [--strict] [--json] [the type's own options]
-                                             its findings, each a severity, a code and a location
-cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no document type, an
-                                             integration's operation), compiled by MuJoCo: what it
-                                             refuses or warns of, the model-health checks, what collides
-                                             as what and the contact excludes; in cad[mujoco]'s
-                                             environment (made first) where this one holds no mujoco
-cad orcaslicer presets KIND [--match TEXT] [--profiles DIR] [--json]
-                                             DEPRECATED, with `complete` below: unlisted, and said so
-                                             on stderr when run.
-                                             the OrcaSlicer presets of one kind (machine, process,
-                                             filament) a person can select, by name: an integration's
-                                             operation on its tool's own files, found by name
-cad orcaslicer complete --printer P --process P --filament F [--out DIR] [--profiles DIR] [--json]
-                                             those presets written complete for OrcaSlicer's command
-                                             line, and the files it wrote; always in this process
-cad xbf|step dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
-cad xbf|step dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+cad snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
+                                             one sheet drawn flat (the root unless --sheet names another)
+cad inspect FILE [REF] [--query Q] [--json]  a model's .xbf, a .step or a .glb: what the document holds,
+                                             then its build closure; with REF (**References**): an
+                                             element's facts and what made it, or a part's or an
+                                             assembly's volume, mass and world bounds (a part's placement
+                                             too); of a GLB, its nodes, meshes and animations (an STL or a
+                                             3MF, and a ref into any mesh, is refused, saying what shows
+                                             it); Q summary (the default without REF), structure (the
+                                             summary with nothing measured), closure, geometry (the
+                                             default with REF) or build
+cad inspect FILE --interference [--pose NAME|NAME@SECONDS|JSON]... [--fit A B]... [--min-volume MM3] [--json]
+                                             which parts share volume: every pair whose boxes meet
+                                             answered, by the kernel wherever their meshes do not show
+                                             air between them, as built and at each pose given; a named fit
+                                             listed apart; each pair not measured said, and never passed
+cad inspect FILE --ranges [--step STEP] [--clearance MM] [--joint NAME]... [--verbose] [--json]
+                                             each joint's stops, found from its parts' surfaces
+cad inspect ROBOT.urdf|ROBOT.srdf [--strict] [--json] [the type's own options]
+                                             a robot description's conformance check: its findings, each
+                                             a severity, a code and a location
+cad inspect BOARD [--json] | SCHEMATIC [REF] [--json]
+                                             the board in one look, by the library's reader; a
+                                             schematic's sheets, parts and nets, with REF (#U3, #U3.7,
+                                             #net:VBUS, #sheet:/Power/, #wire:<uuid>) what that names
+cad dfm SRC [--process cnc] [--axes 3|4|5] [--turning] [--tools D,D] [--stock XxYxZ]
+cad dfm SRC [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY]
-cad xbf|step dfm SRC [--process molding] [--pull AXIS|X,Y,Z] [--wall-limit DEG] [--zero-tol DEG]
+cad dfm SRC [--process molding] [--pull AXIS|X,Y,Z] [--wall-limit DEG] [--zero-tol DEG]
                 [--cavities N] [--candidates]
-cad xbf|step dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pbf] [--build-volume XxYxZ]
+cad dfm SRC [--process printing] [--technology fdm|sls|sla|mjf|pbf] [--build-volume XxYxZ]
                 [--angle-limit DEG] [--layer-height H] [--nozzle D] [--samples N] [--candidates]
-cad stl|glb|threemf dfm FILE [--process printing] [printing's options as above] [--units U]
-cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
+cad dfm FILE [--process printing] [printing's options as above] [--units U]
+cad dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius R] [--kerf W]
                 [--sheet-size XxY] [--units U]
       ... [--material M] [--json]
-                                             the manufacturing check: SRC a file or, for model, a document
-                                             id or an .xbf;
+                                             the manufacturing check: SRC a model's .xbf or a .step,
+                                             FILE a mesh or a .dxf;
                                              --process, given none, the parts' declared one (a model,
                                              an xbf; a STEP keeps none) or a DXF's sheet; --units an
                                              STL's, and a DXF's that declares none (not checked
@@ -83,34 +86,30 @@ cad dxf dfm FILE [--process sheet] [--thickness T] [--k-factor K] [--bend-radius
                                              integration's (findings at face refs, layers), a mesh the
                                              trimesh integration's (at x, y, z); the general
                                              rules' verdicts (no shop's limits) and
-                                             every measurement
-cad xbf|step interference SRC [--pose NAME|NAME@SECONDS|JSON]...
-                [--fit A B]... [--min-volume MM3] [--json]
-                                             which parts share volume: every pair whose boxes meet
-                                             answered, by the kernel wherever their meshes do not show
-                                             air between them, as built and at each pose given; a named fit
-                                             listed apart; each pair not measured said, and never passed
-cad xbf|step solve SRC [--occurrence PART] [--json]
+                                             every measurement; a KiCad file is refused, naming its
+                                             check (cad kicad drc, cad kicad erc)
+cad fea SRC [--occurrence PART] [--json]
                                              a stress study's setup, the kernel's: the parts, the pairs
                                              that touch and a part's faces by ref; writes nothing
-cad xbf|step solve SRC --study STUDY --out DIR [--deck] [--verbose] [--json]
+cad fea SRC --study STUDY --out DIR [--deck] [--verbose] [--json]
                                              the solve, meshed by netgen and solved by CalculiX's ccx
                                              (cad[calculix]): result.json, result.glb, result.vtu and a
                                              picture of each field written into DIR, its findings and
                                              every number; exit 1 when a part yields or misses a check
-cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
-                                             KiCad's DRC and fabrication outputs, by kicad-cli; the board
-                                             in one look, by the library's reader
-cad kicad_sch erc SCHEMATIC [--json] | export SCHEMATIC --to pdf|svg|netlist|bom -o DIR
-                                             KiCad's ERC and the schematic's outputs, by kicad-cli, run on
-                                             the project's root sheet whichever sheet is named
-cad kicad_sch inspect SCHEMATIC [REF] [--json]
-                                             its sheets, parts and nets; with REF (#U3, #U3.7, #net:VBUS,
-                                             #sheet:/Power/, #wire:<uuid>), what that names
-cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
-                                             one sheet drawn flat (the root unless --sheet names another)
+cad kicad drc BOARD [--json]                 KiCad's DRC, by kicad-cli: errors and unconnected items
+                                             fail it, warnings are said
+cad kicad erc SCHEMATIC [--json]             KiCad's ERC, by kicad-cli, run on the project's root sheet
+                                             whichever sheet is named
+cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no document type, an
+                                             integration's operation), compiled by MuJoCo: what it
+                                             refuses or warns of, the model-health checks, what collides
+                                             as what and the contact excludes; in cad[mujoco]'s
+                                             environment (made first) where this one holds no mujoco
+cad show [FILE|FOLDER ...] [--json] [--no-open]
+                                             the running server's page: each file's, a folder opened as
+                                             a project, or the home (The viewer and the snapshot)
 cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
-cad share FILE|ID [--yes] [--json]           one file shared, by its canonical path: a model by its .xbf (its
+cad share FILE [--yes] [--json]              one file shared, by its canonical path: a model by its .xbf (its
                                              view bundle, its .xbf and the files its build closure names: its
                                              script, modules and the files it read), any other file with its
                                              view; uploaded by this process for anyone with its link to open and
@@ -118,7 +117,7 @@ cad share FILE|ID [--yes] [--json]           one file shared, by its canonical p
                                              the .xbf was written, and a .py, are refused; the first share on a
                                              computer is refused without --yes, the person's yes (Sharing)
 cad share status|on|off [--json]             whether sharing is on and agreed, and the live shares; on, off
-cad share delete FILE|ID|LINK [--yes] [--json]
+cad share delete FILE|LINK [--yes] [--json]
                                              the share of a file this computer shared, or of a delete link,
                                              deleted from the service; asked first
 cad import LINK [FOLDER] [--json]            a share's files downloaded by this process into FOLDER (./<name>; one
@@ -128,44 +127,47 @@ cad import LINK [FOLDER] [--json]            a share's files downloaded by this 
                                              downloaded (Importing)
 ```
 
-The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
-(`cad.registry`); `export` and `snapshot` are shared by every type that has them, `inspect` where a type
-has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
-type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
-before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`; `wrong_type`), as is a
-file of no type (`robot.dae is not a urdf file: cad urdf takes .urdf`), and a file of the type that is not
-there, by every type's every operation alike (`no such file: part.stl`; `not_found`), as is a file an option
-names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
-schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). A model's document
-is a type of its own, `xbf`, held by the engine or saved as its `.xbf`: `cad xbf export ID ...` takes its id,
-a file's type refuses one (`ID is a model's document id, not a .step file: use cad xbf export`), and `cad xbf`
-refuses a file the same way, but its `.xbf`, which the registry names `xbf`'s. `cad xbf <operation>
-arm.xbf` reads the file as the file it is, never as the model the engine holds, so its `inspect` says the
-file's state, lists its parameters read-only and names no `made_by`; the engine's verbs and the library's
-functions tell an id from the file themselves (`cad._internal.document_type.is_file`). An argument is
-that file where its suffix is `.xbf`, in any case, which no document id ends in. Every refusal that sends an
-`.xbf` on names `cad xbf`. `cad model <operation> ...`, the earlier spelling, runs `cad xbf <operation> ...`
-(`cad_server.cli.model`): the same output, `--json` and exit status, after one line on stderr but under `--json`,
-`cad model: deprecated and will be removed: use cad xbf`. Unlisted, it is kept for the skill text of releases up
-to 0.12, which says it, and goes 30 days after the release whose skills stop (law 14's first tier). The commands are the server's
-(`cad_server.cli.document_types`), each type's its own module (`python -m cad_server.cli.step export ...`);
+The rule: `cad <verb> <file>`, the file's type by its suffix as the registry names it (`cad.registry.type_of`):
+`export`, `inspect`, `snapshot`, `dfm` and `fea` each run what the file's type does for them
+(`cad.registry.VERBS`, `operation_for`; `inspect --interference` and `--ranges` are `MODES`), and a type that
+lacks the verb is refused in one line naming the types that have it, before anything runs, exit 2
+(`r.urdf is a urdf, which has no dfm: cad dfm takes xbf, step, stl, glb, threemf and dxf files`;
+`wrong_type`), as is a file of no type (`x.dae is not a file cad export takes: it takes .xbf, .step, ...`), and a
+file of the type that is not there, by every verb alike (`no such file: part.stl`; `not_found`), as is a file an
+option names that is not there (`--urdf robot.urdf: no such file`; `--annotation`, `--measurements`, `--job`, a
+schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). `cad <verb>
+FILE --help` gives that file's type's options, `cad <verb> --help` every form. An integration's own operations on
+its tool's files are `cad <integration> <operation> <file>` (`cad kicad drc`, `cad kicad erc`, `cad mujoco check`:
+`cad_server.cli.integrations`). A model's document is a type of its own, `xbf`, saved as its `.xbf`: a verb reads
+the file as the file it is, never as the model the engine holds, so its `inspect` says the file's state, lists its
+parameters read-only and names no `made_by`; the engine's verbs and the library's functions tell an id from the
+file themselves (`cad._internal.document_type.is_file`). An argument is that file where its suffix is `.xbf`, in
+any case, which no document id ends in. The commands are the server's (`cad_server.cli.verbs`, over each type's
+runner, `cad_server.cli.document_types`), each verb's its own module (`python -m cad_server.cli.export ...`);
 `python -m cad_server.engine VERB ...` takes the engine's verbs, its own entry.
 
-Every `SRC` and `DOC` is an on-disk CAD file's path, for the file's type, or, for `cad xbf`, a model's document id
-(`ids`) or its `.xbf`: a model's id is what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
-id is read as the engine holds it, never built: one it does not hold is refused with the command
-that builds it again, `cad run <the script that defines it>`. A script is never a source: `x.py`
+A spelling the command had runs nothing (law 14's first tier): `cad xbf export a.xbf a.step`, `cad model ...`,
+`cad step solve`, `cad urdf validate`, `cad kicad_pcb drc`, `cad kicad_pcb export`, `cad viewer`, `cad status`,
+`cad stop`, bare `cad server` and `cad orcaslicer` are each answered in one line with the spelling the command has
+now, exit 2 (`usage`): `'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its options`. One
+table holds them (`cad_server.cli._hint`: `_RENAMED`, `_BARE`, `_OPERATIONS_NOW`, and a deprecated integration's
+words).
+
+Every `SRC` and `FILE` is an on-disk CAD file's path, a model's its `.xbf`, which `cad run SCRIPT.py` writes,
+printing its page (`view: <engine>/<id>`). The id the engine names a document by (`ids`), which the viewer's
+pages and the CAD app pass, is read as the engine holds it, never built: one it does not hold is refused with the
+command that builds it again, `cad run <the script that defines it>`. A script is never a source: `x.py`
 and `x.py::fn` are refused as any other file that is no document is.
 
 Every build and every verb goes through the engine: no command runs one in its own process. A
 verb that starts the engine to answer says so, `engine started` on stderr, once, and only when the
-engine that answers is the one it started (`client.on_started`); `status` and `stop` never start
+engine that answers is the one it started (`client.on_started`); `cad server status` and `stop` never start
 one, nor does an MCP host closing its session.
 `daemon=False` on the Python functions (`Model.build`, `export`, `snapshot`) is a seam for tests
 and debugging only: it runs in this process, cold, and no document is served: no page, and
-nothing for `inspect` to read by its id.
+nothing for `inspect` to read of it.
 
-**Help** -- `-h` or `--help` at any depth, or `cad help <command ...>` (`cad help step export`) -- prints
+**Help** -- `-h` or `--help` at any depth, or `cad help <command ...>` (`cad help export`) -- prints
 the help on stdout and exits 0, and does nothing else: it moves no earlier release's state, writes nothing
 and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
 person reads, and nothing is sent by default until it is said.
@@ -189,7 +191,7 @@ reading stdout always finds an answer, with nothing else on stdout and no traceb
 a command takes it, puts one on stderr):
 
 ```
-{"ok": false, "error": "part.glb is a glb, not a stl: use cad glb snapshot", "reason": "wrong_type"}
+{"ok": false, "error": "p.glb is a glb, which has no fea: cad fea takes xbf and step files", "reason": "wrong_type"}
 ```
 
 `reason` is one of a fixed set, added to and never renamed (`cli_errors.REASONS`): `usage` (a command,
@@ -306,7 +308,7 @@ status 1, no traceback; caught, nothing said. Builds run in the daemon's warm wo
 `.xbf`, which has no size to set.
 `CAD_ENGINE_DEFAULT_PORT` stands in for 3245 as the default port (`daemon.default_port`): the
 tests' seam, so a suite holds or frees a default of its own and never touches the machine's 3245.
-`CAD_ENGINE_MEMO=0` turns memo hits off. `CAD_VIEWER_WARM=0` keeps `cad viewer`
+`CAD_ENGINE_MEMO=0` turns memo hits off. `CAD_VIEWER_WARM=0` keeps `cad show`
 from warming the engine at its launch (**The viewer and the snapshot**). `CAD_ENGINE_MESH=processes|inline`
 picks how parts are meshed. The default, `processes`, uses a warm pool of
 processes started with the first page or view, each handed one part's shape as bytes,

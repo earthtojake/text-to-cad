@@ -43,7 +43,7 @@ engine, beside the document, and the document's scene brings them as its own lig
 rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
 page put up in place of the theme's. Preview is drawn as any file's is.
 
-`cad <type> snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
+`cad snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
 `snapshot(preview=True)`) draws the viewer's Preview in place of a display mode, by the same raster: the
 model in its materials under the viewer's rig (`photographicStudioRig.js`: its key from the same direction
 at the same strength, shadowing the model, and the look's `studio.hdr` -- the viewer's room and softboxes --
@@ -58,7 +58,7 @@ draws it: a frame holds no light past 1, so a highlight comes out the tone a ful
 ambient occlusion and no reflection in the floor; glass is drawn at its preview alpha; and OCCT's baked
 reflections read lighter on a polished metal. The first Preview of a document bakes its light (seconds).
 
-`cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
+`cad snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
 light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
@@ -90,7 +90,7 @@ object's `preset` (a preset or a pair), `position`, `target`, `up`, `direction`,
 `orthographicHalfHeight` and `name` are checked as the viewer checks a camera, its lens (`projection`,
 `focalLength`) is the display's (`display.camera`), and a view straight down or up with no `up` has +Y
 up the picture, as `top` and `bottom` do. SRC is a whole document: one that names something inside a
-document (`ID#bracket`, `arm.step#arm/face 3`) is refused, saying how to draw a part alone
+document (`arm.xbf#bracket`, `arm.step#arm/face 3`) is refused, saying how to draw a part alone
 (`display.isolated`). `--annotation FILE` draws the viewer's annotation over the
 model -- each mark on the part it was drawn on, wherever the picture places that part -- from an
 annotation or the Quick Edit packet that carries one, as its JSON, a file of it, or `-` (standard input),
@@ -154,7 +154,7 @@ its `output` the file]}`.
 Windows PowerShell 5.1 takes the double quotes out of every argument it passes a program (and cuts what is
 left at its spaces), so `--job '<packet>'` arrives there as `{input:...}`: a `--job` or `--annotation` given JSON
 with its quotes taken out is refused before anything is read (`invalid_argument`, exit 2), in one line saying so
-and to pipe it in instead, `'<packet>' | cad <type> snapshot --job -` (the parser's screen, `engine/cli.py`
+and to pipe it in instead, `'<packet>' | cad snapshot --job -` (the parser's screen, `engine/cli.py`
 `_unquoted`). The page writes a packet in ASCII alone, every other character its `\u` escape, since a pipe there
 is ASCII by default.
 
@@ -206,7 +206,7 @@ stops with it;
 where none can be made the engine fails the picture (`snapshot.NO_GL`). The caller then draws it itself where it
 can (`snapshot.drawable_here`: the kernel in its process and a context it makes, on its own `DISPLAY`), saying so
 on stderr -- a held document's picture from an xbf the engine exports to a temporary folder --; a `cad` command
-that carries no kernel but has a display (`xvfb-run cad urdf snapshot ...`) runs the same snapshot in the
+that carries no kernel but has a display (`xvfb-run cad snapshot ...`) runs the same snapshot in the
 installation's base from its own process, which draws it so (`cli._drawn_elsewhere`); and with neither the
 snapshot fails, naming what to install. Nothing is written but OUT.
 

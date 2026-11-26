@@ -107,24 +107,24 @@ cad run build.py                                 # about 30 s: the steps below, 
 cad run src/part_models.py                       # orbit.3dshapes/
 
 # check the board
-cad kicad_sch erc orbit.kicad_sch
-cad kicad_pcb drc orbit.kicad_pcb
+cad kicad erc orbit.kicad_sch
+cad kicad drc orbit.kicad_pcb
 cad run check_orbit.py                           # prints nothing when the board is clean
 
 # fabrication files
-for k in gerbers drill pos bom pdf; do cad kicad_pcb export orbit.kicad_pcb --to $k -o fab/$k; done
-cad kicad_sch export orbit.kicad_sch --to pdf -o fab/schematic
-cad kicad_pcb export orbit.kicad_pcb --to dxf -o DXF            # the outline and drilled holes
-cad kicad_pcb export orbit.kicad_pcb --to glb -o GLB            # the board with its parts, to look at
+for k in gerbers drill pos bom pdf; do cad export orbit.kicad_pcb fab/$k --to $k; done
+cad export orbit.kicad_sch fab/schematic --to pdf
+cad export orbit.kicad_pcb DXF --to dxf            # the outline and drilled holes
+cad export orbit.kicad_pcb GLB --to glb            # the board with its parts, to look at
 
 # the printed parts, read from the board: its STEP with every part, converted once to an xbf
-cad kicad_pcb export orbit.kicad_pcb --to step -o STEP          # STEP/orbit.step
-cad step export STEP/orbit.step XBF/orbit.xbf
+cad export orbit.kicad_pcb STEP --to step          # STEP/orbit.step
+cad export STEP/orbit.step XBF/orbit.xbf
 cad run src/orbit.py                             # prints each model's id
 cad run src/check_fit.py                         # interference and clearances, also written to tmp/fit.txt
 cad run src/exports.py                           # 3MF/ of each printed part and the two-material front,
                                                  # STEP/orbit_assembly.step, GLB/orbit_assembly.glb
-cad threemf dfm 3MF/baffle.3mf --process printing --angle-limit 45 --samples 20000   # and stand.3mf, diffuser.3mf
+cad dfm 3MF/baffle.3mf --process printing --angle-limit 45 --samples 20000   # and stand.3mf, diffuser.3mf
 ```
 
 `build_libraries.py` writes the same libraries on every run, and `board.py all` makes the same placement, tracks
@@ -136,7 +136,7 @@ and vias. After a board change, export the STEP and the xbf again before
 `render.py` is a Blender scene as a plain `import bpy` script, written the render skill's way: the clock at the
 end of its explode, out of the stand, with the LEDs lit to show 2:14:23. It reads `GLB/orbit_assembly.glb` (every
 part and the explode, `cad run src/exports.py`) and `GLB/orbit.glb` (the board's copper, mask and silkscreen,
-`cad kicad_pcb export orbit.kicad_pcb --to glb -o GLB`), laying the board's layers on the assembly's PCB, so make
+`cad export orbit.kicad_pcb GLB --to glb`), laying the board's layers on the assembly's PCB, so make
 both first. `cad run` gives it cad's blender integration: Blender's module on Python 3.13, with cad, whose
 `cad.blender.load` it loads both GLBs with.
 
@@ -165,7 +165,7 @@ downloaded.
   (it rests on it when screwed), 0.40 mm over every part in a pocket (R3/R4/R6/R8/R9, C9/C10, U5); stand
   0.30 mm round the board's rim (the slot), 0.40 mm round the receptacle and the polyfuse; diffuser 0.30 mm from
   the stand; baffle 0.80 mm from the stand.
-- **Printing** (`cad threemf dfm --process printing --angle-limit 45 --samples 20000` of each 3MF, the files a
+- **Printing** (`cad dfm --process printing --angle-limit 45 --samples 20000` of each 3MF, the files a
   slicer gets; FDM limits from the cad skill's printing reference): baffle walls p05 1.6 mm (FDM unsupported 1.6:
   pass), 48.6 mm2 of pocket and pilot-hole ceilings (bridges of 2.6-4 mm, under FDM's 10 mm), support 0.2 %; its
   thinnest readings, 0.46 mm, are the webs between the light sensor's window and the pockets of C9 and R9, 0.3 and

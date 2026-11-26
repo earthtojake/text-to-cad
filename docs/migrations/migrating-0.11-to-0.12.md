@@ -1,9 +1,11 @@
 # Migrating from 0.11 to 0.12
 
 This guide covers what changes for a person and for a program that talks to the cad server when cad
-stops keeping a record of each document. A document is its file: cad keeps one small library file
-(the project folders, the files you opened or pinned) and nothing else about a document. Nothing
-needs doing by hand: the first start of the new release carries what it can and removes the rest.
+stops keeping a record of each document, and when every command and the library's functions become a verb,
+then a file. A document is its file: cad keeps one small library file (the project folders, the files you
+opened or pinned) and nothing else about a document. Nothing needs doing by hand: the first start of the new
+release carries what it can and removes the rest; a command line of 0.11 says what to type now, and a script
+of 0.11 keeps running, with a warning for each spelling it should change.
 
 Each change names its tier of the compatibility law ([law 14](../../packages/cad/README.md#the-design-laws),
 "Compatibility, by who pays for a break"), which says what a change of its kind keeps working.
@@ -27,9 +29,8 @@ while that server runs.
 - **A document lives while its file does.** With a model's `.xbf` gone, its id names nothing, and
   running its script writes the file again. The states `unsaved` and `detached` are gone, and no
   message names a command that builds a document again.
-- **`cad delete` is removed.** It is answered as any unknown command is. cad has no copy of a
-  document to delete: to be rid of one, delete its file. The rule that keeps a command the skills used working for
-  30 days was waived for this one by the repository's owner.
+- **`cad delete` is removed.** It is answered as any unknown command is: it has no replacement to name. cad has
+  no copy of a document to delete: to be rid of one, delete its file.
 - **A run takes a model from its `.xbf` whenever the file holds the model's key**, whoever wrote
   the file last. 0.11 built again when the file was not the one the server had written.
 - **A script moved to another folder is a new document**, with the id of its `.xbf` there. Moved
@@ -40,23 +41,80 @@ while that server runs.
   beside any. With `--json`, the key `identity` is gone and `library` says what the first start
   carried.
 
-## What you write in a script and at the command line (tier 1)
+## The command line (tier 1)
 
-A model's file is its `.xbf`, and the document type is `xbf`: write the decorator, the reader, the
-operations and the command by that name. Each spelling that named the type `model` still works, says
-once that it is deprecated and which spelling to use, and goes away after the 30 days the compatibility
-law keeps it.
+Every command is a verb, then a file, and the file's suffix says its type: `cad export SRC DST`, `cad inspect
+FILE`, `cad snapshot FILE OUT.png`, `cad dfm FILE`, `cad fea FILE`. A verb a type lacks is refused in one line
+naming the types that have it. A tool's own checks are its integration's: `cad kicad drc BOARD`, `cad kicad erc
+SCHEMATIC`, `cad mujoco check MODEL.xml`. A model is given by its `.xbf`, which its run writes; the id a run
+prints still works, and no text asks for it.
+
+A spelling 0.11 had runs nothing now: it answers in one line with the one that does it, and exits 2
+(`'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its options`).
+
+| 0.11 | 0.12 |
+| --- | --- |
+| `cad xbf export arm.xbf arm.step arm.stl`, `cad step export ...`, any `cad <type> export` | `cad export arm.xbf arm.step`, then `cad export arm.xbf arm.stl`: one destination a command, its format by its suffix |
+| `cad <type> snapshot FILE OUT.png` | `cad snapshot FILE OUT.png` |
+| `cad <type> inspect FILE [REF]` | `cad inspect FILE [REF]` |
+| `cad <type> dfm FILE` | `cad dfm FILE` |
+| `cad xbf interference FILE`, `cad step interference FILE` | `cad inspect FILE --interference` |
+| `cad xbf ranges FILE`, `cad step ranges FILE` | `cad inspect FILE --ranges` |
+| `cad xbf solve FILE`, `cad step solve FILE` | `cad fea FILE` |
+| `cad urdf validate ROBOT.urdf`, `cad srdf validate ROBOT.srdf` | `cad inspect ROBOT.urdf`, `cad inspect ROBOT.srdf`: the same check, options and exit status |
+| `cad kicad_pcb drc BOARD`, `cad kicad_sch erc SCHEMATIC` | `cad kicad drc BOARD`, `cad kicad erc SCHEMATIC` |
+| `cad kicad_pcb export BOARD --to KIND -o DIR`, a schematic's the same | `cad export BOARD DIR --to KIND` |
+| `cad model <operation> ...` | the verb above |
+| `cad viewer [FILE]` | `cad show [FILE\|FOLDER]` |
+| `cad status`, `cad stop` | `cad server status`, `cad server stop` |
+| bare `cad server` | `cad server start` (`--foreground` runs it in that process) |
+| `cad orcaslicer presets\|complete` | none: OrcaSlicer's own command line slices a project saved from its app as it is |
+| `cad serve DOC` | `cad show DOC`; `cad serve` is answered as any unknown command is |
+| `cad export <id> arm.step` | `cad export arm.xbf arm.step` (the id still works) |
+
+`cad export a.xbf b.xbf`, refused in 0.11, writes a copy of the document, its build closure with it.
+`cad dfm` of a KiCad board or schematic is refused, naming `cad kicad drc` or `cad kicad erc`.
+
+## The library (tier 2)
+
+The verbs are the library's too, one to one with the command's, each taking a file, the handle a model's
+call returns, or for `export` a shape: `cad.export(source, destination)`, `cad.inspect(source, ...)`
+(`interference=True`, `ranges=True`), `cad.snapshot(source, out)`, `cad.dfm(source, ...)`,
+`cad.fea(source, ...)`, and `cad.save(shape, "plate.xbf")`, a shape a program holds saved as a model.
+KiCad's checks are `cad.kicad.drc(board)` and `cad.kicad.erc(schematic)`. A source with no destination is
+refused in one line, as is a `.xbf` given to `cad.export` with a shape (`cad.save`'s) and any other file given
+to `cad.save` (`cad.export`'s). A model's file is its `.xbf`, and the document type is `xbf`.
+
+Each spelling of 0.11 still works, says once a process that it is deprecated and which spelling to use
+(`CadDeprecationWarning`, at the line that spelled it), and keeps working for at least one minor release:
 
 | 0.12 writes | Still works, with a warning |
 | --- | --- |
-| `from cad import xbf`, `@xbf`, `@xbf("XBF/arm.xbf")`, `xbf(shape, "arm.xbf")` | `from cad import model` and `@model`, `model(shape, ...)` (`cad.model is deprecated; use cad.xbf`) |
-| `xbf.param(...)`, `xbf.read(path)`, `xbf.export(...)` and the other operations | The same on `model` (`cad.model.export`, ...) |
+| `cad.export("arm.xbf", "arm.glb")`, `cad.export(arm(), "arm.glb")` | `cad.xbf.export(...)`, `cad.step.export(...)` and every `cad.<type>.export` |
+| `cad.snapshot(source, "arm.png")`, `cad.inspect(source)` | `cad.<type>.snapshot(...)`, `cad.<type>.inspect(...)` |
+| `cad.inspect(source, interference=True, poses=[...], fits=[...])` | `cad.xbf.interference(...)`, `cad.step.interference(...)` |
+| `cad.inspect(source, ranges=True)` | `cad.xbf.ranges(...)`, `cad.step.ranges(...)` |
+| `cad.inspect("robot.urdf")`, `cad.inspect("robot.srdf", urdf=...)` | `cad.urdf.validate(...)`, `cad.srdf.validate(...)` |
+| `cad.dfm(source, process="cnc", ...)` | `cad.<type>.dfm(...)` |
+| `cad.fea(source, study=..., out=...)` | `cad.xbf.solve(...)`, `cad.step.solve(...)` |
+| `cad.kicad.drc(board)`, `cad.kicad.erc(schematic)` | `cad.kicad_pcb.drc(...)`, `cad.kicad_sch.erc(...)` |
+| `cad.export(board, "fab/gerbers", to="gerbers")` | `cad.kicad_pcb.export(board, to="gerbers", out="fab/gerbers")`, a schematic's the same |
+| `cad.save(shape, "plate.xbf")` | `xbf(shape, "plate.xbf")`, `xbf(shape, name="plate")`, `model(shape, ...)` |
+| `cad.export(shape, "plate.step")` | `step(shape, "plate.step")`, and `glb`, `stl`, `threemf` and `dxf` given a shape |
+| `from cad import xbf`, `@xbf`, `@xbf("XBF/arm.xbf")` | `from cad import model` and `@model` (`cad.model is deprecated; use cad.xbf`) |
+| `xbf.param(...)`, `xbf.read(path)` | the same on `model` |
 | `cad.xbf.read(path)` | `cad.read_xbf(path)` |
-| `cad xbf export ...` and its other operations | `cad model export ...` (a line on stderr, none with `--json`) |
 | Kind `xbf` in `GET /api/v1/documents` and the routes `/api/v1/documents/xbf/<id>/...` | Kind `model` and `/api/v1/documents/model/<id>/...`: answered as the same documents |
 
-A model's `.xbf` is written by every run that declares a model, at the decorator's path or, with none,
-`<name>.xbf` beside the script.
+The decorators, `xbf.read` and `xbf.param` are as they were, and warn of nothing. A model's `.xbf` is written by
+every run that declares a model, at the decorator's path or, with none, `<name>.xbf` beside the script.
+
+## How long an earlier spelling lasts
+
+A `cad` command or option the skills used is replaced, not kept: its old spelling answers in one line with the
+new one. A library spelling keeps working, with a warning, for at least one minor release. Nothing another
+program calls (an installer, an earlier release's updater, an agent app's launch) is removed before its
+replacement ships: `cad setup --engine-update`, `cad plugin update` and `cad plugin --refresh` run as they did.
 
 ## The viewer
 

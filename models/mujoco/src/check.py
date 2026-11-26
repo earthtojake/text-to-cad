@@ -44,11 +44,11 @@ def colliding(model: mujoco.MjModel) -> dict[str, tuple[str, tuple[float, ...]]]
 
 
 def findings(path: Path) -> tuple[list[str], list[str]]:
-    """The errors and warnings of ``cad mujoco check`` (an ``.xml``) or ``cad urdf validate``."""
+    """The errors and warnings of ``cad mujoco check`` (an ``.xml``) or ``cad inspect`` (a ``.urdf``)."""
+    import cad
     from cad import mujoco as cad_mujoco
-    from cad import urdf
 
-    result = cad_mujoco.check(path) if path.suffix == ".xml" else urdf.validate(path)
+    result = cad_mujoco.check(path) if path.suffix == ".xml" else cad.inspect(path)
     said = {"error": [], "warning": []}
     for finding in result.findings:
         if finding.severity in said:

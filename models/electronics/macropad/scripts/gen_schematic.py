@@ -3,7 +3,7 @@
     python3 scripts/gen_schematic.py      (any Python 3.10+; no KiCad needed)
 
 Rerunning writes the same files (every uuid is derived from its item's name). Check with
-`cad kicad_sch erc macropad.kicad_sch` and `cad kicad_sch snapshot ... --sheet /mcu/`.
+`cad kicad erc macropad.kicad_sch` and `cad snapshot ... --sheet /mcu/`.
 """
 from __future__ import annotations
 

@@ -95,6 +95,6 @@ one in a cache.
 ## Projects
 
 A project (a folder a person opened as one: the home's Import › Folder, a standalone document's Import its folder as
-a project, or `cad viewer <folder>`) is not browser storage either: it is an entry of the library in the server's
+a project, or `cad show <folder>`) is not browser storage either: it is an entry of the library in the server's
 state folder, which every CAD view reads, with the files a person opened or pinned. Nothing is written to the folder
 itself, and removing a project forgets its entry alone.

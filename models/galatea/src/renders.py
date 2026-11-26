@@ -3,7 +3,7 @@
 # ///
 """Galatea's presentation stills and clips: `cad run src/renders.py [name ...]` writes them to tmp/renders/.
 
-Each still is one `cad xbf snapshot` of a document the server holds (the robot, or one
+Each still is one `cad snapshot` of a document the server holds (the robot, or one
 of the standing models of `stances.py`), drawn shaded through a long lens on a clear
 background at twice its size, then set on a pale studio backdrop with a contact shadow.
 A clip is a motion drawn frame by frame, the robot posed by its joint values under a
@@ -91,7 +91,7 @@ def snapshot(document, camera, size, extras, path):
            "outputs": [{"path": str(path), "width": size[0], "height": size[1]}]}
     if "pose" in extras:
         job["jointValues"] = extras["pose"]
-    done = subprocess.run(["cad", "model", "snapshot", "--job", json.dumps(job), "--json"], capture_output=True, text=True)
+    done = subprocess.run(["cad", "snapshot", "--job", json.dumps(job), "--json"], capture_output=True, text=True)
     if done.returncode:
         raise SystemExit(f"snapshot failed for {path.name}: {done.stdout.strip() or done.stderr.strip()}")
 

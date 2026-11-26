@@ -23,10 +23,10 @@ Why that holds, checked:
   a cold build, a body re-run whose 2,673 kernel calls all replayed, and a second cold build
   in a new daemon wrote three different files of one size; their 15,646 element names are the
   same set, each on the same geometry (a face's area and centre, an edge's length and
-  centre, a vertex's point), and refs resolve to the same elements through `cad <type> inspect`.
+  centre, a vertex's point), and refs resolve to the same elements through `cad inspect`.
   `test_memo_marker.py` holds the same for a cold build, a replay and a second cold build.
 - **`verify=True` reads it as `same`.** A leaf whose BRep differs only in order measures alike
   (**Memo functions**): a verification reports it `same`, never `differs`.
 
 The snapshot's part listing (0.7's `--mode list`) is gone by decision: `xbf.read` and `step.read`
-(a document's tree) and `cad xbf inspect DOC REF` (what a ref names) are the facts route.
+(a document's tree) and `cad inspect DOC REF` (what a ref names) are the facts route.

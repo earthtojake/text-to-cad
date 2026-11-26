@@ -28,9 +28,10 @@ file share its id, and the last build wins. Running the script again with change
 and open viewers; `python parts.py` prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url`
 is the page. No list of ids is saved: an id is found from its path (**An id's path**).
 
-`cad serve ID`, `cad xbf snapshot ID view.png`, `cad xbf export ID part.step`, and `cad
-inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
-Each reads the document as it is -- the live worker's, else its `.xbf` -- and so does the `.xbf`'s path:
+`cad show bracket.xbf`, `cad snapshot bracket.xbf view.png`, `cad export bracket.xbf part.step`, and `cad
+inspect bracket.xbf 'face 1'` take its `.xbf`; `cad inspect 'bracket.xbf#face 1'` uses the same reference syntax.
+Each reads the file as it is (and the engine's verbs, given the id, the document as the engine holds it -- the
+live worker's, else its `.xbf`):
 editing the script changes nothing until Python runs it again, and no verb imports, runs or builds a script. Only the viewer's Save of a model's
 parameters, which a person asks for in a page, writes the script and runs its last run again
 (**Parameters**). An id whose `.xbf` is gone names nothing: `no document <id> is held`
@@ -42,8 +43,8 @@ provenance asked -- while a worker holds its build, else the file read as any fi
 document and on the script that builds it (Export among them), and it is in the project its `.xbf` is in, where a
 person opened one (`viewer/projects.py`).
 
-A shape with no function -- a REPL's, a notebook cell's -- is handed over instead: `xbf(shape,
-name="bracket")` returns the same kind of handle, its id its `.xbf`'s too (**Shapes handed over**).
+A shape with no function -- a REPL's, a notebook cell's -- is saved instead: `cad.save(shape,
+"bracket.xbf")` returns the same kind of handle, its id its `.xbf`'s too (**Shapes handed over**).
 
 Ids live in the library's `cad.engine.ids`, document names (a CAD file's path or an id) in
 `cad.engine.addresses`; the daemon's transient book of live models, by id, lives in [models.py](../models.py).

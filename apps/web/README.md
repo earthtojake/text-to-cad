@@ -2,7 +2,7 @@
 
 A local-filesystem CAD review app. This directory is the React CLIENT; the
 backend is the installation's engine, hosting the `cad_server.viewer` HTTP app.
-The built client ships inside the same wheel. `cad viewer [FILE ...]` opens the
+The built client ships inside the same wheel. `cad show [FILE ...]` opens the
 engine's one page and exits; a FILE that is a folder is opened as a project, on the home. The page addresses every
 document by path, `/<uuid>`: a model's id, or a file's id once a launcher (or the page itself) registers it, derived
 from the file's canonical path. `/` is the home, and each place on it has its own address: `/` Recents,
@@ -106,19 +106,19 @@ to the page (dev refuses a `VIEWER_` variable named like a token), and the dev s
 no CORS headers, so no other origin reads what its token-bearing proxy answers. Build shared packages first; Vite needs no web
 production build.
 
-Prod is `cad viewer`, run from anywhere. It serves the client bundled by
+Prod is `cad show`, run from anywhere. It serves the client bundled by
 `scripts/bundle/bundle.sh` or installed in the wheel. To explicitly select this
 checkout's web build, start from the repository root:
 
 ```bash
 npm run build:web
 export CAD_VIEWER_DIST="$PWD/apps/web/dist"
-cad viewer --host 127.0.0.1 --json [FILE ...]
+cad show --host 127.0.0.1 --json [FILE ...]
 ```
 
 The launcher reaches the running engine and its one page (where none runs it says so in one line,
 naming `cad server start`), registers each FILE (an
-on-disk CAD file, or a document id the engine holds) by its id, prints its page's URL
+on-disk CAD file, or a share's link, this computer's copy of it) by its id, prints its page's URL
 (`/<id>`, a line each; the home's, `/`, with none), opens the first in the browser, and exits. `--json` prints the launch
 record without opening a browser; `--no-open` prints only the URL. A FILE that is not there (`not_found`), or that is
 no CAD file -- a model's script among them, which `cad run` builds and prints the page of (`wrong_type`) -- is refused
@@ -126,9 +126,6 @@ before the engine is asked, exit 2, as an id the engine does not hold is (`not_f
 the `cad` command's one `{"ok": false, "error", "reason"}` document on stdout. There is no
 foreground viewer server and no `--detach` or `viewer stop`. `cad server stop` stops
 the engine and all its clients; never stop an engine you did not start.
-
-`cad serve DOC` also reuses this engine, prints the document URL and
-exits. It has no `--foreground` or standalone server mode.
 
 The engine binds loopback on 3245, or, when another program holds it, the next free
 port, which it keeps (`cad server status` says which and why). `--port N`
@@ -387,7 +384,7 @@ bottom, centred on the window as the strip is, the bottom row its alone. DXF is 
 Display card the Background alone, and its Layers tab in the view's panel from the first frame.
 
 A project is a folder a person opened as one (Import's Folder on the home, a standalone
-document's Import its folder as a project, or `cad viewer <folder>`); its page on the home lists its
+document's Import its folder as a project, or `cad show <folder>`); its page on the home lists its
 folder's files, the CAD files and the rest together, the document just left ringed. Below 600px of
 FileViewer width (a phone) the chrome is touch-sized (the phone's scale) and the panel is a sheet under the navbar.
 Preview is the navbar's button right of Display: it takes the whole page,

@@ -53,7 +53,7 @@ def skins_of(tree, links):
 def shot(document, isolated, hidden, camera, path):
     job = {"input": document, "camera": {"preset": camera}, "display": {"mode": "shaded", "isolated": isolated, "hidden": hidden},
            "outputs": [{"path": str(path), "width": SIDE, "height": SIDE}]}
-    done = subprocess.run(["cad", "model", "snapshot", "--job", json.dumps(job)], capture_output=True, text=True)
+    done = subprocess.run(["cad", "snapshot", "--job", json.dumps(job)], capture_output=True, text=True)
     if done.returncode:
         raise SystemExit(f"snapshot failed for {path.name}: {done.stdout.strip() or done.stderr.strip()}")
 

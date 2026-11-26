@@ -46,7 +46,7 @@ geometry (tom-sized: seconds against most of a minute) and keeps the engine's na
 Convert a vendor STEP once, keep the xbf beside it, and read the xbf:
 
 ```
-cad step export vendor.step vendor.xbf
+cad export vendor.step vendor.xbf
 ```
 
 The conversion is the author's: the engine writes no derived file beside an input of its own.

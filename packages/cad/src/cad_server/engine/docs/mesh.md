@@ -19,7 +19,7 @@ A part is meshed from its binary shape bytes read into a fresh shape, so its
 mesh is a function of those bytes alone. Those are its read-back bytes, the
 bytes its document holds of it. A build's live part is written and read once to
 get them, as saving its document does. A part read from a document (the served
-document, `cad <type> export`) is written as it was read. So a worker, the
+document, `cad export`) is written as it was read. So a worker, the
 server and an export all mesh one geometry key from the same bytes.
 The geometry key is the digest of those bytes (`document.geometry_key`), so a
 reader makes a part's key again from the part it read, and takes the key the file
@@ -29,8 +29,8 @@ own keys together (a placement's look kept apart is such a copy, and keeps one k
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
 
-A GLB, an STL or a 3MF export may give its own tolerance instead: `cad xbf export ID part.stl
---tolerance 0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@glb("part.glb", tolerance=0.01)`. It is
+A GLB, an STL or a 3MF export may give its own tolerance instead: `cad export part.xbf part.stl
+--tolerance 0.01`, `cad.export(doc, "part.3mf", tolerance=0.01)`, `@glb("part.glb", tolerance=0.01)`. It is
 an absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
 the angle unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm
 tube is 47 segments round at the engine's tolerance, its facets 0.095 mm deep; 205 and 0.005 mm at
@@ -69,7 +69,7 @@ shapes without faces still use `AddOptimal`. A failed distance measurement is an
 
 What the kernel measures of an element is asked for, never extracted ahead:
 `GET /api/v1/documents/<kind>/<id>/parts/<key>/faces/<ordinal>` (`serve.py`'s
-`/api/doc/<id>/part/<key>/face/<ordinal>`, as `cad <type> inspect` asks it through the door) is its
+`/api/doc/<id>/part/<key>/face/<ordinal>`, as `cad inspect` asks it through the door) is its
 area, centroid, surface type, exact bounding box and `BRepCheck` verdict (and a round face's radii), and
 whether the part's tessellation has it (`meshed`: null while the part is not meshed --
 an inspection meshes nothing);
@@ -88,7 +88,7 @@ worker that built it (for example, after a daemon restart), answers
 that worker's last build. The line is the call's in the run that named the part. A file's
 element -- a model's declared xbf among them -- answers no `made_by`: a file names no model,
 whichever run wrote it.
-`cad xbf inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
+`cad inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
 an element answers its facts and, of a model's document, `made_by`, with its canonical `ref`, its occurrence's `path`
 (`hand/finger.2`), its part, key, kind, ordinal and name, its points (centroid, position,
 endpoints, box) placed where that occurrence stands; a part or an assembly answers what it

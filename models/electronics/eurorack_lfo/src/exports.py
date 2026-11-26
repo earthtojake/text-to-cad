@@ -8,7 +8,7 @@ Run: cad run src/exports.py"""
 
 from pathlib import Path
 
-from cad import xbf
+import cad
 
 from assembly import twin_orbit_assembly
 from hardware import jack_nut, jack_spacer, knob, pot_nut
@@ -17,10 +17,10 @@ from panel import panel, panel_art, panel_cut
 ROOT = Path(__file__).resolve().parent.parent      # the project folder
 
 if __name__ == "__main__":
-    xbf.export(panel_cut, ROOT / "DXF" / "twin_orbit_panel_cut.dxf")
-    xbf.export(panel_art, ROOT / "DXF" / "twin_orbit_panel_art.dxf")
-    xbf.export(panel, ROOT / "STEP" / "twin_orbit_panel.step")
-    xbf.export(twin_orbit_assembly, ROOT / "STEP" / "twin_orbit_assembly.step")
-    xbf.export(twin_orbit_assembly, ROOT / "GLB" / "twin_orbit_assembly.glb")
+    cad.export(panel_cut, ROOT / "DXF" / "twin_orbit_panel_cut.dxf")
+    cad.export(panel_art, ROOT / "DXF" / "twin_orbit_panel_art.dxf")
+    cad.export(panel, ROOT / "STEP" / "twin_orbit_panel.step")
+    cad.export(twin_orbit_assembly, ROOT / "STEP" / "twin_orbit_assembly.step")
+    cad.export(twin_orbit_assembly, ROOT / "GLB" / "twin_orbit_assembly.glb")
     for name, m in (("knob", knob), ("jack_nut", jack_nut), ("jack_spacer", jack_spacer), ("pot_nut", pot_nut)):
-        xbf.export(m, ROOT / "STEP" / f"{name}.step")
+        cad.export(m, ROOT / "STEP" / f"{name}.step")

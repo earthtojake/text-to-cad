@@ -1,4 +1,4 @@
-# Files written on request (cad <type> export, exports.py): reproducible from the code.
+# Files written on request (cad export, exports.py): reproducible from the code.
 /STEP/
 /STL/
 /GLB/
@@ -6,7 +6,7 @@
 /DXF/
 /tmp/
 __pycache__/
-# The board's fabrication outputs (cad kicad_pcb export, cad kicad_sch export).
+# The board's fabrication outputs (cad export, cad export).
 /fab/
 # The 3D models src/vendor_parts.py writes for the footprints that name them (${KIPRJMOD}/macropad.3dshapes).
 /macropad.3dshapes/

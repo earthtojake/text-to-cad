@@ -40,7 +40,7 @@ blank line changes no digest; a module the model loads and does not reach holds 
 `inputs` lists every file a body read -- through the engine (`file`: `step.read`, `xbf.read`,
 `stl.read`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
-null (**Body retention**). `cad xbf inspect DOC` prints the closure, `cad.inspect(doc)` and
+null (**Body retention**). `cad inspect DOC` prints the closure, `cad.inspect(doc)` and
 `document.Loaded.closure` read it.
 
 **When the toolchain or the format moves.** The key covers the document format
@@ -82,7 +82,7 @@ conversion preserves the original bytes.
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
 ```bash
-cad xbf export saved-v8.xbf upgraded-v9.xbf
+cad export saved-v8.xbf upgraded-v9.xbf
 ```
 
 This serializes the complete upgraded XCAF document, including its separate migration record,
@@ -108,7 +108,7 @@ key, in an `.xbf` this engine's format wrote that reads whole, and the body is n
 built, so an unchanged warm build costs what a restart's second build does, the key alone (the w16: 59 s
 replaying, against under a second), and the declared files' translation and compare. Its bodies' memo entries
 count as used by that build, as a replay's do, so an edit after any number of them still replays what it leaves
-alone. A model taken writes its other declared files after, exactly as `cad <type> export`
+alone. A model taken writes its other declared files after, exactly as `cad export`
 would (**Exports**), so one deleted or edited is written again from the document, and every file `written: false`
 where each holds its bytes already. Anything else builds as before, and `cache.reason` says why: it has no `.xbf`,
 written by another engine or program, one that does not read, no key in

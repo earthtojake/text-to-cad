@@ -9,6 +9,7 @@ as every export is; Git holds no CAD files) and reads them back from there, so r
 before opening either import model.
 """
 
+import cad
 from cad import xbf, step
 
 from pathlib import Path
@@ -31,7 +32,7 @@ def basic_shape_mating_test_fixture_import():
 
 
 if __name__ == "__main__":
-    xbf.export(electronics_enclosure_base, ENCLOSURE_STEP)
-    xbf.export(basic_shape_mating_test_fixture, FIXTURE_STEP)
+    cad.export(electronics_enclosure_base, ENCLOSURE_STEP)
+    cad.export(basic_shape_mating_test_fixture, FIXTURE_STEP)
     electronics_enclosure_base_import()
     basic_shape_mating_test_fixture_import()

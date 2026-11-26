@@ -4,8 +4,8 @@ A page of [the engine's documentation](../README.md). A name in bold in parenthe
 
 One server per computer -- reached through one door, which clients of 0.11.11 and earlier find too
 (**Starting and updating**) -- owns its processes, run by one supervisor (**Services**), served documents
-and HTTP listener. `cad serve` and `cad viewer` reuse that server and return its URL; where none runs
-they say so in one line.
+and HTTP listener. `cad show` reuses that server and returns its URL; where none runs
+it says so in one line.
 The background process is implemented in `daemon.py`; warm workers remain separate.
 Every successful build registers its document by id and gives it a URL, `/<id>`; registration does not mesh it.
 A model's worker is a separate process, holding its memo and live kernel objects; the daemon holds
@@ -164,14 +164,14 @@ until `cad cache prune`. A server asked for `{"op": "http",
 among them, to a server that started while 0.11.10 still held P -- takes P too, a second listener of the same
 application and token, and P is its own from then on (what `status` says, what its record keeps for the next start,
 the port a later update hands on), Q kept as well; where P cannot be taken it answers with where it serves, never
-`failed`. Any other request naming another port (`cad viewer --port`) is refused as before. Every page keeps its link
+`failed`. Any other request naming another port (`cad show --port`) is refused as before. Every page keeps its link
 through it, and reloads once its server answers with another release or start (`release`, `instance`).
 
 An engine asks no other process anything, another engine no more than any program: 0.8's server on
 the port is rolled from as above, or refused where the port is named, as below.
 
 A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
-`cad server` binds at its start, so the command fails at once with that line on stderr and exits
+`cad server start --foreground` binds at its start, so the command fails at once with that line on stderr and exits
 1, no engine left. An engine a client starts binds on the first request that serves, but for one that replaces
 a server that served pages: a client that stops a server (`client.sweep`: `cad server stop`, which cad's own update
 and the bridge's move run before they start the next, and a start that replaces an older server) first asks it where
@@ -179,7 +179,7 @@ it serves pages, any release's server alike, and notes the port (`places.pages_p
 the note and serves pages there at once with the user's token (`daemon.resumed`, `Daemon.resume`), so a page open in a
 browser reconnects with nobody doing anything. A port named (`--port`, `CAD_ENGINE_PORT`) comes first; where the port noted is taken,
 that server runs as one with no pages before, and its log says so. A port that
-request names (`cad viewer --port`) refuses that request alone, with the line: the engine runs
+request names (`cad show --port`) refuses that request alone, with the line: the engine runs
 on, unbound, for its other clients' builds and the next request that serves. Its own port held
 (`CAD_ENGINE_PORT` in the environment it started in) fails that request with the line, and the
 engine, which can never serve, leaves its note (`places.failure_path`) and exits 1: `port 3245 is
@@ -191,7 +191,7 @@ The token is made at the first engine's start and every start serves with it: th
 its own `state.ENGINE_SCHEMA`), and the token is the user's one file beside it, `engines/token`,
 which every release's engine serves with (`state.State.token`; both this user's alone, 0600), so a link
 outlives an update too. So a page link
--- the `cad viewer` output, a model's `view:` line, the CAD app's card -- works across `cad
+-- the `cad show` output, a model's `view:` line, the CAD app's card -- works across `cad
 server stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the

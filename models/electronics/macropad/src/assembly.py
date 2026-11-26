@@ -3,10 +3,11 @@ plate, nine MX switches, nine keycaps and the knob, each where the board puts it
 the layers apart in order (board, plate, switches, caps, knob), holds, and sets them back.
 
     cad run src/assembly.py
-    cad xbf export <id> STEP/nine.step GLB/nine.glb
+    cad export nine.xbf STEP/nine.step
+    cad export nine.xbf GLB/nine.glb
 
 The board is KiCad's STEP of it with every part, converted once to an xbf (README: "Rebuild"):
-`cad kicad_pcb export macropad.kicad_pcb --to step -o STEP`, then `cad step export STEP/macropad.step
+`cad export macropad.kicad_pcb STEP --to step`, then `cad export STEP/macropad.step
 XBF/macropad.xbf`. Export both again after a board change.
 """
 from pathlib import Path

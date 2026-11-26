@@ -14,7 +14,7 @@ Which apps are offered CAD's tools, and how, `initialize` decides (`cad_server/m
 first**: the CAD server ships to, and offers tools to, one app, the Codex app, the only one whose CAD view
 is verified as solid (a tab beside the thread). Only Codex's manifest names a server
 (`.codex-plugin/plugin.json` → `codex.mcp.json`); every other app gets the skills alone, and its agent shows
-a model in the app's own browser or by the link `cad viewer` prints, as the skills say. A server someone adds
+a model in the app's own browser or by the link `cad show` prints, as the skills say. A server someone adds
 by hand to another app is offered no tools either, whatever that app declares: its `tools/list` is empty,
 its connection completes, and its instructions name the `cad` command
 ([decisions](../../docs/contributing/decisions.md)).
@@ -106,11 +106,11 @@ its tabs outside Codex, or no tools.
 **What a connecting app declared** is in the server's log, one line per session at `initialize`
 (`cad_server.mcp`, INFO): `client <name> <version>: <tabs views | inline views | no tools>, <why> (extensions:
 <declared>; launcher: <host>)`, and `a view called back: <app> shows CAD views` at its first call back. The
-log is the engine's (`cad server` in a terminal shows it; a started engine writes it to its log file).
+log is the engine's (`cad server start --foreground` in a terminal shows it; a started engine writes it to its log file).
 
 No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
-agent runs in its shell (`cad xbf export <id> <file>`, `cad xbf inspect <id>`, `cad xbf snapshot
-<id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
+agent runs in its shell (`cad export model.xbf model.step`, `cad inspect model.xbf`, `cad snapshot
+model.xbf out.png`, a model by its `.xbf` and any other file by its path), and every presentation's instructions say so
 at initialize, an app offered no tools among them. The three tools
 0.11.10 removed (`cad_export`, `cad_snapshot`, `cad_inspect`) are never listed, but a call by one of those
 names, from a session that still lists it, answers with the `cad` command that replaced it. No tool builds
@@ -162,7 +162,7 @@ the second, a copy of `latest` or `main` registered no `cad` server in Codex. Wi
 
 Decided 2026-11-13: Claude gets text-to-cad as skills alone, on every install route, the install
 command's and by hand: its MCP Apps support was too flaky to build on. A model is shown by the
-skills' `cad viewer` link, in the browser pane or the browser.
+skills' `cad show` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
@@ -225,8 +225,8 @@ the launch's `_meta` first (`host/capability.ts`).
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`) and `model`, a
   file's absolute path, a model's document id, or none — and the page renders it: the shared
-  viewer showing that document, or the home. Agents name a file by its absolute path and a
-  model by the id its script printed (a script is never a document), and
+  viewer showing that document, or the home. Agents name a file by its absolute path, a model by its
+  `.xbf`'s (a script is never a document), and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
   `protocol`, `version` and `platform` — and the home's carries its `recents` and `projects` (as
@@ -252,7 +252,7 @@ the launch's `_meta` first (`host/capability.ts`).
   and nothing else, so a project's page is not offered there (`places: false`).
 - **A view moves within its project.** A document in a project (a folder a person opened as one: the home's
   Import › Folder, or a folder chosen in Import where it is one button, a Mac's, whose one chooser takes either; a
-  standalone document's Import its folder as a project; `cad viewer <folder>`) has the project's
+  standalone document's Import its folder as a project; `cad show <folder>`) has the project's
   name before its own in the navbar, which goes to that project's page on the home at the document's folder (the
   document just left ringed there, Escape the way back), and `[` and `]` step through that folder's files; a press
   shows the document in place. A tab, a card and the web viewer do the same, and
@@ -418,7 +418,7 @@ the launch's `_meta` first (`host/capability.ts`).
     `tools/call` the card makes with its own error, "IPC not available for MCP tool call";
     the server never sees the view open, so `cad_view` and `cad_screenshot` answer that it has
     not reached CAD's server: not drawn yet, or drawn by a chat that carries none of its calls,
-    with the page the card links for the person and `cad <type> snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
+    with the page the card links for the person and `cad snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
     `serverTools` carries calls (a tab host is trusted as before, whatever it declares), one
     that says nothing gets a single `GET /api/v1/server` before anything is drawn, and a call
     the host itself refuses (a JSON-RPC error: not a timeout, not the engine's answer) before

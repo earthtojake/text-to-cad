@@ -55,7 +55,7 @@ def main(arguments):
                "output": {"transparent": True, "padding": 0.04}, "outputs": [{"path": str(path), "width": size[0], "height": size[1]}]}
         if pose:
             job["jointValues"] = pose
-        done = subprocess.run(["cad", "model", "snapshot", "--job", json.dumps(job), "--json"], capture_output=True, text=True)
+        done = subprocess.run(["cad", "snapshot", "--job", json.dumps(job), "--json"], capture_output=True, text=True)
         if done.returncode:
             raise SystemExit(f"snapshot failed for {name}: {done.stdout.strip() or done.stderr.strip()}")
         shot = Image.open(path).convert("RGBA")

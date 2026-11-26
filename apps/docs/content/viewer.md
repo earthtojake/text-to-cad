@@ -12,10 +12,10 @@ When your agent shows a model, it gives you the model's page or opens it in your
 To open the viewer yourself, run:
 
 ```bash
-cad viewer
+cad show
 ```
 
-With no file it opens the home in your browser. With a file it opens that file's page, as in `cad viewer part.step`. With a folder it opens the folder as a project, on the home, as in `cad viewer .`. It prints each page's URL, and `--no-open` prints the URL without opening a browser. One server serves the viewer for your whole computer: `cad server start` starts it and `cad server stop` stops it. With no server running, `cad viewer` says so in one line. A page's link carries a token for your session, so keep it private. If a link has expired or is refused, ask your agent to open the model again.
+With no file it opens the home in your browser. With a file it opens that file's page, as in `cad show part.step`. With a folder it opens the folder as a project, on the home, as in `cad show .`. It prints each page's URL, and `--no-open` prints the URL without opening a browser. One server serves the viewer for your whole computer: `cad server start` starts it and `cad server stop` stops it. With no server running, `cad show` says so in one line. A page's link carries a token for your session, so keep it private. If a link has expired or is refused, ask your agent to open the model again.
 
 ## What it shows
 
@@ -43,7 +43,7 @@ If the server restarts, the page shows the model as last built. If its saved bui
 
 The bare address is the home: your projects, each with its models and files, then the models and files you have opened that are in no project, pinned ones first and then by latest activity, as tiles or a list. You can filter, search and pin them. **Import** picks a file from your computer, or a folder to open as a project, where the system has a chooser. A tile's menu can delete a model: that removes the server's record and its saved build, and leaves your script and exported files alone.
 
-A project is a folder you opened as one: **Import › Folder…** on the home, **Import its folder as a project…** in a file's **⋯** menu, or `cad viewer <folder>`. Nothing is written to the folder, and **Remove from CAD** in a project's menu forgets it without touching your files. A document in a project shows the project's name before its own, which leads back to the project on the home, and the project's models and files in the **Project** tab beside the model, one click from each other.
+A project is a folder you opened as one: **Import › Folder…** on the home, **Import its folder as a project…** in a file's **⋯** menu, or `cad show <folder>`. Nothing is written to the folder, and **Remove from CAD** in a project's menu forgets it without touching your files. A document in a project shows the project's name before its own, which leads back to the project on the home, and the project's models and files in the **Project** tab beside the model, one click from each other.
 
 ## Exporting from the viewer
 

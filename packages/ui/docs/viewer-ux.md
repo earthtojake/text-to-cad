@@ -158,7 +158,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
 
 - A folder becomes a project only when a person or an agent opens it as one: a folder imported on the home (the
   navbar's Import, or the "+" by Projects in the sidebar), a standalone document's Import its folder as a project, or
-  `cad viewer <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
+  `cad show <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
   forgets it, and nothing on disk changes.
 - **A project is its folder, linked.** Its page lists what is in the folder now, so a file another tool drops in
   appears, and one deleted in the file manager goes; nothing is recorded of a project but where its folder is. Why: the
@@ -327,7 +327,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
     (under 560px), then Last viewed (440). Why that tall: a row with a picture is as tall as its
     picture needs, the same in the search; a list's emphasis is colour, never a second size.
   - An `.xbf` file is badged "Part" when its document holds one part and
-  "Assembly" when it holds more (the row's `parts`: its parts' occurrences, as `cad xbf inspect` counts them and the
+  "Assembly" when it holds more (the row's `parts`: its parts' occurrences, as `cad inspect` counts them and the
   Model tree shows them), and "XBF", its format, where the host does not know for the file as it now is: never a
   guess, and never a read to find out. Why: desktop CAD names its own documents that way, a part or an assembly, and
   a person reads a card the same way; an xbf is the engine's own document saved as a file, the same thing a model's
@@ -1013,7 +1013,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 
 - What a person reads says "browser" for the browser (Open in ▸ Browser, the CAD app's Open in browser) and "the
   viewer" or "this page" for the page, in every locale. The page has no other name.
-- Developer docs and the skills call it the viewer too, and its command is `cad viewer`. Where a reader has no context
+- Developer docs and the skills call it the viewer too, and its command is `cad show`. Where a reader has no context
   (a file read on its own, a package's description), it is "the text-to-cad viewer".
 - The skills say what a person can do in the viewer, never where its controls are or how they look: that is this
   document's alone.

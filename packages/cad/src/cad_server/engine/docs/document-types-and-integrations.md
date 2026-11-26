@@ -22,15 +22,20 @@ protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the ana
 **A type's object.** Each `cad/<type>/__init__.py` ends by binding its module to `DocumentType`
 (`cad._internal.document_type.bind`), the module class of every type (`XbfType` for `cad.xbf`, whose
 `__call__` is the engine's `model` itself): `__call__` is the decorator (`cad.engine.model`'s, for a type
-with one), `read` the type's reader, and `export`, `snapshot` and `inspect` the engine's functions (`api`)
-behind a check that the source is the type's (`refuse_other`: no file of another type; for `xbf`, a
-handle, an id or the `.xbf` a model is saved as, and no other file; for a file's type, no handle or id):
-`cad.xbf`'s operations given that file read it as the file it is (`is_file`), so `xbf` is a model held or
-saved, one type in every layer, and `.xbf` names it (`by_extension(".xbf")`). `cad.xbf.read` is the reader
+with one), and `read` the type's reader. What a type does for the verbs (`cad.export`, `cad.snapshot`,
+`cad.inspect`, `cad.dfm`, `cad.fea`: `cad._internal.verbs`) is its operations: for `export`, `snapshot` and
+`inspect` the engine's functions (`api`) behind a check that the source is the type's (`refuse_other`: no file of
+another type; for `xbf`, a handle, an id or the `.xbf` a model is saved as, and no other file; for a file's type,
+no handle or id), so `xbf` is a model held or saved, one type in every layer, and `.xbf` names it
+(`by_extension(".xbf")`); given that file they read it as the file it is (`is_file`). `cad.xbf.read` is the reader
 of that file (`cad.engine.model.read_xbf`). `model`, the earlier id of that document, is an alias of `xbf`
-in the registry (`ALIASES`: `DOCUMENT_TYPES["model"]` is `xbf`'s, listed nowhere), and `cad.xbf` a module
+in the registry (`ALIASES`: `DOCUMENT_TYPES["model"]` is `xbf`'s, listed nowhere), and `cad.model` a module
 alias of `cad.xbf` (below); a mesh's `export` takes no `tolerance` or `angle`.
-`dfm` is the manufacturing check's (below); `drc`, `erc` and `validate` are the type's own functions. Each attribute is resolved on first use and kept, so `cad.step.read
+`dfm` is the manufacturing check's (below), `validate` the type's own function (`cad.<type>._check`), and KiCad's
+`drc` and `erc` the kicad integration's (`cad.kicad.drc`, `cad.kicad.erc`). A type's operation under its own name
+(`cad.<type>.<operation>`) is the verb's earlier spelling: an alias that warns once
+and runs what the verb runs for a source of that type (`verbs.per_type`), as a decorator given a shape warns naming
+`cad.save` or `cad.export`. Each attribute is resolved on first use and kept, so `cad.step.read
 is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spellings resolve through
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
 meta-path finder that hands out the new module under the old name (and runs it, for `python -m`), each
@@ -57,23 +62,25 @@ line before it starts (`_refused`), and a slow start said once while it waits --
 or KiCad made it, never when it raises. One server serves a project: an edit of the project's other file
 inside the block joins it (`OpenDocument`), each document saved at its own block's end. Nothing is
 declared, and nothing is written from the edited file but what explicit calls after the block write
-(`kicad_pcb.export`, `kicad_pcb.drc`, `kicad_sch.export`, `kicad_sch.erc`).
+(`cad.export(board, out, to=kind)`, `cad.kicad.drc`, `cad.kicad.erc`).
 
-**The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
+**The commands.** The verbs (`cad export`, `cad inspect`, `cad snapshot`, `cad dfm`, `cad fea`:
+`cad_server.cli.verbs`) read a file's type from its suffix and hand its command line to what that type does for
+them (`cad.registry.operation_for`); `cad_server.cli.document_types` makes those runs from the registry:
 `OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and
 runners) for `export`, `snapshot` and `inspect`, each with its source said as the type's and a mesh's export
-without `--tolerance` or `--angle`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
-function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
-repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
+without `--tolerance` or `--angle`; the type's own function for `dfm`, `interference`, `solve`, `ranges` and
+`validate` (generated from the function's signature, `cad_server._internal.cli_from_function`, or an adapter's
+parser where a flag repeats). A parameter whose type is a `Literal` of strings is an enumeration, its values the flag's
 choices (`dfm`'s `process`, `rules`, `units` and `technology`), so a value outside them is the
 parser's usage error, naming the flag; a value the function itself refuses by name raises the library's
 `ArgumentRefused` (`cad._internal.refused`), which the command says as the command line's
 (`invalid_argument`, exit 2), never as a failure of the work. A `Path` option is a file the operation
-reads (`srdf.validate`'s `urdf`): one that is not there is refused before it runs (`not_found`), as
-its own file is. `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
-...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser. `xbf`'s
-runs take its file too, the `.xbf` a model is saved as, and `cad model`, the earlier id's command, runs `cad
-xbf` saying it is deprecated (**CLI**). An
+reads (an SRDF's `--urdf`): one that is not there is refused before it runs (`not_found`), as
+its own file is. A file whose type lacks the verb is refused in one line naming the types that have it; `resolve`
+and `build_parser_for` give a command line's parser. `xbf`'s runs take its file, the `.xbf` a model is saved as;
+`cad <type> <operation>`, `cad model ...` and the other spellings the command had run nothing and answer with the
+verb that does it now (**CLI**). An
 integration's operations on its tool's own files are made the same way, by `cad_server.cli.integrations`
 (`INTEGRATION_COMMANDS`, `cad_server.cli.<integration>`): each generated from its function's signature,
 its file refused by name where it is a document type's (which names that type's own check), any other
@@ -95,7 +102,7 @@ declares its own and a value of another kind are refused before anything is
 read, as a STEP given no process is (it keeps none). An xbf or a model given none is checked for the one
 its parts declare, its process's options refused once the document is read.
 
-**A B-rep's check is measured in the engine's checks processes.** The caller (the command, or `cad.<type>.dfm`
+**A B-rep's check is measured in the engine's checks processes.** The caller (the command, or `cad.dfm`
 in any Python) resolves the options and asks the engine (`api.check`): an `export` request carrying a
 `check`, its own release (`caller`), what measures in it (`measures`, `contract.measuring`: the digest of the
 library's code, every source file of the cad package -- a `.py`, or the `.pyc` an install of bytecode alone holds
@@ -123,7 +130,8 @@ engine can be reached. Either way `api.check` says so in one line on stderr, in 
 measure it: nothing keeps such a check, so it is measured again each time it is asked. What the engine measured
 `api.check` returns as `measured_in: "engine"` (`api.IN_ENGINE`; `IN_CALLER` is the caller's to say of its own).
 
-**The interference check** (`cad <type> interference`, `cad.<type>.interference`: a model's, an xbf's, a STEP's)
+**The interference check** (`cad inspect FILE --interference`, `cad.inspect(source, interference=True)`: a model's,
+an xbf's, a STEP's)
 is asked and answered the same way and is no manufacturing process's: the caller resolves its options
 (`cad._internal.interference.options`: the poses, the mechanism states, the configuration sequences and their
 samples, the named fits, its limits) and asks `api.check` with `process: "interference"`, which the runner takes
@@ -271,7 +279,7 @@ here. The families, the JSON and
 every rule are the library's `src/cad/_internal/dfm/README.md`.
 
 **The stress study.** A B-rep type's `solve` (`xbf`, `step`: the registry's `solve` operation of the
-`calculix` integration) is one function the library makes for each (`cad._internal.fea.operation.solve_for`, bound by
+`calculix` integration, which `cad fea` and `cad.fea` run) is one function the library makes for each (`cad._internal.fea.operation.solve_for`, bound by
 `DocumentType`): with no study, the study's setup, which writes nothing; with a study and `--out`, the solve.
 The options of the other use (`--out` or `--deck` with no study, `--occurrence` beside one, an `--out` that is a
 file) are refused there, the standard library alone, before anything is read. The study reads a file's B-rep with
@@ -288,9 +296,9 @@ kernel, netgen and ccx (`integration_env.carries("calculix")`, the kernel and ne
 `cad[build123d,calculix,netgen]` at the installation's release, made once by the engine, by the library's runner
 of one operation, and the result is printed as it would be here (`FeaResult.from_data`).
 
-**The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's
-`cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
-way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
+**The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad drc BOARD` and `cad export BOARD DIR
+--to KIND` are the library's `cad.kicad.drc` and `cad.export(board, out, to=kind)`, the `kicad` integration's
+(`cad.kicad._check`, `_export`), run the same way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
 names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
 installation's release, made once by the engine (about 100 MB to download from PyPI, mostly kicode, and 340 MB on disk, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
@@ -299,8 +307,10 @@ for kicode's. An export's result is a `cad.results.ExportResult` (the files writ
 board's `--to glb` holds its copper, mask and silkscreen too, each KiCad's own mesh named by its layer
 (`<board>_copper`, `_pad`, `_via`, `_silkscreen`, `_soldermask`, `_PCB`); its `--to step` holds the board
 and its parts alone. A
-schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
-run the same way.
+schematic's `cad kicad erc` and `cad export SCHEMATIC DIR --to KIND` are `cad.kicad.erc` and `cad.export`
+(`cad.kicad._schematic`), run the same way. KiCad's own checks are the integration's operations on its tool's
+files (`cad.registry`'s `INTEGRATION_OPERATIONS`, each taking the suffixes its `Operation.files` names), and `cad
+dfm` of a board or a schematic is refused, naming its check.
 
 **A MuJoCo model's check.** An MJCF is MuJoCo's own file and no document type: the engine writes one
 (`export/mjcf.py`) and reads none, the viewer lists none, and no still is drawn of one -- MuJoCo Studio shows
@@ -319,19 +329,18 @@ MuJoCo function's `save` says the same of the file it wrote.
 
 **OrcaSlicer's presets (deprecated).** The `orcaslicer` integration is on its way out: a project saved from
 OrcaSlicer's app carries its settings and slices on its command line as it is, and from OrcaSlicer 2.5 the
-built-in presets are binary caches these commands cannot read. Its commands stay, unlisted, while skill text of
-the last 30 days uses them, and say on stderr that they are deprecated (the registry entry's `deprecated`).
-What they do until then:
+built-in presets are binary caches these commands cannot read. Its command, `cad orcaslicer`, runs nothing:
+it answers in one line with that (the registry entry's `deprecated`). What its library, `cad.orcaslicer`, does:
 OrcaSlicer keeps a preset as its differences from a parent (`inherits`), and its
 command line neither fills the parent in nor reads compatibility conditions. The `orcaslicer` integration's two
-operations take preset names, not a file (`cli/integrations.py`): `cad orcaslicer presets KIND` lists the
-selectable presets of one kind, and `cad orcaslicer complete` writes a printer, a process and each filament
+operations take preset names, not a file: `presets(kind)` lists the
+selectable presets of one kind, and `complete(...)` writes a printer, a process and each filament
 merged with every parent, the process and filaments naming the printer as compatible, as `printer.json`,
 `process.json` and `filament-N.json` (`cad.orcaslicer._presets`: the folders given first, then the person's own,
 the Flathub build's and the app's profiles; of several vendors' presets of one name, the one that lists the
 printer, else the nearest). Every preset is resolved before a file is written. The integration has no extra:
-its code is the standard library alone, so `integration_env.carries` holds it everywhere and the command runs
-it in its own process, asking the engine nothing. OrcaSlicer itself is never run.
+its code is the standard library alone, so it runs in its caller's process, asking the engine nothing.
+OrcaSlicer itself is never run.
 
 **A part's convex hulls.** `cad.mujoco.decompose(spec, part, max_hulls=16, threshold=None)` replaces a part's
 collision in a MuJoCo function's spec with the convex hulls CoACD cuts its mesh into, the `coacd` integration's

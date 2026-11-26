@@ -81,7 +81,7 @@ the document holds; else `reason` is one of
 among them; the script must run again), `shared` or `expression` (no
 span: an expression, or a literal not that declaration's alone, above).
 `source` is the declaring file relative to the script's folder where it is under it, else its name, and null
-where nothing live says it. `cad xbf inspect` lists the same rows, of an id and of an `.xbf` file (`api._summary`'s
+where nothing live says it. `cad inspect` lists the same rows, of an id and of an `.xbf` file (`api._summary`'s
 `parameters`).
 
 **Setting.** One entrance, the viewer's Save: the page's `POST /api/v1/documents/xbf/<id>/parameters` with

@@ -3,7 +3,7 @@
 # ///
 """SHORT CIRCUIT's playfield schematic, written as text (no KiCad needed; rerunning writes the same files).
 
-    cad run scripts/schematic.py     then   cad kicad_sch erc pinball.kicad_sch
+    cad run scripts/schematic.py     then   cad kicad erc pinball.kicad_sch
 
 A root sheet (the machine in one look, the board's mechanics) and six sheets: Power, MCU, Inputs (the ball's
 switches, the buttons, the tilt), Lighting, Flippers, Audio and backbox. The GPIO map and the LED chain's order come

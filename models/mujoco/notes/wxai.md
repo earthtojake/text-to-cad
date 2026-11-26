@@ -275,7 +275,7 @@ gripping-force formula.
 - `cad mujoco check out/wxai/export/wxai.xml` (the plain export): OK, with the same warning naming a
   second pair, the two carriages' hulls (18.5 mm), which the plain export collides; 15 geoms and 8
   excludes, link_6 with each carriage among them.
-- `cad urdf validate out/wxai/export/wxai.urdf`: OK. Root base_link, 11 links, 10 joints (8 movable),
+- `cad inspect out/wxai/export/wxai.urdf`: OK. Root base_link, 11 links, 10 joints (8 movable),
   total mass 4 kg. Two warnings, `zero_velocity` on the two carriage joints: the specification gives
   the gripper no speed.
 
@@ -286,7 +286,7 @@ gripping-force formula.
 - Menagerie drawn at the same pose (a scratch picture, not committed): the two match link for link. Menagerie's
   meshes show the pocketing and the D405 that the dummies lack.
 
-The pictures are of the robot's description, drawn from the plain URDF (`cad urdf snapshot
+The pictures are of the robot's description, drawn from the plain URDF (`cad snapshot
 out/wxai/export/wxai.urdf out/wxai/wxai.png`); cad draws no MJCF, which MuJoCo Studio shows (`cad run
 mujoco-studio --model out/wxai/scene.xml`). The shared daemon was started without a display, so the
 snapshot failed with "no X display" and the pictures were drawn in-process instead, under `xvfb-run`.
@@ -341,7 +341,7 @@ snapshot failed with "no X display" and the pictures were drawn in-process inste
    its sibling (a scratch test, not committed: `cam` landed in `base`), so fastening by RigidJoint pairs is
    the only way, and it merges. A comparison has to merge Menagerie's fixed bodies.
 6. **URDF joint limits are written with `effort="0" velocity="0"`.** Fixed: `limits(assembly, joint, effort=,
-   velocity=)`, and `cad urdf validate` warns of a 0. The spec gives both (27/7 N*m;
+   velocity=)`, and `cad inspect` warns of a 0. The spec gives both (27/7 N*m;
    6.28 and 9.42 rad/s), but there is no declaration for them, and a ROS controller reads 0 velocity
    literally.
 7. **One collision hull per part, no decomposition**: link_6 and link_2 (above). Fixed:
