@@ -102,6 +102,7 @@ import sys
 import tempfile
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler
@@ -501,12 +502,34 @@ def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoo
         context = multiprocessing.get_context("spawn")
         if not found["own"]:
             context = _spawn_in(context, found["python"], found["path"])
-        return concurrent.futures.ProcessPoolExecutor(workers, mp_context=context, **options)
+        pool = concurrent.futures.ProcessPoolExecutor(workers, mp_context=context, **options)
     except (ImportError, OSError, NotImplementedError, ValueError) as error:
         where = "" if found["own"] else f" in {found['python']}"
         raise KernelProcessesUnavailable(
             f"The CAD engine could not start its kernel processes{where} ({type(error).__name__}: {error})",
             "pool") from error
+    if options.get("max_tasks_per_child"):
+        _replaces_none_once_let_go(pool)
+    return pool
+
+
+def _replaces_none_once_let_go(pool: Any) -> None:
+    """``pool``, whose workers leave after their tasks (``max_tasks_per_child``: the readers'), made to start none in
+    their place once it is shut down. Its manager thread replaces each worker that left (``_adjust_process_count``);
+    shut down without waiting (``shutdown(wait=False)``, ``_end``), the pool has let go of its processes by then, and
+    on Python 3.11 and 3.12 that thread dies of it (``TypeError: object of type 'NoneType' has no len()``: CPython's
+    gh-132969, fixed from 3.13 as here). The pool is held weakly, so it goes as any pool does."""
+    replace = getattr(type(pool), "_adjust_process_count", None)
+    if replace is None:  # a pool of no such thread
+        return
+    held = weakref.ref(pool)
+
+    def adjust() -> None:
+        found = held()
+        if found is not None and getattr(found, "_processes", None) is not None:
+            replace(found)
+
+    pool._adjust_process_count = adjust
 
 
 # The import path the pool's processes start with when they run another environment's Python than this

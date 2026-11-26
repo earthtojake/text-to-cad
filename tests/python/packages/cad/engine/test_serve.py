@@ -786,6 +786,19 @@ class PoolStopTest(unittest.TestCase):
             time.sleep(0.05)
 
 
+class PoolLetGoTest(unittest.TestCase):
+    def test_a_reader_pool_shut_down_without_waiting_starts_no_worker_in_a_leaver_s_place(self) -> None:
+        """A pool whose workers leave after their tasks (the readers') has its manager thread replace each that
+        left. Shut down without waiting, the pool has let go of its processes, and replaces none: Python 3.11 and
+        3.12's thread died of it there (``TypeError``, CPython's gh-132969)."""
+        import sys
+
+        with mock.patch("cad.engine.places.kernel", return_value={"own": True, "python": sys.executable, "path": []}):
+            pool = serve._process_pool(1, max_tasks_per_child=1)
+        pool.shutdown(wait=False)
+        self.assertIsNone(pool._adjust_process_count())  # what the manager thread calls as a worker leaves
+
+
 class MeshCacheTest(unittest.TestCase):
     def test_mesh_all_publishes_buffers_and_unmeshed_notes_before_done_callbacks_finish(self) -> None:
         from types import SimpleNamespace
