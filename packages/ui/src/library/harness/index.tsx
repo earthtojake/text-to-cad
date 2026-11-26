@@ -92,11 +92,16 @@ async function folder(project: string, { path = "", q = "" }: { path?: string; q
 // gearbox's recents: housing/v3/housing.xbf and exports/housing.step below its top, gearbox.xbf at it; with
 // `?recents=many`, six of its dxf plates too, opened in the last hours.
 const MORE = params.get("recents") === "many" ? TREE.slice(7, 13).map((entry, index) => ({ ...entry, opened: NOW - (index + 0.5) * HOUR })) : [];
+// `?picture=4x3`: every recent keeps a picture taken before pictures were 3:2, 640 × 480 and solid red, edge to edge.
+const OLD_PICTURE = params.get("picture") === "4x3";
+const oldPicture = () => { const canvas = document.createElement("canvas"); canvas.width = 640; canvas.height = 480;
+  const context = canvas.getContext("2d")!; context.fillStyle = "#ff0000"; context.fillRect(0, 0, 640, 480); return canvas.toDataURL("image/png"); };
 const RECENTS = [TREE[2], TREE[0], TREE[6], ...MORE, ...["bracket.step", "hinge.step", "layered.dxf", "arm.urdf", "pair.glb"]
-  .map((name, index) => row(`/home/me/parts/${name}`, index + 3, { pinned: index === 0 }))];
+  .map((name, index) => row(`/home/me/parts/${name}`, index + 3, { pinned: index === 0 }))]
+  .map(entry => OLD_PICTURE ? { ...entry, thumbnail: "old", pictured: NOW - HOUR } : entry);
 const never = new Promise<never>(() => {});
 const chose = (chooser: "file" | "folder" | "any") => { const page = window as unknown as { homeChoosers?: string[] }; (page.homeChoosers ??= []).push(chooser); return null; };
-const library = { list: () => state === "reading" ? never : Promise.resolve(state === "empty" ? [] : RECENTS), change: async () => RECENTS, thumbnail: async () => null,
+const library = { list: () => state === "reading" ? never : Promise.resolve(state === "empty" ? [] : RECENTS), change: async () => RECENTS, thumbnail: async () => OLD_PICTURE ? oldPicture() : null,
   open: async () => { if (state === "failing") throw new Error("The file could not be opened."); },
   projects: async () => state === "empty" ? [] : PROJECTS, folder, removeProject: async () => PROJECTS,
   pick: async () => { chose("file"); }, importFolder: async () => chose("folder"), ...(params.get("chooser") === "one" ? { importAny: async () => chose("any") } : null) };

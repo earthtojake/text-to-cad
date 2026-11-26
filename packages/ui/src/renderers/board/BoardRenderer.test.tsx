@@ -936,7 +936,7 @@ it("a board's card picture is drawn once, in the light theme, on nothing but the
   await opened(pane);
   const controller = await controllerOf(view);
   themes.length = 0;
-  const picture = await controller.thumbnail({ width: 480, height: 360 });
+  const picture = await controller.thumbnail({ width: 480, height: 320 });
   expect(picture).toBeInstanceOf(Blob);
   expect('dark' in picture).toBe(false);
   expect(themes).toEqual(['light']);

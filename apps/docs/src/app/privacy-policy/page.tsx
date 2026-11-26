@@ -4,13 +4,13 @@ import { IssuesLink, LegalPage, LegalSection } from "@/components/legal-page";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports), its install command's failure report, its hourly version check and its automatic updates, why, who receives it, how long it is kept, and your controls.",
+    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports), its install command's failure report, its hourly version check and its automatic updates, the files you choose to share, why, who receives it, how long it is kept, and your controls.",
   alternates: { canonical: "/privacy-policy" },
 };
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 19, 2026">
+    <LegalPage title="Privacy Policy" updated="November 26, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
           <code>cad</code>, <code>cad-server</code> and <code>cad-mcp</code>, named cadgen
           before 0.10), and this website, texttocad.dev. text-to-cad runs on
           your computer. Your prompts, models, drawings and files stay there, and we do not collect
-          them.
+          them, unless you ask text-to-cad to share a file (section 6).
         </p>
       </LegalSection>
 
@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
         <ul>
           <li>
             <strong>The plugin and its software:</strong> your prompts, models, drawings, file names and
-            paths never leave your computer. There are no accounts. Your agent and the local runtime
+            paths never leave your computer, except for a file you share (below). There are no accounts. Your agent and the local runtime
             process your work on your computer and do not send it to us.
           </li>
           <li>
@@ -169,6 +169,12 @@ export default function PrivacyPolicyPage() {
             the check and the updates off.
           </li>
           <li>
+            <strong>A file you share:</strong> nothing is shared unless you run <code>cad share</code>. It
+            then uploads that file, its view and, for a model, the code that built it to cad.fun, where
+            anyone with the link can open it. Section 6 says what is uploaded, how it is protected and how
+            long it is kept.
+          </li>
+          <li>
             <strong>This website:</strong> page views, with the referring page, browser, device type
             and country, and which product on the Shop page you click through to a store, through
             Vercel Web Analytics, which sets no cookies. Each request also
@@ -232,6 +238,10 @@ export default function PrivacyPolicyPage() {
             each service sees the request’s IP address, time and user agent.
           </li>
         </ul>
+        <p>
+          <strong>Cloudflare, Inc.</strong> runs cad.fun and keeps the files you share (section 6), which
+          are sealed so that it cannot open them without your link.
+        </p>
         <p>We share personal data with no one else, except where the law requires it.</p>
       </LegalSection>
 
@@ -262,6 +272,7 @@ export default function PrivacyPolicyPage() {
             beyond its one run, so turning telemetry off cannot find one that was already sent; a
             malformed report is logged as a malformed batch is, by the name of the rule it broke alone.
           </li>
+          <li>A file you share is kept for 7 days after its last share, or until you delete it (section 6).</li>
           <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>
         </ul>
       </LegalSection>
@@ -327,6 +338,11 @@ export default function PrivacyPolicyPage() {
             process.
           </li>
           <li>
+            Nothing is shared unless you run <code>cad share</code>. <code>cad share off</code> turns sharing
+            off on your computer, and <code>cad share delete</code> or a share’s delete link removes a share
+            (section 6).
+          </li>
+          <li>
             You can uninstall the plugin at any time. Deleting text-to-cad’s cache and state folders
             removes everything it stored on your computer, including its recent-files list.
           </li>
@@ -338,18 +354,85 @@ export default function PrivacyPolicyPage() {
         </ul>
       </LegalSection>
 
-      <LegalSection title="6. Children">
+      <LegalSection title="6. Sharing a file you choose to share">
+        <ul>
+          <li>
+            <strong>Sharing never happens on its own.</strong> Only <code>cad share</code> uploads a file.
+            A build, an edit or a later run changes no share until you run <code>cad share</code> again. The
+            first share on a computer is refused until you agree: text-to-cad says what goes, where, who can
+            open it, for how long and how to delete it, and text-to-cad’s skills tell your agent to ask you
+            before it runs the command again. <code>cad share off</code> stops sharing on that computer, even for a command that says
+            yes, until <code>cad share on</code>.
+          </li>
+          <li>
+            <strong>What is uploaded.</strong> The file’s view, which is what the hosted viewer draws: for a
+            model its parts as meshes with their names, measurements and joints, and for other files the
+            like (a drawing, a board’s layers and its parts’ 3D models, a schematic’s sheets). Then the files
+            that anyone with the link can download:
+            <ul>
+              <li>
+                for a model, its <code>.xbf</code> file and the files of the code that built it: its script,
+                the modules of its project that the build imported and the files it read;
+              </li>
+              <li>
+                for a KiCad board or schematic, the file and the files of its project that opening it
+                needs: its project file, its rules, its own footprint and symbol libraries, a board’s 3D
+                model files and a schematic’s sheets;
+              </li>
+              <li>
+                for any other file, the file itself (and, for a robot description, the mesh files it names).
+              </li>
+            </ul>
+            Nothing outside the project goes, and no installed library: a file outside the project is left
+            out, and said. A file the build did not read, such as a README or a settings file, does not go.
+          </li>
+          <li>
+            <strong>Where it goes.</strong> To cad.fun, a service we run as a Cloudflare Worker, which keeps
+            the share in Cloudflare’s storage. The upload is made by the <code>cad</code> program on your
+            computer.
+          </li>
+          <li>
+            <strong>How it is protected.</strong> Each share is sealed at rest with AES-256-GCM under a key
+            that the service derives from the link’s ID and keeps no copy of, so someone who reads the storage
+            alone can neither open a share nor tell which link it belongs to. The link is the key: anyone who
+            has the link can open the model and download its files, with no sign-in, so treat it as you would
+            the files. The sealing is done by the service, not on your computer, so the service could read a
+            share while it serves a request for it.
+          </li>
+          <li>
+            <strong>What the service keeps, and for how long.</strong> A share’s sealed files, the hashes of
+            its write and delete secrets, and its expiry, size and number of files, and nothing else: there
+            are no accounts and no database, and the service keeps no log of requests (the Worker writes no
+            path, header or body anywhere, and its request logs in Cloudflare are turned off). Cloudflare
+            carries the traffic under its own privacy policy, and while a request is being served, whoever runs
+            the service could see its link in Cloudflare’s live view of requests. To refuse a flood, uploads and
+            downloads of the files’ zip are counted per minute for each address and location. A share lives 7
+            days after its last share, and is deleted when someone asks for it after that. Sharing the same
+            file again keeps the link and starts the 7 days again. A storage rule also deletes every object 8
+            days after it was stored, which Cloudflare carries out within about a day, so what is left is
+            gone soon after. The share’s delete link removes it at once, as does{" "}
+            <code>cad share delete</code>; <code>cad share status</code> lists your shares and their links,
+            which text-to-cad keeps on your computer, with the share’s secrets, in a file only you can read.
+          </li>
+          <li>
+            <strong>Importing.</strong> <code>cad import</code> downloads a share’s files from cad.fun and
+            writes them into a new folder on your computer. It runs nothing.
+          </li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="7. Children">
         <p>
           text-to-cad is not directed to children under 13, and we do not knowingly collect their
           personal data.
         </p>
       </LegalSection>
 
-      <LegalSection title="7. Changes">
+      <LegalSection title="8. Changes">
         <p>We will post any change to this policy on this page and update the date above.</p>
       </LegalSection>
 
-      <LegalSection title="8. Contact">
+      <LegalSection title="9. Contact">
         <p>
           Thompson Labs LLC. For privacy questions and requests, open an issue at <IssuesLink />.
         </p>

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { build } from "esbuild";
 import { chromium, devices } from "playwright";
+import { PNG } from "pngjs";
 
 // The home as it is drawn (`docs/viewer-ux.md`, "The home"): what needs a layout, a real link or a real key. What it
 // lists, counts and asks of its host is `ModelLibrary.test.tsx`'s.
@@ -992,5 +993,31 @@ test("a search's result that cad does not open is a 46px tile after the cards, a
     assert.deepEqual(drawn.map(([name]) => name), ["gearbox.xbf", "gearbox.f3d"]);
     assert.equal(drawn.every(([, cells]) => cells.length === 3 && cells.every(Boolean)), true, JSON.stringify(drawn));
     assert.equal(await page.getByText("Standalone").count(), 0);
+  } finally { await context.close(); }
+});
+
+test("a picture taken at 4:3, before pictures were 3:2, still draws whole in its 3:2 card, centred with the gradient either side, in a card and in a row", async () => {
+  const { context, page } = await home("picture=4x3");
+  try {
+    const red = ([r, g, b]) => r > 240 && g < 20 && b < 20;
+    const measure = async (picture) => {
+      await page.waitForFunction((node) => node.querySelector("img")?.complete && node.querySelector("img").naturalWidth === 640, await picture.elementHandle());
+      const { width, height } = await box(picture);
+      const image = PNG.sync.read(await picture.screenshot());
+      const at = (x, y) => { const offset = (Math.floor(y) * image.width + Math.floor(x)) * 4; return [image.data[offset], image.data[offset + 1], image.data[offset + 2]]; };
+      // The 4:3 picture is as tall as the box and a third narrower than it: red from its first row to its last, bars of gradient beside it.
+      const redAcross = (y) => { let first = -1, last = -1; for (let x = 0; x < image.width; x += 1) if (red(at(x, y))) { first = first < 0 ? x : first; last = x; } return [first, last]; };
+      const [first, last] = redAcross(image.height / 2);
+      return { width: image.width, height: image.height, top: red(at(image.width / 2, 2)), bottom: red(at(image.width / 2, image.height - 3)),
+        bars: [!red(at(2, image.height / 2)), !red(at(image.width - 3, image.height / 2))], drawn: (last - first + 1) / image.width, expected: (height * 4 / 3) / width };
+    };
+    const card = await measure(page.locator(".cad-library-card [data-library-picture]").first());
+    assert.ok(Math.abs(card.height * 3 - card.width * 2) <= 3, "the box is 3:2, to the pixel");
+    assert.deepEqual([card.top, card.bottom, ...card.bars], [true, true, true, true], "whole, edge to edge in height, never cropped");
+    assert.ok(Math.abs(card.drawn - card.expected) < 0.02, `drawn ${card.drawn} of the width, 4:3 of the box's height is ${card.expected}`);
+    await page.getByRole("button", { name: "List" }).click();
+    await page.locator(".cad-library-row").first().waitFor();
+    const row = await measure(page.locator(".cad-library-row [data-library-picture]").first());
+    assert.deepEqual([row.top, row.bottom, ...row.bars], [true, true, true, true]);
   } finally { await context.close(); }
 });
