@@ -136,7 +136,7 @@ test("a menu stands 6px from its trigger, padded 6px, from the primitives alone"
 // with a panel's toggle after it or none. The Home itself is full width:
 // its sidebar the viewer's panel (its surface, its 232px default width) with its content on the panel's 16px inset and
 // Settings pinned at its foot, and the place on screen padded by that same inset on every side, at every width (no
-// narrow home's gutters), its cards' columns 232px at least.
+// narrow home's gutters), its cards' columns 200px at least (the panel's narrowest).
 test("the navbar's logo's drawn mark stands 16px in, and the Home is the panel's sidebar beside the place on its own gutters", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8");
   // The sidebar is the panel's surface, never a rule of the Home's own: its width, rule and colour are the panel's.
@@ -154,7 +154,7 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is the panel's
   assert.match(place, /(?:^| )p-\(--panel-inset\)(?: |$)/);
   assert.doesNotMatch(place, /max-w-/);
   assert.doesNotMatch(css + page, /data-library-narrow/);
-  assert.match(page, /const GRID_CLASS = "[^"]*grid-cols-\[repeat\(auto-fill,minmax\(232px,1fr\)\)\]/);
+  assert.match(page, /const GRID_CLASS = "[^"]*grid-cols-\[repeat\(auto-fill,minmax\(200px,1fr\)\)\]/);
   const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
   // The row the control and 12px (40px), the tool strip's height, its icon buttons the strip's tile (the control, 28px):
   // THE scale's (a phone's from the same tokens).

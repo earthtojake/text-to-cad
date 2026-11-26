@@ -353,7 +353,7 @@ function Columns({ where = null }: { where?: string | null }) {
 
 // A card: one box on the card's colour with a card's corners, the picture edge to edge over its caption, padded by a
 // card's inset. A row: the search's row, its fill the row's (`primitives/tree-row.jsx`).
-const GRID_CLASS = "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(232px,1fr))] items-start gap-4 p-0";
+const GRID_CLASS = "m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(200px,1fr))] items-start gap-4 p-0";
 const LIST_CLASS = "-mx-2 my-0 flex list-none flex-col p-0";
 const CARD_OPEN_CLASS = "cad-library-open flex w-full min-w-0 cursor-pointer flex-col text-left text-inherit no-underline outline-none disabled:cursor-default";
 const CARD_CLASS = "cad-library-card group/entry relative min-w-0 scroll-m-4 overflow-hidden rounded-lg border border-border bg-card transition-colors";

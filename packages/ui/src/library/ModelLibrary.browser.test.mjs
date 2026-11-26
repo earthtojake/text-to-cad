@@ -104,9 +104,9 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
     await kinds.getByRole("button", { name: "Drawings, 1" }).click();
     assert.deepEqual(await page.locator(".cad-library-card .cad-library-open").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("aria-label"))), ["Open layered.dxf"]);
     await kinds.getByRole("button", { name: "All, 8" }).click();
-    // Cards at least 232px a column, filling the place's width.
+    // Cards at least 200px a column, filling the place's width: five across beside the sidebar at 1440px.
     const cards = await page.locator(".cad-library-card").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()).map(({ x, width }) => [x, width]));
-    assert.ok(cards.every(([, width]) => width >= 232), "every card at least 232px");
+    assert.deepEqual([cards.every(([, width]) => width >= 200), new Set(cards.slice(0, 5).map(([x]) => x)).size], [true, 5], "every card at least 200px, five across");
     assert.equal(cards[0][0], 232 + 16);
     // Recents says each card's project before its facts.
     assert.match(await page.getByRole("link", { name: "Open housing.xbf", exact: true }).locator("[data-library-status]").textContent(), /^gearbox · /);
@@ -521,8 +521,11 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
     assert.equal((await box(cards.first())).y - (await box(folders.first())).bottom, 16);
     // A card: a card's 10px corners, the picture at 3:2 edge to edge, the caption padded by a card's 12px inset all round;
     // 16px between cards, across and down.
-    const [first, second, below] = [await box(cards.nth(0)), await box(cards.nth(1)), await box(cards.nth(4))];
-    assert.deepEqual([second.x - first.right, below.y - first.bottom, (await px(cards.first(), "borderTopLeftRadius"))[0]], [16, 16, "10px"]);
+    // The first card of the second row, however many stand across.
+    const across = await cards.evaluateAll((nodes) => nodes.findIndex((node) => node.getBoundingClientRect().y > nodes[0].getBoundingClientRect().y));
+    const [first, second, below] = [await box(cards.nth(0)), await box(cards.nth(1)), await box(cards.nth(across))];
+    // Columns share the width in fractions of a pixel, so a 3:2 picture's height is fractional too: measured to the pixel.
+    assert.deepEqual([Math.round(second.x - first.right), Math.round(below.y - first.bottom), (await px(cards.first(), "borderTopLeftRadius"))[0]], [16, 16, "10px"]);
     const picture = await box(cards.first().locator("[data-library-picture]"));
     assert.deepEqual([picture.width, Math.round(picture.height * 3)], [first.width - 2, Math.round(picture.width * 2)]);
     const caption = cards.first().locator("[data-library-label]").locator("xpath=..");
@@ -593,7 +596,7 @@ test("a file that is no document is a card and a row like the rest, pressed as a
     const script = page.getByRole("button", { name: "Open build.py", exact: true });
     const [card, document] = [page.locator(".cad-library-card", { has: script }), page.locator(".cad-library-card", { has: page.getByRole("link", { name: "Open gearbox.xbf", exact: true }) })];
     assert.deepEqual([await card.locator("[data-library-format]").textContent(), await card.locator("[data-library-status]").textContent(), await script.getAttribute("href"), await card.locator("a").count(),
-      (await box(card)).height, (await style(card, "opacity"))[0], (await style(script, "cursor"))[0]], ["PY", "Edited 1d ago", null, 0, (await box(document)).height, "1", "pointer"]);
+      Math.round((await box(card)).height), (await style(card, "opacity"))[0], (await style(script, "cursor"))[0]], ["PY", "Edited 1d ago", null, 0, Math.round((await box(document)).height), "1", "pointer"]);
     assert.equal(await page.locator(".cad-library-card", { has: page.getByRole("button", { name: "Open Makefile", exact: true }) }).locator("[data-library-format]").count(), 0, "no badge with no extension");
     // The keyboard reaches it as it reaches a document's card, with the same ring; Enter opens it: here, a script, in
     // the first app the host lists.

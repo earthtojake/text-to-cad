@@ -261,11 +261,12 @@ chrome that floats over the picture. The home is the navbar over the library: it
   - The folder is read as it is shown and again every two seconds while it is up, so a file written meanwhile joins
     it. Where the host listed only part of a very large folder, a line under its last row says so.
 - **Its documents**, all of them, with no Show more: a folder lists at most what the host answers of it, and Recents a
-  couple of hundred. Cards in columns at least 232px wide, 16px apart across and down, or rows.
+  couple of hundred. Cards in columns at least 200px wide, 16px apart across and down, or rows.
   - **A card** is one box on the card's colour with a card's 10px corners: the picture edge to edge with its format's
     chip 8px in from its corner, then the caption on a card's 12px inset, the name (medium, a card's title) over one
-    muted line in the small step. Why 232: the panel's width, the page's one measure for a column on the 8px grid; it
-    puts four across beside the sidebar on a 1280px page, three on a 760px one and one on a phone.
+    muted line in the small step. Why 200: the panel's narrowest width, a measure the page already has, on the 8px grid; it
+    puts four or five across beside the sidebar on a laptop's page, a card about 200 to 250px wide, and one on a phone.
+    232 made cards near 290px wide on a laptop, larger than a file's picture needs.
   - **A document's picture is 3:2 wherever it is drawn** (a card's, a row's, the search's), on the light viewport's
     gradient in both themes. Why: one picture, one shape; a card's, a row's and the search's had three.
   - **A row** is the search's: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall, then its
