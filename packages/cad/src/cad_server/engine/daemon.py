@@ -1743,7 +1743,8 @@ class Daemon:
             # this request's channel ahead of its answer (``serve.Server.measure``): the summary's count.
             counted = ((lambda done, total, key: send({"progress": {"done": done, "total": total, "key": key}}))
                        if request.get("progress") else None)
-            status, body = self.serve(request).read(route, counted)
+            status, body = self.serve(request).read(route, counted, fresh=request.get("fresh") is True,
+                                                    version=request.get("version"))
             send({"ok": True, "status": status, "body": body.decode("utf-8")})
         elif op == "draw":
             self.draw(request, send)
