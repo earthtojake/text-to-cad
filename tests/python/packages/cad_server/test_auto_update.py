@@ -4168,6 +4168,7 @@ class CutShortTest(unittest.TestCase):
 
     def closed(self) -> mock.Mock:
         connection = mock.MagicMock()
+        connection.token = "t"  # on Windows a request carries its connection's token
         connection.__enter__.return_value = connection
         connection.reader = iter([])  # closed: nothing more to read
         return connection

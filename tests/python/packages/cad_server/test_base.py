@@ -115,12 +115,14 @@ class BaseTest(unittest.TestCase):
         (env / base.OVERRIDES).unlink()
         held = env / "lib" / "site-packages" / "uv"
         held.mkdir(parents=True)
-        (env / "bin" / "uv").write_text("", encoding="utf-8")
+        binary = env / ("Scripts/uv.exe" if os.name == "nt" else "bin/uv")  # the platform's scripts folder
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_text("", encoding="utf-8")
         fake.steps.clear()
         with self.made(fake):
             again = base.ensure(self.installation, told=self.said.append)
         self.assertEqual((again, fake.steps), (found, []), "found and used, nothing asked of uv")
-        self.assertTrue(held.is_dir() and (env / "bin" / "uv").is_file(), "left as it is")
+        self.assertTrue(held.is_dir() and binary.is_file(), "left as it is")
 
     def test_the_network_is_asked_only_for_what_uvs_cache_lacks_and_said_first(self) -> None:
         fake = Fake((2, "error: Network connectivity is disabled, but the requested data wasn't found in the cache"))
