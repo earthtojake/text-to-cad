@@ -94,3 +94,39 @@ it('two fingers down, one lifted, still rotates with the other', () => {
   pointer(document, 'pointerup', 1, 'touch', 160, 100);
   expect(controls.state).toBe(-1);
 });
+
+// The same laptop the other way round: the pen orbits and a finger (a palm) lands beside it. Only
+// the finger would get a position, and three's two-finger dolly read the pen's `position.x` off
+// undefined on the press itself. The pen keeps its orbit; the finger is not the controls'.
+it('a finger landing while a pen orbits leaves the orbit running instead of throwing', () => {
+  const { canvas, camera, controls } = mount();
+  pointer(canvas, 'pointerdown', 1, 'pen');
+  pointer(canvas, 'pointerdown', 2, 'touch', 200, 100);
+  expect(listenerErrors).toEqual([]);
+  expect(controls.state).toBe(0); // ROTATE
+  const before = camera.position.clone();
+  pointer(canvas, 'pointermove', 1, 'pen', 140, 100);
+  controls.update();
+  expect(camera.position.distanceTo(before)).toBeGreaterThan(0.01);
+  pointer(document, 'pointerup', 2, 'touch', 200, 100);
+  expect(controls.state).toBe(0);
+  pointer(document, 'pointerup', 1, 'pen');
+  expect(controls.state).toBe(-1);
+});
+
+// `setPointerCapture` throws NotFoundError for a pointer the browser does not know: an
+// automation's synthetic press, or one it dropped before the listener ran. Such a pointer never
+// lifts, so a gesture it started would never end and would hold the next press.
+it('a press whose pointer cannot be captured starts nothing and holds no pointer', () => {
+  const { canvas, controls } = mount();
+  canvas.setPointerCapture = (pointerId: number) => {
+    if (pointerId === 9) throw new DOMException('No active pointer with the given id is found.', 'NotFoundError');
+  };
+  pointer(canvas, 'pointerdown', 9, 'mouse');
+  expect(listenerErrors).toEqual([]);
+  expect(controls.state).toBe(-1);
+  pointer(canvas, 'pointerdown', 2, 'touch', 200, 100);
+  expect(controls.state).toBe(3); // TOUCH_ROTATE: one finger, not a two-finger dolly with the lost pointer
+  pointer(document, 'pointerup', 2, 'touch', 200, 100);
+  expect(controls.state).toBe(-1);
+});

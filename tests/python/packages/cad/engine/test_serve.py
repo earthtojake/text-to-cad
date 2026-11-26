@@ -338,6 +338,30 @@ class ServedStepTest(unittest.TestCase):
         self.assertIs(self.server.document(ident), served, "the page keeps the version it has")
         self.assertNotIn(ident, self.server.rereading, "and nothing reads the file again until it changes")
 
+    def test_an_inspection_reads_the_rewritten_step_and_checks_the_facts_version(self) -> None:
+        import build123d as bd
+
+        ident = self.server.add(self.step)
+        route = f"/api/doc/{ident}"
+        status, body = self.server.read(route, fresh=True)
+        self.assertEqual(status, 200)
+        before = json.loads(body)
+        changed = self.folder / "changed.step"
+        self.assertTrue(bd.export_step(bd.Box(25, 18, 16), str(changed)))
+        changed.replace(self.step)
+
+        status, body = self.server.read(route, fresh=True)
+        self.assertEqual(status, 200, body)
+        after = json.loads(body)
+        self.assertNotEqual(after["version"], before["version"])
+        status, body = self.server.read(route + "/volumes", fresh=True, version=before["version"])
+        self.assertEqual(status, 409)
+        self.assertIn("changed during inspection", json.loads(body)["error"])
+        status, body = self.server.read(route + "/volumes", fresh=True, version=after["version"])
+        self.assertEqual(status, 200, body)
+        (part,) = json.loads(body).values()
+        self.assertEqual([hi - lo for lo, hi in zip(part["box"]["min"], part["box"]["max"])], [25, 18, 16])
+
 
 class ServerUrlTest(unittest.TestCase):
     def test_a_wildcard_bind_reports_a_loopback_url_and_keeps_its_bind(self) -> None:

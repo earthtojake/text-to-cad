@@ -624,8 +624,9 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")
-# Errors that are never cadgen's bug: a command's own output closed by whatever read it (``cad ... | head``,
-# which the command answers by stopping quietly) -- that pipe, not another the command wrote to (``stdout_closed``);
+# Errors that are never cadgen's bug: a write to a command's own output, stdout or stderr, that failed (``cad ... |
+# head``, a reader gone, which the command answers by stopping quietly; on Windows a closed pipe or console is EINVAL,
+# a plain ``OSError``) -- that stream, not another the command wrote to (``failed_output``);
 # a page leaving a viewer route mid-reply is the response writer's to swallow (``cad_server.viewer.response``), so a
 # route's connection error that reaches here is cadgen's own connection failing, and is reported. A
 # ``RecursionError`` whose cycle is the person's: their code among its innermost frames, and of cadgen's only the
@@ -669,27 +670,37 @@ def _installation_gone(error: BaseException) -> bool:
     return not all(os.path.isfile(path) for path in needed)
 
 
-def stdout_closed() -> bool:
-    """Whether this process's own output is the pipe that closed: flushing it fails the same way, or -- a write too
-    large for the buffer leaves nothing to flush -- its descriptor reports no reader (POLLERR on Linux, POLLHUP on
-    macOS). Windows has no ``poll``, and says a closed pipe is EINVAL, not EPIPE: never there."""
-    stream = sys.stdout
-    if stream is None:
-        return False
-    try:
-        stream.flush()
-    except BrokenPipeError:
-        return True
-    except (OSError, ValueError):
-        return False
-    try:
-        import select
+def failed_output(error: BaseException) -> Any:
+    """The process's own stream, ``sys.stdout`` or ``sys.stderr``, whose write raised ``error``, or None: flushing it
+    fails the same way (an ``OSError`` of the same type and errno: what it could not write is still in its buffer),
+    or -- a ``BrokenPipeError`` from a write too large for the buffer leaves nothing to flush -- its descriptor reports
+    no reader (POLLERR on Linux, POLLHUP on macOS). Windows has no ``poll``, and says a closed pipe or console is a
+    plain ``OSError`` (EINVAL), not ``BrokenPipeError``: there only the flush tells. A stream that would block
+    (``BlockingIOError``) is still there, and is no failure of its own."""
+    if not isinstance(error, OSError) or isinstance(error, (BlockingIOError, InterruptedError)):
+        return None
+    streams = [stream for stream in (sys.stdout, sys.stderr) if stream is not None]
+    for stream in streams:
+        try:
+            stream.flush()
+        except OSError as again:
+            if type(again) is type(error) and again.errno == error.errno:
+                return stream
+        except (AttributeError, ValueError):  # not a stream, or one already closed
+            pass
+    if not isinstance(error, BrokenPipeError):
+        return None
+    for stream in streams:
+        try:
+            import select
 
-        poller = select.poll()
-        poller.register(stream.fileno(), select.POLLOUT)
-        return any(events & (select.POLLERR | select.POLLHUP) for _, events in poller.poll(0))
-    except (AttributeError, OSError, ValueError):  # no poll, or not a real file
-        return False
+            poller = select.poll()
+            poller.register(stream.fileno(), select.POLLOUT)
+            if any(events & (select.POLLERR | select.POLLHUP) for _, events in poller.poll(0)):
+                return stream
+        except (AttributeError, OSError, ValueError):  # no poll, or not a real file
+            pass
+    return None
 
 
 USER = "<user>"  # the person's own code, a frame or an exception's type: never named
@@ -1182,7 +1193,7 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
     send."""
     if where not in WHERE or not isinstance(error, Exception):  # an interrupt, an exit: no crash
         return None
-    if where == "command" and isinstance(error, BrokenPipeError) and stdout_closed():  # its reader left: no crash
+    if where == "command" and failed_output(error) is not None:  # a write to its own output failed: no crash
         return None
     if _installation_gone(error):  # cadgen's own files removed under it: no crash
         return None
