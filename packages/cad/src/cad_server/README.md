@@ -229,7 +229,8 @@ was. In order:
 1. **Switch** (the record's `phase` is `switching`: a server of the release being left starts none, `leaving`). On
    Windows inside an app package: refused, cause `packaged`. The server that answers is stopped at once, as `cad server
    stop` stops it; a `cad` command it cuts short says cad updated itself while it ran. On Windows, uv's bin `cad.exe` is
-   moved aside, then every other process of the environment stopped but those it spares, until none is left.
+   moved aside, then every other process of the environment stopped but those it spares, until none is left (by the
+   Win32 API, else PowerShell's `Get-CimInstance Win32_Process`).
    Then `uv tool upgrade "cad==<release>"` (pipx: `pipx runpip cad install --upgrade "cad==<release>"`); the moment it
    returns a bin `cad` is back.
 2. **Check**: `cad server start` where a server ran or one is wanted, which must leave a server of the release, else

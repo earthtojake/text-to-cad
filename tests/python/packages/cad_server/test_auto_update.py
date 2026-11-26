@@ -1655,6 +1655,25 @@ class WorkerTest(unittest.TestCase):
             found = helper.switch({**self.told, "spare": []}, run, helper.Log(None), system=FakeWindows({}))
         self.assertEqual(found["cause"], "in_use", found)
 
+    def test_where_the_win32_api_cannot_list_the_processes_powershell_does(self) -> None:
+        """``listed``: PowerShell's ``Get-CimInstance Win32_Process`` read as the Toolhelp snapshot is, one process (an
+        object, not a list) too; None where it fails or says no JSON. ``Windows.processes`` takes it where the snapshot
+        raises, and raises that error where PowerShell cannot say either."""
+        many = '[{"ProcessId":4,"ParentProcessId":0,"ExecutablePath":null},' \
+               '{"ProcessId":50,"ParentProcessId":4,"ExecutablePath":"C:\\\\cad\\\\Scripts\\\\python.exe"}]'
+        self.assertEqual(helper.listed(lambda command, timeout: (0, many)),
+                         {4: (0, None), 50: (4, "C:\\cad\\Scripts\\python.exe")})
+        self.assertEqual(helper.listed(lambda command, timeout: (0, '{"ProcessId":7,"ParentProcessId":1}')), {7: (1, None)})
+        for said in ((1, "powershell: not found"), (0, "not json"), (0, '"text"'), (None, "FileNotFoundError: x")):
+            with self.subTest(said=said):
+                self.assertIsNone(helper.listed(lambda command, timeout, said=said: said))
+        system = helper.Windows.__new__(helper.Windows)  # no kernel32 here
+        system.snapshot = mock.Mock(side_effect=OSError(5, "Access is denied"))
+        with mock.patch.object(helper, "listed", return_value={7: (1, None)}):
+            self.assertEqual(system.processes(), {7: (1, None)})
+        with mock.patch.object(helper, "listed", return_value=None), self.assertRaises(OSError):
+            system.processes()
+
     def test_the_installer_s_first_error_is_why_it_failed(self) -> None:
         """``why``: the first ``error:`` line, the ``Caused by:`` lines under it, and before it each warning that names
         a file; with no ``error:`` line, the last line. ``cause_of`` reads the same, and all it printed where the

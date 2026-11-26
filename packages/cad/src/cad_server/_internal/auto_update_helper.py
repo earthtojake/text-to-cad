@@ -595,9 +595,30 @@ def running(pids, prefix, command, system=None):
     return sorted(pid for pid in pids if pid in table and running_from(table[pid][1], prefix, command))
 
 
+# PowerShell's list of the processes (``listed``): each one's id, its parent's and its program's path, as JSON.
+PROCESSES = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process | "
+             "Select-Object ProcessId, ParentProcessId, ExecutablePath | ConvertTo-Json -Compress"]
+
+
+def listed(run=run):
+    """Every process as ``Windows.processes`` gives them, read from PowerShell's ``Get-CimInstance Win32_Process``
+    where the Win32 API could not be read; None where PowerShell could not say."""
+    code, said = run(PROCESSES, 60)
+    try:
+        found = json.loads(said) if code == 0 else None
+    except ValueError:
+        return None
+    found = [found] if isinstance(found, dict) else found
+    if not isinstance(found, list):
+        return None
+    return {int(each.get("ProcessId") or 0): (int(each.get("ParentProcessId") or 0), each.get("ExecutablePath") or None)
+            for each in found if isinstance(each, dict)}
+
+
 class Windows:
     """Windows' own calls for ``stop_environment``, by ctypes: the processes (a Toolhelp snapshot, each program's path
-    by ``QueryFullProcessImageNameW``) and their end (``TerminateProcess``, ``WaitForSingleObject``)."""
+    by ``QueryFullProcessImageNameW``; else PowerShell's list, ``listed``) and their end (``TerminateProcess``, ``WaitForSingleObject``)."""
 
 
     SNAPPROCESS, QUERY, TERMINATE, SYNCHRONIZE = 0x2, 0x1000, 0x0001, 0x00100000
@@ -631,7 +652,17 @@ class Windows:
             function.argtypes, function.restype = arguments, result
 
     def processes(self):
-        """``{pid: (parent pid, its program's path or None)}`` of every process now."""
+        """``{pid: (parent pid, its program's path or None)}`` of every process now: by a Toolhelp snapshot, else, where
+        that fails, by PowerShell (``listed``)."""
+        try:
+            return self.snapshot()
+        except Exception:  # noqa: BLE001 - the other way, then the error
+            found = listed()
+            if found is None:
+                raise
+            return found
+
+    def snapshot(self):
         kernel, ctypes = self.kernel, self.ctypes
         snapshot = kernel.CreateToolhelp32Snapshot(self.SNAPPROCESS, 0)
         if not snapshot or snapshot == ctypes.c_void_p(-1).value:
