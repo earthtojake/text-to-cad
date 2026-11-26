@@ -34,14 +34,14 @@ independent coordinate, and put this namespaced element on the input joint, whic
   input joint carries no `<mimic>`. Its limits must hold everything the driver's range derives (a
   continuous one has none), and the linkage must close over the driver's whole range: its `<limit>`,
   or one turn for a continuous driver.
-- **What moves it.** The viewer and `cad urdf snapshot` place the input joint from the driver's
+- **What moves it.** The viewer and `cad snapshot` place the input joint from the driver's
   value. The person cannot pose it in the viewer, a snapshot's `--pose` refuses it by name, and an SRDF group
   state cannot set it, as with a mimic joint.
-- **What checks it.** `cad urdf validate` checks the element alone: at most one on a joint, every
+- **What checks it.** `cad inspect` checks the element alone: at most one on a joint, every
   length positive, both zero angles numbers, the joint and its driver revolute or continuous on one
   parent, no cycle of drivers and mimics. The linkage's geometry (the two points above) is checked
   when the viewer opens the file: its page refuses the robot, naming the joint, what it found
-  and what to change. `cad urdf snapshot` checks none of it: it draws what the numbers give, and
+  and what to change. `cad snapshot` checks none of it: it draws what the numbers give, and
   refuses only a pose the coupler cannot reach. So a clean validation and a picture do not show that
   the linkage closes.
 - **Not in a generated URDF.** The extension derives one joint's angle and places no coupler link,

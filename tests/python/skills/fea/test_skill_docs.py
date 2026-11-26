@@ -41,17 +41,21 @@ class SkillDocs(unittest.TestCase):
         self.assertIn("`calculix` integration (`cad[calculix]`", setup)
         self.assertNotIn("conda install", setup)
 
-    def test_every_command_is_a_types_operation(self):
-        from cad.registry import DOCUMENT_TYPES
+    def test_every_command_is_the_study_s_verb_on_a_file_it_takes(self):
+        from cad.registry import type_of, types_for
 
-        studied = {entry.id for entry in DOCUMENT_TYPES.values() if "solve" in entry.operation_names}
+        studied = set(types_for("fea"))  # the types `cad fea` takes: a B-rep's
+        self.assertEqual({"xbf", "step"}, studied)
+        found = 0
         for path in _pages():
             text = path.read_text(encoding="utf-8")
             with self.subTest(page=path.name):
-                for document_type in re.findall(r"`cad (\w+) solve\b", text):
-                    self.assertIn(document_type, studied)
-                self.assertNotRegex(text, r"`cad (?:step|xbf|model) fea\b", "the study is solve")
-                self.assertNotRegex(text, r"`cad fea\b|\.fea\b", "a solve writes a folder of standard files")
+                self.assertNotRegex(text, r"`cad \w+ solve\b", "the study is the verb's: cad fea FILE")
+                self.assertNotRegex(text, r"\.fea\b", "a solve writes a folder of standard files, no .fea")
+                for source in re.findall(r"`cad fea ([^\s`]+)", text):
+                    found += 1
+                    self.assertIn(getattr(type_of(source), "id", None), studied, source)
+        self.assertGreater(found, 0)
 
     def test_the_folder_the_skill_describes_is_the_one_a_solve_writes(self):
         from cad._internal.fea import run

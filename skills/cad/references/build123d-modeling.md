@@ -64,7 +64,7 @@ There is no `metals.steel()`: plain steel is `mild_steel()`. A grade is a name, 
 - **Units.** A material is a `FinishedMaterial`, with physics in `.material` and appearance in
   `.pbr`; each family's `custom_*` factory (`metals.custom_metal`) makes one of your own. Density
   is a single value in kg/m³; mechanical properties are ranges, modulus in GPa and strength in
-  MPa. `shape.mass()` is in grams; `cad <type> inspect` reports kilograms. A measured weight is
+  MPa. `shape.mass()` is in grams; `cad inspect` reports kilograms. A measured weight is
   declared beside the material, `mass(part, grams)` from `cad.build123d`
   ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)).
 - **A part read from a STEP or an xbf** keeps the file's colours until it is given a material,

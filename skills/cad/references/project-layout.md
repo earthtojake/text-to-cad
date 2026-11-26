@@ -77,4 +77,4 @@ __pycache__/
 ```
 
 Vendor STEP files are irreplaceable inputs: commit them. The xbf converted from one is
-made again by one `cad step export`.
+made again by one `cad export`.

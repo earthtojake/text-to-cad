@@ -112,7 +112,7 @@ plate/face 3                            in a document of one part, its elements 
 ### References into other files
 
 A reference into a file that is not a document names what the viewer picked in it, in that file's
-own terms. None is a ref `cad <type> inspect` resolves:
+own terms. None is a ref `cad inspect` resolves:
 
 | File | Reference | Means |
 | --- | --- | --- |
@@ -147,13 +147,13 @@ each feature that made it out of another: `f:plate.body.6;M:plate.relief` is fac
 
 ### A picked element in a model's body
 
-A ref resolves in the server (`cad <type> inspect`, the viewer), never in a model: a body selects
+A ref resolves in the server (`cad inspect`, the viewer), never in a model: a body selects
 from the live shape it is building with build123d, by what the element is. To change what a person
 picked, read the ref's answer and either edit the code its `made_by` names or pick the same element
 in the body:
 
 ```bash
-cad xbf inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 2), a plane: the top
+cad inspect model.xbf "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 2), a plane: the top
 ```
 
 ```python
@@ -172,8 +172,8 @@ def bracket():
 
 ## Which code made it
 
-`cad xbf inspect "$ID" REF` answers what a ref names, placed where its occurrence stands
-(`cad xbf inspect FILE.xbf REF` or `cad step inspect FILE REF` for a file):
+`cad inspect model.xbf REF` answers what a ref names, placed where its occurrence stands
+(`cad inspect FILE.xbf REF` or `cad inspect FILE REF` for a file):
 
 - an element: its kind, number, name and canonical ref; the kernel's facts (a face's area,
   centroid, surface type, exact box and radius; an edge's length, curve type, class and endpoints;
@@ -184,7 +184,7 @@ def bracket():
   placement too.
 
 ```text
-$ cad xbf inspect "$ID" "bracket/face 7"
+$ cad inspect model.xbf "bracket/face 7"
 {
   "ref": "bracket/f:bracket_body.hole.1;M:bracket_body.body_dedanl",
   "path": "bracket/bracket",
@@ -204,12 +204,12 @@ The bore's wall is face 1 of the cylinder `hole`, modified by the cut whose resu
 file's element has none: a file names no model, but a model's own `.xbf` is the model. A ref of several selectors answers a list; one that
 names nothing is refused (exit 2) with the nearest names.
 
-Without a ref, `cad xbf inspect "$ID"` prints what the document holds, then the closure it was
+Without a ref, `cad inspect model.xbf` prints what the document holds, then the closure it was
 built from (its script, modules and input files, each by digest). Read it for the names a ref, a
 pose or a snapshot takes, rather than guessing them:
 
 ```text
-$ cad xbf inspect "$ID"
+$ cad inspect model.xbf
 hinge  09ffb984-e388-502a-96e4-a5f9feb2f88c
 state       live, not cached, built 4s ago
 parts       2 in hinge
@@ -262,7 +262,7 @@ volume = overlap_volume(solid_a, solid_b)
 `closest_points` returns the minimum distance and one witness pair; overlap, contact and
 containment all give 0, so it does not measure penetration. `overlap_volume` is the exact
 intersection volume (mm³) of two finite, positively oriented solids, 0 for mere contact; a kernel
-failure raises. `cad xbf interference` is that measure over every pair of a document
+failure raises. `cad inspect --interference` is that measure over every pair of a document
 ([interference](#interference)).
 
 - A part meant to sit on, bolt to or bear against another measures `closest_points` distance 0
@@ -293,20 +293,20 @@ cancel, so check signed volume per solid; no free edges means closed, not manifo
 
 ## Interference
 
-`cad xbf interference "$ID"` (`cad xbf interference FILE.xbf`, `cad step interference FILE`) says which
+`cad inspect model.xbf --interference` (a STEP the same way, by its path) says which
 parts of a document share volume. The verdict is the kernel's, exact, on the parts' own solids, so a
 plate through a 2.6 mm skin is found and a part 0.3 mm from another is not; meshes only rule out
 the pairs with air between them.
 
 ```bash
-cad xbf interference "$ID"                                  # as built
-cad xbf interference "$ID" --pose crouch --pose bow       # and at mechanism states
-cad xbf interference "$ID" --pose walk@0 --pose walk@0.6 --pose '{"l_knee": 90}'   # a sequence at times of it, joint values
-cad xbf interference "$ID" --fit 'bearing*' housing --fit pin base   # pairs meant to share volume
+cad inspect model.xbf --interference                                  # as built
+cad inspect model.xbf --interference --pose crouch --pose bow       # and at mechanism states
+cad inspect model.xbf --interference --pose walk@0 --pose walk@0.6 --pose '{"l_knee": 90}'   # a sequence at times of it, joint values
+cad inspect model.xbf --interference --fit 'bearing*' housing --fit pin base   # pairs meant to share volume
 ```
 
 ```text
-$ cad xbf interference "$ID" --pose '{"elbow": -10}'
+$ cad inspect model.xbf --interference --pose '{"elbow": -10}'
 error: overlapping_parts at hinge/base: shares 176.3 mm^3 with hinge/arm ({"elbow":-10}) Hint: move or resize one of the two, or name the pair a fit if it is meant to share volume (--fit A B)
 FAILED hinge: 1 pair of parts share volume (2 parts at 2 poses, the boxes of 2 pairs met: 1 kept, 1 measured, in 1.82 s)
 ```
@@ -325,7 +325,7 @@ FAILED hinge: 1 pair of parts share volume (2 parts at 2 poses, the boxes of 2 p
   `measurements.slowest` names the pairs that took longest.
 - **It checks the poses it is given, and chooses none.** `--pose` repeats and takes what a
   snapshot's does: a mechanism state's name, a configuration sequence at a time of it (`walk@0.6`),
-  or `{joint or coupling: value}`. `cad xbf inspect "$ID"` lists the states, and the sequences
+  or `{joint or coupling: value}`. `cad inspect model.xbf` lists the states, and the sequences
   with their durations.
 - **A fit is named, never inferred.** `--fit A B` takes two refs or globs; the pair's overlap is
   listed as a fit and is no overlap to fix. A shared volume of 0.001 mm^3 or less is the rounding
@@ -333,23 +333,23 @@ FAILED hinge: 1 pair of parts share volume (2 parts at 2 poses, the boxes of 2 p
 - **What it cannot see**: a pose it was not given (a time between two of a sequence), a part with
   no solid (left out, and counted), and joints that share a centre taken to the corners of their
   travel together, which is a `--pose` for each corner. Say so with the result.
-- From a script, `cad.xbf.interference(robot(), poses=["crouch", "walk@0.6"], fits=[("pin", "base")])`
+- From a script, `cad.inspect(robot(), interference=True, poses=["crouch", "walk@0.6"], fits=[("pin", "base")])`
   returns the same result (`.ok`, `.findings`, `.measurements`).
 
 ## Mass properties
 
 A part given a material ([materials](build123d-modeling.md#colour-and-materials)) is weighed by
-`cad xbf inspect "$ID" OWNER`. A script that needs every part's density (a link's mass summed
+`cad inspect model.xbf OWNER`. A script that needs every part's density (a link's mass summed
 from its parts) asks the server, which transfers no solid:
 
 ```python
-from cad import xbf
+import cad
 
-materials = xbf.inspect(robot(), query="structure")["summary"]["materials"]
+materials = cad.inspect(robot(), query="structure")["summary"]["materials"]
 # [{"name": "Alu_G6061_T6", "density": 2700, "parts": ["robot/hip/bracket", ...]}, ...]
 ```
 
-`xbf.inspect(handle, "hip/bracket")` answers one part or assembly as the command does. For
+`cad.inspect(handle, "hip/bracket")` answers one part or assembly as the command does. For
 explicit densities, a centre of mass or inertia:
 
 ```python

@@ -20,8 +20,8 @@ safety factor is no answer to them (a drop or a braking load can be estimated as
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| Check a part under a load | `cad step solve part.step` lists its faces; write the study; solve into a folder | [Workflow](#workflow), [linear static](references/linear-static.md) |
-| Check an assembly | `cad step solve assembly.step` lists the parts and the pairs that touch | [Assemblies](#assemblies) |
+| Check a part under a load | `cad fea part.step` lists its faces; write the study; solve into a folder | [Workflow](#workflow), [linear static](references/linear-static.md) |
+| Check an assembly | `cad fea assembly.step` lists the parts and the pairs that touch | [Assemblies](#assemblies) |
 | Write or edit a study | One JSON object: fixtures and loads, then material, mesh, margin and checks | [Study file](references/study-file.md) |
 | Choose a material | The model's own, or the E, ν and yield the person gives | [Materials](references/materials.md) |
 | Judge the answer | `result.json` and its findings, against a hand estimate | [Findings](#findings), [judging the answer](references/linear-static.md#judging-the-answer) |
@@ -29,8 +29,8 @@ safety factor is no answer to them (a drop or a braking load can be estimated as
 | Answer what the summary does not | `result.vtu`, read with meshio | [Your own questions](#your-own-questions) |
 | Compare design variants | The same study on each, faces mapped, mesh size held | [Compare variants](#compare-variants) |
 
-The study reads a saved `.step` or `.xbf`, or a model the server holds by its id
-(`cad xbf solve <id>`), and solves the whole document: to study one part of an assembly alone,
+The study reads a saved `.step` or a model's `.xbf` (`cad fea bracket.xbf`), and solves the whole
+document: to study one part of an assembly alone,
 export it as a document of its own.
 
 ## Setup
@@ -60,7 +60,7 @@ Units are fixed: mm, N, MPa (pressure, modulus and stress), t/mm³ for density (
    `plane, normal -Z, largest`.
 
    ```bash
-   cad step solve part.step
+   cad fea part.step
    ```
 
    Match the person's words ("the mounting face") to a ref by the hint and the centre; a hole is a
@@ -87,14 +87,14 @@ Units are fixed: mm, N, MPa (pressure, modulus and stress), t/mm³ for density (
 3. **Solve into a folder**, one per study:
 
    ```bash
-   cad step solve part.step --study study.json --out /tmp/bracket-load --json
+   cad fea part.step --study study.json --out /tmp/bracket-load --json
    ```
 
    | File | What it is for |
    | --- | --- |
    | `result.json` | The answer, which `--json` also prints. Read this first |
    | `stress.png`, `displacement.png` | The deformed part coloured by each field, the deformation exaggerated by `deformation_scale`. They show whether the load points the way you meant and which faces are held |
-   | `result.glb` | The same coloured surface, for `cad viewer` or any glTF viewer |
+   | `result.glb` | The same coloured surface, for `cad show` or any glTF viewer |
    | `result.vtu` | The volume mesh with `displacement` (mm) and `von_mises` (MPa) at its corner nodes |
    | `ccx.inp` | With `--deck`: the input CalculiX solved, to run or edit yourself (`cad run ccx -i ccx`, in that folder) |
 

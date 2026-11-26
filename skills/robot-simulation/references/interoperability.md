@@ -14,7 +14,7 @@ never one from the other. An SRDF is always hand-written, over the generated URD
 The two files name every link and joint alike, so a controller, an SRDF and a policy read the same
 names in each, except that a URDF name keeps `[A-Za-z0-9_]` and takes `_` for any other character.
 Each format keeps links and joints apart, so a link and a joint may share a name. The URDF export
-says where they do, since tools that name the two together collide them (`cad urdf validate` warns
+says where they do, since tools that name the two together collide them (`cad inspect` warns
 `joint_link_name_collision`): name the link apart with `link(shape, name)` (a finger's joint
 `finger_left`, its link `finger_left_link`). A name already held in its kind takes `_2`.
 
@@ -30,7 +30,7 @@ What one format cannot say, or says its own way:
 | A drive's speed bound (`limits(velocity=)`) | not written: MJCF has none | `<limit velocity>` |
 | The base, bolted (the default) or free (`free()`) | the base body with no joint, welded to the world, or with a `<freejoint>` | the root either way: a URDF bolts nothing (a consumer adds its own `world` link) |
 | A root link with mass, or placed off the world's frame | as any body | an empty `base_link` (`base_footprint` above a root named `base_link`) on a fixed joint before it ([the base link](from-cad.md#links-and-the-base)) |
-| A link with no material | no `<inertial>`: MuJoCo weighs its geoms, visual and collision both, and the check warns `inertia_from_visuals` | no `<inertial>`: `cad urdf validate` warns of a moving one |
+| A link with no material | no `<inertial>`: MuJoCo weighs its geoms, visual and collision both, and the check warns `inertia_from_visuals` | no `<inertial>`: `cad inspect` warns of a moving one |
 | A part with painted faces (a STEP's or an xbf's face colours, `paint()`) | a visual geom per colour, as the viewer draws it | a `<visual>` per colour |
 | Collisions | each part's mesh as a `collision` geom, which MuJoCo collides as its convex hull | each part's mesh as its `<collision>` |
 | Contact exclusions | `<contact><exclude>` for every jointed pair touching at rest | not written (an SRDF's `disable_collisions` for MoveIt) |

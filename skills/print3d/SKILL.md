@@ -34,8 +34,8 @@ https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 `cad` is needed only to write the mesh a slicer takes from a text-to-cad model or a STEP:
 
 ```bash
-cad xbf export part.xbf part.3mf
-cad step export part.step part.3mf
+cad export part.xbf part.3mf
+cad export part.step part.3mf
 ```
 
 OrcaSlicer is the person's own install: `brew install --cask orcaslicer` on macOS (its command line is

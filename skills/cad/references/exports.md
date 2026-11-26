@@ -17,22 +17,22 @@ converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-pro
 
 ## A file is exported from the `.xbf`
 
-A file is written from the model's `.xbf`, the file its run saved, when asked, each destination
-by its suffix. No code changes and nothing rebuilds, even after a server restart. The `.xbf`
+A file is written from the model's `.xbf`, the file its run saved, when asked: one file a
+command, its format by its suffix. No code changes and nothing rebuilds, even after a server restart. The `.xbf`
 holds the model as its last run left it: after an edit, run the script first. The person can
 export the same files from the viewer, as downloads.
 
 ```bash
-cad xbf export src/bracket.xbf STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad export src/bracket.xbf STEP/bracket.step
+cad export src/bracket.xbf STL/bracket.stl
 ```
 
-Any other file exports through its own type (a `.step` by `cad step export`), and a mesh file
-(`.stl`, `.glb`, `.3mf`) converts to either of the other two mesh formats, keeping what the target
-can hold:
+Any other CAD file exports the same way, by its path, and a mesh file (`.stl`, `.glb`, `.3mf`)
+converts to either of the other two mesh formats, keeping what the target can hold:
 
 ```bash
-cad step export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which model.read loads many times faster
-cad stl export scan.stl scan.3mf
+cad export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which model.read loads many times faster
+cad export scan.stl scan.3mf
 ```
 
 A mesh never becomes an `.xbf`, `.step` or `.dxf`: it has no B-rep, so model it in build123d, with
@@ -42,11 +42,10 @@ A mesh never becomes an `.xbf`, `.step` or `.dxf`: it has no B-rep, so model it 
   a robot description's `--zero` ([robot descriptions](#robot-descriptions)) and `--json`. None
   picks a part or a pose: a different file is a different model
   ([posed files and parts on their own](#posed-files-and-parts-on-their-own)).
-- **A refused export writes nothing.** Every destination is checked, a DXF's drawing and its
-  checks included, before any is written (exit 2). One that fails only once it writes (a full
-  disk, a folder it cannot make) exits 1, keeps the files it wrote before and names them in its
-  error (`a.stl: ... (a.step was written before it; a.glb was not)`). Each file is written beside
-  its target and moved over it, so a failed export leaves the old file whole.
+- **A refused export writes nothing.** The destination is checked, a DXF's drawing and its
+  checks included, before it is written (exit 2). One that fails only once it writes (a full
+  disk, a folder it cannot make) exits 1. The file is written beside its target and moved over
+  it, so a failed export leaves the old file whole.
 - **`--json`** prints what was written as one object (`{"ok": true, "source", "files": [{"path",
   "kind", "bytes", "seconds", "written", "robot"?}]}`: `written` false where the file already
   held those bytes, `robot` a robot description's summary), and a failure as one `{"ok": false,
@@ -61,8 +60,8 @@ A mesh never becomes an `.xbf`, `.step` or `.dxf`: it has no B-rep, so model it 
 The model's page is the default. A project can instead revolve around its exported files, where
 the person asks to iterate on the file or the project already works that way (an `exports.py`, a
 consumer reading the files). Each change then ends in the export too, by `exports.py` in place of
-the model's script or by `cad xbf export` after its run; the person looks at the file's page;
-and checks read the file (`cad <type> snapshot` or `inspect` with its path, or `step.read` in a
+the model's script or by `cad export` after its run; the person looks at the file's page;
+and checks read the file (`cad snapshot` or `cad inspect` with its path, or `step.read` in a
 check).
 
 | | Model page | File page |
@@ -76,14 +75,14 @@ check).
 A project whose files are delivered again after each change (a print set, a STEP for a
 supplier) keeps one script beside its models. It calls each model first, so its `.xbf` is
 current (an unchanged model runs nothing), then exports from the `.xbf`; a one-off file is a
-`cad xbf export`. `xbf.export(xbf, path, ...)` is that command from Python, and a file of
-another type exports through its own (`step.export`).
+`cad export`. `cad.export(source, path, ...)` is that command from Python, one file a call, for a
+model's `.xbf` or a file of any type.
 
 ```python
 # src/exports.py
 from pathlib import Path
 
-from cad import xbf
+import cad
 
 from bracket import bracket, bracket_wide
 
@@ -93,8 +92,9 @@ ROOT = HERE.parent                                  # the project's folder
 if __name__ == "__main__":
     bracket()
     bracket_wide()
-    xbf.export(HERE / "bracket.xbf", ROOT / "STEP/bracket.step", ROOT / "STL/bracket.stl")
-    xbf.export(HERE / "bracket_wide.xbf", ROOT / "STEP/bracket_wide.step")
+    cad.export(HERE / "bracket.xbf", ROOT / "STEP/bracket.step")
+    cad.export(HERE / "bracket.xbf", ROOT / "STL/bracket.stl")
+    cad.export(HERE / "bracket_wide.xbf", ROOT / "STEP/bracket_wide.step")
 ```
 
 ```bash
@@ -148,11 +148,12 @@ project, where `model.read` reads it as an input.
   of its `animation()`s ([animation](animation.md)) is an animation of its name, whose
   `extras.cad` holds its `duration` and its `kind`, `"motion"` or `"animation"`; a sub-assembly
   that moves as one is keyed on its own node. `asset.generator` is `cad`. A GLB exported from the
-  model's `.xbf`, from a copy of it or by the model's id is byte for byte the same file.
+  model's `.xbf` or from a copy of it is byte for byte the same file.
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
   and materials through the materials extension.
 - **STL**: binary, every placed triangle, in millimetres.
-- **xbf**: of a STEP (converting a vendor file); a model's is the file its run saves.
+- **xbf**: of a STEP (converting a vendor file), or a copy of a model's; a model's is the file its
+  run saves.
 - **DXF**: of a planar document only (a 2D drawing); a solid is refused.
 
 STL and 3MF files are in millimetres and a GLB in metres, so a hand-written URDF or MJCF scales an
@@ -173,8 +174,9 @@ cylinders show their facets. `--tolerance MM` and `--angle DEG` mesh an STL, a 3
 either alone:
 
 ```bash
-cad xbf export src/hopper.xbf STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
-cad xbf export src/hopper.xbf GLB/hero.glb --tolerance 0.05 --angle 5
+cad export src/hopper.xbf STL/hopper.stl --tolerance 0.02
+cad export src/hopper.xbf 3MF/hopper.3mf --tolerance 0.02
+cad export src/hopper.xbf GLB/hero.glb --tolerance 0.05 --angle 5
 ```
 
 - `--tolerance` is an absolute chord deviation in millimetres, at least 0.001. For a print with
@@ -182,7 +184,7 @@ cad xbf export src/hopper.xbf GLB/hero.glb --tolerance 0.05 --angle 5
   is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints).
 - `--angle` is a ceiling in degrees, from 1 to 28.5 (the viewer's): it draws small radii in more
   segments, where a tolerance does not reach them.
-- From Python they are `xbf.export(xbf, path, tolerance=0.02, angle=5)`.
+- From Python they are `cad.export(xbf, path, tolerance=0.02, angle=5)`.
 
 Each part is meshed again at the finer of the option and its own, for that file alone: a file is
 never coarser than the viewer's mesh, and the viewer, snapshots and every other export keep
@@ -202,8 +204,9 @@ A mechanism exports as a robot description for a simulator or ROS, by the destin
 `.xml` (or `.mjcf`) is a MuJoCo MJCF, `.urdf` a ROS URDF.
 
 ```bash
-cad xbf export src/arm.xbf sim/arm.xml description/arm.urdf
-cad xbf export src/arm.xbf sim/arm.xml --zero home
+cad export src/arm.xbf sim/arm.xml
+cad export src/arm.xbf description/arm.urdf
+cad export src/arm.xbf sim/arm.xml --zero home
 ```
 
 Each is one description of the model in SI units at its as-built state, and writes its meshes as
@@ -243,5 +246,5 @@ file: change the model and export again.
   KDL wants and so it stands where the MJCF stands it.
 - A closed loop's last joint is an MJCF equality and is left out of a URDF
   ([loops](kinematics.md#loops)); a ball joint in a URDF is refused by name.
-- A STEP has no mechanism: exported this way (`cad step export vendor/arm.step sim/arm.xml`), each
+- A STEP has no mechanism: exported this way (`cad export vendor/arm.step sim/arm.xml`), each
   top-level part or assembly is a body fixed to the world.

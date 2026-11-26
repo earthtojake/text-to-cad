@@ -24,8 +24,8 @@ def section(name: str) -> str:
 
 # The CAD app's tools: not every host has them (Claude gets none), so a skill names them only on condition.
 APP_TOOLS = re.compile(r"`cad_(?:show|view|screenshot)`")
-# `cad viewer`, as every command a skill runs: plain `cad`.
-VIEWER = re.compile(r"`?cad viewer")
+# `cad show`, as every command a skill runs: plain `cad`.
+VIEWER = re.compile(r"`?cad show")
 
 
 class ShowTheModelTest(unittest.TestCase):
@@ -46,8 +46,8 @@ class ShowTheModelTest(unittest.TestCase):
         self.assertIn("share it again after each change", text)
         self.assertIn("run it again with\n   `--yes` once they have", text)
         self.assertIn("The page follows every run", text)
-        self.assertRegex(text, r"`cad viewer")
-        # Of the app's tools, only `cad_show` is named, and outside the section only beside `cad viewer` or as a
+        self.assertRegex(text, r"`cad show")
+        # Of the app's tools, only `cad_show` is named, and outside the section only beside `cad show` or as a
         # thing that already prints or refuses (never told to call alone).
         for path in sorted((REPO / "skills").rglob("*.md")):
             for paragraph in path.read_text(encoding="utf-8").split("\n\n"):

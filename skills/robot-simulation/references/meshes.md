@@ -4,7 +4,7 @@ Read this for the mesh files a description names: what a generated description w
 
 ## Generated Descriptions
 
-A description generated from a CAD model (`cad xbf export robot.xbf robot.xml` or `robot.urdf`, or `cad.mujoco.spec`) writes its own meshes, and none of the steps below apply:
+A description generated from a CAD model (`cad export robot.xbf robot.xml` or `robot.urdf`, or `cad.mujoco.spec`) writes its own meshes, and none of the steps below apply:
 
 - one binary STL per part prototype, in metres and in the part's own frame, written once however many links place it, named `<model>_<part>.stl`; the description places it in its link with an origin, so no `scale` is written;
 - beside the file, each named by relative path, so the file and its meshes move as one folder: in `assets/` for an MJCF (its `meshdir`), in `meshes/` for a URDF;
@@ -24,7 +24,7 @@ The unit of export is the link, not the assembly and not the CAD feature tree:
 2. Never point several links at one combined mesh with compensating origins. A body two links share is split at the joint, in CAD.
 3. Export each link's mesh in the link's own frame, the one coincident with its parent joint's frame at zero. Every `<visual><origin>` is then identity, the easiest state to audit.
 4. A mesh that cannot be re-framed (a vendor's, a scan) takes a nonzero visual origin, recorded in the ledger with its source: a per-link constant, not a tuning knob.
-5. With a text-to-cad model, each link is a model of its own returning the link's part in the link's frame, and `cad xbf export link.xbf link.stl` writes its mesh.
+5. With a text-to-cad model, each link is a model of its own returning the link's part in the link's frame, and `cad export link.xbf link.stl` writes its mesh.
 
 Before writing the XML, confirm each file holds only its link's geometry (open it, or check its bounding box), and give each mesh its ledger line: source, units, scale, and how its collision was simplified ([urdf-authoring.md](urdf-authoring.md#the-ledger)). When the CAD changes shape, export the affected links again first, then re-check what was derived from the old shape: link frames, visual origins, collision approximations and inertials.
 
@@ -38,8 +38,8 @@ Before writing the XML, confirm each file holds only its link's geometry (open i
 
 In a URDF:
 
-- **A relative path** (`3MF/forearm_link.3mf`) resolves from the `.urdf` file's folder, and `cad urdf validate` checks that the file is there. Prefer it for a robot kept in a project tree.
-- **A `package://name/path` URI** is for ROS consumers. The validator checks its syntax and warns that it was not resolved; `--packages NAME=PATH` resolves it for the validator alone. The viewer and `cad urdf snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
+- **A relative path** (`3MF/forearm_link.3mf`) resolves from the `.urdf` file's folder, and `cad inspect` checks that the file is there. Prefer it for a robot kept in a project tree.
+- **A `package://name/path` URI** is for ROS consumers. The validator checks its syntax and warns that it was not resolved; `--packages NAME=PATH` resolves it for the validator alone. The viewer and `cad snapshot` take the nearest folder above the `.urdf` named `name`, or holding a `package.xml` that names it, as the package root, so keep the description inside its package folder.
 - **A remote URI** passes with a warning and is drawn by nothing here.
 
 In an MJCF, a mesh `file` resolves from `<compiler meshdir>`, itself relative to the main file, and is an STL, an OBJ or an MSH. A 3MF or a GLB is no MuJoCo mesh: export the link as STL. `cad mujoco check` says, in MuJoCo's words, a mesh file it cannot find or read.

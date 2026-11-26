@@ -26,7 +26,7 @@ a part of its own. Mirror inline, or make the mirrored part a model of its own w
 needs its own files.
 
 A part read from a file ([inputs](model-contract.md#inputs)) keeps its vendor's origin
-and orientation: find its mounting features with a snapshot or `cad <type> inspect`, and
+and orientation: find its mounting features with a snapshot or `cad inspect`, and
 write the measured offsets or joint frames in the source.
 
 ## Native joints

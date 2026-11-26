@@ -48,8 +48,8 @@ moves them.
 ## Check it
 
 ```bash
-cad xbf dfm "$ID" --process printing --technology sla --build-volume 145x145x185
-cad stl dfm stand.stl --technology fdm --material petg --candidates
+cad dfm housing.xbf --process printing --technology sla --build-volume 145x145x185
+cad dfm stand.stl --technology fdm --material petg --candidates
 ```
 
 - `--technology fdm|sls|sla|mjf|pbf` (default `fdm`): every limit and the self-supporting angle are

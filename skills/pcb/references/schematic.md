@@ -33,7 +33,7 @@ with number, name and electrical type), `pins`, `wires` (and buses), `junctions`
 local net carries its sheet's path (`/Power/VBUS`); `sch.net("VBUS")` finds it by its bare name when one
 sheet alone has it. Positions are millimetres on each sheet's page, y down.
 
-`cad kicad_sch inspect board.kicad_sch [REF] --json` says the same in one look: sheets, parts, nets,
+`cad inspect board.kicad_sch [REF] --json` says the same in one look: sheets, parts, nets,
 and what a reference names.
 
 ## References
@@ -52,8 +52,8 @@ the other:
 ## Look at it
 
 ```bash
-cad kicad_sch snapshot board.kicad_sch tmp/root.png
-cad kicad_sch snapshot board.kicad_sch tmp/power.png --sheet /Power/
+cad snapshot board.kicad_sch tmp/root.png
+cad snapshot board.kicad_sch tmp/power.png --sheet /Power/
 ```
 
 Each picture is one sheet, framed on what it draws, its title block included (`--border`: the whole page
@@ -64,7 +64,7 @@ read them: after an edit, look at each sheet changed and redraw until nothing ov
 ## Check it
 
 ```bash
-cad kicad_sch erc board.kicad_sch --json
+cad kicad erc board.kicad_sch --json
 ```
 
 KiCad's electrical rules check on the whole hierarchy, every finding with its sheet and where it is on that
@@ -190,16 +190,17 @@ the parent's that the child does not set (a lost one is ERC's `lib_symbol_mismat
 ## Into the board, and back
 
 The board takes its parts and nets from the schematic's netlist. There is no "Update PCB": a schematic
-edit reaches the board through the netlist exported from the saved schematic (`cad kicad_sch export
-board.kicad_sch --to netlist -o tmp` writes `tmp/board.net`) and imported in a board's edit. One script does
+edit reaches the board through the netlist exported from the saved schematic (`cad export
+board.kicad_sch tmp --to netlist` writes `tmp/board.net`) and imported in a board's edit. One script does
 both, the schematic's block first:
 
 ```python
+import cad
 from cad import kicad_pcb, kicad_sch
 
 with kicad_sch.edit("board.kicad_sch") as s:
     ...                                       # saved at this block's end
-(netlist,) = kicad_sch.export("board.kicad_sch", "netlist", "tmp").written
+(netlist,) = cad.export("board.kicad_sch", "tmp", to="netlist").written
 with kicad_pcb.edit("board.kicad_pcb") as b:
     print(b.import_netlist(str(netlist)).report)  # dry_run=True first, to see what it would change
 ```

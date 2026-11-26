@@ -33,7 +33,7 @@ again, since a hand edit to the CSV disagrees with the board and is lost at the 
 ## 3D models
 
 A part stands on the STEP its footprint names ([where it is looked for](views.md#3d-and-part-models)).
-`cad kicad_pcb inspect board.kicad_pcb --json` lists the missing ones (`models.missing`, each with its
+`cad inspect board.kicad_pcb --json` lists the missing ones (`models.missing`, each with its
 reason) before any export. Report them: an enclosure checked against a board without its parts' bodies
 establishes no component clearance.
 

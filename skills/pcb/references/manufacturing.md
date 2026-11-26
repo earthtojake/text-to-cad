@@ -5,8 +5,8 @@ the fabs' standard limits.
 
 ## Exports
 
-`cad kicad_pcb export BOARD --to KIND -o DIR` writes one kind a run from the saved board, which it never
-changes (`--json` lists the files written). `kicad_pcb.export(board, to, out)` is the same in a script run
+`cad export BOARD DIR --to KIND` writes one kind a run from the saved board, which it never
+changes (`--json` lists the files written). `cad.export(board, out, to=kind)` is the same in a script run
 with `cad run` (its result's `written` and `warnings`).
 
 | `--to` | Writes into DIR |
@@ -33,7 +33,7 @@ cad run kicad-cli pcb export step --force --subst-models --user-origin 0x0mm -o 
 cad run kicad-cli pcb export pos --format csv --units mm --side both --exclude-dnp --use-drill-file-origin -o out/board-pos.csv board.kicad_pcb
 ```
 
-Its STEP holds only the models KiCad itself finds, so check its parts against `cad kicad_pcb inspect
+Its STEP holds only the models KiCad itself finds, so check its parts against `cad inspect
 --json`'s `models`.
 
 JLCPCB's assembly reads `Designator`, `Mid X`, `Mid Y`, `Layer` (`Top` or `Bottom`) and `Rotation` in
@@ -74,7 +74,7 @@ out: say so when you use it.
 
 The STEP is an ordinary CAD file, not the board's source. Show it as any file
 ([Show the model](../SKILL.md#show-the-model): `cad_show` where your tools include it, else its page
-from `cad viewer`), convert it with `cad step export mechanical/board.step mechanical/board.glb` (or STL,
+from `cad show`), convert it with `cad export mechanical/board.step mechanical/board.glb` (or STL,
 3MF) for a requested mesh, and read it into an enclosure model with `step.read`. Check geometry and
 millimetre scale after a conversion. Export again after a board edit; never carry a change made to the
 STEP back into the board by guessing at its meaning.

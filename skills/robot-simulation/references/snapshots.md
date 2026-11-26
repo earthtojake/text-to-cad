@@ -1,12 +1,12 @@
 # Snapshots
 
-`cad urdf snapshot` and `cad srdf snapshot` draw the robot to a PNG still, as the viewer shows
+`cad snapshot` and `cad snapshot` draw the robot to a PNG still, as the viewer shows
 it. An MJCF has no snapshot: it is MuJoCo's own file, which no `cad` command draws
 ([an MJCF](#an-mjcf), below).
 
 ```bash
-cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "gripper_slide": 0.02}'
-cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
+cad snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "gripper_slide": 0.02}'
+cad snapshot path/to/robot.srdf review.png --pose arm/ready
 ```
 
 ## Poses
@@ -19,7 +19,7 @@ follower is refused by name (a follower follows its leader).
 - **URDF**: mimic joints and four-bar linkages are followed; a `<tcad:four_bar>` input is refused
   by name (an input follows its driver; [urdf-four-bar.md](urdf-four-bar.md)).
 - **SRDF**: hand it the `.srdf`. It draws the paired URDF's geometry, the same-folder `.urdf`
-  whose `<robot name>` matches, as `cad srdf validate` pairs them; no match, or more than one, is
+  whose `<robot name>` matches, as `cad inspect` pairs them; no match, or more than one, is
   refused, naming the robot name it looked for and the `.urdf` files it found. The robot opens at
   this SRDF's `home` group state if it declares one, and `--pose` names a group state
   (`group/name`, or a name only one group has) or gives joint values over that opening pose.
@@ -45,8 +45,8 @@ first.
 
 No `cad` command draws a MuJoCo model's file. In its place:
 
-- **The robot's kinematics, posed**: snapshot the CAD model it was generated from (`cad xbf snapshot
-  "$ID" out.png --pose home`) or the URDF exported beside it (`cad urdf snapshot robot.urdf out.png
+- **The robot's kinematics, posed**: snapshot the CAD model it was generated from (`cad snapshot
+  robot.xbf out.png --pose home`) or the URDF exported beside it (`cad snapshot robot.urdf out.png
   --pose '{"elbow": 45}'`): the same links, joints and zero.
 - **What it collides as**: the `collisions` and `excludes` lines of `cad mujoco check`
   ([mjcf-checks.md](mjcf-checks.md#what-collides-and-the-excludes)), which say exactly what a MuJoCo
@@ -56,7 +56,7 @@ No `cad` command draws a MuJoCo model's file. In its place:
 
 ## Display, camera and annotations
 
-`cad urdf snapshot --help` lists the display modes, the camera forms and the sizes. What it does not
+`cad snapshot --help` lists the display modes, the camera forms and the sizes. What it does not
 say:
 
 - A robot file carries each part's colour and its material's name, not the material's look. `cad

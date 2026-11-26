@@ -83,7 +83,7 @@ Declare on finished parts, as a material is set: an operation after a `frame()`,
 or `point_mass()` makes a new shape that has lost it, with no warning, while a move or a copy keeps
 it.
 
-`cad xbf export src/gripper.xbf sim/gripper.xml` writes the file a MuJoCo function starts from (`spec()`
+`cad export src/gripper.xbf sim/gripper.xml` writes the file a MuJoCo function starts from (`spec()`
 holds the same), abridged:
 
 ```xml
@@ -186,7 +186,7 @@ path:
   each for a part that should not collide (a fastener, a cover, a motor inside its case). `fit` and
   `decompose` return the same list for what they made.
 
-**Naming a part.** A part is its label path as `cad xbf inspect` prints it (`gripper/left`). Its
+**Naming a part.** A part is its label path as `cad inspect` prints it (`gripper/left`). Its
 last segment, or any trailing run of segments, is enough where that names one part (`left`,
 `left_servo/case`); a name that fits none or several is refused with the candidates. A part placed
 several times (one servo in each joint) has a path per occurrence. Parts of one label in one link

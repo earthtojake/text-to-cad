@@ -34,10 +34,10 @@ how to tell).
 
 ## Joint ranges
 
-- **Stops that are the parts meeting**: `cad xbf ranges <id>` moves each joint alone until its child
+- **Stops that are the parts meeting**: `cad inspect robot.xbf --ranges` moves each joint alone until its child
   link meets its parent and prints each stop, in degrees or millimetres, in the joint's own values
   (the ones `angular_range` takes, whatever value it was built at). Write them into the joint's
-  `angular_range` or `linear_range`, rounded towards zero, and run the model again (`cad xbf ranges --help` has the options).
+  `angular_range` or `linear_range`, rounded towards zero, and run the model again (`cad inspect --help --ranges` has the options).
 - **A servo's own travel**, narrower than that, is its datasheet's.
 - **A joint the parts never stop** (a wrist roll): give it the actuator's travel (a position servo's
   one turn, `angular_range=(-180, 180)` around the pose its encoder centres on), a limited hinge in
@@ -78,7 +78,7 @@ how to tell).
   pair the loop's last joint by label where both parts already stand. The MJCF closes the loop there
   with an equality between a site on each body (two `connect`s for a hinge, one for a ball; where the
   last joint is a slide, at the loop's nearest hinge or ball instead). The URDF leaves that joint out
-  and says so. A loop's joints have no named pose and no stops from `cad xbf ranges`.
+  and says so. A loop's joints have no named pose and no stops from `cad inspect --ranges`.
 
 ## Mass
 
@@ -118,10 +118,10 @@ parts a density weighs wrongly, and the checks).
 
 ```bash
 cad run src/gripper.py
-cad xbf ranges "$ID"
-cad xbf export src/gripper.xbf sim/gripper.xml
-cad xbf export src/gripper.xbf description/gripper.urdf --zero home
-cad step export vendor/part.step sim/part.xml
+cad inspect robot.xbf --ranges
+cad export src/gripper.xbf sim/gripper.xml
+cad export src/gripper.xbf description/gripper.urdf --zero home
+cad export vendor/part.step sim/part.xml
 ```
 
 - **Read what it wrote.** After the file's line, an export says its links and how its base stands,

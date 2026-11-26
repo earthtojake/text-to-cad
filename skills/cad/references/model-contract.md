@@ -24,7 +24,7 @@ files into a model, or working out why a run ran what it ran.
   loaded there, when it is first read and never before, so a script that only builds
   pays nothing for it. In a plain script (a check, a drawing) it is the tree a calling
   body reads, every part placed, named, coloured and given its material, without its
-  joints. Verbs take the handle (`xbf.export(handle, ...)`, `posed(handle, state)`).
+  joints. Verbs take the handle (`cad.export(handle, ...)`, `posed(handle, state)`).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module
   level (`from build123d import Box`, an `Axis`, a `Location`, a colour palette, a
@@ -47,7 +47,7 @@ HOLES = xbf.param("holes", 4, min=2, max=8)              # an int default: whole
 BORE = xbf.param("bore", 3 + CLEARANCE)                  # CLEARANCE declared in spec.py
 ```
 
-`cad xbf inspect "$ID"` lists them. The viewer saves one only where its default is a plain number in
+`cad inspect model.xbf` lists them. The viewer saves one only where its default is a plain number in
 the model's own script; any other is listed read-only, and changes where it is declared:
 
 ```text
@@ -227,13 +227,13 @@ def rig():
   part is a part. Take the tree's parts placed with `leaves(tree)` (`cad.build123d`),
   never `located` or `moved` on a node of it, which copies the whole assembly
   ([opening geometry](inspection-and-validation.md#opening-geometry)).
-- **A vendor STEP is converted once**: `cad step export vendor.step vendor.xbf` writes an
+- **A vendor STEP is converted once**: `cad export vendor.step vendor.xbf` writes an
   xbf of it, which `model.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
 - **A STEP that names other files as its parts** (an external reference, written by a
   CAD tool's multi-file export) is refused by name, here and in the viewer and
-  `cad <type> export`: export it again from its CAD tool as one file.
+  `cad export`: export it again from its CAD tool as one file.
 - **`stl.read(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
   `name` and `bounding_box()`. A document holds B-rep alone, so a mesh is measured and
   built from, never placed in a model.
@@ -255,7 +255,7 @@ def rig():
   name in a folder, in one script or two, save one file and are one document, the last
   one built: nothing refuses it.
 - **What names the state** is the key of the code and inputs the document was built
-  from, `handle.report["closure"]["key"]` (`cad xbf inspect "$ID" --query closure`
+  from, `handle.report["closure"]["key"]` (`cad inspect model.xbf --query closure`
   prints the closure). A file derived from a document (a simulator's description, a GLB
   beside a film) that records the key can tell whether the document has been built from
   other sources since. The key is `None` where the model's code cannot be keyed.
@@ -264,10 +264,10 @@ def rig():
   script again. cad keeps no other copy of it, so to be rid of a document is to delete its
   file. Delete only what the person asked to delete.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
-  shape) is handed over: `xbf(shape, name="plate")` makes a document of it, served on
+  shape) is saved: `cad.save(shape, "plate.xbf")` makes a document of it, served on
   its page and exported like any other, and returns its handle. Joints, mechanism states
   and sequences on the shape go with it; a GLB's animations are passed as
-  `animations=[...]`. Nothing builds it again but the program that handed it over. A
+  `animations=[...]`. Any other file of a shape is `cad.export(shape, "plate.step")`. Nothing builds it again but the program that saved it. A
   decorated function in no saved file is refused, with these words.
 - `cad server status` lists each document its workers hold: `live`, `building` or `failed`
   (its last run failed, and its previous good build is served). One no worker holds is its

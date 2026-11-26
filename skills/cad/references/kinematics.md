@@ -110,7 +110,7 @@ if __name__ == "__main__":
   `warning:` line (`sequences 0 · warnings 1`).
 - **A pair is named by its moving joint's label** (`elbow`). A label two pairs share
   takes the path of the part that holds it (`hand/left:knuckle`);
-  `cad xbf inspect "$ID"` lists the names a pose takes.
+  `cad inspect arm.xbf` lists the names a pose takes.
 - **Links are parts that move as one**: parts whose rigid joints are connected are one
   link, and a part below a jointed sub-assembly moves with it. The ground is every link
   no `connect_to` moved, and every part no joint places.
@@ -235,7 +235,7 @@ hinge("pin", rocker, coupler, C, connect=False)   # the loop's last joint: the c
 The document keeps every pair, and poses none of a loop's (there is no solver): a
 configuration sequence that moves one is left out with a warning, a pose that moves one
 (a `--pose`, or a mechanism state where it is drawn or checked) is refused, and
-`cad xbf ranges` sweeps none of them. A robot description follows the pairs from the
+`cad inspect --ranges` sweeps none of them. A robot description follows the pairs from the
 ground and leaves out the pair that reaches a link a second time, the one paired last.
 The MJCF closes the loop there with an equality between two sites, one on each body where
 the joint stands (a hinge is two `connect`s, a ball one), and does not enforce that
@@ -252,9 +252,9 @@ the stops into the joint's `angular_range` or `linear_range` in the body, rounde
 run the model again.
 
 ```bash
-cad xbf ranges "$ID"
-cad xbf ranges "$ID" --joint gripper
-cad step ranges arm.step --step 0.5 --json
+cad inspect arm.xbf --ranges
+cad inspect arm.xbf --ranges --joint gripper
+cad inspect arm.step --ranges --step 0.5 --json
 ```
 
 Reading a finding:
@@ -271,7 +271,7 @@ Reading a finding:
   that does not limit the hardware (a vendor's servo cover the jaw clears) is not the joint's range,
   and neither is a stop wider than the actuator's own travel: write the datasheet's travel instead.
   A stop is where surfaces come near, not where solids overlap, so it reads a little short of
-  contact (a lid that folds back flat at 180 reads 174): `cad xbf interference "$ID" --pose
+  contact (a lid that folds back flat at 180 reads 174): `cad inspect arm.xbf --interference --pose
   '{"hinge": 178}'` at and past it is the exact answer, with the joint's range widened for the test.
 - **No stop.** A turn is swept a full turn each way and a slide the document's extent; a joint clear
   that far has none (`why`: `clear all the way round`). A cylindrical or spherical joint and a joint
@@ -352,7 +352,7 @@ free(root)                                  # the base is not bolted to the worl
   label on the assembly or below it, in SI, from the drive's datasheet: URDF's `<limit>`, MJCF's
   `actuatorfrcrange` (MJCF has no speed bound). Declare it after the joint is made. A joint without
   one is written `effort="0" velocity="0"` in a URDF, which a ROS controller reads literally
-  (`cad urdf validate` warns of it).
+  (`cad inspect` warns of it).
 - **`mass(part_or_assembly, grams)`** is what it weighs in all: its solids keep the ratios their
   materials' densities give and are scaled alike to make up `grams`, so the centre of mass and the
   shape of the inertia stay the geometry's. Where none of them has a material they share one
@@ -429,9 +429,9 @@ waypoints and sweeps like a joint's.
 A pose is drawn on demand:
 
 ```bash
-cad xbf snapshot "$ID" tmp/open.png --pose open
-cad xbf snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
-cad xbf snapshot "$ID" tmp/stride.png --pose walk@0.6
+cad snapshot arm.xbf tmp/open.png --pose open
+cad snapshot arm.xbf tmp/elbow_45.png --pose '{"elbow": 45}'
+cad snapshot arm.xbf tmp/stride.png --pose walk@0.6
 ```
 
 `--pose` takes a mechanism state's name, joint and coupling values as JSON (a turn in
@@ -446,12 +446,12 @@ as `--pose` takes it. A preset camera is fitted to each picture:
 how to hold one.
 
 ```bash
-cad xbf snapshot --job tmp/frames.json
+cad snapshot --job tmp/frames.json
 ```
 
 ```json
-[{"input": "<id>", "camera": "right", "jointValues": "walk@0.0", "outputs": [{"path": "tmp/walk_00.png"}]},
- {"input": "<id>", "camera": "right", "jointValues": "walk@0.2", "outputs": [{"path": "tmp/walk_01.png"}]}]
+[{"input": "arm.xbf", "camera": "right", "jointValues": "walk@0.0", "outputs": [{"path": "tmp/walk_00.png"}]},
+ {"input": "arm.xbf", "camera": "right", "jointValues": "walk@0.2", "outputs": [{"path": "tmp/walk_01.png"}]}]
 ```
 
 The frames stand under the mechanism's fixed link, as the sequence is written: a robot whose
@@ -461,7 +461,7 @@ configuration sequences.
 
 A pose or a motion shows movement; it does not measure it. A check of the model measures
 the parts as built, so a part that clears there can still pass through another
-mid-motion. `cad xbf interference "$ID" --pose crouch --pose walk@0.6` measures every pair of
+mid-motion. `cad inspect arm.xbf --interference --pose crouch --pose walk@0.6` measures every pair of
 parts at each pose it is given: give it every state, and each sequence at the times that matter
 ([interference](inspection-and-validation.md#interference)). To measure one pair at a pose in a
 check script, pose the model there and take its parts with `find_part`, copied from

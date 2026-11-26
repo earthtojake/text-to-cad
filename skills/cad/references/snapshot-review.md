@@ -11,16 +11,16 @@ snapshot can draw.
 - [Annotations and Quick Edit views](#annotations-and-quick-edit-views)
 - [Mesh files, robots and drawings](#mesh-files-robots-and-drawings)
 
-`cad <type> snapshot SRC OUT.png` draws SRC as the viewer draws it, rendered by OCCT, into a
+`cad snapshot SRC OUT.png` draws SRC as the viewer draws it, rendered by OCCT, into a
 PNG: one command, one picture. SRC is a model's id (the document the server holds, as it is:
 nothing is built), a document file (`.xbf`, `.step`), a mesh (`.stl`, `.3mf`, `.glb`), a robot
 (`.urdf`, `.srdf`) or a drawing (`.dxf`). A script is never a source, and SRC is a whole document,
-never a ref into one (`$ID#bracket`): `--display '{"isolated": ["bracket"]}'` draws one part alone.
+never a ref into one (`model.xbf#bracket`): `--display '{"isolated": ["bracket"]}'` draws one part alone.
 
 ```bash
-cad xbf snapshot "$ID" tmp/review.png
-cad xbf snapshot "$ID" tmp/below_behind.png --camera 225:-30
-cad xbf snapshot "$ID" tmp/top.png --display hidden-line --grid --camera top
+cad snapshot model.xbf tmp/review.png
+cad snapshot model.xbf tmp/below_behind.png --camera 225:-30
+cad snapshot model.xbf tmp/top.png --display hidden-line --grid --camera top
 ```
 
 With no flags a snapshot is the `solid` display from an orthographic isometric camera fitted to the
@@ -97,8 +97,8 @@ of a large curved part (a faceted outline, uneven shading). For a still that nee
 export the model as a GLB at the tolerance wanted and draw that file:
 
 ```bash
-cad xbf export src/bracket.xbf tmp/fine.glb --tolerance 0.02 --angle 3
-cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
+cad export src/bracket.xbf tmp/fine.glb --tolerance 0.02 --angle 3
+cad snapshot tmp/fine.glb tmp/close.png --camera 35:20
 ```
 
 ## Clipped views
@@ -109,7 +109,7 @@ relation to a floor. `display.clip` takes `enabled`, `axis` (`x`, `y` or `z`, lo
 and `invert`; the cut is capped. Look straight at the cut:
 
 ```bash
-cad xbf snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
+cad snapshot model.xbf tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
 ```
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
@@ -120,15 +120,15 @@ numbered segment and its path written with either, so one entry leaves out a kin
 part wherever it is; a glob that matches nothing is refused.
 
 ```bash
-cad xbf snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
-cad xbf snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
+cad snapshot model.xbf tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad snapshot model.xbf tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
 ```
 
 ## Annotations and Quick Edit views
 
 A Quick Edit prompt carries a snapshot packet, inline JSON after its references. The prompt names
 files relative to your workspace, else from `~/`, or a shared model by its cad.fun link (`cad import
-LINK` first: then `cad <type> snapshot` reads the link as the copy it wrote). The packet holds:
+LINK` first: then `cad snapshot` reads the link as the copy it wrote). The packet holds:
 
 - `input`: what the person looked at: a model's id, a file's path, or a cad.fun link;
 - `jobs`: one per view they captured (the current view and each view they drew
@@ -145,7 +145,7 @@ LINK` first: then `cad <type> snapshot` reads the link as the copy it wrote). Th
 Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cad xbf snapshot "$ID" tmp/quick_edit.png --annotation '<packet>' --camera authored
+cad snapshot model.xbf tmp/quick_edit.png --annotation '<packet>' --camera authored
 ```
 
 `--annotation` takes the packet and draws each mark on its part,
@@ -161,8 +161,8 @@ pose, the ink over each), each picture into the current folder (or `--out DIR`) 
 `<input>-<label>.png`, and says where:
 
 ```bash
-cad xbf snapshot --job '<packet>'
-cad xbf snapshot --job '<packet>' "$ID"   # the same views, of the document as it is now
+cad snapshot --job '<packet>'
+cad snapshot --job '<packet>' model.xbf   # the same views, of the document as it is now
 ```
 
 `--job` also takes a job (`{input, camera, display, preview, jointValues, output, outputs}`) or a

@@ -19,7 +19,7 @@ sources. Where either is missing or uncertain, the row says so instead of passin
 | --- | --- | --- |
 | Review an upload | The order's intent, then the sources, then the file | [Workflow](#workflow) |
 | Find the current requirements | The three official source files, fetched now | [Official sources](references/official-sources.md) |
-| Measure the file | `cad step inspect`, `cad step dfm --process sheet`, `cad dxf dfm` | [Measure the file](#measure-the-file) |
+| Measure the file | `cad inspect part.step`, `cad dfm part.step --process sheet`, `cad dfm part.dxf` | [Measure the file](#measure-the-file) |
 | Write the report | Rows of status, check, evidence, rule source, recommendation | [Report template](references/report-template.md) |
 
 ## Setup
@@ -55,13 +55,13 @@ https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations
 ## Measure the file
 
 ```bash
-cad step inspect part.step                    # bodies, bounds, volume
-cad step inspect part.step 'face 9'           # one face: a bend's cylinder and its radius, a hole's
-cad step dfm part.step --process sheet --material aluminum --thickness 3 --json
-cad dxf dfm part.dxf --material aluminum --thickness 3 --json
+cad inspect part.step                    # bodies, bounds, volume
+cad inspect part.step 'face 9'           # one face: a bend's cylinder and its radius, a hole's
+cad dfm part.step --process sheet --material aluminum --thickness 3 --json
+cad dfm part.dxf --material aluminum --thickness 3 --json
 ```
 
-A text-to-cad model's upload is the file `cad xbf export part.xbf part.step` (or `part.dxf`) wrote.
+A text-to-cad model's upload is the file `cad export part.xbf part.step` (or `part.dxf`) wrote.
 The sheet check gives measurements and general findings (one thickness, bends, the flat pattern, hole
 and feature distances, cut-file defects); give it the SKU's own `--bend-radius` and `--k-factor`
 where the specs list them, the radius converted to millimetres (the specs are in inches). Its rules are general practice, not SendCutSend's: use its

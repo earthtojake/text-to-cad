@@ -11,7 +11,7 @@ metadata:
 A render is a picture for a person: a hero image, a README picture, a turntable, a film of a
 mechanism. The model goes to Blender as a GLB, loaded by `cad.blender.load`; the scene (camera, lights,
 world, engine, output) is an ordinary Python script that imports `bpy`, Blender as a Python module,
-and `cad run` runs it. Geometry is judged with `cad xbf snapshot`, never a render: lens, light and
+and `cad run` runs it. Geometry is judged with `cad snapshot`, never a render: lens, light and
 depth of field make it a poor measure.
 
 ## Start with the task
@@ -46,10 +46,10 @@ Macs or Linux on ARM, where `cad run` refuses the script by name.
 ## Export the model
 
 ```bash
-cad xbf export part.xbf scene.glb --tolerance 0.02 --angle 5
+cad export part.xbf scene.glb --tolerance 0.02 --angle 5
 ```
 
-`part.xbf` is the model, the file its run saves; a STEP exports the same way (`cad step export part.step scene.glb
+`part.xbf` is the model, the file its run saves; a STEP exports the same way (`cad export part.step scene.glb
 --tolerance 0.02 --angle 5`). The GLB is in metres, Z up once imported, with the assembly's tree as
 nested empties, a PBR material per look, and each motion and `animation()` as a clip. `--tolerance`
 (mm) and `--angle` (degrees) mesh it finer than the viewer's, so a close camera shows no facets, at the

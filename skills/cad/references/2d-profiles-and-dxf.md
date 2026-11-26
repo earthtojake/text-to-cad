@@ -16,7 +16,7 @@ existing `.dxf`. Whether a cut file is ready for a shop is the sheet-metal revie
 
 A drawing is a `@xbf` that returns build123d 2D geometry on z=0 (a sketch, a face, wires or
 edges). Exporting its document to a `.dxf` runs the drawing checks and writes the file, which is
-the one the viewer and `cad dxf snapshot` draw and a cutting service gets.
+the one the viewer and `cad snapshot` draw and a cutting service gets.
 
 ```python
 import build123d as bd
@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
 ```bash
 cad run src/gasket.py                              # saves src/gasket.xbf
-cad xbf export src/gasket.xbf DXF/gasket.dxf     # runs the drawing checks, then writes
+cad export src/gasket.xbf DXF/gasket.dxf     # runs the drawing checks, then writes
 ```
 
 - **One shape is one layer, `CUT`.** For more than one CAM operation, return a `Compound` of
@@ -127,9 +127,9 @@ if __name__ == "__main__":
 
 | The change | Check it with |
 | --- | --- |
-| Any drawing | `cad xbf export`: the drawing checks run on the document it is about to write |
+| Any drawing | `cad export`: the drawing checks run on the document it is about to write |
 | A dimension the person gave | A targeted `ezdxf` read of the exported `.dxf` (below): extents, a circle's radius, counts by layer |
-| Layout, layers, marking | `cad dxf snapshot` of the exported file ([below](#see-a-drawing)) |
+| Layout, layers, marking | `cad snapshot` of the exported file ([below](#see-a-drawing)) |
 | A file from elsewhere | `validate_dxf_file` (below), then the same reads |
 
 Every DXF export runs the drawing checks, and an error refuses the file, naming the check
@@ -169,10 +169,10 @@ overlapping or partly coincident curves, small features, kerf and the shop's rul
 ## See a drawing
 
 ```bash
-cad dxf snapshot DXF/gasket.dxf tmp/gasket.png
+cad snapshot DXF/gasket.dxf tmp/gasket.png
 ```
 
-`cad dxf snapshot` draws a drawing the way the viewer does: whole, from above,
+`cad snapshot` draws a drawing the way the viewer does: whole, from above,
 fitted with a margin, in the pens the file declares (an entity with no pen of its own takes the
 paper's ink), on white paper. `--size-profile`, `--width` and `--height` size it; `--camera`
 takes a plan view (`{"position": [x, y, d], "target": [x, y, 0], "up": [0, 1, 0],
@@ -191,6 +191,6 @@ its INSERT). Its packet's views are plan-view cameras and its ink is in drawing 
 the sheet. Draw what the person saw, each view with their ink on it, before editing:
 
 ```bash
-cad dxf snapshot --job '<packet>'                          # every view, each with the ink
-cad dxf snapshot DXF/panel.dxf tmp/view.png --annotation '<packet>' --camera authored
+cad snapshot --job '<packet>'                          # every view, each with the ink
+cad snapshot DXF/panel.dxf tmp/view.png --annotation '<packet>' --camera authored
 ```
