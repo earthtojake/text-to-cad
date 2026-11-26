@@ -16,8 +16,9 @@ waits for the next (``client.SWITCHING``). The server's own commands are not hel
 command's client launches no server while cad's own update switches away from its release (``client.LEAVING``).
 
 A command whose words a person reads says, once, what CAD sends by default (``_tell``), and, after its own output and
-at most once a day, that this cad has stayed behind a release of its major though it updates itself (``_behind``):
-each one line on stderr, never in a command's output.
+at most once a day, that this cad has stayed behind a release of its major though it updates itself (``_behind``), and
+each of the project's notices for this cad (``_notices``, ``cad_server.notices``): each one line on stderr, never in a
+command's output.
 
 Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
 second implementation. A command's parser lives in its own module and owns its arguments, so the
@@ -291,6 +292,7 @@ def _main(argv: list[str]) -> int:
     except SystemExit:  # a command that ends by SystemExit (its usage refused) ran all the same
         if behind:
             _behind()
+            _notices()
         raise
     except BrokenPipeError as error:
         from cad_server.analytics import stdout_closed
@@ -305,6 +307,7 @@ def _main(argv: list[str]) -> int:
         return _crashed(command, rest, error)
     if behind:
         _behind()
+        _notices()
     return code
 
 
@@ -376,9 +379,9 @@ _ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", 
 _UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "plugin", "run", "requirement"})
 # Commands that only report, and so write nothing a command's run writes (``_tell``).
 _READ_ONLY = frozenset({"doctor"})
-# Commands that never say this cad has stayed behind (``_behind``), beside those never told (``_UNTOLD``): `update`,
-# which updates it, and `doctor`, which says it in its report; the server's, `serve` and `mcp`, whose output a program
-# reads; and `setup`, which no person reads.
+# Commands that never say this cad has stayed behind (``_behind``), nor a notice (``_notices``), beside those never
+# told (``_UNTOLD``): `update`, which updates it, and `doctor`, which says both in its report; the server's, `serve` and
+# `mcp`, whose output a program reads; and `setup`, which no person reads.
 _UNSAID_BEHIND = frozenset({"update", "doctor", "mcp", "server", "serve", "setup"})
 
 
@@ -419,6 +422,25 @@ def _behind() -> None:
         line = notice()
         if line:
             sys.stderr.write(line + "\n")
+            sys.stderr.flush()
+    except Exception:  # noqa: BLE001 - the line never fails the command it follows
+        return
+
+
+def _notices() -> None:
+    """Say, after the command's own output, each of the project's notices for this cad that no command said within a
+    day (``cad_server.notices.lines``), whatever automatic updates are set to: one line on stderr each. Under
+    ``_behind``'s rules: never where the command's output has lost its reader, and never a failure of the command it
+    follows."""
+    try:
+        from cad_server.analytics import stdout_closed
+        from cad_server.notices import lines
+
+        if stdout_closed():
+            return
+        said = lines()
+        if said:
+            sys.stderr.write("".join(line + "\n" for line in said))
             sys.stderr.flush()
     except Exception:  # noqa: BLE001 - the line never fails the command it follows
         return

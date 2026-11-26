@@ -10,7 +10,8 @@ whether an update can begin at all, ``blocked``; the newest release of this cad'
 names, and when it was last asked for, and, where it names a release of a higher major, the one line that says how to
 get it (``auto_update.MAJOR_LINE``); the uv the update builds with; and the last attempt: its outcome and uv's words,
 why in plain words where it did not install what it was for, a release held back, a release ready and when cad
-restarts on it, and where the worker's log of it is) and the plugin's record
+restarts on it, and where the worker's log of it is), each of the project's notices for this cad, a line each
+(``cad_server.notices``: none where none is posted), and the plugin's record
 (``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for, and
 the last run of ``cad plugin install`` the server began for a newer cad, and how it went); on
 Windows, uv's folder in an app's private copy of AppData, a copy of cad or uv's leftovers, to delete
@@ -127,7 +128,8 @@ def _report() -> list[dict]:
               *_release(), *(_check("private", WARNING, line) for line in private_folders()),
               _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
               *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
-              read("server", _server), read("update", _update), _newest(), _installer(), read("attempt", _attempt),
+              read("server", _server), read("update", _update), _newest(), *_notices(), _installer(),
+              read("attempt", _attempt),
               read("plugin", _catch_up)]
     return checks + _fix(checks)
 
@@ -258,6 +260,14 @@ def _newest() -> dict:
         return _check("newest", INFO, said, [auto.MAJOR_LINE.format(release=higher)] if higher else None)
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return _check("newest", WARNING, f"unknown ({type(error).__name__}: {error})")
+
+
+def _notices() -> list[dict]:
+    """Each of the project's notices for this cad, as the version feed as last read carries it (``notices.applying``),
+    a line of its own, worth a look: its text, and its link in brackets where it has one. None where none is."""
+    from cad_server import notices
+
+    return [_check("notice", WARNING, notices.said(notice)) for notice in notices.applying()]
 
 
 def _asked(at: float | None, now: float | None = None) -> str:

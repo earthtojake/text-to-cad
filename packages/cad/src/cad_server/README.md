@@ -52,6 +52,8 @@ cad_server/
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
   updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
+  notices.py             # the project's notices the feed carries: said after a command, in `cad doctor`
+                         #   and to the viewer (`cadNotices`)
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base, extras, scan), cad's own update
                          #   (auto_update, auto_update_helper, store, selftest), the plugin kept as new as cad
@@ -284,6 +286,14 @@ No step is tried twice in a run. A build's cause is told from uv's words and whi
 by name (`cause_of`). Each command, its status, time and last 64 KiB of output go to `auto-update.log` in the
 state folder (the attempt before's, `auto-update.1.log`), which nothing sends. A worker that raises leaves the
 attempt underway, `helper_crash`. Forward only: nothing moves to an older release.
+
+**Notices** (`notices.py`). The version feed can carry the project's notices, one line of text and a link on
+texttocad.dev or the project's repository, for every cad older than a release (`updates.parse_notices`, which checks
+each again by the feed's rules and drops one that fails; kept with the feed in `releases.json`, where releases before
+notices ignore the key). Where this cad reads the feed (`updates.checking`), whatever automatic updates are set to, a
+command says each that applies on stderr after its own output, at most once a day by its id (`notices.json` in the
+state folder, written before it is said), on the rules of the stayed-behind line; `cad doctor` lists each; and
+`GET /api/v1/server`'s `cadNotices` hands them to the viewer. With none, nothing says anything.
 
 **The update button** (`auto_update.button`, `GET /api/v1/server`'s `cadUpdate`; `POST /api/v1/local/update`).
 Where cad can update itself, whatever the switch says, the viewer and the CAD app show it while the feed names a

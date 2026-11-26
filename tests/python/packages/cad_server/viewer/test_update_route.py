@@ -89,6 +89,23 @@ class UpdateRouteTest(unittest.TestCase):
             "release": "0.2.0", "wanted": "0.2.0", "from": "0.1.0", "at": time.time() - 60, "tries": 1,
             "installer": "uv", "asked": False, **record})
 
+    def test_the_server_carries_the_notices_for_this_cad_and_none_where_none_is_posted(self) -> None:
+        # The project's notices (``cad_server.notices``), beside the button: each the viewer shows as a card.
+        self.assertEqual(self.ask("GET", "/api/v1/server")[1]["cadNotices"], [], "none posted: none, and nothing else")
+        posted = [{"id": "install-moved", "below": "0.2.0", "text": "cad now installs another way.",
+                   "url": "https://texttocad.dev/docs/install"},
+                  {"id": "plain", "below": "1.0.0", "text": "Words <b>alone</b>."},
+                  {"id": "past", "below": "0.1.0", "text": "For older cads alone."},
+                  {"id": "bad", "below": "1.0.0", "text": "A link elsewhere.", "url": "https://example.com/"}]
+        with mock.patch.object(updates, "feed", return_value={"latest": "0.2.0", "lines": {"0": "0.2.0"}, "notices": posted}):
+            status, answer = self.ask("GET", "/api/v1/server")
+            self.assertEqual(status, 200)
+            self.assertEqual(answer["cadNotices"], [
+                {"id": "install-moved", "text": "cad now installs another way.", "url": "https://texttocad.dev/docs/install"},
+                {"id": "plain", "text": "Words <b>alone</b>."}])
+            with mock.patch.object(updates, "checking", return_value=False):
+                self.assertEqual(self.ask("GET", "/api/v1/server")[1]["cadNotices"], [], "no feed read here: none")
+
     def test_the_server_says_what_the_button_shows(self) -> None:
         status, answer = self.ask("GET", "/api/v1/server")
         self.assertEqual(status, 200)

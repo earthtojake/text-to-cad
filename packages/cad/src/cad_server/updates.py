@@ -5,7 +5,8 @@ At most once an hour, a server reads the version feed (``GET /v1/releases``, ``c
     {"latest": "1.2.0", "lines": {"0": "0.12.3", "1": "1.2.0"}}
 
 in the background (``refresh``), never waited on: ``latest`` the newest release, ``lines`` the newest release of each
-major version (``newest_of_major``). Releases 0.7.12 to 0.11.11 read ``/v1/versions``, which names ``latest`` alone and
+major version (``newest_of_major``), and, where the project posts any, ``notices``, its words for every cad older than a
+release (``parse_notices``, ``notices_for``; said by ``cad_server.notices``). Releases 0.7.12 to 0.11.11 read ``/v1/versions``, which names ``latest`` alone and
 never a release from 0.12.0 on: it is kept for them as it is, and nothing here reads it. It is one anonymous request:
 no id, no path, nothing about the person or their machine beyond what any web request carries.
 ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI`` set) or for a development build
@@ -52,6 +53,15 @@ TIMEOUT_SECONDS = 5
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
 _RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _OFF = ("0", "off", "false", "no")
+# A notice's rules (``parse_notices``), the version feed's own (apps/api's ``noticesOf``): a feed is never trusted.
+NOTICES_MAX = 10
+NOTICE_TEXT_MAX = 240  # characters
+_NOTICE_ID = re.compile(r"[a-z0-9-]{1,40}")
+_NOTICE_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u2028\u2029]")  # control characters and every line break
+# A link's site, then nothing or a path, query or fragment of printable ASCII: never another host behind it.
+_NOTICE_SITES = ("https://texttocad.dev", "https://github.com/earthtojake/text-to-cad")
+_NOTICE_URL = re.compile(f"(?:{'|'.join(map(re.escape, _NOTICE_SITES))})" + r"(?:[/?#][\x21-\x7e]*)?")
+_NOTICE_URL_MAX = 500
 
 
 def parse_release(value: Any) -> tuple[int, int, int] | None:
@@ -64,15 +74,56 @@ def parse_release(value: Any) -> tuple[int, int, int] | None:
 def parse_feed(data: Any) -> dict[str, Any] | None:
     """The feed as the server reads it: a release as ``latest`` (``None`` when there is none), and ``lines``, each major
     version's newest release by its number as a string (``{"0": "0.12.3"}``): an entry whose release is of another
-    major, or no release, is left out, and a feed with none is read with ``lines`` empty. Anything else in it is left
-    out, so the feed can grow without a release of cad."""
+    major, or no release, is left out, and a feed with none is read with ``lines`` empty; and ``notices``, only where
+    it carries one that passes (``parse_notices``), so a feed with none is read, and kept, as it was before notices.
+    Anything else in it is left out, so the feed can grow without a release of cad."""
     if not isinstance(data, dict) or parse_release(data.get("latest")) is None:
         return None
     given = data.get("lines")
     lines = {major: release for major, release in (given.items() if isinstance(given, dict) else ())
              if isinstance(major, str) and (numbers := parse_release(release)) is not None
              and str(numbers[0]) == major}
-    return {"latest": data["latest"], "lines": lines}
+    notices = parse_notices(data.get("notices"))
+    return {"latest": data["latest"], "lines": lines, **({"notices": notices} if notices else {})}
+
+
+def _notice(given: Any) -> dict[str, str] | None:
+    """One notice as ``parse_notices`` keeps it, or None where it breaks a rule."""
+    if not isinstance(given, dict):
+        return None
+    notice_id, below, text, url = (given.get(key) for key in ("id", "below", "text", "url"))
+    if not (isinstance(notice_id, str) and _NOTICE_ID.fullmatch(notice_id)) or parse_release(below) is None:
+        return None
+    if not isinstance(text, str) or re.fullmatch(" *", text) or len(text) > NOTICE_TEXT_MAX \
+            or _NOTICE_CONTROL.search(text):
+        return None
+    if "url" in given and not (isinstance(url, str) and len(url) <= _NOTICE_URL_MAX and _NOTICE_URL.fullmatch(url)):
+        return None
+    return {"id": notice_id, "below": below, "text": text, **({"url": url} if "url" in given else {})}
+
+
+def parse_notices(given: Any) -> list[dict[str, str]]:
+    """The feed's ``notices`` checked by the rules the feed posts them by (apps/api's ``noticesOf``), never trusted:
+    each ``{"id", "below", "text", "url"?}`` with those keys alone, ``id`` a slug (``[a-z0-9-]``, 1 to 40),
+    ``below`` a release, ``text`` one line of at most ``NOTICE_TEXT_MAX`` characters with no control character, not
+    blank, and ``url``, where there is one, ``https://`` on texttocad.dev or the project's GitHub repository. One that
+    breaks a rule is left out, as is an id named before and any past ``NOTICES_MAX``; anything but a list is none."""
+    notices: list[dict[str, str]] = []
+    for given_one in given if isinstance(given, list) else ():
+        notice = _notice(given_one)
+        if notice is not None and len(notices) < NOTICES_MAX and all(kept["id"] != notice["id"] for kept in notices):
+            notices.append(notice)
+    return notices
+
+
+def notices_for(version: str, known: dict[str, Any] | None) -> list[dict[str, str]]:
+    """The notices of the feed ``known`` (as ``feed`` returns it) that are for cad ``version``: each whose ``below`` is
+    a release newer than it, checked again (``parse_notices``). None for a version that is no release (a development
+    build)."""
+    mine = parse_release(version)
+    if mine is None or not isinstance(known, dict):
+        return []
+    return [notice for notice in parse_notices(known.get("notices")) if mine < parse_release(notice["below"])]
 
 
 def newest_of_major(major: int, known: dict[str, Any] | None) -> str | None:

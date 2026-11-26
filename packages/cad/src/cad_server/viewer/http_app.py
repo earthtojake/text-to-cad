@@ -1369,12 +1369,14 @@ class CadApp:
 
     def _version(self) -> dict:
         """The release this engine runs, which a page compares with its own to reload into a new one, the token
-        of this start of it (``instance``), and what the update button shows (``cadUpdate``: ``auto_update.button``,
-        null where cad cannot update itself)."""
-        from cad_server import __version__
+        of this start of it (``instance``), what the update button shows (``cadUpdate``: ``auto_update.button``,
+        null where cad cannot update itself), and the project's notices for this cad, each a card until the person
+        dismisses it (``cadNotices``: ``notices.for_viewer``, ``[{id, text, url?}]``, ``[]`` where there is none)."""
+        from cad_server import __version__, notices
         from cad_server._internal import auto_update
 
-        return {"release": __version__, "instance": INSTANCE, "cadUpdate": auto_update.button()}
+        return {"release": __version__, "instance": INSTANCE, "cadUpdate": auto_update.button(),
+                "cadNotices": notices.for_viewer()}
 
     def _update(self, request) -> tuple[int, dict]:
         """``POST /api/v1/local/update``: the update button. ``{}``: a person's update of cad, as ``cad update`` asks it
