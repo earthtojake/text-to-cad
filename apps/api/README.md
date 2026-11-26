@@ -162,7 +162,7 @@ it arrives.
   keep sending what a later one learned to leave out, and each would be an issue in
   PostHog with no fix in text-to-cad. A signature goes on the list only when it can never
   be a mistake in text-to-cad's code, never because it is frequent, and in the same change
-  the client stops sending it (`stdout_closed` and `signature` in `cad_server/analytics.py`). Each
+  the client stops sending it (`failed_output` and `signature` in `cad_server/analytics.py`). Each
   entry matches on `where`, `type`, `status` and frames alone: any `ConnectionError` at a
   `route` (a page that left mid-reply); a `BrokenPipeError` at a `command` (its output's
   reader closed it, `| head`); an `AttributeError` whose innermost frame is

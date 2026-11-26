@@ -6,7 +6,7 @@
  *
  * The rule: a signature goes on `NEVER_OURS` only when it can never be a mistake in cadgen's code -- never
  * because it is frequent -- and in the same change the client stops sending it (`cad_server/analytics.py`:
- * `stdout_closed`, `signature`). Each entry matches on a row's `where`, `type`, `status` and frames alone. Dropping
+ * `failed_output`, `signature`). Each entry matches on a row's `where`, `type`, `status` and frames alone. Dropping
  * a row is not a refusal: the batch is still taken, and its other rows stored.
  */
 

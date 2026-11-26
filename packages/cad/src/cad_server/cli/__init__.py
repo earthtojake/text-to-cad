@@ -202,12 +202,13 @@ def main(argv: list[str] | None = None) -> int:
         if sys.stdout is not None:
             sys.stdout.flush()  # here, not as Python exits, where a closed pipe could only be complained about
         return code
-    except BrokenPipeError:
-        from cad_server.analytics import stdout_closed
+    except OSError as error:
+        from cad_server.analytics import failed_output
 
-        if not stdout_closed():
-            raise  # another pipe it wrote to (a child's stdin): a failure like any other
-        return _output_closed()
+        stream = failed_output(error)
+        if stream is None:
+            raise  # not its own output (a child's stdin, a file): a failure like any other
+        return _output_failed(error, stream, "cad")
     except KeyboardInterrupt:
         # Ctrl-C: said in a word, never as a traceback, and the status a shell gives an interrupt
         # (``cad_server._internal.cli_errors``: ``canceled``, 130). A build it waited for goes on in the
@@ -217,24 +218,33 @@ def main(argv: list[str] | None = None) -> int:
         return write(Failure("canceled", "canceled"), prog="cad", as_json=wants_json(argv))
 
 
-def _output_closed() -> int:
-    """Whatever read this command's output closed it (``cad ... | head``): stop quietly, as a CLI does
-    on SIGPIPE -- no traceback, no crash report (``cad_server.analytics.stdout_closed``), nothing more written. Both
-    streams go to the null device first: Python flushes them again as it exits, and would print that
-    flush's own BrokenPipeError."""
+def _output_failed(error: OSError, stream: object, prog: str) -> int:
+    """A write to this command's own output failed (``cad_server.analytics.failed_output``): never a crash, so no
+    traceback and no crash report. Its reader closed it (``cad ... | head``: EPIPE, or EINVAL, as Windows says a
+    closed pipe or console): stopped quietly, as a CLI does on SIGPIPE, with the status a shell gives ``yes | head``.
+    Any other failure of stdout (a full disk, a write that timed out) is said in one line on stderr, where that still
+    takes it. Both streams then go to the null device: Python flushes them again as it exits, and would print that
+    flush's own error."""
+    import errno
+    import signal
+
+    closed = error.errno in (errno.EPIPE, errno.EINVAL)
+    if not closed and stream is sys.stdout and sys.stderr is not None:
+        try:
+            print(f"{prog}: could not write its output: {error.strerror or error}", file=sys.stderr, flush=True)
+        except (OSError, ValueError):
+            pass
     try:
         devnull = os.open(os.devnull, os.O_WRONLY)
     except OSError:
         return 1
-    for stream in (sys.stdout, sys.stderr):
+    for each in (sys.stdout, sys.stderr):
         try:
-            os.dup2(devnull, stream.fileno())
+            os.dup2(devnull, each.fileno())
         except (AttributeError, OSError, ValueError):  # not a real file: nothing of the process's to quiet
             pass
     os.close(devnull)
-    import signal
-
-    return 128 + signal.SIGPIPE if hasattr(signal, "SIGPIPE") else 1  # what a shell reports for `yes | head`
+    return 128 + signal.SIGPIPE if closed and hasattr(signal, "SIGPIPE") else 1
 
 
 def _main(argv: list[str]) -> int:
@@ -279,13 +289,12 @@ def _main(argv: list[str]) -> int:
         when("cad.engine.client", _hold_to_release)  # as the client is imported, if it is: a command imports no more
     try:
         code = _run(command, entry[0], rest)
-    except BrokenPipeError as error:
-        from cad_server.analytics import stdout_closed
-
-        if not stdout_closed():  # its output's reader left: `main` stops quietly; any other pipe is a failure
-            _report(error)
-        raise
     except Exception as error:
+        from cad_server.analytics import failed_output
+
+        stream = failed_output(error)
+        if stream is not None:  # a write to its own output failed (its reader gone, a disk full): no crash
+            return _output_failed(error, stream, f"cad {command}")
         _report(error)
         if command == "run" or not wants_json(rest):  # `run`'s words are its program's: never its own --json
             raise  # its traceback the person's
