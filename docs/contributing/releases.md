@@ -652,6 +652,14 @@ What a release depends on:
   [Holding a release](../../apps/api/README.md#holding-a-release)) stops the automatic update to it
   on every computer that has not taken it (0.11.12 to 0.11.17, which install PyPI's newest of their
   major, excepted); one that has keeps it. To pull a release from everyone, yank it on PyPI.
+- **A notice reaches the computers a release cannot.** Where an update keeps failing in a way no
+  message of cad's foresaw, or a change of how cad installs leaves computers behind, post a notice
+  (`CAD_NOTICES`, an environment variable of the Vercel project, then the same redeploy:
+  [Posting a notice](../../apps/api/README.md#posting-a-notice)): one line of text, and a link on
+  texttocad.dev or the repository, for every cad older than a release you name. cad says it after a
+  command's output once a day, in `cad doctor` and in the viewer, until it is taken down; releases
+  before notices existed never show one. It is for what a release cannot fix, not for news: with none
+  posted, nothing anywhere changes ([Decisions](decisions.md#notices-reach-what-a-release-cannot)).
 - **A new telemetry schema ships with its receiver.** Telemetry passes through the same API to
   PostHog. A release that sends a new schema carries the receiver that reads it, deployed by its
   merge (`Deploy API`, which needs the project's PostHog settings in Vercel: `/v1/health` checks

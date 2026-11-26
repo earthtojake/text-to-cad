@@ -12,8 +12,9 @@ The decisions, by what they govern:
 - **Installing**: one cad per computer; uv installs cad, and cad's update changes none of it; one line
   installs cad; the install command gets cad and hands the apps to it; no Skills CLI route; inside a
   Windows app's package
-- **Updating**: the feed says when; a major version never installs itself; who updates which copy;
-  the restart waits until nobody would notice; forward only; the 30-day rule
+- **Updating**: the feed says when; notices reach what a release cannot; a major version never
+  installs itself; who updates which copy; the restart waits until nobody would notice; forward only;
+  the 30-day rule
 - **Past releases**: the bridge for 0.10.0 to 0.11.11; old releases are carried through the newest
   0.11; no version left behind
 - **The plugin**: browser first; no hooks, no pre-approved tools
@@ -171,6 +172,27 @@ release; one that has keeps it. A person who runs `cad update` or the install co
 newest of their major at once, a release minutes old or held back included, as a fresh install does.
 To pull a bad release from everyone, yank it on PyPI. With no answer from the feed, no automatic
 update starts.
+
+## Notices reach what a release cannot
+
+**Decision.** The version feed can carry notices: one line of text, and a link where there is one, for
+every cad older than a release the project names, posted and taken down in the API's settings without a
+release ([Posting a notice](../../apps/api/README.md#posting-a-notice)). cad says each after a command's
+own output at most once a day, lists it in `cad doctor`, and the viewer shows it as a card the person
+dismisses. It is dormant: with none posted, the feed, every command, `cad doctor` and the viewer are as
+they were. A notice is text only, shown as text, its link only on texttocad.dev or the project's
+repository over https; cad checks it again by the feed's rules, and nothing in it is ever run.
+
+**Why.** An update cannot reach a cad whose update is broken, and a change of how cad installs can leave
+computers behind that no release can fetch. Only code already shipped can show words set later, so the
+channel has to be in releases before it is needed. Text and our own links, and nothing run, keep the
+feed from being a way to make a computer do anything.
+
+**What it costs.** Releases before notices existed never show one. A notice reaches a computer only
+through its hourly read of the feed by a running cad server, so allow about an hour, and up to a day more
+for a line a command already said; a computer with the check turned off (`CAD_UPDATE_CHECK=0`) shows
+none. The feed's answer is the same for everyone, so a notice is said to every cad below its release,
+whatever is wrong on each.
 
 ## A major version never installs itself
 
