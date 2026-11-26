@@ -91,6 +91,10 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   upgrade and its repairs fail, and the repairer, run outside the environment by the Python it was made from, makes
   it anew (``uv tool install --force "cad<N>"``): healthy at the next release, its server started, uv's receipt the
   range, the repairer's copy gone.
+- ``self-pipx``: cad installed with pipx (pipx itself by uv) updates itself as uv's does: the button while three
+  callers run its ``cad``, then the server's next start, each by pip inside pipx's environment (``pipx runpip cad
+  install``), healthy, pipx's pin as it was; then the person's ``pipx pin cad``: the start counts the update
+  blocked once (``pinned``), ``cad update`` refuses naming ``pipx unpin cad``, the button answers 409.
 - ``install-repair``: the install command, the advised repair, over a cad that does not start, whose dist-info has no
   ``RECORD``, with a process running from its environment: it removes the dist-info, on Windows stops that process
   and waits for it, installs cad again with uv: healthy, uv's receipt as it was.
@@ -153,7 +157,7 @@ Usage::
 
     scripts/test/rehearse-update.py [ROUTE ...] [--old RELEASE] [--wheels DIR] [--uv-cache DIR]
 
-``all`` (the default) is every route; ``self`` the fourteen of cad updating itself and of its repair; ``bridge`` the ten from a shipped
+``all`` (the default) is every route; ``self`` the fifteen of cad updating itself and of its repair; ``bridge`` the ten from a shipped
 release; ``plugin-update`` is of neither group, and runs with ``all`` or by its name. ``--wheels``: this tree's wheels as ``scripts/release/check-wheel-contents.sh`` keeps them; without it they
 are built from the source (``tests/python/support/machine.py``, no packaged runtime: no route opens a page).
 ``--uv-cache``: one folder for uv's cache and Pythons, shared by every computer of the run (default: a new one of the
@@ -1733,6 +1737,108 @@ def self_forced(box: Box) -> None:
     pages(box, NEXT)
 
 
+class Pipx:
+    """cad installed by pipx on a computer (``self-pipx``): pipx itself installed by uv (``uv tool install pipx``), its
+    environments in the home and its commands in the bin folder (``PIPX_HOME``, ``PIPX_BIN_DIR``), its packages from
+    the computer's folder of releases beside the index (uv's under pipx's uv backend, ``UV_FIND_LINKS``; pip's,
+    ``PIP_FIND_LINKS``)."""
+
+    def __init__(self, box: Box) -> None:
+        self.box, self.home = box, box.home / ".local" / "share" / "pipx"
+        box.env.update({"PIPX_HOME": str(self.home), "PIPX_BIN_DIR": str(box.bin), "PIP_FIND_LINKS": str(box.links)})
+        box.run(["uv", "tool", "install", "--managed-python", "--python", "3.14", "pipx"], timeout=SECONDS)
+        self.env = self.home / "venvs" / "cad"
+
+    def metadata(self) -> dict:
+        return read_json(self.env / "pipx_metadata.json").get("main_package") or {}
+
+    def healthy(self, release: str, kept: dict) -> None:
+        """pipx's cad at ``release``, upgraded in place: its environment holds that one ``cad-<release>.dist-info``,
+        whole, nothing without its ``RECORD``; pipx's ``cad`` in the bin folder says it; the server answers as it from
+        the environment; pipx's metadata as it was (``kept``: its package and its pin; pipx 1.19's ``runpip`` notes
+        the requirement it installed as ``package_or_url``, which ``pipx upgrade`` moves on from)."""
+        box, problems = self.box, []
+        if dist_infos(self.env) != [f"cad-{release}.dist-info"] or unrecorded(self.env):
+            problems.append(f"the environment holds {dist_infos(self.env)}, without RECORD {unrecorded(self.env)}")
+        if box.version() != f"cad {release}":
+            problems.append(f"cad --version says {box.version()!r}")
+        now = {key: self.metadata().get(key) for key in kept}
+        if now != kept:
+            problems.append(f"pipx's metadata {now}, not {kept} as before")
+        if problems:
+            raise Failed(f"{box.label}: pipx's cad at {release}:\n  " + "\n  ".join(problems) + f"\n{box.said()}")
+        serves(box, self.env, release)
+
+
+def self_pipx(box: Box) -> None:
+    """cad installed with pipx updates itself as uv's does: by the button while three callers run its ``cad``, then at
+    the server's next start, each by pip inside pipx's environment (``pipx runpip cad install``), healthy; then a
+    person's ``pipx pin cad`` holds it, and says how to unpin."""
+    pipx = Pipx(box)
+    box.out(NEW)
+    box.run(["pipx", "install", "cad"], timeout=SECONDS)
+    kept = {key: pipx.metadata().get(key) for key in ("pinned", "package")}
+    started = box.run([box.cad(), "server", "start"]).stdout
+    if f"cad {NEW}" not in started:
+        raise Failed(f"{box.label}: pipx's cad server start said {started!r}\n{box.said()}")
+    box.token = (box.ask(rc.interpreter(pipx.env), "http") or {}).get("token", "")
+    pipx.healthy(NEW, kept)
+    box.out(NEXT)
+    callers = Callers(box)
+    try:
+        box.until(lambda: len(callers.calls) >= 6, "the callers at work")
+        record = clicked(box, NEW, NEXT)
+        done = len(callers.calls)
+        box.until(lambda: len(callers.calls) >= done + 6, "the callers at work after the update")
+    finally:
+        calls = callers.stop()
+    pipx.healthy(NEXT, kept)
+    log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
+    if f" runpip cad install --upgrade cad=={NEXT}" not in log or record.get("installer") != "pipx":
+        raise Failed(f"{box.label}: the update was not pipx's: {record}\n{log[-3000:]}")
+    failed = [call for call in calls if call[3] != 0]
+    outside = [call for call in failed if call[1] < record["at"] or call[0] > record["ended"]]
+    if outside:
+        raise Failed(f"{box.label}: calls failed outside the update: {outside[:5]}\n{box.said()}")
+    say(f"        `pipx install cad`; the button: {NEW} -> {NEXT} by `pipx runpip cad install`, in place, "
+        f"{record['ended'] - record['at']:.1f} s, three callers every 50 ms: {len(calls)} calls, {len(failed)} failed, "
+        "each within the update; pipx's pin as it was")
+    box.out(AFTER)
+    box.run([box.cad(), "server", "stop"])
+    feed_read(box, AFTER)
+    began = time.time()
+    done = box.run([box.cad(), "server", "start"], check=False)
+    record = updated(box, AFTER, after=began - 1)
+    if (done.returncode, done.stdout.strip()) != (0, UPDATED.format(release=AFTER, was=NEXT)) or record.get("asked"):
+        raise Failed(f"{box.label}: the start with {AFTER} named exited {done.returncode}: {done.stdout}{done.stderr}"
+                     f"\n{record}\n{box.said()}")
+    pipx.healthy(AFTER, kept)
+    say(f"        then the server's next start: {NEXT} -> {AFTER} in place, automatic ({done.stdout.strip()!r})")
+    # A person's own pin, pipx's: nothing updates it, and it says how to unpin.
+    box.run(["pipx", "pin", "cad"])
+    box.out(UNBUILDABLE)  # a newer release of this major, never to be installed
+    box.run([box.cad(), "server", "stop"])
+    feed_read(box, UNBUILDABLE)
+    at = box.read("auto-update.json").get("at")
+    started = box.run([box.cad(), "server", "start"]).stdout.strip()
+    if started != STARTED.format(release=AFTER):
+        raise Failed(f"{box.label}: cad server start, pinned by pipx, said {started!r}\n{box.said()}")
+    blocked = box.until(lambda: box.read("auto-update-blocked.json") or None, "the blocked update counted")
+    if (blocked.get("cause"), blocked.get("wanted")) != ("pinned", UNBUILDABLE):
+        raise Failed(f"{box.label}: the blocked update: {blocked}")
+    done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
+    line = done.stderr.strip().splitlines()[-1:]
+    if done.returncode == 0 or not line or "`pipx unpin cad`" not in line[0]:
+        raise Failed(f"{box.label}: cad update, pinned by pipx, exited {done.returncode}:\n{done.stdout}\n{done.stderr}")
+    status, answer = click(box)
+    if (status, answer.get("cause")) != (409, "pinned"):
+        raise Failed(f"{box.label}: the button, pinned by pipx, answered {status}: {answer}")
+    nothing_begun(box, "pinned by pipx", at=at)
+    pipx.healthy(AFTER, {**kept, "pinned": True})
+    say(f"        `pipx pin cad`, {UNBUILDABLE} named: the start started {AFTER} (cause pinned, counted once); "
+        f"`cad update`: {line[0]!r}; the button 409 pinned; nothing begun")
+
+
 # A process of cad's environment that runs until its input ends (``install-repair``): an agent's ``cad`` command at
 # work, as far as Windows is concerned.
 RUNS = "import sys\nprint('running', flush=True)\nsys.stdin.read()\n"
@@ -2191,7 +2297,7 @@ SELF = {"self-at-start": self_at_start, "self-button": self_button, "self-typed"
         "self-rollback": self_rollback, "self-uninstallable": self_uninstallable, "self-held": self_held,
         "self-called": self_called, "self-pinned": self_pinned, "self-major": self_major,
         "self-stopped-midway": self_stopped_midway, "self-hop": self_hop, "self-forced": self_forced,
-        "install-repair": install_repair}
+        "self-pipx": self_pipx, "install-repair": install_repair}
 BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
           "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,
           "uv-line": uv_line, "store-uv-line": store_uv_line}

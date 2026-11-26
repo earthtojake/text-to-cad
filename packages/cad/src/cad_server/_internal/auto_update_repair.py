@@ -1,6 +1,6 @@
 """cad's update, repaired from outside cad's environment: the last resort of the worker (``auto_update_helper``), where
-its repair in place left no cad that runs. The installer then installs cad again whole (``uv tool install --force``),
-which removes the environment and makes it anew: it cannot while any process runs from
+its repair in place left no cad that runs. The installer then installs cad again whole (``uv tool install --force``,
+``pipx install --force cad``), which removes the environment and makes it anew: it cannot while any process runs from
 it on Windows (measured: ``failed to remove directory ...\\Scripts: Access is denied``, and cad left broken), the
 worker's own interpreter included. So the worker copies this file and ``auto_update_sweep`` into cad's state folder,
 keeps the attempt underway in its ``repairing`` phase, starts the copy detached, outside any Windows app package

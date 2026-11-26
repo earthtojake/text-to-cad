@@ -221,8 +221,8 @@ at once and runs your own uv, with your uv's settings, on its own environment: `
 upgrade "cad==<that release>"`, which downloads exactly that release from the package index
 uv uses and replaces cad's files where they are, then checks that it runs and starts the
 server again. It never installs an older release, and leaves uv's record of the install as it
-is; a cad you pinned to a release is left alone, and one pipx installed is told to run
-`pipx upgrade cad`. A typed `cad update` asks PyPI which release of its major is
+is; a cad pipx installed is updated the same way by pipx (`pipx runpip cad install "cad==<that
+release>"`), and a cad you pinned to a release is left alone. A typed `cad update` asks PyPI which release of its major is
 newest and updates to it the same way, never across a major. It is what you could run
 yourself, so whoever can write cad's environment can change what `cad` runs, as always. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an

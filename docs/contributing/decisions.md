@@ -89,8 +89,9 @@ person's own uv on the installed cad, in place: `uv tool upgrade "cad==X"`, with
 settings as the person has them. uv's record of the install stays as the install made it. cad carries no uv
 of its own: one function finds the person's (uv's default install place, then PATH) and, where there is none,
 says in one line how to get it. cad's part is what makes that safe where processes run cad (below).
-A global install pipx made is told to run `pipx upgrade cad`; one the person pinned (`uv tool install
-cad==X`) is left alone, and told how to unpin it.
+A global install pipx made updates itself the same way, by pipx: `pipx runpip cad install "cad==X"`, pip
+inside pipx's environment. One the person pinned (`uv tool install cad==X`, `pipx pin cad`) is left alone,
+and told how to unpin it.
 
 **Why.** Installers update a tool where it is, and uv is the one the person chose. But uv deletes the old
 files one by one, in the order of the package's record, and stops at the first it cannot delete, with
@@ -105,10 +106,11 @@ on Windows moves uv's bin `cad.exe` aside (a new `cad` then fails at once, rathe
 stops every other process of the environment; runs uv, which downloads and prepares the release before it
 changes anything, so a failed download leaves cad as it was; puts `cad.exe` back; checks that the release
 runs; and, where it does not, deletes the folders uv left without their record and runs `uv tool upgrade
---reinstall` of the release, then of the release before. Where that leaves no cad that runs, uv makes the
-environment anew, `uv tool install --force "cad<N>"`: a range, never one release, which would pin it. That
-removes the folder the worker runs from, so the worker hands it to a standard-library script copied out of the
-environment and run by the Python the environment was made from, which stops cad's processes first. Inside a Windows app's package the
+--reinstall` (pipx: `--force-reinstall`) of the release, then of the release before. Where that leaves no
+cad that runs, the installer makes the environment anew, `uv tool install --force "cad<N>"` or `pipx install
+--force cad`: a range, never one release, which would pin it. That removes the folder the worker runs from, so
+the worker hands it to a standard-library script copied out of the environment and run by the Python the
+environment was made from, which stops cad's processes first. Inside a Windows app's package the
 update is refused, and the server and the worker are started outside it by Task Scheduler
 ([below](#inside-a-windows-apps-package-say-so)).
 

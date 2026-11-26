@@ -3,15 +3,18 @@ Windows app package (``places.outside_package``), as ``python -P -m cad_server._
 by the environment's own interpreter. ``told`` is one JSON argument: ``record`` (the attempt's file), ``log``, ``from``
 (the release that runs), ``at``, ``tries``, ``wanted``, ``asked``, ``start`` (a server wanted at the end though none
 runs), ``target`` (the release asked for, or null), ``requirement`` (what is installed: ``cad==<target>``; with no
-target the bound of ``from``'s major), ``cad`` (the environment's own ``cad`` command), ``uv`` (the person's uv,
-``base.find_uv``), ``installer`` (kept in the record), ``repair`` (the command that installs cad again whole,
-``auto_update.repair_command``) and ``spare`` (on Windows, the processes the switch leaves running:
+target the bound of ``from``'s major), ``cad`` (the environment's own ``cad`` command), ``installer`` (``uv`` or
+``pipx``, who made the global install, kept in the record), ``uv`` (the person's uv, ``base.find_uv``), ``pipx``
+(pipx's command, ``auto_update.find_pipx``, for a pipx install), ``repair`` (the installer's command that installs
+cad again whole, ``auto_update.repair_command``) and ``spare`` (on Windows, the processes the switch leaves running:
 ``auto_update.spared``).
 
-uv installed cad and updates it where it is, with the person's own uv and uv's settings, its receipt untouched
-(``installing``). On Windows a file a process has open or loaded cannot be deleted, and uv's upgrade deletes the old
-files in the order of the package's ``RECORD`` and stops at the first it cannot delete, with nothing put back; one
-stopped past the ``RECORD`` leaves a ``cad-*.dist-info`` without it that every later uv run fails on. uv downloads and prepares the release before it changes the environment, so a
+The installer that made cad updates it where it is, with the person's own settings: uv by ``uv tool upgrade``, its
+receipt untouched; pipx by pip inside its environment (``pipx runpip cad install``; ``uv pip`` under pipx's uv backend),
+pipx's pin untouched (``installing``). On Windows a file a process has open or loaded cannot be deleted: uv's upgrade
+deletes the old files in the order of the package's ``RECORD`` and stops at the first it cannot delete, with nothing
+put back, and one stopped past the ``RECORD`` leaves a ``cad-*.dist-info`` without it that every later uv run fails on
+(pip puts back what it removed). Either downloads and prepares the release before it changes the environment, so a
 download that fails leaves cad as it was. What follows is what makes the upgrade safe where processes run cad, and
 repairs it where it fails anyway. In order (``update``):
 
@@ -23,7 +26,7 @@ repairs it where it fails anyway. In order (``update``):
 
    a. On Windows inside an app package (``places.packaged``): refused, nothing touched, cause ``packaged``.
    b. The server that answers stopped at once, as ``cad server stop`` stops it (``stop``).
-   c. On Windows, uv's bin ``cad.exe`` (``tool_command``) moved aside, so a
+   c. On Windows, the installer's bin ``cad.exe`` (``tool_command``: uv's, or the copy pipx exposes) moved aside, so a
       new ``cad`` fails at once rather than open the files being replaced; then every other process running from the
       environment stopped, and looked for again until none is left (``auto_update_sweep``). In that order: a ``cad``
       launched between a sweep and the rename would hold the files being replaced.
@@ -31,23 +34,24 @@ repairs it where it fails anyway. In order (``update``):
       imported as it starts (this module's imports), none compiled, the repairer's files are read (``CARRIED``), and
       after the upgrade it runs only programs. Its own interpreter is the environment's ``python``, which an upgrade
       does not touch.
-   e. ``uv tool upgrade <requirement>`` (``installing``): the release it leaves is the one installed
+   e. The installer's upgrade to ``requirement`` (``installing``): the release it leaves is the one installed
       (``auto_update.installed``); ``from`` itself is ``current``. uv's own failure to write the bin ``cad.exe`` (a file
       in use) leaves the environment upgraded and whole: that is checked as an upgrade.
-   f. The moment uv returns, its bin ``cad`` again where it left none (``command_back``: an upgrade uv fails after it
-      took the tool's commands out leaves none, and ``--reinstall`` makes none): on Windows the environment's own
-      ``cad.exe`` copied there, else the one moved aside put back, and the one moved aside removed where it can be
-      (else the server's next tidying does, ``auto_update.tidy``); elsewhere a link to the environment's own, as uv
-      makes it.
+   f. The moment the installer returns, its bin ``cad`` again where it left none (``command_back``: an upgrade uv
+      fails after it took the tool's commands out leaves none, ``--reinstall`` makes none, and pip writes none
+      there): on Windows the environment's own ``cad.exe`` copied there, as pipx exposes it, else the one moved aside
+      put back, and the one moved aside removed where it can be (else the server's next tidying does,
+      ``auto_update.tidy``); elsewhere a link to the environment's own, as uv and pipx make it.
    g. A server of another release that came up meanwhile stopped (``clear``), and the release checked (``runs``):
       ``cad server start`` where a server ran or ``start`` asks for one, ending 0 with a server whose greeting names
       it; else ``cad --version`` saying it.
    h. Where e or g failed, the repair in place (``recover``): where nothing changed and the release before runs as it
       is, that; else each ``*.dist-info`` without its ``RECORD`` deleted and the release installed again
-      (``installing``: ``uv tool upgrade --reinstall``), then the release before, each made safe as e is (c, f) and
-      checked. It keeps uv's receipt and the environment's ``Scripts`` folder, which this worker's interpreter holds on Windows.
+      (``installing``: ``uv tool upgrade --reinstall``, ``pipx runpip cad install --force-reinstall``), then the
+      release before, each made safe as e is (c, f) and checked. It keeps uv's receipt, pipx's pin and the
+      environment's ``Scripts`` folder, which this worker's interpreter holds on Windows.
    i. Where that left no cad that runs, the last resort (``hand_off``): the installer installs cad again whole
-      (``uv tool install --force "cad<N>"``), which removes the environment, so it runs
+      (``uv tool install --force "cad<N>"``, ``pipx install --force cad``), which removes the environment, so it runs
       from outside it once this worker has ended (``auto_update_repair``): the attempt is kept underway in its
       ``repairing`` phase, and the repairer writes its outcome. Where it cannot start, the attempt is ``broken``.
 
@@ -149,6 +153,15 @@ def update(told, run=run, mark=lambda phase: None):
     return found
 
 
+def installer(told):
+    """The installer's command as the worker runs it: uv, or pipx (``find_pipx``'s)."""
+    return " ".join(map(str, told.get("pipx") or ())) if told.get("installer") == "pipx" else told.get("uv")
+
+
+def by(told):
+    """Who installs cad, as the log and the detail name it: ``uv`` or ``pipx``."""
+    return "pipx" if told.get("installer") == "pipx" else "uv"
+
 
 def answering():
     """The server that answers now: ``(its release, the environment it runs from)``, either None where it does not
@@ -222,7 +235,7 @@ def switch(told, run, log, system=None):
     got = auto_update.installed()
     if code != 0 and got is not None and got == target and not unrecorded(prefix):
         # The environment is upgraded and whole: what failed after it is the bin command, which is back (``upgrade``).
-        log.write(f"uv exited {code} with cad {got} installed whole: checked as an upgrade")
+        log.write(f"{by(told)} exited {code} with cad {got} installed whole: checked as an upgrade")
         code = 0
     got = (got if code == 0 else None) or target
     named_ = {"release": got or "latest"}
@@ -233,12 +246,12 @@ def switch(told, run, log, system=None):
             return {**named_, "outcome": "current", "detail": f"cad {got} is the newest release it may take",
                     **started(wanted, True, said)}
         if ok:
-            return {**named_, "outcome": "installed", "detail": f"cad {got} runs, upgraded in place by uv",
+            return {**named_, "outcome": "installed", "detail": f"cad {got} runs, upgraded in place by {by(told)}",
                     **started(wanted, True, said)}
         cause = "start_failed"
         detail = f"cad {got} did not {'start' if wanted else 'run'}: {last_line(said) or 'no word'}"
     else:
-        cause, detail = cause_of(code, said, log), last_line(said) or "uv said nothing"
+        cause, detail = cause_of(code, said, log), last_line(said) or f"{by(told)} said nothing"
     back, again = recover(told, run, got, wanted, log, upgraded=code == 0, command=command, system=system)
     if back is not None and back == got and got != told["from"]:
         return {**named_, "outcome": "installed", "detail": f"cad {got} runs, installed again after: {detail}",
@@ -272,7 +285,8 @@ def recover(told, run, target, wanted, log, *, upgraded, command=None, system=No
     """Step h (see the module), where the upgrade to ``target`` failed (``upgraded`` false) or its check did: the release
     that runs after it, or None, and what its check said. Where nothing changed (no ``*.dist-info`` without its
     ``RECORD``) the release before is checked as it is first; else, or where it does not run, ``target`` installed
-    again in place (``installing``: ``uv tool upgrade --reinstall``), then the release before, each after a server of another release is stopped (``clear``) and the records left half
+    again in place (``installing``: ``uv tool upgrade --reinstall``, ``pipx runpip cad install --force-reinstall``),
+    then the release before, each after a server of another release is stopped (``clear``) and the records left half
     removed are deleted (``unrecorded``), made safe as the upgrade is (``upgrade``); each checked (``runs``). Never a
     whole new install from here (``uv tool install --force``): it removes the environment's ``Scripts`` folder, which
     this worker's own interpreter holds (``hand_off`` runs it from outside)."""
@@ -288,7 +302,7 @@ def recover(told, run, target, wanted, log, *, upgraded, command=None, system=No
         clear(release_, log)
         for path in unrecorded(prefix):
             shutil.rmtree(path, ignore_errors=True)
-            log.write(f"removed {path}, which uv left without its RECORD")
+            log.write(f"removed {path}, which {by(told)} left without its RECORD")
         code, said = upgrade(told, run, installing(told, f"cad=={release_}", again=True), command, log, system)
         if code == 0:
             ok, said = runs(told, run, release_, wanted)
@@ -342,15 +356,22 @@ def replace(told, run, held, log, mark=lambda phase: None):
 
 
 def installing(told, requirement, again=False):
-    """uv's command that installs ``requirement`` in cad's environment where it is: ``uv tool upgrade [--reinstall]
-    <requirement>``, which keeps its receipt."""
+    """The installer's command that installs ``requirement`` in cad's environment where it is: uv's ``uv tool upgrade
+    [--reinstall] <requirement>``, which keeps its receipt; pipx's ``pipx runpip cad install --upgrade
+    [--force-reinstall] <requirement>``, pip (or ``uv pip``, under pipx's uv backend) inside pipx's environment,
+    which keeps pipx's pin (pipx 1.19 notes ``requirement`` in its metadata, which ``pipx upgrade`` moves on from)."""
+    if told.get("installer") == "pipx":
+        return [*told["pipx"], "runpip", "cad", "install", "--upgrade", *(["--force-reinstall"] if again else []),
+                requirement]
     return [told["uv"], "tool", "upgrade", *(["--reinstall"] if again else []), requirement]
 
 
 def tool_command(told, run):
-    """uv's bin ``cad`` of this tool (``cad.exe`` on Windows; ``uv tool dir --bin``, asked of the worker's uv), or None
-    where uv cannot say."""
-    code, said = run([told["uv"], "tool", "dir", "--bin"], ASK_SECONDS)
+    """The installer's bin ``cad`` (``cad.exe`` on Windows), as the installer names its folder (``uv tool dir --bin``;
+    ``pipx environment --value PIPX_BIN_DIR``), or None where it cannot say."""
+    asked = [*told["pipx"], "environment", "--value", "PIPX_BIN_DIR"] if told.get("installer") == "pipx" \
+        else [told["uv"], "tool", "dir", "--bin"]
+    code, said = run(asked, ASK_SECONDS)
     folder = last_line(said) if code == 0 else ""
     return Path(folder) / ("cad.exe" if WINDOWS else "cad") if folder else None
 
@@ -587,7 +608,7 @@ class Log:
                 handle.write(f"cad's update, begun {_when(time.time())}: from {told.get('from')} to "
                              f"{told.get('target') or 'the newest it may take'}"
                              f"{f' (for {wanted})' if wanted and wanted != told.get('target') else ''}, "
-                             f"{told.get('requirement')} by {told.get('uv')}, "
+                             f"{told.get('requirement')} by {installer(told)}, "
                              f"{'typed' if told.get('asked') else 'automatic'}, try {told.get('tries', 1)}\n")
         except Exception:  # noqa: BLE001 - the worker never fails of its log
             self.path = None

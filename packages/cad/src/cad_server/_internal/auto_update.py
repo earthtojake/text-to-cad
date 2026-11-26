@@ -6,19 +6,21 @@ forward only. The
 bound is worked out from the release that runs each time (``bound``: ``cad>=<this release>,<<its major + 1>``), never a
 fixed number, so it holds on a computer that has not updated for months.
 
-**How a release arrives.** uv installed cad, and uv updates it where it is: the person's own uv (``base.find_uv``) runs
-``uv tool upgrade "cad==<release>"`` on the environment, with the person's uv settings. What cad adds is what makes that
-safe where processes run cad, which on Windows hold its files (uv downloads and prepares the release before it changes
-the environment, so a download that fails leaves cad as it was): the server stopped, on Windows every other process of the environment stopped and its ``cad``
-command moved aside, the upgrade, a check that the release runs, a repair in place where it does not, and, where that
-leaves no cad that runs, cad installed again whole from outside its environment (``repair_command``). That work is the
-worker's (``auto_update_helper``, ``auto_update_repair``); this module decides when it runs and keeps its record.
+**How a release arrives.** The installer that made cad updates it where it is, with the person's own settings: uv
+(``base.find_uv``) runs ``uv tool upgrade "cad==<release>"`` on its tool, its receipt keeping its own requirements;
+pipx (``find_pipx``) runs ``pipx runpip cad install "cad==<release>"``, pip inside its environment, the person's pin
+there as it was (pipx 1.19 notes the requirement as the one it was installed by, which ``pipx upgrade`` moves on
+from). What cad adds is what makes that safe where processes run cad, which on Windows hold its files (the installer
+downloads and prepares the release before it changes the environment, so a download that fails leaves cad as it was):
+the server stopped, on Windows every other process of the environment stopped and its ``cad`` command moved aside,
+the upgrade, a check that the release runs, a repair in place where it does not, and, where that leaves no cad that
+runs, cad installed again whole from outside its environment (``repair_command``). That work is the worker's
+(``auto_update_helper``, ``auto_update_repair``); this module decides when it runs and keeps its record.
 
 **A global install** (``global_install``) is a cad whose environment uv's ``uv tool install cad`` made (uv's receipt
-there names ``cad``) or pipx's ``pipx install cad`` (pipx's ``venvs/cad``, its metadata naming ``cad``). Only uv's
-global install updates itself, by uv, and uv's receipt keeps its own requirements; one pipx made is told to run
-``pipx upgrade cad`` (``PIPX_LINE``) where cad's own update would run. ``installed_tool`` finds the global install from anywhere (a cad run from
-uv's cache): uv's tool first, then pipx's.
+there names ``cad``) or pipx's ``pipx install cad`` (pipx's ``venvs/cad``, its metadata naming ``cad``): either updates
+itself, by its installer. ``installed_tool`` finds the global install from anywhere (a cad run from uv's cache): uv's
+tool first, then pipx's.
 
 **The switches** are the person's, in cad's settings (``settings.json`` in the state folder): ``auto_update.on``,
 whether cad updates itself, ON where nothing is kept -- but OFF where 0.10.0 to 0.11.11 kept the person's own off
@@ -379,12 +381,14 @@ def _has_pipx(python: str) -> bool:
 
 @dataclass(frozen=True)
 class Global:
-    """A global install of cad: its environment, who made it (``INSTALLERS``), and the person's uv, which the update
-    runs (``base.find_uv``; None where there is none: then it cannot update)."""
+    """A global install of cad: its environment, who made it (``INSTALLERS``), the person's uv (``base.find_uv``,
+    which a pipx install needs too, for the kernel's environments), and for a pipx install pipx (``find_pipx``); None
+    where there is none: then it cannot update."""
 
     installer: str
     prefix: Path
     uv: str | None
+    pipx: list[str] | None = None
 
     @property
     def launcher(self) -> Path:
@@ -399,7 +403,7 @@ def global_install(prefix: str | None = None) -> Global | None:
     installer = "uv" if uv_tool(str(folder)) is not None else "pipx" if pipx_tool(str(folder)) is not None else None
     if installer is None:
         return None
-    return Global(installer, folder, find_uv())
+    return Global(installer, folder, find_uv(), find_pipx(prefix=str(folder)) if installer == "pipx" else None)
 
 
 def find_uv() -> str | None:
@@ -487,22 +491,26 @@ def installed_tool(uv: str | None = None, *, timeout: float = 30.0, pipx: list[s
         return None
 
 
-def tool_bin(uv: str | None = None, timeout: float = 30.0) -> Path | None:
-    """uv's bin folder, where ``uv tool`` puts each tool's command (``uv tool dir --bin``, which reads
-    ``UV_TOOL_BIN_DIR`` as every uv command does), or None where uv cannot say. Never raises."""
+def tool_bin(install: Global | None = None, timeout: float = 30.0) -> Path | None:
+    """The bin folder of the global install ``install`` (this cad's by default), where its installer puts cad's command:
+    uv's (``uv tool dir --bin``, which reads ``UV_TOOL_BIN_DIR`` as every uv command does), pipx's (``pipx environment
+    --value PIPX_BIN_DIR``, which reads ``PIPX_BIN_DIR``); None where it cannot say. Never raises."""
     try:
-        uv = uv or find_uv()
-        said = _said([uv, "tool", "dir", "--bin"], timeout) if uv else None
-    except Exception:  # noqa: BLE001 - a uv that cannot answer names no folder
+        install = install or global_install()
+        asked = None if install is None else [*install.pipx, "environment", "--value", "PIPX_BIN_DIR"] \
+            if install.installer == "pipx" and install.pipx else [install.uv, "tool", "dir", "--bin"] if install.uv \
+            else None
+        said = _said(asked, timeout) if asked else None
+    except Exception:  # noqa: BLE001 - an installer that cannot answer names no folder
         return None
     return Path(said) if said else None
 
 
 def tidy(windows: bool = os.name == "nt") -> list[str]:
-    """On Windows, for a uv tool: each ``cad.exe`` cad's update moved aside (``auto_update_sweep.ASIDE``) and could not
-    remove then, as a process still ran it, removed where none does now. The paths removed. Elsewhere nothing. Never
-    raises."""
-    if not windows or uv_tool() is None:
+    """On Windows, for a global install: each ``cad.exe`` cad's update moved aside (``auto_update_sweep.ASIDE``) and
+    could not remove then, as a process still ran it, removed where none does now. The paths removed. Elsewhere
+    nothing. Never raises."""
+    if not windows or uv_tool() is None and pipx_tool() is None:
         return []
     from cad_server._internal.auto_update_sweep import ASIDE
 
@@ -628,7 +636,7 @@ def due(*, fetch: bool = False, now: float | None = None) -> Due | None:
     else the feed as last read. Never raises."""
     try:
         found = global_install()
-        if not switches()["on"] or found is None or found.installer != "uv":
+        if not switches()["on"] or found is None:
             return None
         from cad_server import updates
 
@@ -697,32 +705,33 @@ def stale(wanted: str) -> bool:
 
 def blocked(found: Global) -> str | None:
     """Why no update can begin for the global install ``found``, as a cause (``SAID``): ``pinned``, the person pinned
-    cad to a release in uv's receipt (``pinned``), which every upgrade to another fails on; ``no_installer``, no uv is
-    found. None where one can, and for pipx's, which pipx updates (``PIPX_LINE``)."""
-    if found.installer != "uv":
-        return None
+    cad to its release (``pinned``); ``no_installer``, no uv is found, or for a pipx install no pipx. None where one
+    can."""
     if pinned(found.prefix):
         return "pinned"
-    return "no_installer" if found.uv is None else None
+    return "no_installer" if found.uv is None or found.installer == "pipx" and not found.pipx else None
 
 
 def pinned(prefix: str | os.PathLike[str] | None = None) -> bool:
-    """Whether uv's receipt of the tool at ``prefix`` (``sys.prefix``) pins cad to one release: its requirement's
-    specifier an exact one (``==``, ``===``), as a person's own ``uv tool install cad==X`` writes it. cad's installers
-    write none, ``<N`` or ``>=X,<N``, and an update leaves the receipt as it is. Never raises."""
+    """Whether the person pinned the global install at ``prefix`` (``sys.prefix``) to its release, so its installer
+    keeps it there: uv's receipt's requirement an exact one (``==``, ``===``), as a person's own ``uv tool install
+    cad==X`` writes it (cad's installers write none, ``<N`` or ``>=X,<N``, and an update leaves the receipt as it is),
+    which every upgrade to another release fails on; pipx's metadata ``pinned`` (``pipx pin cad``), which ``pipx
+    upgrade`` keeps to (a ``pipx install cad==X`` pins nothing: ``pipx upgrade`` moves it on). Never raises."""
     import tomllib
 
+    folder = Path(prefix or sys.prefix)
     try:
-        first = tomllib.loads((Path(prefix or sys.prefix) / "uv-receipt.toml").read_text(encoding="utf-8"))["tool"][
-            "requirements"][0]
+        package = json.loads((folder / "pipx_metadata.json").read_text(encoding="utf-8"))["main_package"]
+        return package.get("pinned") is True
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    try:
+        first = tomllib.loads((folder / "uv-receipt.toml").read_text(encoding="utf-8"))["tool"]["requirements"][0]
         specifier = first.get("specifier", "") if isinstance(first, dict) else str(first)[3:]
     except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
         return False
     return "==" in str(specifier)
-
-
-# What a global install pipx made is told where cad's own update would run: pipx updates it.
-PIPX_LINE = "this cad was installed with pipx, which updates it: run `pipx upgrade cad`"
 
 
 def requirement(target: str | None, version: str) -> str:
@@ -732,9 +741,12 @@ def requirement(target: str | None, version: str) -> str:
 
 
 def repair_command(install: Global, version: str) -> list[str] | None:
-    """uv's command that installs cad again whole, the update's last resort (``auto_update_repair``): ``uv tool install
-    --force`` of the newest of release ``version``'s major (``tool_install.command``: ``cad<N>``, as cad's installers
-    write it, never one release, which would pin it). None where uv is not found."""
+    """The installer's command that installs cad again whole, the update's last resort (``auto_update_repair``): uv's
+    ``uv tool install --force`` of the newest of release ``version``'s major (``tool_install.command``: ``cad<N>``, as
+    cad's installers write it, never one release); pipx's ``pipx install --force cad``, unpinned. None where the
+    installer is not found."""
+    if install.installer == "pipx":
+        return [*install.pipx, "install", "--force", "cad"] if install.pipx else None
     if install.uv is None:
         return None
     from cad_server._internal import tool_install
@@ -749,7 +761,7 @@ def helper_command(target: str | None, *, now: float, version: str, record: str,
                    spare: list[int] | None = None) -> list[str]:
     """The worker's command line: this environment's interpreter (``python``: ``sys.executable``), the worker as a
     module, and its one argument: ``target``, the release asked for (None: whatever uv gets), what to install
-    (``requirement``), the global install ``install``'s ``cad`` command, the uv it runs, who made it and the command
+    (``requirement``), the global install ``install``'s ``cad`` command, who made it, its uv and pipx, and the command
     that installs it again whole (``repair_command``); ``wanted``, the
     release the attempt is for (``target`` or ``LATEST`` by default), ``tries``, ``asked`` (a typed update), ``start``
     (whether a server is wanted at the end though none runs now), ``spare`` (on Windows, the processes the switch leaves running: ``spared``), ``record``
@@ -757,8 +769,8 @@ def helper_command(target: str | None, *, now: float, version: str, record: str,
     told = {"record": record, "log": log, "from": version, "at": now, "tries": tries,
             "wanted": wanted or target or LATEST, "asked": asked, "start": start, "target": target,
             "requirement": requirement(target, version), "cad": str(tool_command(install.prefix)),
-            "uv": install.uv, "installer": install.installer, "repair": repair_command(install, version),
-            "spare": spare or []}
+            "uv": install.uv, "pipx": install.pipx, "installer": install.installer,
+            "repair": repair_command(install, version), "spare": spare or []}
     return [python or sys.executable, "-P", "-m", HELPER, json.dumps(told)]
 
 
@@ -940,15 +952,13 @@ def asked(*, pypi: Callable[[], dict[str, Any] | None] | None = None) -> dict[st
         found = global_install()
         if found is None:
             return {"failed": NOT_THE_TOOL}
-        if found.installer == "pipx":
-            return {"failed": PIPX_LINE}
         from cad_server import updates
 
         if not updates.checking():
             return {"failed": CHECK_OFF}
         stuck = blocked(found)
         if stuck is not None:
-            return {"failed": f"{in_words(stuck)}: {advice(stuck, found.installer)}"}
+            return {"failed": f"{in_words(stuck, found.installer)}: {advice(stuck, found.installer)}"}
         if release(version) is None:
             return {"failed": f"cad {version} is no release, so it does not update itself"}
         known = (pypi or updates.pypi)()
@@ -1082,6 +1092,21 @@ ADVICE = {
     **dict.fromkeys(("no_installer", "no_program"), f"install uv ({UV_DOCS}), then `cad update`"),
     "pinned": "to have cad update itself again, install it unpinned: `uv tool install --force cad`",
 }
+# Where pipx made the global install, what is said in other words than uv's (``in_words``, ``advice``).
+PIPX_SAID = {
+    "timeout": "pipx did not end within 15 minutes",
+    "no_program": "pipx could not be run",
+    "denied": "pipx was refused access to a file",
+    "network": "pipx could not reach the package index",
+    "no_installer": "pipx or uv cannot be found, so no update can begin",
+    "pinned": "cad is pinned to its release in pipx (a `pipx pin cad`), so it does not update",
+    "unknown": "pipx's output names no cause cad knows",
+}
+PIPX_ADVICE = {
+    "denied": "give your user write access to cad's state folder ({state}) and pipx's environments, then " + RETRIES,
+    **dict.fromkeys(("no_installer", "no_program"), f"install pipx and uv ({UV_DOCS}), then `cad update`"),
+    "pinned": "to have cad update itself again, unpin it: `pipx unpin cad`",
+}
 
 
 def cause(found: dict[str, Any], now: float | None = None) -> str | None:
@@ -1097,9 +1122,9 @@ def cause(found: dict[str, Any], now: float | None = None) -> str | None:
     return None
 
 
-def in_words(word: str) -> str:
-    """A cause in plain words (``SAID``)."""
-    return SAID[word]
+def in_words(word: str, installer: str | None = None) -> str:
+    """A cause in plain words (``SAID``; ``PIPX_SAID`` where pipx made the global install, ``installer``)."""
+    return (PIPX_SAID if installer == "pipx" else {}).get(word) or SAID[word]
 
 
 def reinstall(installer: str | None = None) -> str:
@@ -1111,8 +1136,10 @@ def reinstall(installer: str | None = None) -> str:
 def advice(word: str, installer: str | None = None) -> str:
     """What to do about a cause (``ADVICE``), in one line that names one command where there is one to run: the one
     ``cad doctor``, ``cad update``'s failure and the line a cad behind says (``notice``) give. A reinstall names the
-    command of who made the global install (``installer``: ``reinstall``). ``KeyError`` for a word that is no cause."""
-    return ADVICE[word].format(reinstall=reinstall(installer), state=_data())
+    command of who made the global install (``installer``: ``reinstall``; pipx's own words, ``PIPX_ADVICE``).
+    ``KeyError`` for a word that is no cause."""
+    said = (PIPX_ADVICE if installer == "pipx" else {}).get(word) or ADVICE[word]
+    return said.format(reinstall=reinstall(installer), state=_data())
 
 
 def waiting(known: Any = None, version: str | None = None,
@@ -1168,7 +1195,7 @@ def button(*, now: float | None = None) -> dict[str, Any] | None:
     try:
         version = _version()
         install = global_install()
-        if install is None or install.installer != "uv" or release(version) is None:
+        if install is None or release(version) is None:
             return None
         from cad_server import updates
 
@@ -1186,7 +1213,7 @@ def button(*, now: float | None = None) -> dict[str, Any] | None:
             return {**out, **attempt, "state": "working"}
         if word is not None and latest is not None and not stale(chosen.wanted):
             log = _data() / LOG
-            return {**out, **attempt, "state": "failed", "cause": word, "said": in_words(word),
+            return {**out, **attempt, "state": "failed", "cause": word, "said": in_words(word, found.get("installer")),
                     **({"installer": found["installer"]} if found.get("installer") in INSTALLERS else {}),
                     **({"log": str(log)} if log.is_file() else {}),
                     **({"dismissed": True} if found.get("dismissed") is True else {})}
@@ -1301,16 +1328,15 @@ def _behind(version: str, target: str, now: float) -> str:
     """``notice``'s line for this cad, release ``version``, behind ``target``."""
     found = global_install()
     installer = found.installer if found is not None else None
-    if installer == "pipx":
-        return f"cad: cad {target} is out and this is {version}: {PIPX_LINE}"
     stuck = blocked(found) if found is not None else None
     if stuck is not None:
-        return (f"cad: this cad is {version} and cannot update itself to {target} ({in_words(stuck)}): "
+        return (f"cad: this cad is {version} and cannot update itself to {target} ({in_words(stuck, installer)}): "
                 f"{advice(stuck, installer)}")
     record = last()
     word = cause(record, now) if record is not None and record.get("from") == version else None
     if word is not None:
-        return (f"cad: this cad is {version} and has not been able to update itself to {target} ({in_words(word)}): "
+        return (f"cad: this cad is {version} and has not been able to update itself to {target} "
+                f"({in_words(word, installer)}): "
                 f"{advice(word, installer)}")
     return f"cad: cad {target} is out and this is {version}: `cad update` updates it"
 

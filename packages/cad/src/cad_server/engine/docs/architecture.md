@@ -143,7 +143,7 @@ as last read names a newer release of its major (the start is the update, begun 
 `daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`). Nothing runs in the
 background: the server's tending only reads the feed. A detached worker (`auto_update_helper`, by the environment's own
 interpreter, outside any Windows app package) stops the server at once, as `cad server stop` does, runs `uv tool
-upgrade "cad==X"` (on Windows after moving uv's `cad.exe` aside and stopping every process of the environment, since a
+upgrade "cad==X"` (pipx: `pipx runpip cad install`; on Windows after moving uv's `cad.exe` aside and stopping every process of the environment, since a
 process holds the files uv deletes one by one with no rollback), checks that the release runs and starts its server, and
 repairs the environment where it does not, from outside it where only a new install brings cad back
 (`auto_update_repair`). A command it cuts short says cad updated itself while it ran

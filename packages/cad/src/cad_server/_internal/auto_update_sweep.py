@@ -49,8 +49,8 @@ def aside(command, log):
 
 def command_back(command, moved, prefix, log, windows=WINDOWS):
     """The installer's bin ``cad`` at ``command`` again where the installer left none -- on Windows the environment's
-    own (``Scripts/cad.exe``) copied there, the same program as uv's, elsewhere a link to its ``bin/cad`` as uv makes
-    one; else the one moved aside (``moved``) put back --; then the one moved aside
+    own (``Scripts/cad.exe``) copied there, as pipx exposes it and uv's is the same program, elsewhere a link to its
+    ``bin/cad`` as uv and pipx make one; else the one moved aside (``moved``) put back --; then the one moved aside
     removed where it can be (a process may run it still: the server's next tidying removes it). What is left of it
     there, or None."""
     if not os.path.lexists(command):

@@ -186,8 +186,6 @@ def _update() -> tuple:
     plugin = f"plugin update auto {word[auto.plugin_switch()]}"
     if found is None:
         return INFO, f"this cad is not a global install, so it never updates itself; {plugin}"
-    if found.installer == "pipx":
-        return INFO, f"a global install by pipx ({found.prefix}), which updates it; {plugin}", [auto.PIPX_LINE]
     kept = auto.switches()
     earlier = " (turned off in an earlier release)" if kept.get("earlier") else ""
     said = (f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by {found.installer} "
@@ -195,7 +193,7 @@ def _update() -> tuple:
     stuck = auto.blocked(found)
     if stuck is None:
         return INFO, said
-    return WARNING, f"{said}; {auto.in_words(stuck)}", [auto.advice(stuck, found.installer)]
+    return WARNING, f"{said}; {auto.in_words(stuck, found.installer)}", [auto.advice(stuck, found.installer)]
 
 
 def _newest() -> dict:
@@ -291,7 +289,7 @@ def _attempt() -> tuple:
         outcome, detail, word = last.get("outcome"), last.get("detail"), auto.cause(last)
         restored = {True: f"; cad {last.get('from')} runs again", False: f"; cad {last.get('from')} did not start again"}
         said = (f"{last.get('from')} to {last['release']} on {when}: {outcome}" + (f" ({detail})" if detail else "")
-                + (f": {auto.in_words(word)}" if word else "")
+                + (f": {auto.in_words(word, last.get('installer'))}" if word else "")
                 + restored.get(last.get("restored"), ""))
         warn = mine and (outcome == "failed" or word is not None)
         word = word if mine else None
