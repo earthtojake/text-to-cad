@@ -321,6 +321,7 @@ export default {
   "home.openNewTab": "Open in new tab",
   "home.openBrowser": "Open in browser",
   "home.backTo": "Back to {name}",
+  "home.parentFoldersAria": "Parent folders",
   "home.emptyTitle": "Nothing here yet",
   "home.emptyBody": "Import a file or a folder, or ask your agent to build a model.",
   "home.searchAria": "Search models",

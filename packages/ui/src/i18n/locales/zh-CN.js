@@ -383,6 +383,7 @@ export default {
 
 
   "home.backTo": "返回 {name}",
+  "home.parentFoldersAria": "上级文件夹",
 
 
 

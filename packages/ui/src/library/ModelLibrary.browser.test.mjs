@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { build } from "esbuild";
-import { chromium } from "playwright";
+import { chromium, devices } from "playwright";
 
 // The home as it is drawn (`docs/viewer-ux.md`, "The home"): what needs a layout, a real link or a real key. What it
 // lists, counts and asks of its host is `ModelLibrary.test.tsx`'s.
@@ -539,6 +539,79 @@ test("the head stays one row on a narrow page and at a phone's width: the title 
   } finally { await phone.context.close(); }
 });
 
+// A phone, as a touch screen (Playwright's iPhone 13: touch, mobile, 390×844) and as a plain 390px window: the head is one row, nothing in it is cut mid-word or overflows, the
+// way back is its arrow alone under its accessible name, and the path's hidden folders are one "…" crumb with a menu.
+for (const [label, options] of [["a touch phone", { ...devices["iPhone 13"], deviceScaleFactor: 1 }], ["a plain 390px window", {}]]) {
+  test(`on ${label} the way back is its arrow alone and a path too long for the head folds its first folders into one "…" crumb with a menu`, async () => {
+    const { context, page } = await home("place=gearbox&path=housing/v3&from=housing.xbf&layout=list", { width: 390, height: 844 }, options);
+    const press = (locator) => options.hasTouch ? locator.tap() : locator.click();
+    try {
+      const back = page.getByRole("button", { name: "Back to housing.xbf" });
+      await back.locator("xpath=self::*[@data-compact]").waitFor();
+      await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
+      const head = await box(page.locator("[data-library-head]"));
+      const parts = await page.locator("[data-library-head] > :not([data-library-fit])").evaluateAll((nodes) => nodes.map((node) => { const { y, bottom, x, right } = node.getBoundingClientRect(); return { y, bottom, x, right }; }));
+      assert.ok(parts.every(({ y, bottom }) => y >= head.y - 1 && bottom <= head.bottom + 1), "the head is one row: every part is inside it");
+      assert.ok(parts.every(({ x, right }) => x >= head.x - 1 && right <= head.right + 1), "every part ends inside the place's lines");
+      // Nothing is cut or wider than the page: no text clipped, no horizontal scroll in the window or the place.
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "nothing wider than the window");
+      assert.equal(await page.locator("[data-library-content]").evaluate((node) => node.scrollWidth <= node.clientWidth), true, "nothing wider than the place");
+      const cut = await page.locator("[data-library-head] :is([data-library-title], [data-library-crumb], [data-library-crumb-more], [data-library-back], [data-library-sort])")
+        .evaluateAll((nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth).map((node) => node.textContent));
+      assert.deepEqual(cut, [], "no text is cut");
+      // The way back: the arrow alone, a control wide, named in full, with its press.
+      assert.deepEqual([await back.textContent(), await back.locator("svg.lucide-arrow-left").count(), (await box(back)).width, (await box(back)).height, await back.getAttribute("aria-keyshortcuts")],
+        ["", 1, 36, 36, "Escape"]);
+      // The path: "…" then the folder on screen, no bare slash first.
+      const crumbs = page.locator("[data-library-crumbs]");
+      assert.equal((await crumbs.innerText()).replace(/\s+/g, " ").trim(), "… / v3");
+      const more = page.getByRole("button", { name: "Parent folders" });
+      assert.equal(await more.textContent(), "…");
+      assert.deepEqual(await page.locator("[data-library-crumb]").count(), 0, "no earlier folder is left half-drawn beside it");
+      await press(more);
+      const menu = page.getByRole("menu", { name: "Parent folders" });
+      assert.deepEqual(await menu.getByRole("menuitem").allTextContents(), ["gearbox", "housing"]);
+      await press(menu.getByRole("menuitem", { name: "housing" }));
+      await menu.waitFor({ state: "hidden" });
+      await page.locator("[data-library-title]").filter({ hasText: /^housing$/ }).waitFor();
+      // At housing the path "gearbox / housing" fits what the row has once the arrow stands alone, or folds again; it never
+      // shows a bare slash or a cut name.
+      const text = (await page.locator("[data-library-crumbs]").innerText()).replace(/\s+/g, " ").trim();
+      assert.match(text, /^(… \/ housing|gearbox \/ housing)$/);
+    } finally { await context.close(); }
+  });
+}
+
+test("a wide home keeps the way back as its name and key and a path that fits whole, with no \"…\"", async () => {
+  const { context, page } = await home("place=gearbox&path=housing/v3&from=housing.xbf&layout=list", { width: 1280, height: 800 });
+  try {
+    const back = page.getByRole("button", { name: "Back to housing.xbf" });
+    assert.deepEqual([await back.locator("kbd").textContent(), await back.locator("span.truncate").textContent(), await back.locator("svg").count(), await back.getAttribute("data-compact")], ["Esc", "Back to housing.xbf", 0, null]);
+    assert.equal((await page.locator("[data-library-crumbs]").innerText()).replace(/\s+/g, " ").trim(), "gearbox / housing / v3");
+    assert.equal(await page.getByRole("button", { name: "Parent folders" }).count(), 0);
+  } finally { await context.close(); }
+});
+
+test("a page's tables keep their columns at the same x at every width: Recent's and All files' headers and rows", async () => {
+  for (const width of [390, 560, 800, 1440]) {
+    const { context, page } = await home("place=gearbox&layout=list", { width, height: 900 });
+    try {
+      await page.locator("[data-library-recent] .cad-library-row").first().waitFor();
+      assert.equal(await page.locator("[data-library-content]").evaluate((node) => node.scrollWidth <= node.clientWidth), true, `${width}: no table is wider than the place`);
+      const columns = await page.locator("[data-library-columns]").evaluateAll((tables) => tables.map((header) => {
+        const table = header.closest(".cad-library-table");
+        const xs = (root) => Object.fromEntries([...root.querySelectorAll("[data-column]")].filter((cell) => cell.getBoundingClientRect().width > 0)
+          .map((cell) => [cell.dataset.column, Math.round(cell.getBoundingClientRect().x)]));
+        return { header: xs(header), rows: [...table.querySelectorAll(".cad-library-open")].map(xs) };
+      }));
+      assert.equal(columns.length, 2, `${width}: Recent and All files each have a header`);
+      assert.deepEqual(columns[0].header, columns[1].header, `${width}: the two headers share their columns' x`);
+      assert.ok(Object.keys(columns[0].header).includes("edited"), `${width}: Last edited is a column`);
+      for (const { header, rows } of columns) for (const row of rows) assert.deepEqual(row, header, `${width}: a row's cells stand under its header's`);
+    } finally { await context.close(); }
+  }
+});
+
 test("Import is one button opening the system's chooser where it takes a file or a folder, else a menu of File… and Folder…; the + by Projects is the folder chooser", async () => {
   // Where the system's chooser takes either (a Mac's, as VS Code's "Open…" is there): one button, its icon and its word
   // with no chevron, padded alike at both ends, the control tall; a press opens that chooser, and no menu.
@@ -687,7 +760,7 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
 const texts = (page) => page.evaluate(() => {
   const found = {};
   for (const node of document.querySelectorAll(".cad-library *")) {
-    if (![...node.childNodes].some((child) => child.nodeType === 3 && child.textContent.trim()) || !node.getClientRects().length) continue;
+    if (![...node.childNodes].some((child) => child.nodeType === 3 && child.textContent.trim()) || !node.getClientRects().length || getComputedStyle(node).visibility === "hidden") continue;
     const role = node.closest("kbd") ? "key" : node.closest("[data-library-format]") ? "chip" : node.closest("[data-library-crumbs]") || node.matches("[data-library-title]") ? "title" : "body";
     const { fontSize, lineHeight } = getComputedStyle(node);
     (found[role] ??= new Set()).add(`${fontSize} ${lineHeight}`);

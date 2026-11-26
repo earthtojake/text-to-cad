@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDownUp, ChevronDown, Clock, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Search, Star } from "lucide-react";
+import { ArrowDownUp, ArrowLeft, ChevronDown, Clock, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Search, Star } from "lucide-react";
 import { Badge } from "../primitives/badge.jsx";
 import { Button } from "../primitives/button.jsx";
 import { VALUE_DROPDOWN_LIST_CLASS } from "../primitives/value-dropdown.jsx";
@@ -1002,6 +1002,45 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // into: the glyph says what it is, and its accessible name says it whole ("Sort by Last activity"). Its menu is a value
   // dropdown's list (`VALUE_DROPDOWN_LIST_CLASS`): the four sorts, the chosen one ticked. Where the place is narrow
   // (a phone's) it is the glyph alone: the name and the chevron give way, the accessible name and the menu stay.
+  // How the head fits its row, measured from what is drawn (`data-library-fit`'s unwrapped copies of the way back and of
+  // the path's parts, which cost no room): the way back shows its glyph alone where its name would leave the title less
+  // than ten heading-sized characters, and a path too wide for what the title has folds its earliest folders into one
+  // "…" crumb, as few as make it fit. Neither is ever cut mid-word.
+  const headRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState({ compact: false, folded: 0 });
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head) return;
+    const measure = () => {
+      const sizer = head.querySelector<HTMLElement>("[data-library-fit]");
+      const headWidth = head.clientWidth;
+      if (!sizer || !headWidth) return;
+      const gap = parseFloat(getComputedStyle(head).columnGap) || 0;
+      const own = [...head.children].filter(child => child !== sizer);
+      const title = own.find(child => child.matches("[data-library-crumbs], [data-library-title]")) as HTMLElement | undefined;
+      const fixed = own.filter(child => child !== title && !child.matches("[data-library-back]"));
+      const used = fixed.reduce((sum, child) => sum + child.getBoundingClientRect().width, 0);
+      const backFull = sizer.querySelector<HTMLElement>("[data-fit=back]");
+      const count = fixed.length + 1 + (backFull ? 1 : 0);
+      const heading = parseFloat(getComputedStyle(title ?? head).fontSize) || 16;
+      const compact = Boolean(backFull) && headWidth - used - gap * (count - 1) - backFull!.offsetWidth < heading * 10;
+      const room = headWidth - used - gap * (count - 1) - (backFull ? (compact ? backFull.offsetHeight : backFull.offsetWidth) : 0);
+      const parts = [...sizer.querySelectorAll<HTMLElement>("[data-fit=crumb]")].map(part => part.offsetWidth);
+      const [more, sep, last] = ["more", "sep", "last"].map(name => sizer.querySelector<HTMLElement>(`[data-fit=${name}]`)?.offsetWidth ?? 0);
+      const between = parseFloat(getComputedStyle(sizer.querySelector("[data-fit-crumbs]") ?? sizer).columnGap) || 0;
+      let folded = 0;
+      const width = (from: number) => (from ? more + sep + between * 2 : 0) + parts.slice(from).reduce((sum, part) => sum + part + sep + between * 2, 0) + last;
+      while (folded < parts.length && width(folded) > room) folded++;
+      setFit(now => now.compact === compact && now.folded === folded ? now : { compact, folded });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(head);
+    const sizer = head.querySelector("[data-library-fit]");
+    if (sizer) observer.observe(sizer);
+    return () => observer.disconnect();
+  });
   const sortName = t(`home.sort.${sort}`);
   const sortMenu: ReactNode = onSortChange ? <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
@@ -1037,25 +1076,59 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const layoutSwitch = onLayoutChange ? <SegmentedControl label={t("home.layout")} value={layout}
     options={[{ value: "grid", label: t("home.grid"), Icon: LayoutGrid }, { value: "list", label: t("home.list"), Icon: List }]}
     onChange={value => { usage.used(`home_layout_${value as LibraryLayout}`); onLayoutChange(value as LibraryLayout); }} /> : null;
-  // The way back to the document just left: the scale's outline button at the title row's right end, its name the first
-  // to give way, and the key that does the same after it (left out where nothing hovers: a finger has no Escape).
-  const backControl = back && from ? <Button variant="outline" size="control" className="ml-auto min-w-0 shrink" aria-keyshortcuts="Escape" onClick={back} data-library-back="">
-    <span className="truncate">{t("home.backTo", { name: from.name })}</span><Kbd className="[@media(hover:none)]:hidden" aria-hidden="true">{ESCAPE_KEY}</Kbd></Button> : null;
+  // The way back to the document just left: the scale's outline button at the title row's right end, and the key that
+  // does the same after it (left out where nothing hovers: a finger has no Escape). Where the row lacks room for its
+  // name (a phone's) it is the back arrow alone, the one the navbar's Back draws, a control wide: a name cut mid-word
+  // reads as broken, and its accessible name ("Back to <name>") and its press stay. Sort gives up its name alike.
+  const backName = from ? t("home.backTo", { name: from.name }) : "";
+  const backLabel = <><span className="truncate">{backName}</span><Kbd className="[@media(hover:none)]:hidden" aria-hidden="true">{ESCAPE_KEY}</Kbd></>;
+  const backControl = back && from ? fit.compact
+    ? <Button variant="outline" size="control" className="ml-auto w-control flex-none px-0" aria-label={backName} aria-keyshortcuts="Escape" onClick={back} data-library-back="" data-compact="">
+      <ArrowLeft aria-hidden="true" /></Button>
+    : <Button variant="outline" size="control" className="ml-auto flex-none" aria-keyshortcuts="Escape" onClick={back} data-library-back="">{backLabel}</Button> : null;
   // The page's title, its `h1` (the navbar names no place: the logo is the way home), the one text a step over the body,
   // at medium weight (the heading step's own weight is semibold), as Figma's file browser titles a place: the place's
   // name; on a project's page, the folder's path, every part at the title's size, as Drive's and Dropbox's paths are:
   // each part but the last a way back up to its folder, regular and muted, the first to give way (down to its first
   // letters, the last keeping six characters of its own), the slashes regular and muted, the last the folder on screen, medium in the foreground.
   const TITLE_CLASS = "m-0 min-w-[6ch] truncate text-heading font-medium text-foreground";
-  const title = crumbs.length > 1 ? <div className="flex min-w-0 flex-initial items-baseline justify-end gap-1 overflow-hidden" data-library-crumbs="">
-    {crumbs.slice(0, -1).map(crumb => <Fragment key={crumb.path}>
-      <PressTarget className="max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate rounded-control text-heading font-normal text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset"
+  const CRUMB_CLASS = "rounded-control text-heading font-normal text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset";
+  const ancestors = crumbs.slice(0, -1);
+  const folded = Math.min(fit.folded, ancestors.length);
+  const goTo = (crumb: { path: string }) => visit(place.view === "project" ? projectFolder(place.project, crumb.path) : place);
+  const slash = <span className="flex-none text-heading font-normal text-muted-foreground" aria-hidden="true">/</span>;
+  const title = crumbs.length > 1 ? <div className="flex min-w-0 flex-initial items-baseline gap-1 overflow-hidden" data-library-crumbs="">
+    {folded ? <>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className={cn(CRUMB_CLASS, "flex-none px-1 data-[state=open]:text-foreground")} aria-label={t("home.parentFoldersAria")} data-library-crumb-more="">…</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" collisionPadding={8} aria-label={t("home.parentFoldersAria")} className="min-w-40">
+          {ancestors.slice(0, folded).map(crumb => <DropdownMenuItem key={crumb.path} onSelect={() => goTo(crumb)} data-library-crumb-item="">
+            <span className="min-w-0 truncate">{crumb.name}</span></DropdownMenuItem>)}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {slash}
+    </> : null}
+    {ancestors.slice(folded).map(crumb => <Fragment key={crumb.path}>
+      <PressTarget className={cn(CRUMB_CLASS, "max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate")}
         href={hrefOf?.({ home: projectFolder(shownProject?.id ?? "", crumb.path) }) ?? null} data-library-crumb=""
-        onPress={() => visit(place.view === "project" ? projectFolder(place.project, crumb.path) : place)}>{crumb.name}</PressTarget>
-      <span className="flex-none text-heading font-normal text-muted-foreground" aria-hidden="true">/</span>
+        onPress={() => goTo(crumb)}>{crumb.name}</PressTarget>
+      {slash}
     </Fragment>)}
     <h1 className={cn(TITLE_CLASS, "flex-initial")} data-library-title="">{shownAs}</h1>
   </div> : <h1 className={TITLE_CLASS} data-library-title="">{placeName}</h1>;
+  // The head's unwrapped copies, drawn at their whole width and never seen, that `fit` measures.
+  const sizer = <div className="pointer-events-none invisible absolute inset-x-0 top-0 h-0 overflow-hidden" aria-hidden="true" inert data-library-fit="">
+    <div className="flex w-max flex-col items-start">
+    {back && from ? <Button variant="outline" size="control" className="flex-none" tabIndex={-1} data-fit="back">{backLabel}</Button> : null}
+    {crumbs.length > 1 ? <div className="flex w-max items-baseline gap-1 text-heading font-normal" data-fit-crumbs="">
+      <span className="flex-none px-1 font-normal" data-fit="more">…</span><span className="flex-none font-normal" data-fit="sep">/</span>
+      {ancestors.map(crumb => <span key={crumb.path} className="max-w-[16em] flex-none truncate font-normal" data-fit="crumb">{crumb.name}</span>)}
+      <span className="flex-none font-medium" data-fit="last">{shownAs}</span>
+    </div> : null}
+    </div>
+  </div>;
   // Nothing at all yet: no project, no document.
   const empty = !all.length && !(projects ?? []).length;
   // The place with nothing to list says why, in a line.
@@ -1096,13 +1169,13 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
                   : recentShown.length ? <>
                     {/* Two blocks 16px apart, each under its label 8px over it (the body's size, medium, in the
                         foreground): Recent's one row, then the listing as it is without it. */}
-                    <section className="grid min-w-0 gap-2" aria-labelledby={recentLabel} data-library-recent="">
+                    <section className="grid min-w-0 grid-cols-1 gap-2" aria-labelledby={recentLabel} data-library-recent="">
                       <h2 className={SECTION_LABEL_CLASS} id={recentLabel}>{t("home.recent")}</h2>
                       {recentList}
                     </section>
-                    <section className="grid min-w-0 gap-2" aria-labelledby={allLabel} data-library-all="">
+                    <section className="grid min-w-0 grid-cols-1 gap-2" aria-labelledby={allLabel} data-library-all="">
                       <h2 className={SECTION_LABEL_CLASS} id={allLabel}>{t("home.allFiles")}</h2>
-                      <div className="grid min-w-0 gap-4">{listed}</div>
+                      <div className="grid min-w-0 grid-cols-1 gap-4">{listed}</div>
                     </section>
                   </> : listed;
   // Whether the place lists anything, or will: its Sort and layout stand in the head then, and over
@@ -1129,7 +1202,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
             project's folder's path, with its glyph and its ⋯) at the left, the title the first to truncate; at the right,
             where the place lists anything, the way back, Sort and the layout, centred on the title. The content starts
             16px under it. */}
-        <div className="flex min-h-control min-w-0 items-center gap-2" data-library-head="">
+        <div ref={headRef} className="relative flex min-h-control min-w-0 items-center gap-2" data-library-head="">
+          {sizer}
           {shownProject ? <Folder className="size-glyph flex-none text-muted-foreground" aria-hidden="true" /> : null}
           {title}
           {shownProject ? projectMenu(shownProject) : null}

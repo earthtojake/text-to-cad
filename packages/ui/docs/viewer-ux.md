@@ -221,9 +221,15 @@ chrome that floats over the picture. The home is the navbar over the library: it
     (and while it is read, and over a search that finds nothing); with nothing to list (an empty folder, nothing
     starred, the welcome) they are not, as there is nothing to order or lay out. The content starts 16px under the
     row.
-  - **One row at every width.** On a phone the row does not wrap: the title (or the path) is the first to truncate,
+  - **One row at every width.** On a phone the row does not wrap: the title (or the path) is the first to give way,
     and where the controls still do not fit Sort shows its glyph alone, keeping its accessible name ("Sort by Last
     activity") and its menu.
+  - **The way back is its glyph alone where its name has no room.** Where "Back to <name>" would leave the title less
+    than ten heading-sized characters (measured from what is drawn, not a breakpoint: a long name goes sooner), it is the
+    back arrow the navbar's Back draws, a control wide, in the same outline button, keeping its accessible name ("Back
+    to <name>"), its press and Escape; on a wide screen it is its name and its Esc hint. Why: a name cut to "Bac…" reads
+    as broken, a label that is whole or a glyph that says what it is does not, and Sort already gives up its name the
+    same way.
   - **Sort** is one control: a ghost button, its sort glyph, the sort's name and a chevron, its menu the four orders
     with the chosen one ticked, each an order of a column the list shows: Last activity (the default: the later of
     when a page last opened the file and when it last changed, which is what a card's line says); Name; Last viewed;
@@ -236,9 +242,12 @@ chrome that floats over the picture. The home is the navbar over the library: it
   folder on screen, medium in the foreground; then its ⋯: Open in new tab (this folder), Copy path, Reveal (this folder), then
   Remove from CAD (the project), which says nothing on disk changed and goes to Recents. Nothing beside the name says
   where the folder is on disk: Copy path and Reveal do, as Figma's and Drive's titles say none. A path too long for
-  the row gives way from its start: the parts above, down to their first letters, then the folder's own name, so the
-  folder on screen is the last to go. Why: it is the way a file browser says where you are, and the one way back up,
-  with no Back button of its own.
+  the row gives way from its start: its earliest folders fold into one "…" crumb before the rest (`… / v3`), as few as
+  make it fit, and only when even that is too long does the folder's own name truncate, so the folder on screen is the
+  last to go. The "…" is a button, "Parent folders", whose menu lists the folded folders, the project first, each going
+  to that folder. Why: a path cut to a bare "/" before its last folder says nothing about where it is, and a "…" that
+  opens what it hides is how Drive and Finder do it; it is the way a file browser says where you are, and the one way
+  back up, with no Back button of its own.
 - **A document is its file, one card.** Every row is a file: a model's document is its `.xbf` (every model has one:
   `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it; a shape's handed over too), and its id is
   that file's: one file, one row, one card, in Recents, Starred, a folder's page and the search, named by
@@ -292,7 +301,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   then the listing under "All files". It holds the library's rows of the project whose folder is below its top (the
   list Recents shows; no folder is read for it), by last activity, newest first: in the grid one row of the cards' grid,
   as many cards as fit across at the width on screen (five at 1440px beside the sidebar), the rest left out, and a
-  resize changes how many; in the list at most five rows, under a header of their own, the listing's columns. A
+  resize changes how many; in the list at most five rows, under a header of their own, the listing's columns, drawn at the same x as All files' at every
+  width (a table is never wider than the place, so a long name truncates inside its column and moves no other). A
   search replaces it with the search's results. Each label is the body's size at medium weight in the foreground, 8px over what it labels, and All files
   stands 16px under the Recent row. With no such files there is no block and no label: the page is the folder. Why: in
   a project the files worked on are rarely in its top folder, and Google Drive, Dropbox, Box, Figma, Fusion and
@@ -355,7 +365,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   dialog or field has the keyboard. It lasts until another document is opened or the person goes to another place.
   From the sidebar a project opens at its top. Why: the document's folder is where the documents beside it are, and
   the way back should cost nothing. "Back to <name>" is the scale's outline button, as tall as the row's other
-  controls, its name the first to give way.
+  controls, its arrow alone where its name has no room ([the head](#the-home)): never a name cut short.
 - **Search** narrows the place on screen. Recents and Starred narrow the rows in hand. A folder's page asks
   the host, once typing rests, for every file anywhere below the folder on screen whose path below it holds every
   word, and lists them flat, with no folders. Why: a search is the one place

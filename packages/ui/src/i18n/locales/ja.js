@@ -382,6 +382,7 @@ export default {
 
 
   "home.backTo": "{name} に戻る",
+  "home.parentFoldersAria": "上位のフォルダー",
 
 
 
