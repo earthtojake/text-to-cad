@@ -255,7 +255,6 @@ export default {
   "search.inProject": "{name} 안",
   "search.otherProjects": "다른 프로젝트",
   "search.recent": "최근",
-  "search.standalone": "독립 문서",
   "search.kindPart": "부품",
   "search.kindAssembly": "어셈블리",
   "search.current": "보는 중",

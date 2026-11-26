@@ -257,8 +257,8 @@ it('lists rows under a Name, Kind, Size, Updated and Created header: each its pi
   };
   expect(cells('plate.step')).toEqual([true, 'plate.step', ['kind', 'STEP'], ['size', '87 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
   // An xbf is the engine's own document saved as a file: a model, XBF where its parts are not known. One the library
-  // does not know yet (a folder's) has an empty Created.
-  expect(cells('arm.xbf')).toEqual([true, 'arm.xbf', ['kind', 'XBF'], ['size', '2 KB'], ['updated', '2h ago'], ['created', '']]);
+  // does not know yet (a folder's) has a dash for Created.
+  expect(cells('arm.xbf')).toEqual([true, 'arm.xbf', ['kind', 'XBF'], ['size', '2 KB'], ['updated', '2h ago'], ['created', '—']]);
   // A row's picture has no badge: its Kind says it. Its pin and ⋯ follow its button, at its end.
   expect(list.querySelector('[data-library-format]')).toBeNull();
   const row = screen.getByRole('button', { name: 'Open plate.step' }).closest('li')!;
@@ -891,7 +891,7 @@ it("orders a folder's page in groups, each in the Sort's order: its folders, its
     .toEqual([['Open sub', 'Open alpha.xbf', 'Open zeta.step', 'Open beta.pdf', 'Open gamma.py'], [1, 2, 2]]);
 });
 
-it("keeps a search's results one set, as found, a file that is no document a card among them; and while a file's tile is being opened, a spinner stands where its glyph is", async () => {
+it("groups a search's results as a folder's page is, the documents' cards then the other files' tiles; and while a file's tile is being opened, a spinner stands where its glyph is", async () => {
   const tag = project('p1', 'heart-tag');
   const host = hosted([tag], [file(tag, 'arm.xbf', { documentKind: 'model' }), file(tag, 'build.py', { documentKind: null }), file(tag, 'build.step', { documentKind: 'step' })]);
   let answer!: (files: unknown) => void;
@@ -908,12 +908,30 @@ it("keeps a search's results one set, as found, a file that is no document a car
   await act(async () => { answer({ targets: [{ target: 'source', kind: 'code', name: 'build.py', present: true, apps: [{ id: 'vscode', name: 'VS Code' }], default: false }] }); });
   await waitFor(() => expect(openApp).toHaveBeenCalledWith(expect.objectContaining({ id: 'file-p1-build.py' }), 'source', 'vscode'));
   await waitFor(() => expect([tile.hasAttribute('data-opening'), Boolean(tile.querySelector('[data-glyph="file"]'))]).toEqual([false, true]));
-  // A search: one set as found, the file no page opens a card like the rest, its extension its badge.
+  // A search: the documents' cards first, then the file no page opens as the same tile, never a card with an empty picture.
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'build' } });
   await waitFor(() => expect(host.folder).toHaveBeenLastCalledWith('p1', { path: '', q: 'build' }));
-  await waitFor(() => expect(opens()).toEqual(['Open build.py', 'Open build.step']));
-  expect([screen.queryByRole('list', { name: 'Other files' }), screen.getByRole('button', { name: 'Open build.py' }).closest('li')?.querySelector('[data-library-format]')?.textContent])
-    .toEqual([null, 'PY']);
+  await waitFor(() => expect(opens()).toEqual(['Open build.step', 'Open build.py']));
+  const lists = ['Files', 'Other files'].map(list => within(screen.getByRole('list', { name: list })).getAllByRole('listitem').map(item => item.textContent));
+  expect([lists[0].length, lists[1].length, screen.getByRole('button', { name: 'Open build.py' }).closest('li')?.querySelector('[data-library-format]')]).toEqual([1, 1, null]);
+});
+
+it("groups a search's rows in the list the documents' first, then the other files', each in the Sort's order, and no cell is blank or says Standalone", async () => {
+  const tag = project('p1', 'heart-tag');
+  const loose = (below: string) => file(tag, below, { documentKind: null, thumbnail: null, size: null, updated: null, created: null });
+  const host = hosted([tag], [loose('a-build.py'), file(tag, 'z-build.step', { documentKind: 'step', created: null }), file(tag, 'b-build.step', { documentKind: 'step' }), loose('c-build.pdf')]);
+  const fileActions = { platform: 'linux' as const, perform: { 'copy-path': () => {} }, apps: async () => ({ targets: [] }) as never, openApp: async () => {} };
+  render(<ModelLibrary library={library([], host)} fileActions={fileActions} layout="list" sort="name" onSortChange={() => {}} place={{ view: 'project', project: 'p1' }} />);
+  await screen.findByRole('button', { name: 'Open a-build.py' });
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'build' } });
+  await waitFor(() => expect(host.folder).toHaveBeenLastCalledWith('p1', { path: '', q: 'build' }));
+  await waitFor(() => expect(opens()).toEqual(['Open b-build.step', 'Open z-build.step', 'Open a-build.py', 'Open c-build.pdf']));
+  const rows = [...screen.getByRole('list', { name: 'Files' }).querySelectorAll('li')];
+  const blank = rows.flatMap(row => [...row.querySelectorAll('[data-column]')].filter(cell => !(cell.textContent ?? '').trim()));
+  expect(blank).toEqual([]);
+  expect(screen.queryByText('Standalone')).toBeNull();
+  const created = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column=created]')?.textContent;
+  expect([created('z-build.step'), created('a-build.py')]).toEqual(['—', '—']);
 });
 
 it('a file that is no document does what its host can: shown in the file manager where the host opens no apps, and no control at all where it can do neither', async () => {

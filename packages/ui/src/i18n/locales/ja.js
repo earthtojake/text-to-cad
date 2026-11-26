@@ -255,7 +255,6 @@ export default {
   "search.inProject": "{name} 内",
   "search.otherProjects": "ほかのプロジェクト",
   "search.recent": "最近",
-  "search.standalone": "単独のドキュメント",
   "search.kindPart": "部品",
   "search.kindAssembly": "アセンブリ",
   "search.current": "表示中",

@@ -130,7 +130,7 @@ export interface DocumentSearchProps<Model extends LibraryModel> {
  * library's other documents as the home's search does (every word in a name or a path) under "Other projects", at
  * most `SEARCH_LIMIT` rows drawn, and a line saying how many more there are. A row is its picture (`thumbnail`, read for the rows on
  * screen, the kind's glyph until then), its name and, at its right, its kind in the project on screen, else its
- * project's name ("Standalone" for one in none); the document on screen's row is marked and opens nothing.
+ * project's name (a dash for one in none); the document on screen's row is marked and opens nothing.
  *
  * The input is a combobox over a listbox (the active row is its `aria-activedescendant`), so the focus never leaves it
  * and typing always lands there: Up and Down move, Home and End go to the ends, Enter opens the row in this view and
@@ -298,7 +298,7 @@ export function DocumentSearch<Model extends LibraryModel>({ search, library, na
   const heading = (group: SearchGroup<Model>) => group.id === "here" ? t("search.inProject", { name: project?.name ?? "" })
     : group.id === "other" ? t("search.otherProjects") : group.id === "recent" ? t("search.recent") : null;
   const detail = (row: SearchRow<Model>, group: SearchGroup<Model>["id"]) => onScreen(row) ? t("search.current")
-    : group === "here" ? formatLabel(row.model, labels) : row.project?.name ?? t("search.standalone");
+    : group === "here" ? formatLabel(row.model, labels) : row.project?.name ?? "—";
   const reading = read.status === "reading" || (read.status === "ready" && !ready);
   const listed = ready && drawn > 0;
   const status = reading ? t("search.reading") : read.status === "failed" ? t("search.failed")

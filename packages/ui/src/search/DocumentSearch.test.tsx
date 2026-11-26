@@ -100,7 +100,7 @@ it("says a model is a Part when its document holds one part and an Assembly when
   expect(groups()).toEqual([['In drive', [['hinge.xbf', 'Assembly'], ['pin.xbf', 'Part'], ['unread.xbf', 'XBF'], ['pair.step', 'STEP'], ['gear.step', 'On screen']]]]);
 });
 
-it("asks the host for the project on screen's files that hold the words, then finds the library's others; a row says its project, or Standalone, and the words found are lit", async () => {
+it("asks the host for the project on screen's files that hold the words, then finds the library's others; a row says its project, or a dash, and the words found are lit", async () => {
   const user = userEvent.setup();
   const source = library();
   render(<Page source={source} />);
@@ -108,7 +108,7 @@ it("asks the host for the project on screen's files that hold the words, then fi
   await user.type(input(), 'gear');
   // Once typing rests, one search of the whole project, from its root.
   await waitFor(() => expect(source.folder).toHaveBeenLastCalledWith('p1', { q: 'gear' }));
-  await waitFor(() => expect(groups()).toEqual([['In drive', [['gear.step', 'STEP']]], ['Other projects', [['gearbox.step', 'Standalone'], ['gear_blank.step', 'examples']]]]));
+  await waitFor(() => expect(groups()).toEqual([['In drive', [['gear.step', 'STEP']]], ['Other projects', [['gearbox.step', '—'], ['gear_blank.step', 'examples']]]]));
   expect([...options()[0].querySelectorAll('[data-tree-filter-hit]')].map(hit => hit.textContent).join('')).toBe('gear');
   // Every level of the project is searched: a file's folder below the root is in what the words are found in.
   await user.clear(input());
@@ -122,7 +122,7 @@ it("with nothing typed and no project on screen (the home) lists the latest docu
   const user = userEvent.setup();
   render(<Page source={library()} current={null} />);
   await openSearch(user);
-  expect(groups()).toEqual([['Recent', [['gear.step', 'drive'], ['gearbox.step', 'Standalone'], ['gear_blank.step', 'examples']]]]);
+  expect(groups()).toEqual([['Recent', [['gear.step', 'drive'], ['gearbox.step', '—'], ['gear_blank.step', 'examples']]]]);
 });
 
 it("moves with the arrows, Home and End, past the row on screen; Enter opens the row here through the library and closes, the focus back where it was; counted, never what was typed", async () => {
@@ -225,7 +225,7 @@ it("says when the read failed and offers nothing; a read of the projects that fa
   cleanup();
   render(<Page source={library({ projects: vi.fn(async () => { throw new Error('offline'); }) })} current={null} />);
   await openSearch(user);
-  expect(groups()).toEqual([['Recent', [['gear.step', 'Standalone'], ['gearbox.step', 'Standalone'], ['gear_blank.step', 'Standalone']]]]);
+  expect(groups()).toEqual([['Recent', [['gear.step', '—'], ['gearbox.step', '—'], ['gear_blank.step', '—']]]]);
 });
 
 it('draws at most 50 rows and says how many there are', async () => {

@@ -932,7 +932,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <span className="truncate text-foreground" data-library-label="">{item.name}</span>
   </span>;
   // A row's columns, muted: where it is, its kind and size, then its two times with no verb: when it last changed, and when the library first knew it.
-  const cell = (column: string, value: ReactNode) => <span key={column} className={cn(COLUMN_CLASS[column], "text-muted-foreground")} data-column={column}>{value}</span>;
+  const cell = (column: string, value: ReactNode) => <span key={column} className={cn(COLUMN_CLASS[column], "text-muted-foreground")} data-column={column}>{value === "" || value == null ? "—" : value}</span>;
   // `at`: where it is, its column's cell (a Recent row's folder below the project's top, where the listing has none).
   const columns = (item: Model, at: string | null = whereColumn ? where(item) : null) => <>
     {at === null ? null : cell("where", at)}
@@ -1019,7 +1019,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // The place's folders and files, the folders first, then the documents, then the files the viewer does not open
   // (`others`), each group in the Sort's order: in the list, rows under their header; in the grid, the folders' tiles,
   // the documents' cards, then those files' tiles, each a grid of the cards' columns, 16px apart (Drive's folders over
-  // its files). A search's results are one set, as it found them (`others` empty).
+  // its files). A search's results are grouped alike.
   const listRow = (item: Model) => entry(item, true, <>{name(item)}{columns(item)}</>);
   const documents = (list: readonly Model[], others: readonly Model[]) => layout === "list"
     ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className={LIST_CLASS} aria-label={t("home.filesAria")}>
@@ -1156,7 +1156,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const reading = place.view === "project" ? !listing && !folderRead?.failed && Boolean(library.folder) : items === null;
   // The listing: the folders and the files, and under a folder listed only in part a line saying so.
   const listed = <>
-    {searching ? documents(matching, []) : documents(matching.filter(item => isDocument(item)), matching.filter(item => !isDocument(item)))}
+    {documents(matching.filter(item => isDocument(item)), matching.filter(item => !isDocument(item)))}
     {listing?.truncated ? <p className="m-0 text-muted-foreground" data-library-truncated="">{t("home.projectTruncated")}</p> : null}
   </>;
   const body = items === null || awaited ? <Placeholders layout={layout} />

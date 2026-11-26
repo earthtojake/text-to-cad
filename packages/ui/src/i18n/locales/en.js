@@ -269,7 +269,6 @@ export default {
   "search.inProject": "In {name}",
   "search.otherProjects": "Other projects",
   "search.recent": "Recent",
-  "search.standalone": "Standalone",
   "search.kindPart": "Part",
   "search.kindAssembly": "Assembly",
   "search.current": "On screen",

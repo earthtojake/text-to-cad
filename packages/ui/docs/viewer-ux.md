@@ -147,7 +147,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   are reached through what the library knows of them, so one search never walks every project.
 - A row: the document's picture (the kind's glyph until it loads, and where it has none), its name, and at its right its
   format in the project on screen ("Part" or "Assembly" for an `.xbf` file, "XBF", its format, where its parts are not
-  known, as on a card), else its project's name, "Standalone" for one in none. The document on screen's row is marked and opens
+  known, as on a card), else its project's name, a dash for one in none. The document on screen's row is marked and opens
   nothing. While it reads, placeholder rows; a read that fails or finds nothing says so.
 - Up and Down move, Home and End go to the ends, Enter opens the row here and ⌘Enter (Ctrl+Enter) in a new tab; typing
   always goes to the input. A click opens a row here; where the host gives a document an address the row is a real
@@ -274,7 +274,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
     card's actions are (under the pointer, in focus, always where nothing hovers). In the list it is a row after the
     documents' rows: the plain tile with its kind's glyph, its name, its extension as its name writes it for its Kind,
     upper case (`PDF`, `PY`, `F3D`; a dash with no extension), its size and when it was edited. A search's results are
-    one set, as found: there it is a card or a row like the rest, its extension its badge. Nothing about it is dimmed:
+    grouped just so: the documents' cards or rows first, then these files as the same tiles (16px under the cards) or
+    rows, each group in the Sort's order; it is never a card with an empty picture. Nothing about it is dimmed:
     it is a file of the folder. Why a tile: a file the viewer cannot picture has nothing to show in a picture's space,
     so it takes a folder's compact tile and comes after the files the viewer can show. **A press opens it**, as a
     press on a document opens the document: with no page for it, in an app of the computer's, chosen from what the
@@ -287,6 +288,9 @@ chrome that floats over the picture. The home is the navbar over the library: it
     manager; with no app and no handler, those two alone. It has no star and no Open in new tab, being in no library;
     `[` and `]` and the search of documents pass it by. A host that opens no apps shows it in its file manager on a
     press, and where it can do neither the tile is no control at all.
+  - **No blank cell in the list.** A cell whose value is not known reads a dash ("—", as a folder's row does in every
+    column): Where, Project, Kind, Size, Updated and Created alike, on a document's row and on another file's.
+    Why: an empty cell reads as a fault or a column still loading; a dash says there is nothing to show.
   - The kinds' tabs narrow the documents; Sort orders the documents, and then the other files, each group in its
     order; the folders stand first in the folder's own order.
 - **A project's top page leads with its recent files.** At a project's top (its own folder, not one below it), where

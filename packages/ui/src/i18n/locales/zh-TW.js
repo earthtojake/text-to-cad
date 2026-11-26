@@ -256,7 +256,6 @@ export default {
   "search.inProject": "在 {name} 中",
   "search.otherProjects": "其他專案",
   "search.recent": "最近",
-  "search.standalone": "獨立文件",
   "search.kindPart": "零件",
   "search.kindAssembly": "組合件",
   "search.current": "正在檢視",

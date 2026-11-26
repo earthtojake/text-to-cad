@@ -853,3 +853,28 @@ test("a file that is no document is a 46px tile of the folders' family after the
       [16, 358, 46, "1", 36, 4, 4, 16]);
   } finally { await phone.context.close(); }
 });
+
+test("a search's result that cad does not open is a 46px tile after the cards, and the list's rows after the documents' have no blank cell", async () => {
+  const { context, page } = await home("place=gearbox");
+  try {
+    await page.getByRole("searchbox", { name: "Search models" }).fill("gearbox");
+    const tiles = page.getByRole("list", { name: "Other files" });
+    await tiles.getByRole("button", { name: "Open gearbox.f3d", exact: true }).waitFor();
+    await page.getByRole("link", { name: "Open gearbox.xbf", exact: true }).waitFor();
+    // Measured as drawn: the card above, the file a 46px tile of the folders' size 16px under the cards, in their column.
+    const cards = await box(page.getByRole("list", { name: "Files", exact: true }));
+    const [card, tile] = [await box(page.locator(".cad-library-card").first()), await box(tiles.locator("> li").first())];
+    assert.deepEqual([tile.height, Math.round((await box(tiles)).y - cards.bottom), tile.x, tile.width, tile.y > card.bottom],
+      [46, 16, card.x, card.width, true]);
+    assert.equal(await page.locator(".cad-library-card", { hasText: "gearbox.f3d" }).count(), 0, "no card for it");
+    // The list: its rows after the documents', every cell drawn with something in it.
+    await page.getByRole("button", { name: "List" }).click();
+    const rows = page.locator(".cad-library-row");
+    await page.getByRole("button", { name: "Open gearbox.f3d", exact: true }).waitFor();
+    const drawn = await rows.evaluateAll((nodes) => nodes.map((node) => [node.querySelector("[data-library-label]")?.textContent,
+      [...node.querySelectorAll("[data-column]")].map((cell) => cell.textContent.trim())]));
+    assert.deepEqual(drawn.map(([name]) => name), ["gearbox.xbf", "gearbox.f3d"]);
+    assert.equal(drawn.every(([, cells]) => cells.length === 5 && cells.every(Boolean)), true, JSON.stringify(drawn));
+    assert.equal(await page.getByText("Standalone").count(), 0);
+  } finally { await context.close(); }
+});
