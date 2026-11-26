@@ -175,6 +175,25 @@ class GlobalInstallTest(Case):
         (self.tool / "uv-receipt.toml").write_text('[tool]\nrequirements = ["cad==0.1.0"]\n', encoding="utf-8")
         self.assertEqual(auto_update.uv_tool(), self.tool, "a receipt's requirement as a string")
 
+    def test_a_release_counts_as_installed_only_with_its_metadata_and_its_record(self) -> None:
+        """A ``cad-*.dist-info`` an uninstall left with only its licences, or one with no ``RECORD``, is no release
+        installed (else the worker says ``current`` without running uv, and a server takes the environment for newer);
+        ``whole=False`` counts it by its name alone. The newest whole one is the release held."""
+        with tempfile.TemporaryDirectory(prefix="held-") as folder:
+            packages = Path(folder)
+            for name, files in (("cad-0.1.0.dist-info", ("METADATA", "RECORD")), ("cad-0.3.0.dist-info", ("METADATA",)),
+                                ("cad-0.4.0.dist-info", ("RECORD",)), ("cad-0.5.0.dist-info", ("licenses/LICENSE",)),
+                                ("cad-0.6.0.dist-info", ())):
+                for file in files:
+                    (packages / name / file).parent.mkdir(parents=True, exist_ok=True)
+                    (packages / name / file).write_text("", encoding="utf-8")
+                (packages / name).mkdir(exist_ok=True)
+            self.assertEqual(auto_update.holds(packages), "0.1.0")
+            self.assertEqual(auto_update.holds(packages, whole=False), "0.6.0")
+            for name in ("METADATA", "RECORD"):
+                (packages / "cad-0.1.0.dist-info" / name).unlink()
+            self.assertIsNone(auto_update.holds(packages), "none whole")
+
     def test_what_is_built_is_the_release_named_else_this_major_s_newest_never_below_the_release_that_runs(self):
         self.assertEqual(auto_update.requirement("0.2.0", "0.1.0"), "cad==0.2.0")
         self.assertEqual(auto_update.requirement(None, "0.1.0"), "cad>=0.1.0,<1")
