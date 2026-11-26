@@ -25,7 +25,10 @@ from unittest import mock
 
 import ezdxf
 
-from cad_server.drawing_payload import DRAWING_PAYLOAD_SCHEMA_VERSION
+from cad.engine import places
+from cad.engine.drawing_payload import DRAWING_PAYLOAD_SCHEMA_VERSION, drawn
+from cad.engine.serve import Server
+from cad_server.viewer.documents import EngineDocuments
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.drawings import HELD, DrawingRenders
 from cad_server.viewer.http_app import create_cad_app
@@ -81,6 +84,7 @@ class DrawingRouteFixture:
     def close(self) -> None:
         self.server.shutdown()
         self.server.server_close()
+        self.app.drawings.close()
         self.thread.join(timeout=5)
         shutil.rmtree(self.base, ignore_errors=True)
 
@@ -230,18 +234,18 @@ class OneRenderPerDrawing(unittest.TestCase):
         self.calls = []
 
     def render(self, outcome):
-        def rendered(path, data):
+        def rendered(_renders, path, data):
             self.calls.append((path, data))
             self.release.wait(30)
             if isinstance(outcome, Exception):
                 raise outcome
             return outcome
 
-        return mock.patch("cad_server.drawing_payload.build_drawing_payload", side_effect=rendered)
+        return mock.patch.object(DrawingRenders, "_drawn", autospec=True, side_effect=rendered)
 
     def test_requests_while_it_renders_join_it_and_the_next_has_its_payload(self) -> None:
         renders = DrawingRenders(hold_seconds=0, retry_ms=750)
-        with self.render({"payload": 1}):
+        with self.render(b'{"payload":1}'):
             self.assertEqual(renders.response(str(self.drawing)), (202, {"state": "drawing", "retryMs": 750}))
             self.assertEqual(renders.response(str(self.drawing))[0], 202)
             self.release.set()
@@ -270,16 +274,15 @@ class HeldByItsBytes(unittest.TestCase):
         self.base = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
         self.renders = DrawingRenders(hold_seconds=30)
+        self.addCleanup(self.renders.close)
         self.rendered = []
-        from cad_server import drawing_payload
+        real = DrawingRenders._drawn
 
-        real = drawing_payload.build_drawing_payload
-
-        def counted(path, data):
+        def counted(renders, path, data):
             self.rendered.append(Path(path).name)
-            return real(path, data)
+            return real(renders, path, data)
 
-        patcher = mock.patch("cad_server.drawing_payload.build_drawing_payload", side_effect=counted)
+        patcher = mock.patch.object(DrawingRenders, "_drawn", autospec=True, side_effect=counted)
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -334,6 +337,96 @@ class ItStaysOffTheKernel(DrawingRouteTestCase):
             [],
             "the drawing route must not wake the kernel",
         )
+
+
+# The repository's DXF fixtures: the viewer's own drawings, the payloads its renderer is tested on.
+FIXTURES = Path(__file__).resolve().parents[5] / "packages" / "ui" / "src" / "renderers" / "dxf" / "__fixtures__"
+
+
+class ItDrawsInAKernelProcess(unittest.TestCase):
+    """The payload is drawn in the drawing process, a kernel process: the same bytes the library makes of the
+    drawing in this process, and ezdxf never loaded in the server's."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        self.drawings = []
+        for name in ("sample.dxf", "layered.dxf"):
+            shutil.copyfile(FIXTURES / name, self.base / name)
+            self.drawings.append(self.base / name)
+        self.drawings.append(write_drawing(self.base / "plate.dxf", plate))
+
+    def test_the_route_answers_the_payload_the_library_makes_of_the_same_bytes(self) -> None:
+        renders = DrawingRenders(hold_seconds=60)
+        self.addCleanup(renders.close)
+        for path in self.drawings:
+            with self.subTest(drawing=path.name):
+                status, body = renders.response(str(path))
+                self.assertEqual(status, 200, body)
+                self.assertEqual(body, drawn(str(path), path.read_bytes()))
+
+    def test_the_servers_process_never_imports_ezdxf(self) -> None:
+        import subprocess
+        import sys
+
+        from tests.python.support.paths import REPO_ROOT, SOURCE_PATH
+
+        code = ("import json, sys\n"
+                "from cad_server.viewer.drawings import DrawingRenders\n"
+                "renders = DrawingRenders(hold_seconds=60)\n"
+                f"status, body = renders.response({str(self.drawings[0])!r})\n"
+                "renders.close()\n"
+                "print(json.dumps([status, json.loads(body)['schemaVersion'], 'ezdxf' in sys.modules]))\n")
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=REPO_ROOT, timeout=120,
+                              env={**os.environ, "PYTHONPATH": SOURCE_PATH})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1]), [200, DRAWING_PAYLOAD_SCHEMA_VERSION, False])
+
+    def test_a_drawing_process_that_died_is_replaced_by_the_next_render(self) -> None:
+        renders = DrawingRenders(hold_seconds=60)
+        self.addCleanup(renders.close)
+        self.assertEqual(renders.response(str(self.drawings[2]))[0], 200)
+        pool = renders._processes
+        for process in list(pool._processes.values()):
+            process.kill()
+        deadline = time.monotonic() + 30
+        while not pool._broken and time.monotonic() < deadline:  # the pool hears its process go
+            time.sleep(0.05)
+        self.assertTrue(pool._broken)
+        other = write_drawing(self.base / "other.dxf", lambda document, modelspace: modelspace.add_line((0, 0), (9, 9)))
+        status, body = renders.response(str(other))
+        self.assertEqual(status, 200, body)
+        self.assertIsNot(renders._processes, pool)
+
+
+class NoKernelProcess(unittest.TestCase):
+    """Where no kernel process can start, the DXF pane says so as a STEP's open does, and holds no answer."""
+
+    def setUp(self) -> None:
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        self.drawing = write_drawing(self.base / "plate.dxf", plate)
+        self.step = self.base / "part.step"
+        self.step.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+
+    def test_the_drawing_and_a_step_are_answered_alike_and_the_next_request_tries_again(self) -> None:
+        class Refused(Exception):
+            cause = "uv"
+
+        def refused(make):
+            raise Refused("uv could not install the kernel's packages")
+
+        crashes = []
+        renders = DrawingRenders(hold_seconds=30, on_crash=crashes.append)
+        self.addCleanup(renders.close)
+        with mock.patch.object(places, "KERNEL", refused):
+            step = EngineDocuments(server=Server(), hold_seconds=30).response(str(self.step))
+            drawing = renders.response(str(self.drawing))
+        said = "the server has no CAD kernel environment: uv could not install the kernel's packages"
+        self.assertEqual(step, (400, {"error": said}))
+        self.assertEqual(drawing, step)
+        self.assertEqual([type(error).__name__ for error in crashes], ["KernelProcessesUnavailable"])
+        self.assertEqual(renders.response(str(self.drawing))[0], 200, "a refused kernel is tried again, never held")
 
 
 if __name__ == "__main__":

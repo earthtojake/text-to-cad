@@ -14,15 +14,15 @@ The daemon takes its HTTP application -- the viewer's and the CAD app's -- from 
 composition root (`daemon.HTTP_FACTORY`, `cad_server._internal.engine_host`); the library's engine imports
 no application module. Beside the library's own dependencies (numpy) it imports the `build123d`
 extra's -- OCP, build123d, bd_materials, threejs_materials, Pillow (the renderer's rasteriser) and
-ezdxf (build123d's own DXF library, which the DXF export writes and checks a drawing with) -- in the
-base its workers run in, and an integration's extra only in that integration's environment; a test
+ezdxf (build123d's own DXF library, which the DXF export writes and checks a drawing with, and the
+viewer's DXF pane is flattened by in a drawing process) -- in the base its workers run in, and an integration's extra only in that integration's environment; a test
 holds each extra's list (law 3). The application serves the built
 viewer's one page on that listener, every document at `/<id>`. Document routes run in
 process, with no network relay. Kernel reads, topology, poses and meshes run in
 reader/mesh subprocesses; even an inline-mesh request stays outside the daemon. The daemon's own
 process imports no kernel: its installation may have none (the wheel's core), and every process
 of the engine's that loads the kernel -- a model's worker, the documents worker, the standby, the
-meshing and reading pools, the render processes -- runs in an environment that has it (**Running a
+meshing and reading pools, the DXF pane's drawing process, the render processes -- runs in an environment that has it (**Running a
 model**): the base, or the Python a script was run with, for that script's worker. If Python cannot
 start those processes (on Windows, a loader refusing `_multiprocessing.pyd`), or the environment they
 run in cannot be made, the request fails with

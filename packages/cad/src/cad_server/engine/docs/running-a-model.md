@@ -3,8 +3,7 @@
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
 A model runs where the CAD kernel is. The server (`cad_server`, in the `cad` distribution: the engine's daemon, the `cad`
-command, the viewer's server, and the numpy, ezdxf and Pillow they read meshes, drawings and
-pictures with) depends on the library (`cad`) without its kernel, and the CAD kernel (OCP,
+command, the viewer's server, and the numpy they read meshes with) depends on the library (`cad`) without its kernel, and the CAD kernel (OCP,
 build123d and the rest) is the library's `build123d` extra. The library's layer over it (the model
 API, `kernel/`'s memo, naming and determinism settings) is the build123d integration, named for its
 technology as its extra is; each of cad's integrations is an extra, listed with the modules, the

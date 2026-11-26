@@ -136,7 +136,6 @@ version = "0.11.17"
 source = { editable = "packages/cad" }
 dependencies = [
     { name = "distlib", marker = "sys_platform == 'win32'" },
-    { name = "ezdxf" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pillow" },
@@ -193,7 +192,6 @@ requires-dist = [
     { name = "cadquery-ocp-novtk", marker = "extra == 'build123d'", specifier = ">=8.0,<8.1" },
     { name = "coacd", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'coacd') or (platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'coacd') or (platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'coacd') or (platform_machine == 'AMD64' and sys_platform == 'win32' and extra == 'coacd')", specifier = ">=1.0.14,<1.1" },
     { name = "distlib", marker = "sys_platform == 'win32'" },
-    { name = "ezdxf" },
     { name = "ezdxf", marker = "extra == 'build123d'" },
     { name = "kicode", marker = "extra == 'kicad'", specifier = "==10.99.0.dev20261106" },
     { name = "matplotlib", marker = "extra == 'build123d'" },
