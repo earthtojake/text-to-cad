@@ -119,6 +119,45 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(refused.exception.cause, "network", "a word of ours for telemetry, never read from the line")
         self.assertIsNone(base.complete(base.where(self.installation)), "no marker: the next use makes it again")
 
+    def test_a_cooldown_in_uvs_settings_keeps_out_no_release_of_cads_own(self) -> None:
+        """A person's ``exclude-newer`` (a cooldown on new uploads, in their uv.toml) leaves out the release the
+        engine runs, which the server line installed without reading it: uv is asked again with the cutoff lifted
+        for cad alone, from the step it said so, the steps after asked the same. As uv 0.13 says it; offline,
+        with a cold cache, it says no version and no hint."""
+        unsatisfiable = (f"error: No solution found when resolving dependencies\n  cause: Because there is no version of "
+                         f"cad[build123d]=={RELEASE} and you require cad[build123d]=={RELEASE}, we can conclude that your "
+                         "requirements are unsatisfiable.\n")
+        filtered = (f"{unsatisfiable}\nhint: `cad` was filtered by `exclude-newer` to only include packages uploaded "
+                    f"before 2026-11-19T20:49:10Z. The requested version, v{RELEASE}, was published at "
+                    "2026-11-23T17:27:17Z. Consider using `exclude-newer-package` to override the cutoff for this package.\n")
+        lifted = ["--exclude-newer-package", "cad=false"]
+        for cache, answers, asked in (("warm", [(1, filtered)], ["venv", "pip --offline", "pip --offline"]),
+                                      ("cold", [(1, unsatisfiable), (1, filtered)], ["venv", "pip --offline", "pip", "pip"])):
+            with self.subTest(cache=cache):
+                fake = Fake(*answers)
+                with self.made(fake):
+                    found = base.ensure(self.installation, told=self.said.append)
+                self.assertEqual(fake.asked(), asked)
+                self.assertNotIn("cad=false", fake.steps[-2], "asked as given until uv said cad was left out")
+                made = [step for step in fake.steps[-1] if step != "--offline"]
+                self.assertEqual(made[-2:], lifted, "the cutoff lifted for cad alone")
+                self.assertEqual(base.marked(Path(found.prefix))["commands"][1], made, "its marker names that step")
+                base._remove(Path(found.prefix))
+        # What a cooldown holds back of what cad needs -- not cad's own -- is said with uv's hint; nothing is lifted.
+        held = ("error: No solution found when resolving dependencies\n  cause: Because only build123d<0.13.0 is "
+                f"available and cad[build123d]=={RELEASE} depends on build123d>=0.13.0, we can conclude that your "
+                "requirements are unsatisfiable.\n\nhint: `build123d` was filtered by `exclude-newer` to only include "
+                "packages uploaded before 2026-11-19T20:49:10Z. Consider using `exclude-newer-package` to override the "
+                "cutoff for this package.\n")
+        fake = Fake((1, held), (1, held))
+        with self.made(fake), self.assertRaises(base.Refused) as refused:
+            base.ensure(self.installation, told=self.said.append)
+        self.assertEqual(fake.asked(), ["venv", "pip --offline", "pip"])
+        self.assertTrue(str(refused.exception).startswith(
+            "a cutoff of uv's settings (exclude-newer) holds back what the CAD kernel environment needs: `build123d` was "
+            "filtered by `exclude-newer`"), str(refused.exception))
+        self.assertEqual(refused.exception.cause, "resolve")
+
     def test_an_installation_that_carries_the_kernel_is_its_own_base(self) -> None:
         own = base.Installation(**{**base.dataclasses.asdict(self.installation), "kernel": True})
         fake = Fake()
