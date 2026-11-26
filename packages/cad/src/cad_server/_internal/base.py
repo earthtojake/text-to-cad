@@ -9,7 +9,9 @@ kernel processes (the standby, the documents worker, the meshing and reading poo
 exists (``Making.made``), never before.
 
 - **What it is**: ``cad[build123d]`` at the server's release -- or the source tree, or the wheel, it was
-  installed from (``Installation.requirement``) -- on the server's own Python, unless that is a line newer than the
+  installed from (``Installation.requirement``) -- but for the ``uv`` package cad depends on, which nothing run
+  there uses (``LEFT_OUT``: the server's uv makes environments; a base made before holds it, and is used as it
+  is), on the server's own Python, unless that is a line newer than the
   one this release runs on (``cad_server._internal.launch.PYTHON``): ``uv tool install cad`` takes whatever Python
   uv finds that meets ``requires-python``, which has no upper bound, and the kernel's wheels come for a new line
   months after it. Then it is made on ``PYTHON``, a Python uv manages, fetched on first need
@@ -669,13 +671,35 @@ def kernel_python(installation: Installation) -> tuple[str, tuple[str, ...], str
 
 def recipe(installation: Installation) -> Recipe:
     """The base's recipe: ``cad[build123d]`` as the installation installs it, on its own Python where the kernel is
-    known to run on it (``kernel_python``)."""
+    known to run on it (``kernel_python``), less what nothing run there uses (``LEFT_OUT``, ``_left_out``)."""
     python, options, said = kernel_python(installation)
     return Recipe(what=WHAT, python=python, requirement=tuple(installation.requirement()),
                   release=installation.release, source=installation.source,
                   making=f"making {WHAT}, once: {LIBRARY}[{EXTRA}] {installation.release} on Python {said}",
                   downloading=f"downloading the CAD kernel (about {_kernel_download_mb()} MB) and what it needs, once",
-                  venv_options=options)
+                  venv_options=options, before=_left_out)
+
+
+# What the base leaves out of cad's dependencies: the ``uv`` package, which carries uv's own binary for the server,
+# which makes environments and stores releases with it (``find_uv``); nothing run in the base -- the kernel processes,
+# ``cad run``'s program and worker, an integration's command -- runs uv. uv drops a requirement that an override
+# names under a marker never true, as every uv the server may find does (``--overrides``); the file it reads is kept
+# in the base beside its marker (``OVERRIDES``). A base made before, which holds the package, is used as it is: the key
+# does not change.
+LEFT_OUT = ("uv",)
+OVERRIDES = "cad-overrides.txt"
+
+
+def _left_out(env: Path) -> tuple[str, ...]:
+    """Once the base's virtual environment is made (``Recipe.before``): the overrides that leave ``LEFT_OUT`` out,
+    written in it, and the options that hand them to ``uv pip install``. ``Refused`` where the file cannot be
+    written."""
+    path = env / OVERRIDES
+    try:
+        path.write_text("".join(f'{name} ; sys_platform == "never"\n' for name in LEFT_OUT), encoding="utf-8")
+    except OSError as error:
+        raise Refused(_cannot(str(path), error), _file_cause(error)) from None
+    return ("--overrides", str(path))
 
 
 def _say(line: str) -> None:

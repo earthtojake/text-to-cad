@@ -1,6 +1,6 @@
 """The core and the base, end to end, with the real uv: an installation of the server alone (this
 checkout's server and library, editable, without the library's build123d extra) runs a model -- ``cadgen
-run`` makes the base once, the
+run`` makes the base once, with no uv in it, the
 script and its worker run there, and so do the engine's documents worker and meshing pool, while the
 engine's daemon runs the core.
 
@@ -127,6 +127,13 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertEqual(Path((project / "worker.txt").read_text(encoding="utf-8")).resolve(), made,
                          "the model's worker runs in the base")
         self.assertEqual(self.asked(), ["venv", "pip"])
+        # The base holds no uv, which cad depends on and nothing run there uses: neither its package nor its binary.
+        python = base.interpreter(made)
+        probe = subprocess.run([str(python), "-c", "import importlib.util, sys; "
+                                "sys.exit(importlib.util.find_spec('uv') is not None)"], env=self.env, capture_output=True)
+        self.assertEqual(probe.returncode, 0, "no uv package in the base")
+        self.assertFalse([path.name for path in python.parent.iterdir() if path.stem == "uv"], "no uv binary there")
+        self.assertTrue(list(python.parent.parent.glob("**/cad-*.dist-info")), "cad itself installed there")
         again = self.run_cadgen("run", "model.py", cwd=project)
         self.assertEqual((again.returncode, self.caller(again)), (0, made), again.stderr)
         self.assertEqual(self.asked(), ["venv", "pip"], "made once: nothing asked of uv again")

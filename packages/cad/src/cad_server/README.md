@@ -6,7 +6,8 @@ environment the CAD kernel runs in; cad's own update; and the command that runs 
 
 Models are written against the library, `cad`, which the server imports without its CAD kernel: the kernel
 lives in the environments the server makes, on first need, for models and its own kernel processes,
-`cad[build123d]` at the server's own release. `cad run` runs a program as `uv run` does, with cad pinned at
+`cad[build123d]` at the server's own release (the kernel's one, the base, less the `uv` package, which only the
+server uses). `cad run` runs a program as `uv run` does, with cad pinned at
 the server's release and the integrations its imports use; a tool's own command an integration declares
 (`cad run kicad-cli …`) gets that integration and runs headless; a script that imports `bpy` gets the
 blender integration, its environment made on Python 3.13, the one Blender is built for.

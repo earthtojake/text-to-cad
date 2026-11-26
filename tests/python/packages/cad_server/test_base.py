@@ -92,8 +92,11 @@ class BaseTest(unittest.TestCase):
         venv, pip = fake.steps
         self.assertEqual(venv, ["uv", "venv", "--no-project", "--python", self.installation.executable, str(env)],
                          "on the installation's own Python")
+        overrides = env / base.OVERRIDES
         self.assertEqual(pip, ["uv", "pip", "install", "--python", str(base.interpreter(env)), "--link-mode",
-                               "hardlink", f"cad[build123d]=={RELEASE}", "--offline"])
+                               "hardlink", f"cad[build123d]=={RELEASE}", "--overrides", str(overrides), "--offline"])
+        self.assertEqual(overrides.read_text(encoding="utf-8"), 'uv ; sys_platform == "never"\n',
+                         "the uv package left out: nothing run in the base uses it")
         self.assertEqual(self.said, [f"making the CAD kernel environment, once: cad[build123d] {RELEASE} on Python "
                                      f"3.14.2, in {env}"])
         # Its marker names the installation it belongs to: a process there reaches that engine.
@@ -101,6 +104,23 @@ class BaseTest(unittest.TestCase):
         self.assertEqual((home["executable"], home["prefix"], home["root"]),
                          (self.installation.executable, self.installation.prefix, self.installation.root))
         self.assertIsNone(places.home(str(self.core)), "an environment no marker names is its own installation")
+
+    def test_a_base_made_before_with_the_uv_package_in_it_is_used_as_it_is(self) -> None:
+        """A base an earlier release made holds the ``uv`` package (``LEFT_OUT`` was not left out then): its key is
+        the same, its marker complete, so it is found and used, nothing made again."""
+        fake = Fake()
+        with self.made(fake):
+            found = base.ensure(self.installation, told=self.said.append)
+        env = Path(found.prefix)
+        (env / base.OVERRIDES).unlink()
+        held = env / "lib" / "site-packages" / "uv"
+        held.mkdir(parents=True)
+        (env / "bin" / "uv").write_text("", encoding="utf-8")
+        fake.steps.clear()
+        with self.made(fake):
+            again = base.ensure(self.installation, told=self.said.append)
+        self.assertEqual((again, fake.steps), (found, []), "found and used, nothing asked of uv")
+        self.assertTrue(held.is_dir() and (env / "bin" / "uv").is_file(), "left as it is")
 
     def test_the_network_is_asked_only_for_what_uvs_cache_lacks_and_said_first(self) -> None:
         fake = Fake((2, "error: Network connectivity is disabled, but the requested data wasn't found in the cache"))
