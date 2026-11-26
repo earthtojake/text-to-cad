@@ -260,10 +260,9 @@ def _handed_bytes(shape: Any, name: str, animations: Any) -> bytes:
     from cad.engine.animations import ANIMATIONS, Animation
 
     if not isinstance(shape, bd.Shape):
-        raise TypeError(f"xbf() takes a function to declare, or a build123d shape and its path or name=; "
-                        f"not {type(shape).__name__}")
+        raise TypeError(f"a shape saved or exported is a build123d shape, not {type(shape).__name__}")
     if shape.__dict__.get("_wrapped") is None:
-        raise ValueError(f"xbf(shape, name={name!r}): the shape is empty")
+        raise ValueError(f"the shape {name!r} is empty")
     given = list(animations or [])
     if given:
         below: list[Any] = []
@@ -298,7 +297,8 @@ def _beside(frame: Any, path: Any) -> Path:
 
 def write_shape(shape: Any, kind: str, out: Any, name: Any, frame: Any = None, tolerance: float | None = None,
                 angle: float | None = None) -> Path:
-    """``step(shape, "crate.step")`` and its siblings: that one file of a shape this program holds, written now, in this
+    """``cad.export(shape, "crate.step")`` (and ``step(shape, "crate.step")``, its earlier spelling, and its siblings):
+    that one file of a shape this program holds, written now, in this
     process, as a declared file is (``export.translate`` of the shape's document: ``_handed_bytes``), at ``out``, else
     ``<name>`` and the kind's suffix, relative to the calling script's folder, or the working folder (``_beside``). No
     ``.xbf``, no record, nothing of the engine's: the path written."""
@@ -306,7 +306,7 @@ def write_shape(shape: Any, kind: str, out: Any, name: Any, frame: Any = None, t
     from cad.engine.model import SUFFIXES
 
     if out is None and not name:
-        raise TypeError(f"{kind}(shape, 'path{SUFFIXES[kind]}'): a file of a shape takes its path, or name=")
+        raise TypeError(f"cad.export(shape, 'part{SUFFIXES[kind]}'): a file of a shape takes its path")
     path = _beside(frame, out if out is not None else name + SUFFIXES[kind])
     label = name or path.stem
     export.translate(build.held_source(_handed_bytes(shape, label, None), label), kind, path, tolerance, None, angle)
@@ -314,7 +314,8 @@ def write_shape(shape: Any, kind: str, out: Any, name: Any, frame: Any = None, t
 
 
 def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = None, out: Any = None) -> Document:
-    """``xbf(shape, name=...)``: a document made of a shape this program holds -- from a script or a
+    """``cad.save(shape, "crate.xbf")`` (and ``xbf(shape, ...)``, its earlier spelling): a document made of a shape
+    this program holds -- from a script or a
     REPL, no function, no body -- handed to the engine, which writes it as its ``.xbf``, serves its page from
     that file and exports it, and records that a program it did not run showed it: there is no command that
     builds it again. A model's document is its ``.xbf`` (law 10): at ``out`` where given, else ``<name>.xbf``,
@@ -325,10 +326,10 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     from cad.engine.ids import canonical, check_name, file_id
 
     if getattr(declaring._CONTEXT, "build", None) is not None:
-        raise TypeError("xbf(shape, name=...) hands a shape over from a script or a REPL; a model's body returns "
+        raise TypeError("cad.save(shape, 'part.xbf') saves a shape from a script or a REPL; a model's body returns "
                         "its shape, and calls its children")
     if name is None and out is None:
-        raise TypeError("xbf(shape, 'path.xbf'): a shape handed over takes its path, or name=")
+        raise TypeError("cad.save(shape, 'part.xbf'): a shape saved takes its path")
     if name is None:  # named by its file, as a file of a shape is (``write_shape``)
         name = Path(os.fspath(out)).stem
     check_name(name)
@@ -614,7 +615,7 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, angl
     it); every destination is then an MJCF or a URDF. Each robot file's ``Written.robot`` says what it
     holds, and the program's own call says it on stderr after the file's line (``said.robot``). A call
     the program's own
-    code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
+    code makes (``python exports.py``) says each file, as ``cad export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
     terminal and nowhere when it is not, ``False`` nowhere, a callable each frame."""
@@ -632,10 +633,11 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, angl
 
 def _said(written: list[Written], destinations: tuple) -> list[Written]:
     """``written``, a line said of each file when the call is the program's own (the first frame
-    outside this module and a document type's dispatch of it, past the verb's observer, is
-    ``__main__``'s), as a model call's report is said (``Model.__call__``)."""
+    outside this module and the library's dispatch of it -- a verb's, ``cad.export``, and a document type's --,
+    past the verb's observer, is ``__main__``'s), as a model call's report is said (``Model.__call__``)."""
     frame = sys._getframe(1)
-    while frame is not None and frame.f_globals.get("__name__") in (__name__, "cad._internal.document_type"):
+    while frame is not None and frame.f_globals.get("__name__") in (__name__, "cad._internal.verbs",
+                                                                     "cad._internal.document_type"):
         frame = frame.f_back
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
         from cad.engine.said import written as said_written
@@ -769,13 +771,13 @@ class Unanswered(EngineError):
 
 class Stopped(EngineError):
     """The engine stopped while it measured a check (``check``): an update moving the device to another
-    release, or ``cad stop``. Nothing is measured here instead: the check is the engine's to run again."""
+    release, or ``cad server stop``. Nothing is measured here instead: the check is the engine's to run again."""
 
     reason = "stopped"
     refusal = False
 
 
-STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
+STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad server stop` stops it): "
            "run the check again")
 #: Where a check was measured, as its answer says it (``check``'s ``measured_in``): in the engine, or -- what a
 #: caller that measures it itself after ``Unreached`` or ``Unanswered`` says of its own result -- in the caller.
@@ -801,7 +803,7 @@ def check(source: Any, check: dict[str, Any]) -> dict[str, Any]:
     - ``Unreached`` (``unreachable``): no engine can be reached or started;
     - ``Unanswered`` (``unanswered``): the engine measured nothing -- of a release before checks in memory, or of
       another release, code or libraries than this library's, which it says before anything is measured;
-    - ``Stopped`` (``stopped``): the engine stopped before it answered (an update, ``cad stop``);
+    - ``Stopped`` (``stopped``): the engine stopped before it answered (an update, ``cad server stop``);
     - an ``EngineError`` whose ``reason`` is ``cancelled`` (every caller of it had gone and its process was given
       to another check), ``over_time`` or ``over_memory`` (past a check's limits, ``CAD_ENGINE_CHECK_SECONDS``
       and ``CAD_ENGINE_CHECK_RSS_MB``), ``process_lost`` (its checks process exited under it), ``no_kernel``
@@ -881,7 +883,7 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, folder: An
     was (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the
     model lit in a studio, in its materials, on a floor with its shadow, in perspective.
 
-    ``job`` is every picture a job names (``cad <type> snapshot --job``), a list of ``Drawn``: a
+    ``job`` is every picture a job names (``cad snapshot --job``), a list of ``Drawn``: a
     Quick Edit packet (the JSON a Quick Edit's message carries, a file of it, or its object), a job
     or a list of jobs, each job a view drawn as it was -- its camera, display, hidden and isolated
     parts, pose, the packet's ink and dimensions -- at its output settings, into each of its outputs
@@ -1059,7 +1061,7 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
     name (``refs.RefError``). No query builds a missing model or writes its declared
     outputs. ``query="build"`` returns file metadata/closure or live build metadata;
     ``query="geometry"`` requires a ref, and ``query="closure"`` accepts none.
-    ``query="summary"`` (``cad xbf inspect DOC`` with no ref) is ``{"summary", "closure"}``:
+    ``query="summary"`` (``cad inspect DOC`` with no ref) is ``{"summary", "closure"}``:
     what the document holds at a glance (``_summary``), and its closure, as the engine holds it; of
     a GLB, ``{"mesh"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).
     ``query="structure"`` is the summary without bounds, volume or mass and requests no measurements.
@@ -1188,9 +1190,9 @@ def _mesh(path: Path, named: str, query: str) -> Facts:
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
         from cad.engine.said import COMMAND
 
-        said = (f"`{COMMAND} glb inspect {path.name}` alone tells its nodes, meshes and animations, and "
-                f"`{COMMAND} viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
-                f"inspect reads nothing more of it: `{COMMAND} viewer {path.name}` shows it, and the document it "
+        said = (f"`{COMMAND} inspect {path.name}` alone tells its nodes, meshes and animations, and "
+                f"`{COMMAND} show {path.name}` shows it" if path.suffix.lower() == ".glb" else
+                f"inspect reads nothing more of it: `{COMMAND} show {path.name}` shows it, and the document it "
                 "was exported from, inspected, tells the rest")
         raise ValueError(f"{path.name} is a mesh: it has no B-rep for a ref to name and no build closure (only an "
                          f".xbf carries one); {said}")
@@ -1241,7 +1243,7 @@ def _no_closure(path: Path) -> str:
     from cad.engine.said import COMMAND
 
     return (f"{path.name} holds no build closure: a STEP file carries none, only an .xbf does; inspect the model's "
-            f"document by its id for its closure, or name a ref in the file ({COMMAND} step inspect {path.name} REF)")
+            f".xbf for its closure, or name a ref in the file ({COMMAND} inspect {path.name} REF)")
 
 
 def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1269,7 +1271,7 @@ def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any], ident: str,
              progress: Callable[[dict], None] | None = None, *, measured: bool = True) -> dict[str, Any]:
-    """What a served document holds, at a glance (``cad xbf inspect DOC``): its name and id; its
+    """What a served document holds, at a glance (``cad inspect DOC``): its name and id; its
     state -- a model's a live worker holds (``live``, ``building``, ``failed``: ``Models.state``), or ``file``
     for a document read from its file; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the

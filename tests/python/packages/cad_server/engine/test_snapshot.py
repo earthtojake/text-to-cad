@@ -634,10 +634,10 @@ class SnapshotTest(unittest.TestCase):
                                                  "5.1 removes them from a program's arguments. Pipe the packet in instead: "
                                                  "'<packet>' | python -m cad_server.engine snapshot"
                                                  f"{'' if flag == '--job' else ' SRC OUT.png'} {flag} -")
-        done = subprocess.run([sys.executable, "-m", "cad_server.cli", "xbf", "snapshot", "--job", "{input:x}"],
+        done = subprocess.run([sys.executable, "-m", "cad_server.cli", "snapshot", "--job", "{input:x}"],
                               env={**os.environ, "PYTHONPATH": str(SRC)}, capture_output=True, text=True, timeout=120)
         self.assertEqual((done.returncode, done.stdout, len(done.stderr.splitlines())), (2, "", 1), done.stderr)
-        self.assertIn("Pipe the packet in instead: '<packet>' | cad xbf snapshot --job -", done.stderr)
+        self.assertIn("Pipe the packet in instead: '<packet>' | cad snapshot --job -", done.stderr)
         named = {**packet, "jobs": [{**packet["jobs"][0], "outputs": [{"label": "vue \u00e9 \u4e2d", "colour": 1}]}]}
         text = json.dumps(named, separators=(",", ":"))  # ensure_ascii: as the page writes it
         self.assertEqual(text.encode("ascii").decode("ascii"), text)

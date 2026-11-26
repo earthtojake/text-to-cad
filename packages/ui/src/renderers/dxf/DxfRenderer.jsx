@@ -46,7 +46,7 @@ import { useI18n } from "@cad/ui/i18n";
  * Ctrl, Cmd or Shift drag pans, the wheel or a pinch zooms, a double-click fits; Annotate, which draws on the sheet; and Measure, between points
  * snapped to its ends, centres and lines, in the unit the drawing declares (bare drawing units when
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
- * on screen as a plan-view camera, which `cad <type> snapshot --annotation PACKET --camera authored` draws again. A drawing with
+ * on screen as a plan-view camera, which `cad snapshot --annotation PACKET --camera authored` draws again. A drawing with
  * layers and blocks to read has the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a
  * board's and a 3D view's): its search, then its Layers tab (from the first frame), kept open or
  * collapsed as the other views' panel is, ⌘\ to show or hide it and / to search it. The chrome and

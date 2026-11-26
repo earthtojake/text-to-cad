@@ -26,8 +26,7 @@ from cad._internal import aliases  # noqa: E402
 
 NAMES = {
     "cad": {"read_step": "cad.step.read", "read_xbf": "cad.xbf.read", "read_mesh": "cad.stl.read",
-            "memo": "cad.build123d.memo", "paint": "cad.build123d.paint", "export": "cad.engine.api.export",
-            "snapshot": "cad.engine.api.snapshot", "inspect": "cad.engine.api.inspect"},
+            "memo": "cad.build123d.memo", "paint": "cad.build123d.paint"},
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
     "cad.build123d": {name: f"cad.build123d._flatten.{name}" for name in (
         "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
@@ -72,7 +71,7 @@ class TheAliases(unittest.TestCase):
     def test_an_alias_warns_once_per_process_naming_the_new_path_at_the_callers_line(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             script = Path(folder) / "old.py"
-            script.write_text("from cad import read_step\nimport cad\ncad.read_step\ncad.export\n"
+            script.write_text("from cad import read_step\nimport cad\ncad.read_step\ncad.paint\n"
                               "from cad.ap242 import mechanism_state\n", encoding="utf-8")
             proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120)
             program = subprocess.run([sys.executable, "-P", "-m", "cad._internal.program", str(script)],
@@ -81,8 +80,7 @@ class TheAliases(unittest.TestCase):
         for said in (proc.stderr, program.stderr):
             lines = [line for line in said.splitlines() if "CadDeprecationWarning" in line]
             self.assertEqual([f"{script}:1: CadDeprecationWarning: cad.read_step is deprecated; use cad.step.read",
-                              f"{script}:4: CadDeprecationWarning: cad.export is deprecated; use cad.xbf.export (a file's: "
-                              "cad.<document_type>.export, cad.step.export, ...)",
+                              f"{script}:4: CadDeprecationWarning: cad.paint is deprecated; use cad.build123d.paint",
                               f"{script}:5: CadDeprecationWarning: cad.ap242 is deprecated; use cad.build123d"], lines)
 
     def test_what_another_process_said_is_not_said_again_and_a_file_in_the_working_folder_is_named_relative(self) -> None:

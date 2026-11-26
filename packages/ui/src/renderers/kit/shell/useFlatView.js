@@ -87,7 +87,7 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  * @param {((event: KeyboardEvent) => boolean) | null} [options.onChord]  ⌘ or Ctrl with a letter the view takes (a
  *   board's Ctrl+H), while the view has the keyboard (`useViewerShortcuts`); true when it took it.
  * @param {((references: readonly object[], file: string) => string[]) | null} [options.packetReferences]  What the
- *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
+ *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad snapshot --job`
  *   lights as the view did), where the view's packets carry them; null for none.
  * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
  *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: Display's Mode

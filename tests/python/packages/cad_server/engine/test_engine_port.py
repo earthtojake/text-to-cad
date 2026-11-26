@@ -124,8 +124,8 @@ class EnginePortTest(unittest.TestCase):
             return places.address()
 
     def server(self, *args: str, **extra: str) -> subprocess.Popen:
-        """``cad server ARGS`` in the background -- the server run in this process, as ``cad server start
-        --foreground`` runs it --, once its door answers; ``extra``: its environment."""
+        """``cad server ARGS`` in the background -- the server run in this process (``start --foreground``, or
+        ``--rotate-token`` where none runs) --, once its door answers; ``extra``: its environment."""
         from cad.engine import client, places
 
         env = {**self.env, **extra}
@@ -234,21 +234,25 @@ class EnginePortTest(unittest.TestCase):
 
     def test_a_server_in_the_foreground_on_a_held_port_fails_at_once_and_leaves_no_engine(self) -> None:
         port = held_port(self)
-        # No request is ever sent: it binds at its start. Bare ``cad server`` is that start's alias.
-        for words in (("server", "start", "--foreground", "--port", str(port)), ("server", "--port", str(port))):
-            done = self.cad(*words)
-            self.assertEqual(done.returncode, 1, done.stdout)
-            self.assertRegex(done.stderr.strip().splitlines()[-1],
-                             rf"^cad: port {port} is held by .+: stop it, or pass another --port$")
-            self.answering()
+        # No request is ever sent: it binds at its start.
+        done = self.cad("server", "start", "--foreground", "--port", str(port))
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertRegex(done.stderr.strip().splitlines()[-1],
+                         rf"^cad: port {port} is held by .+: stop it, or pass another --port$")
+        self.answering()
+        # Bare ``cad server``, which ran it here once, runs nothing: it names the start that does.
+        bare = self.cad("server", "--port", str(port))
+        self.assertEqual((bare.returncode, bare.stdout), (2, ""), bare.stderr)
+        self.assertEqual(bare.stderr, "cad server: 'cad server' alone is 'cad server start' now; 'cad server --help' "
+                                      "says its forms\n")
+        self.answering()
 
     def test_a_start_beside_a_running_server_of_its_release_does_nothing(self) -> None:
         from cad.engine.previous import version
 
         running = self.launch(CAD_ENGINE_PORT=str(free_port()))
         asked = free_port()
-        for words in (("server", "start", "--port", str(asked)), ("server", "start", "--foreground", "--port", str(asked)),
-                      ("server",)):
+        for words in (("server", "start", "--port", str(asked)), ("server", "start", "--foreground", "--port", str(asked))):
             done = self.cad(*words)
             self.assertEqual((done.returncode, done.stdout), (0, f"the cad server (cad {version()}) is already running\n"),
                              done.stderr)
@@ -326,7 +330,7 @@ class EnginePortTest(unittest.TestCase):
         default = free_port()
         other = {"CAD_ENGINE_DIR": str(self.root / "other-engine"), "CAD_STATE_DIR": str(self.root / "other-state"),
                  "CAD_ENGINE_STANDBY": "0"}
-        theirs = self.server("--port", str(default), **other)
+        theirs = self.server("start", "--foreground", "--port", str(default), **other)
         self.addCleanup(lambda: self.cli("stop", **other))
         done = self.started(CAD_ENGINE_DEFAULT_PORT=str(default))
         self.assertEqual(done.returncode, 0, done.stderr)

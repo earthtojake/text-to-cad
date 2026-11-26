@@ -443,7 +443,7 @@ _FILE_DEFECTS = {
 FLAT_MATERIAL_SLACK = 0.03
 
 
-#: A ref as an item names a face or an edge (``bracket/face 7``): what ``cad step inspect`` resolves.
+#: A ref as an item names a face or an edge (``bracket/face 7``): what ``cad inspect`` resolves.
 _REF = re.compile(r"(?:^|/)(?:vertex|edge|face) \d+$")
 
 

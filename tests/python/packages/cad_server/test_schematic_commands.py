@@ -39,29 +39,30 @@ class SchematicCommands(unittest.TestCase):
 
     def test_snapshot_draws_the_sheet_it_names_as_the_file_is_now(self) -> None:
         png = self.root / "load.png"
-        done = cad("kicad_sch", "snapshot", str(self.schematic), str(png), "--sheet", "/Load/", "--width", "320",
+        done = cad("snapshot", str(self.schematic), str(png), "--sheet", "/Load/", "--width", "320",
                    "--height", "240", "--json")
         self.assertEqual(done.returncode, 0, done.stderr)
         drawn = json.loads(done.stdout)
         self.assertEqual((drawn["sheet"], drawn["page"]), ("/Load/", "2"))
         with Image.open(png) as image:
             self.assertEqual(image.size, (320, 240))
-        refused = cad("kicad_sch", "snapshot", str(self.schematic), str(png), "--sheet", "/Power/")
+        refused = cad("snapshot", str(self.schematic), str(png), "--sheet", "/Power/")
         self.assertEqual(refused.returncode, 2)
         self.assertIn("has no sheet /Power/; its sheets are /, /Load/", refused.stderr)
 
     def test_inspect_says_what_it_holds_and_what_a_reference_names(self) -> None:
-        done = cad("kicad_sch", "inspect", str(self.schematic.with_name("load.kicad_sch")), "#R1.2", "--json")
+        done = cad("inspect", str(self.schematic.with_name("load.kicad_sch")), "#R1.2", "--json")
         self.assertEqual(done.returncode, 0, done.stderr)
         found = json.loads(done.stdout)
         self.assertEqual([sheet["path"] for sheet in found["sheets"]], ["/", "/Load/"])
         self.assertEqual(found["resolved"], {**found["resolved"], "kind": "pin", "ref": "R1", "net": "/MID"})
-        other = cad("kicad_sch", "inspect", str(self.root / "board.kicad_pcb"))
+        # A file of no type the verb takes is refused, naming the ones it takes.
+        other = cad("inspect", str(self.root / "notes.txt"))
         self.assertEqual(other.returncode, 2)
-        self.assertIn("is a kicad_pcb, not a kicad_sch: use cad kicad_pcb inspect", other.stderr)
+        self.assertIn("is not a file cad inspect takes", other.stderr)
 
     def test_erc_without_kicad_fails_saying_how_to_install_it(self) -> None:
-        done = cad("kicad_sch", "erc", str(self.schematic), "--json",
+        done = cad("kicad", "erc", str(self.schematic), "--json",
                    env={**os.environ, "CAD_KICAD_CLI": str(self.root / "no-kicad-cli")})
         self.assertEqual(done.returncode, 1, done.stderr)
         [issue] = json.loads(done.stdout)["findings"]

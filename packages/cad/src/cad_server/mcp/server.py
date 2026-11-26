@@ -23,7 +23,7 @@ CAD view is verified. Every other app is offered none, and shows a model the way
   session per thread, so a call that names no view reaches the thread's own tab.
 - *No tools* (``text``): every other app, whatever it declares (Cursor, the Claude apps, Gemini CLI, ...), and
   Codex launched by a program that shows no views (``codex exec``, its terminal UI). Such an app shows a model
-  with the link ``cad viewer`` prints.
+  with the link ``cad show`` prints.
 - *Inline*, each call to ``cad_show`` mounting a new view in the chat: no app is served it. The development
   switch below reaches it, for testing the page's cards: each launch is stamped with an order for the views to
   retire their elders by, and a view the agent reads is named by the token its ``cad_show`` returned.
@@ -84,7 +84,7 @@ _RESOURCE_NOT_FOUND = -32002
 # The formats every surface opens, as the agent is told them and as a host's file handler offers them: a
 # cadgen engine document (XBF) among them, and a KiCad board and schematic.
 EXTENSIONS = sorted(set(VIEWER_EXTENSIONS))
-# File formats alone, by their own names: a model's file is an XBF (a model the engine holds is shown by its id).
+# File formats alone, by their own names: a model's file is an XBF.
 FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values())
 
 # How long a call that reads a view (cad_view, cad_screenshot) waits for one the agent just opened (a tab from
@@ -101,14 +101,14 @@ _MOUNTING_KEPT = 64
 _ASKED_KEPT = 16
 
 # What no tool does: the `cad` command's, which every host's agent runs in its shell.
-COMMANDS = ("To export a model, inspect it or snapshot it for yourself, run `cad xbf export <id> <file>`, "
-            "`cad xbf inspect <id>` or `cad xbf snapshot <id> out.png` in a shell (a file: `cad <type> ...` with "
-            "its path, as `cad step inspect part.step`).")
+COMMANDS = ("To export a model, inspect it or snapshot it for yourself, run `cad export model.xbf model.step`, "
+            "`cad inspect model.xbf` or `cad snapshot model.xbf out.png` in a shell, with the model's .xbf or any "
+            "CAD file's path (`cad inspect part.step`).")
 
 INSTRUCTIONS = (
     f"CAD shows local CAD models ({FORMATS}) in a viewer tab beside the chat. "
-    "To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute "
-    "path: it switches an open viewer and never opens a tab. "
+    "To show a model, call cad_show with the absolute path of its .xbf (running its script writes it) or of any CAD "
+    "file: it switches an open viewer and never opens a tab. "
     "Only when cad_show reports no open viewer, call cad_open, once. "
     "Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. "
     "cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see. " + COMMANDS
@@ -116,7 +116,7 @@ INSTRUCTIONS = (
 
 INLINE_INSTRUCTIONS = (
     f"CAD shows local CAD models ({FORMATS}) in interactive viewers in the chat. "
-    "Call cad_show with a model's document id (running its script prints it) or a CAD file's absolute path to "
+    "Call cad_show with the absolute path of a model's .xbf (running its script writes it) or of any CAD file to "
     "show it: each call adds a viewer and pauses the earlier ones. "
     "Viewers follow every rebuild of a model and every save of a file, so never show a model again after a rebuild. "
     "cad_view reports what the user is looking at and has selected in a viewer, and cad_screenshot returns "
@@ -130,7 +130,7 @@ FOLLOWS = ("The page follows the model: rebuilds for a document, saves for a fil
 # A session offered no tools (``text``: see the module): what it is told instead.
 NO_TOOLS_INSTRUCTIONS = (
     "This CAD server offers no tools here: this app shows no CAD views. Use the `cad` command. " + COMMANDS
-    + " To show a model, give the user the link `cad viewer` prints, which opens in the app's browser pane or their "
+    + " To show a model, give the user the link `cad show` prints, which opens in the app's browser pane or their "
     "browser."
 )
 
@@ -172,7 +172,7 @@ def _object(properties: dict[str, Any] | None = None, required: list[str] | None
 
 
 # What names a model, the one argument name every tool that takes one gives it (cad_show, cad_open).
-_SOURCE = {"type": "string", "description": "A CAD file's absolute path, or a document id (a model's, which running its script prints)."}
+_SOURCE = {"type": "string", "description": "A CAD file's absolute path: a model's .xbf, which running its script writes, or any CAD file."}
 # The tools the agent calls with a model or a view, whose arguments are checked against what they take
 # (``_arguments``): the host's own surfaces (``cad_file``, ...) are called with what the host sends.
 _AGENT_TOOLS = ("cad_open", "cad_show", "cad_view", "cad_screenshot")
@@ -214,15 +214,14 @@ def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
 # listed (``tools``); counted as any call naming no tool of cadgen's (``_refused``). Goes at the next minor release.
 _REMOVED_TOOLS = {
     "cad_export": "The cad_export tool was removed in cad 0.11.10. Export with the cad command instead: "
-                  "`cad xbf export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
-                  "for a CAD file (type: xbf for an .xbf, step, stl, glb or threemf); `cad --help` gives the details.",
+                  "`cad export <file> <out>` for a CAD file, a model by its .xbf, its format by <out>'s suffix; "
+                  "`cad export --help` gives the details.",
     "cad_snapshot": "The cad_snapshot tool was removed in cad 0.11.10. Draw a PNG with the cad command instead: "
-                    "`cad xbf snapshot <id> <out.png>` for a model's document id, `cad <type> snapshot <file> <out.png>` "
-                    "for a CAD file, or `cad xbf snapshot --job <packet>` for a Quick Edit packet; `cad --help` gives "
-                    "the details.",
+                    "`cad snapshot <file> <out.png>` for a CAD file, a model by its .xbf, or `cad snapshot --job "
+                    "<packet>` for a Quick Edit packet; `cad snapshot --help` gives the details.",
     "cad_inspect": "The cad_inspect tool was removed in cad 0.11.10. Inspect with the cad command instead: "
-                   "`cad xbf inspect <id> [ref]` for a model's document id, or `cad <type> inspect <file> [ref]` for a "
-                   "CAD file (type: xbf for an .xbf, step or glb); `cad --help` gives the details.",
+                   "`cad inspect <file> [ref]` for a CAD file, a model by its .xbf; `cad inspect --help` gives the "
+                   "details.",
 }
 
 
@@ -241,12 +240,12 @@ def _unreached(page: str | None) -> str:
     and refuses their calls; its card says so, and links ``page``), and CAD can neither read nor capture it.
     What the person can open instead, and the picture the agent can draw itself."""
     instead = (f"give them the model's page to open in their browser instead: {page}" if page
-               else "open the model in their browser instead (`cad viewer` prints its page)")
+               else "open the model in their browser instead (`cad show` prints its page)")
     return ("That viewer has not reached CAD's server. Either the chat has not drawn it yet (it may be waiting for the "
             "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
             "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
             f"whether they see the model; if the card says this chat can't connect, {instead}. To see the model yourself, "
-            "render it headless with `cad <type> snapshot`.")
+            "render it headless with `cad snapshot`.")
 
 
 def _unavailable(error: BaseException) -> str:
@@ -686,7 +685,7 @@ class Server:
         optional = [key for key in schema["properties"] if key not in required]
         takes = (f"{name} takes {' and '.join(required) or 'nothing'}"
                  + (f", optionally {' and '.join(optional)}" if optional else "")
-                 + ("; source is a document id (running a model's script prints it) or a CAD file's absolute path"
+                 + ("; source is a CAD file's absolute path (a model's .xbf, which running its script writes)"
                     if "source" in schema["properties"] else "") + ".")
         said = _refusal(name, missing, unknown, takes)
         if "source" in missing:
@@ -765,8 +764,8 @@ class Server:
         """An existing CAD file, from the absolute path a caller named; or a document the engine holds,
         from its id: a model's id stays itself, a file's is its path. Nothing is built."""
         if not isinstance(value, str) or not value.strip():
-            raise ToolFailed('Name the model in "source": a document id (running a model\'s script prints it) or a '
-                             "CAD file's absolute path.", "no_path")
+            raise ToolFailed('Name the model in "source": a CAD file\'s absolute path (a model\'s .xbf, which running '
+                             "its script writes).", "no_path")
         from cad.engine.ids import is_id
 
         if is_id(value):
@@ -986,7 +985,7 @@ class Server:
             link = self._browser_url(model)
         except ViewerUnavailable as failure:
             raise ToolFailed(f"This app cannot show CAD views, and CAD's server gave no browser page ({failure}). Run "
-                             f"`cad viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
+                             f"`cad show --host 127.0.0.1 --json {model}` and open the url it prints.",
                              "no_viewer") from failure
         if _reads_with_kernel(model):
             self.warm()  # the browser page's first document meshes on a pool already starting
@@ -1046,7 +1045,7 @@ class Server:
     def _tool_cad_screenshot(self, arguments, context):
         deadline = time.monotonic() + CAPTURE_SECONDS
         if self._no_app(context):
-            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cad <type> snapshot`.", "no_view")
+            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cad snapshot`.", "no_view")
         if self.tabs:
             view = self._target(context, arguments.get("view"), needs_model=True)
             if view is None and self._opened is not None and time.monotonic() - self._opened < _OPENED_WITHIN:
@@ -1058,7 +1057,7 @@ class Server:
             raise ToolFailed("That viewer shows no model yet.", "no_view")
         if view is None:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
-                             "or render headless with `cad <type> snapshot`.", "no_view")
+                             "or render headless with `cad snapshot`.", "no_view")
         if isinstance(view, SidebarView):
             reply = self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic()))
             if reply is None:

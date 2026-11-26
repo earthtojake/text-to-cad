@@ -1,11 +1,6 @@
-"""The ``cad`` command's table, pinned: every document type's operations and every other command.
-
-The shape is ``cad <document_type> <operation> <file>``, one id per type everywhere (the registry,
-``cad.registry``; the file a model is saved as is ``xbf``'s, with no command of its own), one set of
-operation names every type shares; the commands that are no
-document's are the engine's process control, ``run`` and the installation's. A command added,
-renamed or taken out is a change to what every agent reads, made here on purpose. The old
-spellings are gone, a hard cutover: each answers as a command that never existed does.
+"""The ``cad`` command's table: the verbs on a file, by the file's type (``cad export``, ``cad inspect``,
+``cad snapshot``, ``cad dfm``, ``cad fea``), the integrations' operations on their tools' files, and the commands;
+how each refuses a source it cannot take, by name and before anything runs.
 """
 
 from __future__ import annotations
@@ -25,26 +20,26 @@ add_sources()
 from cad.registry import DOCUMENT_TYPES  # noqa: E402
 
 import cad_server.cli as cli  # noqa: E402
-from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
+from cad_server.cli.verbs import VERBS  # noqa: E402
 
+#: The verbs each type takes, by the table's order: what ``cad --help`` says of it.
 TYPES = {
-    "xbf": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"),
-    "step": ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"),
+    "xbf": ("export", "inspect", "snapshot", "dfm", "fea"),
+    "step": ("export", "inspect", "snapshot", "dfm", "fea"),
     "stl": ("export", "snapshot", "dfm"),
-    "glb": ("export", "snapshot", "inspect", "dfm"),
+    "glb": ("export", "inspect", "snapshot", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
     "dxf": ("snapshot", "dfm"),
-    "urdf": ("snapshot", "validate"),
-    "srdf": ("snapshot", "validate"),
-    "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
-    "kicad_sch": ("export", "snapshot", "inspect", "erc"),
+    "urdf": ("inspect", "snapshot"),
+    "srdf": ("inspect", "snapshot"),
+    "kicad_pcb": ("export", "inspect", "snapshot"),
+    "kicad_sch": ("export", "inspect", "snapshot"),
 }
-COMMANDS = ("serve", "status", "stop", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
-            "viewer", "share", "import", "telemetry", "update", "plugin")
-# Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), the commands for
-# programs rather than people, and `model`, the earlier spelling of `cad xbf`, which runs it saying it is deprecated
-# and which the skill text of releases up to 0.12 says (``test_older_model_spellings.py``).
-UNLISTED = ("status", "stop", "setup", "serve", "requirement", "model")
+COMMANDS = ("export", "inspect", "snapshot", "dfm", "fea", "show", "server", "mcp", "run", "requirement", "doctor",
+            "cache", "setup", "share", "import", "telemetry", "update", "plugin")
+# Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's updaters run `cad setup`), and the command
+# for programs rather than people (`requirement`, whose output a program reads).
+UNLISTED = ("setup", "requirement")
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:
@@ -61,23 +56,24 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 
 class TheCommandTable(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
-        # Each type by its id; an earlier one (`cad xbf`) is unlisted.
-        self.assertEqual(TYPES, {name: operations_of(name) for name in DOCUMENT_TYPES})
-        self.assertEqual(sorted(TYPES), sorted(set(cli.TYPE_COMMANDS) - set(UNLISTED)))
+        from cad.registry import operation_for
+
+        self.assertEqual(TYPES, {name: tuple(verb for verb in VERBS if operation_for(verb, name) is not None)
+                                 for name in DOCUMENT_TYPES})
         self.assertEqual(sorted(COMMANDS), sorted(cli._COMMANDS))  # noqa: SLF001 - the table IS the subject
-        for name, module in cli.TYPE_COMMANDS.items():
-            self.assertEqual(f"cad_server.cli.{name}", module)
+        self.assertEqual(VERBS, cli.VERB_COMMANDS)
 
     def test_help_lists_the_commands_a_person_uses_and_the_unlisted_still_run(self) -> None:
         self.assertEqual(sorted(UNLISTED), sorted(cli._UNLISTED))  # noqa: SLF001 - the table IS the subject
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
         listed = {line.split()[0] for line in said.split("\ncommands:\n", 1)[1].split("\n\n", 1)[0].splitlines()}
-        self.assertEqual(listed, set(COMMANDS) - set(UNLISTED))
+        self.assertEqual(listed, set(COMMANDS) - set(UNLISTED) - set(VERBS))
+        verbs = [line.split()[0] for line in said.split("its type by its suffix (cad <verb> FILE):\n", 1)[1]
+                 .split("\n\n", 1)[0].splitlines()]
+        self.assertEqual(verbs, list(VERBS))
         self.assertIn("mcp", listed)
-        for argv in (["serve", "--help"], ["requirement", "--help"]):
-            with self.subTest(argv=argv):
-                self.assertEqual(_run(argv)[0], 0, "unlisted, and parsed as ever")
+        self.assertEqual(_run(["requirement", "--help"])[0], 0, "unlisted, and parsed as ever")
 
     def test_the_switches_are_update_auto_and_the_old_spellings_are_gone(self) -> None:
         """``cad update auto``, ``cad plugin install`` and ``cad plugin update [auto]``; ``cad auto-update`` and ``cad
@@ -106,72 +102,57 @@ class TheCommandTable(unittest.TestCase):
             with self.subTest(argv=argv):
                 self.assertEqual(_run(argv)[0], 2)
 
-    def test_help_groups_the_commands_by_type(self) -> None:
+    def test_help_says_the_verbs_and_the_files_each_takes(self) -> None:
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
-        self.assertIn("document types, the files cad shows (cad <type> <operation> FILE):", said)
-        self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
-        self.assertRegex(said, r"\n  xbf +export, snapshot, inspect, dfm, interference, solve, ranges +XBF: a document id, "
-                               r"held in memory, or an \.xbf file\n")
-        types = said.split("document types, the files cad shows", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("verbs, on a file, its type by its suffix (cad <verb> FILE):", said)
+        self.assertRegex(said, r"\n  srdf +inspect, snapshot +SRDF: \.srdf\n")
+        self.assertRegex(said, r"\n  xbf +export, inspect, snapshot, dfm, fea +XBF: a model's \.xbf file\n")
+        types = said.split("the files they take, by document type:", 1)[1].split("\n\n", 1)[0]
         self.assertEqual([line.split()[0] for line in types.splitlines()[1:]], list(TYPES))
-        code, said, _ = _run(["xbf", "--help"])
-        self.assertEqual((code, said.splitlines()[0]), (0, "usage: cad xbf <operation> ID|FILE.xbf [options]"))
-        self.assertIn("cad xbf <operation> FILE.xbf takes a model saved as a file, read as the file it is, never as "
-                      "the model the engine holds.", said)
-        code, said, _ = _run(["step", "--help"])
-        self.assertEqual(0, code)
-        self.assertIn("operations:\n  export ", said)
-        self.assertIn("(.step, .stp)", said)
-
-    def test_a_file_of_another_type_is_refused_by_name(self) -> None:
-        code, _, err = _run(["stl", "snapshot", "part.glb", "out.png"])
-        self.assertEqual(2, code)
-        self.assertIn("part.glb is a glb, not a stl: use cad glb snapshot", err)
-        # The same failure with --json: the same status, its one document on stdout and nothing else.
-        code, said, err = _run(["urdf", "validate", "robot.srdf", "--json"])
-        self.assertEqual(2, code)
-        self.assertEqual({"ok": False, "error": "robot.srdf is a srdf, not a urdf: use cad srdf validate",
-                          "reason": "wrong_type"}, json.loads(said))
-        self.assertEqual("", err)
+        code, said, _ = _run(["export", "--help"])
+        self.assertEqual((code, said.splitlines()[0]),
+                         (0, "usage: cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]"))
+        self.assertIn("cad export BOARD|SCHEMATIC DIR --to KIND", said)
 
     def test_a_file_that_is_not_there_is_the_same_failure_for_every_type(self) -> None:
-        """Every operation of every file's type refuses a file that is not there before anything runs, alike:
-        ``not_found``, exit 2, with ``--json`` and without; and a file of no type as ``wrong_type``. A model's file is
-        its ``.xbf``, which every operation of ``cad xbf`` takes as it takes an id: one type, no operation of it
-        that its file lacks."""
-        from cad.registry import DOCUMENT_TYPES as TYPES_TABLE
-        from cad_server.cli.document_types import OPERATIONS
+        """Every verb of every file's type refuses a file that is not there before anything runs, alike:
+        ``not_found``, exit 2, with ``--json`` and without; and a file of no type as ``wrong_type``."""
+        from cad.registry import DOCUMENT_TYPES as TYPES_TABLE, MODES, operation_for
 
-        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": []}
-        for document_type, operation in sorted(OPERATIONS):
-            entry = TYPES_TABLE[document_type]
-            missing = f"no-such-file{entry.extensions[0]}"
-            extra = (["--to", "pdf", "-o", "out"] if document_type.startswith("kicad_") and operation == "export"
-                     else rest.get(operation, []))
-            with self.subTest(command=f"{document_type} {operation}"):
-                code, out, err = _run([document_type, operation, missing, *extra])
-                self.assertEqual((code, out, err), (2, "", f"cad {document_type} {operation}: no such file: {missing}\n"))
-                code, out, err = _run([document_type, operation, missing, *extra, "--json"])
-                self.assertEqual((code, err), (2, ""))
-                # a manufacturing check's answers all carry the state, a command-line mistake's too
-                state = {"status": "usage"} if operation == "dfm" else {}
-                self.assertEqual(json.loads(out),
-                                 {"ok": False, "error": f"no such file: {missing}", "reason": "not_found", **state})
-        code, _, err = _run(["urdf", "validate", "robot.txt"])
-        self.assertEqual((code, err), (2, "cad urdf validate: robot.txt is not a urdf file: cad urdf takes .urdf\n"))
+        rest = {"export": ["out.step"], "snapshot": ["out.png"]}
+        for document_type, verbs in TYPES.items():
+            for verb in verbs:
+                for mode in (None, *(MODES if verb == "inspect" else ())):
+                    if mode is not None and operation_for(verb, document_type, mode) is None:
+                        continue
+                    missing = f"no-such-file{TYPES_TABLE[document_type].extensions[0]}"
+                    extra = (["out", "--to", "pdf"] if document_type.startswith("kicad_") and verb == "export"
+                             else rest.get(verb, [])) + ([f"--{mode}"] if mode else [])
+                    with self.subTest(command=f"{verb} {document_type} {mode or ''}"):
+                        code, out, err = _run([verb, missing, *extra])
+                        self.assertEqual((code, out, err), (2, "", f"cad {verb}: no such file: {missing}\n"))
+                        code, out, err = _run([verb, missing, *extra, "--json"])
+                        self.assertEqual((code, err), (2, ""))
+                        # a manufacturing check's answers all carry the state, a command-line mistake's too
+                        state = {"status": "usage"} if verb == "dfm" else {}
+                        self.assertEqual(json.loads(out),
+                                         {"ok": False, "error": f"no such file: {missing}", "reason": "not_found",
+                                          **state})
+        code, _, err = _run(["inspect", "robot.txt"])
+        self.assertEqual((code, err), (2, "cad inspect: robot.txt is not a file cad inspect takes: it takes .xbf, "
+                                          ".step, .stp, .glb, .urdf, .srdf, .kicad_pcb or .kicad_sch\n"))
         # An .xml is no document type: a MuJoCo model's file, which its integration's command takes.
-        code, _, err = _run(["urdf", "validate", "robot.xml"])
-        self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf "
-                                          "(cad mujoco check takes .xml and .mjcf)\n"))
+        code, _, err = _run(["inspect", "robot.xml"])
+        self.assertEqual((code, err), (2, "cad inspect: robot.xml is not a file cad inspect takes: it takes .xbf, "
+                                          ".step, .stp, .glb, .urdf, .srdf, .kicad_pcb or .kicad_sch (cad mujoco check "
+                                          "takes .xml and .mjcf)\n"))
 
     def test_a_file_whose_path_holds_a_hash_is_its_type_s(self) -> None:
         """A folder or a file named with a '#' (project#1) is the file whole, as ``cad.engine.addresses.parts``
         reads a ``FILE#REF``: every operation takes it, where each once refused it as no file of its type."""
-        import tempfile
-        from pathlib import Path
-
         from cad_server.cli.document_types import _refuse_other_type
+        from cad_server.cli.verbs import resolve
 
         with tempfile.TemporaryDirectory() as folder:
             part = Path(folder) / "project#1" / "bracket#2.step"
@@ -180,97 +161,98 @@ class TheCommandTable(unittest.TestCase):
             for operation in ("snapshot", "export", "inspect"):
                 _refuse_other_type("step", operation, str(part))
                 _refuse_other_type("step", operation, f"{part}#arm")
+            self.assertEqual(("step", "inspect", None), resolve("inspect", [f"{part}#arm"]))
 
     def test_a_script_where_a_document_is_wanted_says_cad_run_builds_it(self) -> None:
-        """A model's script is never a source: the refusal says the command that builds it and prints its id,
+        """A model's script is never a source: the refusal says the command that builds it and writes its .xbf,
         the skills' own form, and the help says the same -- never ``python SCRIPT.py``."""
         for argv, said in (
-                (["xbf", "inspect", "part.py"], "part.py is a model's script, not a document id: `cad run part.py` "
-                                                  "builds its models and prints each one's id, which cad xbf inspect "
-                                                  "takes"),
-                (["step", "snapshot", "src/my part.py::part", "out.png"],
-                 "src/my part.py::part is a model's script, not a step file: `cad run 'src/my part.py'` builds its "
-                 "models and prints each one's id, which cad xbf snapshot takes"),
-                (["urdf", "validate", "robot.py"], "robot.py is a model's script, not a urdf file: `cad run robot.py` "
-                                                   "builds its models and prints each one's id")):
+                (["inspect", "part.py"], "part.py is a model's script, not a document: `cad run part.py` builds its "
+                                         "models, writes each one's .xbf and prints each one's id, which cad inspect "
+                                         "takes"),
+                (["snapshot", "src/my part.py::part", "out.png"],
+                 "src/my part.py::part is a model's script, not a document: `cad run 'src/my part.py'` builds its "
+                 "models, writes each one's .xbf and prints each one's id, which cad snapshot takes")):
             with self.subTest(argv=argv):
                 code, out, err = _run(argv)
                 self.assertEqual((code, out), (2, ""))
-                self.assertEqual(err, f"cad {argv[0]} {argv[1]}: {said}\n")
-        # And the commands that take a document but are no type's: the document it serves, the page it opens.
-        for argv, said in ((["serve", "part.py"], "part.py is no document: serve reads an .xbf, a .step or a document "
-                                                  "id; run `cad run part.py` first, then serve its document by id"),
-                           (["viewer", "part.py"], "part.py is a model's script, not a CAD file: `cad run part.py` "
-                                                   "builds its models and prints each one's page")):
-            with self.subTest(argv=argv):
-                code, out, err = _run(argv)
-                self.assertEqual((code, out, err), (2, "", f"cad {argv[0]}: {said}\n"))
-        from cad_server.cli.document_types import OPERATIONS, build_parser, type_usage
+                self.assertEqual(err, f"cad {argv[0]}: {said}\n")
+        # And the command that takes a file but is no verb's: the page it opens.
+        code, out, err = _run(["show", "part.py"])
+        self.assertEqual((code, out, err), (2, "", "cad show: part.py is a model's script, not a CAD file: `cad run "
+                                                   "part.py` builds its models and prints each one's page\n"))
+        from cad_server.cli.document_types import OPERATIONS, build_parser
+        from cad_server.cli.verbs import build_parser as verb_parser
 
         helps = [" ".join(text.split()) for text in  # each help as words: argparse wraps its lines
-                 [type_usage(name) for name in TYPES] + [build_parser(*key).format_help() for key in sorted(OPERATIONS)]]
+                 [verb_parser(verb).format_help() for verb in VERBS]
+                 + [build_parser(*key).format_help() for key in sorted(OPERATIONS)]]
         self.assertEqual([text for text in helps if "python SCRIPT" in text], [])
-        self.assertIn("a model's document id, which cad run SCRIPT.py prints",
-                      " ".join(build_parser("xbf", "export").format_help().split()))
+        # A path, never an id, is what the help tells a person to give.
+        self.assertEqual([text for text in helps if "cad run SCRIPT.py prints" in text], [])
 
-    def test_a_model_is_its_id_and_a_file_is_its_types(self) -> None:
-        """``cad xbf`` takes a model's document id and, of files, only the one a model is saved as; a file's type
-        takes its file and no id."""
+    def test_a_model_s_id_is_its_xbf_s_and_a_file_is_its_type_s(self) -> None:
+        """A model's document id is an xbf's source as its .xbf is; any other word is a file by its suffix."""
+        from cad_server.cli.verbs import resolve
+
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
-        code, _, err = _run(["step", "export", ident, "arm.glb"])
-        self.assertEqual(2, code)
-        self.assertIn(f"{ident} is a model's document id, not a .step file: use cad xbf export", err)
-        code, _, err = _run(["xbf", "snapshot", "arm.step", "arm.png"])
-        self.assertEqual(2, code)
-        self.assertIn("arm.step is a step, not a xbf: use cad step snapshot", err)
-        code, _, err = _run(["xbf", "inspect", "arm"])
-        self.assertEqual((code, err), (2, "cad xbf inspect: cad xbf takes a model's document id (cad run SCRIPT.py "
-                                          "prints it) or an .xbf file, not 'arm'\n"))
-        # An .xbf given to another type's command is sent to the one that takes it, which is `cad xbf`.
-        code, _, err = _run(["step", "export", "arm.xbf", "arm.glb"])
-        self.assertEqual((code, err), (2, "cad step export: arm.xbf is a xbf, not a step: use cad xbf export\n"))
+        self.assertEqual(("xbf", "export", None), resolve("export", [ident, "arm.glb"]))
+        self.assertEqual(("xbf", "interference", "interference"), resolve("inspect", [ident, "--interference"]))
+        self.assertEqual(("step", "solve", None), resolve("fea", ["arm.STP"]))
+        code, _, err = _run(["inspect", "arm"])
+        self.assertEqual((code, err), (2, "cad inspect: arm is not a file cad inspect takes: it takes .xbf, .step, "
+                                          ".stp, .glb, .urdf, .srdf, .kicad_pcb or .kicad_sch\n"))
         code, _, err = _run(["mujoco", "check", "arm.xbf"])
         self.assertEqual((code, err), (2, "cad mujoco check: arm.xbf is a xbf, not a file cad mujoco check takes (.xml "
-                                          "or .mjcf): use cad xbf dfm\n"))
+                                          "or .mjcf): cad dfm takes it\n"))
         # A mesh's export meshes nothing: its parser has no --tolerance or --angle.
         for flag, value in (("--tolerance", "0.01"), ("--angle", "5")):
             err = io.StringIO()
             with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as refused:
-                cli.main(["stl", "export", "part.stl", "part.glb", flag, value])
+                cli.main(["export", "part.stl", "part.glb", flag, value])
             self.assertEqual(2, refused.exception.code)
             self.assertIn(f"unrecognized arguments: {flag}", err.getvalue())
 
-    def test_cad_xbf_takes_a_model_by_its_id_or_saved_as_a_file(self) -> None:
-        """``cad xbf <operation>`` takes the ``.xbf`` a model is saved as beside a document id, for every
-        operation: the file is told by its suffix, as the registry reads one, where the operation's parser reads
-        its source, and its help says so. A file that is not there is refused before anything runs, as every
-        type's is; a destination is no source."""
+    def test_export_writes_one_file_like_cp(self) -> None:
+        """``cad export SRC DST``: one destination, its format by its suffix; a second is the command line's mistake,
+        named, and nothing runs."""
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch("cad_server.engine.cli.answered", side_effect=AssertionError("ran")):
+            saved = Path(folder) / "arm.xbf"
+            saved.write_bytes(b"")
+            code, out, err = _run(["export", str(saved), "arm.glb", "arm.stl"])
+            self.assertEqual((code, out), (2, ""))
+            self.assertTrue(err.endswith("cad export: error: cad export writes one file, DST: run it once for each of "
+                                         "arm.glb, arm.stl\n"), err)
+            code, out, err = _run(["export", str(saved), "arm.glb", "arm.stl", "--json"])
+            self.assertEqual((code, err), (2, ""))
+            self.assertEqual(json.loads(out)["reason"], "usage")
+            code, _, err = _run(["export", str(saved)])
+            self.assertEqual(code, 2)
+            self.assertIn("the following arguments are required: DST", err)
+
+    def test_an_xbf_takes_a_model_by_its_id_or_saved_as_a_file(self) -> None:
+        """Every verb of an xbf takes the ``.xbf`` a model is saved as beside a document id: the file is told by its
+        suffix, as the registry reads one, where the operation's parser reads its source, and its help says so. A file
+        that is not there is refused before anything runs, as every type's is; a destination is no source."""
         from cad_server.cli.document_types import _refuse_other_type, build_parser
 
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
-        rest = {"export": ["out.glb"], "snapshot": ["out.png"]}
         with tempfile.TemporaryDirectory() as folder:
             saved = Path(folder) / "Arm.XBF"
             saved.write_bytes(b"")
-            for operation in TYPES["xbf"]:
+            for operation in ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges"):
                 with self.subTest(operation=operation):
                     for source in (ident, str(saved), f"{saved}#arm/face 1"):
                         _refuse_other_type("xbf", operation, source)  # taken: no refusal
                     said = " ".join(build_parser("xbf", operation).format_help().split())
                     self.assertTrue("the .xbf file a model is saved as" in said or "a .step or .xbf" in said, said)
-                    for flags in ([], ["--json"]):
-                        code, out, err = _run(["xbf", operation, "no-such-file.xbf", *rest.get(operation, []), *flags])
-                        state = {"status": "usage"} if operation == "dfm" else {}
-                        self.assertEqual(code, 2)
-                        if flags:
-                            self.assertEqual((json.loads(out), err), ({"ok": False, "error": "no such file: "
-                                             "no-such-file.xbf", "reason": "not_found", **state}, ""))
-                        else:
-                            self.assertEqual((out, err), ("", f"cad xbf {operation}: no such file: no-such-file.xbf\n"))
 
-    def test_cad_xbf_reads_only_its_source_as_a_file_and_an_id_stays_the_model_s(self) -> None:
-        """A destination is no source: ``cad xbf export ID out.xbf`` is the export of what the engine holds,
-        however its destinations are spelled; and a file is handed on as the path it is."""
+    def test_an_xbf_reads_only_its_source_as_a_file_and_an_id_stays_the_model_s(self) -> None:
+        """A destination is no source: ``cad export ID out.xbf`` is the export of what the engine holds, however its
+        destination is spelled; and a file is handed on as the path it is."""
         from unittest import mock
 
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"
@@ -283,60 +265,26 @@ class TheCommandTable(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, mock.patch("cad_server.engine.cli.answered", answered):
             saved = str(Path(folder) / "arm.xbf")
             Path(saved).write_bytes(b"")
-            self.assertEqual(_run(["xbf", "export", ident, "share/arm.xbf"])[0], 0)
-            self.assertEqual(_run(["xbf", "export", saved, "arm.glb"])[0], 0)
-        self.assertEqual(asked, [(ident, ["share/arm.xbf"], "cad xbf export"), (saved, ["arm.glb"], "cad xbf export")])
+            self.assertEqual(_run(["export", ident, "share/arm.xbf"])[0], 0)
+            self.assertEqual(_run(["export", saved, "arm.glb"])[0], 0)
+        self.assertEqual(asked, [(ident, ["share/arm.xbf"], "cad export"), (saved, ["arm.glb"], "cad export")])
 
     def test_a_types_own_option_before_its_file_is_no_file(self) -> None:
-        """``--urdf robot.urdf`` is srdf validate's own option, wherever it stands: the file it validates is
-        the one the parser takes as its file, never the first word without a dash."""
-        import tempfile
-        from pathlib import Path
-
+        """``--urdf robot.urdf`` is an SRDF check's own option, wherever it stands: the file it checks is the one the
+        parser takes as its file, never the first word without a dash."""
         with tempfile.TemporaryDirectory() as folder:
             urdf, srdf = Path(folder) / "robot.urdf", Path(folder) / "robot.srdf"
             urdf.write_text('<robot name="r"><link name="a"/></robot>', encoding="utf-8")
             srdf.write_text('<robot name="r"><group name="arm"><link name="a"/></group></robot>', encoding="utf-8")
-            for argv in (["srdf", "validate", "--urdf", str(urdf), str(srdf)],
-                         ["srdf", "validate", str(srdf), "--urdf", str(urdf)]):
+            for argv in (["inspect", "--urdf", str(urdf), str(srdf)], ["inspect", str(srdf), "--urdf", str(urdf)]):
                 with self.subTest(argv=argv):
                     code, said, err = _run([*argv, "--json"])
-                    self.assertNotIn("is a urdf, not a srdf", said + err)
+                    self.assertNotIn("is a urdf", said + err)
                     self.assertIn('"path"', said)
-            code, said, _ = _run(["srdf", "validate", "--urdf", str(urdf), str(urdf), "--json"])
+            # A URDF's inspection is its own check, which takes no --urdf.
+            code, said, _ = _run(["inspect", "--urdf", str(urdf), str(urdf), "--json"])
             self.assertEqual(2, code)
-            self.assertIn("is a urdf, not a srdf", said)
-
-    def test_an_operation_a_type_lacks_names_the_ones_it_has(self) -> None:
-        # Said as an unknown command is: one line, at most one suggestion, and where the operations are told,
-        # never the type's whole help after it; a type named with no operation at all shows its help.
-        code, out, err = _run(["stl", "inspect", "part.stl"])
-        self.assertEqual((code, out), (2, ""))
-        self.assertEqual(err, "cad stl: cad stl has no operation 'inspect'; it has export, snapshot, dfm; "
-                              "'cad stl --help' says what each does\n")
-        code, out, err = _run(["step", "exprt", "--json"])
-        self.assertEqual((code, err), (2, ""))
-        self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": (
-            "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, interference, "
-            "solve, ranges; "
-            "'cad step --help' says what each does")})
-        self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
-        code, out, err = _run(["stl"])
-        self.assertEqual((code, out), (2, ""))
-        self.assertTrue(err.startswith("cad stl: cad stl needs an operation\n\nusage: cad stl <operation> FILE"), err)
-
-    def test_the_old_spellings_are_commands_that_never_existed(self) -> None:
-        for argv in (["export", "a.xbf", "a.step"], ["snapshot", "a.xbf", "a.png"], ["inspect", "a.xbf"]):
-            with self.subTest(argv=argv):
-                code, _, err = _run(argv)
-                self.assertEqual(2, code)
-                self.assertIn(f"cad: unknown command {argv[0]!r}", err)
-        # The operations named for what they do: the old shared ``check`` is an operation no type has.
-        for argv in (["urdf", "check", "robot.urdf"], ["stl", "check", "part.stl"], ["kicad_pcb", "check", "b.kicad_pcb"]):
-            with self.subTest(argv=argv):
-                code, _, err = _run(argv)
-                self.assertEqual(2, code)
-                self.assertIn(f"cad {argv[0]} has no operation 'check'; it has ", err)
+            self.assertIn("unrecognized arguments: --urdf", said)
 
 
 _MJCF = ('<mujoco model="arm"><worldbody><body name="a"><joint name="j" type="hinge" range="-90 90"/>'
@@ -358,18 +306,19 @@ class MujocoCheck(unittest.TestCase):
         self.model.write_text(_MJCF, encoding="utf-8")
 
     def test_the_command_table_names_the_integration_apart_from_the_types(self) -> None:
-        self.assertEqual({"mujoco": "cad_server.cli.mujoco", "orcaslicer": "cad_server.cli.orcaslicer"},
+        self.assertEqual({"kicad": "cad_server.cli.kicad", "mujoco": "cad_server.cli.mujoco"},
                          cli.INTEGRATION_COMMANDS)
-        self.assertFalse(set(cli.INTEGRATION_COMMANDS) & set(cli.TYPE_COMMANDS), "a name is a type's or an integration's")
+        self.assertFalse(set(cli.INTEGRATION_COMMANDS) & set(DOCUMENT_TYPES), "a name is a type's or an integration's")
         self.assertEqual(("mujoco check", ["arm.xml"]), cli.resolve(["mujoco", "check", "arm.xml"]))
+        self.assertEqual(("kicad drc", ["b.kicad_pcb"]), cli.resolve(["kicad", "drc", "b.kicad_pcb"]))
         self.assertIsNone(cli.resolve(["mujoco", "validate", "arm.xml"]))
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
-        self.assertIn("integrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
-                      "<operation> [FILE]):\n  mujoco  check  compile a MuJoCo model", said)
-        # A deprecated integration's commands still run (the 30 days a command the skills used is kept) and are
-        # no longer listed: `cad orcaslicer`, deprecated (a project saved from OrcaSlicer's app slices as it is).
-        self.assertNotIn("orcaslicer", said.split("integrations, for a tool's own files", 1)[1])
+        self.assertIn("integrations, a tool's own operations on its files (cad <integration> <operation> FILE):\n"
+                      "  kicad   drc, erc  KiCad's design rule check of a board (.kicad_pcb); KiCad's electrical rules "
+                      "check of a schematic (.kicad_sch)\n  mujoco  check     compile a MuJoCo model", said)
+        # A deprecated integration has no command: `cad orcaslicer` answers with what to do instead (test_cli).
+        self.assertNotIn("orcaslicer", said.split("integrations, a tool's own operations", 1)[1])
         code, said, _ = _run(["mujoco", "--help"])
         self.assertEqual(0, code)
         self.assertIn("usage: cad mujoco <operation> FILE [options]", said)
@@ -378,15 +327,6 @@ class MujocoCheck(unittest.TestCase):
         code, _, err = _run(["mjcf", "validate", str(self.model)])
         self.assertEqual((code, err), (2, "cad: unknown command 'mjcf' (did you mean 'mujoco'?); 'cad --help' lists the "
                                           "commands\n"))
-
-    def test_a_deprecated_integration_still_runs_and_says_so_once_on_stderr(self) -> None:
-        line = "cad orcaslicer: deprecated and will be removed: "
-        with tempfile.TemporaryDirectory() as folder:
-            _, _, err = _run(["orcaslicer", "presets", "machine", "--profiles", folder])
-            self.assertEqual(err.count(line), 1, err)
-            # A program's reply stays one document: under --json nothing is said beside it.
-            _, _, err = _run(["orcaslicer", "presets", "machine", "--profiles", folder, "--json"])
-            self.assertNotIn(line, err)
 
     def test_the_parser_is_the_generated_one(self) -> None:
         from cad_server.cli.integrations import build_parser
@@ -402,7 +342,7 @@ class MujocoCheck(unittest.TestCase):
                 (["mujoco", "chek", "arm.xml"], "cad mujoco: cad mujoco has no operation 'chek' (did you mean 'check'?); "
                                                 "it has check; 'cad mujoco --help' says what each does\n"),
                 (["mujoco", "check", "arm.urdf"], "cad mujoco check: arm.urdf is a urdf, not a file cad mujoco check "
-                                                  "takes (.xml or .mjcf): use cad urdf validate\n"),
+                                                  "takes (.xml or .mjcf): cad inspect takes it\n"),
                 (["mujoco", "check", "notes.txt"], "cad mujoco check: notes.txt is not a file cad mujoco check takes: "
                                                    "it takes .xml or .mjcf\n"),
                 (["mujoco", "check", "nowhere.xml"], "cad mujoco check: no such file: nowhere.xml\n")):
@@ -437,76 +377,34 @@ class MujocoCheck(unittest.TestCase):
         self.assertEqual([("/env/mujoco/python", "mujoco", "check", [str(self.model.resolve())], {"strict": True})], calls)
 
 
-# What `cad orcaslicer ...` runs, in a process of its own: the preset folders are the test's alone (the app's own
-# profiles left out), and it says what it loaded of cad's and whether the engine's folder was made.
-_ORCASLICER = """
-import json, os, sys
-before = set(sys.modules)
-from cad.orcaslicer import _presets
-_presets.app_profiles = lambda: []
-import cad_server.cli as cli
-code = cli.main(sys.argv[1:])
-loaded = sorted(name for name in set(sys.modules) - before if name.split(".")[0] in ("OCP", "build123d", "socket")
-                or name.startswith("cad.engine"))
-print(json.dumps({"code": code, "loaded": loaded, "engine": os.path.exists(os.environ["CAD_ENGINE_DIR"])}),
-      file=sys.stderr)
-"""
 
 
-class OrcaslicerCommands(unittest.TestCase):
-    """``cad orcaslicer presets`` and ``complete``: an integration's operations on its tool's own files found by
-    name, no FILE. The integration has no extra, so they run in the command's own process: no engine, no kernel,
-    no environment made."""
+class KicadChecks(unittest.TestCase):
+    """``cad kicad drc BOARD`` and ``cad kicad erc SCHEMATIC``: KiCad's own checks, the kicad integration's operations
+    (``cad.kicad.drc``, ``cad.kicad.erc``), each of its own kind of file. What they find is the KiCad suite's
+    (``tests/python/packages/kicad``); here, what each takes and refuses."""
 
-    def test_the_presets_are_listed_and_written_complete_in_the_command_s_own_process(self) -> None:
-        import os
-        import subprocess
-        import sys
-        import tempfile
-        from pathlib import Path
+    def test_each_takes_its_own_kind_of_file_and_names_the_other(self) -> None:
+        for argv, words in (
+                (["kicad", "drc", "sheet.kicad_sch"], "cad kicad drc: sheet.kicad_sch is not a file cad kicad drc takes "
+                                                      "(.kicad_pcb): cad kicad erc checks it\n"),
+                (["kicad", "erc", "board.kicad_pcb"], "cad kicad erc: board.kicad_pcb is not a file cad kicad erc takes "
+                                                      "(.kicad_sch): cad kicad drc checks it\n"),
+                (["kicad", "drc", "part.step"], "cad kicad drc: part.step is a step, not a file cad kicad drc takes "
+                                                "(.kicad_pcb): cad dfm takes it\n"),
+                (["kicad", "drc", "nowhere.kicad_pcb"], "cad kicad drc: no such file: nowhere.kicad_pcb\n"),
+                (["kicad", "check", "board.kicad_pcb"], "cad kicad: cad kicad has no operation 'check'")):
+            with self.subTest(argv=argv):
+                code, out, err = _run(argv)
+                self.assertEqual((code, out), (2, ""))
+                self.assertTrue(err.startswith(words), err)
 
-        from tests.python.support.paths import SOURCE_PATH
+    def test_the_parsers_are_the_generated_ones(self) -> None:
+        from cad_server.cli.integrations import build_parser
 
-        with tempfile.TemporaryDirectory() as scratch:
-            root = Path(scratch)
-            for relative, preset in (
-                    ("Acme/machine/acme.json", {"type": "machine", "name": "Acme One 0.4 nozzle", "from": "system",
-                                                "instantiation": "true", "bed_shape": "0x0,200x200"}),
-                    ("Acme/process/fine.json", {"type": "process", "name": "0.20mm @Acme", "from": "system",
-                                                "instantiation": "true"}),
-                    ("Acme/filament/pla.json", {"type": "filament", "name": "Generic PLA", "from": "system",
-                                                "instantiation": "true"})):
-                (root / "profiles" / relative).parent.mkdir(parents=True, exist_ok=True)
-                (root / "profiles" / relative).write_text(json.dumps(preset), encoding="utf-8")
-            (root / "home").mkdir()
-            env = {key: value for key, value in os.environ.items() if key not in ("APPDATA", "XDG_CONFIG_HOME")}
-            env.update(PYTHONPATH=SOURCE_PATH, HOME=str(root / "home"), USERPROFILE=str(root / "home"),
-                       CAD_ENGINE_DIR=str(root / "engine"), CAD_STATE_DIR=str(root / "state"),
-                       CAD_CACHE_DIR=str(root / "cache"), CAD_UPDATE_CHECK="0", CAD_API_URL="http://127.0.0.1:9")
-
-            def cad(*argv: str) -> tuple[str, dict]:
-                done = subprocess.run([sys.executable, "-c", _ORCASLICER, "orcaslicer", *argv,
-                                       "--profiles", str(root / "profiles")],
-                                      capture_output=True, text=True, encoding="utf-8", env=env, cwd=root, timeout=60)
-                return done.stdout, json.loads(done.stderr.strip().splitlines()[-1])
-
-            said, ran = cad("presets", "machine", "--match", "ACME")
-            self.assertEqual(("Acme One 0.4 nozzle\n", {"code": 0, "loaded": [], "engine": False}), (said, ran))
-            said, ran = cad("complete", "--printer", "Acme One 0.4 nozzle", "--process", "0.20mm @Acme",
-                            "--filament", "Generic PLA", "--out", "presets", "--json")
-            self.assertEqual({"code": 0, "loaded": [], "engine": False}, ran)
-            out = (root / "presets").resolve()
-            self.assertEqual({"printer": str(out / "printer.json"), "process": str(out / "process.json"),
-                              "filaments": [str(out / "filament-1.json")]}, json.loads(said))
-            process = json.loads((out / "process.json").read_text(encoding="utf-8"))
-            self.assertEqual((["Acme One 0.4 nozzle"], "User"), (process["compatible_printers"], process["from"]))
-        code, said, _ = _run(["orcaslicer", "--help"])
-        self.assertEqual(0, code)
-        self.assertIn("usage: cad orcaslicer <operation> [options]", said)
-        self.assertIn("operations:\n  presets   ", said)
-        code, _, err = _run(["orcaslicer", "complete", "--process", "x", "--filament", "y"])
-        self.assertEqual(2, code)
-        self.assertIn("the following arguments are required: --printer", err)
+        for operation, file in (("drc", "BOARD"), ("erc", "SCHEMATIC")):
+            text = " ".join(build_parser("kicad", operation).format_help().split())
+            self.assertIn(f"usage: cad kicad {operation} [-h] [--json] {file}", text)
 
 
 if __name__ == "__main__":

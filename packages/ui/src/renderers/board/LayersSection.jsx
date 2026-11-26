@@ -43,7 +43,7 @@ function LayerEye({ id, hidden, onToggle, label = null }) {
  * one is pressed, KiCad's own, the copper facing the eye). A layer has nothing under it, so its one glyph is its
  * colour (KiCad's, in the view's theme: `plot2d/theme.js`, `kit/inspector/layerRows.jsx`). While the
  * panel's search is up, the layers whose names match, and nothing else. Everything here is the
- * board's Display (`plot2d/boardDisplay.js`), the one object `cad <type> snapshot --display` draws,
+ * board's Display (`plot2d/boardDisplay.js`), the one object `cad snapshot --display` draws,
  * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. Under the
  * layers, **Layer display** (the other layers, the pours, the opacities), as
  * KiCad's Appearance panel has them (`BoardDisplay.jsx`): how the board is drawn, changed now and then, so

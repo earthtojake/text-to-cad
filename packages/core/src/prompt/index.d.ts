@@ -24,7 +24,7 @@ export interface PromptDeliveryLedger {
 export declare function createPromptDeliveryLedger(options?: { maxPending?: number; maxRemembered?: number; busyMessage?: string }): PromptDeliveryLedger;
 /**
  * A Quick Edit's snapshot packet, made in the page from the views a prompt carries, its ink and a board's references,
- * shortened; `input` is the file's address as the message names it, `type` its document type (`cad <type> snapshot`).
+ * shortened; `input` is the file's address as the message names it, `type` its document type (`cad snapshot`).
  * Null without a view.
  */
 export declare function snapshotPacket(options: { input: string; type: string; views: readonly SnapshotView[];

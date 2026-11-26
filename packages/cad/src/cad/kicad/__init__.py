@@ -15,13 +15,15 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
   project symbol libraries loaded first), saved at the block's end when it was changed and not when the
   block raises, the server stopped and its folder removed; ``_drift``, the board's check at the save of the
   nets KiCad moved onto a pad's.
-* ``_check``: KiCad's design rule check (``cad.kicad_pcb.drc``, ``cad kicad_pcb drc``).
+* ``drc`` and ``erc``: KiCad's own checks, its design rule check of a board (``_check``) and its electrical
+  rules check of a schematic (``_schematic``), the integration's operations on its tool's files: ``cad kicad
+  drc BOARD`` and ``cad kicad erc SCHEMATIC``, one to one.
 * ``_export``: the board's fabrication, assembly and 3D outputs by ``kicad-cli`` (``EXPORTS``: gerbers,
-  drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.kicad_pcb.export`` and the server's ``cad
-  kicad_pcb export`` are written by.
+  drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.export(board, folder, to=...)`` and ``cad
+  export BOARD DIR --to KIND`` are written by.
 * ``_schematic``: a schematic's electrical rules check and its outputs (``EXPORTS``: pdf, svg, netlist,
-  bom) by ``kicad-cli``, from its project's root sheet (``cad.kicad_sch.erc`` and ``export``, ``cad
-  kicad_sch erc`` and ``export``).
+  bom) by ``kicad-cli``, from its project's root sheet (``erc``; ``cad.export(schematic, folder, to=...)``,
+  ``cad export SCHEMATIC DIR --to KIND``).
 * ``route`` (``_route``, its search in ``_routing``): copper for the connections an agent names, in the order
   it names them, written into the board a ``kicad_pcb.edit`` block has open: KiPy's board in, the copper out
   through it, every rule the board's own; it answers a ``Routed``.
@@ -32,6 +34,54 @@ reading and drawing a board need no KiCad. Importing this package starts nothing
 
 from __future__ import annotations
 
-from cad.kicad._route import Routed, route
+from pathlib import Path
 
-__all__ = ["Routed", "route"]
+from cad.kicad._route import Routed, route
+from cad.results import CheckResult
+
+__all__ = ["Routed", "drc", "erc", "route"]
+
+
+def _taken(path: Path | str, suffix: str, check: str) -> Path:
+    """``path`` as a check takes it, after refusing a file of another kind by name before anything runs."""
+    given = Path(path)
+    if given.suffix.lower() != suffix:
+        raise ValueError(f"cad.kicad.{check} checks a {suffix} file, not {str(path)!r}"
+                         + ("; a schematic's check is cad.kicad.erc" if given.suffix.lower() == ".kicad_sch" else
+                            "; a board's check is cad.kicad.drc" if given.suffix.lower() == ".kicad_pcb" else ""))
+    return given
+
+
+def drc(board: Path) -> CheckResult:
+    """Check the KiCad board BOARD with KiCad's design rule check.
+
+    Runs ``kicad-cli pcb drc`` on the saved file with every severity reported
+    and lists each violation and unconnected item with where it is (millimetres
+    from the board's origin). The board fails when any error-severity violation
+    or any unconnected item exists; warnings are reported and do not fail it.
+    The result's ``measurements["drc"]`` is every finding as KiCad reported it,
+    each item with its uuid and position.
+
+    board: the .kicad_pcb to check (its .kicad_pro beside it carries the rules).
+    """
+    from cad.kicad._check import check
+
+    return check(_taken(board, ".kicad_pcb", "drc"))
+
+
+def erc(schematic: Path) -> CheckResult:
+    """Check the KiCad schematic SCHEMATIC with KiCad's electrical rules check.
+
+    Runs ``kicad-cli sch erc`` on the saved hierarchy (from its project's root sheet) with every
+    severity reported, and lists each violation with its sheet and where it is (millimetres on that
+    sheet's page). Beside KiCad's, a warning for every pin joined some other way besides, and every wire's
+    end, that lies on a wire's span with no junction there (``pin_on_wire_span``, ``wire_end_on_wire_span``):
+    KiCad joins them and its ERC passes. A pin whose one connection is a wire's span is KiCad's own straight
+    run through a pin (it saves a rail drawn to each pin as one wire across them), not a finding. The schematic
+    fails when any error-severity violation exists; warnings are reported and do not fail it.
+
+    schematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).
+    """
+    from cad.kicad._schematic import check
+
+    return check(_taken(schematic, ".kicad_sch", "erc"))

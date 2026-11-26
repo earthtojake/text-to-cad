@@ -4,7 +4,7 @@ set -euo pipefail
 # Build the server's non-Python runtime INTO ITS PACKAGE (packages/cad/src/cad_server/_runtime).
 #
 # The server ships two things it does not write in Python: the viewer's built client
-# (`cad viewer` serves it) and the one-file CAD app an agent host renders (`cad-mcp`
+# (`cad show` serves it) and the one-file CAD app an agent host renders (`cad-mcp`
 # serves it). (The OCCT parity bench's headless page of the viewer's scene
 # is not one of them: the engine's snapshots are OCCT's, so lib/snapshot_runtime.sh builds that
 # page into tmp/ when the bench asks for it, never into the wheel.)

@@ -396,8 +396,8 @@ it("a note on a pick hands over the view and its sheet, and no references: light
   note.textContent = 'Make R1 10k.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(copied.at(-1)).toContain('Snapshot JSON (`cad kicad_sch snapshot --job`)'));
-  // `cad kicad_sch snapshot --job` refuses a packet's references (a schematic's still lights none): a packet that named
+  await waitFor(() => expect(copied.at(-1)).toContain('Snapshot JSON (`cad snapshot --job`)'));
+  // `cad snapshot --job` refuses a packet's references (a schematic's still lights none): a packet that named
   // the pick would not draw.
   const packet = JSON.parse(/```json\n(.*)\n```/.exec(copied.at(-1)!)![1]);
   expect(packet.jobs).toEqual([expect.objectContaining({ display: { sheet: '/', border: true }, outputs: [expect.objectContaining({ label: 'current view' })] })]);

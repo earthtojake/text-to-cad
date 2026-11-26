@@ -37,6 +37,9 @@ FAMILY = [
         # family's front door now, so they inherit its purity rule.
         "urdf/__init__.py",
         "srdf/__init__.py",
+        # Their checks, what `cad inspect` of a URDF or an SRDF runs.
+        "urdf/_check.py",
+        "srdf/_check.py",
         "_internal/document_type.py",
         "_internal/aliases.py",
         "registry.py",
@@ -45,7 +48,7 @@ FAMILY = [
         "engine/urdf_source.py",  # the URDF (and SRDF) reader: the stills' and the payload's, stdlib only
         "engine/robot_model.py",  # the one articulation the readers make
     )
-] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf.py", "srdf.py")]
+]
 
 # Heavy roots that would break extraction-readiness. The packages themselves are allowed only
 # for the family's own light members (findings, xml_common, and each other).
@@ -80,12 +83,15 @@ ALLOWED_CADGEN = {
     # (``cad.engine.ranges``, numpy) are imported in the function that sweeps.
     "cad._internal.ranges",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
+    # The verbs (``cad.inspect`` of a robot description among them): what each type does for each, stdlib only at
+    # import; each operation imported in the function that runs it.
+    "cad._internal.verbs",
     # A model's parameters (no robot type's): ``cad.xbf.param``, loaded on first use, and what a Save
     # checks and writes, stdlib only.
     "cad.engine.parameters",
     "cad._internal.refused",  # an argument refused by name (the command's exit 2): one ValueError, stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,
-    # ``cad urdf snapshot``), never by a check: imported in the function that dispatches to it.
+    # ``cad snapshot robot.urdf``), never by a check: imported in the function that dispatches to it.
     "cad.engine",
     "cad.engine.api",
     "cad.engine.model",
@@ -101,7 +107,7 @@ ALLOWED_CADGEN = {
     "cad.engine.mesh_uri",
 }
 
-# What importing the family must not drag in. `cad urdf validate` runs on machines with
+# What importing the family must not drag in. `cad inspect robot.urdf` runs on machines with
 # none of these installed.
 HEAVY_AT_IMPORT = ("OCP", "build123d", "playwright", "numpy", "ezdxf")
 

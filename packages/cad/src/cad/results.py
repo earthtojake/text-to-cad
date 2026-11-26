@@ -1,10 +1,10 @@
 """The operations' shared result types: what every check returns, typed.
 
-Every check -- ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``,
-``cad.kicad_pcb.drc``, ...) -- answers with a ``CheckResult`` (a stress study's, ``FeaResult``, one with its setup and
+Every check -- ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` (``cad.dfm``, ``cad.fea``, ``cad.kicad.drc``,
+``cad.inspect`` of a URDF, ...) -- answers with a ``CheckResult`` (a stress study's, ``FeaResult``, one with its setup and
 the files its solve wrote) -- whether it passed, the file, its findings, each with a severity, a code
 and a location, and what it measured, where it measures -- rather than a loose dict, so the library call
-and the CLI carry the SAME shape: ``cad <type> dfm --json`` is ``dataclasses.asdict`` of the value the library returned.
+and the CLI carry the SAME shape: ``cad dfm FILE --json`` is ``dataclasses.asdict`` of the value the library returned.
 A check has three states (``CheckResult.status``): ``ok``, ``failed`` and ``not_checked`` -- it did not judge
 what it was asked to, which is never a pass; ``ok`` is true for the first alone.
 ``ValidationResult`` and ``ValidationIssue``, their 0.10 names, are aliases that take the 0.10 call shapes

@@ -130,14 +130,14 @@ class CoreAndBaseTest(unittest.TestCase):
         again = self.run_cadgen("run", "model.py", cwd=project)
         self.assertEqual((again.returncode, self.caller(again)), (0, made), again.stderr)
         self.assertEqual(self.asked(), ["venv", "pip"], "made once: nothing asked of uv again")
-        status = json.loads(self.run_cadgen("status", "--json", cwd=project).stdout)
+        status = json.loads(self.run_cadgen("server", "status", "--json", cwd=project).stdout)
         self.assertEqual(Path(status["prefix"]).resolve(), self.core.resolve(), "the engine runs the core")
 
         # The engine's own kernel processes: the documents worker exports a file, the pool measures it.
-        exported = self.run_cadgen("xbf", "export", "XBF/part.xbf", "out.stl", cwd=project)
+        exported = self.run_cadgen("export", "XBF/part.xbf", "out.stl", cwd=project)
         self.assertEqual(exported.returncode, 0, exported.stderr)
         self.assertGreater((project / "out.stl").stat().st_size, 0)
-        inspected = self.run_cadgen("xbf", "inspect", "XBF/part.xbf", "--json", cwd=project)
+        inspected = self.run_cadgen("inspect", "XBF/part.xbf", "--json", cwd=project)
         self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)  # --json says a failure on stdout
         self.assertAlmostEqual(json.loads(inspected.stdout)["summary"]["volume"], 120.0, places=3)
 

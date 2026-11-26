@@ -81,7 +81,7 @@ class State(enum.Enum):
 
 # The states a check can be stopped in: once it is in any other, it has ended.
 LIVE = (State.ASKED, State.WAITING, State.STARTING, State.MEASURING)
-STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
+STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad server stop` stops it): "
            "run the check again")
 SUPERSEDED = ("the document changed while its manufacturing check ran, so nothing of that check is kept or "
               "answered: run the check again")
@@ -468,7 +468,7 @@ class Runner:
                     self.running.pop(asked.same)
 
     def halt(self) -> None:
-        """Every check stopped as the engine stops (an update's drain, ``cad stop``): those waiting leave the
+        """Every check stopped as the engine stops (an update's drain, ``cad server stop``): those waiting leave the
         queue, the checks processes measuring are killed, all at once -- they hold nothing of anyone's, so nothing
         is waited for -- and their callers are told to run the check again (``api.Stopped``)."""
         with self.lock:

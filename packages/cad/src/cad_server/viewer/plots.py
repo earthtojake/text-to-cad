@@ -21,7 +21,7 @@ with the reason (``PlotError``).
   catalog entry) or why it has none -- read by the rules of ``cad.engine.formats.kicad.models3d`` (the board's folder, KiCad's 3D
   library, ``CAD_KICAD_3DMODELS``; STEP alone), afresh on every request (``stat`` alone), so a model file
   added, edited or removed is the next answer's.
-* ``drc``: ``cad kicad_pcb drc --json``'s ``CheckResult`` as data (``boards.drc``): ``ok``, ``path``,
+* ``drc``: ``cad kicad drc --json``'s ``CheckResult`` as data (``boards.drc``): ``ok``, ``path``,
   ``findings`` (each a severity, a code, a message and a location) and ``measurements.drc``, every finding
   as KiCad reported it -- ``check`` (violation, unconnected, parity), ``severity``, ``type``,
   ``description``, ``at`` ([x, y] mm in KiCad's frame, y down) and ``items``, each ``{uuid, description,

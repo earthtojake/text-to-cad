@@ -727,14 +727,13 @@ def prepare(document: Any, kind: str | None, path: Any, tolerance: float | None 
     why = refused(source.path, path) if source.mesh and source.path is not None else None
     if why:
         raise ExportRefused(why)
-    # A file read: an xbf already is the document. A build's own document (``live``), whose path is the .xbf
-    # its model saves it as, is written as any export of it is, as its held bytes are once its worker is gone.
+    # A file read: an .xbf to another .xbf is a copy of its document (``cad export a.xbf b.xbf``), never over its
+    # own file. A build's own document (``live``), whose path is the .xbf its model saves it as, is written as any
+    # export of it is, as its held bytes are once its worker is gone.
     if (kind == "xbf" and not source.live and not source.foreign and source.path is not None
-            and source.path.suffix.lower() == ".xbf"):
-        if source.migration is None:
-            raise ExportRefused("an xbf is not written from another xbf: the document already is one")
-        if path.resolve() == source.path.resolve():
-            raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
+            and source.path.suffix.lower() == ".xbf" and source.migration is not None
+            and path.resolve() == source.path.resolve()):
+        raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
     if (tolerance is not None or angle is not None) and source.mesh:
         raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance or angle "
                             "meshes it again")

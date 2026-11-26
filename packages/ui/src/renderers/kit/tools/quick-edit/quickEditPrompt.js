@@ -6,7 +6,7 @@ import { subjectReference } from "../../shell/promptContext.js";
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
 const pathOf = resource => resource.kind === "url" ? new URL(resource.url).pathname : resource.path;
 const stemOf = resource => stem(pathOf(resource));
-// What draws the packet again: the file's document type's snapshot (`cad <type> snapshot`), the type read off
+// What draws the packet again: the file's document type's snapshot (`cad snapshot`), the type read off
 // the registry by the extension of the file the view shows; a model's document, which has no file of its own, is
 // the xbf's.
 const typeOf = path => {
@@ -90,7 +90,7 @@ export function createQuickEditContext({ resource, references = [], text, snapsh
       input: promptAddress(file.resource, where && typeof where === "object" ? where : null) }));
     packet.catch(() => {});
     parts.push({ id: "snapshot", kind: "attachment", name: `${stemOf(resource)}-snapshot.json`, mimeType: "application/json",
-      inlineText: packet.then(json => `Snapshot JSON (\`cad ${type} snapshot --job\`):\n\`\`\`json\n${json}\n\`\`\``),
+      inlineText: packet.then(json => `Snapshot JSON (\`cad snapshot --job\`):\n\`\`\`json\n${json}\n\`\`\``),
       content: lazy(() => packet.then(json => new Blob([json], { type: "application/json" }))), about: ["file"] });
   }
   return createPromptContext(parts, undefined, folders ? { folders } : {});

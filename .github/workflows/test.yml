@@ -591,7 +591,7 @@ jobs:
         timeout-minutes: 5
         run: uv sync --locked --inexact --group fea
 
-      - name: Solve a cantilever through cad step solve
+      - name: Solve a cantilever through cad fea
         timeout-minutes: 4
         run: |
           python -c "from cad._internal.fea.mesh import require_fea_stack; require_fea_stack()"

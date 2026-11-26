@@ -403,7 +403,7 @@ function SchematicSurface({ view, data }) {
   useEffect(() => { handlers.hover(null, null); }, [toolMode, handlers]);
 
   // The view on screen as a prompt carries it: the plan view's camera, the pane's shape, and the sheet shown,
-  // which `cad kicad_sch snapshot --display` draws again: light, whatever the viewer's theme, as every snapshot is,
+  // which `cad snapshot --display` draws again: light, whatever the viewer's theme, as every snapshot is,
   // and on the whole drawing sheet the viewer shows (`border`: its frame and zone labels with the title block).
   const currentView = useCallback(() => {
     const current = viewRef.current, size = current?.sizeRef.current;
@@ -487,7 +487,7 @@ function SchematicSurface({ view, data }) {
     capture,
     thumbnail
   };
-  // A note's packet names no references: `cad kicad_sch snapshot --job` lights none yet (a board's alone does), and
+  // A note's packet names no references: `cad snapshot --job` lights none yet (a board's alone does), and
   // refuses a packet that names them. The note itself still names every pick.
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,

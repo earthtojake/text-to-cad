@@ -1,5 +1,5 @@
 """cadgen's telemetry: usage counts and crash reports from the processes that do CAD's work --
-``cad-mcp`` (the CAD app in an agent app), ``cad viewer`` (the browser viewer), every ``cadgen``
+``cad-mcp`` (the CAD app in an agent app), ``cad show`` (the browser viewer), every ``cadgen``
 command, whose exports and snapshots the engine runs, and the engine's daemon, which counts the model builds
 it answers (a model's own process counts nothing): how many people use
 CAD, how often, what they make, how it goes and where cadgen's own code fails -- counts, times,
@@ -92,7 +92,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
-force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``cad <type> export`` or
+force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``cad export`` or
 ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of them, and each model build the
 daemon answers (a ``python model.py``, a ``Model.build()``) by the daemon, under its asker's environment
 (``cad_server._internal.engine_telemetry``). Whichever process takes it sends it as a batch of its own,
@@ -384,7 +384,7 @@ KINDS = frozenset({"model", *FILE_KINDS.values()})  # a live model, or an actual
 # commands counted (``cad_server._internal.telemetry_send``).
 PROCESSES = frozenset({"app", "viewer", "cli"})
 # Who asked for a build: a model script (``python model.py``, or a Python caller's ``Model.build()``) or a
-# ``cadgen`` command (``cad <type> export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
+# ``cadgen`` command (``cad export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
 # source text (``cadgen build``); the receiver reads it still, as it reads every schema a release sent.
 VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its

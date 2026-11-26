@@ -68,7 +68,7 @@ class StoreTest(unittest.TestCase):
         self.assertEqual(self.define(source, str(saved)).name, "cell")
         self.assertFalse(hasattr(self.define(source, str(saved)), "store"), "no store to choose")
         for nowhere in ("<stdin>", str(folder / "ipykernel_1" / "2.py")):  # a REPL's, a notebook cell's
-            with self.subTest(file=nowhere), self.assertRaisesRegex(ValueError, r"xbf\(shape, name='cell'\)"):
+            with self.subTest(file=nowhere), self.assertRaisesRegex(ValueError, r"cad\.save\(shape, 'cell\.xbf'\)"):
                 self.define(source, nowhere)
         # store= is gone: an unexpected keyword argument, as any name that never was (law 14).
         for given in ("@model(store='memory')", "@model('XBF/cell.xbf', store='memory')"):

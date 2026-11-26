@@ -7,14 +7,14 @@ step`` is one object that is
 * the type's decorator, where it has one: ``@step("out.step")`` declares a model's file (bare ``@step``,
   ``<name>.step`` beside the script), and ``@xbf`` the model's ``.xbf``;
 * its reader, where it has one: ``step.read(path)``;
-* its operations, one to one with the ``cad`` command's (``cad step export``): ``.export`` and
-  ``.snapshot``, shared by every type that has them, ``.inspect``, and those named for what they do
-  (a 3D type's ``.dfm``, the manufacturing check, ``cad._internal.manufacturing``; a B-rep type's ``.solve``,
-  the stress study, ``cad._internal.fea.operation``, and ``.ranges``, its mechanism's joint stops,
-  ``cad._internal.ranges``; a board's ``.drc``, a
-  schematic's ``.erc``, a robot description's ``.validate``, each the type's own function), each where
-  the type implements it;
 * the vocabulary its own standard defines, where that takes no third-party objects.
+
+What is done to a document is a verb's, the library's and the command's alike: ``cad.export``, ``cad.inspect``,
+``cad.snapshot``, ``cad.dfm`` and ``cad.fea`` (``cad._internal.verbs``), ``cad.save`` a shape's ``.xbf``. A
+type's operations under its own name (``cad.step.export``, ``cad.stl.dfm``, ``cad.urdf.validate``,
+``cad.kicad_pcb.drc``) are their earlier spellings, aliases of the verbs (``verbs.per_type``), as is a file
+type's call given a shape (``step(shape, "crate.step")`` is ``cad.export``'s, ``xbf(shape, "crate.xbf")``
+``cad.save``'s): each answers as before and says once that it is deprecated (``cad._internal.aliases``).
 
 Everything loads on first use: ``import cad`` imports no CAD kernel. A source of another type is
 refused by name before anything runs: a file of another type (``cad.stl.export("part.glb", ...)``: that's
@@ -34,8 +34,6 @@ from typing import Any
 
 __all__ = ["DocumentType", "XbfType", "bind", "is_file", "refuse_other"]
 
-# An operation a type does not implement, read as one that needs no integration.
-_NONE = types.SimpleNamespace(integration=None, family=None)
 # A type's reader: the function that reads a file of it into a model. ``xbf``'s reads the .xbf a model is
 # saved as.
 _READERS = {"step": "cad.engine.model.read_step", "xbf": "cad.engine.model.read_xbf",
@@ -62,9 +60,13 @@ class DocumentType(types.ModuleType):
         if not entry.decorator:
             how = (f"; a file of it is changed in place with `with cad.{entry.id}.edit(path) as {entry.edit.noun}:`"
                    if entry.edit is not None else "")
-            raise TypeError(f"cad.{entry.id} has no decorator: a {entry.title} is authored, not made by a model"
-                            f"{how} (its operations: {', '.join(entry.operation_names)})")
+            raise TypeError(f"cad.{entry.id} has no decorator: a {entry.title} is authored, not made by a model{how}")
         from cad.engine import model
+
+        if model._given(target, file, out)[2] is not None:
+            from cad._internal.aliases import spelled
+
+            spelled(f"cad.{entry.id}(shape, ...)", f"cad.export(shape, 'part{entry.suffix}')")
 
         # A GLB's, an STL's or a 3MF's own mesh tolerance and angle go to the engine's decorator, which alone
         # takes them.
@@ -78,36 +80,11 @@ class DocumentType(types.ModuleType):
             value = _resolve(_READERS[entry.id])
             self.__dict__[name] = value  # one object, every lookup: cad.read_step is cad.step.read
             return value
-        if name in ("export", "snapshot", "inspect") and name in entry.operation_names:
-            value = _operation(entry.id, name)
-            self.__dict__[name] = value
-            return value
-        if name == "dfm" and (entry.operation("dfm") or _NONE).family == "manufacturing":
-            # The manufacturing check every 3D type shares (``cad._internal.manufacturing``).
-            from cad._internal.manufacturing import dfm_for
+        from cad._internal.verbs import FORMER, per_type
 
-            value = dfm_for(entry.id)
-            self.__dict__[name] = value
-            return value
-        if name == "interference" and name in entry.operation_names:
-            # The interference check every B-rep type shares (``cad._internal.interference``).
-            from cad._internal.interference import interference_for
-
-            value = interference_for(entry.id)
-            self.__dict__[name] = value
-            return value
-        if name == "solve" and (entry.operation("solve") or _NONE).integration == "calculix":
-            # The stress study every B-rep type shares (``cad._internal.fea.operation``).
-            from cad._internal.fea.operation import solve_for
-
-            value = solve_for(entry.id)
-            self.__dict__[name] = value
-            return value
-        if name == "ranges" and "ranges" in entry.operation_names:
-            # The joint stops every type with a mechanism shares (``cad._internal.ranges``).
-            from cad._internal.ranges import ranges_for
-
-            value = ranges_for(entry.id)
+        if name in entry.operation_names or name in FORMER.get(entry.id, {}):
+            # An operation under the type's name: an alias of the verb that does it now, which says so once.
+            value = per_type(entry.id, name)
             self.__dict__[name] = value
             return value
         if name.startswith("__"):
@@ -118,15 +95,17 @@ class DocumentType(types.ModuleType):
             return lookup(self.__name__, name)
         except AttributeError:
             pass
-        has = [*(["read"] if entry.reader else []), *entry.operation_names, *self._declarations]
-        raise AttributeError(f"cad.{entry.id} has no {name!r}; it has {', '.join(has)}")
+        has = [*([entry.id] if entry.decorator else []), *(["read"] if entry.reader else []),
+               *(["edit"] if entry.edit is not None else []), *self._declarations]
+        raise AttributeError(f"cad.{entry.id} has no {name!r}; it has {', '.join(has) or 'no names of its own'}, and "
+                             f"cad.export, cad.inspect, cad.snapshot, cad.dfm and cad.fea take its files")
 
     #: What a script declares with the type beside its decorator, by name: none but the model's (``ModelType``).
     _declarations: tuple[str, ...] = ()
 
     def __dir__(self) -> list[str]:
         entry = self.entry
-        names = {*super().__dir__(), *entry.operation_names, *(["read"] if entry.reader else []), *self._declarations}
+        names = {*super().__dir__(), *(["read"] if entry.reader else []), *self._declarations}
         return sorted(name for name in names if not name.startswith("_") or name.startswith("__"))
 
     def __repr__(self) -> str:
@@ -151,17 +130,20 @@ def refuse_other(document_type: str, source: Any) -> str:
         named = parts(text)[0]  # a FILE#REF's file, a path that holds a '#' itself whole
         if is_id(named):
             if not entry.held:
-                raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: use cad.xbf")
+                raise ValueError(f"{text} is a model's document id, not a {entry.suffix} file: the verbs (cad.export, "
+                                 "cad.inspect, ...) take it as it is")
             return entry.id
         found = type_of(named)
         if found is not None and found.id != entry.id:
-            raise ValueError(f"{text} is a {found.id}, not a {entry.id}: use cad.{found.id}")
+            raise ValueError(f"{text} is a {found.id}, not a {entry.id}: the verbs (cad.export, cad.inspect, ...) take "
+                             "a file of any type")
         if found is None and entry.held:
-            raise ValueError(f"cad.xbf takes a model's handle, its document id (cad run SCRIPT.py prints it) or "
-                             f"an {entry.suffix} file, not {text!r}")
+            raise ValueError(f"cad.xbf takes a model's handle or the {entry.suffix} file a model is saved as, not "
+                             f"{text!r}")
         return entry.id
     if not entry.held:
-        raise ValueError(f"cad.{entry.id} takes a {entry.suffix} file; {_what(source)} is a model's: use cad.xbf")
+        raise ValueError(f"cad.{entry.id} takes a {entry.suffix} file; {_what(source)} is a model's: the verbs "
+                         "(cad.export, cad.inspect, ...) take it as it is")
     return entry.id
 
 
@@ -202,53 +184,16 @@ class XbfType(DocumentType):
     def __call__(self, target: Any = None, file: Any = None, /, *, out: Any = None,  # type: ignore[override]
                  name: str | None = None, animations: Any = None) -> Any:
         """``@xbf``, ``@xbf(name=...)`` or ``@xbf("XBF/arm.xbf")``: declare a model and the ``.xbf`` each
-        run saves it as, at its path relative to the script, else ``<name>.xbf`` beside it; ``xbf(shape,
-        name=...)`` (``xbf(shape, "crate.xbf", name=...)`` with a path): hand a shape over as a named model
-        (``cad.engine.model.model``)."""
+        run saves it as, at its path relative to the script, else ``<name>.xbf`` beside it
+        (``cad.engine.model.model``). A shape a program holds is saved as a model by ``cad.save(shape,
+        "plate.xbf")``."""
         from cad.engine import model
 
+        if model._given(target, file, out)[2] is not None:
+            from cad._internal.aliases import spelled
+
+            spelled("cad.xbf(shape, ...)", "cad.save(shape, 'part.xbf')")
         return model.model(target, file, out=out, name=name, animations=animations)
-
-
-def _operation(document_type: str, name: str) -> Any:
-    """``cad.<document_type>.<name>``: the engine's operation of that name (``cad.engine.api``), which takes any
-    source, for a source of this type alone (``refuse_other``). An export of a mesh to the other mesh kinds takes
-    no ``tolerance``, ``angle`` or ``zero``: only a document is meshed or described as a robot."""
-    from cad.engine import api
-    from cad.registry import DOCUMENT_TYPES
-
-    entry = DOCUMENT_TYPES[document_type]
-    verb = getattr(api, name)
-    meshed = name == "export" and entry.view == "document"
-
-    if name == "export" and not meshed:
-        def operation(source: Any, *destinations: Any, **options: Any) -> Any:
-            for option in ("tolerance", "angle", "zero"):  # a document's alone: a mesh is meshed by none, nor described
-                if option in options:
-                    raise TypeError(f"cad.{document_type}.export() got an unexpected keyword argument '{option}'")
-            refuse_other(document_type, source)
-            return verb(source, *destinations, **options)
-    else:
-        def operation(source: Any = None, *args: Any, **options: Any) -> Any:
-            refuse_other(document_type, source)
-            return verb(source, *args, **options)
-
-    operation.__name__ = operation.__qualname__ = name
-    operation.__module__ = f"cad.{document_type}"
-    # Its signature is the verb's, as ``help()`` and the library's reference say it: a mesh's export without
-    # the options it refuses.
-    import inspect
-
-    signature = inspect.signature(verb)
-    if name == "export" and not meshed:
-        signature = signature.replace(parameters=[parameter for parameter in signature.parameters.values()
-                                                  if parameter.name not in ("tolerance", "angle", "zero")])
-    operation.__signature__ = signature  # type: ignore[attr-defined]
-    # The verb's docstring without its indentation, which Python strips by itself only from 3.13: the same words on
-    # every Python the library runs on.
-    described = inspect.cleandoc(verb.__doc__ or "")
-    operation.__doc__ = f"cad.{document_type}.{name}: {entry.operation(name).summary}.\n\n{described}"
-    return operation
 
 
 def bind(module_name: str) -> None:

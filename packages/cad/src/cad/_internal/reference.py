@@ -5,11 +5,12 @@ its kind, its signature and its docstring.
 the site's copy to it, so the reference cannot drift from the code. What is public is what the package
 declares, never a guess:
 
-* the root's ``__all__`` (``__version__``, ``CadDeprecationWarning``) and its document types, one object each
-  (``cad.registry.DOCUMENT_TYPES``; an earlier spelling, an alias, is left out as the root's ``__all__``
-  leaves it out);
-* of each document type, what its registry entry gives it -- its decorator, its reader, its operations and its
-  edit -- and whatever else its package's own ``__all__`` names (``cad._internal.document_type``);
+* the root's ``__all__`` (``__version__``, ``CadDeprecationWarning``, the verbs: ``export``, ``inspect``, ...)
+  and its document types, one object each (``cad.registry.DOCUMENT_TYPES``; an earlier spelling, an alias, is left
+  out as the root's ``__all__`` leaves it out);
+* of each document type, what its registry entry gives it -- its decorator, its reader and its edit -- and whatever
+  else its package's own ``__all__`` names (``cad._internal.document_type``); its operations under its own name
+  are aliases of the verbs, left out as every alias is;
 * each integration's namespace (``cad.registry.INTEGRATIONS``, in its order, a deprecated one left out as
   ``cad --help`` leaves it out) and the names its ``__all__`` declares, a public submodule's
   (``cad.build123d.materials``) with its own ``__all__``.
@@ -361,18 +362,12 @@ def _type_members(entry: Any) -> list[dict[str, Any]]:
             maker = getattr(engine_model, entry.id)
             signature, doc = _runtime_signature(maker), _doc(maker.__doc__)
         members.append({"name": entry.id, "kind": "decorator", "signature": signature, "doc": doc})
-    names = [*(["read"] if entry.reader else []), *entry.operation_names, *(["edit"] if entry.edit else [])]
+    names = [*(["read"] if entry.reader else []), *(["edit"] if entry.edit else [])]
     names += sorted(set(getattr(owner, "__all__", ())) - set(names))
     for name in names:
         value = getattr(owner, name)
-        operation = entry.operation(name)
-        summary = operation.summary if operation is not None else None
-        doc = _doc(getattr(value, "__doc__", None))
-        head = f"cad.{entry.id}.{name}: {summary}."
-        if doc is not None and summary is not None and doc.startswith(head):
-            doc = _doc(doc[len(head):])  # the summary, said by its own field; the rest is the verb's, shared
-        members.append({"name": name, "kind": "function", "operation": operation is not None, "summary": summary,
-                        "signature": _runtime_signature(value), "doc": doc})
+        members.append({"name": name, "kind": "function", "signature": _runtime_signature(value),
+                        "doc": _doc(getattr(value, "__doc__", None))})
     return members
 
 
@@ -391,6 +386,10 @@ def as_docs() -> dict[str, Any]:
                           "doc": "The release of the library this is, as its distribution's metadata says it."})
             continue
         value = getattr(cad, name)
+        if inspect.isfunction(value):  # a verb, one to one with the command's (``cad export``)
+            names.append({"name": name, "kind": "function", "operation": name != "save",
+                          "signature": _runtime_signature(value), "doc": _doc(value.__doc__)})
+            continue
         names.append({"name": name, "kind": "class" if isinstance(value, type) else "object",
                       "bases": [base.__qualname__ for base in value.__bases__] if isinstance(value, type) else None,
                       "doc": _doc(value.__doc__)})

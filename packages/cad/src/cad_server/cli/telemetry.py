@@ -1,5 +1,5 @@
 """``cad telemetry`` -- show or change the usage stats and crash reports cad sends: from CAD's apps
-(``cad-mcp`` and ``cad viewer``) and its build daemon.
+(``cad-mcp`` and ``cad show``) and its build daemon.
 
 They are sent by default once a ``cad`` command has said so (``cad_server/analytics.py``). ``status`` (the
 default) says what is sent and why, and says that notice itself if no command has yet; ``on`` and ``off``

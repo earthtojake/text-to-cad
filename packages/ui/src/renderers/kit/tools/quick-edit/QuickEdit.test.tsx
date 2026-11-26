@@ -16,8 +16,8 @@ const camera = { position: [1684.7442631095366, -1260.5132201786464, 725.5995354
 const view = (label: string, display: Record<string, unknown> = {}) => ({ label, camera, display: { mode: 'solid', grid: false, ...display }, width: 1600, height: 1160 });
 // The snapshot packet a message carries, and the message before it.
 const packetOf = (message: string) => {
-  const block = /\nSnapshot JSON \(`cad (\w+) snapshot --job`\):\n```json\n(.*)\n```$/.exec(message);
-  return block ? { type: block[1], packet: JSON.parse(block[2]), text: message.slice(0, block.index) } : null;
+  const block = /\nSnapshot JSON \(`cad snapshot --job`\):\n```json\n(.*)\n```$/.exec(message);
+  return block ? { packet: JSON.parse(block[1]), text: message.slice(0, block.index) } : null;
 };
 
 function mount(host = testHost(), props: Record<string, unknown> = {}) {
@@ -149,7 +149,8 @@ it('copies the note with its references by their files\' absolute paths, and its
   const message = await copied;
   expect(packetOf(message)!.text).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
   // The page's packet: the file as `File:` names it, the view without a path to write, the ink shortened.
-  expect(packetOf(message)!.type).toBe('step');
+  // The command names no type: the packet's file's suffix says it.
+  expect(message).toContain('\nSnapshot JSON (`cad snapshot --job`):\n');
   expect(packetOf(message)!.packet).toEqual({ input: '/models/parts/bracket.step', jobs: [{
     camera: { position: [1684.744, -1260.513, 725.6], target: [59.422, 16.525, -110.28], up: [0, 0, 1], orthographicHalfHeight: 968.275 },
     display: { mode: 'solid', grid: false }, output: { padding: 0, tightFrame: false }, outputs: [{ label: 'view 1', width: 1600, height: 1160 }] }],
@@ -178,7 +179,7 @@ it("names the file as the host's prompts do where the host says how (a shared mo
   update({ references: [face], prompt: { snapshot: () => ({ views: [view('current view')], annotation: null }) } });
   const message = await copy();
   expect(packetOf(message)!.text).toBe(`Make it thicker.\n\nFile: ${link}\nReferences:\n${link}#base/f:base.extrude1.2`);
-  expect([packetOf(message)!.type, packetOf(message)!.packet.input]).toEqual(['step', link]);
+  expect(packetOf(message)!.packet.input).toBe(link);
 });
 
 it.each(['Copy Prompt', 'Queue', 'Send'])('%s reads the views and makes their packet only at the press, inline and named by no path', async action => {
@@ -195,7 +196,7 @@ it.each(['Copy Prompt', 'Queue', 'Send'])('%s reads the views and makes their pa
     const attachments = delivered[0].parts.filter((part: any) => part.kind === 'attachment');
     expect(attachments).toHaveLength(1);
     expect([attachments[0].path, attachments[0].label]).toEqual([undefined, undefined]);
-    expect(await attachments[0].inlineText).toMatch(/^Snapshot JSON \(`cad step snapshot --job`\):\n```json\n\{"input":"\/models\/parts\/bracket.step","jobs":\[/);
+    expect(await attachments[0].inlineText).toMatch(/^Snapshot JSON \(`cad snapshot --job`\):\n```json\n\{"input":"\/models\/parts\/bracket.step","jobs":\[/);
   }
 });
 
@@ -379,7 +380,7 @@ it.each(['Copy Prompt', 'Queue', 'Send'])('%s carries the packet inline whatever
   mount(host, { references: [face], prompt });
   write('Keep it.');
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
-  await waitFor(() => expect(message).toContain('Snapshot JSON (`cad step snapshot --job`):\n```json\n'));
+  await waitFor(() => expect(message).toContain('Snapshot JSON (`cad snapshot --job`):\n```json\n'));
   const { text, packet } = packetOf(message)!;
   expect(text).toBe('Keep it.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#base/f:base.extrude1.2');
   expect(new TextEncoder().encode(message).length).toBeGreaterThan(8 * 1024);
@@ -407,7 +408,7 @@ it.each(['Copy Prompt', 'Send'])('%s names every file from the workspace the hos
   fireEvent.click(within(box()!).getByRole('button', { name: action }));
   await waitFor(() => expect(message).toContain('Snapshot JSON'));
   expect(folders).toHaveBeenCalledTimes(1);
-  expect(message).toContain('File: twin_orbit.kicad_pcb\nReferences:\ntwin_orbit.kicad_pcb#R1\nSnapshot JSON (`cad kicad_pcb snapshot --job`):\n');
+  expect(message).toContain('File: twin_orbit.kicad_pcb\nReferences:\ntwin_orbit.kicad_pcb#R1\nSnapshot JSON (`cad snapshot --job`):\n');
   // A drawing's view has no 3D framing; its picture is named by its label alone.
   expect(message).toContain('{"input":"twin_orbit.kicad_pcb","jobs":[{"camera":{"position":[25,10,40],"target":[25,10,0],"up":[0,1,0],"orthographicHalfHeight":10},'
     + '"outputs":[{"label":"current view","width":1600,"height":1000}]}],"references":["#R1"]}');
@@ -451,7 +452,7 @@ it.each([
     const there = await quickEdit(shared, sharedFile, LINK, action);
     // The engine page's names the file three times, and only there: its `File:`, its reference's file, its packet's `input`.
     expect(here.split(address).length - 1).toBe(3);
-    expect(here).toContain(`File: ${address}\nReferences:\n${address}#bracket/f:bracket.extrude1.2\nSnapshot JSON (\`cad ${localFile.kind === 'cad-model' ? 'xbf' : 'step'} snapshot --job\`):`);
+    expect(here).toContain(`File: ${address}\nReferences:\n${address}#bracket/f:bracket.extrude1.2\nSnapshot JSON (\`cad snapshot --job\`):`);
     expect(here).toContain(`{"input":${JSON.stringify(address)},`);
     const addressed = here.replace(`File: ${address}\n`, `File: ${LINK}\n`).replace(`\n${address}#`, `\n${LINK}#`)
       .replace(`{"input":${JSON.stringify(address)},`, `{"input":${JSON.stringify(LINK)},`);

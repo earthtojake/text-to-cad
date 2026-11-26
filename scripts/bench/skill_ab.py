@@ -102,7 +102,7 @@ def exported(model: Path, scratch: Path) -> Path:
     try:
         built = subprocess.run([cad, "run", str(script)], env=env, check=True, capture_output=True, text=True)
         ids = [line.split("id:", 1)[1].strip() for line in built.stdout.splitlines() if line.strip().startswith("id:")]
-        subprocess.run([cad, "model", "export", ids[0], str(out)], env=env, check=True, capture_output=True)
+        subprocess.run([cad, "export", ids[0], str(out)], env=env, check=True, capture_output=True)
     finally:
         subprocess.run([cad, "server", "stop"], env=env, check=False, capture_output=True)
     return out

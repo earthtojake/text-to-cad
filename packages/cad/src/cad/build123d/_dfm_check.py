@@ -314,9 +314,9 @@ def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidate
 def dfm(shape: Any, *, process: str | None = None, candidates: bool = False, strict: bool = False,
         **options: Any) -> Any:
     """The manufacturing check of a live build123d ``shape`` (a part, or an assembly's every part), as
-    ``cad.step.dfm`` checks a file: ``process`` is ``cnc``, ``sheet``, ``molding`` or ``printing`` -- with
+    ``cad.dfm`` checks a file: ``process`` is ``cnc``, ``sheet``, ``molding`` or ``printing`` -- with
     none, the one the parts declare (``part.material = metals.aluminum(process=machined())``) -- and the
-    options are that process's, by the names ``cad.step.dfm`` takes (``tools=[3, 6]``, ``pull="z"``,
+    options are that process's, by the names ``cad.dfm`` takes (``tools=[3, 6]``, ``pull="z"``,
     ``technology="sla"``); ``candidates`` ranks molding's pulls or printing's orientations instead, and
     ``strict`` fails the check on a warning too. A ``CheckResult``: its ``status`` (``ok``, ``failed``,
     ``not_checked``), its findings at refs (``plate/face 7``), each rule's verdict with its figure and its

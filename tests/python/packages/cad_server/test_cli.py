@@ -34,10 +34,15 @@ class Registry(unittest.TestCase):
         # The viewer's backend is cad_server.viewer, reached through the front
         # door as a launcher for the shared engine. Registered by dotted module
         # name like everything else, so `cad --help` imports none of it.
-        for name in ("viewer",):
+        for name in ("show",):
             self.assertIn(name, cli._COMMANDS)
             module_name, _ = cli._COMMANDS[name]
-            self.assertTrue(module_name.startswith("cad_server.cli.viewer"), module_name)
+            self.assertTrue(module_name.startswith("cad_server.cli.show"), module_name)
+
+    def test_the_verbs_on_a_file_are_registered_and_listed(self):
+        for name in ("export", "inspect", "snapshot", "dfm", "fea"):
+            self.assertIn(name, cli._COMMANDS)
+            self.assertNotIn(name, cli._UNLISTED)
 
 
 class Dispatch(unittest.TestCase):
@@ -88,9 +93,10 @@ class Dispatch(unittest.TestCase):
 
         from cad.engine import places
 
-        for argv, expected in ((["doctor"], []), (["status"], ["tell"]), (["doctor", "--help"], []),
-                               (["status", "-h"], []), (["help", "doctor"], []), (["xbf", "export", "--help"], []),
-                               (["model", "help"], []), (["status", "--json"], []), (["run", "a.py", "--help"], [])):
+        for argv, expected in ((["doctor"], []), (["export", "a.step", "a.glb"], ["tell"]), (["doctor", "--help"], []),
+                               (["export", "-h"], []), (["help", "doctor"], []), (["export", "--help"], []),
+                               (["kicad", "help"], []), (["export", "a.step", "a.glb", "--json"], []),
+                               (["run", "a.py", "--help"], [])):
             with self.subTest(argv=argv):
                 calls = []
                 with mock.patch.object(places, "adopt_earlier", side_effect=lambda: calls.append("adopt") or []), \
@@ -123,13 +129,13 @@ class Dispatch(unittest.TestCase):
                 return subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
                                       capture_output=True, text=True, encoding="utf-8", timeout=120)
 
-            for argv in (["doctor", "--help"], ["help", "doctor"], ["status", "-h"], ["xbf", "export", "--help"],
-                         ["help", "step"], ["status", "--json"]):
+            for argv in (["doctor", "--help"], ["help", "doctor"], ["inspect", "-h"], ["export", "--help"],
+                         ["help", "export"], ["server", "status", "--json"]):
                 with self.subTest(argv=argv):
                     done = run(*argv)
                     self.assertEqual((done.returncode, done.stderr), (0, ""))
                     self.assertFalse(os.path.exists(state), os.listdir(state) if os.path.exists(state) else None)
-            done = run("status")
+            done = run("cache", "dir")
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertIn("cad now sends usage stats", done.stderr)
             self.assertTrue(os.path.isfile(os.path.join(state, "settings.json")))
@@ -157,10 +163,53 @@ class Dispatch(unittest.TestCase):
         self.assertEqual((code, out), (2, ""))
         self.assertEqual(err, "cad: unknown command 'nope'; 'cad --help' lists the commands\n")
         # At most one suggestion, never run; under --json the same failure as the contract's one document.
-        code, out, err = self._run(["stats", "--json"])
+        code, out, err = self._run(["expotr", "--json"])
         self.assertEqual((code, err), (2, ""))
-        self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": "unknown command 'stats' (did you "
-                                           "mean 'status'?); 'cad --help' lists the commands"})
+        self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": "unknown command 'expotr' (did you "
+                                           "mean 'export'?); 'cad --help' lists the commands"})
+
+    def test_a_spelling_the_command_had_runs_nothing_and_names_the_one_it_has_now(self):
+        # Old command lines are answered, never run: one line naming the new spelling, exit 2 (usage), and under
+        # --json that line as the contract's one document, nothing on stderr.
+        from unittest import mock
+
+        cases = {
+            ("xbf", "export", "a.xbf", "a.step"): "'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its options",
+            ("model", "inspect", "a.xbf"): "'cad model inspect' is 'cad inspect FILE' now; 'cad inspect --help' says its options",
+            ("step", "snapshot", "a.step", "a.png"): "'cad step snapshot' is 'cad snapshot FILE OUT.png' now; 'cad snapshot --help' says its options",
+            ("stl", "dfm", "a.stl"): "'cad stl dfm' is 'cad dfm FILE' now; 'cad dfm --help' says its options",
+            ("xbf", "interference", "a.xbf"): "'cad xbf interference' is 'cad inspect FILE --interference' now; 'cad inspect --help' says its options",
+            ("step", "ranges", "a.step"): "'cad step ranges' is 'cad inspect FILE --ranges' now; 'cad inspect --help' says its options",
+            ("step", "solve", "a.step"): "'cad step solve' is 'cad fea FILE' now; 'cad fea --help' says its options",
+            ("urdf", "validate", "r.urdf"): "'cad urdf validate' is 'cad inspect FILE' now; 'cad inspect --help' says its options",
+            ("srdf", "validate", "r.srdf"): "'cad srdf validate' is 'cad inspect FILE' now; 'cad inspect --help' says its options",
+            ("kicad_pcb", "drc", "b.kicad_pcb"): "'cad kicad_pcb drc' is 'cad kicad drc BOARD' now; 'cad kicad drc --help' says its options",
+            ("kicad_sch", "erc", "s.kicad_sch"): "'cad kicad_sch erc' is 'cad kicad erc SCHEMATIC' now; 'cad kicad erc --help' says its options",
+            ("kicad_pcb", "export", "b.kicad_pcb", "--to", "step", "-o", "out"): "'cad kicad_pcb export' is 'cad export FILE DIR --to KIND' now; 'cad export --help' says its options",
+            ("viewer", "a.step"): "'cad viewer' is 'cad show FILE|FOLDER' now; 'cad show --help' says its options",
+            ("status",): "'cad status' is 'cad server status' now; 'cad server --help' says its options",
+            ("stop",): "'cad stop' is 'cad server stop' now; 'cad server --help' says its options",
+            ("step",): "'cad step' is no command now: a verb takes the file, its type by its suffix (cad export, cad inspect, cad snapshot, cad dfm, cad fea); 'cad --help' lists them",
+        }
+        for argv, line in cases.items():
+            with self.subTest(argv=argv), mock.patch.object(cli, "_run", side_effect=AssertionError("ran")):
+                self.assertEqual(self._run(list(argv)), (2, "", f"cad: {line}\n"))
+                code, out, err = self._run([*argv, "--json"])
+                self.assertEqual((code, err), (2, ""))
+                self.assertEqual(json.loads(out), {"ok": False, "reason": "usage", "error": line})
+        code, _out, err = self._run(["orcaslicer", "presets", "machine"])
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith("cad: 'cad orcaslicer' is no command now: OrcaSlicer's own command line"), err)
+        # Bare `cad server`, which ran the server in its own process, runs nothing: the server's command asks the same
+        # table, and starts, stops and rotates nothing.
+        from cad.engine import client
+
+        with mock.patch.object(client, "make_way", side_effect=AssertionError("ran")), \
+                mock.patch.object(client, "start", side_effect=AssertionError("ran")):
+            for argv in (["server"], ["server", "--port", "4000"]):
+                with self.subTest(argv=argv):
+                    self.assertEqual(self._run(argv), (2, "", "cad server: 'cad server' alone is 'cad server start' "
+                                                              "now; 'cad server --help' says its forms\n"))
 
     def test_subcommand_argv_is_forwarded_untouched(self):
         """The dispatcher must not consume or reorder a subcommand's own flags."""

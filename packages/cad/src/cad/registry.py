@@ -13,8 +13,15 @@ content it provides. The **operations** are a closed set (``OPERATIONS``): ``exp
 shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
 ``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
 ``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint stops found from its geometry,
-``drc`` a board's design rule check, ``erc`` a schematic's electrical rules check, ``validate`` a robot
-description's conformance check.
+``validate`` a robot description's conformance check.
+
+The **verbs** are what the ``cad`` command and the library name them by (``VERBS``): ``cad <verb> FILE`` and
+``cad.<verb>``, one to one, each running the operation the file's type has for it -- ``cad export`` a type's
+``export``, ``cad inspect`` its ``inspect`` (a robot description's ``validate``; with ``--interference`` or
+``--ranges``, ``interference=`` or ``ranges=``, those checks: ``MODES``), ``cad snapshot``, ``cad dfm`` and
+``cad fea``, a B-rep type's ``solve`` (``operation_for``). KiCad's design rule check of a board and its
+electrical rules check of a schematic are the kicad integration's operations, ``drc`` and ``erc``
+(``cad kicad drc BOARD``, ``cad.kicad.drc``), named for its tool's own checks.
 
 ``xbf`` is the engine's own document: a file, its ``.xbf``, which names it (``by_extension(".xbf")`` is
 ``xbf``), and, where a model built from code made it, a document the engine also holds in its memory, addressed by
@@ -37,24 +44,33 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
-__all__ = ["ALIASES", "DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
+__all__ = ["ALIASES", "DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTEGRATION_OPERATIONS", "MODES",
+           "OPERATIONS", "PLATFORMS", "PROCESS_KINDS", "VERBS", "VIEWS", "DocumentTypeEntry",
            "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integration_help",
            "integrations_of",
-           "interference_check", "manufacturing_check", "platform_of", "producer_for", "producers_for",
-           "resolve", "type_of"]
+           "interference_check", "manufacturing_check", "operation_for", "platform_of", "producer_for",
+           "producers_for", "resolve", "type_of", "types_for"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
 #: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
-OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "drc", "erc", "validate")
-#: What an integration does to its tool's own files, which are no document type (files we check or write and
-#: never show): a closed set too. ``check`` takes one file and answers findings, as a type's check does
-#: (``cad.results.CheckResult``); ``presets`` lists the presets of one kind the tool's own folders hold, by name,
-#: and ``complete`` writes chosen ones complete for the tool's command line, answering the files it wrote (the
-#: orcaslicer integration's, whose presets are found by name, never handed over as a file).
-INTEGRATION_OPERATIONS = ("check", "presets", "complete")
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "validate")
+#: The verbs on a file, ``cad <verb> FILE`` and ``cad.<verb>``, each with the operations it runs, the first a
+#: file's type has (``operation_for``): ``inspect`` a robot description's ``validate``, ``fea`` the stress study.
+VERBS: Mapping[str, tuple[str, ...]] = MappingProxyType({
+    "export": ("export",), "inspect": ("inspect", "validate"), "snapshot": ("snapshot",), "dfm": ("dfm",),
+    "fea": ("solve",)})
+#: ``inspect``'s modes, each a flag of ``cad inspect`` (``--interference``, ``--ranges``) and a keyword of
+#: ``cad.inspect`` (``interference=True``), and the operation each runs.
+MODES: Mapping[str, str] = MappingProxyType({"interference": "interference", "ranges": "ranges"})
+#: What an integration does to its tool's own files: a closed set too. ``check`` takes one file and answers
+#: findings, as a type's check does (``cad.results.CheckResult``), as do ``drc`` and ``erc``, KiCad's own checks
+#: of a board and of a schematic, named as KiCad names them; ``presets`` lists the presets of one kind the tool's
+#: own folders hold, by name, and ``complete`` writes chosen ones complete for the tool's command line, answering
+#: the files it wrote (the orcaslicer integration's, whose presets are found by name, never handed over as a file).
+INTEGRATION_OPERATIONS = ("check", "drc", "erc", "presets", "complete")
 #: The integration operations that take a file of the tool's (``cad <integration> <operation> FILE``), whose
-#: suffixes the integration names (``files``).
-FILE_OPERATIONS = ("check",)
+#: suffixes the operation names (``Operation.files``), else the integration (``files``).
+FILE_OPERATIONS = ("check", "drc", "erc")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -85,6 +101,9 @@ class Operation:
     #: ``manufacturing``: the manufacturing check every 3D type shares (``cad._internal.manufacturing``).
     family: str | None = None
     engine: bool = False
+    #: An integration's operation on a file: the suffixes it takes, where they are not all its integration's
+    #: (``drc`` a board's, ``erc`` a schematic's); empty for one that takes them all, or no file.
+    files: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -109,15 +128,17 @@ class Integration:
     extra: str | None
     process: str
     probe: Probe | None = None
-    #: What it does to its tool's own files, which are no document type (``INTEGRATION_OPERATIONS``): ``cad
-    #: <integration> <operation>`` and ``cad.<integration>.<operation>``, one to one, as a type's are. A file
-    #: that has a document type has its operations there, never here; ``files`` are the suffixes its operations
-    #: on a file take (``FILE_OPERATIONS``), and an integration with none of those names none.
+    #: What it does to its tool's own files (``INTEGRATION_OPERATIONS``): ``cad <integration> <operation>`` and
+    #: ``cad.<integration>.<operation>``, one to one, as a verb's are. A file of no document type (a MuJoCo
+    #: model) has only these; a document type's file has its verbs, and an integration's check of it only where
+    #: that check is its tool's own, by its tool's name (KiCad's ``drc`` and ``erc``). ``files`` are the suffixes
+    #: its operations on a file take (``FILE_OPERATIONS``; each operation's own, ``Operation.files``, where they
+    #: differ), and an integration with none of those names none.
     operations: tuple[Operation, ...] = ()
     files: tuple[str, ...] = ()
-    #: Set where its operations are deprecated: what to do instead, in a line. They keep working while skill
-    #: text of the last 30 days uses them (the compatibility law's first tier), ``cad --help`` no longer lists
-    #: them, and a run says this line once on stderr.
+    #: Set where its operations are deprecated: what to do instead, in a line. Its command runs nothing: it answers
+    #: with this line (the compatibility law's first tier, ``cad_server.cli._hint``), and ``cad --help`` and the
+    #: reference list it nowhere.
     deprecated: str = ""
     modules: tuple[str, ...] = ()
     distributions: tuple[str, ...] = ()
@@ -165,6 +186,11 @@ class Integration:
 
     def operation(self, name: str) -> Operation | None:
         return next((operation for operation in self.operations if operation.name == name), None)
+
+    def files_of(self, name: str) -> tuple[str, ...]:
+        """The suffixes its operation ``name`` takes: the operation's own, else the integration's."""
+        found = self.operation(name)
+        return (found.files if found is not None and found.files else self.files) if found is not None else ()
 
 
 @dataclass(frozen=True)
@@ -352,9 +378,8 @@ _TYPES = (
         (Operation("export", "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, "
                              "step, glb, odb, ipc2581, pdf or dxf", "kicad"),
          Operation("snapshot", "draw it flat, as the viewer's board view does, into a PNG"),
-         Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
-         Operation("drc", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
-                   "kicad")), reader=True,
+         Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets")),
+        reader=True,
         edit=Edit("kicad", "board", "the open board, through KiCad's IPC API (kicode's KiPy)",
                   ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"))),
     DocumentTypeEntry(
@@ -363,8 +388,7 @@ _TYPES = (
         ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"),
         (Operation("export", "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder", "kicad"),
          Operation("snapshot", "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG"),
-         Operation("inspect", "what the schematic holds: its sheets, parts and nets; with a ref, what that names"),
-         Operation("erc", "KiCad's electrical rules check: errors fail it, warnings are said", "kicad")),
+         Operation("inspect", "what the schematic holds: its sheets, parts and nets; with a ref, what that names")),
         reader=True,
         edit=Edit("kicad", "schematic", "the open schematic, its project's symbol libraries loaded, through KiCad's IPC API "
                            "(kicode's KiPy)",
@@ -429,6 +453,11 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                                         "cad[kicad] in its header); or set CAD_KICAD_CLI to a kicad-cli of "
                                         "KiCad 9 or newer (a nightly's, 10.99, for kicad_pcb.edit and kicad_sch.edit)",
                     "CAD_KICAD_CLI"),
+        operations=(Operation("drc", "KiCad's design rule check of a board: errors and unconnected items fail it, "
+                                     "warnings are said", "kicad", files=(".kicad_pcb",)),
+                    Operation("erc", "KiCad's electrical rules check of a schematic: errors fail it, warnings are said",
+                              "kicad", files=(".kicad_sch",))),
+        files=(".kicad_pcb", ".kicad_sch"),
         modules=("kicode",), distributions=("kicode",),
         identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",),
         holds="KiCad's kicad-cli", download_mb=100),
@@ -537,6 +566,20 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
     return by_extension(name[dot:]) if dot > 0 else None
 
 
+def operation_for(verb: str, document_type: str, mode: str | None = None) -> str | None:
+    """The operation ``cad <verb> FILE`` (``cad.<verb>``) runs of a file of ``document_type`` -- with ``mode``,
+    ``inspect``'s check of that name (``MODES``) --, or None where the type has none."""
+    entry = DOCUMENT_TYPES[document_type]
+    names = (MODES[mode],) if mode is not None else VERBS[verb]
+    return next((name for name in names if name in entry.operation_names), None)
+
+
+def types_for(verb: str, mode: str | None = None) -> tuple[str, ...]:
+    """The document types ``cad <verb>`` takes a file of (with ``mode``, ``inspect``'s check of that name), in
+    the table's order."""
+    return tuple(entry.id for entry in _TYPES if operation_for(verb, entry.id, mode) is not None)
+
+
 @cache
 def _producers() -> tuple[Producer, ...]:
     # Each integration registers the producers it has; this is the one place they are gathered.
@@ -635,7 +678,9 @@ def integration_help(name: str) -> str:
     if entry.operations:
         lines.append(f"operations (on {', '.join(entry.files)}):" if entry.files else "operations:")
         width = max(len(operation.name) for operation in entry.operations)
-        lines.extend(f"  {operation.name.ljust(width)}  {operation.summary}" for operation in entry.operations)
+        lines.extend(f"  {operation.name.ljust(width)}  {operation.summary}"
+                     + (f" ({', '.join(operation.files)})" if operation.files and len(entry.files) > 1 else "")
+                     for operation in entry.operations)
     else:
         lines.append("operations: none of its own; the document types it serves have them")
     return "\n".join(lines)
@@ -663,10 +708,12 @@ def as_docs() -> dict[str, Any]:
     the site's copy (``--docs``) is held to this by the same parity test."""
     def operations(entry: Any) -> list[dict[str, Any]]:
         return [{"name": operation.name, "summary": operation.summary, "integration": operation.integration,
-                 "engine": operation.engine} for operation in entry.operations]
+                 "engine": operation.engine, "files": list(operation.files)} for operation in entry.operations]
 
     return {
         "operations": list(OPERATIONS),
+        "verbs": {verb: list(names) for verb, names in VERBS.items()},
+        "modes": dict(MODES),
         "integrationOperations": list(INTEGRATION_OPERATIONS),
         "views": list(VIEWS),
         "documentTypes": [

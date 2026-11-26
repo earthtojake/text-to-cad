@@ -6,4 +6,4 @@ I need a clamp bracket to hold a 25.4 mm tube, to be 3D printed. A base plate 70
 
 ## Expect
 
-Bounds 70 x 40 x 26 mm and volume 30,252 mm^3 (`cad xbf inspect`). A STEP and an STL, the STL with `--tolerance` in an export of its own (no refused export). A printing check run (`cad xbf dfm --process printing`), since the request names the process. The page link given.
+Bounds 70 x 40 x 26 mm and volume 30,252 mm^3 (`cad inspect`). A STEP and an STL, the STL with `--tolerance` in an export of its own (no refused export). A printing check run (`cad dfm --process printing`), since the request names the process. The page link given.

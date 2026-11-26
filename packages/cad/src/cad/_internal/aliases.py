@@ -8,6 +8,13 @@ every ``__all__`` and every document but this table and the migration guide; a t
 ``cadgen``, the library's earlier import name, is no entry of the table: its own module says so through
 ``warn`` when it is imported (``cadgen/__init__.py``).
 
+The document types' operations (``cad.xbf.export``, ``cad.step.dfm``, ``cad.kicad_pcb.drc``, ...) and the
+callable forms of the file types (``xbf(shape, "part.xbf")``, ``step(shape, "part.step")``) are aliases too:
+each answers as the verb that does it now (``cad.export``, ``cad.dfm``, ``cad.kicad.drc``; ``OPERATION_VERBS``),
+built where its type is (``cad._internal.verbs``, ``cad._internal.document_type``), and says so once per name per
+process through ``spelled``, where ``SPELLINGS_WARN``, the one switch, is on and a program called it -- never the
+library, the server or the transport calling one of its own.
+
 A build's stderr is the model's log, and a model's own process imports its script first, so the
 warning reaches the person or the agent who ran it: in their terminal, before the worker's build. That
 process owns the line: the worker that builds the program's models imports the same script again
@@ -27,7 +34,8 @@ from pkgutil import resolve_name as _resolve
 import warnings
 from typing import Any
 
-__all__ = ["CadDeprecationWarning", "MODULE_ALIASES", "NAME_ALIASES", "current", "lookup", "warn"]
+__all__ = ["CadDeprecationWarning", "MODULE_ALIASES", "NAME_ALIASES", "OPERATION_VERBS", "SPELLINGS_WARN", "current",
+           "lookup", "spelled", "warn"]
 
 
 class CadDeprecationWarning(FutureWarning):
@@ -43,11 +51,6 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
         "read_mesh": "cad.stl.read",
         "memo": "cad.build123d.memo",
         "paint": "cad.build123d.paint",
-        # 0.10's export, which took any source (a handle, an id, or a file): the engine's, so a 0.10
-        # exports.py keeps writing a file's exports too; a new one names its type's (cad.xbf.export, ...).
-        "export": "cad.engine.api.export",
-        "snapshot": "cad.engine.api.snapshot",
-        "inspect": "cad.engine.api.inspect",
     },
     # The 0.10 call shapes, each a CheckResult or a CheckFinding.
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
@@ -65,12 +68,8 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
                    "compile_findings": "cad.mujoco._compile.compile_findings"},
 }
 
-#: What the deprecation says to use instead, where the new path is not one object: the root's
-#: operations are each document type's now.
+#: What the deprecation says to use instead, where the new path is not one object.
 _ADVICE = {
-    "cad.export": "cad.xbf.export (a file's: cad.<document_type>.export, cad.step.export, ...)",
-    "cad.snapshot": "cad.<document_type>.snapshot (cad.xbf.snapshot, cad.stl.snapshot, ...)",
-    "cad.inspect": "cad.<document_type>.inspect (cad.xbf.inspect, cad.step.inspect, ...)",
     "cad.results.ValidationResult": "cad.results.CheckResult (findings=, each with location=)",
     "cad.results.ValidationIssue": "cad.results.CheckFinding (severity, code, message, location=, hint=)",
     "cad.flatten": "build123d's own calls: bd.Plane(face).to_local_coords(face) lays a face into XY, bd.offset "
@@ -105,6 +104,28 @@ MODULE_ALIASES: dict[str, str] = {
     "cad.model": "cad.xbf",
 }
 
+#: Whether the document types' operations and the file types' callable forms say they are deprecated (``spelled``):
+#: the one switch. Off, each answers as its verb does and says nothing.
+SPELLINGS_WARN = True
+
+#: ``operation -> what to use instead``: the verb each document type's operation is an alias of (``cad.xbf.export``
+#: is ``cad.export``'s), as its warning names it.
+OPERATION_VERBS: dict[str, str] = {
+    "export": "cad.export",
+    "snapshot": "cad.snapshot",
+    "inspect": "cad.inspect",
+    "dfm": "cad.dfm",
+    "interference": "cad.inspect(source, interference=True)",
+    "ranges": "cad.inspect(source, ranges=True)",
+    "solve": "cad.fea",
+    "validate": "cad.inspect",
+    "drc": "cad.kicad.drc",
+    "erc": "cad.kicad.erc",
+}
+
+# The library's, the server's and the transport's own modules: a spelling one of them calls is no program's.
+_OWN = ("cad", "cad_server", "cad_mcp")
+
 _WARNED: set[str] = set()
 # A module alias's module's own spec, kept while the import system stamps the alias's on it.
 _OWN_SPECS: dict[str, Any] = {}
@@ -135,6 +156,23 @@ def warn(old: str, new: str) -> None:
     found = frame.f_globals
     warnings.warn_explicit(message, CadDeprecationWarning, _shown(frame.f_code.co_filename), frame.f_lineno,
                            module=found.get("__name__", "<string>"), registry=found.setdefault("__warningregistry__", {}))
+
+
+def spelled(old: str, new: str, *, depth: int = 2) -> None:
+    """Say that ``old`` -- a document type's operation (``cad.step.dfm``) or a file type's callable form
+    (``cad.xbf(shape, ...)``) -- is deprecated, naming ``new``, once per process (``warn``), where
+    ``SPELLINGS_WARN`` is on and the frame ``depth`` above this one (the alias's caller) is a program's: never
+    one of the library's, the server's or the transport's own modules (``_OWN``), which call their own."""
+    if not SPELLINGS_WARN or old in _WARNED:
+        return
+    try:
+        caller = sys._getframe(depth)
+    except ValueError:
+        caller = None
+    name = str(caller.f_globals.get("__name__", "")) if caller is not None else ""
+    if name.split(".")[0] in _OWN:
+        return
+    warn(old, new)
 
 
 def _shown(filename: str) -> str:

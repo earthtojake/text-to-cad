@@ -1,6 +1,6 @@
 """A spec's parts, remembered: ``parts``, ``collisions``, ``fit`` and ``decompose`` on a spec ``spec`` made.
 
-A MuJoCo function chooses a part's collision by the part's label path, the path ``cad xbf inspect``
+A MuJoCo function chooses a part's collision by the part's label path, the path ``cad inspect``
 prints (``hinge/arm``): a last segment is enough where only one part ends in it (``arm``), and any
 trailing run of segments names the parts it ends; one that names two is refused with their full paths,
 and one that names none with the parts there (the first dozen: ``parts`` answers them all, for a function
@@ -170,7 +170,7 @@ def _one(part: Part, said: str) -> None:
 def _part(source: Source, part: Any, said: str) -> Part:
     """The part ``part`` names (the module docstring's label path), refused by name where it names none or two."""
     if not isinstance(part, str) or not part.strip("/"):
-        raise TypeError(f"{said}: a part's label path (as `cad xbf inspect` prints it), not {part!r}")
+        raise TypeError(f"{said}: a part's label path (as `cad inspect` prints it), not {part!r}")
     wanted = part.strip("/")
     if wanted in source.parts:
         return source.parts[wanted]

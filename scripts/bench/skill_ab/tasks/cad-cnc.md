@@ -6,4 +6,4 @@ Design a motor mount plate to be CNC machined from 6061 aluminium on a 3-axis mi
 
 ## Expect
 
-`cad xbf dfm <id> --process cnc --material aluminum --tools 3,6,10` exits 0 on the result. The pocket's corners carry a radius the 3 mm tool can cut, and the reply says so as a departure from the request. The material and its process are recorded on the part and the check's flags in the module docstring. The reply says that the M4 holes straddle the pocket's wall, which the check reports as four `cnc.partial_hole` warnings (each reaching 1.75 mm past the wall) unless the design was changed to clear them, and what to do about it. A STEP.
+`cad dfm <id> --process cnc --material aluminum --tools 3,6,10` exits 0 on the result. The pocket's corners carry a radius the 3 mm tool can cut, and the reply says so as a departure from the request. The material and its process are recorded on the part and the check's flags in the module docstring. The reply says that the M4 holes straddle the pocket's wall, which the check reports as four `cnc.partial_hole` warnings (each reaching 1.75 mm past the wall) unless the design was changed to clear them, and what to do about it. A STEP.

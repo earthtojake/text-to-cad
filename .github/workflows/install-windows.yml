@@ -386,7 +386,7 @@ jobs:
           Need $r 'cad run headed.py' @('(?m)^(built|took) \S+', 'bounds 33\D+20\D+5 mm')
 
       # 4. Option B: the user's own venv holds the library and their package; running its Python on
-      # a model builds through the device's installed server, and `cad status` names that Python.
+      # a model builds through the device's installed server, and `cad server status` names that Python.
       - name: A venv of the user's own (uv, Python 3.14), a model run by its Python (5.1)
         shell: powershell
         timeout-minutes: 20
@@ -418,10 +418,10 @@ jobs:
           Set-Location $dir
           $r = Invoke-Native $py model.py
           Need $r 'the venv Python on model.py' @('(?m)^built \S+', 'bounds 33\D+20\D+4 mm')
-          $status = Invoke-Cad status
-          if ($status.Code) { Fail "cad status exited $($status.Code)" }
+          $status = Invoke-Cad server status
+          if ($status.Code) { Fail "cad server status exited $($status.Code)" }
           if ($status.Text.IndexOf($py, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
-            Fail "cad status does not name the venv's Python, $py"
+            Fail "cad server status does not name the venv's Python, $py"
           }
 
       # 5. The page link of a build (step 1's) opens with its token and is refused without it.

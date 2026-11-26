@@ -364,7 +364,7 @@ finally:
         [trio] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "trio.xbf"]
         exported = self.base / "out" / "trio.xbf"
         exported.parent.mkdir()
-        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "xbf", "export", trio, str(exported)],
+        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "export", trio, str(exported)],
                                  cwd=self.base, env=self.env)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         for folder, name, parts in ((self.base / "XBF", "pair.xbf", 2), (exported.parent, "trio.xbf", 3)):
@@ -425,7 +425,7 @@ finally:
         self.assertEqual(ident, file_id(hub), "a model's id is its .xbf's")
         # The person's exports of a model, an .xbf and a STEP, and a copy of a model's own .xbf.
         for target in (exported, folder / "hub.step"):
-            done = run("-m", "cad_server.cli", "xbf", "export", ident, str(target))
+            done = run("-m", "cad_server.cli", "export", ident, str(target))
             self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         shutil.copyfile(arm, folder / "arm-copy.xbf")
         status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})

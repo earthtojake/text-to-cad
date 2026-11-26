@@ -37,7 +37,7 @@ class ViewerExportsTest(unittest.TestCase):
                     _export({**request, "source": {"script": str(script), "function": "part"},
                              "expected": {"digest": "old"}}, lambda _: None)
 
-    def test_a_planar_document_writes_its_dxf_and_no_xbf_of_an_xbf(self):
+    def test_a_planar_document_writes_its_dxf_and_an_xbf_a_copy_of_it(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()
             script = root / "plate.py"
@@ -48,9 +48,14 @@ class ViewerExportsTest(unittest.TestCase):
             request = {"source": {"path": str(source.path)}, "expected": {"version": source.structure["version"]},
                        "destinations": [str(root / "plate.dxf")]}
             self.assertGreater(_export(request, lambda _: None)["files"][0]["bytes"], 0)
-            with self.assertRaisesRegex(ExportRefused, "not written from another xbf"):
-                _export({**request, "destinations": [str(root / "again.xbf")]}, lambda _: None)
-            self.assertFalse((root / "again.xbf").exists())
+            # An xbf of an xbf is a copy of its document (`cad export a.xbf b.xbf`), read back as the same one.
+            _export({**request, "destinations": [str(root / "again.xbf")]}, lambda _: None)
+            self.assertEqual(Source.read(root / "again.xbf").structure["prototypes"], source.structure["prototypes"])
+            from cad.engine import document
+
+            closure = document.Loaded(root / "plate.xbf").closure
+            self.assertTrue(closure)
+            self.assertEqual(document.Loaded(root / "again.xbf").closure, closure, "its build closure with it")
 
 
 class ViewerExportHttpTest(unittest.TestCase):

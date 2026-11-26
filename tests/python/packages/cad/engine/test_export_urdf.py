@@ -260,7 +260,7 @@ class HandBuiltTest(_Folder):
         path = self.folder / "rig.urdf"
         # The slider link and its joint share a name: legal, said at export as the validator warns of it.
         with self.assertWarnsRegex(ExportWarning, r"^1 name held by a link and a joint both: slider \(legal URDF; "
-                                                  r"cad urdf validate warns of it, joint_link_name_collision"):
+                                                  r"cad inspect warns of it, joint_link_name_collision"):
             write_description(rig(), path)
         checked = urdf.validate(path)
         self.assertTrue(checked.ok, [f.message for f in checked.findings])

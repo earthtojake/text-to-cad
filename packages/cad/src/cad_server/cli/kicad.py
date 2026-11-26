@@ -1,16 +1,16 @@
-"""``cad orcaslicer <operation>``: the orcaslicer integration's commands on OrcaSlicer's presets (presets,
-complete).
+"""``cad kicad <operation>``: the kicad integration's commands, KiCad's own checks of its files: ``drc`` of a board
+(``cad kicad drc board.kicad_pcb``) and ``erc`` of a schematic (``cad kicad erc sheet.kicad_sch``).
 
 The operations and their options are ``cad_server.cli.integrations``', from the registry
-(``cad.registry``); ``python -m cad_server.cli.orcaslicer <operation> ...`` runs what the ``cad`` command does.
+(``cad.registry``); ``python -m cad_server.cli.kicad <operation> ...`` runs what the ``cad`` command does.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
-INTEGRATION = "orcaslicer"
-DEFAULT_PROG = "cad orcaslicer"
+INTEGRATION = "kicad"
+DEFAULT_PROG = "cad kicad"
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:

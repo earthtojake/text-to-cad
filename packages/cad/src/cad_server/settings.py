@@ -1,5 +1,5 @@
 """The person's settings: one file, ``settings.json``, in the state folder (``places.state_dir``) beside the
-model library, so both CAD apps (``cad mcp`` and ``cad viewer``) and every process of every release read the same
+model library, so both CAD apps (``cad mcp`` and ``cad show``) and every process of every release read the same
 answers -- nothing cad's code holds them, and an update keeps them. Deleting the state folder forgets them.
 
 The file is one JSON object with a section per feature, each owned by the module that uses it

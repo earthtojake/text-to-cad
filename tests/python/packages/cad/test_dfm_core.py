@@ -385,7 +385,7 @@ class OptionsTest(unittest.TestCase):
         for document_type in ("stl", "threemf", "glb"):  # molding is judged on exact geometry alone
             with self.subTest(document_type=document_type), self.assertRaisesRegex(
                     ArgumentRefused, r"a molding check is judged on exact geometry .*: check the part's STEP or model "
-                                     r"instead \(cad step dfm part.step --process molding"):
+                                     r"instead \(cad dfm part.step --process molding"):
                 manufacturing.options(document_type, "molding", {"pull": "z"})
         with self.assertRaisesRegex(ValueError, "--process sheet"):
             manufacturing.options("dxf", "cnc", {})
@@ -1739,7 +1739,7 @@ class PythonCallTest(unittest.TestCase):
         with self.assertRaisesRegex(ArgumentRefused, "^--tools is end mill diameters"):
             cad.step.dfm("part.step", process="cnc", tools="x", _command=True)
         # a command written out in a refusal stays a command
-        with self.assertRaisesRegex(ArgumentRefused, r"\(cad step dfm part.step --process molding"):
+        with self.assertRaisesRegex(ArgumentRefused, r"\(cad dfm part.step --process molding"):
             cad.stl.dfm("part.stl", process="molding")
         self.assertEqual(manufacturing.parameters("give --process, not --bend-radius (cad x --pull z), --unknown"),
                          "give process, not bend_radius (cad x --pull z), --unknown")

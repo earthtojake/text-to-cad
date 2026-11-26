@@ -39,7 +39,7 @@ with nothing taking it for a window, the sender a command starts (``telemetry_se
 looks each time it tends itself (``daemon.Daemon.tend``), so a person who only ever runs ``python model.py``
 has its builds sent too. Nothing is counted where the environment turns telemetry off (``analytics.refused``,
 read first: this process's, or for a build the daemon answered its asker's, ``request["env"]``), in an engine
-worker (what a build asks for is that build's), or for a server's own work (``cad viewer``, ``cad-mcp``: each
+worker (what a build asks for is that build's), or for a server's own work (``cad show``, ``cad-mcp``: each
 counts what it serves). Never raises.
 """
 
@@ -54,11 +54,11 @@ def _types():
     return DOCUMENT_TYPES
 
 
-# The ``cad`` command this process runs (``cad_server.cli``, as it starts one); None for a model script or a
-# Python caller.
+# The ``cad`` command this process runs (``cad_server.cli``, as it starts one: a verb, ``cad export``, or a command);
+# None for a model script or a Python caller. A spelling the command had runs nothing, so it is never one.
 command: str | None = None
 # Commands that serve others and count their own work: a verb one asks for is a view's, not a build.
-SERVERS = frozenset({"viewer", "mcp", "server"})
+SERVERS = frozenset({"show", "mcp", "server"})
 API = "cad.engine.api"
 # An engine kind as telemetry names it (``analytics.KINDS``): models are distinct from file formats.
 # A document type's id to its analytics spelling (``cad.registry``'s ``wire``), and a live model's; a file a

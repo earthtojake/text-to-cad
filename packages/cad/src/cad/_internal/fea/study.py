@@ -381,7 +381,7 @@ def parse_study(study: str | dict | Path | None) -> Study:
     if study is None:
         raise ValueError(
             "a study is required: --study study.json (or inline JSON) naming the fixed faces and the "
-            "loads; run `cad step solve IN.step` (no study) to list face refs"
+            "loads; run `cad fea IN.step` (no study) to list face refs"
         )
     document = _load_document(study)
     unknown = set(document) - set(STUDY_KEYS)

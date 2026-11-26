@@ -65,7 +65,7 @@ class CommandTest(unittest.TestCase):
         return engine_daemon.run([sys.executable, *args], cwd=self.folder, env=self.env)
 
     def check(self, *args: str):
-        return self.run_("-m", "cad_server.cli", "xbf", "interference", self.ident, *args)
+        return self.run_("-m", "cad_server.cli", "inspect", self.ident, "--interference", *args)
 
     def test_the_command_s_status_is_its_verdict_and_the_same_check_is_answered_from_what_was_kept(self) -> None:
         (self.folder / "kit.py").write_text(textwrap.dedent(KIT), encoding="utf-8")

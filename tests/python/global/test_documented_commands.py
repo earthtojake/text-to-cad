@@ -94,20 +94,21 @@ def _documented_forms() -> list[tuple[Path, list[str], bool]]:
 
 
 def _split_command(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The command this form dispatches to, exactly as `cli.main` picks it: a document type's operation
-    (`xbf export`) or a command."""
+    """The command this form dispatches to, exactly as `cli.main` picks it: a verb (`export`), an
+    integration's operation (`kicad drc`) or a command."""
     return cli.resolve(argv)
 
 
 def _parse(name: str, rest: list[str]) -> None:
     """Put the form through the command's real parser, or skip if it has none.
 
-    Every document type's operation, and every command in the schema, answers with
-    its parser (``cli.build_parser_for``). A command that builds its parser inside
-    ``main()`` has nothing to call without running it, so those forms are checked
-    for existence only.
+    Every verb (its file's type's parser, read off the form), every integration's
+    operation, and every command in the schema, answers with its parser
+    (``cli.build_parser_for``). A command that builds its parser inside ``main()``
+    has nothing to call without running it, so those forms are checked for
+    existence only.
     """
-    parser = cli.build_parser_for(name)
+    parser = cli.build_parser_for(name, rest)
     if parser is not None:
         parser.parse_args(rest)
 
@@ -162,9 +163,10 @@ class DocumentedExportOptions(unittest.TestCase):
         forms = []
         for source, argv, elided in _documented_forms():
             split = _split_command(argv)
-            if split is None or elided or not split[0].endswith(" export") or split[0].startswith("kicad"):
+            if split is None or elided or split[0] != "export" or any(
+                    word.lower().endswith((".kicad_pcb", ".kicad_sch")) for word in split[1]):
                 continue
-            forms.append((source, argv, cli.build_parser_for(split[0]).parse_args(split[1])))
+            forms.append((source, argv, cli.build_parser_for(split[0], split[1]).parse_args(split[1])))
         return forms
 
     def test_every_documented_export_option_suits_its_destinations(self):
@@ -213,7 +215,7 @@ class DocumentedSnapshotOutputPaths(unittest.TestCase):
             if split is None:
                 continue
             name, rest = split
-            out = getattr(cli.build_parser_for(name).parse_args(rest), "out", None)
+            out = getattr(cli.build_parser_for(name, rest).parse_args(rest), "out", None)
             if out is not None:
                 forms.append((source, argv, str(out)))
         return forms

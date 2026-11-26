@@ -1,9 +1,9 @@
 """``cad share`` -- a file shared for anyone with its link to open in the hosted viewer, and to download the files that
 made it, with no sign-in, for 7 days after its last share (``cad_server.sharing``; the engine's **Sharing**).
 
-- ``cad share FILE|ID [--yes]``: FILE a CAD file the viewer opens, ID a document id the engine names a file by, a
-  share's link the file this computer's copy of it is; each turned at once into the file's canonical path, which the
-  share is of. A model is shared by its ``.xbf``: what goes is its view, the ``.xbf`` itself and the files of the build
+- ``cad share FILE [--yes]``: FILE a CAD file the viewer opens (a document id the engine names a file by, and a
+  share's link the file this computer's copy of it is, are taken too), turned at once into the file's canonical path,
+  which the share is of. A model is shared by its ``.xbf``: what goes is its view, the ``.xbf`` itself and the files of the build
   closure it holds -- its script, the modules of its project the build imported and the files it read
   (``sharing.model_sources``) --; a file document's view and the file itself, with a robot description's mesh files
   and a KiCad board's or schematic's project -- its project file, its local libraries, a board's 3D models, a
@@ -25,7 +25,7 @@ made it, with no sign-in, for 7 days after its last share (``cad_server.sharing`
   where, who can open it, for how long, how to delete it), naming the same command with ``--yes``, which records the
   agreement. ``cad share off`` refuses every share, ``--yes`` or not, until ``cad share on``.
 - ``cad share status``: whether sharing is on, whether this computer agreed, and its live shares with their links.
-- ``cad share delete FILE|ID|LINK [--yes]``: the share of a file this computer shared, or the share a link names (a
+- ``cad share delete FILE|LINK [--yes]``: the share of a file this computer shared, or the share a link names (a
   delete link, or the view link of a share this computer keeps), deleted from the service, asked first as every
   command that destroys is (``cad_server._internal.consent``); what it kept in the file's folder of cad's cache goes
   with it.
@@ -53,7 +53,7 @@ DESCRIPTION = (
     "Share a file: anyone with its link opens it in the hosted viewer, and downloads the files that made it (the "
     "link's .zip, which `cad import` writes into a folder), with no sign-in, until 7 days after its last share. "
     "FILE is "
-    "a CAD file the viewer opens, or a document id; a model is shared by its .xbf. What goes is the file, the files "
+    "a CAD file the viewer opens; a model is shared by its .xbf. What goes is the file, the files "
     "that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf "
     "records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's "
     "project file, local libraries, 3D models and sheets -- and its view: its shapes as meshes with their names, "
@@ -77,12 +77,12 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     from cad_server._internal.cli_parser import parser as command_parser
 
     parser = command_parser(prog=prog, description=DESCRIPTION,
-                            usage=f"%(prog)s [-h] FILE|ID [--yes] [--json]\n       {prog} status|on|off [--json]\n"
-                                  f"       {prog} delete FILE|ID|LINK [--yes] [--json]")
-    parser.add_argument("target", metavar="FILE|ID",
-                        help="a CAD file the viewer opens (a model's .xbf; a folder has no bundle to share), or a "
-                             "document id; or status, on, off or delete")
-    parser.add_argument("link", nargs="?", metavar="FILE|ID|LINK",
+                            usage=f"%(prog)s [-h] FILE [--yes] [--json]\n       {prog} status|on|off [--json]\n"
+                                  f"       {prog} delete FILE|LINK [--yes] [--json]")
+    parser.add_argument("target", metavar="FILE",
+                        help="a CAD file the viewer opens (a model's .xbf; a folder has no bundle to share); or "
+                             "status, on, off or delete")
+    parser.add_argument("link", nargs="?", metavar="FILE|LINK",
                         help="after delete: the file this computer shared, or a share's delete link")
     parser.add_argument("-y", "--yes", action="store_true",
                         help="share: the person agrees to sharing, kept for this computer; delete: delete without "
@@ -131,7 +131,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 def _target(target: str) -> tuple[str, str]:
     """What FILE|ID names, as ``(the file's canonical path, its type's id)``: a share's link this computer's copy of it
     (``engine.cli.linked``), a document id the file the engine names by it (``_located``), else a path read from this
-    folder. Refused by the failure contract, as ``cad viewer`` refuses a FILE, where it is no file a share is of: a
+    folder. Refused by the failure contract, as ``cad show`` refuses a FILE, where it is no file a share is of: a
     model's script (its ``.xbf`` is, which running it writes), a path that is not there, a folder, a file of no
     document type."""
     import shlex

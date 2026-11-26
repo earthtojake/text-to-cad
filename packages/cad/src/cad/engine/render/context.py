@@ -130,7 +130,7 @@ ENGINE_DISPLAY = DISPLAY
 # What a Linux with no X display installs, for the engine to start Xvfb itself.
 INSTALL = ("install Xvfb and Mesa's OpenGL (Debian, Ubuntu: sudo apt-get install xvfb libgl1 libgl1-mesa-dri; "
            "Fedora: sudo dnf install xorg-x11-server-Xvfb mesa-libGL mesa-dri-drivers), and the engine starts "
-           "Xvfb itself (run cad stop, then try again); or set DISPLAY")
+           "Xvfb itself (run cad server stop, then try again); or set DISPLAY")
 
 
 def display() -> str | None:

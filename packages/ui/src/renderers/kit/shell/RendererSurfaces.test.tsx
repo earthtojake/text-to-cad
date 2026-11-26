@@ -190,7 +190,7 @@ it("an annotation is Quick Edit's attachment, which sends the note with the pack
   expect(context.parts.filter((part: any) => part.kind === 'attachment').map((part: any) => [part.mimeType, part.path])).toEqual([['application/json', undefined]]);
   // The view on screen, as a snapshot job says it (its mode and Grid switch with it, so the snapshot
   // replays it), with the annotation in the same packet, inline.
-  const [, packet] = /^Snapshot JSON \(`cad xbf snapshot --job`\):\n```json\n(.*)\n```$/.exec(await context.parts[2].inlineText)!;
+  const [, packet] = /^Snapshot JSON \(`cad snapshot --job`\):\n```json\n(.*)\n```$/.exec(await context.parts[2].inlineText)!;
   expect(JSON.parse(packet)).toEqual({ input: '/models/one.harness', jobs: [{
     camera: { position: [0, -100, 0], target: [0, 0, 0], up: [0, 0, 1], orthographicHalfHeight: 40 }, display: { mode: 'solid', grid: false },
     output: { padding: 0, tightFrame: false }, outputs: [{ label: 'current view', width: 1600, height: 1200 }] }],
@@ -539,7 +539,7 @@ it('text-only Quick Edit captures the current view at Copy without any annotatio
   secondaryTap(canvas, 300, 200);
   fireEvent.click(screen.getByRole('menuitem', { name: 'Clear the note' }));
   fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(copied).toContain('Snapshot JSON (`cad xbf snapshot --job`):'));
+  await waitFor(() => expect(copied).toContain('Snapshot JSON (`cad snapshot --job`):'));
   const packet = JSON.parse(/```json\n(.*)\n```/.exec(copied)![1]);
   expect(packet).toMatchObject({ input: '/models/one.harness', jobs: [{ camera: { position: [0, -100, 0] }, outputs: [{ label: 'current view' }] }] });
   expect(packet).not.toHaveProperty('annotation');

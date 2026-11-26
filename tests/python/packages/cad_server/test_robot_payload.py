@@ -405,7 +405,7 @@ class SrdfArticulation(_Workspace):
         with self.assertRaises(RobotReadError) as caught:
             read_robot_description(self.write("lonely.srdf", "<robot name='nobody'><group name='g'><link name='l'/></group></robot>"))
         message = str(caught.exception)
-        for expected in ("lonely.srdf has no paired URDF", "<robot name='nobody'>", "other.urdf (robot 'crane')", "cad srdf validate"):
+        for expected in ("lonely.srdf has no paired URDF", "<robot name='nobody'>", "other.urdf (robot 'crane')", "cad inspect lonely.srdf"):
             self.assertIn(expected, message)
 
 

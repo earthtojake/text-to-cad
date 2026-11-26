@@ -1,6 +1,6 @@
 """The viewer's backend and the CAD app's server are leaves of the server.
 
-Outside `cad_server/viewer/`, `cad_server/mcp/` and the commands that start them (`cli/viewer.py`,
+Outside `cad_server/viewer/`, `cad_server/mcp/` and the commands that start them (`cli/show.py`,
 `cli/mcp.py`, which the CLI registry names by string), no module of the server's
 imports either (the library imports nothing of the server's at all: test_core_imports)
 -- except the injected `_internal/engine_host.py` composition root.
@@ -13,7 +13,7 @@ import unittest
 from tests.python.support.paths import REPO_ROOT
 
 SERVER = REPO_ROOT / "packages/cad/src/cad_server"
-SHELLS = {"cli/viewer.py"}
+SHELLS = {"cli/show.py"}
 
 
 def inside(relative: str) -> bool:

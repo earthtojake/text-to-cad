@@ -7,13 +7,13 @@ import tempfile
 import unittest
 
 
-from cad_server.cli import urdf as _command
+from cad_server.cli import inspect_ as _command
 
 
-class cli:  # noqa: N801 - ``cad urdf validate``, as the old module's ``main`` was called
+class cli:  # noqa: N801 - ``cad inspect ROBOT.urdf``: a robot description's check
     @staticmethod
     def main(argv):
-        return _command.main(["validate", *argv])
+        return _command.main(list(argv))
 
 
 VALID_URDF = """\
@@ -126,7 +126,8 @@ class UrdfValidateCliTests(unittest.TestCase):
         path = self._write("robot.txt", VALID_URDF)
         exit_code, output = self._run(str(path))
         self.assertEqual(exit_code, 2)
-        self.assertIn("is not a urdf file: cad urdf takes .urdf", output)
+        self.assertIn("robot.txt is not a file cad inspect takes: it takes .xbf, .step, .stp, .glb, .urdf, .srdf, "
+                      ".kicad_pcb or .kicad_sch", output)
 
     def test_a_package_root_that_is_no_pair_is_refused_by_its_flag(self) -> None:
         urdf_path = self._write("robot.urdf", VALID_URDF)

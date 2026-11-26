@@ -600,7 +600,7 @@ def _timed(shape: Any, parallel: bool) -> tuple[bytes, dict[int, str], float]:
 
 def exit_with_parent() -> None:
     """A pool process's start (meshing, reading): it exits once the process that started it is
-    gone, however that one ended -- ``cad stop``, a signal, a crash -- so no pool process
+    gone, however that one ended -- ``cad server stop``, a signal, a crash -- so no pool process
     outlives its engine (or its worker) holding the kernel's memory."""
     import multiprocessing
 

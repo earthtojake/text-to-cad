@@ -10,8 +10,6 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "interference",
     "solve",
     "ranges",
-    "drc",
-    "erc",
     "validate"
   ],
   "views": [
@@ -177,8 +175,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "inspect",
-        "drc"
+        "inspect"
       ],
       "decorator": false,
       "held": false
@@ -195,8 +192,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "inspect",
-        "erc"
+        "inspect"
       ],
       "decorator": false,
       "held": false

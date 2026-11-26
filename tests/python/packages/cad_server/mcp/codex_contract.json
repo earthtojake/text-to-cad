@@ -8,7 +8,7 @@
     "listChanged": false
    }
   },
-  "instructions": "CAD shows local CAD models (XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic) in a viewer tab beside the chat. To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see. To export a model, inspect it or snapshot it for yourself, run `cad xbf export <id> <file>`, `cad xbf inspect <id>` or `cad xbf snapshot <id> out.png` in a shell (a file: `cad <type> ...` with its path, as `cad step inspect part.step`).",
+  "instructions": "CAD shows local CAD models (XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, KiCad PCB, KiCad schematic) in a viewer tab beside the chat. To show a model, call cad_show with the absolute path of its .xbf (running its script writes it) or of any CAD file: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see. To export a model, inspect it or snapshot it for yourself, run `cad export model.xbf model.step`, `cad inspect model.xbf` or `cad snapshot model.xbf out.png` in a shell, with the model's .xbf or any CAD file's path (`cad inspect part.step`).",
   "protocolVersion": "2025-06-18",
   "serverInfo": {
    "icons": [
@@ -100,7 +100,7 @@
   "cad_screenshot": {
    "content": [
     {
-     "text": "No CAD viewer with a model is open in this thread. Open one with cad_open, or render headless with `cad <type> snapshot`.",
+     "text": "No CAD viewer with a model is open in this thread. Open one with cad_open, or render headless with `cad snapshot`.",
      "type": "text"
     }
    ],
@@ -385,7 +385,7 @@
     "additionalProperties": false,
     "properties": {
      "source": {
-      "description": "A CAD file's absolute path, or a document id (a model's, which running its script prints).",
+      "description": "A CAD file's absolute path: a model's .xbf, which running its script writes, or any CAD file.",
       "type": "string"
      }
     },
@@ -417,7 +417,7 @@
     "additionalProperties": false,
     "properties": {
      "source": {
-      "description": "A CAD file's absolute path, or a document id (a model's, which running its script prints).",
+      "description": "A CAD file's absolute path: a model's .xbf, which running its script writes, or any CAD file.",
       "type": "string"
      },
      "view": {

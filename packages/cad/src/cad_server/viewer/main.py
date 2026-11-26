@@ -1,9 +1,8 @@
 """Open the running server's viewer page: the home, or each file named (no server running: its one line, which
 says to run ``cad server start``).
 
-The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, a
-document id the engine holds, or a share's link, this computer's copy of it) is registered and printed as its page,
-``/<id>``. A folder is opened as a
+The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a
+share's link, this computer's copy of it) is registered and printed as its page, ``/<id>``. A folder is opened as a
 project, shown a folder at a time on the home, whose page is printed. Nothing is written to the folder."""
 # A FILE that is not there, or that the viewer does not open -- a model's script among them -- is the
 # command line's (the ``cad`` command's failure contract, ``cad_server._internal.cli_errors``): refused
@@ -18,7 +17,7 @@ import webbrowser
 
 from cad_server import assets
 
-DEFAULT_PROG = 'cad viewer'
+DEFAULT_PROG = 'cad show'
 
 
 def resolve_dist_dir(explicit: str) -> str:
@@ -78,13 +77,13 @@ def _files_opened(parsed):
 
 
 def build_parser(prog=DEFAULT_PROG):
-    """The parser of ``cad viewer``: its options, as the command reads them (``parse_args`` adds the check of
+    """The parser of ``cad show``: its options, as the command reads them (``parse_args`` adds the check of
     its FILEs)."""
     from cad_server._internal.cli_parser import parser as command_parser
 
     parser = command_parser(prog=prog, description=__doc__)
     parser.add_argument('files', nargs='*', metavar='FILE',
-                        help='a CAD file to open (or a document id the engine holds): its page is /<id>; '
+                        help='a CAD file to open: its page is /<id>; '
                              'a folder opens as a project, on the home')
     parser.add_argument('--host', default=None, help='Pin the engine bind address; default loopback.')
     parser.add_argument('--port', type=int, default=None, help='Pin this installation’s engine HTTP port.')
@@ -142,7 +141,7 @@ def main(argv=None, *, prog=DEFAULT_PROG):
         try:
             open_page(answer['url'], opener=webbrowser.open)  # a file of a redirect: no token in argv
         except CannotOpen as error:
-            print(f'cad viewer: could not open a browser ({error}); open the URL above', file=sys.stderr)
+            print(f'cad show: could not open a browser ({error}); open the URL above', file=sys.stderr)
     return 0
 
 
@@ -155,5 +154,5 @@ def _failed(options, prog, error):
     failure = classify(error)
     if options['json']:
         return write(failure, prog=prog, as_json=True)
-    print(f'cad viewer: {failure}', file=sys.stderr)
+    print(f'cad show: {failure}', file=sys.stderr)
     return failure.status

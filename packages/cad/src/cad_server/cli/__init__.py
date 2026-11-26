@@ -1,16 +1,18 @@
 """The ``cad`` console script -- a subcommand dispatcher over the distribution's CLIs.
 
-Three kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
-the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
-(``cad_server.cli.document_types``: ``cad step export``, ``cad stl snapshot``, ``cad urdf validate``; ``cad xbf``
-takes a model's document id, or the ``.xbf`` file a model is saved as). An
-integration's, for its tool's own files, which are no document type, which cad checks or writes and never
-shows: ``cad <integration> <operation> [<file>]`` (``cad_server.cli.integrations``: ``cad mujoco check``,
-``cad orcaslicer presets``), only for the integrations the registry gives operations. And the commands that are no file's: the server's (``server``: ``start``,
-``stop``, ``status``), the CAD app an agent app starts (``mcp``), the engine's verbs (``serve``, ``delete``), ``run``,
-and the installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``viewer``, ``telemetry``, ``update``, whose
-``update auto`` is cad's own switch, and ``plugin``), ``share``, a file uploaded for its link, and ``import``, a
-share's files written into a folder and its file added to the library. ``cad --help`` lists them all but ``_UNLISTED``'s.
+Three kinds of command. The verbs on a file: ``cad <verb> FILE``, its type by its suffix -- ``export``, ``inspect``,
+``snapshot``, ``dfm`` and ``fea`` (``cad_server.cli.verbs``: ``cad export arm.xbf arm.step``, ``cad inspect
+robot.urdf``), each running what the file's type does for it (``cad.registry.VERBS``). An integration's, a tool's own
+operations on its files: ``cad <integration> <operation> FILE`` (``cad_server.cli.integrations``: ``cad kicad drc
+board.kicad_pcb``, ``cad mujoco check robot.xml``), only for the integrations the registry gives operations. And the
+commands that are no file's: ``show`` (a file or a folder on the viewer's page), ``share`` and ``import``, ``run``,
+the server's (``server``: ``start``, ``stop``, ``status``), the CAD app an agent app starts (``mcp``), and the
+installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``telemetry``, ``update``, whose ``update auto`` is
+cad's own switch, and ``plugin``). ``cad --help`` lists them all but ``_UNLISTED``'s.
+
+A spelling the command had (``cad xbf export``, ``cad viewer``, ``cad urdf validate``, ``cad kicad_pcb drc``, bare
+``cad server``) runs nothing: it is answered in one line with the spelling it has now, exit 2 (``_hint``, one table:
+``_RENAMED``, ``_BARE`` and ``_OPERATIONS_NOW``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -36,18 +38,23 @@ from cad.registry import ALIASES, DOCUMENT_TYPES, INTEGRATIONS
 
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
 # exit code. Keep this list grouped as below and the help text under ~60 chars so
-# ``cad --help`` stays a single readable column. The document types' commands are not here:
-# they are the registry's (``TYPE_COMMANDS``).
+# ``cad --help`` stays a single readable column.
 #
 # A model script builds by running it (``cad run <model>.py``: ``uv run``, cad pinned, in the environment the
 # device's engine makes for it): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
-    # The server, documents served, and documents deleted.
+    # The verbs on a file, its type by its suffix (``cad_server.cli.verbs``).
+    "export": ("cad_server.cli.export", "write a file to another, one destination, its format by its suffix"),
+    "inspect": ("cad_server.cli.inspect_", "what a document holds; a robot description's check; --interference, "
+                                            "--ranges"),
+    "snapshot": ("cad_server.cli.snapshot", "draw a file as the viewer does, into a PNG"),
+    "dfm": ("cad_server.cli.dfm", "check that a part can be made, by CNC, sheet metal, molding or 3D printing"),
+    "fea": ("cad_server.cli.fea", "a linear static stress study of a part or a bonded assembly"),
+    # A page of the running server's; the launcher exits.
+    "show": ("cad_server.cli.show", "open a file, or a folder as a project, on the viewer's page"),
+    # The server, and the CAD app an agent app's plugin starts: the server started as `cad server start` starts it,
+    # then MCP on stdio.
     "server": ("cad_server.cli.server", "the cad server: start, stop, status"),
-    "serve": ("cad_server.cli.serve", "serve a document over HTTP and print its URL"),
-    "status": ("cad_server.cli.status", "`cad server status`"),
-    "stop": ("cad_server.cli.stop", "`cad server stop`"),
-    # The CAD app an agent app's plugin starts: the server started as `cad server start` starts it, then MCP on stdio.
     "mcp": ("cad_mcp.shim", "serve the CAD app to the agent app that starts it, over MCP on stdin and stdout"),
     # Generic / services
     "run": ("cad_server.cli.run", "run a script (or -m, -c) as uv run does, cad pinned at this device's release "
@@ -59,8 +66,6 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # BRIDGE-ONLY, never listed: what the updaters of 0.10.0 to 0.11.11 run of the release they bring
     # (``cad_server.cli.setup``).
     "setup": ("cad_server.cli.setup", "the bridge from releases 0.10.0 to 0.11.11"),
-    # A page of the running server's; the launcher exits.
-    "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     # A file, its files and its view bundle uploaded, by this process, for anyone with its link to open in the hosted
     # viewer and to download; and a share's files downloaded, by this process, into a folder, its file then the
     # library's (the module is ``import_``: ``import`` is Python's).
@@ -74,88 +79,102 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "plugin": ("cad_server.cli.plugin", "the plugin in your agent apps: `install` puts it in or updates it; "
                                         "`update auto`: whether cad's updates update it too"),
 }
-# Run, never listed. Only for releases 0.10.0 to 0.11.11 -- their skill text (`cad status`, `cad stop`) and their
-# updaters (`cad setup`) -- and gone with the bridge. And commands for programs, not people: `serve` (a document served
-# over HTTP, its URL printed) and `requirement` (the cad requirement a Python of a program's own installs). And a
-# type's alias (``cad.registry.ALIASES``): `cad xbf`, which runs `cad xbf` (``cad_server.cli.model``).
-_UNLISTED = frozenset({"status", "stop", "setup", "serve", "requirement", *ALIASES})
-
-# Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``); and a
-# type's alias, which runs its type's command, unlisted.
-TYPE_COMMANDS: dict[str, str] = {**{document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES},
-                                 **{alias: f"cad_server.cli.{alias}" for alias in ALIASES}}
+# Run, never listed: commands for programs, not people. `setup`, what the updaters of releases 0.10.0 to 0.11.11 run
+# of the release they bring (and their `cad update`, the install command in install mode), gone with the bridge; and
+# `requirement` (the cad requirement a Python of a program's own installs), whose output a program reads.
+_UNLISTED = frozenset({"setup", "requirement"})
+#: The verbs on a file (``cad_server.cli.verbs``), in the order ``cad --help`` lists them.
+VERB_COMMANDS = ("export", "inspect", "snapshot", "dfm", "fea")
 
 # Each integration's command, by its name, for those with operations of their own on their tool's files:
-# ``cad <integration> <operation>`` (``cad_server.cli.integrations``). A name is a type's or an integration's,
-# never both (``tests/python/packages/cad/test_registry.py``).
+# ``cad <integration> <operation>`` (``cad_server.cli.integrations``); a deprecated one's command line is answered
+# with what to do instead (``_hint``). A name is a type's or an integration's, never both
+# (``tests/python/packages/cad/test_registry.py``).
 INTEGRATION_COMMANDS: dict[str, str] = {name: f"cad_server.cli.{name}" for name, entry in INTEGRATIONS.items()
-                                        if entry.operations}
+                                        if entry.operations and not entry.deprecated}
 
-_USAGE_HEAD = ("usage: cad <document_type> <operation> FILE [args...] | cad <integration> <operation> [FILE] [args...]\n"
+# The commands the command had and has no more, each with the one that does it now: answered in one line, nothing
+# run (``_hint``). `viewer`, the skills' to 0.12; `status` and `stop`, the skill text of 0.11.0 to 0.11.11's.
+_RENAMED: dict[str, str] = {"viewer": "cad show FILE|FOLDER", "status": "cad server status",
+                            "stop": "cad server stop"}
+# A command's bare form that ran something and runs nothing now, with what does it now and the words that make a
+# command line no bare form: bare `cad server` (and `cad server --port N`), the server run in this process, which
+# releases 0.10.0 to 0.11.11 told a person to run outside an agent's sandbox (``cad_server.cli.server`` asks it).
+_BARE: dict[str, tuple[str, frozenset[str]]] = {
+    "server": ("cad server start", frozenset({"start", "stop", "status", "--rotate-token", "-h", "--help"}))}
+# A document type's operations as the command spelled them (``cad <type> <operation>``, ``cad model <operation>``),
+# each with the verb that does it now.
+_OPERATIONS_NOW: dict[str, str] = {
+    "export": "cad export SRC DST", "snapshot": "cad snapshot FILE OUT.png", "inspect": "cad inspect FILE",
+    "dfm": "cad dfm FILE", "interference": "cad inspect FILE --interference", "ranges": "cad inspect FILE --ranges",
+    "solve": "cad fea FILE", "validate": "cad inspect FILE", "drc": "cad kicad drc BOARD",
+    "erc": "cad kicad erc SCHEMATIC"}
+
+_USAGE_HEAD = ("usage: cad <verb> FILE [args...] | cad <integration> <operation> FILE [args...]\n"
                "       | cad <command> [args...]\n\n")
 _USAGE_TAIL = (
-    "\nRun 'cad <document_type> --help' for a type's operations ('cad <integration> --help' for an\n"
-    "integration's), 'cad <document_type> <operation> --help' or 'cad <command> --help' for its options.\n"
+    "\nRun 'cad <verb> --help' for its forms and every file type's options ('cad <verb> FILE --help': that\n"
+    "file's), 'cad <integration> --help' for an integration's operations, or 'cad <command> --help'.\n"
     "Each command is also available as 'python -m <module>'.\n"
 )
 
 
 def _command_lines(names) -> str:
-    width = max((len(name) for name in _COMMANDS), default=0)
-    return "\n".join(f"  {name.ljust(width)}  {_COMMANDS[name][1]}" for name in sorted(set(names) - _UNLISTED)) + "\n"
+    listed = sorted(set(names) - _UNLISTED - set(VERB_COMMANDS))
+    width = max(len(name) for name in listed)
+    return "\n".join(f"  {name.ljust(width)}  {_COMMANDS[name][1]}" for name in listed) + "\n"
+
+
+def _verb_lines() -> str:
+    """The verbs on a file, each with what it does."""
+    width = max(len(name) for name in VERB_COMMANDS)
+    return "\n".join(f"  {name.ljust(width)}  {_COMMANDS[name][1]}" for name in VERB_COMMANDS) + "\n"
 
 
 def _type_lines() -> str:
-    """The document types, grouped: each with its operations and what it is (``cad.registry``); ``xbf`` a
-    document id the engine holds, or its file."""
-    from cad_server.cli.document_types import operations_of
+    """The document types, the files the verbs take: each with its files and the verbs that take it
+    (``cad.registry``); ``xbf`` a document id the engine holds, or its file."""
+    from cad.registry import operation_for
 
     listed = dict(DOCUMENT_TYPES.items())
     width = max(len(name) for name in listed)
-    ops = {name: ", ".join(operations_of(name)) for name in listed}
-    ops_width = max(len(text) for text in ops.values())
+    verbs = {name: ", ".join(verb for verb in VERB_COMMANDS if operation_for(verb, name) is not None) for name in listed}
+    verbs_width = max(len(text) for text in verbs.values())
 
     def takes(entry) -> str:
-        return f"a document id, held in memory, or an {entry.suffix} file" if entry.held else ", ".join(entry.extensions)
+        return f"a model's {entry.suffix} file" if entry.held else ", ".join(entry.extensions)
 
-    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {entry.title}: {takes(entry)}"
+    return "\n".join(f"  {name.ljust(width)}  {verbs[name].ljust(verbs_width)}  {entry.title}: {takes(entry)}"
                      for name, entry in listed.items()) + "\n"
 
 
 def _integration_lines() -> str:
-    """The integrations with operations of their own, each with them and the files they take, or, for one whose
-    tool's files are found by name in its own folders, that tool (``cad.registry``)."""
-    listed = [name for name in INTEGRATION_COMMANDS if not INTEGRATIONS[name].deprecated]
+    """The integrations with operations of their own, each with them and the files each takes (``cad.registry``)."""
+    listed = list(INTEGRATION_COMMANDS)
     width = max(len(name) for name in listed)
     ops = {name: ", ".join(INTEGRATIONS[name].operation_names) for name in listed}
     ops_width = max(len(text) for text in ops.values())
 
     def takes(entry) -> str:
-        if entry.files:
-            return f"{entry.operations[0].summary.split(':')[0]}: {', '.join(entry.files)}"
-        return f"found by name in {entry.summary.split(',')[0]}'s own folders"
+        return "; ".join(f"{operation.summary.split(':')[0]} ({', '.join(entry.files_of(operation.name))})"
+                         for operation in entry.operations)
 
     return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {takes(INTEGRATIONS[name])}"
                      for name in listed) + "\n"
 
 
 def _usage() -> str:
-    return (_USAGE_HEAD + "document types, the files cad shows (cad <type> <operation> FILE):\n" + _type_lines()
-            + "\nintegrations, for a tool's own files cad checks or writes and does not show (cad <integration> "
-              "<operation> [FILE]):\n" + _integration_lines()
+    return (_USAGE_HEAD + "verbs, on a file, its type by its suffix (cad <verb> FILE):\n" + _verb_lines()
+            + "\nthe files they take, by document type:\n" + _type_lines()
+            + "\nintegrations, a tool's own operations on its files (cad <integration> <operation> FILE):\n"
+            + _integration_lines()
             + "\ncommands:\n" + _command_lines(_COMMANDS) + _USAGE_TAIL)
 
 
 def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The command a command line names, as ``main`` dispatches it, and its arguments: ``("step export",
-    [...])`` for a document type's operation, ``("status", [...])`` for a command; None for neither."""
-    if argv[:1] and argv[0] in TYPE_COMMANDS:
-        from cad_server.cli.document_types import OPERATIONS
-
-        named = ALIASES.get(argv[0], argv[0])  # an alias as the command it runs
-        if len(argv) > 1 and (named, argv[1]) in OPERATIONS:
-            return f"{named} {argv[1]}", argv[2:]
-        return None
+    """The command a command line names, as ``main`` dispatches it, and its arguments: ``("export", [...])`` for a
+    verb or a command, ``("kicad drc", [...])`` for an integration's operation; None for none (a spelling the
+    command had among them: ``_hint``)."""
     if argv[:1] and argv[0] in INTEGRATION_COMMANDS:
         from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
 
@@ -167,19 +186,44 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
     return None
 
 
-def build_parser_for(name: str):
-    """The parser a resolved command (``resolve``) parses with, or None for one that builds its own."""
-    if name not in _COMMANDS:  # a document type's operation (``step export``), or an integration's (``mujoco check``)
-        document_type, operation = name.split(" ", 1)
-        if document_type in INTEGRATION_COMMANDS:
-            from cad_server.cli.integrations import build_parser as integration_parser
+def build_parser_for(name: str, argv: list[str] | None = None):
+    """The parser a resolved command (``resolve``) parses with, or None for one that builds its own: a verb's, with
+    the command line ``argv`` its source's type's (``cad_server.cli.verbs.build_parser``)."""
+    if name in VERB_COMMANDS:
+        from cad_server.cli.verbs import build_parser as verb_parser
 
-            return integration_parser(document_type, operation)
-        from cad_server.cli.document_types import build_parser
+        return verb_parser(name, argv)
+    if name not in _COMMANDS:  # an integration's operation (``kicad drc``, ``mujoco check``)
+        integration, operation = name.split(" ", 1)
+        from cad_server.cli.integrations import build_parser as integration_parser
 
-        return build_parser(document_type, operation)
+        return integration_parser(integration, operation)
     builder = getattr(importlib.import_module(_COMMANDS[name][0]), "build_parser", None)
     return builder() if builder is not None else None
+
+
+def _hint(argv: list[str]) -> str | None:
+    """The one line that answers a spelling the command had, naming the one it has now (``cad export``: ``cad
+    export SRC DST``), or None for a command line that is no such spelling."""
+    word = argv[0]
+    if word in _BARE and not _BARE[word][1] & set(argv[1:]):
+        return f"'cad {word}' alone is '{_BARE[word][0]}' now; 'cad {word} --help' says its forms"
+    if word in _RENAMED:
+        return f"'cad {word}' is '{_RENAMED[word]}' now; 'cad {_RENAMED[word].split()[1]} --help' says its options"
+    if word in DOCUMENT_TYPES or word in ALIASES:
+        operation = argv[1] if len(argv) > 1 else ""
+        now = _OPERATIONS_NOW.get(operation)
+        if word in ("kicad_pcb", "kicad_sch") and operation == "export":
+            now = "cad export FILE DIR --to KIND"
+        if now is not None:
+            verb = " ".join(now.split()[1:3]) if now.startswith("cad kicad") else now.split()[1]
+            return f"'cad {word} {operation}' is '{now}' now; 'cad {verb} --help' says its options"
+        return (f"'cad {word}' is no command now: a verb takes the file, its type by its suffix (cad export, cad "
+                "inspect, cad snapshot, cad dfm, cad fea); 'cad --help' lists them")
+    entry = INTEGRATIONS.get(word)
+    if entry is not None and entry.deprecated:
+        return f"'cad {word}' is no command now: {entry.deprecated}"
+    return None
 
 
 def _standard_streams() -> None:
@@ -260,7 +304,7 @@ def _main(argv: list[str]) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         sys.stdout.write(_usage())
         return 0
-    if argv[0] == "help":  # `cad help step export` is `cad step export --help`, at any depth
+    if argv[0] == "help":  # `cad help step export` is `cad export --help`, at any depth
         return _main([*argv[1:], "--help"]) if argv[1:] else _main([])
 
     if argv[0] in {"-V", "--version"}:
@@ -272,10 +316,8 @@ def _main(argv: list[str]) -> int:
         return 0
 
     command, rest = argv[0], argv[1:]
-    if command in TYPE_COMMANDS:
-        entry: tuple[str, str] | None = (TYPE_COMMANDS[command], "")
-    elif command in INTEGRATION_COMMANDS:
-        entry = (INTEGRATION_COMMANDS[command], "")
+    if command in INTEGRATION_COMMANDS:
+        entry: tuple[str, str] | None = (INTEGRATION_COMMANDS[command], "")
     else:
         entry = _COMMANDS.get(command)
     if entry is None:
@@ -318,12 +360,16 @@ def _hold_to_release(client) -> None:
 
 
 def _unknown(word: str, rest: list[str]) -> int:
-    """A command that is none of the table's: the command line's failure (``usage``, exit 2), naming it,
-    the one command it is closest to, if any, and where the commands are listed -- never the whole list."""
+    """A command that is none of the table's: the command line's failure (``usage``, exit 2). A spelling the command
+    had is answered with the one it has now (``_hint``); any other is named, with the one command it is closest to,
+    if any, and where the commands are listed -- never the whole list."""
     from cad_server._internal.cli_errors import Failure, wants_json, write
     from cad_server._internal.cli_parser import suggest
 
-    close = suggest(word, [*(name.split()[0] for name in _COMMANDS), *TYPE_COMMANDS, *INTEGRATION_COMMANDS])
+    hint = _hint([word, *rest])
+    if hint is not None:
+        return write(Failure(hint, "usage"), prog="cad", as_json=wants_json(rest))
+    close = suggest(word, [*(name for name in _COMMANDS if name not in _UNLISTED), *INTEGRATION_COMMANDS])
     words = (f"unknown command {word!r}" + (f" (did you mean {close!r}?)" if close else "")
              + "; 'cad --help' lists the commands")
     return write(Failure(words, "usage"), prog="cad", as_json=wants_json(rest))
@@ -357,7 +403,7 @@ def _report(error: Exception) -> None:
 # `update auto` and `plugin`, whose switches are the person's, kept for every release, which any server that knows how
 # keeps, and `update`, which any server that knows how carries out (one that does not is said), and whose next server
 # is another.
-_ANY_RELEASE = frozenset({"server", "status", "stop", "mcp", "doctor", "cache", "update", "plugin"})
+_ANY_RELEASE = frozenset({"server", "mcp", "doctor", "cache", "update", "plugin"})
 # Commands that never carry the analytics notice: the engine's server and `mcp`, writing nowhere a person reads;
 # `telemetry`, which says it its own way; `setup`, which an updater of 0.11.11 and earlier runs with no person to read
 # it, and `plugin`, which cad's own update runs with none, its output in a log, and which says it itself before a run
@@ -376,7 +422,7 @@ def _asks_help(command: str, rest: list[str]) -> bool:
 
     if command == "run":
         return rest[:1] in (["-h"], ["--help"])
-    if (command in TYPE_COMMANDS or command in INTEGRATION_COMMANDS) and rest[:1] == ["help"]:
+    if command in INTEGRATION_COMMANDS and rest[:1] == ["help"]:
         return True
     return bool({"-h", "--help"} & set(options(rest)))
 
@@ -403,7 +449,7 @@ def _run_module(command: str, module_name: str, rest: list[str]) -> int:
     module = importlib.import_module(module_name)
 
     # Tell the parser which front door it was reached through, so
-    # `cad urdf validate --help` says "cad urdf validate".
+    # `cad kicad drc --help` says "cad kicad drc".
     # Not every command takes a name for its parser, hence the signature check rather
     # than a blanket keyword.
     import inspect  # only the dispatcher needs it; `--help` does not.

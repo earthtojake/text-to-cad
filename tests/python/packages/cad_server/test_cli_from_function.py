@@ -136,17 +136,18 @@ class Metavars(unittest.TestCase):
 
     def test_every_generated_door_has_distinct_metavars(self):
         import collections
-        import importlib
 
-        from cad_server import cli
+        from cad_server.cli import document_types
 
-        for command, (module_name, _) in sorted(cli._COMMANDS.items()):
-            module = importlib.import_module(module_name)
-            if not hasattr(module, "VERB"):
-                continue
-            with self.subTest(command=command):
+        # The doors generated from a function's signature: a type's checks the verbs run (a URDF's is an adapter's).
+        generated = [(document_type, operation) for document_type, operation in sorted(document_types.OPERATIONS)
+                     if operation in ("dfm", "solve", "ranges", "validate") and document_type != "urdf"]
+        self.assertGreater(len(generated), 8)
+        for document_type, operation in generated:
+            with self.subTest(door=f"{document_type} {operation}"):
                 metavars = collections.Counter(
-                    a.metavar for a in module.build_parser()._actions if a.option_strings and a.metavar
+                    a.metavar for a in document_types.build_parser(document_type, operation)._actions
+                    if a.option_strings and a.metavar
                 )
                 self.assertEqual({}, {name: n for name, n in metavars.items() if n > 1})
 

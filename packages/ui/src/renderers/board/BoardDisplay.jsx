@@ -29,7 +29,7 @@ import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
  *   **Tracks**' (100%) opacities.
  *
  * The contract — `{ mode, side, poured, layers, active, others, zones, tracks }` — is core's, shared
- * with `cad <type> snapshot --display`, so what is drawn here is drawn there, and kept with the file's view.
+ * with `cad snapshot --display`, so what is drawn here is drawn there, and kept with the file's view.
  */
 export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };
 

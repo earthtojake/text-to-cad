@@ -933,7 +933,7 @@ class ShareTest(unittest.TestCase):
             return engine_daemon.run([sys.executable, "-m", "cad_server.cli", *args, "--json"], env=self.env(),
                                      cwd=workspace, input=given)
 
-        shared = cad("xbf", "inspect", f"{link}#plate")
+        shared = cad("inspect", f"{link}#plate")
         self.assertEqual(shared.returncode, 0, shared.stdout + shared.stderr)
         volume = json.loads(shared.stdout)["volume"]
 
@@ -942,13 +942,13 @@ class ShareTest(unittest.TestCase):
         imported = self.import_(link, "copy", cwd=place)
         self.assertEqual(imported.returncode, 0, imported.stdout + imported.stderr)
         copy = place / "copy" / "plate.xbf"
-        for args in (("xbf", "inspect", f"{link}#plate"), ("xbf", "inspect", link, f"{link}#plate"),
-                     ("xbf", "inspect", str(copy), f"{link}#plate")):
+        for args in (("inspect", f"{link}#plate"), ("inspect", link, f"{link}#plate"),
+                     ("inspect", str(copy), f"{link}#plate")):
             with self.subTest(args=args):
                 built = cad(*args)
                 self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
                 self.assertAlmostEqual(json.loads(built.stdout)["volume"], volume, places=3)
-        exported = cad("xbf", "export", link, str(place / "out.step"))
+        exported = cad("export", link, str(place / "out.step"))
         self.assertEqual(exported.returncode, 0, exported.stdout + exported.stderr)
         self.assertTrue((place / "out.step").is_file())
         with mock.patch.dict(os.environ, {"CAD_SHARE_URL": self.service.url}):
@@ -965,11 +965,11 @@ class ShareTest(unittest.TestCase):
                    "error": f"{other} is a shared model this computer has no copy of: run `cad import {other}`."}
         packet = json.dumps({"input": other, "jobs": [{"camera": "iso", "outputs": [{"label": "view 1"}]}]})
         for args, given, answer in (
-                (("xbf", "inspect", link), None, refusal), (("xbf", "inspect", f"{other}#plate"), None, unknown),
-                (("xbf", "inspect", str(project / "plate.xbf"), f"{other}#plate"), None, unknown),
-                (("xbf", "snapshot", other, "out.png"), None, unknown),
-                (("xbf", "export", other, "out.step"), None, unknown),
-                (("xbf", "snapshot", "--job", "-"), packet, unknown)):
+                (("inspect", link), None, refusal), (("inspect", f"{other}#plate"), None, unknown),
+                (("inspect", str(project / "plate.xbf"), f"{other}#plate"), None, unknown),
+                (("snapshot", other, "out.png"), None, unknown),
+                (("export", other, "out.step"), None, unknown),
+                (("snapshot", "--job", "-"), packet, unknown)):
             with self.subTest(args=args):
                 missing = cad(*args, given=given)
                 self.assertEqual((missing.returncode, json.loads(missing.stdout)), (2, answer))

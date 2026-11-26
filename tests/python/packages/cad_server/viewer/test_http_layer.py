@@ -476,7 +476,7 @@ class Pick(HttpLayerTestCase):
             with self.subTest(payload=payload):
                 self.assertEqual(self.pick(payload, return_value=None)[0], 400)
         status, answer = self.pick({"folder": True}, side_effect=PickerFailed("no chooser here"))
-        self.assertEqual((status, answer["hint"]), (500, "open it with `cad viewer <folder>` instead"))
+        self.assertEqual((status, answer["hint"]), (500, "open it with `cad show <folder>` instead"))
 
     def test_each_desktops_chooser_is_asked_for_a_folder_where_it_starts(self):
         from cad_server._internal import picker
@@ -528,7 +528,7 @@ class Pick(HttpLayerTestCase):
             self.assertEqual((status, answer["hint"]), (400, "choose a CAD file, or a folder"))
             self.assertIn("notes.txt is not one", answer["error"])
             status, answer = self.pick({"any": True}, side_effect=PickerFailed("no chooser here"))
-            self.assertEqual((status, answer["hint"]), (500, "open it with `cad viewer <file>` or `cad viewer <folder>` instead"))
+            self.assertEqual((status, answer["hint"]), (500, "open it with `cad show <file>` or `cad show <folder>` instead"))
             # Either, or a folder: never both; and a flag is a flag.
             for payload in ({"any": True, "folder": True}, {"any": "yes"}, {"any": 1}):
                 with self.subTest(payload=payload):

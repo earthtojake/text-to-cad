@@ -983,7 +983,7 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   note.textContent = 'Move this pad.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(copied.at(-1)).toContain('Snapshot JSON (`cad kicad_pcb snapshot --job`)'));
+  await waitFor(() => expect(copied.at(-1)).toContain('Snapshot JSON (`cad snapshot --job`)'));
   const packet = packetOf(copied.at(-1));
   expect(JSON.stringify(packet)).not.toContain('measurements');
   // A board's view is its plan view: no 3D framing to pin, its picture by its label.

@@ -505,7 +505,7 @@ class Cantilever(unittest.TestCase):
 
         out = io.StringIO()
         with redirect_stdout(out), quiet():
-            code = cli.main(["step", "solve", str(self.step), "--study", json.dumps(self.study),
+            code = cli.main(["fea", str(self.step), "--study", json.dumps(self.study),
                              "--out", str(self.out.with_name("again")), "--json"])
         self.assertEqual(code, 0, out.getvalue())
         payload = json.loads(out.getvalue().strip().splitlines()[-1])

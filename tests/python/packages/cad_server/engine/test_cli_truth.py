@@ -168,12 +168,12 @@ class VerbsTest(unittest.TestCase):
         closure = self.cli("inspect", "box.step", "--query", "closure")
         self.assertEqual(closure.returncode, 1)
         self.assertEqual(closure.stderr, "python -m cad_server.engine inspect: box.step holds no build closure: a STEP file "
-                                         "carries none, only an .xbf does; inspect the model's document by its id for "
-                                         "its closure, or name a ref in the file (cad step inspect box.step REF)\n")
+                                         "carries none, only an .xbf does; inspect the model's .xbf for its closure, or "
+                                         "name a ref in the file (cad inspect box.step REF)\n")
         summary = self.cli("inspect", "box.step")
         self.assertEqual(summary.returncode, 0, summary.stderr)
         self.assertEqual(summary.stdout.splitlines()[-1], "closure     none: a STEP file carries none, only an .xbf "
-                                                          "does (a model's document, inspected by its id, has one)")
+                                                          "does (a model's .xbf, inspected, has one)")
 
     def test_a_part_ref_answers_where_the_part_stands_and_its_world_bounds(self) -> None:
         shown = self.cli("inspect", self.box, "box/link")
@@ -215,9 +215,9 @@ class MeshTest(unittest.TestCase):
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(refused.stderr, "python -m cad_server.engine inspect: rotor.stl is a mesh: it has no B-rep for a "
                                          "ref to name and no build closure (only an .xbf carries one); inspect reads "
-                                         "nothing more of it: `cad viewer rotor.stl` shows it, and the document it "
+                                         "nothing more of it: `cad show rotor.stl` shows it, and the document it "
                                          "was exported from, inspected, tells the rest\n")
-        self.assertIn("`cad glb inspect rotor.glb` alone tells its nodes, meshes and animations",
+        self.assertIn("`cad inspect rotor.glb` alone tells its nodes, meshes and animations",
                       inspect("rotor.glb", "rotor").stderr)
 
 

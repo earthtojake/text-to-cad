@@ -413,9 +413,9 @@ class TabServerTest(_Session):
         listed = [tool["name"] for tool in self.server.tools()]
         context = RequestContext(1, {"threadId": "t"})
         with mock.patch.object(self.server.analytics, "called") as counted:
-            for name, command in (("cad_export", "`cad xbf export <id> <file>...`"),
-                                  ("cad_snapshot", "`cad xbf snapshot <id> <out.png>`"),
-                                  ("cad_inspect", "`cad xbf inspect <id> [ref]`")):
+            for name, command in (("cad_export", "`cad export <file> <out>`"),
+                                  ("cad_snapshot", "`cad snapshot <file> <out.png>`"),
+                                  ("cad_inspect", "`cad inspect <file> [ref]`")):
                 with self.subTest(name=name):
                     self.assertNotIn(name, listed)
                     answered = self.server.handle("tools/call", {"name": name, "arguments": {"source": "x"}}, context)
@@ -889,7 +889,7 @@ class InlineServerTest(_Session):
                 said = answer["content"][0]["text"]
                 self.assertTrue(said.startswith("That viewer has not reached CAD's server."), said)
                 self.assertIn("give them the model's page to open in their browser instead: http://127.0.0.1:3245/doc?token=t.", said)
-                self.assertIn("render it headless with `cad <type> snapshot`", said)
+                self.assertIn("render it headless with `cad snapshot`", said)
         # A token no cad_show of this server named is not waited for.
         with mock.patch.object(self.server.views, "wait", side_effect=AssertionError("waited for an unknown view")):
             self.assertIn("not open", self.call("cad_screenshot", {"view": "cad-9-unknown"})["content"][0]["text"])
@@ -1006,16 +1006,18 @@ class HeadlessCodexTest(_Session):
         # The Viewer adds the model to the library once it shows it; a link alone adds nothing.
         self.assertEqual(self.server.library.read()["files"], {})
 
-    def test_cad_show_takes_a_path_or_a_document_id_and_says_so(self) -> None:
+    def test_cad_show_takes_a_path_and_says_so(self) -> None:
+        # A model is shown by its .xbf's path, as every file is; no text tells the agent to type an id.
         cad_show = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}["cad_show"]
         for said in (cad_show["inputSchema"]["properties"]["source"]["description"], self.initialized["instructions"]):
-            self.assertIn("document id", said)
+            self.assertNotIn("document id", said)
             self.assertIn("absolute path", said)
+            self.assertIn(".xbf", said)
         refused = self.call("cad_show", {"id": "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"})
         self.assertTrue(refused["isError"])
         self.assertEqual(refused["content"][0]["text"], "cad_show: missing source; unknown id. cad_show takes source, "
-                                                        "optionally view; source is a document id (running a model's "
-                                                        "script prints it) or a CAD file's absolute path.")
+                                                        "optionally view; source is a CAD file's absolute path (a "
+                                                        "model's .xbf, which running its script writes).")
 
     def test_a_model_a_browser_page_shows_already_is_not_opened_again(self) -> None:
         self.server._in_browser = lambda model: model == self.bracket
@@ -1166,7 +1168,7 @@ class HeadlessCodexTest(_Session):
         self.server._viewer_url = refuse
         failed = self.call("cad_show", {"source": self.bracket})
         self.assertTrue(failed["isError"])
-        self.assertIn(f"`cad viewer --host 127.0.0.1 --json {self.bracket}`", failed["content"][0]["text"])
+        self.assertIn(f"`cad show --host 127.0.0.1 --json {self.bracket}`", failed["content"][0]["text"])
 
 
 class CodexExecTest(_Session):
@@ -1285,7 +1287,7 @@ class NoToolsTest(_Session):
 
     def test_it_is_offered_no_tools_and_told_the_cad_command(self) -> None:
         self.assertEqual(self.initialized["instructions"], NO_TOOLS_INSTRUCTIONS)
-        for said in ("`cad` command", "`cad viewer`"):
+        for said in ("`cad` command", "`cad show`"):
             self.assertIn(said, NO_TOOLS_INSTRUCTIONS)
         for unsaid in ("skill", "cad setup"):  # nothing sends the agent to set a CAD server up
             self.assertNotIn(unsaid, NO_TOOLS_INSTRUCTIONS)
@@ -1366,8 +1368,8 @@ class ToolArgumentsTest(unittest.TestCase):
         shown = self.call(server, "cad_show", {"path": str(self.model)})
         self.assertTrue(shown["isError"])
         self.assertEqual(shown["content"][0]["text"], "cad_show: missing source; unknown path. cad_show takes source; source "
-                                                      "is a document id (running a model's script prints it) or a CAD file's "
-                                                      "absolute path.")
+                                                      "is a CAD file's absolute path (a model's .xbf, which running its "
+                                                      "script writes).")
 
     def test_every_host_is_told_the_commands_that_export_inspect_and_snapshot(self) -> None:
         # No tool exports, inspects or draws a picture for the agent: it learns the commands that do from the
@@ -1376,7 +1378,8 @@ class ToolArgumentsTest(unittest.TestCase):
                       presentation=presentation)["instructions"]
                 for client, presentation in CATALOGS.values()]
         for instructions in told:
-            for command in ("`cad xbf export <id> <file>`", "`cad xbf inspect <id>`", "`cad xbf snapshot <id> out.png`"):
+            for command in ("`cad export model.xbf model.step`", "`cad inspect model.xbf`",
+                            "`cad snapshot model.xbf out.png`"):
                 self.assertIn(command, instructions)
 
 

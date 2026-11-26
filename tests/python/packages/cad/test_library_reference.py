@@ -42,13 +42,17 @@ class TheCopyIsTheLibrary(unittest.TestCase):
         self.assertEqual([entry["name"] for entry in docs["integrations"]],
                          [name for name, entry in INTEGRATIONS.items() if not entry.deprecated])
         self.assertEqual({entry["name"] for entry in docs["names"]} | set(spelled), set(cad.__all__))
+        # A type is its decorator, its reader and its edit; what it does for a verb is the verb's (``cad.export``,
+        # ``cad.dfm``: the root's names), and its own spelling of one an alias, listed nowhere.
+        for verb in ("export", "inspect", "snapshot", "dfm", "fea", "save"):
+            self.assertIn(verb, {entry["name"] for entry in docs["names"]})
         for entry in docs["documentTypes"]:
             with self.subTest(type=entry["name"]):
                 registry = DOCUMENT_TYPES[entry["name"]]
-                names = {member["name"] for member in entry["members"] if member["kind"] != "decorator"}
-                self.assertLessEqual(set(registry.operation_names), names)
-                self.assertEqual(any(member["kind"] == "decorator" for member in entry["members"]),
-                                 registry.decorator)
+                members = entry.get("members", [])
+                names = {member["name"] for member in members if member["kind"] != "decorator"}
+                self.assertEqual(set(), set(registry.operation_names) & names)
+                self.assertEqual(any(member["kind"] == "decorator" for member in members), registry.decorator)
         for entry in docs["integrations"]:
             with self.subTest(integration=entry["name"]):
                 module = __import__(entry["module"], fromlist=["__all__"])

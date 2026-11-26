@@ -162,7 +162,7 @@ class Model:
         if not os.path.isfile(filename):
             raise ValueError(f"model {self.name!r} is defined in {filename}, no saved .py file: a function becomes a "
                              "document from the file it is in. Where the code is in no file (a notebook cell, a "
-                             f"REPL), build the shape and hand it over: xbf(shape, name={self.name!r})")
+                             f"REPL), build the shape and save it: cad.save(shape, '{self.name}.xbf')")
         self.script = Path(canonical(filename))
         self.outputs: list[Output] = []
         # The name ``name=`` gives it, which its files take where no path is given; None: its function's.
@@ -365,7 +365,7 @@ def as_package_module(main: Any) -> None:
 def _no_animations(animations: Any) -> None:
     if animations is not None:
         raise TypeError("a model decorator takes no animations=: a model's body declares its animations "
-                        "(animation(...)); animations= goes with a shape handed over, xbf(shape, name=...)")
+                        "(animation(...)); animations= goes with a shape saved, cad.save(shape, 'part.xbf', animations=[...])")
 
 
 def _given(target: Any, file: Any, out: Any) -> tuple[Any, Any, Any]:
@@ -379,11 +379,12 @@ def _given(target: Any, file: Any, out: Any) -> tuple[Any, Any, Any]:
 
 
 def _program() -> Any:
-    """The frame of the program's line that called a declaration with a shape: past this module and ``cad.<type>``'s
-    own call of it (``cad._internal.document_type``)."""
+    """The frame of the program's line that called a declaration with a shape: past this module and the library's
+    own call of it (``cad._internal.document_type``'s, ``cad._internal.verbs``')."""
     caller = sys._getframe(2)
     while caller.f_back is not None and (caller.f_code.co_filename == __file__
-                                         or caller.f_globals.get("__name__") == "cad._internal.document_type"):
+                                         or caller.f_globals.get("__name__") in ("cad._internal.document_type",
+                                                                                 "cad._internal.verbs")):
         caller = caller.f_back
     return caller
 
@@ -465,10 +466,10 @@ def _decorator(kind: str) -> Callable[..., Any]:
     decorate.__doc__ = (f"Write a {SUFFIXES[kind]} file. On a function: declare the file it writes and nothing else, "
                         f"@{kind}('path{SUFFIXES[kind]}') or out=, relative to the script; with none (@{kind}, "
                         f"@{kind}()), <name>{SUFFIXES[kind]} beside the script, the model's name= or its function's. "
-                        "Decoration builds nothing. Given a shape first, write that file of it now: "
-                        f"{kind}(shape, 'path{SUFFIXES[kind]}'), relative to the calling script's folder."
+                        "Decoration builds nothing. A shape a program holds is written as this file by "
+                        f"cad.export(shape, 'path{SUFFIXES[kind]}'), relative to the calling script's folder."
                         + (" tolerance= and angle= mesh it to within an absolute tolerance in mm and an angle in "
-                           "degrees, as cad xbf export --tolerance and --angle do." if kind in TOLERANT else ""))
+                           "degrees, as cad export --tolerance and --angle do." if kind in TOLERANT else ""))
     return decorate
 
 

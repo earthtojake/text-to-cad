@@ -11,17 +11,15 @@ signature rule):
   run`` imports it without the CAD kernel and without KiCad: its sheets, symbols and their pins,
   wires, labels and the nets they make, and ``resolve(ref)`` for a reference in the board's grammar
   (``#U3``, ``#U3.7``, ``#net:VBUS``) and the schematic's own (``#sheet:/Power/``, ``#wire:<uuid>``).
-* :func:`inspect` is the schematic in one look as plain data -- its sheets, parts and nets, and what a
-  reference names -- what ``cad kicad_sch inspect`` prints; ``snapshot`` draws one sheet flat, as
-  ``cad kicad_sch snapshot`` does.
 * :func:`edit` opens the saved schematic in KiCad's IPC API for a ``with`` block, the ``kicad``
   integration's (``cad.kicad._session``): its project's symbol libraries loaded, saved at the block's end
   when it was changed and not at all when the block raises.
-* :func:`erc` (KiCad's electrical rules check) and :func:`export` (a pdf, svgs, the netlist, a BOM) run
-  KiCad's own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``), as the board's do: they
-  are the commands ``cad kicad_sch erc`` and ``cad kicad_sch export``, one to one. Where this environment
-  lacks kicode, the command runs them in the environment of ``cad[kicad]`` the engine makes on first need;
-  a function called here says to install the extra (or run the script with ``cad run``, which does).
+
+The schematic in one look, and what a reference names, is ``cad.inspect`` (``cad inspect SCHEMATIC [REF]``),
+one sheet drawn flat ``cad.snapshot`` (``cad snapshot SCHEMATIC OUT.png --sheet /Power/``), KiCad's outputs of it
+(a pdf, svgs, the netlist, a BOM) ``cad.export(schematic, folder, to=...)``, and KiCad's electrical rules check
+``cad.kicad.erc`` (``cad kicad erc SCHEMATIC``): the last two run KiCad's own ``kicad-cli``, the ``kicad``
+integration's (kicode, ``cad[kicad]``), as the board's do.
 """
 
 from __future__ import annotations
@@ -31,14 +29,12 @@ from pathlib import Path
 
 from typing import Any
 
-from cad.results import CheckResult, ExportResult
-
-__all__ = ["edit", "erc", "export", "inspect", "read"]
+__all__ = ["edit", "read"]
 
 
 def __getattr__(name: str) -> Any:
     # The reader loads when first used: the formats package it lives in imports numpy, and a command's
-    # help (``cad kicad_sch erc --help``) is made from this module without it.
+    # help (``cad kicad erc --help``) is made from this module without it.
     if name == "read":
         from cad.engine.formats.kicad.schematic import read_schematic
 
@@ -49,15 +45,6 @@ def __getattr__(name: str) -> Any:
 
 def __dir__() -> list[str]:
     return sorted(set(globals()) | {"read"})
-
-
-def inspect(path: Path | str, ref: str | None = None) -> dict:
-    """What the schematic at ``path`` holds, as plain data: ``file``, ``root``, ``format``, ``sheets``,
-    ``parts``, ``nets`` and ``counts``; with ``ref``, ``resolved``: what that reference names
-    (``cad kicad_sch inspect``)."""
-    from cad.engine.formats.kicad.schematic_summary import inspect_schematic
-
-    return inspect_schematic(path, ref)
 
 
 def edit(schematic: Path | str) -> AbstractContextManager[Any]:
@@ -73,36 +60,6 @@ def edit(schematic: Path | str) -> AbstractContextManager[Any]:
     from cad.kicad._session import edit as editing
 
     return editing(schematic, "kicad_sch")
-
-
-def erc(schematic: Path) -> CheckResult:
-    """Check the KiCad schematic SCHEMATIC with KiCad's electrical rules check.
-
-    Runs ``kicad-cli sch erc`` on the saved hierarchy (from its project's root sheet) with every
-    severity reported, and lists each violation with its sheet and where it is (millimetres on that
-    sheet's page). Beside KiCad's, a warning for every pin joined some other way besides, and every wire's
-    end, that lies on a wire's span with no junction there (``pin_on_wire_span``, ``wire_end_on_wire_span``):
-    KiCad joins them and its ERC passes. A pin whose one connection is a wire's span is KiCad's own straight
-    run through a pin (it saves a rail drawn to each pin as one wire across them), not a finding. The schematic fails when any error-severity violation exists; warnings are reported and
-    do not fail it.
-
-    schematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).
-    """
-    from cad.kicad._schematic import check
-
-    return check(Path(schematic))
-
-
-def export(schematic: Path | str, to: str, out: Path | str) -> ExportResult:
-    """KiCad's ``to`` export of the saved ``schematic``'s hierarchy into the folder ``out`` (``cad kicad_sch
-    export SCHEMATIC --to KIND -o DIR``): ``to`` is one of ``pdf`` (every sheet), ``svg`` (one a sheet),
-    ``netlist`` (the one a board imports) and ``bom``. The result says the files written. ``RuntimeError``
-    in KiCad's words when it fails."""
-    from cad.kicad._schematic import export as run
-
-    source = Path(schematic).expanduser()
-    written = run(source, str(to), Path(out).expanduser())
-    return ExportResult(path=source.resolve(), to=str(to), written=tuple(written), warnings=())
 
 
 from cad._internal.document_type import bind as _bind  # noqa: E402

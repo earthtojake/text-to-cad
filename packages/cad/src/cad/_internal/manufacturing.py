@@ -16,7 +16,7 @@ module of ``cad._internal.dfm`` (its options, rules, findings and summary):
 
 **Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
-finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
+finding at a ref ``cad inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
 processes (``_held``, ``cad.engine.api.check``), a file by this caller only where no engine can be reached;
 an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), by this caller, each finding at
 ``x, y, z``. What a caller measures itself it measures in a process of its own that it holds to a check's
@@ -250,8 +250,8 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *,
     module = dfm.module(process)
     if "mesh" not in module.MEASURED_FROM and document_type not in (*BREP_TYPES, *CUT_TYPES):
         reason = _MESH_REFUSED.get(process, f"a {process} check measures exact geometry, which a mesh does not hold")
-        raise ArgumentRefused(f"{reason}: check the part's STEP or model instead (cad step dfm part.step --process "
-                              f"{process}, or cad xbf dfm <id> --process {process})")
+        raise ArgumentRefused(f"{reason}: check the part's STEP or model instead (cad dfm part.step --process "
+                              f"{process}, or cad dfm part.xbf --process {process})")
     if document_type in CUT_TYPES and process != "sheet":
         raise ArgumentRefused(f"a DXF is checked as a sheet's cut file: --process sheet, not {process}")
     own = {**dfm.COMMON, **module.OPTIONS}
@@ -897,7 +897,7 @@ that does not read or holds no solid, a family that could not be measured, an en
 is no verdict and never a pass. Exit 2: the command line's mistake."""
 _ABOUT = {
     "brep": """A STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref
-(cad <type> inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
+(cad inspect DOC REF resolves it). The measurements are facts; the verdicts are general rules, each
 from a published design guide and no shop's limit, each finding coded by its rule, with the limit, the source
 and what to change. A rule's feasibility limit broken is an error; a recommendation is a warning. For a named
 shop, compare the measurements with its own published limits. --json carries every measurement, every rule's
@@ -926,8 +926,8 @@ def _kind_of(document_type: str) -> str:
 
 def _source_help(document_type: str) -> str:
     if document_type == "xbf":
-        return ("a model's document id the engine holds (cad run SCRIPT.py prints it), or the handle its call "
-                "returns; or the .xbf file a model is saved as, checked as the file it is.")
+        return ("the .xbf file a model is saved as, checked as the file it is; in Python, the handle a model's call "
+                "returns too.")
     from cad.registry import DOCUMENT_TYPES
 
     extensions = " or ".join(DOCUMENT_TYPES[document_type].extensions)
@@ -987,7 +987,7 @@ def _signature(document_type: str) -> tuple[inspect.Signature, str]:
     return inspect.Signature(parameters, return_annotation=CheckResult), doc
 
 
-#: A flag in a refusal's words (``--layer-height``), but inside a command written out (``(cad step dfm ...)``).
+#: A flag in a refusal's words (``--layer-height``), but inside a command written out (``(cad dfm ...)``).
 _FLAG = re.compile(r"\((?:cad |a shop)[^)]*\)|--([a-z][a-z-]*[a-z])")
 
 
@@ -1035,8 +1035,8 @@ def called(document_type: str, signature: inspect.Signature, args: tuple[Any, ..
 
 def dfm_for(document_type: str) -> Any:
     """``cad.<document_type>.dfm``: the manufacturing check, for a source of that type. Its signature is the
-    type's (``_signature``): its processes the command's choices, and only their options, so ``cad stl dfm``
-    offers no CNC flag and ``cad dxf dfm`` checks the sheet's cut file given no ``--process``.
+    type's (``_signature``): its processes the command's choices, and only their options, so ``cad dfm`` of a
+    mesh offers no CNC flag and ``cad dfm`` of a DXF checks the sheet's cut file given no ``--process``.
 
     A Python caller's refusal names the parameter (``tools``, not ``--tools``: ``parameters``); the command
     calls it with ``_command=True`` -- a keyword of the command's own, in no signature -- and reads its flags."""

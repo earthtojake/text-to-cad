@@ -340,9 +340,12 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(count, sum(held[placed.prototype].triangles for placed in view.placements))
         self.assertEqual(len(data), 84 + 50 * count)
 
-    def test_what_is_no_document_or_no_new_one_is_refused_by_name(self) -> None:
-        with self.assertRaisesRegex(ExportRefused, "not written from another xbf"):
-            translate(self.xbf, None, self.folder / "again.xbf")
+    def test_what_is_no_document_is_refused_by_name_and_an_xbf_of_an_xbf_is_its_copy(self) -> None:
+        # An xbf written from another is a copy of its document, as cp makes one: its build closure with it.
+        translate(self.xbf, None, self.folder / "again.xbf")
+        closure = document.Loaded(self.xbf).closure
+        self.assertTrue(closure)
+        self.assertEqual(document.Loaded(self.folder / "again.xbf").closure, closure)
         with self.assertRaisesRegex(ExportRefused, "is a mesh"):
             translate(self.folder / "board.glb", None, self.folder / "back.step")
         with self.assertRaisesRegex(ExportRefused, "an export is one of"):

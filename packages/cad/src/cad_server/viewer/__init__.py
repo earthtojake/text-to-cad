@@ -1,6 +1,6 @@
 """The engine's viewer HTTP application and its short-lived launcher.
 
-``cad viewer [FILE ...]`` ensures the installation's engine and opens its one
+``cad show [FILE ...]`` ensures the installation's engine and opens its one
 page: the home, or each file's page. The built React client ships in
 ``cad_server/_runtime/viewer``. The page addresses every document by path, ``/<id>``; a
 request names a file by its absolute path.

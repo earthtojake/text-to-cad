@@ -20,7 +20,7 @@ so the saved scene finds nothing the child's folder held: a Menagerie robot read
 and texture by its absolute path and clears the spec's own folders (``meshdir``, ``texturedir``,
 ``modelfiledir``), for an MJCF path as for a document: a scene composed from them compiles, and saved
 anywhere on this computer loads again. The price is that the saved scene's paths are this computer's;
-a robot meant to travel as a folder is an export (``cad xbf export <id> robot/robot.xml``, meshes
+a robot meant to travel as a folder is an export (``cad export <id> robot/robot.xml``, meshes
 relative beside it) that the scene ``<include>``s or attaches without saving.
 
 MuJoCo reads a mesh's file when the spec is compiled, not when it is made, so a document's files must

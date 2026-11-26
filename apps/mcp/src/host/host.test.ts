@@ -375,7 +375,7 @@ describe('a Quick Edit in the chat', () => {
   const annotation = () => ({ id: 'annotation', kind: 'attachment' as const, name: 'a.annotation.json', label: 'Annotation', mimeType: 'application/json', about: ['file'],
     content: { then: () => { throw new Error('JSON bytes must not be read for handoff'); } }, path: Promise.resolve('/tmp/p/a-1.annotation.json') });
   // The snapshot packet, as a Quick Edit carries it: text inline in the message, never an image or a file.
-  const PACKET = 'Snapshot JSON (`cad step snapshot --job`):\n```json\n{"input":"/project/parts/a.step","jobs":[]}\n```';
+  const PACKET = 'Snapshot JSON (`cad snapshot --job`):\n```json\n{"input":"/project/parts/a.step","jobs":[]}\n```';
   const snapshot = () => ({ id: 'snapshot', kind: 'attachment' as const, name: 'a-snapshot.json', mimeType: 'application/json', about: ['file'],
     content: new Blob(['{"input":"/project/parts/a.step","jobs":[]}'], { type: 'application/json' }), inlineText: Promise.resolve(PACKET) });
   const edit = (...parts: any[]) => createPromptContext([{ id: 'text', kind: 'text', text: 'Round it.' }, file, ...parts]);

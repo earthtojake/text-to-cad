@@ -12,7 +12,11 @@ says it does -- an integration's namespace that integration, a document type's r
 ``reader_integration`` (a STEP's: build123d), an operation the calling process runs its integration (a
 STEP's, an xbf's, a model's and a DXF's ``dfm``: build123d; a mesh's: trimesh), one the engine runs none, an edit its
 integration (``kicad_pcb.edit``: kicad; ``for_name``), and an operation also what its integration's operations need
-beside it (``cad.step.solve``: calculix, with build123d and netgen; ``needs``). A type alone
+beside it (``cad.step.solve``: calculix, with build123d and netgen; ``needs``). A verb's call (``cad.dfm``) needs
+what the operation it runs of its source's type does, the source's suffix read where the call spells it
+(``cad.dfm("part.stl")``, ``cad.dfm(HERE / "part.step")``: trimesh, build123d; ``cad.inspect(src, ranges=True)``
+build123d; ``cad.export(board, out, to=kind)`` a KiCad file's, kicad; ``needs_call``), and a verb by its name alone
+what every type it takes needs alike (``cad.fea``: calculix, with build123d and netgen). A type alone
 (``from cad import step``) needs nothing. Nothing is imported, and a module of no local file is passed over.
 An import made by name at run time (``importlib.import_module``) is not seen: the program's run says which
 extra it lacks, in one line, and its header names it.
@@ -56,6 +60,47 @@ def _package_root(folder: Path) -> Path:
 def _package_of(path: Path) -> Path:
     """The folder a relative import of the file ``path`` counts from: its own."""
     return path.parent
+
+
+def _verb(dotted: str) -> str | None:
+    """The verb a call of the library's name ``dotted`` is (``cad.dfm``: ``dfm``), or None."""
+    from cad._internal.aliases import current
+    from cad.registry import VERBS
+
+    parts = current(dotted).split(".")
+    return parts[1] if len(parts) == 2 and parts[0] in LIBRARY and parts[1] in VERBS else None
+
+
+def _suffix(node: ast.expr | None) -> str | None:
+    """The suffix of the path an expression spells, where it ends in a literal (``"part.stl"``, ``HERE /
+    "part.stl"``, ``Path("part.stl")``, ``f"{name}.stl"``), or None."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        node = node.right
+    elif isinstance(node, ast.Call) and node.args and not node.keywords:
+        called = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+        node = node.args[-1] if called in ("Path", "PurePath") else None
+    fragment = isinstance(node, ast.JoinedStr)
+    if fragment and node.values:
+        node = node.values[-1]
+    if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+        return None
+    name = node.value.replace("\\", "/").rsplit("/", 1)[-1]
+    dot = name.rfind(".")
+    return name[dot:] if dot > 0 or (dot == 0 and fragment) else None
+
+
+def _call(verb: str, node: ast.Call) -> tuple[str | None, str | None]:
+    """What a verb's call says of its source: its suffix where it spells one (``_suffix``) and ``inspect``'s mode
+    (``ranges=True``); ``to=`` is a KiCad file's export alone (a board's or a schematic's, the kicad integration's)."""
+    from cad.registry import MODES
+
+    keywords = {keyword.arg: keyword.value for keyword in node.keywords if keyword.arg}
+    suffix = _suffix(node.args[0] if node.args else keywords.get("source"))
+    if suffix is None and verb == "export" and "to" in keywords:
+        suffix = ".kicad_pcb"
+    mode = next((name for name in MODES if isinstance(keywords.get(name), ast.Constant)
+                 and keywords[name].value is True), None)
+    return suffix, mode
 
 
 def _dotted(node: ast.expr, bound: dict[str, str]) -> str | None:
@@ -119,7 +164,7 @@ class _Reader:
     def read(self, source: str, path: Path) -> None:
         """One file's imports, its uses of cad's names and its decorators (see the module); a file that does
         not parse is passed over: Python says what is wrong with it when it runs."""
-        from cad._internal.integrations import needs
+        from cad._internal.integrations import needs, needs_call
 
         try:
             tree = ast.parse(source, filename=str(path))
@@ -147,6 +192,11 @@ class _Reader:
                 dotted = _dotted(node, bound)
                 if dotted:
                     self.found.update(needs(dotted))
+            elif isinstance(node, ast.Call):  # ``cad.dfm("part.stl")``: the verb's source decides what it needs
+                dotted = _dotted(node.func, bound)
+                verb = _verb(dotted) if dotted else None
+                if verb is not None:
+                    self.found.update(needs_call(verb, *_call(verb, node)))
 
     def drain(self) -> None:
         while self.queue:

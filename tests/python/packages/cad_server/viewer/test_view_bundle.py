@@ -599,7 +599,7 @@ class ViewBundleTest(unittest.TestCase):
         # and by the command, and nothing is written.
         with self.assertRaisesRegex(ExportRefused, r"^pair\.view: an export is one of "):
             xbf.export(source, self.out / "pair.view")
-        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "xbf", "export", str(source),
+        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "export", str(source),
                                   str(self.out / "said.view"), "--json"], env=self.env)
         self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
         self.assertIn("said.view: an export is one of ", json.loads(done.stdout)["error"])

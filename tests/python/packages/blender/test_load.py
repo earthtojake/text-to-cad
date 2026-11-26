@@ -471,7 +471,7 @@ class LoadTest(unittest.TestCase):
         ids = re.findall(r"^\s*id: (\S+)$", built.stdout, re.M)
         if built.returncode != 0 or not ids:
             raise AssertionError(f"the model did not build:\n{built.stdout}\n{built.stderr}")
-        exported = cls.cad("xbf", "export", ids[0], "scene.glb", "--tolerance", "0.05", "--angle", "10")
+        exported = cls.cad("export", ids[0], "scene.glb", "--tolerance", "0.05", "--angle", "10")
         if exported.returncode != 0:
             raise AssertionError(f"the GLB was not exported:\n{exported.stdout}\n{exported.stderr}")
         _nameless(cls.project / "scene.glb", cls.project / "nameless.glb")

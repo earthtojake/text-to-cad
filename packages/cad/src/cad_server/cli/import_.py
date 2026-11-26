@@ -13,7 +13,7 @@ goes into the library with the link it came from (``sharing.import_record``), as
 share`` keeps a share, so that it is among the viewer's Recents and the share's link names it here wherever cad takes a
 document (``sharing.copy_of``). It says what it wrote, the file it is of and the script that builds it, and where what built it (``Cad-Share-Made``)
 differs from this computer's cad and libraries, which a build here records (``_here``). It runs nothing, and makes no
-project: the next steps it prints are ``cad viewer FOLDER/<file>``, which shows it as it was shared, and, of a model,
+project: the next steps it prints are ``cad show FOLDER/<file>``, which shows it as it was shared, and, of a model,
 ``cad run FOLDER/<script>``, which builds it here, since someone else's code is the person's to run. ``--json``
 answers in one object.
 

@@ -390,7 +390,23 @@ class ChoosingTest(unittest.TestCase):
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
                 ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
                 ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),
-                ("from cad import kicad_pcb\nkicad_pcb.read('b.kicad_pcb')\n", set())):
+                ("from cad import kicad_pcb\nkicad_pcb.read('b.kicad_pcb')\n", set()),
+                # A verb needs what it runs of its source's type, the suffix read where the call spells it; by its
+                # name alone, what every type it takes needs alike; a source the scan cannot read, nothing.
+                ("import cad\ncad.dfm('p.step', process='cnc')\n", {"build123d"}),
+                ("import cad\ncad.dfm('p.stl')\n", {"trimesh"}),
+                ("from pathlib import Path\nfrom cad import dfm\ndfm(Path('p.3mf'))\n", {"trimesh"}),
+                ("import cad\nHERE = None\ncad.dfm(HERE / 'p.glb')\n", {"trimesh"}),
+                ("import cad\nname = 'p'\ncad.dfm(f'{name}.dxf')\n", {"build123d"}),
+                ("import cad\nsource = None\ncad.dfm(source)\n", set()),
+                ("import cad\ncad.fea('p.step', study='s.json', out='r')\n", {"build123d", "calculix", "netgen"}),
+                ("from cad import fea\n", {"build123d", "calculix", "netgen"}),
+                ("import cad\nhandle = None\ncad.inspect(handle, ranges=True)\n", {"build123d"}),
+                ("import cad\ncad.inspect('p.step', interference=True)\n", set()),
+                ("import cad\ncad.inspect('p.step')\n", set()),
+                ("import cad\ncad.export('b.kicad_pcb', 'fab', to='gerbers')\n", {"kicad"}),
+                ("import cad\nboard = out = kind = None\ncad.export(board, out, to=kind)\n", {"kicad"}),
+                ("import cad\ncad.snapshot('b.kicad_pcb', 'b.png')\n", set())):
             with self.subTest(code=code):
                 self.assertEqual(scan.scan(code=code, cwd=self.folder), found)
         self.write("read.py", "from pathlib import Path\nfrom cad import xbf, step\n\n@xbf\ndef holder():\n"

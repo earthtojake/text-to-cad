@@ -29,7 +29,7 @@ The nets are resolved as KiCad's connection graph resolves them (``eeschema/conn
    the lower name. A local name carries its sheet's path (``/Power/VBUS``), a global one none.
 
 :func:`span_joins` lists what step 1 joins that a person seldom means: a pin, or a wire's end, on another
-wire's run with no junction there (``cad kicad_sch erc`` warns of each).
+wire's run with no junction there (``cad kicad erc`` warns of each).
 
 A reference names a schematic's things as a board's names the board's (:mod:`.refs`, the same
 grammar where they mean the same: ``#U3`` the symbol, every unit of it; ``#U3.7`` its pin 7;

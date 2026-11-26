@@ -89,22 +89,28 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertRegex(integration.python or "3.13", r"^3\.\d+$", "a Python line, as uv is asked for one")
                 self.assertTrue(set(integration.platforms) <= set(registry.PLATFORMS))
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
-        # An integration has operations of its own only on its tool's own files, which are no document type (files
-        # cad checks or writes and never shows): a MuJoCo model's, which mujoco checks, and OrcaSlicer's presets,
-        # found by name, which orcaslicer lists and writes complete. A name is a type's or an integration's, a
-        # suffix one or the other's, and a type's file has its operations there alone.
-        self.assertEqual({"mujoco": (("check",), (".xml", ".mjcf")), "orcaslicer": (("presets", "complete"), ())},
+        # An integration has operations of its own on its tool's own files: a MuJoCo model's, which is no document type
+        # and which mujoco checks; a KiCad board's and schematic's, document types whose own checks are KiCad's, by its
+        # name (drc, erc); and OrcaSlicer's presets, found by name, which orcaslicer lists and writes complete. A name
+        # is a type's or an integration's, and an operation lives in one place: a type has none an integration has.
+        self.assertEqual({"kicad": (("drc", "erc"), (".kicad_pcb", ".kicad_sch")),
+                          "mujoco": (("check",), (".xml", ".mjcf")), "orcaslicer": (("presets", "complete"), ())},
                          {name: (found.operation_names, found.files)
                           for name, found in registry.INTEGRATIONS.items() if found.operations})
-        self.assertEqual(("check", "presets", "complete"), registry.INTEGRATION_OPERATIONS)
-        self.assertEqual(("check",), registry.FILE_OPERATIONS)
+        self.assertEqual({"drc": (".kicad_pcb",), "erc": (".kicad_sch",)},
+                         {name: registry.INTEGRATIONS["kicad"].files_of(name) for name in ("drc", "erc")})
+        self.assertEqual(("check", "drc", "erc", "presets", "complete"), registry.INTEGRATION_OPERATIONS)
+        self.assertEqual(("check", "drc", "erc"), registry.FILE_OPERATIONS)
         self.assertFalse(set(registry.INTEGRATIONS) & set(registry.DOCUMENT_TYPES))
         for found in registry.INTEGRATIONS.values():
             self.assertEqual(bool(set(found.operation_names) & set(registry.FILE_OPERATIONS)), bool(found.files))
-            self.assertFalse([suffix for suffix in found.files if registry.by_extension(suffix)],
-                             "a suffix that is a document type's is not an integration's too")
+            if found.name != "kicad":  # KiCad's checks are of document types' files, by its own name
+                self.assertFalse([suffix for suffix in found.files if registry.by_extension(suffix)],
+                                 "a suffix that is a document type's is not an integration's too")
             for operation in found.operations:
                 self.assertEqual(found.name, operation.integration)
+        operations = {name for entry in registry.DOCUMENT_TYPES.values() for name in entry.operation_names}
+        self.assertFalse(operations & set(registry.INTEGRATION_OPERATIONS), "an operation lives in one place")
         self.assertNotIn("mjcf", registry.DOCUMENT_TYPES, "an MJCF is written and checked, never shown: no type")
         self.assertIsNone(registry.type_of("robot.xml"))
         self.assertIn("operations (on .xml, .mjcf):\n  check  ", registry.integration_help("mujoco"))
@@ -139,6 +145,16 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("calculix", integrations.for_command("ccx"))
         # A mechanism's joint stops are the kernel's, run in the caller: a script that calls them needs build123d.
         self.assertEqual("build123d", integrations.for_name("cad.xbf.ranges"))
+        # A verb needs what it runs of its source's type, by the source's suffix; by its name alone, what every type
+        # it takes needs alike (the study's calculix), else nothing: the engine runs a document's export.
+        self.assertEqual(("calculix", "build123d", "trimesh", "kicad", None),
+                         (integrations.for_name("cad.fea"), integrations.for_verb("dfm", ".step"),
+                          integrations.for_verb("dfm", ".stl"), integrations.for_verb("export", ".kicad_sch"),
+                          integrations.for_verb("export", ".xbf")))
+        self.assertEqual(("build123d", None, None, None),
+                         (integrations.for_verb("inspect", mode="ranges"), integrations.for_name("cad.dfm"),
+                          integrations.for_name("cad.export"), integrations.for_verb("dfm", ".urdf")))
+        self.assertEqual(("build123d", "calculix", "netgen"), integrations.needs("cad.fea"))
         self.assertEqual({"xbf", "step"},
                          {entry.id for entry in registry.DOCUMENT_TYPES.values() if "ranges" in entry.operation_names})
         self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
@@ -165,6 +181,18 @@ class TheTableIsTheSource(unittest.TestCase):
                          [registry.platform_of(*given) for given in (("darwin", "x86_64"), ("linux", "aarch64"),
                                                                      ("win32", "AMD64"), ("darwin", "arm64"))])
 
+    def test_each_verb_runs_the_operation_a_type_has_for_it(self) -> None:
+        self.assertEqual({"export": ("export",), "inspect": ("inspect", "validate"), "snapshot": ("snapshot",),
+                          "dfm": ("dfm",), "fea": ("solve",)}, dict(registry.VERBS))
+        self.assertEqual({"interference": "interference", "ranges": "ranges"}, dict(registry.MODES))
+        self.assertEqual("validate", registry.operation_for("inspect", "urdf"))
+        self.assertEqual("inspect", registry.operation_for("inspect", "kicad_pcb"))
+        self.assertEqual("solve", registry.operation_for("fea", "step"))
+        self.assertEqual("interference", registry.operation_for("inspect", "xbf", "interference"))
+        self.assertIsNone(registry.operation_for("inspect", "glb", "ranges"))
+        self.assertIsNone(registry.operation_for("dfm", "kicad_pcb"))
+        self.assertEqual(("xbf", "step"), registry.types_for("fea"))
+        self.assertEqual(("xbf", "step", "stl", "glb", "threemf", "dxf"), registry.types_for("dfm"))
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone
             __module__ = "build123d.topology"

@@ -17,7 +17,7 @@
  * hole golden with a light wall; names on copper light or dark against the copper's own colour. The
  * payload carries geometry only (`docs/plot-payload.md`); what colour a layer is, is this module's,
  * so a change of theme draws the board again in the browser, never on the server.
- * `render/board.py` (`cad kicad_pcb snapshot`) mirrors both tables, its stills on the canvas this
+ * `render/board.py` (`cad snapshot`) mirrors both tables, its stills on the canvas this
  * module had before the canvas moved to `--canvas` (`#292929`, `#ffffff`).
  */
 import { APP_THEME_COLORS } from "../appTheme.js";
@@ -132,7 +132,7 @@ export const itemColor = BOARD_PALETTES.dark.item;
 
 /**
  * A schematic's colours, by layer kind and by what an item is: the schematic plot's
- * (`cad.engine.formats.kicad.schematic_plot`), as `cad kicad_sch snapshot` paints them
+ * (`cad.engine.formats.kicad.schematic_plot`), as `cad snapshot` paints them
  * (`cad.engine.render.schematic.LIGHT` and `DARK`, kept in step). A schematic follows the viewer's
  * theme: in light, KiCad's default schematic theme (`common/settings/builtin_color_themes.h`), light
  * paper and dark ink; in dark, a dark sheet with light ink, each element the same hue. The payload

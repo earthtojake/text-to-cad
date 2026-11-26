@@ -1,10 +1,10 @@
 import { DOCUMENT_TYPE_REGISTRY } from '../lib/documentTypes.generated.js';
 
-// A Quick Edit's snapshot packet: what `cad <type> snapshot --job` draws again, every view a prompt carries with
+// A Quick Edit's snapshot packet: what `cad snapshot --job` draws again, every view a prompt carries with
 // the person's ink over it. The page makes it, the same for every host, from what the person saw (the views a
 // prompt carries, `promptViews`, and the ink, an annotation file's document), what a board's prompt names in it
 // (`references`) and the file's address as the message names it (`input`); the message carries it inline, whole.
-// Nothing is written and no picture is named: `cad <type> snapshot --job` names each output.
+// Nothing is written and no picture is named: `cad snapshot --job` names each output.
 //
 // It is shortened as it is made, every number to what the view it was seen in can show and nothing a reader
 // outside the page cannot use, so the same views and ink give the same packet on every host, but for `input`.
@@ -45,7 +45,7 @@ export function pixelDecimals(q) {
   return Math.min(100, Math.max(0, Math.ceil(-Math.log10(q))));
 }
 
-// The selector of a ref into the file, the part after its document's `#`, as `cad <type> inspect` reads it
+// The selector of a ref into the file, the part after its document's `#`, as `cad inspect` reads it
 // (`cadRefs.js`'s `engineFile`): a document in quotes (a path with a space or a `#` in it) is read whole first, and
 // a `#` after a quote is a quoted label's own; a ref with no document (a bare selector, a glob, a robot's visual id)
 // is the selector itself.
@@ -164,11 +164,11 @@ function markOf(mark, q) {
  * A Quick Edit's snapshot packet, made in the page from what the person saw: a job per view (`views`, each a
  * snapshot job's own words, `annotation/views.js`'s), its camera and what it shows (`display`, `kinematics`,
  * `jointValues`, `animation`, `selection`), a 3D view's `output` framing, and its picture by its label and size
- * (`outputs`, no path: `cad <type> snapshot --job` names each); the board `references` its prompt names; the ink
+ * (`outputs`, no path: `cad snapshot --job` names each); the board `references` its prompt names; the ink
  * (`annotation`, an annotation file's document), and the parts hidden and isolated in the view it was last drawn
  * in (`hidden`, `isolated`), which `--annotation` leaves out of its stills. `input` is the file's address as the
  * message's `File:` line names it (a path from the workspace, a model's id, a shared model's link); `type` its
- * document type, whose snapshot draws the packet (`cad <type> snapshot`: a drawing's views, a DXF's, a board's and a
+ * document type, whose snapshot draws the packet (`cad snapshot`: a drawing's views, a DXF's, a board's and a
  * schematic's, have no 3D framing). Null without a view.
  *
  * Shortened as it is made: each mark's points to a quarter of a pixel of the view it was drawn in (`q`,
@@ -228,13 +228,13 @@ function drawnIn(annotation, views) {
 
 // What a packet's text writes as its JSON escape, which only a string can hold: what a single-quoted argument ends at,
 // in bash (`'`) and in PowerShell (`'`, and its typographic quotes, U+2018 to U+201B), and every other character
-// that is not ASCII, which Windows PowerShell 5.1 pipes to a program as ASCII by default (`'<packet>' | cad <type>
+// that is not ASCII, which Windows PowerShell 5.1 pipes to a program as ASCII by default (`'<packet>' | cad
 // snapshot --job -`, where its quotes are taken from an argument): a code unit at a time, a surrogate pair as two.
 const ESCAPED = /['\u0080-\uffff]/g;
 
 /**
  * A packet as a message carries it: compact JSON, no space, in ASCII alone, with no character a single-quoted
- * argument ends at, so `cad <type> snapshot --job '<packet>'` takes it as it is pasted, in bash and PowerShell
+ * argument ends at, so `cad snapshot --job '<packet>'` takes it as it is pasted, in bash and PowerShell
  * alike, and a pipe that speaks ASCII alone carries it whole.
  * @param {object} packet
  */

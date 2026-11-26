@@ -86,7 +86,7 @@ export interface SnapshotJob {
   output?: { padding: 0; tightFrame: false };
   outputs: Array<{ label: string; width?: number; height?: number }>;
 }
-/** A Quick Edit's snapshot packet: what `cad <type> snapshot --job` draws again, made in the page. */
+/** A Quick Edit's snapshot packet: what `cad snapshot --job` draws again, made in the page. */
 export interface SnapshotPacket {
   /** The file's address, as the message's `File:` line names it. */
   input: string;

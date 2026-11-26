@@ -39,8 +39,8 @@ const HEADING_ATTRIBUTES = /[ \t]+\{#([^\s}]+)(?:[ \t]+kind=([a-z]+))?\}[ \t]*$/
 function generatedMarkdown(page: "cli" | "library") {
   if (page === "cli") return cliPage(libraryIds());
   const version = fs.readFileSync(inRepo("VERSION"), "utf8").trim();
-  const operations = [...cli.documentTypes, ...cli.integrations].flatMap((group) => group.operations);
-  return libraryPage(version, new Set([...cli.commands, ...operations].map((cmd) => cmd.command)));
+  const operations = cli.integrations.flatMap((group) => group.operations);
+  return libraryPage(version, new Set([...cli.verbs, ...cli.commands, ...operations].map((cmd) => cmd.command)));
 }
 
 export type LoadedDoc = {

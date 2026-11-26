@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 __all__ = ["INTEGRATIONS", "Integration", "alongside", "for_command", "for_distribution", "for_module", "for_name",
-           "missing", "needs"]
+           "for_verb", "missing", "needs", "needs_call"]
 
 
 @dataclass(frozen=True)
@@ -89,13 +89,17 @@ def for_name(name: str) -> str | None:
     ``cad.build123d``); then an integration's namespace (``cad.build123d``, ``cad.kicad._session``: the
     registry's), a document type's reader (``cad.step.read``: its ``reader_integration``), its edit
     (``cad.kicad_pcb.edit``: the edit's integration, kicad) and a type's operation that runs in the caller
-    (``cad.step.dfm``: build123d, ``cad.stl.dfm``: trimesh; never one the engine runs, as ``cad.step.export``). None for any other name: a type itself (``cad.step``), the model contract."""
+    (``cad.step.dfm``: build123d, ``cad.stl.dfm``: trimesh; never one the engine runs, as ``cad.step.export``), and a
+    verb's where every type it takes needs one alike (``cad.fea``: calculix; ``for_verb``, which a call's source decides
+    otherwise). None for any other name: a type itself (``cad.step``), the model contract."""
     from cad._internal.aliases import current
-    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS as REGISTERED
+    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS as REGISTERED, VERBS
 
     parts = current(name).split(".")
     if parts[0] not in _LIBRARY or len(parts) < 2:
         return None
+    if parts[1] in VERBS and len(parts) == 2:  # ``cad.fea``: by its name alone where every type needs one alike
+        return for_verb(parts[1])
     namespace = _namespaces().get(parts[1])
     if namespace is not None:
         return namespace
@@ -110,6 +114,38 @@ def for_name(name: str) -> str | None:
         operation = entry.operation(parts[2])
         needed = operation.integration if operation is not None and not operation.engine else None
     return REGISTERED[needed].extra if needed is not None else None
+
+
+def for_verb(verb: str, suffix: str | None = None, mode: str | None = None) -> str | None:
+    """The integration a program that calls the verb ``cad.<verb>`` needs in its own process: of a source whose
+    suffix is ``suffix`` (``.stl``), that of the operation the verb runs of its type (``cad.registry.operation_for``,
+    ``mode`` one of ``inspect``'s: ``ranges``), none where the engine runs it; with no suffix known, the one every
+    type the verb takes needs alike (``cad.fea``: calculix), else None -- a ``cad.dfm`` of a source the scan cannot
+    read, which the program's run names in one line where it lacks it."""
+    from cad.registry import (DOCUMENT_TYPES, INTEGRATIONS as REGISTERED, MODES, VERBS, by_extension, operation_for,
+                              types_for)
+
+    if verb not in VERBS or (mode is not None and (verb != "inspect" or mode not in MODES)):
+        return None
+
+    def of(document_type: str) -> str | None:
+        operation = DOCUMENT_TYPES[document_type].operation(operation_for(verb, document_type, mode))
+        needed = operation.integration if operation is not None and not operation.engine else None
+        return REGISTERED[needed].extra if needed is not None else None
+
+    if suffix is not None:
+        entry = by_extension(suffix)
+        return of(entry.id) if entry is not None and operation_for(verb, entry.id, mode) is not None else None
+    found = {of(document_type) for document_type in types_for(verb, mode)}
+    return found.pop() if len(found) == 1 else None
+
+
+def needs_call(verb: str, suffix: str | None = None, mode: str | None = None) -> tuple[str, ...]:
+    """Every extra a program that calls ``cad.<verb>`` needs in its own process (``for_verb``), with those its
+    integration's operations need beside it (``alongside``: ``cad.fea``'s calculix, the kernel and netgen). Sorted;
+    none for a call that needs none."""
+    key = for_verb(verb, suffix, mode)
+    return tuple(sorted({key, *alongside(key)})) if key is not None else ()
 
 
 def alongside(extra: str) -> tuple[str, ...]:
@@ -138,14 +174,15 @@ def needs(name: str) -> tuple[str, ...]:
     module or namespace (``cad_ccx``, ``cad.calculix``) is its integration alone. Sorted; none for a name that
     needs none."""
     from cad._internal.aliases import current
-    from cad.registry import DOCUMENT_TYPES
+    from cad.registry import DOCUMENT_TYPES, VERBS
 
     key = for_module(name)
     if key is None:
         return ()
     parts = current(name).split(".")
-    operation = (parts[0] in _LIBRARY and len(parts) >= 3 and parts[1] in DOCUMENT_TYPES
-                 and parts[2] not in ("read", "edit"))
+    operation = parts[0] in _LIBRARY and ((len(parts) >= 3 and parts[1] in DOCUMENT_TYPES
+                                           and parts[2] not in ("read", "edit"))
+                                          or (len(parts) == 2 and parts[1] in VERBS))
     return tuple(sorted({key, *(alongside(key) if operation else ())}))
 
 

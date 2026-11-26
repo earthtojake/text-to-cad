@@ -42,7 +42,7 @@ export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'find
 export interface CadServerInfo {
   autoReload?: boolean;
   identityToken?: string;
-  /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
+  /** The folder of the most recent launch (`cad show`), which a launch's relative files are read from. */
   start?: string;
   /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
@@ -475,7 +475,7 @@ export interface CadActivity {
   crash?: CadPageCrash;
 }
 
-/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad kicad_pcb export --to`). */
+/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad export --to`). */
 export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
   | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf' | 'svg' | 'netlist';
 export interface ExportSource { doc: string; revision: string }

@@ -169,7 +169,7 @@ class EngineTest(unittest.TestCase):
                                        "CAD_ENGINE_CHECK_RSS_MB": "0"})  # no limit of a check's own: the cap's alone
         reached = Path(f"{hold}.reached")
         steps = box(self, 6, 7)
-        command = subprocess.Popen([sys.executable, "-m", "cad_server.cli", "step", "dfm", str(steps[0]),
+        command = subprocess.Popen([sys.executable, "-m", "cad_server.cli", "dfm", str(steps[0]),
                                     "--process", "printing", "--json"], env=env, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
         self.addCleanup(command.wait)

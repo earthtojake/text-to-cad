@@ -82,14 +82,14 @@ const BoardPreview = props => <Suspense fallback={null}><BoardPreviewView {...pr
  * draws on the board, and Measure, between points snapped to pad, via and hole centres, track ends
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
- * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its panel
+ * board's Display, which `cad snapshot --job` draws again, the references lit. Its panel
  * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
  * settings are Display's card's (`BoardDisplay.jsx`'s `boardViewGroups`): Side (top or bottom; ⇧F), Mode (2D/3D; 3)
  * and in 3D Projection, then Style (the preset) and Background, and its Reset; the corner
  * holds the zoom pill alone; the Layers tab has the
- * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
+ * layers, the other layers, the pours and the opacities: one contract with `cad snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
  *
  * The same view, drawn in 3D (2D/3D, or the key 3): the board as a slab with its two faces, each the

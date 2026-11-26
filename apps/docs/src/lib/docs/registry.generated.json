@@ -7,12 +7,34 @@
     "interference",
     "solve",
     "ranges",
-    "drc",
-    "erc",
     "validate"
   ],
+  "verbs": {
+    "export": [
+      "export"
+    ],
+    "inspect": [
+      "inspect",
+      "validate"
+    ],
+    "snapshot": [
+      "snapshot"
+    ],
+    "dfm": [
+      "dfm"
+    ],
+    "fea": [
+      "solve"
+    ]
+  },
+  "modes": {
+    "interference": "interference",
+    "ranges": "ranges"
+  },
   "integrationOperations": [
     "check",
+    "drc",
+    "erc",
     "presets",
     "complete"
   ],
@@ -51,43 +73,50 @@
           "name": "export",
           "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "inspect",
           "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "dfm",
           "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
           "integration": "build123d",
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "interference",
           "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "solve",
           "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
           "integration": "calculix",
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "ranges",
           "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
           "integration": "build123d",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": true,
@@ -137,43 +166,50 @@
           "name": "export",
           "summary": "write the document to other files, each kind by its suffix (.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), .urdf (its meshes beside it)); --tolerance and --angle mesh a .glb, an .stl or a .3mf finer",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "inspect",
           "summary": "what the document holds, then its build closure; with a ref, what one element or part is and what made it",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "dfm",
           "summary": "check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding (molding) or 3D printing (printing), measured and judged against general, cited rules, each finding at a face's or an edge's ref",
           "integration": "build123d",
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "interference",
           "summary": "which parts share volume, as built and at each pose asked (--pose: a mechanism state, a configuration sequence at a time, or joint values): a pair with air between its parts ruled out on their meshes, every other measured exactly on the parts' own solids, the fits named on purpose (--fit A B) listed apart, and each pair it could not measure said",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "solve",
           "summary": "a linear static stress study of a part or a bonded assembly: with --study and --out DIR, the solve, its results written into DIR (result.json, result.glb, result.vtu, stress.png, displacement.png), each part's peak stress and safety factor, and a part that yields failing it; with no --study, the parts, the pairs that touch and a part's faces a study names",
           "integration": "calculix",
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "ranges",
           "summary": "each joint's stops found from the geometry: the joint turned or slid alone, a step at a time each way, until its parts meet another part; the stops and which parts meet, nothing written",
           "integration": "build123d",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": true,
@@ -213,19 +249,22 @@
           "name": "export",
           "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
           "integration": null,
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "dfm",
           "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
           "integration": "trimesh",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": true,
@@ -265,25 +304,29 @@
           "name": "export",
           "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
           "integration": null,
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "inspect",
           "summary": "its nodes, meshes and animations",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "dfm",
           "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
           "integration": "trimesh",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": true,
@@ -327,19 +370,22 @@
           "name": "export",
           "summary": "write the mesh to the other mesh kinds (.glb, .stl, .3mf)",
           "integration": null,
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "dfm",
           "summary": "check it can be 3D printed (--process printing), measured as a mesh and judged against general, cited rules",
           "integration": "trimesh",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": true,
@@ -379,13 +425,15 @@
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         },
         {
           "name": "dfm",
           "summary": "check it as a sheet's cut file (--process sheet): closed contours, nothing cut twice, features against the kerf and the thickness, the sheet's size",
           "integration": "build123d",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": true,
@@ -424,13 +472,15 @@
           "name": "validate",
           "summary": "check it for conformance: structure, joints, inertials, mesh references",
           "integration": null,
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         }
       ],
       "decorator": false,
@@ -461,13 +511,15 @@
           "name": "validate",
           "summary": "check it against its URDF: every name, chain, state and disabled pair",
           "integration": null,
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it as the viewer does, into a PNG",
           "integration": "build123d",
-          "engine": true
+          "engine": true,
+          "files": []
         }
       ],
       "decorator": false,
@@ -502,25 +554,22 @@
           "name": "export",
           "summary": "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or dxf",
           "integration": "kicad",
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw it flat, as the viewer's board view does, into a PNG",
           "integration": null,
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "inspect",
           "summary": "what the board holds: its format, thickness, size, layers, parts and nets",
           "integration": null,
-          "engine": false
-        },
-        {
-          "name": "drc",
-          "summary": "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
-          "integration": "kicad",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": false,
@@ -571,25 +620,22 @@
           "name": "export",
           "summary": "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder",
           "integration": "kicad",
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "snapshot",
           "summary": "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG",
           "integration": null,
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "inspect",
           "summary": "what the schematic holds: its sheets, parts and nets; with a ref, what that names",
           "integration": null,
-          "engine": false
-        },
-        {
-          "name": "erc",
-          "summary": "KiCad's electrical rules check: errors fail it, warnings are said",
-          "integration": "kicad",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "decorator": false,
@@ -656,8 +702,30 @@
       "summary": "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and its fabrication exports run kicad-cli, headless, and an edit of a board or a schematic goes through the API",
       "extra": "kicad",
       "process": "separate",
-      "operations": [],
-      "files": [],
+      "operations": [
+        {
+          "name": "drc",
+          "summary": "KiCad's design rule check of a board: errors and unconnected items fail it, warnings are said",
+          "integration": "kicad",
+          "engine": false,
+          "files": [
+            ".kicad_pcb"
+          ]
+        },
+        {
+          "name": "erc",
+          "summary": "KiCad's electrical rules check of a schematic: errors fail it, warnings are said",
+          "integration": "kicad",
+          "engine": false,
+          "files": [
+            ".kicad_sch"
+          ]
+        }
+      ],
+      "files": [
+        ".kicad_pcb",
+        ".kicad_sch"
+      ],
       "modules": [
         "kicode"
       ],
@@ -712,7 +780,8 @@
           "name": "check",
           "summary": "compile a MuJoCo model (an MJCF) with MuJoCo and check it: what MuJoCo refuses or warns of, the model-health checks, what collides as what, and the contact excludes",
           "integration": "mujoco",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "files": [
@@ -844,13 +913,15 @@
           "name": "presets",
           "summary": "list the presets of one kind a person can select (machine, process or filament), from their own OrcaSlicer folders and the app's profiles",
           "integration": "orcaslicer",
-          "engine": false
+          "engine": false,
+          "files": []
         },
         {
           "name": "complete",
           "summary": "write a printer, a process and filaments complete for OrcaSlicer's command line: every parent merged in, the printer named as compatible",
           "integration": "orcaslicer",
-          "engine": false
+          "engine": false,
+          "files": []
         }
       ],
       "files": [],
