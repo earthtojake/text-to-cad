@@ -232,8 +232,9 @@ As many past releases as reasonable can reach the latest one:
   `remove_loose_skills`).
 - **0.11.12 and 0.11.13** update themselves, and their plugin's catch-up downloads the hosted install
   command, which finds no `cad plugin install` in them and runs the newest release's from uv's cache.
-- **0.11.12 to 0.11.17** update by a store of their own that their `cad` reads through a pointer; the
-  release after them updates in place, with uv.
+- **0.11.12 to 0.11.17** update themselves in place with uv, by their own updater, which has none of this
+  release's safety steps: each makes its hop into this release that way, once; from then on this release's
+  update runs.
 
 Check a change to the install script, to `cad plugin install`, to cad's update or to the list above
 against these paths before it ships.

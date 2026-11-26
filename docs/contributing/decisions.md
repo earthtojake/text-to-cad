@@ -110,11 +110,11 @@ the release in uv's record and removes the folder the worker runs from. Inside a
 update is refused, and the server and the worker start outside it
 ([below](#inside-a-windows-apps-package-say-so)).
 
-An update that builds a second copy beside the one that runs, switched to by a pointer every `cad` reads,
-was the design of 0.11.12 to 0.11.17. It avoided that failure, and cost code of our own: a store of releases,
-a module that reads the pointer as every interpreter starts (which no update can ever replace), a check of each
-release, a tidying of what nothing ran, and a `uv` dependency to run all that. It was removed for the one
-update uv already does.
+0.11.12 to 0.11.17 update in place too, with none of these steps: that is the failure above. Also built and
+left unreleased: a second copy of each release beside the installed one, switched to by a pointer every `cad`
+reads. It avoided the failure, and cost code of our own (a store of releases, a module no update could ever
+replace, a check of each release, a tidying, a `uv` dependency); stopping cad's own processes makes uv's own
+update safe instead.
 
 **What it costs.** Where a release is held open by a process the worker cannot stop, the update fails (cause
 `in_use`) and is tried again later. A computer without uv, or with one cad cannot find (a Windows batch shim
