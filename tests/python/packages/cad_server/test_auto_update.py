@@ -1294,6 +1294,8 @@ class HelperCommandTest(Case):
         self.assertEqual(line[:10], [str(self.uv), "tool", "run", "--isolated", "--managed-python", "--python", "3.14",
                                      "--from", "cad==0.4.2", "python"])
         self.assertEqual((found["release"], found["outcome"], options["cwd"]), ("latest", "underway", str(self.state)))
+        self.assertEqual({key: options[key] for key in places.detached(breakaway=True)}, places.detached(breakaway=True),
+                         "detached, and on Windows out of the job of the app that ran cad where it allows it")
 
     def test_where_uv_cannot_build_the_release_the_attempt_fails_with_uv_s_cause_and_nothing_is_touched(self) -> None:
         """Offline, PyPI down, no such release: uv cannot build the worker's environment, so no worker starts and
@@ -1313,8 +1315,6 @@ class HelperCommandTest(Case):
             (self.state / auto_update.RECORD).unlink()
             found = auto_update.begin("0.2.0")
             self.assertEqual((found["outcome"], found["cause"]), ("failed", "no_release"), "said by `cad update`")
-        self.assertEqual({key: options[key] for key in places.detached(breakaway=True)}, places.detached(breakaway=True),
-                         "detached, and on Windows out of the job of the app that ran cad where it allows it")
             popen.assert_not_called()
         self.assertEqual(auto_update.event(found)["outcome"], "restored")
 
@@ -1622,6 +1622,55 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(system.looks, [False, False], "the rename before the sweep, which looks until none is left")
         self.assertEqual((folder / "cad.exe").read_bytes(), b"new launcher", "the environment's own, copied there")
         self.assertEqual(sorted(path.name for path in folder.iterdir()), ["cad.exe"], "the one moved aside removed")
+
+    def test_a_file_held_by_a_process_of_cad_s_the_sweep_could_not_stop_is_cad_running_by_uv_s_first_error(self):
+        """On Windows a process of the environment that outlives every look of the sweep (``stop_environment`` says
+        which) and a uv refused a file: ``cad_running``, not a bare ``in_use``. The detail is uv's first error, its
+        causes and the warning naming the file it could not remove, never the rollback's error uv prints after it."""
+        folder = self.tmp / "bin"
+        folder.mkdir()
+        (folder / "cad.exe").write_bytes(b"old launcher")
+        stubborn = FakeWindows({50: (1, str(self.prefix / "Scripts" / "python.exe"))})
+        stubborn.end = lambda ending, watched, seconds: (stubborn.ended.append(list(ending)), list(ending))[1]
+        self.upgrade = (2, "warning: Failed to remove `C:\\cad\\Lib\\site-packages\\cad\\_x.pyd`: The process "
+                           "cannot access the file because it is being used by another process. (os error 32)\n"
+                           "error: Failed to install: cad-0.2.0-py3-none-any.whl (cad==0.2.0)\n"
+                           "  Caused by: failed to remove directory `C:\\cad\\Lib\\site-packages\\cad`: The "
+                           "process cannot access the file because it is being used by another process. (os error 32)\n"
+                           "error: Failed to roll back the tool environment\n"
+                           "  Caused by: Access is denied. (os error 5)\n")
+
+        def run(command, timeout):
+            return (0, f"{folder}\n") if command == ["uv", "tool", "dir", "--bin"] else self.cad(command, timeout)
+
+        with mock.patch.object(helper, "WINDOWS", True):
+            found = helper.switch({**self.told, "spare": []}, run, helper.Log(None), system=stubborn)
+        self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "cad_running", True), found)
+        self.assertEqual(len(stubborn.ended), helper.ROUNDS, "looked for each round, then left")
+        self.assertTrue(found["detail"].startswith("warning: Failed to remove"), found["detail"])
+        self.assertIn("Caused by: failed to remove directory", found["detail"])
+        self.assertNotIn("roll back", found["detail"], "never the rollback's error after the first")
+        # Every process stopped: the same words are a bare ``in_use``.
+        with mock.patch.object(helper, "WINDOWS", True):
+            found = helper.switch({**self.told, "spare": []}, run, helper.Log(None), system=FakeWindows({}))
+        self.assertEqual(found["cause"], "in_use", found)
+
+    def test_the_installer_s_first_error_is_why_it_failed(self) -> None:
+        """``why``: the first ``error:`` line, the ``Caused by:`` lines under it, and before it each warning that names
+        a file; with no ``error:`` line, the last line. ``cause_of`` reads the same, and all it printed where the
+        first error names no cause it knows (pip's network warnings before its ``ERROR: Could not find``)."""
+        said = ("Resolved 1 package\nwarning: something else entirely\nwarning: failed to remove file `a.pyd` (os "
+                "error 32)\nerror: first\n  Caused by: deeper\nnot a cause\nerror: rollback\n")
+        self.assertEqual(helper.why(said), "warning: failed to remove file `a.pyd` (os error 32) error: first "
+                                           "Caused by: deeper")
+        self.assertEqual(helper.why("  × No solution found\n  ╰─▶ Because cad==9 is not\n"), "╰─▶ Because cad==9 is not")
+        self.assertEqual((helper.why(""), helper.first_error("no error here")), ("", ""))
+        self.assertLessEqual(len(helper.why("error: " + "x" * 5000)), 1000)
+        self.assertEqual(helper.cause_of(2, "error: Failed to fetch: `https://pypi.org/simple/cad/`\n  Caused by: "
+                                            "tcp connect error\nerror: Failed to remove `RECORD`: Access is denied. "
+                                            "(os error 5)\n"), "network", "the first error's, not the rollback's")
+        pip = [said for cause, _code, said in CauseTest.SAID if cause == "network" and said.startswith("WARNING")][0]
+        self.assertEqual(helper.cause_of(1, pip), "network", "all it printed where the first error tells nothing")
 
     @unittest.skipIf(os.name == "nt", "a link, as uv makes the command elsewhere than on Windows")
     def test_the_bin_command_a_failed_upgrade_took_out_is_linked_again(self) -> None:

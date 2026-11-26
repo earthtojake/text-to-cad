@@ -122,7 +122,7 @@ replace, a check of each release, a tidying, a `uv` dependency); stopping cad's 
 update safe instead.
 
 **What it costs.** Where a release is held open by a process the worker cannot stop, the update fails (cause
-`in_use`) and is tried again later. A computer without uv, or with one cad cannot find (a Windows batch shim
+`cad_running`, or `in_use` for another program's) and is tried again later. A computer without uv, or with one cad cannot find (a Windows batch shim
 alone), does not update itself; `cad doctor` says so. A plain `uv tool install cad` keeps no range, so a
 person's own `uv tool upgrade cad` takes the newest of all, a higher major included. A computer that 0.11.12
 to 0.11.17 updated keeps the range their update wrote (`cad>=X,<1`), which cad never rewrites: uv's own

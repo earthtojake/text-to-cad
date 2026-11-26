@@ -237,7 +237,8 @@ was. In order:
 3. **Repair**, where uv or the check failed: where uv changed nothing and the release before runs, that; else each
    `*.dist-info` left without its `RECORD` deleted and `uv tool upgrade --reinstall` (pipx: `--force-reinstall`) of the
    release, then of the release before. Cause `start_failed` where the release did not start and the one before runs
-   again. Where neither runs, the last resort: the installer makes the environment anew (`uv tool install --force
+   again; where uv was refused a file and a process of the environment could not be stopped, `cad_running`; the
+   detail is uv's first error, never its rollback's after it. Where neither runs, the last resort: the installer makes the environment anew (`uv tool install --force
    "cad<N>"`, `pipx install --force cad`; never one release, which would pin it), which removes the environment, so
    the worker does it once nothing of it runs: the attempt `repairing` first, on which the processes the switch spared
    leave (`cad update` says so and ends), waited for, then every process of it stopped. Cause `broken` where that

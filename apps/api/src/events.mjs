@@ -282,7 +282,7 @@ const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
 // with an error; a blocked one, no uv to build with or an environment that does not read cad's pointer.
 const UPDATE_OUTCOMES_13 = new Set([...UPDATE_OUTCOMES, 'lost', 'blocked']);
 const UPDATE_ENDED = new Set(['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'network', 'offline',
-  'no_release', 'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'broken', 'start_failed',
+  'no_release', 'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'cad_running', 'broken', 'start_failed',
   'helper_start', 'packaged', 'unknown', 'none']);
 const UPDATE_CAUSES = { current: new Set([...UPDATE_ENDED, 'already']), failed: UPDATE_ENDED, restored: UPDATE_ENDED,
   lost: new Set(['lost', 'helper_crash']), blocked: new Set(['no_installer', 'no_switch', 'pinned']) };

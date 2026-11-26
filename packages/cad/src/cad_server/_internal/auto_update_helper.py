@@ -59,8 +59,10 @@ repairs it where it fails anyway. In order (``update``):
       release that runs checked (f).
 
 3. **Outcome**, kept in the record: ``installed``, ``current`` or ``failed``, with ``detail``, ``cause`` where it did
-   not install what it was for (one of ``CAUSES``: the installer's words where the upgrade failed, ``cause_of``;
-   ``start_failed`` where the release did not start and the one before runs again; ``broken`` where neither runs),
+   not install what it was for (one of ``CAUSES``: the installer's first error where the upgrade failed, ``why`` and
+   ``cause_of``, never a later rollback's; ``cad_running`` where a process of cad's the sweep could not stop held a
+   file; ``start_failed`` where the release did not start and the one before runs again; ``broken`` where neither
+   runs),
    ``restored`` (whether the release before runs again), ``started`` (``"start": false`` where no server was
    wanted) and ``worker``.
 No step is tried twice in a run: the schedule tries a failed release again (``auto_update.next_try``). As it runs the
@@ -137,6 +139,33 @@ def last_line(text):
     """The last line of ``text`` that holds anything, stripped; "" for none."""
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     return lines[-1] if lines else ""
+
+
+def why(text):
+    """Why an installer's run failed, in its own words: its first ``error:`` line with the ``Caused by:`` lines under
+    it, after each warning before it that names a file it could not remove or replace (``FILE_WORDS``); else its last
+    line. uv's rollback of a failed install prints an error of its own last, which says nothing of the first."""
+    return first_error(text) or last_line(text)
+
+
+# A warning that names a file the installer could not act on (``first_error``).
+FILE_WORDS = re.compile(r"os error \d+|WinError \d+|failed to (remove|replace|rename|write|copy|open)", re.IGNORECASE)
+
+
+def first_error(text):
+    """The installer's first error as ``why`` says it, at most 1000 characters; "" where it printed no ``error:``
+    line."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    first = next((n for n, line in enumerate(lines) if line.lower().startswith("error:")), None)
+    if first is None:
+        return ""
+    said = [line for line in lines[:first] if line.lower().startswith("warn") and FILE_WORDS.search(line)]
+    said.append(lines[first])
+    for line in lines[first + 1:]:
+        if not line.lower().startswith("caused by:"):
+            break
+        said.append(line)
+    return " ".join(said)[:1000]
 
 
 def update(told, run=run, mark=lambda phase: None):
@@ -245,7 +274,7 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
     if server is not None:
         stop(server, log)
     wanted = server is not None or told.get("start") is True
-    code, said = upgrade(told, run, installing(told, told["requirement"]), command, log, system)
+    code, said, left = upgrade(told, run, installing(told, told["requirement"]), command, log, system)
     got = auto_update.installed(prefix)
     if code != 0 and got is not None and got == target and not unrecorded(prefix):
         # The environment is upgraded and whole: what failed after it is the bin command, which is back (``upgrade``).
@@ -265,7 +294,9 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
         cause = "start_failed"
         detail = f"cad {got} did not {'start' if wanted else 'run'}: {last_line(said) or 'no word'}"
     else:
-        cause, detail = cause_of(code, said, log), last_line(said) or f"{by(told)} said nothing"
+        cause, detail = cause_of(code, said, log), why(said) or f"{by(told)} said nothing"
+        if cause in ("in_use", "denied") and left:  # a process of cad's the sweep could not stop held the file
+            cause = "cad_running"
     back, again = recover(told, run, got, wanted, log, upgraded=code == 0, command=command, system=system)
     if back is not None and back == got and got != told["from"]:
         return {**named_, "outcome": "installed", "detail": f"cad {got} runs, installed again after: {detail}",
@@ -290,13 +321,14 @@ def upgrade(told, run, argv, command, log, system=None, spare=None):
     moved aside first, so a new ``cad`` fails at once, then every process running from the environment stopped but
     ``spare`` (the switch's, ``told["spare"]``, by default), looked for again until none is left
     (``stop_environment``), and the moment the installer returns a bin ``cad`` there again (``command_back``, on every
-    system), before anything is checked. The installer's exit status and words."""
-    prefix, moved = Path(told["prefix"]), None
+    system), before anything is checked. The installer's exit status and words, and the processes of the environment
+    the sweep left running."""
+    prefix, moved, left = Path(told["prefix"]), None, []
     if WINDOWS:
         moved = aside(command, log) if command is not None else None
-        stop_environment(prefix, command, (told.get("spare") or ()) if spare is None else spare, log, system)
+        left = stop_environment(prefix, command, (told.get("spare") or ()) if spare is None else spare, log, system)
     try:
-        return run(argv, auto_update.UPGRADE_SECONDS)
+        return (*run(argv, auto_update.UPGRADE_SECONDS), left)
     finally:
         if command is not None:
             command_back(command, moved, prefix, log, windows=WINDOWS)
@@ -320,7 +352,7 @@ def recover(told, run, target, wanted, log, *, upgraded, command=None, system=No
     for release_ in dict.fromkeys(name for name in (target, before) if release(name) is not None):
         clear(release_, log)
         removed(prefix, told, log)
-        code, said = upgrade(told, run, installing(told, f"cad=={release_}", again=True), command, log, system)
+        code, said, _left = upgrade(told, run, installing(told, f"cad=={release_}", again=True), command, log, system)
         if code == 0:
             ok, said = runs(told, run, release_, wanted)
             if ok:
@@ -344,7 +376,7 @@ def reinstall(told, run, log, *, command, wanted, mark, system=None, seconds=WAI
         sleep(LOOK_SECONDS)
     clear(None, log)
     removed(prefix, told, log)
-    code, said = upgrade(told, run, reinstalling(told), command, log, system, spare=[])
+    code, said, _left = upgrade(told, run, reinstalling(told), command, log, system, spare=[])
     held = auto_update.installed(prefix) if code == 0 else None
     if held is None:
         return None, said
@@ -523,11 +555,12 @@ def stop_environment(prefix, command, spare, log, system=None, seconds=END_SECON
     processes each started directly (the Python a launcher started, which ends with it: killing a ``cad.exe`` takes its
     Python down in milliseconds), ``seconds`` at most; then looked for again, until none is left, ``rounds`` looks at
     most. As Scoop finds what to stop before it updates an app. This worker runs from uv's cache, never from there, so
-    it spares nothing of its own. Each written to the log. Never raises. ``system``: Windows' process calls
-    (``Windows``; a test's stand-in)."""
+    it spares nothing of its own. Each written to the log. The processes still running from it after the last look
+    (none where none could be seen), by which a file in use is ``cad_running``. Never raises. ``system``: Windows'
+    process calls (``Windows``; a test's stand-in)."""
     try:
         system = system or Windows()
-        for _round in range(rounds):
+        for round_ in range(rounds + 1):
             table = system.processes()
             kept = set()
             for pid in spare:
@@ -535,7 +568,10 @@ def stop_environment(prefix, command, spare, log, system=None, seconds=END_SECON
             ending = sorted(pid for pid, (_parent, image) in table.items()
                             if pid not in kept and running_from(image, prefix, command))
             if not ending:
-                return
+                return []
+            if round_ == rounds:
+                log.write(f"still running from cad's environment after {rounds} rounds: {', '.join(map(str, ending))}")
+                return ending
             watched = sorted(pid for pid, (parent, _image) in table.items()
                              if parent in ending and pid not in kept and pid not in ending)
             left = system.end(ending, watched, seconds)
@@ -544,6 +580,7 @@ def stop_environment(prefix, command, spare, log, system=None, seconds=END_SECON
                       + (f"; still there after {seconds:g} s: {', '.join(map(str, left))}" if left else ""))
     except Exception as error:  # noqa: BLE001 - the install goes on, and says what it met
         log.write(f"the processes running from cad's environment could not be stopped: {type(error).__name__}: {error}")
+    return []
 
 
 def running(pids, prefix, command, system=None):
@@ -648,14 +685,15 @@ class Windows:
 # --- why an attempt did not install what it was for: one word ------------------------------------------------------
 
 # Every word a record's ``cause`` holds, a closed list. The worker tells most of them: from uv's words where the
-# upgrade failed (``cause_of``), ``start_failed`` where the release did not start and the one before runs again,
-# ``broken`` where neither runs, ``packaged`` where it ran inside a Windows app package, ``helper_start`` where it ran
+# upgrade failed (``cause_of``; ``cad_running`` where a file was in use or refused and a process of the environment the
+# switch could not stop still ran, ``stop_environment``), ``start_failed`` where the release did not start and the one
+# before runs again, ``broken`` where neither runs, ``packaged`` where it ran inside a Windows app package, ``helper_start`` where it ran
 # from the environment it would replace; ``helper_start`` is the trigger's too (its worker could not start), and so are
 # uv's words where it could not build the worker's environment (``auto_update.build``); ``lost`` a reader's (an
 # attempt still underway and silent), ``no_installer`` and ``pinned`` the reasons none begins (``auto_update.blocked``),
 # and ``no_switch`` one an earlier release kept. Each word is said in plain words by ``auto_update.SAID``.
 CAUSES = ("timeout", "no_program", "in_use", "denied", "disk_full", "network", "offline", "no_release", "python",
-          "platform", "config_exclude", "config_index", "config_tls", "broken", "start_failed", "helper_start",
+          "platform", "config_exclude", "config_index", "config_tls", "cad_running", "broken", "start_failed", "helper_start",
           "helper_crash", "lost", "no_installer", "no_switch", "packaged", "pinned", "unknown")
 
 # What uv's output says, tried in order, the first match winning: uv's own words, and the system's for an error of the
@@ -778,13 +816,18 @@ def refine(cause, output, found):
 
 
 def cause_of(code, output, log=None, environ=None):
-    """Why uv failed, one of ``CAUSES``: what uv's exit status and words say (``classify``), then what its
+    """Why uv failed, one of ``CAUSES``: what uv's exit status and words say (``classify``) -- its first error
+    (``first_error``), never a later rollback's, and all it printed where that tells nothing known --, then what its
     settings explain (``refine``), whose names are written to the log."""
     found = settings(environ)
     if found and log is not None:
         log.write("uv's settings found (names only): " + "; ".join(
             f"{name}: {', '.join(names)}" for name, names in sorted(found.items())))
-    return refine(classify(code, output), output, found)
+    first = first_error(output)
+    cause = classify(code, first) if first else "unknown"
+    if cause == "unknown":
+        first, cause = output, classify(code, output)
+    return refine(cause, first, found)
 
 
 # --- the log: each command of the last two runs, on this computer alone ------------------------------------------

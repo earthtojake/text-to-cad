@@ -705,7 +705,8 @@ test('schema 12 reads everything schema 11 does, its rows keyed alike, and a sch
 // Schema 13: schema 12 with why an update did not install a newer cad (`cause`), and two more outcomes.
 const CAUSING = { ...INSTALLING, schema: 13 };
 const ENDED = ['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'network', 'offline', 'no_release', 'python', 'platform',
-  'config_exclude', 'config_index', 'config_tls', 'broken', 'start_failed', 'helper_start', 'packaged', 'unknown', 'none'];
+  'config_exclude', 'config_index', 'config_tls', 'cad_running', 'broken', 'start_failed', 'helper_start', 'packaged', 'unknown',
+  'none'];
 
 test('schema 13 says why an update did not install a newer cad, and counts the ones lost and the ones that could not begin', async () => {
   const shapes = [

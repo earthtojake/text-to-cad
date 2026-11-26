@@ -794,7 +794,8 @@ def build(uv: str, wanted: str, timeout: float = UPGRADE_SECONDS) -> tuple[str |
 def _unbuilt(kept: dict[str, Any], line: list[str], uv: str, wanted: str,
              found: tuple[str | None, int | None, str], seconds: float) -> dict[str, Any]:
     """The attempt ``kept`` ended where uv could not build the worker's environment of ``wanted`` (``build``'s
-    ``found``, in ``seconds``): ``failed``, with uv's cause (``auto_update_helper.cause_of``), its last line, and
+    ``found``, in ``seconds``): ``failed``, with uv's cause (``auto_update_helper.cause_of``), its first error
+    (``auto_update_helper.why``), and
     ``restored``: nothing was touched, and the release before runs on. Written to the record and the log."""
     from cad_server._internal import auto_update_helper as helper
 
@@ -806,7 +807,7 @@ def _unbuilt(kept: dict[str, Any], line: list[str], uv: str, wanted: str,
              "ended": time.time(), "restored": True,
              "cause": helper.cause_of(1 if code == 0 else code, said, log),  # 0: uv named no release
              "detail": f"uv could not build {wanted} to update cad, and nothing was changed: "
-                       f"{helper.last_line(said) or 'uv said nothing'}"}
+                       f"{helper.why(said) or 'uv said nothing'}"}
     log.end(ended)
     _keep(_data() / RECORD, ended)
     return ended
@@ -1099,6 +1100,8 @@ SAID = {
     "config_exclude": "a setting of uv's hides newer releases (exclude-newer)",
     "config_index": "a package index named in uv's settings did not give the release",
     "config_tls": "a TLS setting of uv's failed the connection to the package index",
+    "cad_running": ("a program run from cad's environment could not be stopped, and a file it holds could not be "
+                    "replaced"),
     "broken": "the update left cad unable to run",
     "start_failed": "the new release did not start, so the release before runs again",
     "helper_start": "the update's worker could not start",
@@ -1123,6 +1126,7 @@ _SETTING = "the update follows your uv settings: change {setting}, then `cad upd
 ADVICE = {
     **dict.fromkeys(("network", "timeout", "no_release", "in_use", "unknown", "helper_start", "helper_crash", "lost"),
                     RETRIES),
+    "cad_running": "close the programs that run cad (an agent app, a terminal), then `cad update`",
     "denied": "give your user write access to cad's state folder ({state}), uv's tools and uv's cache, then " + RETRIES,
     "disk_full": "free room on the disk, then " + RETRIES,
     "offline": _SETTING.format(setting="uv's offline setting"),
