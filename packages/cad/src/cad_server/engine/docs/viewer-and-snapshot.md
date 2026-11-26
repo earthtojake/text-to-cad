@@ -41,7 +41,8 @@ bundled `@cad/core`'s `lib/viewer/surfaceLook.js`). The engine serves the record
 `GET /api/v1/look` and its image as `GET /api/v1/look/environment`; the page reads both once per
 engine, beside the document, and the document's scene brings them as its own lighting and surface
 rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
-page put up in place of the theme's. Preview is drawn as any file's is.
+page put up in place of the theme's. A share's page, which has no engine, reads its own copies of both
+(**View bundle**). Preview is drawn as any file's is.
 
 `cad snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
 `snapshot(preview=True)`) draws the viewer's Preview in place of a display mode, by the same raster: the

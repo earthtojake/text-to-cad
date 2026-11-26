@@ -19,7 +19,10 @@
 //   a small `structure.json` and a part's names travel only when they change. A part's buffer is
 //   `parts/<key>/<tessellation>.xbm`; one element's facts, and a part's groups, come out of the part's
 //   one table (`parts/<key>/elements.json`), read once, so nothing is asked per element. The document is
-//   `final`: there is no engine to wait on for a next version;
+//   `final`: there is no engine to wait on for a next version. The look it is drawn in (`/api/v1/look` and its
+//   environment image) is no file of a bundle, being the same for every document of a release: it is answered
+//   from the page's own copies, the record this build of @cad/core holds (`lib/xbf/look.generated.js`, made from the
+//   engine's) and the image its host's build holds (`environment`), and nothing of a bundle's `look/` is read;
 // - a drawing's (`drawing`), a robot's (`robot`) and a mesh file's bytes, through the service's
 //   resources, which read bundle paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb`
 //   and `meshes/<sha256>.<format>`, as its structure names them);
@@ -35,6 +38,7 @@
 
 import { retainGlbMeshWorker } from '../lib/render/glbMeshWorkerClient.js';
 import { retainStlMeshWorker } from '../lib/render/stlMeshWorkerClient.js';
+import { ENGINE_LOOK } from '../lib/xbf/look.generated.js';
 import { scopeCadResources } from './resources.js';
 
 /** The one layout this reader reads: a manifest of another `format` is refused whole. */
@@ -46,7 +50,7 @@ export const VIEW_BUNDLE_MANIFEST = 'manifest.json';
  */
 export const VIEW_BUNDLE_ORIGIN = 'http://view-bundle.invalid';
 
-// The documents a bundle holds that a page reads as the engine's own (structure, parts, tables, look).
+// The documents a bundle holds that a page reads as the engine's own (structure, parts, tables).
 const ENGINE_KINDS = new Set(['xbf', 'step']);
 // Every kind a manifest may name (the API's), and the renderer's.
 const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srdf', 'kicad_pcb', 'kicad_sch']);
@@ -130,11 +134,11 @@ export function readViewBundleManifest(value) {
 
 /**
  * Open the bundle `source` holds: its manifest read and checked, then the service that answers the viewer
- * from it (`createViewBundleClient`).
+ * from it (`createViewBundleClient`, which takes `environment`).
  * @param {import('./types.js').ViewBundleSource} source
- * @param {{ signal?: AbortSignal }} [options]
+ * @param {{ signal?: AbortSignal, environment?: import('./types.js').ViewBundleEnvironment | null }} [options]
  */
-export async function openViewBundle(source, { signal } = {}) {
+export async function openViewBundle(source, { signal, environment = null } = {}) {
   let text;
   try {
     text = decoder.decode(await source.read(VIEW_BUNDLE_MANIFEST, { signal }));
@@ -144,7 +148,7 @@ export async function openViewBundle(source, { signal } = {}) {
   }
   let parsed;
   try { parsed = JSON.parse(text); } catch { throw new Error('This is no view bundle: its manifest.json is not JSON.'); }
-  return createViewBundleClient(source, readViewBundleManifest(parsed));
+  return createViewBundleClient(source, readViewBundleManifest(parsed), { environment });
 }
 
 /** The catalog's row of a bundle's document, as an envelope's `entry` gives it to a page. */
@@ -160,12 +164,15 @@ function entryOf(manifest) {
 
 /**
  * The viewer's CAD service over one view bundle (`manifest`, already read: `openViewBundle` reads it). Disposing
- * it disposes `source` too, where the source has something to let go of.
+ * it disposes `source` too, where the source has something to let go of. `environment`: the bytes of the look's
+ * environment image as the page's build holds it, read when a view asks for them; with none, an engine document's
+ * look has no image to read, and the document does not open.
  * @param {import('./types.js').ViewBundleSource} source
  * @param {import('./types.js').ViewBundleManifest} manifest
+ * @param {{ environment?: import('./types.js').ViewBundleEnvironment | null }} [options]
  * @returns {import('./types.js').CadViewBundleClient}
  */
-export function createViewBundleClient(source, manifest) {
+export function createViewBundleClient(source, manifest, { environment = null } = {}) {
   const document = manifest.document;
   const entry = entryOf(manifest);
   const files = manifest.files;
@@ -243,6 +250,14 @@ export function createViewBundleClient(source, manifest) {
     if (mechanism) restored.kinematics = kinematics;
     return json(restored);
   }
+  /** The look's environment image, the page's own copy (`environment`), as the engine answers it. */
+  async function environmentAnswer(signal) {
+    if (typeof environment !== 'function') return json({ error: "This page holds no copy of the look's environment image." }, 404);
+    const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
+    const bytes = await environment({ signal: combined });
+    if (combined.aborted) throw abortError();
+    return new Response(bytes, { headers: { 'content-type': 'image/vnd.radiance' } });
+  }
   /** What a part's table says of one of its elements, or of its groups: its answer's body. */
   async function fromTable(key, route, ordinal, signal) {
     const table = await once(`parts/${viewBundleSegment(key)}/elements.json`, signal);
@@ -254,8 +269,9 @@ export function createViewBundleClient(source, manifest) {
 
   async function answer(url, signal) {
     const { pathname, searchParams } = url;
-    if (pathname === '/api/v1/look') return fileAnswer('look.json', signal);
-    if (pathname === '/api/v1/look/environment') return fileAnswer('look/environment.hdr', signal);
+    // The look, the page's own: a constant of the release, never a bundle's file.
+    if (pathname === '/api/v1/look') return json(ENGINE_LOOK);
+    if (pathname === '/api/v1/look/environment') return environmentAnswer(signal);
     if (pathname === `/api/v1/documents/${encodeURIComponent(document.id)}/thumbnail`) return fileAnswer('thumbnail.png', signal);
     const at = /^\/api\/v1\/documents\/[a-z0-9]+\/([^/]+)\/(.+)$/.exec(pathname);
     if (!at || decodeURIComponent(at[1]) !== document.id) return refused(pathname);

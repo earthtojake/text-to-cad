@@ -1,13 +1,10 @@
-// The engine's look (`xbfLook.js`) as the engine serves it: `__fixtures__/look.json` is
-// `GET /api/v1/look`'s answer, which cadgen's tests hold to `render/look.py`. What it says, the image
+// The engine's look (`xbfLook.js`) as the engine serves it: `look.generated.js` is `GET /api/v1/look`'s answer,
+// made from `render/look.py` and held to it by cad's tests. What it says, the image
 // its environment is, the rig it lights an engine document with, what a surface wears by it (X-ray's
 // colour-only model apart), and that what it says of edges, the palette and the modes is what the
 // viewer's own modes draw.
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { resolveCadEdgeSettings } from "../../common/cadInk.js";
 import { resolveViewSettings } from "../../common/viewSettings.js";
@@ -16,8 +13,8 @@ import {
   XBF_ENVIRONMENT_ROTATION, decodeRadiance, fetchXbfLook, parseXbfLook, xbfLookHighlight, xbfLookRig, xbfLookSurface, xbfLookXray,
   xbfLookXrayRig, xbfLookXraySurface
 } from "./xbfLook.js";
+import { ENGINE_LOOK as SERVED } from "./look.generated.js";
 
-const SERVED = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "__fixtures__", "look.json"), "utf8"));
 const near = (actual, expected, tolerance = 1e-9) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} is not ${expected}`);
 
 /** A 2 x 2 Radiance image, its top row run-length encoded the new way and its bottom row flat. */

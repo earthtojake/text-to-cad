@@ -28,7 +28,6 @@ for every document, are at the root likewise. So a reader maps each read of a pa
 | `GET <api>/parts/<key>/groups` | `parts/<key>/elements.json`'s `groups` | each part of one |
 | `GET <api>/parts/<key>/volume`, `GET <api>/measure` | `measure.json`: every part's volume, solids and box, by key | a model, an `.xbf`, a STEP |
 | `GET <api>/kinematics` | `kinematics.json`, which the structure leaves out | one with joints |
-| `GET /api/v1/look`, `GET /api/v1/look/environment` | `look.json`, `look/environment.hdr` (the look names its environment by the API's path, as answered) | a model, an `.xbf`, a STEP |
 | `GET <api>/source` | `source.stl`, `source.glb`, `source.3mf`: the file, which its page parses | an STL, a GLB, a 3MF |
 | `GET <api>/drawing` | `drawing.json` | a DXF |
 | `GET <api>/parts/<digest>` | `parts/<digest>.glb`: a primitive cad meshed | a robot description |
@@ -42,6 +41,12 @@ Nothing else a page asks has a file: a version to wait on, a pose, a mesh run, a
 previewed, an export and everything under `/api/v1/local` need an engine. A bundle is one document as it
 stood, so its reader offers none of them, and reads a parameter's `writable` as said of the engine that
 answered.
+
+**The look, the page's own.** The look an engine document is drawn in (`GET /api/v1/look` and its environment
+image, `GET /api/v1/look/environment`: **The viewer and the snapshot**) is a constant of the release, the same for
+every document, so no bundle holds it. A page that reads a bundle carries its own copy of both -- the record, which
+the bundled `@cad/core` holds as `lib/xbf/look.generated.js`, made from its release's, and the image, `studio.hdr`, a
+file of its own build -- and answers the look's two reads from them, reading nothing of a bundle's `look/`.
 
 `<key>`, `<tessellation>`, `<digest>` and a sheet's `<path>` are path segments: ASCII letters,
 digits, `.`, `_` and `-` as they are, every other byte `~` and its two hex digits (a STEP part's key

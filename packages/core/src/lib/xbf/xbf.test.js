@@ -17,6 +17,7 @@ import { recordingRenderer } from "../viewer/__tests__/recordingRenderer.js";
 import { isKitScene } from "../viewer/sceneContract.js";
 import { applySceneRig, renderWithSceneRig, sceneRigFor } from "../viewer/sceneRig.js";
 import { fetchXbfElementFacts, loadXbfDocument, placeXbfFacts, waitForXbfVersion, xbfDocumentSource } from "./xbfDocument.js";
+import { ENGINE_LOOK } from "./look.generated.js";
 import { parseXbfLook, xbfLookRig, xbfLookSurface, xbfLookXrayRig, xbfLookXraySurface } from "./xbfLook.js";
 import { XBF_EDGE_CLASS, readXbmPart, xbmTriangleFaceRows, xbmUnmeshedFaces } from "./xbm.js";
 import { XBF_PICK_PIXELS, createXbfScene, parseXbfElementId, xbfElementId, xbfFaceEdges, xbfFaceOutline, xbfLookParameters } from "./xbfScene.js";
@@ -25,7 +26,6 @@ const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "__fixtu
 const STRUCTURE = JSON.parse(fs.readFileSync(path.join(FIXTURE, "structure.json"), "utf8"));
 // The engine's look of the regular modes, as `GET /api/v1/look` serves it (`render/look.py`), and an
 // environment image for it: 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128).
-const ENGINE_LOOK = JSON.parse(fs.readFileSync(path.join(path.dirname(FIXTURE), "look.json"), "utf8"));
 const ENGINE_ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n"),
   255, 255, 255, 128]).buffer;
 const URL_BASE = "http://127.0.0.1:9/api/v1/documents/xbf/abc123";

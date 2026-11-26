@@ -6,6 +6,7 @@ import { cleanup, render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as THREE from 'three';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { ENGINE_LOOK } from '@cad/core/lib/xbf/look.generated.js';
 import { loadXbfDocument } from '@cad/core/lib/xbf/xbfDocument.js';
 import { createXbfScene } from '@cad/core/lib/xbf/xbfScene.js';
 import MeasureFilterMenu, { measureBadge } from '../../../dist/renderers/kit/tools/measure/MeasureFilterMenu.js';
@@ -28,7 +29,7 @@ const answer = (body: Uint8Array | Buffer) => ({ ok: true, status: 200, json: as
   arrayBuffer: async () => Uint8Array.from(body).buffer });
 async function bracket() {
   const fetch = async (url: string) => {
-    if (url.endsWith('/api/v1/look')) return answer(read('look.json'));
+    if (url.endsWith('/api/v1/look')) return answer(Buffer.from(JSON.stringify(ENGINE_LOOK)));
     if (url.endsWith('/api/v1/look/environment')) return answer(ENVIRONMENT);
     const part = /\/parts\/([^/]+)$/.exec(url);
     return answer(part ? read(`bracket/${part[1]}.xbm`) : read('bracket/structure.json'));

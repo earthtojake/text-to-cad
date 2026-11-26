@@ -187,7 +187,7 @@ test("a share's key and name are its id's, and its objects are sealed, as the co
 
 test("a share's files are read from the packs that hold them, one split over two, each pack fetched once", async () => {
   const files = { 'source.stl': noise(700, 1), 'parts/a.glb': noise(300, 2), 'meshes/b.stl': noise(900, 3), 'parts/empty.bin': new Uint8Array(0),
-    'look.json': encode({ version: 4 }) };
+    'measure.json': encode({ version: 4 }) };
   const share = await makeShare(bundle(files), { packBytes: 512 });
   const split = Object.values(share.manifest.view).filter(entry => new Set(entry.at.map(([id]) => id)).size > 1);
   assert.ok(share.packs.length > 3 && split.length, `${share.packs.length} packs, ${split.length} files split`);

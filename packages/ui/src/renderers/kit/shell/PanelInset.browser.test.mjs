@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
+import { ENGINE_LOOK } from '@cad/core/lib/xbf/look.generated.js';
 import { harnessBundle } from '../../harness/bundle.mjs';
 import { chromium } from 'playwright';
 
@@ -24,7 +25,7 @@ HINGE.parameters = [
 ];
 HINGE.kinematics.motions = { swing: { ease: 'cubic', keys: [{ t: 0, configuration: 'flat' }, { t: 1, configuration: 'raised' }] } };
 const STRUCTURE = JSON.stringify(HINGE);
-const LOOK = readFileSync(join(XBF, 'look.json'));
+const LOOK = JSON.stringify(ENGINE_LOOK);
 const ENVIRONMENT = Buffer.concat([Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), Buffer.from([255, 255, 255, 128])]);
 const BOARD = readFileSync(new URL('../../board/__fixtures__/board.plot.json', import.meta.url));
 const DRAWING = readFileSync(new URL('../../dxf/__fixtures__/layered.drawing.json', import.meta.url));

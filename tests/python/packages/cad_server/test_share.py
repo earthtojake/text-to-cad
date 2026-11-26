@@ -1434,7 +1434,7 @@ class SendTest(unittest.TestCase):
         from cad_server import sharing
 
         large = os.urandom(6 * MIB)  # gzip leaves it as large: its member is split over two packs
-        files = {"look/environment.hdr": b"#?RADIANCE\n", "parts/k/elements.json": b'{"faces":[]}',
+        files = {"sheets/~2F.json": b'{"sheets":[]}', "parts/k/elements.json": b'{"faces":[]}',
                  "parts/k/0.25-28.5.xbm": large, "measure.json": b'{"parts":{}}', "kinematics.json": b"{}",
                  "names/ab.json": b'{"faceNames":["a"]}', "structure.json": b'{"prototypes":[]}',
                  "thumbnail.png": b"\x89PNG an earlier picture"}
@@ -1443,7 +1443,7 @@ class SendTest(unittest.TestCase):
         sent = self.send(share, folder)
         committed = self.service.shares[share.id]["manifest"]["view"]
         order = ["manifest.json", "structure.json", "names/ab.json", "kinematics.json", "measure.json",
-                 "parts/k/0.25-28.5.xbm", "parts/k/elements.json", "look/environment.hdr"]
+                 "parts/k/0.25-28.5.xbm", "parts/k/elements.json", "sheets/~2F.json"]
         self.assertEqual(sorted(committed), sorted(order))  # every file but the picture
         # The packs in the order they were made: the large file's member runs from the first into the second.
         # They go up concurrently, so the order they arrive in says nothing of it.

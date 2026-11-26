@@ -4,8 +4,8 @@ size and digest, each is the live answer byte for byte (but what a structure say
 answered on: a file's ``path``, a model's ``closure``, where a robot's meshes are; and the two things it
 holds apart, its mechanism and its prototypes' element names, which its reader puts back), a prototype's
 names are a file named by its bytes, a part's table holds exactly what asking for each element answers of its
-geometry, a document's part files are asked at once, a bundle written again after an edit rewrites the
-changed part's files and no other part's, a writing that fails leaves the folder as it was, and no file of a
+geometry, no bundle holds the look an engine document is drawn in, a document's part files are asked at once, a
+bundle written again after an edit rewrites the changed part's files and no other part's, a writing that fails leaves the folder as it was, and no file of a
 bundle names a folder of the computer it was made on. A model (its ``.xbf``), a STEP, an STL, a DXF, a URDF, a KiCad
 board (its plot alone, in 2D, whatever STEPs its 3D models table finds) and a KiCad schematic (each sheet a page, the
 hierarchy's index once, which its reader puts back) each have one; an export takes no ``.view`` destination.
@@ -317,10 +317,9 @@ class ViewBundleTest(unittest.TestCase):
             self.assertEqual(buffer, self.live(f"{part}?tessellation={quote(tessellation)}"))
             self.assertEqual((held / "elements.json").read_bytes(), self.live(part + "/elements"))
         self.assertEqual((folder / "measure.json").read_bytes(), self.live(api + "/measure"))
-        self.assertEqual((folder / "look.json").read_bytes(), self.live("/api/v1/look"))
-        self.assertEqual((folder / "look" / "environment.hdr").read_bytes(), self.live("/api/v1/look/environment"))
-        # No page kept a picture of it.
-        self.assertNotIn("thumbnail.png", self.files(folder))
+        # Not the look it is drawn in, the same for every document of a release: a page that reads a bundle carries
+        # its own. And no page kept a picture of it.
+        self.assertEqual({"look.json", "look/environment.hdr", "thumbnail.png"} & self.files(folder), set())
 
     def test_each_bundled_answer_is_the_live_answer(self) -> None:
         for name in ("model", "step"):
@@ -493,7 +492,6 @@ class ViewBundleTest(unittest.TestCase):
         self.assertEqual(set(edited["removed"]), gone)
         # Written: the new part's files, and the document's own that say it changed. Nothing else.
         self.assertEqual(set(edited["written"]), added | {"manifest.json", "structure.json", "measure.json"})
-        self.assertLessEqual({"look.json", "look/environment.hdr"}, kept)
         for path in kept:
             self.assertEqual((folder / path).stat().st_mtime_ns, stamps[path], f"{path} was written again")
         self.assertEqual(self.files(folder), {*after["files"], "manifest.json"})

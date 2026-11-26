@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Regenerate every file generated from the code: the documentation site's references and its copy of the registry,
-and @cad/core's table of document types. `--check` writes nothing and says which are stale.
+and @cad/core's table of document types and copy of the engine's look. `--check` writes nothing and says which are
+stale.
 
-Each file is the text its source's own module makes -- what `python -m <module> <flag>` prints, and what the test that
-holds the file to its source compares -- made in a Python of its own that imports this checkout's packages
-(`packages/cad/src`), never an installed cad:
+Each file is the text a function of its source's own module returns -- what the test that holds the file to its source
+compares, and of the first four what `python -m <module> <flag>` prints -- made in a Python of its own that imports
+this checkout's packages (`packages/cad/src`), never an installed cad:
 
 | File | Made by | Held by |
 | --- | --- | --- |
@@ -12,6 +13,7 @@ holds the file to its source compares -- made in a Python of its own that import
 | `apps/docs/src/lib/docs/library-reference.generated.json` | `python -m cad._internal.reference --docs` | `test_library_reference.py` |
 | `apps/docs/src/lib/docs/registry.generated.json` | `python -m cad.registry --docs` | `test_registry.py` |
 | `packages/core/src/lib/documentTypes.generated.js` | `python -m cad.registry --js` | `test_registry.py` |
+| `packages/core/src/lib/xbf/look.generated.js` | `cad.engine.render.look.as_js()` | `test_look.py` |
 
     scripts/generated/regenerate.py           # each file whose text its source makes otherwise now, written
     scripts/generated/regenerate.py --check   # nothing written: exit 1 naming each stale file
@@ -38,6 +40,7 @@ GENERATED = (
     ("apps/docs/src/lib/docs/library-reference.generated.json", "cad._internal.reference", "as_docs_json"),
     ("apps/docs/src/lib/docs/registry.generated.json", "cad.registry", "as_docs_json"),
     ("packages/core/src/lib/documentTypes.generated.js", "cad.registry", "as_js"),
+    ("packages/core/src/lib/xbf/look.generated.js", "cad.engine.render.look", "as_js"),
 )
 # Run in the child: the module's function, its text written to stdout as UTF-8, untranslated.
 _MAKE = ("import importlib, sys; "
@@ -71,7 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="scripts/generated/regenerate.py",
         description="Regenerate every file generated from the code: the documentation site's command and library "
-                    "references and its copy of the registry, and @cad/core's table of document types.")
+                    "references and its copy of the registry, and @cad/core's table of document types and copy of "
+                    "the engine's look.")
     parser.add_argument("--check", action="store_true",
                         help="write nothing: say which files are stale, and exit 1 where any is")
     args = parser.parse_args(argv)

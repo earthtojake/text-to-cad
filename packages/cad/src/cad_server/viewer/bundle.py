@@ -11,7 +11,8 @@ where the layout says otherwise: a structure names no place and no code of the c
 file's ``path``, a model's ``closure``), and a robot's names its meshes where the bundle holds them. And a
 structure holds two things apart, each once: its mechanism, which is ``kinematics.json`` and so is left
 out of it, and its prototypes' element names, each prototype's in a file named by its own bytes
-(``_names``). A reader puts both back.
+(``_names``). A reader puts both back. What is the same for every document of a release is no file of a bundle: the
+look an engine document is drawn in, which a page that reads a bundle carries itself.
 
 What a page asks for on demand, a bundle holds whole: each part's ``elements`` table (every face's,
 edge's and vertex's facts and its groups), made once per part. A document's part files are asked at once
@@ -346,7 +347,9 @@ def _said(body: bytes) -> str:
 def _engine_document(bundle: _Bundle, envelope: dict) -> str:
     """A model's, an ``.xbf``'s or a STEP's: its structure once every part is meshed (so it names each
     part's unmeshed faces), every part's buffer and table (asked at once: ``take_all``), its parts' facts as
-    wholes, its mechanism, its prototypes' element names, and the look it is drawn in."""
+    wholes, its mechanism and its prototypes' element names. Not the look it is drawn in (``GET /api/v1/look`` and
+    its environment image), a constant of the release, the same for every document: a page that reads a bundle
+    carries its own copy."""
     api = envelope["api"]
     status, _kind, body = bundle.ask("POST", f"{api}/mesh")
     if status != 200:
@@ -365,8 +368,6 @@ def _engine_document(bundle: _Bundle, envelope: dict) -> str:
     if "kinematics" in structure:
         sent, mechanism = bundle.get(f"{api}/kinematics")
         bundle.put("kinematics.json", mechanism, sent)
-    bundle.take("look.json", "/api/v1/look")
-    bundle.take("look/environment.hdr", "/api/v1/look/environment")
     if bundle.get(f"{api}/structure")[1] != first:
         raise _Changed()
     # The two things a structure says of the computer it was answered on, which a bundle never holds: where

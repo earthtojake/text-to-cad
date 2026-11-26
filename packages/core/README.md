@@ -250,7 +250,13 @@ answers the catalog (the one document: a model by its id, a file by `/<name>`), 
 to its file: one element's facts and a part's groups out of the part's one `elements.json`; served
 `final`, so nothing waits on a next version), a drawing, a robot and the resources their loaders
 read, and a KiCad board's plot (its 2D alone: no `boardModels`, so its view has no 3D) and a schematic's a sheet at
-a time (the hierarchy's index, held once in `schematic.json`, put back unless `index: false`). The structure it answers is the
+a time (the hierarchy's index, held once in `schematic.json`, put back unless `index: false`). The look an engine
+document is drawn in is no file of a bundle, being the same for every document of a release: the service answers
+`/api/v1/look` with the record core holds (`lib/xbf/look.generated.js`, which `scripts/generated/regenerate.py` makes
+from the engine's) and `/api/v1/look/environment` with the image its host's build holds, handed to it as
+`environment` (`openViewBundle(source, { environment })`, `openShare(id, service, { environment })`: a function of a
+request's options to the image's bytes); with none, an engine document's look has no image and the document does not
+open. The structure it answers is the
 engine's: where the bundle keeps the mechanism in
 `kinematics.json` alone and each prototype's element names in a file named by their content
 (`names/<sha256>.json`, which the prototype names as `names`), both are put back, each names file

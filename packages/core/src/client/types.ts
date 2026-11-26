@@ -403,6 +403,11 @@ export interface ViewBundleSource {
   dispose?(): void;
 }
 /**
+ * The bytes of the look's environment image as the page's build holds it (the engine's `studio.hdr`, the same in
+ * every release's look): what a view bundle's service answers `/api/v1/look/environment` with, which no bundle holds.
+ */
+export type ViewBundleEnvironment = (options?: CadRequestOptions) => Promise<ArrayBuffer>;
+/**
  * One file of a share (`ShareManifest`): the SHA-256 and the size of its own bytes, and where its gzip member
  * lies: `[pack id, offset, length]` ranges of the packs' bytes (before sealing), joined in order.
  */

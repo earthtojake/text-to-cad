@@ -185,8 +185,10 @@ engine's page, as above; the engine's ids never have a share id's form.
   appearance and the person's language, which this browser keeps (`src/host/browserLanguage.js`,
   [storage](docs/storage.md#localstorage)). It asks nothing of `/api/`: no server description, address link,
   library, Recents, telemetry, What's new, crash report or version to wait on, and no Export, Open in, Reveal or
-  Copy path; parameters read as an `.xbf`'s do ("Edit these in the script."), and a board is drawn in 2D alone. What a
-  bundle-backed view leaves out, and why, is [the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A prompt from it (Quick Edit's, a screenshot's) names the model by
+  Copy path; parameters read as an `.xbf`'s do ("Edit these in the script."), and a board is drawn in 2D alone. The
+  look an engine document is drawn in is this build's own, never the share's: @cad/core's record of it, and its
+  environment image, the engine's `studio.hdr` taken into the build as a file of its own and read from the page's
+  origin (`lookEnvironment`). What a bundle-backed view leaves out, and why, is [the host contract's](../../packages/ui/docs/viewer-host.md#a-view-bundles-host). A prompt from it (Quick Edit's, a screenshot's) names the model by
   the share's link, not by the model's id on the computer it was shared from, which means nothing to an agent on
   another: `File: <origin>/<id>`, each reference `<origin>/<id>#<selectors>` (as Copy Reference and a chip copy
   it) and its snapshot packet's `input` (`sharePromptSubject`, the host's `promptSubject`). Its Quick Edit carries

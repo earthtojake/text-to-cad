@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { ENGINE_LOOK } from '../lib/xbf/look.generated.js';
 import { fetchXbfElementFacts, fetchXbfPartGroups, xbfDocumentSource } from '../lib/xbf/xbfDocument.js';
 import { openViewBundle, viewBundleMemorySource, viewBundleSegment, VIEW_BUNDLE_ORIGIN } from './bundle.js';
 
 // A view bundle made here, file by file, as the layout writes one (the engine's documentation, "View bundle"):
 // a STEP's two parts, one of them keyed as a STEP's are (a key with `:` in it), each with its buffer and its
-// table; the document's structure, measures, mechanism and look. A buffer's bytes are no mesh: this reads
-// them, it draws nothing.
+// table; the document's structure, measures and mechanism. A buffer's bytes are no mesh: this reads them, it draws
+// nothing. The look is no file of it: the page's own copies answer it, the record @cad/core holds and the image its
+// build holds (`ENVIRONMENT`, handed to the service as its host hands it).
 const ID = '1024a2f2-2b65-5151-8299-282973f2a9fc';
 const TESSELLATION = '0.25-28.5';
 const PLATE = 'step-f8f4-0:1:2';
@@ -29,9 +31,9 @@ const FILES = {
   [`parts/${PEG}/elements.json`]: encode(table('peg', [3])),
   'measure.json': encode({ [PLATE]: { volume: 240, solids: 1 }, [PEG]: { volume: 12, solids: 1 } }),
   'kinematics.json': encode({ pairs: [] }),
-  'look.json': encode({ version: 4, environment: { url: '/api/v1/look/environment', intensity: 0.5 } }),
-  'look/environment.hdr': new Uint8Array([35, 63, 82, 65]),
 };
+const ENVIRONMENT = new Uint8Array([35, 63, 82, 65]);
+const environment = async () => ENVIRONMENT.slice().buffer;
 function manifestOf(files, document = { id: ID, kind: 'step', name: 'pair.step', version: 'v1' }) {
   const listed = Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, {
     bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -62,7 +64,7 @@ test('a key is spelled as one path segment as the layout spells it', () => {
 for (const [kind, make] of Object.entries(SOURCES)) {
   test(`an engine document's every read is answered from the bundle, from ${kind}`, async () => {
     const { source, asked } = make();
-    const client = await openViewBundle(source);
+    const client = await openViewBundle(source, { environment });
     // The bundle's one document, by the name it keeps: a file's own name, a model's id.
     assert.equal(client.file, '/pair.step');
     assert.equal((await client.resolveEntry('/pair.step')).id, ID);
@@ -81,9 +83,9 @@ for (const [kind, make] of Object.entries(SOURCES)) {
       const part = await served.fetch(`${where.url}/parts/${encodeURIComponent(key)}?tessellation=${TESSELLATION}`);
       assert.deepEqual(await bytesOf(part), STEP_BUNDLE[`${path}/${TESSELLATION}.xbm`], key);
     }
-    // The look, and its environment where the look names it, by the engine's path.
-    assert.deepEqual(await bytesOf(await served.fetch(`${where.base}/api/v1/look`)), STEP_BUNDLE['look.json']);
-    assert.deepEqual(await bytesOf(await served.fetch(`${where.base}/api/v1/look/environment`)), STEP_BUNDLE['look/environment.hdr']);
+    // The look, and its environment where the look names it, by the engine's path: the page's own copies.
+    assert.deepEqual(await (await served.fetch(`${where.base}/api/v1/look`)).json(), ENGINE_LOOK);
+    assert.deepEqual(await bytesOf(await served.fetch(`${where.base}/api/v1/look/environment`)), ENVIRONMENT);
     assert.deepEqual(await (await served.fetch(`${where.url}/kinematics`)).json(), { pairs: [] });
     assert.deepEqual(await (await served.fetch(`${where.url}/parts/${encodeURIComponent(PLATE)}/volume`)).json(), { volume: 240, solids: 1 });
 
@@ -112,6 +114,27 @@ for (const [kind, make] of Object.entries(SOURCES)) {
     client.dispose();
   });
 }
+
+test("the look is the page's own: a bundle's look/ is never read, and with no image from the page its environment is none", async () => {
+  // A bundle that lists a look and its image beside the model's files (the layout before the look became the page's).
+  const held = { ...FILES, 'look.json': encode({ version: 3 }), 'look/environment.hdr': new Uint8Array([1, 2]) };
+  const { source, asked } = countedSource({ ...held, 'manifest.json': manifestOf(held) });
+  const client = await openViewBundle(source, { environment });
+  const served = await client.engineDocument('/pair.step');
+  const { base } = xbfDocumentSource(served.url);
+  assert.deepEqual(await (await served.fetch(`${base}/api/v1/look`)).json(), ENGINE_LOOK);
+  assert.deepEqual(await bytesOf(await served.fetch(`${base}/api/v1/look/environment`)), ENVIRONMENT);
+  assert.deepEqual(asked.filter(({ path }) => path.startsWith('look')), []);
+  client.dispose();
+  // A host that hands the service no image: the record still, and the environment no answer, saying so.
+  const bare = await openViewBundle(viewBundleMemorySource(STEP_BUNDLE));
+  const plain = await bare.engineDocument('/pair.step');
+  assert.deepEqual(await (await plain.fetch(`${base}/api/v1/look`)).json(), ENGINE_LOOK);
+  const none = await plain.fetch(`${base}/api/v1/look/environment`);
+  assert.equal(none.status, 404);
+  assert.match((await none.json()).error, /holds no copy of the look's environment/);
+  bare.dispose();
+});
 
 test("a mesh file's bytes, a robot's meshes and a drawing are read through the service, from either source", async () => {
   const stl = new Uint8Array([115, 111, 108, 105, 100]);

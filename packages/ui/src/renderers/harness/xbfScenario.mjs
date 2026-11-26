@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
+import { ENGINE_LOOK } from '@cad/core/lib/xbf/look.generated.js';
 import { harnessBundle } from './bundle.mjs';
 import { chromium } from 'playwright';
 
@@ -12,11 +13,11 @@ import { chromium } from 'playwright';
 // pane's origin (`cad_server/viewer/http_app.py`): `GET /api/v1/documents?path=` its envelope, `POST
 // /api/v1/documents` where the page reads the document, and its kind's reads under
 // `/api/v1/documents/xbf/bracket` -- the structure, a buffer per part -- with the version a page waits
-// on, and the look (`look.json`) with an environment image of one texel.
+// on, and the engine's look (@cad/core's copy of it, `look.generated.js`) with an environment image of one texel.
 const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const STRUCTURE = readFileSync(join(FIXTURES, 'bracket', 'structure.json'));
 const VERSION = JSON.parse(STRUCTURE).version;
-const LOOK = readFileSync(join(FIXTURES, 'look.json'));
+const LOOK = JSON.stringify(ENGINE_LOOK);
 // 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128), as `xbf.test.js` serves it.
 const ENVIRONMENT = Buffer.concat([Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), Buffer.from([255, 255, 255, 128])]);
 const FILE = 'bracket.xbf';

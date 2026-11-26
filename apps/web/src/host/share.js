@@ -3,7 +3,8 @@
  * (`/v1/shares/<id>`): a share's sealed manifest and packs, for the view (`/<id>`: `shareService`, what
  * `@cad/core/client`'s `openShare` reads a share with), and its deletion, for the delete page
  * (`/<id>#delete=<secret>`). The delete secret goes in one place, the DELETE's `Authorization` header: never in
- * a URL, a log or storage. What the bytes are, and how they open, is `openShare`'s.
+ * a URL, a log or storage. What the bytes are, and how they open, is `openShare`'s. And what no share holds, the look's
+ * environment image, a file of this page's own build (`lookEnvironment`).
  */
 import { serverErrorMessage } from "@cad/core/client";
 
@@ -30,6 +31,9 @@ export function sharePromptSubject(id, origin = window.location.origin) {
 
 // Every request: no cookie, no referrer (the page's address is no one else's to read).
 const QUIET = { credentials: "omit", referrerPolicy: "no-referrer" };
+// The look's environment image, which lights an engine document's regular modes: the engine's own `studio.hdr`, the
+// same in every release's look, so no share holds it and this page's build carries it, a file beside its scripts.
+const LOOK_ENVIRONMENT = new URL("../../../../packages/cad/src/cad/engine/render/studio.hdr", import.meta.url);
 
 /** A refusal the service answered, in its own words where it said any (`{"error", "hint"}`). */
 async function refusal(response, what) {
@@ -62,6 +66,19 @@ export function shareService(id, { fetch: fetchImpl = globalThis.fetch, origin }
       return response.arrayBuffer();
     },
   };
+}
+
+/**
+ * The bytes of the look's environment image, this page's own copy (`LOOK_ENVIRONMENT`), read from its origin as its
+ * scripts are: what `openShare`'s service answers a view's `/api/v1/look/environment` with. A refusal is an error with
+ * its `status`.
+ * @param {{ fetch?: typeof globalThis.fetch, signal?: AbortSignal }} [options]
+ * @returns {Promise<ArrayBuffer>}
+ */
+export async function lookEnvironment({ fetch: fetchImpl = globalThis.fetch, signal } = {}) {
+  const response = await fetchImpl(LOOK_ENVIRONMENT.href, { ...QUIET, signal });
+  if (!response.ok) throw await refusal(response, "the request for the look's environment image");
+  return response.arrayBuffer();
 }
 
 /**

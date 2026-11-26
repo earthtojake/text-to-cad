@@ -321,13 +321,14 @@ function viewBundleShareSource(view, { key, pack: fetchPack }) {
  * the start (and never a pack only the files that made it lie in), and opened as any other (`openViewBundle`).
  * SHARE_DAMAGED where the manifest does not open or is not one, or a file is not as it says; SHARE_UNAVAILABLE where
  * a pack did not come; SHARE_UNSUPPORTED where the bundle is one this viewer does not open; a failure of
- * `service.manifest` as it is. Disposing the service stops the share's fetches and lets its packs go.
+ * `service.manifest` as it is. Disposing the service stops the share's fetches and lets its packs go. `environment`:
+ * the look's environment image as the page's build holds it (`openViewBundle`'s), which no share holds.
  * @param {string} id
  * @param {import('./types.js').ShareService} service
- * @param {{ signal?: AbortSignal }} [options]
+ * @param {{ signal?: AbortSignal, environment?: import('./types.js').ViewBundleEnvironment | null }} [options]
  * @returns {Promise<import('./types.js').CadViewBundleClient>}
  */
-export async function openShare(id, service, { signal } = {}) {
+export async function openShare(id, service, { signal, environment = null } = {}) {
   if (!SHARE_ID_PATTERN.test(String(id))) throw damaged('it names no share.');
   checkSignal(signal);
   const key = await crypto.subtle.importKey('raw', await deriveShareBits(id, 'key'), 'AES-GCM', false, ['decrypt']);
@@ -338,7 +339,7 @@ export async function openShare(id, service, { signal } = {}) {
   try { parsed = JSON.parse(text.decode(plain)); } catch (error) { throw damaged("the share's manifest is not JSON.", error); }
   const source = viewBundleShareSource(readShareManifest(parsed).view, { key, pack: (pack, options) => service.pack(pack, options) });
   try {
-    return await openViewBundle(source, { signal });
+    return await openViewBundle(source, { signal, environment });
   } catch (error) {
     source.dispose?.();
     // The source's own failures say what they are; whatever else stops the bundle opening is the bundle's.
