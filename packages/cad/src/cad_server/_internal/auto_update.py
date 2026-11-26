@@ -1209,7 +1209,11 @@ def begin(target: str | None, *, start: bool = True, major: bool = False) -> dic
     the release that is ready resumed, where it is ``target`` or PyPI named none (only its switch is left, which
     needs no network); else a new attempt. Never a second at once, never an attempt that ends ``ready``, never the
     install command after it. ``start``: a server wanted after it though none runs (false where ``cad update`` found
-    none running). The attempt's record (``release``, ``at``), or None where it could not begin."""
+    none running). The attempt's record (``release``, ``at``), or None where it could not begin. A person always gets
+    the newest: where ``target`` names a release and an attempt underway only gets another one ready (an automatic
+    one begun before ``target`` came out), that one ends first (``_newest_first``), and this update then installs
+    ``target`` and switches to it, never to the release the attempt was getting ready."""
+    _newest_first(target)
     with _BEGIN:
         try:
             said, found = _start(target, automatic=False, start=start, major=major, wanted=None)
@@ -1217,6 +1221,29 @@ def begin(target: str | None, *, start: bool = True, major: bool = False) -> dic
             return None
         return found if said in (BEGUN, UNDERWAY) else None
 
+
+
+def _newest_first(target: str | None, *, sleep: Callable[[float], None] | None = None,
+                  clock: Callable[[], float] | None = None) -> None:
+    """Where a person asked for ``target``, a release named (not None, not ``LATEST``), and the attempt underway only
+    gets another release ready (``"switch": false``), wait until it ends: joined, it would switch to the release it
+    was getting ready, an older one than the person asked for. Bounded by the longest an attempt can build and check
+    a release (``store.BUILD_SECONDS``, ``store.VERIFY_SECONDS``); a minute more and the ask goes on as it would have.
+    Never raises."""
+    if target in (None, LATEST):
+        return
+    sleep, clock = sleep or time.sleep, clock or time.monotonic
+    try:
+        from cad_server._internal import store
+
+        deadline = clock() + store.BUILD_SECONDS + store.VERIFY_SECONDS + 60.0
+        while clock() < deadline:
+            found = underway()
+            if found is None or found.get("switch") is not False or found.get("release") == target:
+                return
+            sleep(0.5)
+    except Exception:  # noqa: BLE001 - the ask goes on as it would have
+        return
 
 
 # --- the viewer's update button --------------------------------------------------------------------------------------

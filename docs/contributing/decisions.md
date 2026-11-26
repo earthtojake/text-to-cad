@@ -354,9 +354,10 @@ whatever is in flight; nothing that runs is touched and nothing restarts. Then t
 it, and by itself only as the server next starts (the start becomes the switch, and no server of the
 release before serves anything; not a start in the foreground or one that names its port, which are
 the person's own). Until then the update button is a restart icon, and a click restarts now, as a
-typed `cad update` does. A person's update is never left halfway: one asked for while the release is
-being got ready goes on to the restart, and one asked for with a release ready has only the restart
-left, whether PyPI answers or not. At the restart, what is in flight gets ten minutes to end, and then
+typed `cad update` does. A person's update is never left halfway, and always ends on the newest: one asked for while the
+release is being got ready goes on to the restart, and where PyPI names a newer release than the one
+being got ready, that one ends first and the newer is installed, then switched to; one asked for with
+the newest ready has only the restart left, and so has one where PyPI does not answer. At the restart, what is in flight gets ten minutes to end, and then
 the server stops all the same. A release the feed has stopped naming since it got ready is never
 switched to by itself. With automatic updates off nothing is got ready, and a release that was ready
 waits for the person.

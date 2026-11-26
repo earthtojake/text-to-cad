@@ -3547,6 +3547,47 @@ class PluginCatchUpTest(Case):
         self.assertEqual(calls, ["catch up", "count"])
 
 
+class NewestFirstTest(Case):
+    """A person always gets the newest (``auto_update.begin``, ``_newest_first``): an automatic attempt that was only
+    getting an older release ready when they asked for a newer one ends first, and theirs then installs the newer
+    one and switches to it, never to the older."""
+
+    def test_an_ask_for_a_newer_release_waits_for_an_older_one_getting_ready_then_asks_for_the_newer(self) -> None:
+        getting_ready = {"release": "0.2.0", "outcome": "underway", "switch": False}
+        states = [getting_ready, getting_ready, None]
+        slept: list[float] = []
+        with mock.patch.object(auto_update, "underway", side_effect=lambda: states.pop(0) if states else None), \
+                mock.patch.object(auto_update.time, "sleep", side_effect=slept.append), \
+                mock.patch.object(auto_update, "_start", return_value=(auto_update.BEGUN, {"release": "0.3.0"})) as start:
+            found = auto_update.begin("0.3.0")
+        self.assertEqual(found, {"release": "0.3.0"})
+        self.assertEqual(len(slept), 2, "waited while the older one was still getting ready")
+        self.assertEqual(start.call_args.args[0], "0.3.0", "then the newer one, asked by name")
+
+    def test_no_wait_where_it_is_the_release_asked_for_a_whole_update_none_named_or_none_underway(self) -> None:
+        cases = {"the same release": ("0.3.0", {"release": "0.3.0", "switch": False}),
+                 "a whole update underway": ("0.3.0", {"release": "0.2.0", "switch": True}),
+                 "PyPI named none": (auto_update.LATEST, {"release": "0.2.0", "switch": False}),
+                 "nothing underway": ("0.3.0", None)}
+        for name, (target, found) in cases.items():
+            with self.subTest(case=name), mock.patch.object(auto_update, "underway", return_value=found), \
+                    mock.patch.object(auto_update.time, "sleep", side_effect=AssertionError("no wait")), \
+                    mock.patch.object(auto_update, "_start", return_value=(auto_update.UNDERWAY, {"release": "x"})):
+                self.assertEqual(auto_update.begin(target), {"release": "x"})
+
+    def test_the_wait_is_bounded_by_the_longest_a_release_takes_to_get_ready(self) -> None:
+        from cad_server._internal import store
+
+        clock = [0.0]
+        def sleep(seconds: float) -> None:
+            clock[0] += seconds
+        stuck = {"release": "0.2.0", "switch": False}
+        with mock.patch.object(auto_update, "underway", return_value=stuck):
+            auto_update._newest_first("0.3.0", sleep=sleep, clock=lambda: clock[0])
+        self.assertGreaterEqual(clock[0], store.BUILD_SECONDS + store.VERIFY_SECONDS)
+        self.assertLess(clock[0], store.BUILD_SECONDS + store.VERIFY_SECONDS + 61.0, "then the ask goes on")
+
+
 class UpdateCountTest(Case):
     """Each ended attempt of cad's own update counted once (``auto_update.report``, ``event``): the event each kind of
     record makes, marked as counted, the one before a new attempt counted first, and the wait for the install

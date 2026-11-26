@@ -257,7 +257,9 @@ before it serves anything: that start stands aside, and its starter waits for th
 `--foreground`, nor a start that names its port, `--port`). A server never restarted stays on its release, the
 button offering the restart. A person's ask (`cad update`, the button) switches to it
 at once, even where PyPI cannot be reached, and one made during the silent build makes that attempt theirs
-(`"switch": true, "asked": true`, in the step that joins it). The switch resumes the attempt: a new record at
+(`"switch": true, "asked": true`, in the step that joins it) -- unless PyPI names a newer release than the one
+that build gets ready: then the build ends first and the newer is installed and switched to (`_newest_first`), so a
+person's update always ends on the newest. The switch resumes the attempt: a new record at
 `switching`, its tries the ready one's, held by no schedule and counted among none of the day's attempts. A newer
 release takes the record's place as any attempt does, and the one that was ready is tidied.
 
