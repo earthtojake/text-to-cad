@@ -1241,6 +1241,7 @@ class WorkerTest(unittest.TestCase):
         self.upgrade = (0, "Updated cad v0.1.0 -> v0.2.0\n")  # uv's exit status and words
         self.midway = False  # the upgrade stops past a package's RECORD
         self.reinstalls: dict[str, int] = {}  # uv's exit status for ``--reinstall`` of a release (0 by default)
+        self.bin: Path | None = None  # uv's bin folder, where uv says it is
         self.starts = {"0.1.0": True, "0.2.0": True}  # whether a release's server starts
         self.gone = True  # whether a server stopped goes within the bound
         self.ran: list[list[str]] = []
@@ -1273,6 +1274,8 @@ class WorkerTest(unittest.TestCase):
         return {"stopped": ["door"], "running": [], "removed": []}
 
     def cad(self, command, timeout):
+        if command[1:] == ["tool", "dir", "--bin"]:
+            return (0, f"{self.bin}\n") if self.bin else (2, "error: no tool folder")
         self.ran.append(list(command))
         if command[:3] == ["uv", "tool", "upgrade"] and command[3] != "--reinstall":
             code, said = self.upgrade
@@ -1485,6 +1488,36 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(system.looks, [False, False], "the rename before the sweep, which looks until none is left")
         self.assertEqual((folder / "cad.exe").read_bytes(), b"new launcher", "the environment's own, copied there")
         self.assertEqual(sorted(path.name for path in folder.iterdir()), ["cad.exe"], "the one moved aside removed")
+
+    @unittest.skipIf(os.name == "nt", "a link, as uv makes the command elsewhere than on Windows")
+    def test_the_bin_command_a_failed_upgrade_took_out_is_linked_again(self) -> None:
+        """uv takes the tool's commands out before it installs the release, and a run that fails after (a dist-info
+        left without its RECORD) leaves none; its ``--reinstall`` makes none either (measured, uv 0.11): the person's
+        ``cad`` would be gone. The moment uv returns, it is a link to the environment's own again."""
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        own = self.prefix / "bin" / "cad"
+        own.parent.mkdir()
+        own.write_text("#!/bin/sh\n", encoding="utf-8")
+        (self.bin / "cad").symlink_to(own)
+        self.upgrade = (1, "error: Failed to upgrade cad\n  Caused by: failed to open file `RECORD`")
+        cad = self.cad
+
+        def run(command, timeout):
+            if command[:3] == ["uv", "tool", "upgrade"]:
+                (self.bin / "cad").unlink(missing_ok=True)
+            return cad(command, timeout)
+
+        found = helper.update(self.told, run=run, mark=self.phases.append)
+        self.assertEqual((found["outcome"], found["restored"]), ("failed", True), found)
+        self.assertEqual(os.readlink(self.bin / "cad"), str(own), "the release before runs again, by its command")
+        # A link that is there is left as it is; a folder that is not there gets none, and the update goes on.
+        self.upgrade = (0, "Updated cad v0.1.0 -> v0.2.0\n")
+        self.assertEqual(helper.update(self.told, run=cad, mark=self.phases.append)["outcome"], "installed")
+        self.assertEqual(os.readlink(self.bin / "cad"), str(own))
+        self.installed, self.bin = "0.1.0", self.tmp / "elsewhere"
+        self.assertEqual(helper.update(self.told, run=run, mark=self.phases.append)["outcome"], "installed")
+        self.assertFalse(self.bin.exists())
 
     def test_the_moved_aside_command_is_put_back_where_none_can_be_copied(self) -> None:
         folder = self.tmp / "bin"
@@ -3709,6 +3742,10 @@ class SwitchingTest(Case):
         self.assertTrue(auto_update.leaving(), "this release (0.1.0) is the one being left")
         with mock.patch.object(cad_server, "__version__", "0.2.0"):
             self.assertFalse(auto_update.leaving(), "the next release's server is the one to start")
+        with mock.patch.dict(os.environ, {auto_update.WORKER_ENV: json.dumps(auto_update.last()["at"])}):
+            self.assertFalse(auto_update.leaving(), "the worker's own start of it, where its repair goes back to it")
+        with mock.patch.dict(os.environ, {auto_update.WORKER_ENV: "1.5"}):
+            self.assertTrue(auto_update.leaving(), "another attempt's worker")
         self.keep(phase="switching", beat=time.time() - auto_update.LEAVING_SECONDS - 1)
         self.assertFalse(auto_update.leaving(), "a worker that died holds no start back for long")
         self.keep(phase="switching", outcome="installed")

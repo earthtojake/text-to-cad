@@ -986,6 +986,9 @@ def switching(now: float | None = None) -> bool:
 # How fresh the worker's beat must be for a server's start to stand aside for its switch (``leaving``). It beats every
 # minute and as it begins the switch (``auto_update_helper.Beat``), so a worker that died holds a start back no longer.
 LEAVING_SECONDS = 150.0
+# What the worker sets for every command it runs (``auto_update_helper.main``): the ``at`` of its attempt, so its own
+# check of a release, the release being left included where its repair goes back to it, is never held by ``leaving``.
+WORKER_ENV = "CAD_UPDATE_WORKER"
 
 
 def leaving(now: float | None = None) -> bool:
@@ -995,11 +998,15 @@ def leaving(now: float | None = None) -> bool:
     a server of this release started in between (a ``cad server start`` at that moment) would run from files uv is
     replacing, and hold them on Windows. So it starts none (``cad_server.engine.daemon.main``), and its starter
     launches none meanwhile and waits for the server that answers (``cad.engine.client.LEAVING``): the worker starts
-    the next release's, or, where that does not run, the one of whatever release its repair leaves. Never raises."""
+    the next release's, or, where that does not run, the one of whatever release its repair leaves. Never for the
+    worker's own commands (``WORKER_ENV``): it checks the release before by starting its server where its repair goes
+    back to it. Never raises."""
     try:
         now = time.time() if now is None else now
         found = underway(now)
         if found is None or found.get("phase") != "switching" or found.get("from") != _version():
+            return False
+        if os.environ.get(WORKER_ENV) == json.dumps(found.get("at")):
             return False
         beat = found.get("beat")
         return _time(beat) and 0 <= now - beat < LEAVING_SECONDS

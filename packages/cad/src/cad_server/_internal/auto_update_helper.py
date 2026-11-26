@@ -31,9 +31,11 @@ the upgrade safe where processes run cad, and repairs it where it fails anyway. 
    e. ``uv tool upgrade <requirement>`` (``cad==<target>``, or the bound of ``from``'s major): the release it leaves
       is the one installed (``auto_update.installed``); ``from`` itself is ``current``. uv's own failure to write the
       bin ``cad.exe`` (a file in use) leaves the environment upgraded and whole: that is checked as an upgrade.
-   f. On Windows, the moment uv returns, a bin ``cad.exe`` again (``command_back``: the environment's own copied there
-      where uv left none, else the one moved aside put back), and the one moved aside removed where it can be (else
-      the server's next tidying does, ``auto_update.tidy``).
+   f. The moment uv returns, uv's bin ``cad`` again where uv left none (``command_back``; an upgrade uv fails after it
+      took the tool's commands out leaves none, and ``--reinstall`` makes none): on Windows the environment's own
+      ``cad.exe`` copied there, else the one moved aside put back, and the one moved aside removed where it can be
+      (else the server's next tidying does, ``auto_update.tidy``); elsewhere a link to the environment's own, as uv
+      makes it.
    g. A server of another release that came up meanwhile stopped (``clear``), and the release checked (``runs``):
       ``cad server start`` where a server ran or ``start`` asks for one, ending 0 with a server whose greeting names
       it; else ``cad --version`` saying it.
@@ -202,7 +204,7 @@ def switch(told, run, log, system=None):
         return {**named_, "outcome": "failed", "cause": "packaged", "start": False,
                 "detail": "refused: this worker runs inside a Windows app package, and nothing was changed"}
     prefix = Path(sys.prefix)
-    command = tool_command(told, run) if WINDOWS else None
+    command = tool_command(told, run)
     server = answering()
     if server is not None:
         stop(server, log)
@@ -243,7 +245,7 @@ def upgrade(told, run, arguments, command, log, system=None):
     """One ``uv tool upgrade <arguments>``, made safe on Windows: uv's bin ``cad.exe`` (``command``) moved aside first,
     so a new ``cad`` fails at once (``aside``), then every process running from the environment stopped, looked for
     again until none is left (``stop_environment``), and the moment uv returns a bin ``cad.exe`` there again
-    (``command_back``), before anything is checked. uv's exit status and words."""
+    (``command_back``, on every system), before anything is checked. uv's exit status and words."""
     moved = None
     if WINDOWS:
         moved = aside(command, log) if command is not None else None
@@ -329,10 +331,11 @@ def replace(told, run, held, log, mark=lambda phase: None):
 
 
 def tool_command(told, run):
-    """uv's bin ``cad.exe`` of this tool (``uv tool dir --bin``, asked of the worker's uv), or None where uv cannot say."""
+    """uv's bin ``cad`` of this tool (``cad.exe`` on Windows; ``uv tool dir --bin``, asked of the worker's uv), or None
+    where uv cannot say."""
     code, said = run([told["uv"], "tool", "dir", "--bin"], ASK_SECONDS)
     folder = last_line(said) if code == 0 else ""
-    return Path(folder) / "cad.exe" if folder else None
+    return Path(folder) / ("cad.exe" if WINDOWS else "cad") if folder else None
 
 
 def aside(command, log):
@@ -352,14 +355,22 @@ def aside(command, log):
 
 
 def command_back(command, moved, prefix, log):
-    """Step f: a bin ``cad.exe`` at ``command`` again where uv left none -- the environment's own
-    (``Scripts/cad.exe``) copied there, else the one moved aside (``moved``) put back --; then the one moved aside
+    """Step f: uv's bin ``cad`` at ``command`` again where uv left none -- on Windows the environment's own
+    (``Scripts/cad.exe``) copied there, elsewhere a link to its ``bin/cad`` as uv makes one; else the one moved aside
+    (``moved``) put back --; then the one moved aside
     removed where it can be (a process may run it still: the server's next tidying removes it, ``auto_update.tidy``).
     What is left of it there, or None."""
     if not os.path.lexists(command):
         try:
-            shutil.copy2(auto_update.tool_command(prefix, windows=True), command)
-            log.write(f"{command} copied from the environment's own")
+            if WINDOWS:
+                shutil.copy2(auto_update.tool_command(prefix, windows=True), command)
+                log.write(f"{command} copied from the environment's own")
+            else:  # as uv makes it: a link to the environment's own
+                own = auto_update.tool_command(prefix, windows=False)
+                if not own.is_file():
+                    raise FileNotFoundError(own)
+                os.symlink(own, command)
+                log.write(f"{command} linked to the environment's own")
         except OSError:
             if moved is not None:
                 with contextlib.suppress(OSError):
@@ -835,7 +846,10 @@ def crashed(told, error):
 def main(told):
     """The update ``told`` asks for, beating as it runs (``Beat``), its record kept where it is still this attempt's
     (``ours``), under the state folder's lock, ``asked`` where the record says a person asked since; where the worker
-    itself raises, the attempt kept as it was, marked ``helper_crash`` (``crashed``), and the error written to the log."""
+    itself raises, the attempt kept as it was, marked ``helper_crash`` (``crashed``), and the error written to the log.
+    Every command it runs is told it is the worker's of this attempt (``auto_update.WORKER_ENV``), so its check of the
+    release being left starts that release's server, which a start meanwhile would not (``auto_update.leaving``)."""
+    os.environ[auto_update.WORKER_ENV] = json.dumps(told.get("at"))
     beat = Beat(told)
     try:
         found = update(told, mark=beat.mark)
