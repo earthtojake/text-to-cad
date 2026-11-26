@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.11.17"
+version = "0.11.18"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra; and the cad command, its server and the viewer."
 readme = "README.md"
 license = "MIT"
@@ -126,7 +126,7 @@ calculix = [
 # family dies on a ModuleNotFoundError. Meshes are read by the library's own readers (a 3MF and a GLB
 # written as an STL first), so trimesh's 3MF loader and lxml, which it alone needs, are not ours.
 trimesh = [
-  "trimesh>=5.2.1,<6",
+  "trimesh>=5.2.2,<6",
   "rtree>=1.2,<2",
   "scipy>=1.17.1,<2",
   "networkx>=3.6.1,<4",

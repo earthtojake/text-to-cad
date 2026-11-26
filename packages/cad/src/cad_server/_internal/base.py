@@ -28,6 +28,9 @@ exists (``Making.made``), never before.
 - **One maker**: a lock beside it, so a process that finds another making it waits for it.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
+- **A cooldown keeps nothing of cad's own out**: where a cutoff of the person's uv settings (``exclude-newer``) leaves
+  out cad's release itself -- the one this computer runs already -- uv is asked again with it lifted for cad alone
+  (``LIFT``), every other package still under it.
 - **Made on first need**, never ahead of it: nothing makes it at install or at the server's start. Every need
   goes to the server's one making (``MAKING``, ``Making.follow``): the start of a kernel process (``kernel``: a
   build's worker, a view or an operation that reads a STEP or an xbf or meshes one), and a command's ask over the
@@ -704,16 +707,26 @@ def _install(install: list[str], folder: Path, recipe: Recipe,
              told: Callable[[str], None]) -> tuple[subprocess.CompletedProcess, list[str]]:
     """``uv pip install`` as ``install`` says it: from uv's cache first, ``--offline``, and from the network
     only for what it does not hold, said in a line first -- unless the recipe's own options say ``--offline``.
-    Its result, and the command that gave it."""
+    Its result, and the command that gave it. Where a cutoff of uv's settings keeps out cad's own release
+    (``exclude-newer``, ``_cut_off``), every step after is asked with the cutoff lifted for cad alone (``LIFT``)."""
     environment = recipe.environment
+
+    def asked(step: list[str], *offline: str) -> subprocess.CompletedProcess:
+        nonlocal install
+        result = _uv([*step, *offline], folder, environment)
+        if result.returncode != 0 and _cut_off(result) and not set(LIFT) <= set(step):
+            install = step = [*step, *LIFT]
+            result = _uv([*step, *offline], folder, environment)
+        return result
+
     if "--offline" in recipe.options:
-        return _uv(install, folder, environment), install
-    result = _uv([*install, "--offline"], folder, environment)
+        return asked(install), install
+    result = asked(install, "--offline")
     if result.returncode == 0:
         return result, install
     # uv's cache did not hold all of it: from the network, once.
     told(recipe.downloading)
-    result = _uv(install, folder, environment)
+    result = asked(install)
     if result.returncode != 0 and recipe.source is None and _unlisted(result, recipe.release):
         # uv reads an index page it cached (ten minutes, PyPI's): one from before the release was listed says
         # there is none. Asked again, that page alone fetched anew.
@@ -807,6 +820,27 @@ def halt() -> None:
             pass
 
 
+# What uv says where a cutoff of its settings -- ``exclude-newer``, a cooldown on new uploads, in a person's uv.toml or
+# ``UV_EXCLUDE_NEWER`` -- left a package out: ``hint: `cad` was filtered by `exclude-newer` to only include packages
+# uploaded before ...``. Every uv that says it takes ``--exclude-newer-package <name>=false``.
+CUT_OFF = re.compile(r"`([A-Za-z0-9][A-Za-z0-9._-]*)` was filtered by `exclude-newer`")
+# The cutoff lifted for cad alone: the release a making pins is this computer's own, which the server line (``uvx
+# --no-config``, no uv.toml read) or cad's own update already installed, so no cutoff keeps it out of an environment;
+# every other package stays under it.
+LIFT = ("--exclude-newer-package", f"{LIBRARY}=false")
+
+
+def _cut_off(done: subprocess.CompletedProcess) -> bool:
+    """Whether uv says a cutoff of its settings (``CUT_OFF``) left cad itself out."""
+    return LIBRARY in CUT_OFF.findall(done.stderr or done.stdout or "")
+
+
+def _hint(said: str) -> str | None:
+    """uv's hint that a cutoff of its settings left a package out (``CUT_OFF``), as uv says it; else None."""
+    return next((line.strip().removeprefix("hint:").strip() for line in said.splitlines()
+                 if line.strip().startswith("hint:") and CUT_OFF.search(line)), None)
+
+
 def _unlisted(done: subprocess.CompletedProcess, release: str) -> bool:
     """Whether uv found no ``cad==<release>`` (or the server's) on its index."""
     said = " ".join((done.stderr or done.stdout or "").split())
@@ -898,9 +932,9 @@ def _failure(step: list[str], said: str, recipe: Recipe, code: int | None = None
     """Why uv could not make an environment (``recipe``'s), in one line of cadgen's that says what to do, and
     its cause (``Refused.cause``): a signal that ended it (``code``, its exit status: it gave no reason, and the
     last line it printed is none: ``killed``); a file the system denies it (a sandbox's: ``denied``); the
-    network it needs once (``network``); a Python it cannot use (``python``); a release no index it reads has,
-    or requirements it cannot resolve (``resolve``); else uv's own words (``resolve`` where its resolver
-    explained them, else ``install``)."""
+    network it needs once (``network``); a Python it cannot use (``python``); a package a cutoff of uv's settings
+    holds back (``exclude-newer``, with uv's hint), a release no index it reads has, or requirements it cannot
+    resolve (``resolve``); else uv's own words (``resolve`` where its resolver explained them, else ``install``)."""
     explained = _explained(said)
     words = explained or _last(said)
     what = recipe.what
@@ -920,6 +954,9 @@ def _failure(step: list[str], said: str, recipe: Recipe, code: int | None = None
         return f"{what} needs the network once: {_last(said)}", "network"
     if step[1] == "venv":
         return f"uv cannot make {what} on {recipe.python}: {words}", "python"
+    hint = _hint(said)
+    if hint is not None:  # a cooldown of the person's: cad's own release lifted from it (``LIFT``), not what cad needs
+        return f"a cutoff of uv's settings (exclude-newer) holds back what {what} needs: {hint} (uv: {words})", "resolve"
     release = recipe.release
     if recipe.source is None and any(f"no version of {name}=={release}" in explained
                                      for name in (LIBRARY, f"{LIBRARY}[{EXTRA}]", SERVER)):

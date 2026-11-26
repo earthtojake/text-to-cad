@@ -976,13 +976,19 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   keeps its own in `face`), so a pocket's floor and walls are one finding.
 - **Bends.** The skins and bend cylinders joined by tangent edges are the sheet's two sides; the side with
   the largest skin is unfolded (a skin in several faces, split through a hole, read whole: its coplanar faces
-  joined), its coplanar skins the flanges. A bend's angle is its cylinder's angular
+  joined), its coplanar skins the flanges. Where both sides hold a skin as large (within `TIE_MM`, the
+  sheet's two skins where nothing is cut into one alone), each is unfolded and read, and the report holds
+  what either says: an item seen from both is one (its refs, else within two thicknesses on the part), each
+  figure a rule or a finding judges the worse of the two, the rest the first side's (in the part's faces'
+  order); an item one side alone has is kept. A hole sunk, a pocket stepped or a cut run into a bend from
+  one side reads differently from each, and which is largest is rounding's. A bend's angle is its cylinder's angular
   span (checked against the flanges' normals), its length the extent along the axis, its tangent lines
   where the cylinders meet the flanges. A corner joined without a bend is a `sharp_bends` item: two skins at
   an angle meeting at an edge (`Box + Box`, a shelled box), a round on one side of a corner with no
   concentric round a thickness across (`inside_only`, `outside_only`), or skins no bend joins to the unfolded
   side (`unjoined`); their flanges are not in the flat pattern.
-- **Unfold.** Breadth-first from the largest flange: each flange is moved flat (one rigid transform, exact:
+- **Unfold.** Breadth-first from the largest flange (of those as large, the first in the part's faces),
+  along its longest straight edge (of those as long, the first): each flange is moved flat (one rigid transform, exact:
   arcs and holes stay arcs and holes) about its bend and out by `BA = angle * (r + K t)`; each bend is its
   cylinder's outline unrolled into a strip `BA` wide (exact for straight ends, sampled where an end is
   curved). A bend about the same axis, radius and angle as the bend that placed its flange (a bend line a
@@ -1032,6 +1038,9 @@ smallest and largest parts are no rule: give the ones it publishes, or compare t
   face's edges were cut too: its pieces on in one line are one.
   A countersink sunk into the unfolded side is laid in the same way: that skin's hole is the countersink's
   rim, the flat's the hole under it (a plate countersunk from both sides has one whichever side unfolds).
+  A countersink cut across by a layer is merged as a break is (its faces that meet at a curve; its halves,
+  split at a line through its axis, are laid each): laid a layer at a time, a ring 0.008 mm across closed
+  its hole and the flat held 104% of the part's material.
   A rim that runs off the outline, into a cutout or into another rim is no whole circle of the skin's, and
   the cone no whole turn there: the edges between two passes of its seam are laid as one outline, less the
   hole, which is read from the cone's small end; the wire that rim is part of is no hole of its own and is
@@ -1060,7 +1069,7 @@ Every item of a part's families carries its part's `thickness_mm`: what its rule
 
 | family | per item | notes |
 |---|---|---|
-| `parts` | `thickness_mm`, `is_sheet`, `why`, `sheet_area_fraction`, `bend_count`, `sharp_bend_count`, `flat_length_mm`, `flat_width_mm` (smallest rectangle), `flat_area_mm2`, `flat_overlap_mm2`, `neutral_area_ratio`, `flat_material_fraction`, `bent` (it has a bend: which thickness limit is its), `rolled` (a sheet rolled with no flat flange: not unrolled), `unfold_note`, `not_in_flat` (the flanges no bend reached, each its largest face, and the bends not laid out), `joggles` [{bends, location, xyz}] (two bends meeting tangent with no flat between), `flat_bend_lines` | one per part |
+| `parts` | `thickness_mm`, `is_sheet`, `why`, `sheet_area_fraction`, `bend_count`, `sharp_bend_count`, `flat_length_mm`, `flat_width_mm` (smallest rectangle), `flat_area_mm2`, `flat_overlap_mm2`, `neutral_area_ratio`, `flat_material_fraction`, `bent` (it has a bend: which thickness limit is its), `rolled` (a sheet rolled with no flat flange: not unrolled), `unfold_note`, `not_in_flat` (the flanges no bend reached, each its largest face, and the bends not laid out), `joggles` [{bends, location, xyz}] (two bends meeting tangent with no flat between), `flat_bend_lines`, `edge_breaks` {count, break_mm, location} (its judged `edge_break` items, every one: how many, the deepest and the first's ref, whatever the cap leaves of them in `not_sheet`) | one per part |
 | `not_sheet` | `kind` (thicker, thinner, unpaired; `edge_break`: a chamfer or round of a cut edge, its depth `break_mm`, the area and, where a layer cut it, the `pieces` (their refs) of the whole of it; `formed`: a cone, torus or freeform face a thickness across), `surface`, `local_thickness_mm`, `sheet_thickness_mm`, `deviation_mm`, `area_mm2`, `judged` (None on a part that is not sheet, or a round a `sharp_bends` item names: no thickness verdict), `face` (its own ref; `location` is its feature's) | a boss, pocket, round, freeform face |
 | `sharp_bends` | `kind` (sharp, inside_only, outside_only, unjoined), `angle_deg`, `inside_radius_mm`, `outside_radius_mm`, `thickness_mm`, `edge_count`, `faces` | a corner joined without a bend: its flange is not in the flat |
 | `bends` | `kind` (bend; hem: 175 to 185 degrees with an inside diameter of at most 4 t, `HEM_DIAMETER_T`, cad's own line -- wider is a U-bend, a bend; curl: over 185), `inside_radius_mm`, `outside_radius_mm`, `radius_to_thickness`, `angle_deg` (bent from flat), `included_angle_deg`, `flanges_angle_deg`, `length_mm`, `axis`, `axis_origin`, `tangent_lines`, `k_factor`, `k_factor_source`, `bend_allowance_mm`, `bend_deduction_mm` (None for a fold of 175 degrees or more -- a hem, a U-bend, a curl: its mold lines meet nowhere, and its flanges have no height from one); `faces` [inside, outside] | location: the inside cylinder |
@@ -1167,7 +1176,8 @@ joggle's bends keep their own `bend_radius`), `sheet.formed_surface`
 (warning, one per part: its `formed` faces, not measured -- a cone, a torus or a free-form face is rolled,
 spun or stamped, an emboss, a louver or a bead, not brake-bent, and no source gives a stamped form's
 feasibility limit: quote it as a formed feature), `sheet.edge_break` (warning, one per part: its chamfered or
-rounded cut edges, a second operation after cutting), `sheet.bend_radius_differs`
+rounded cut edges, a second operation after cutting; counted and their depth read from the part's `edge_breaks`,
+so past the cap too), `sheet.bend_radius_differs`
 (warning: vs `--bend-radius`, one a bend), `sheet.bend_radii_mixed`
 (info: bends, not hems or curls), `sheet.under_kerf` (error), `sheet.hole_in_bend` (warning),
 `sheet.k_factor_assumed` (info), `sheet.measured_not_judged` (info, one a check: what was measured and no

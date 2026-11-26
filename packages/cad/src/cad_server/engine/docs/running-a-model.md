@@ -18,7 +18,11 @@ asked `--offline` first and goes to the network only for what its cache lacks, s
 (`cad_server._internal.base`). One per installation, keyed by it (the version it runs as, its release
 and source), the Python line it is made on and the architecture, so an update has a base of its
 own, and so has a cad on another Python line. Its marker, `cad-env.json`, written last, makes it complete, so a later use reads the marker and
-resolves nothing; a lock beside it makes one process make it while another waits. An installation
+resolves nothing; a lock beside it makes one process make it while another waits. A cutoff of the person's
+uv settings (`exclude-newer`, a cooldown on new uploads, in their uv.toml) keeps out no release of cad's own: the
+server line reads no uv.toml (`uvx --no-config`), and where uv says the cutoff left out the release the engine
+runs, it is asked again with the cutoff lifted for cad alone (`--exclude-newer-package cad=false`, `base.LIFT`),
+every other package still under it; one it holds back of what cad needs is said with uv's hint. An installation
 whose own environment carries the kernel (installed with the extra, `pip install
 'cad[build123d]==<release>'`) is its own base, and none is made. **Nothing is made ahead of need**:
 not at install time, not by `cad doctor`, not after an update, and not at the engine's start (below).

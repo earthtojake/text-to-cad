@@ -14,18 +14,22 @@ between a skin and its opposite; a cone in several faces (two half faces, as som
 one. A chamfer or a round of a skin's edge is an *edge break*,
 and a face square to the skin it joins to both skins through breaks is a cut edge too (its rays run across
 the plate: its width, never its thickness), as is each face of a cut in several faces across the thickness,
-joined tangent (a plate extruded both ways along an ellipse or a spline); a bend's end is broken by a cone or a torus about its axis; a break in several faces of one surface (a layer cut it across) is one break; a cone, torus or freeform face a thickness across is *formed*
+joined tangent (a plate extruded both ways along an ellipse or a spline); a bend's end is broken by a cone or a torus about its axis; a break in several faces of one surface (a layer cut it across) is one break, and a countersink cut across is one; a cone, torus or freeform face a thickness across is *formed*
 sheet, not a bend. Every other face, and every stretch of a skin whose rays
 cross anything but ``t``, is not sheet (``not_sheet``: a boss, a pocket, a round, at its ref, with how far it
 departs from ``t``).
 
 **Bends.** The skins and the bends' cylinders joined by tangent edges form the sheet's two *sides*; the
-side holding the largest skin is unfolded. Its coplanar skins are the flanges; each of its bend cylinders
-joins one or two of them. A bend's inside radius is its concave cylinder's, its angle the angle the side's
+side holding the largest skin is unfolded. Where both hold a skin as large (a sheet's two skins, wherever
+nothing is cut into one alone), each is unfolded and read and the report holds what either says (``_merged``):
+which is largest is rounding's, and a hole sunk, a pocket stepped or a cut run into a bend from one side reads
+differently from each. Its coplanar skins are the flanges; each of its bend cylinders joins one or two of them.
+A bend's inside radius is its concave cylinder's, its angle the angle the side's
 cylinder spans about the axis (checked against the flanges' normals), its length the cylinder's extent along
 the axis, and its tangent lines where the cylinders meet the flanges.
 
-**The unfold.** From the largest flange, each flange is laid into the plane across the bends that join it
+**The unfold.** From the largest flange (of those as large, the first in the part's faces), along its longest straight
+edge (of those as long, the first in its edges), each flange is laid into the plane across the bends that join it
 (a breadth-first walk): rotated flat about its bend and moved out by the bend allowance ``BA = angle *
 (r + K t)`` (the length of the neutral surface, ``K`` the K-factor), the bend itself unrolled into a strip
 ``BA`` wide. The flanges' faces are moved exactly (a rigid transform each), so their holes and arcs stay
@@ -41,6 +45,7 @@ part for its ref.
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -197,6 +202,21 @@ class _Flange:
     # a joint, no flange: the line where two bends meet tangent with no flat between them (a joggle), as a
     # flange of no faces the unfold passes through, the two bends' numbers
     joint: tuple[int, int] | None = None
+
+
+def _greatest_first(values: list[float]) -> list[int]:
+    """The indices of lengths greatest first, and those as great (within ``plane.TIE_MM`` of the greatest of them)
+    in their own order: equal lengths come out of the kernel some 1e-14 mm apart, and apart another way when the
+    part is moved or built again, so which is greatest of equals is rounding's."""
+    order = sorted(range(len(values)), key=lambda i: -values[i])
+    start = 0
+    while start < len(order):
+        end = start + 1
+        while end < len(order) and values[order[end]] > values[order[start]] - plane.TIE_MM:
+            end += 1
+        order[start:end] = sorted(order[start:end])
+        start = end
+    return order
 
 
 def _opposed(first: _Bend, second: _Bend, flange: _Flange) -> bool:
@@ -726,6 +746,27 @@ class _Analysis:
 
     def ref(self, ordinal: int) -> str:
         return self.part.ref("face", int(ordinal))
+
+    def again(self) -> "_Analysis":
+        """This reading of the sheet, its faces, rays and classes shared, with nothing unfolded yet: for the other
+        side (``sides``)."""
+        other = copy.copy(self)
+        other.side, other.flanges, other.bends, other.joggles = set(), [], [], []
+        other.sharp, other.explained = [], set(self.explained)
+        other.flat, other.flat_loops, other.holes, other.regions = None, [], [], []
+        other.unfold_note, other.missing, other.overlap = "", [], 0.0
+        other._cones_read = set()
+        return other
+
+    def mirrored(self, other: "_Analysis") -> dict[str, str]:
+        """The refs of this reading's side, each the face opposite it on ``other``'s side: what one feature is
+        called from either side."""
+        found: dict[str, str] = {}
+        for a in sorted(self.side):
+            facing = sorted(b for b in self.partners.get(a, ()) if b in other.side)
+            if facing and a not in other.side:
+                found[self.ref(a)] = self.ref(facing[0])
+        return found
 
     # -- the sheet ----------------------------------------------------------------------------------------
 
@@ -1526,9 +1567,13 @@ class _Analysis:
 
     # -- bends --------------------------------------------------------------------------------------------
 
-    def find_bends(self) -> None:
+    def sides(self) -> list[set[int]]:
+        """The sides that hold the largest skin, a skin in several faces (split through a hole) whole: its coplanar
+        faces joined. Of skins as large, every side that holds one, in the part's faces' order: a sheet's two skins
+        are as large wherever nothing is sunk, stepped or cut into one alone, and rounding picks either. One side
+        is unfolded at a time (``find_bends``); where two are as large, both are read (``_part``)."""
         if self.thickness is None or not self.skins:
-            return
+            return []
         sides = _Sets()
         nodes = self.skins | self.bend_faces
         for a in nodes:
@@ -1537,16 +1582,28 @@ class _Analysis:
                 if b in nodes:
                     sides.join(a, b)
         groups = sides.groups()
-        # the side holding the largest skin, a skin in several faces (split through a hole) whole: its coplanar
-        # faces joined
         whole = _Sets()
         for a in self.skins:
             whole.add(a)
             for b in self.smooth[a]:
                 if b in self.skins and self._coplanar(a, b):
                     whole.join(a, b)
-        largest = max(whole.groups(), key=lambda g: (float(self.areas[[m - 1 for m in g]].sum()), -min(g)))
-        self.side = next(set(group) for group in groups if largest[0] in group)
+        skins = self._by_area(whole.groups())
+        top = math.sqrt(float(self.areas[[m - 1 for m in skins[0]]].sum()))
+        found: list[set[int]] = []
+        for skin in skins:
+            if math.sqrt(float(self.areas[[m - 1 for m in skin]].sum())) <= top - plane.TIE_MM:
+                break
+            side = next(set(group) for group in groups if skin[0] in group)
+            if side not in found:
+                found.append(side)
+        return found
+
+    def find_bends(self, side: set[int] | None = None) -> None:
+        """Bends and flanges of one side (``sides``: the first where none is given)."""
+        if self.thickness is None or not self.skins:
+            return
+        self.side = set(side) if side is not None else self.sides()[0]
         # flanges: the side's coplanar skins joined by tangent edges
         flats = _Sets()
         for a in self.side:
@@ -1555,7 +1612,7 @@ class _Analysis:
                 for b in self.smooth[a]:
                     if b in self.skins and b in self.side and self._coplanar(a, b):
                         flats.join(a, b)
-        for number, members in enumerate(sorted(flats.groups(), key=lambda g: -self.areas[[m - 1 for m in g]].sum())):
+        for number, members in enumerate(self._by_area(flats.groups())):
             first = self.surfaces[members[0] - 1]
             self.flanges.append(_Flange(number, members, np.array(first.normal), np.array(first.origin),
                                         float(self.areas[[m - 1 for m in members]].sum())))
@@ -1571,6 +1628,17 @@ class _Analysis:
             if bend is not None:
                 self.bends.append(bend)
         self._joints()
+
+    def _by_area(self, groups: list[list[int]]) -> list[list[int]]:
+        """Groups of faces largest first, and those as large (the squares of their areas no further apart in side
+        than rounding) in the faces' order, which no placement changes."""
+        sides = [math.sqrt(float(self.areas[[m - 1 for m in group]].sum())) for group in groups]
+        return [groups[i] for i in _greatest_first(sides)]
+
+    def largest(self, faces: Any) -> int:
+        """The largest of ``faces``: of those as large (``_greatest_first``), the first."""
+        faces = sorted(faces)
+        return faces[_greatest_first([math.sqrt(float(self.areas[a - 1])) for a in faces])[0]]
 
     def _joints(self) -> None:
         """Bends that meet tangent with no flat between them: each meeting a joint, a flange of no faces at the
@@ -1675,7 +1743,7 @@ class _Analysis:
         formed |= {c for b in formed for c in self.partners.get(b, ())}
         unjoined = sorted(dropped - reached - formed)
         if unjoined:
-            largest = max(unjoined, key=lambda f: self.areas[f - 1])
+            largest = self.largest(unjoined)
             centre = self.faces[largest - 1].center()
             self.sharp.append({"kind": "unjoined", "angle_deg": None, "inside_radius_mm": None,
                                "outside_radius_mm": None, "thickness_mm": _r(t), "edge_count": 0,
@@ -1843,7 +1911,7 @@ class _Analysis:
                     queue.append(child_number)
         unreached = [f.number for f in self.flanges if f.to_flat is None and f.joint is None]
         # what is not in the flat: each flange no bend reached (its largest face), each bend not laid out
-        self.missing = [self.ref(max(f.faces, key=lambda a: self.areas[a - 1])) for f in self.flanges
+        self.missing = [self.ref(self.largest(f.faces)) for f in self.flanges
                         if f.to_flat is None and f.joint is None] + \
             [self.ref(b.inner[0]) for b in self.bends if b.frame is None]
         notes = []
@@ -1968,14 +2036,12 @@ class _Analysis:
         return twin
 
     def _longest_direction(self, flange: _Flange) -> np.ndarray:
-        best, direction = -1.0, None
-        for a in flange.faces:
-            for edge in self.faces[a - 1].edges():
-                if edge.geom_type.name == "LINE" and edge.length > best:
-                    p0, p1 = edge.position_at(0), edge.position_at(1)
-                    best, direction = edge.length, np.array([p1.X - p0.X, p1.Y - p0.Y, p1.Z - p0.Z])
-        if direction is None:
+        lines = [edge for a in flange.faces for edge in self.faces[a - 1].edges() if edge.geom_type.name == "LINE"]
+        if not lines:
             return _perpendicular(flange.normal)
+        longest = lines[_greatest_first([edge.length for edge in lines])[0]]
+        p0, p1 = longest.position_at(0), longest.position_at(1)
+        direction = np.array([p1.X - p0.X, p1.Y - p0.Y, p1.Z - p0.Z])
         return direction / np.linalg.norm(direction)
 
     def _place(self, bend: _Bend, parent: _Flange, child: _Flange | None) -> None:
@@ -2144,10 +2210,12 @@ class _Analysis:
         return bd.make_face(bd.Polyline(*[(float(x), float(y), 0.0) for x, y in polygon], close=True))
 
     def _laid(self, ordinal: int) -> list[Any]:
-        """A break's face as it is measured and laid into the flat: itself, or, where it is one face in several
-        (a round cut in two by a layer, joined and never merged), the face they are once merged at the first of
-        them and nothing at the others. Laid face by face, a piece that projects narrower than the tolerance the
-        flat is fused at is lost there, and a hole's rim with it."""
+        """A break's or a countersink's face as it is measured and laid into the flat: itself, or, where it is one
+        face in several (a round or a countersink cut in two by a layer, joined and never merged), the face they
+        are once merged at the first of them and nothing at the others. Laid face by face, a piece that projects
+        narrower than the tolerance the flat is fused at is lost there, and a hole's rim with it (a countersink's
+        layer 0.008 mm across closed its hole). A countersink's faces split through its axis stay as they are
+        (``_halves`` lays each)."""
         if self._joined is None:
             import build123d as bd
             from OCP.BRep import BRep_Builder
@@ -2171,11 +2239,18 @@ class _Analysis:
                 except Exception:  # noqa: BLE001 - faces that do not merge are laid as they are
                     return None
 
+            # a countersink's faces meet across the thickness at a curve (a layer's cut), its halves at a line
+            curved = {frozenset(join.faces) for join in self.edges
+                      if self.part.edges()[join.ordinal - 1].geom_type.name != "LINE"}
+            groups = [(self._break_faces(a), lambda b, members: True) for a in sorted(self.breaks)]
+            groups += [(sorted(self._cone_faces(c)), lambda b, members: any(
+                frozenset((b, m)) in curved for m in members)) for c in sorted(self.countersinks)]
             self._joined = {}
-            for a in sorted(self.breaks):
-                group = self._break_faces(a)
-                if a != group[0] or len(group) < 2:
+            tried: set[tuple[int, ...]] = set()
+            for group, joins in groups:
+                if len(group) < 2 or tuple(group) in tried:
                     continue
+                tried.add(tuple(group))
                 # grown a face at a time, from the part's own faces (they share their edges; a merged face
                 # shares none): the kernel merges what it would have made one face, and no more (a round about
                 # a hole that was two faces whole stays two)
@@ -2185,7 +2260,7 @@ class _Analysis:
                     grown = True
                     while grown:
                         grown = False
-                        for b in [b for b in left if any(self.smooth[b] & set(members))]:
+                        for b in [b for b in left if any(self.smooth[b] & set(members)) and joins(b, members)]:
                             more = merged([*members, b])
                             if more is not None:
                                 members.append(b)
@@ -2900,6 +2975,140 @@ def _capped(items: list[dict], key: str | None, reverse: bool = False) -> list[d
     return items[:ITEM_CAP]
 
 
+def _worse() -> dict[tuple[str, str], str]:
+    """Which way each figure is worse, (family, field) to ``min`` or ``max``: as the rules judge it (a field two
+    rules judge both ways is neither's), and the figures other findings read (``sheet.findings``)."""
+    ops: dict[tuple[str, str], set[str]] = {}
+    for rule in rules_side.RULES.rules:
+        ops.setdefault((rule.family, rule.field), set()).add(rule.op)
+    found = {key: next(iter(op)) for key, op in ops.items() if len(op) == 1}
+    found.update({("parts", "flat_overlap_mm2"): "max", ("parts", "flat_material_fraction"): "off",
+                  ("holes", "in_bend"): "any"})
+    return found
+
+
+#: (family, field) to which way the figure is worse (``_worse``).
+_WORSE = _worse()
+
+
+def _renamed(value: Any, names: dict[str, str]) -> Any:
+    """``value`` with every ref of one side named as the face opposite it (``_Analysis.mirrored``)."""
+    if isinstance(value, str):
+        return names.get(value, value)
+    if isinstance(value, list):
+        return [_renamed(item, names) for item in value]
+    if isinstance(value, dict):
+        return {key: _renamed(item, names) for key, item in value.items()}
+    return value
+
+
+#: Families whose items are named by their own faces (a hole by its wall), the same from either side: an item one
+#: side alone has is another feature (a pocket's floor, stepped into one skin, is a hole of that skin's alone).
+_NAMED = ("holes", "hole_spacing", "hole_to_bend")
+
+
+def _same(family: str, item: dict[str, Any]) -> tuple[Any, ...]:
+    """What an item is, apart from its figures and its place: its refs (a pair either way round) and its kind (a
+    hole's is how it reads: a hole across a bend line is a slot from one side, a cutout from the other)."""
+    return (tuple(sorted(str(item[key]) for key in ("location", "other") if key in item)),
+            str(item.get("bend")), None if family == "holes" else str(item.get("kind")))
+
+
+def _pair(family: str, mine: dict[str, Any], theirs: dict[str, Any]) -> dict[str, Any]:
+    """One item read from two sides: each figure a rule or a finding judges, the worse of the two; the rest,
+    the first side's."""
+    found = dict(mine)
+    for key, value in theirs.items():
+        held = found.get(key)
+        op = _WORSE.get((family, key))
+        if key == "not_in_flat":
+            found[key] = list(dict.fromkeys([*(held or ()), *(value or ())]))
+        elif key == "unfold_note":
+            found[key] = held or value
+        elif op == "any":
+            found[key] = bool(held) or bool(value)
+        elif op is None or isinstance(held, bool) or not isinstance(held, (int, float)) \
+                or not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        elif op == "min":
+            found[key] = min(held, value)
+        elif op == "max":
+            found[key] = max(held, value)
+        elif op == "off":  # the further from 1 (a flat holding less, or more, than the part's material)
+            found[key] = held if abs(held - 1.0) >= abs(value - 1.0) else value
+    return found
+
+
+def _union(family: str, mine: list[dict], theirs: list[dict], raw: list[dict], reach: float) -> list[dict]:
+    """Two sides' items of one family as one list. Each of the first side's is merged (``_pair``) with the other
+    side's item that is the same (``_same``, its refs as read or as named from the first side: ``theirs`` is
+    ``raw`` renamed), else the nearest on the part within ``reach``; an item of the outline still alone, with the
+    nearest of the other side's still alone of its kind (the same feature, placed apart: a web's narrowest station
+    at either end). The other side's left over are added: a feature one side alone has (``_NAMED``)."""
+    def kind(item: dict) -> tuple[Any, bool, Any]:
+        return item.get("kind"), "cutouts" in item, item.get("bend")
+
+    def apart(item: dict, other: dict) -> float:
+        if item.get("xyz") is None or other.get("xyz") is None:
+            return math.inf
+        return float(np.linalg.norm(np.array(other["xyz"], dtype=float) - np.array(item["xyz"], dtype=float)))
+
+    left = list(range(len(theirs)))
+    found: list[dict] = []
+    alone = []
+    for item in mine:
+        best, at = None, None
+        same = _same(family, item)
+        for k in left:
+            score = (_same(family, theirs[k]) != same and _same(family, raw[k]) != same, apart(item, theirs[k]))
+            if (score[0] and score[1] > reach) or (best is not None and score >= best):
+                continue
+            best, at = score, k
+        if at is None:
+            alone.append(len(found))
+            found.append(item)
+            continue
+        left.remove(at)
+        found.append(_pair(family, item, theirs[at]))
+    for n in alone if family not in _NAMED else ():
+        item = found[n]
+        near = [k for k in left if kind(theirs[k]) == kind(item)]
+        if near:
+            at = min(near, key=lambda k: (apart(item, theirs[k]), k))
+            left.remove(at)
+            found[n] = _pair(family, item, theirs[at])
+    return found + [theirs[k] for k in left]
+
+
+def _merged(readings: list[tuple[_Analysis, dict[str, Any]]]) -> dict[str, Any]:
+    """One part's families read from each of its sides as large (``_Analysis.sides``) as one: what either side
+    says is said (``_union``), so no finding hangs on which of them rounding makes largest. The first side's
+    places and the rest of its figures stand."""
+    first, out = readings[0]
+    reach = 2.0 * float(first.thickness or 0.0) + 1e-3  # one feature, seen from the two skins
+    for analysis, found in readings[1:]:
+        names = analysis.mirrored(first)
+        for family in FAMILIES:
+            mine, theirs = out.get(family), found.get(family)
+            if family == "not_sheet" or isinstance(mine, Exception) or theirs is None:
+                continue
+            if isinstance(theirs, Exception):
+                out[family] = theirs  # not measured from one side: said so, as that side alone would
+                continue
+            out[family] = _union(family, mine, _renamed(theirs, names), theirs, reach)
+        for family, faces in (found.get("_lost") or {}).items():
+            out.setdefault("_lost", {}).setdefault(family, set()).update(faces)
+        failed = dict(out.get("_failed") or {})
+        for face, count in (found.get("_failed") or {}).items():
+            failed[face] = max(count, failed.get(face, 0))
+        out["_failed"] = failed
+        said = out.get("_findings") or []
+        said += [finding for finding in found.get("_findings") or () if finding not in said]
+        if said:
+            out["_findings"] = said
+    return out
+
+
 def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     """Every family of one part: a list of items, or the exception that stopped it."""
     out: dict[str, Any] = {}
@@ -2907,7 +3116,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     analysis.probe()
     analysis.classify()
     t = analysis.thickness
-    largest = max(analysis.skins, key=lambda a: analysis.areas[a - 1]) if analysis.skins else 1
+    largest = analysis.largest(analysis.skins) if analysis.skins else 1
     item: dict[str, Any] = {
         "name": part.name, "thickness_mm": _r(t), "given_thickness_mm": options.get("thickness"),
         "sheet_area_fraction": _r(analysis.sheet_fraction), "skin_faces": len(analysis.skins),
@@ -2968,8 +3177,26 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
         if missed:
             out["_findings"] = [missed]
         return out
+    # where the sheet's two sides are as large, each is unfolded and read, and the report holds what either says
+    # (``_merged``): which one is largest is rounding's, and they read differently where a hole is sunk, a pocket
+    # stepped or a cut run on into a bend from one side alone
+    sides = analysis.sides()
+    readings = []
+    for number, side in enumerate(sides):
+        sided = analysis if number == 0 else analysis.again()
+        here = {**out, "parts": [copy.deepcopy(item)], "_lost": copy.deepcopy(lost)}
+        readings.append((sided, _read(sided, side, here, here["parts"][0], screens, listed,
+                                      settle if number == 0 else None)))
+    return _merged(readings)
+
+
+def _read(analysis: _Analysis, side: set[int], out: dict[str, Any], item: dict[str, Any], screens: list[Any],
+          listed: list[Any], settle: Callable[[], None] | None) -> dict[str, Any]:
+    """Every family of one part as unfolded from ``side``, into ``out`` (``settle`` the not_sheet facts once)."""
+    part, t, lost = analysis.part, analysis.thickness, out["_lost"]
+    settle = settle or (lambda: None)
     try:
-        analysis.find_bends()
+        analysis.find_bends(side)
         out["bends"] = [_bend_item(analysis, bend) for bend in analysis.bends]
         analysis.find_sharp()
         out["sharp_bends"] = analysis.sharp
@@ -3127,6 +3354,14 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             if thickness is not None and isinstance(found, list) and family in FAMILIES[2:]:
                 for item in found:
                     item.setdefault("thickness_mm", thickness)
+        # its broken cut edges, every one: what sheet.edge_break says of the part, whatever the cap leaves of its
+        # items in the document's not_sheet
+        records = result.get("not_sheet")
+        broken = [item for item in records if item.get("kind") == "edge_break" and item.get("judged")] \
+            if isinstance(parts, list) and parts and isinstance(records, list) else []
+        if broken:
+            parts[0]["edge_breaks"] = {"count": len(broken), "location": broken[0].get("location"),
+                                       "break_mm": max(float(item.get("break_mm") or 0.0) for item in broken)}
     report: dict[str, Any] = {}
     partial = []
     for family in FAMILIES:

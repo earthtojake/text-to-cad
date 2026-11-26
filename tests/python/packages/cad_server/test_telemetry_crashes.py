@@ -5,6 +5,8 @@ person's own code. And that crashes go where their process sends from, counted r
 
 from __future__ import annotations
 
+import errno
+import io
 import json
 import os
 import shutil
@@ -38,6 +40,41 @@ def _caught(call) -> BaseException:
     except BaseException as error:  # noqa: BLE001 - the error is what the test reads
         return error
     raise AssertionError("it did not fail")
+
+
+class _Output(io.RawIOBase):
+    """A process's own stream whose every write fails as ``gone`` makes the error -- a reader that left, as Windows
+    says it (EINVAL), a write that timed out -- until ``gone`` is None, buffered and decoded as Python's own are."""
+
+    def __init__(self, gone) -> None:
+        super().__init__()
+        self.gone = gone
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, data) -> int:
+        if self.gone is not None:
+            raise self.gone()
+        return len(data)
+
+
+def _output(test: unittest.TestCase, gone) -> io.TextIOWrapper:
+    """``_Output`` as Python wraps a standard stream (line-buffered text over a buffer), freed of its failure as the
+    test ends so that nothing it still holds is complained about."""
+    raw = _Output(gone)
+    stream = io.TextIOWrapper(io.BufferedWriter(raw), encoding="utf-8", line_buffering=True)
+
+    def free() -> None:
+        raw.gone = None
+        stream.close()
+
+    test.addCleanup(free)
+    return stream
+
+
+def _einval() -> OSError:
+    return OSError(errno.EINVAL, "Invalid argument")  # what Windows says of a write to a pipe its reader closed
 
 
 def _cadgen_bug() -> None:
@@ -125,11 +162,11 @@ class SignatureTest(unittest.TestCase):
             raise BrokenPipeError(32, "Broken pipe")
 
         # A reader that closed the command's own output (`| head`): its stdout is the pipe that broke.
-        with mock.patch.object(analytics, "stdout_closed", return_value=True):
+        with mock.patch.object(analytics, "failed_output", return_value=sys.stdout):
             self.assertIsNone(analytics.signature(_caught(write), "command", handled=False))
         # Another pipe the command wrote to (a child's stdin), and a route's own connection out, are cadgen's: a
         # page leaving a route is the response writer's to swallow, and never reaches here.
-        with mock.patch.object(analytics, "stdout_closed", return_value=False):
+        with mock.patch.object(analytics, "failed_output", return_value=None):
             self.assertEqual(analytics.signature(_caught(write), "command", handled=False)["type"], "BrokenPipeError")
         for error in (ConnectionAbortedError(10053, "aborted"), ConnectionRefusedError()):
             self.assertEqual(analytics.signature(error, "route", handled=False)["type"], type(error).__name__)
@@ -157,6 +194,24 @@ class SignatureTest(unittest.TestCase):
                     found = analytics.signature(mine, where, bugs_only=bugs_only)
                     self.assertEqual((found["type"], {frame["file"] for frame in found["frames"]}),
                                      ("RecursionError", {"cad/engine/model.py"}), "the person's call is far outside it")
+
+    def test_a_write_to_the_commands_own_output_that_failed_is_never_a_crash_and_any_other_oserror_is(self) -> None:
+        # Windows says a pipe its reader closed, or a console gone, is EINVAL, a plain OSError: on stdout (a result)
+        # and on stderr (a usage error, a notice), as on Linux and macOS a write that timed out or a terminal hung up.
+        for name, gone in (("stdout", _einval), ("stderr", _einval),
+                           ("stdout", lambda: TimeoutError(errno.ETIMEDOUT, "Operation timed out"))):
+            with self.subTest(stream=name, error=gone.__name__):
+                stream = _output(self, gone)
+                with mock.patch.object(sys, name, stream):
+                    error = _caught(lambda: print('{"ok":true}', file=getattr(sys, name), flush=True))
+                    self.assertIs(analytics.failed_output(error), stream)
+                    self.assertIsNone(analytics.signature(error, "command", handled=False))
+        # Both streams taking what is written, an OSError of the same errno is no stream's: a file of cadgen's, a
+        # child's pipe. Nor is a stream that would block: it is still there.
+        for error in (_einval(), PermissionError(errno.EACCES, "Permission denied"), BlockingIOError(errno.EAGAIN, "")):
+            with self.subTest(error=type(error).__name__):
+                self.assertIsNone(analytics.failed_output(error))
+                self.assertEqual(analytics.signature(error, "command", handled=False)["type"], type(error).__name__)
 
     def test_cadgens_own_module_gone_is_its_installation_removed_and_never_a_crash(self) -> None:
         import importlib
@@ -490,6 +545,29 @@ class CommandCrashTest(unittest.TestCase):
                               timeout=60)
         self.assertEqual(done.returncode, 1)
         self.assertIn(b"BrokenPipeError", done.stderr)
+
+    def test_a_command_whose_output_fails_as_windows_says_it_stops_quietly_and_reports_nothing(self) -> None:
+        import signal
+
+        from cad_server import cli
+
+        closed = 128 + signal.SIGPIPE if hasattr(signal, "SIGPIPE") else 1
+        # A usage error said on a stderr whose reader left (EINVAL), past the command's own run (`_main`); and a
+        # JSON answer on such a stdout, before any command runs (`main`): no traceback, nothing reported.
+        for argv, name in ((["server", "--no-such-option"], "stderr"), (["no-such-command", "--json"], "stdout")):
+            with self.subTest(argv=argv):
+                streams = {"stdout": io.StringIO(), "stderr": io.StringIO(), name: _output(self, _einval)}
+                with mock.patch.object(sys, "stdout", streams["stdout"]), \
+                        mock.patch.object(sys, "stderr", streams["stderr"]), mock.patch.object(cli, "_tell"):
+                    self.assertEqual(cli.main(argv), closed)
+                self.assertEqual(self.crashes(), [])
+        # A stdout that is there but did not take the answer (a write that timed out): no crash either, and said in
+        # its one line on stderr, which still takes it.
+        stdout, stderr = _output(self, lambda: TimeoutError(errno.ETIMEDOUT, "Operation timed out")), io.StringIO()
+        with mock.patch.object(sys, "stdout", stdout), mock.patch.object(sys, "stderr", stderr):
+            self.assertEqual(cli.main(["no-such-command", "--json"]), 1)
+        self.assertEqual(stderr.getvalue(), "cad: could not write its output: Operation timed out\n")
+        self.assertEqual(self.crashes(), [])
 
     def test_a_commands_reported_failure_is_a_crash_only_when_it_is_a_mistake_in_cadgens_code(self) -> None:
         import io

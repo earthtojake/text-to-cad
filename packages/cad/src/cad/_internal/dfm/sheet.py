@@ -491,9 +491,11 @@ def _sharp_hint(corner: dict[str, Any]) -> str:
     return f"{rule} (t = {t:.4g} mm: r {t:.4g} mm, outside {2 * t:.4g} mm)"
 
 
-def _faces_said(here: list[dict[str, Any]]) -> str:
-    refs = [str(item.get("location", "")).rsplit("/", 1)[-1] for item in here]
-    return ", ".join(refs[:6]) + (f" and {len(refs) - 6} more" if len(refs) > 6 else "")
+def _faces_said(here: list[dict[str, Any]], count: int | None = None) -> str:
+    """The first six faces of ``here``, and how many more of the ``count`` (its own, unless the cap cut it)."""
+    refs = [str(item.get("location", "")).rsplit("/", 1)[-1] for item in here][:6]
+    more = (len(here) if count is None else count) - len(refs)
+    return ", ".join(refs) + (f" and {more} more" if more > 0 else "")
 
 
 def _owner(location: Any) -> str:
@@ -511,7 +513,13 @@ def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
     for item in _items(report, "not_sheet"):
         if item.get("judged") and item.get("kind") in ("formed", "edge_break"):
             groups.setdefault((item["kind"], _owner(item.get("location"))), []).append(item)
-    for (kind, _), here in groups.items():
+    # a part's broken edges as its parts item counts them: the cap on not_sheet's items is the document's, so it
+    # can leave a part fewer of them than it has, or none
+    broken = {_owner(part.get("location")): part["edge_breaks"] for part in _items(report, "parts")
+              if isinstance(part.get("edge_breaks"), dict)}
+    for owner, whole in broken.items():
+        groups.setdefault(("edge_break", owner), [{"location": whole.get("location")}])
+    for (kind, owner), here in groups.items():
         if kind == "formed":
             # no guide gives a feasibility limit for a stamped form (an emboss, a louver, a bead): not measured,
             # a warning -- the part is quoted with it as a formed feature, never failed for it
@@ -526,10 +534,13 @@ def _surface_findings(report: dict[str, Any]) -> list[CheckFinding]:
                 "bend a cylinder about a straight axis between flat flanges",
                 refs=_refs(here[0].get("location"), [item.get("face") for item in here])))
         else:
-            deepest = max(float(item.get("break_mm") or 0.0) for item in here)
+            whole = broken.get(owner) or {}
+            count = int(whole.get("count") or len(here))
+            deepest = float(whole["break_mm"]) if whole.get("break_mm") is not None else \
+                max(float(item.get("break_mm") or 0.0) for item in here)
             found.append(CheckFinding(
                 "warning", "sheet.edge_break",
-                f"{len(here)} face(s) chamfer or round the cut edges ({_faces_said(here)}; up to {deepest:.3g} mm "
+                f"{count} face(s) chamfer or round the cut edges ({_faces_said(here, count)}; up to {deepest:.3g} mm "
                 "deep): a laser or waterjet cuts a square edge, so a chamfer or a round is a second operation "
                 "(deburring, an edge-break pass)", here[0].get("location"),
                 "leave the cut edges square and call for deburring, or quote the chamfers as a second operation",

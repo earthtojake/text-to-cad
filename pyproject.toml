@@ -40,7 +40,7 @@ dev = [
   # The server's Windows dependency (cad.exe's launcher stub), which the tests of the cad command read on every
   # system.
   "distlib",
-  "pyrefly==1.4.1",
+  "pyrefly==1.5.0",
 ]
 # The fea job's (`uv sync --group fea`): the netgen and calculix integrations a stress study runs on, with netgen
 # at the version the accuracy tests' margins were measured with (the round rod's top-fibre stress is +8.6%

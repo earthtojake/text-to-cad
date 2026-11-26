@@ -1131,12 +1131,14 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
     if ref is not None:
         refs.parse(ref)  # refuse invalid refs before serving
     ident = _ask({"op": "serve", "path": str(path)})["doc"]
+    version = None
 
     def get(route: str, counted: Callable[[int, int, str], None] | None = None) -> Any:
         # Read through the engine's door, never its loopback port: a sandboxed shell has the one.
         # ``counted``: a read of the parts' facts hears each part's as the engine has it (``Server.measure``).
         heard = None if counted is None else (lambda said: counted(said["done"], said["total"], said["key"]))
-        read = _ask({"op": "read", "route": f"/api/doc/{ident}{route}", **({"progress": True} if heard else {})},
+        read = _ask({"op": "read", "route": f"/api/doc/{ident}{route}", "fresh": True,
+                     **({"version": version} if version is not None else {}), **({"progress": True} if heard else {})},
                     on_progress=heard)
         if 200 <= read["status"] < 300:
             return json.loads(read["body"])
@@ -1147,9 +1149,16 @@ def _inspected(source: Any, ref: str | None, query: str | None, progress: Callab
         raise refs.RefError(said or f"HTTP {read['status']}")
 
     structure = get("")
+    if Path(str(structure.get("path", ""))).suffix.lower() in (".step", ".stp"):
+        version = structure["version"]  # the rest of this inspection must describe the same STEP
     if query in ("summary", "structure"):
+        closure = structure.get("closure")
+        if isinstance(path, Path) and path.suffix.lower() == ".xbf":
+            from cad.engine import previous
+
+            closure = previous.of(path)
         return {"summary": _summary(structure, path, get, ident, progress, measured=query == "summary"),
-                "closure": structure.get("closure")}
+                "closure": closure}
     if ref is None:
         if not structure.get("closure"):
             raise EngineError(f"{source} holds no build closure")

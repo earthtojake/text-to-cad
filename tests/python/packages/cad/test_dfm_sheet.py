@@ -876,6 +876,46 @@ class SlotBesideAHoleTest(unittest.TestCase):
         self.assertTrue(analysis.holes[0].in_bend)
 
 
+class EqualSidesTest(unittest.TestCase):
+    """A sheet's two skins are as large wherever nothing is cut into one alone, and come out of the kernel some
+    1e-14 mm2 apart, another way in each placement. Here one is larger by a known amount, either way."""
+
+    E = 1e-9
+
+    def read(self, part: bd.Shape, e: float) -> dict:
+        classify = sheet._Analysis.classify
+
+        def nudged(analysis: sheet._Analysis) -> None:
+            classify(analysis)
+            for a in analysis.skins:  # the top skin a hair larger, or smaller
+                if analysis.surfaces[a - 1].normal[2] > 0.5:
+                    analysis.areas[a - 1] += e
+
+        part.label = "part"
+        with mock.patch.object(sheet._Analysis, "classify", nudged):
+            return measured(part)
+
+    def test_a_hole_sunk_from_either_side_is_measured_at_its_rim_whichever_skin_is_larger(self) -> None:
+        def sunk(x: float, top: bool) -> bd.Part:
+            cone = bd.Pos(x, 10, 0.5) * bd.Cone(2, 3, 1) if top else bd.Pos(x, 10, -0.5) * bd.Cone(3, 2, 1)
+            return bd.Pos(x, 10, 0) * bd.Cylinder(2, 4) + cone
+
+        # each countersink's rim 1.6 from the edge, its hole 2.6: one sunk from the top, one from the bottom
+        part = bd.Box(90, 50, 2) - sunk(-40.4, True) - sunk(40.4, False)
+        for e in (self.E, -self.E):
+            with self.subTest(top_larger=e > 0):
+                holes = items(self.read(part, e), "holes")
+                self.assertEqual(sorted(hole["edge_distance_mm"] for hole in holes), [1.6, 1.6])
+
+    def test_a_pocket_stepped_into_either_skin_is_read_whichever_skin_is_larger(self) -> None:
+        # a pocket's floor is a hole of the skin it is stepped into alone: one 1 mm from the edge, one far
+        part = bd.Box(90, 50, 2) - bd.Pos(-40, 10, 1) * bd.Box(8, 8, 1) - bd.Pos(20, 0, -1) * bd.Box(8, 8, 1)
+        for e in (self.E, -self.E):
+            with self.subTest(top_larger=e > 0):
+                holes = items(self.read(part, e), "holes")
+                self.assertEqual(sorted(hole["edge_distance_mm"] for hole in holes), [1.0, 21.0])
+
+
 class TypeSideTest(unittest.TestCase):
     def test_k_factor_defaults(self) -> None:
         self.assertEqual(sheet_rules.k_factor("aluminum", 0.5, 1.0)[0], 0.33)
@@ -1759,6 +1799,27 @@ class ModellingMistakeTest(unittest.TestCase):
         with self.subTest(broken="rounded whole"):
             reads_as(layered(whole, *(level(z) for z in (-0.504, -0.148, 0.208, 0.564))), whole)
 
+    def test_a_countersink_cut_in_layers_keeps_its_hole_whichever_skin_is_unfolded(self) -> None:
+        # a hole chamfered on both rims (a countersink each side), the top one cut 0.008 mm from the wall: laid a
+        # layer at a time, from the top, the thin ring was narrower than the flat is fused at and the hole filled
+        outline = (bd.RectangleRounded(80, 40, 5) - bd.Circle(6)).face()
+        plate = bd.extrude(bd.Pos(0, 0, -1) * outline, amount=2)
+        rims = [edge for edge in plate.edges().filter_by(bd.GeomType.CIRCLE) if abs(edge.radius - 6) < 1e-6]
+        split = layered(bd.chamfer(rims, 0.4), level(0.608))
+        classify = sheet._Analysis.classify
+        for e in (1e-9, -1e-9):  # the top skin a hair larger, then smaller: the side unfolded
+
+            def nudged(analysis: sheet._Analysis, e: float = e) -> None:
+                classify(analysis)
+                for a in analysis.skins:
+                    if analysis.surfaces[a - 1].normal[2] > 0.5:
+                        analysis.areas[a - 1] += e
+
+            with self.subTest(top_larger=e > 0), mock.patch.object(sheet._Analysis, "classify", nudged):
+                report = measured(split)
+                self.assertAlmostEqual(items(report, "parts")[0]["flat_material_fraction"], 1.0, delta=0.002)
+                self.assertEqual([hole["size_mm"] for hole in items(report, "holes")], [12.0])
+
     def test_a_notch_beside_a_break_in_pieces_is_at_its_cut_edge(self) -> None:
         # the cut edges behind a break were looked for two faces in from the skin: with each side's chamfer in
         # three, a notch, a web and a gap were said to be at the chamfer
@@ -1774,6 +1835,49 @@ class ModellingMistakeTest(unittest.TestCase):
                 with self.subTest(family=family, at=item["location"]):
                     face = faces[int(item["location"].rsplit(" ", 1)[-1]) - 1]
                     self.assertAlmostEqual(abs(face.normal_at().Z), 0.0, places=6)
+
+    def test_each_part_says_all_of_its_broken_edges_past_the_reports_cap(self) -> None:
+        # sheet.edge_break counted the not_sheet items the report keeps, the document's first ITEM_CAP: a plate of
+        # 408 chamfers said 300, the part after it fewer, and a part whose items all fell past the cap said nothing
+        def perforated(holes: tuple[int, int], depth: float, label: str, y: float = 0.0) -> bd.Part:
+            columns, rows = holes
+            outline = bd.Rectangle(columns * 10 + 4, rows * 10 + 4).face()
+            for hole in bd.GridLocations(10, 10, columns, rows):
+                outline = (outline - hole * bd.Rectangle(4, 4)).face()
+            levels = bd.extrude(outline, amount=2).edges().group_by(bd.Axis.Z)
+            part = bd.Pos(0, y, 0) * bd.chamfer([*levels[0], *levels[-1]], depth)
+            part.label = label
+            return part
+
+        # both sides' four edges round the outline and round each square hole
+        wanted = {"big": (8 * 51, 0.4), "small": (8 * 3, 0.6), "copy": (8 * 51, 0.4)}
+        documents = {
+            "one part": lambda: [perforated((10, 5), 0.4, "big")],
+            "the second's items all past the cap": lambda: [perforated((10, 5), 0.4, "big"),
+                                                            perforated((2, 1), 0.6, "small", 120)],
+            "some of the second's past it": lambda: [perforated((2, 1), 0.6, "small", 120),
+                                                     perforated((10, 5), 0.4, "big")],
+            "a copy, measured once": lambda: [perforated((10, 5), 0.4, "big"), perforated((10, 5), 0.4, "copy", 120)],
+        }
+        for name, parts in documents.items():
+            with self.subTest(document=name):
+                shapes = parts()
+                result = checked(shapes[0] if len(shapes) == 1 else bd.Compound(children=shapes))
+                family = result.measurements["not_sheet"]
+                self.assertEqual(family["count"], sum(wanted[shape.label][0] for shape in shapes))
+                self.assertEqual(len(family["items"]), sheet.ITEM_CAP)  # the report stays capped
+                said = {f.location.split("/")[0]: f for f in result.findings if f.code == "sheet.edge_break"}
+                self.assertEqual(sorted(said), sorted(shape.label for shape in shapes))
+                for shape in shapes:
+                    count, depth = wanted[shape.label]
+                    finding = said[shape.label]
+                    self.assertTrue(finding.message.startswith(f"{count} face(s) chamfer"), finding.message)
+                    self.assertIn(f" more; up to {depth:.3g} mm deep", finding.message)
+                    self.assertAlmostEqual(finding.value, depth, places=6)
+                    # at one of its chamfers, every face it names its own
+                    face = shape.faces()[int(finding.location.rsplit(" ", 1)[-1]) - 1]
+                    self.assertAlmostEqual(abs(face.normal_at().Z), math.sqrt(0.5), places=6)
+                    self.assertTrue(all(ref.startswith(f"{shape.label}/") for ref in finding.refs))
 
     def test_a_round_whose_edges_meet_a_hair_apart_is_laid_whole(self) -> None:
         # a plate notched along half an ellipse, its rims rounded: the kernel may end the mitre where the round
