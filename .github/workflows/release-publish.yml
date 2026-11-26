@@ -313,7 +313,7 @@ jobs:
           "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps dist/cad-[0-9]*.whl \
             dist/cad_server-*.whl dist/cad_mcp-*.whl
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" --help >/dev/null)
-          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" show --help >/dev/null)
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" viewer --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad-mcp" --help >/dev/null)
           "$RUNNER_TEMP/install-test/bin/cad" doctor
           scripts/test/test-installed.sh --wheels dist

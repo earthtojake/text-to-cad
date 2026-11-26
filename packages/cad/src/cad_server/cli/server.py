@@ -118,7 +118,7 @@ def _rotate(args: argparse.Namespace, prog: str) -> None:
             command=retry(prog, ["--rotate-token", *(["--port", str(args.port)] if args.port is not None else [])]),
             preview=[f"{prog} --rotate-token replaces the page token: every viewer link and browser session made "
                      "with the one it has now stops working at once, in the server running too, and each page needs a "
-                     "new link (cad show prints one). This cannot be undone."])
+                     "new link (cad viewer prints one). This cannot be undone."])
     try:
         rotate_token(told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
     except (OSError, ValueError) as error:

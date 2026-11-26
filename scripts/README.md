@@ -162,7 +162,7 @@ where those files ship, so these scripts are what produces them.
   alone, for another test to run real programs on; `real_computer.py stamp` prints the release every
   rehearsal writes this tree's wheels again as (this tree's major and minor, a patch of 9000 or more, so uv,
   offered them beside PyPI, installs them), and `real_computer.py publish` writes them.
-- `test-viewer-launch.sh` — launches `cad show` against the built client and
+- `test-viewer-launch.sh` — launches `cad viewer` against the built client and
   verifies reuse, the engine serving a tiny test-owned STEP and the bundled client
   drawing it. Called by `test.yml`'s `viewer-e2e` job.
 - `test-viewer-browser.sh` — creates tiny inputs and owns its temporary project,

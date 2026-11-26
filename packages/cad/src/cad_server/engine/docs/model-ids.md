@@ -28,7 +28,7 @@ file share its id, and the last build wins. Running the script again with change
 and open viewers; `python parts.py` prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url`
 is the page. No list of ids is saved: an id is found from its path (**An id's path**).
 
-`cad show bracket.xbf`, `cad snapshot bracket.xbf view.png`, `cad export bracket.xbf part.step`, and `cad
+`cad viewer bracket.xbf`, `cad snapshot bracket.xbf view.png`, `cad export bracket.xbf part.step`, and `cad
 inspect bracket.xbf 'face 1'` take its `.xbf`; `cad inspect 'bracket.xbf#face 1'` uses the same reference syntax.
 Each reads the file as it is (and the engine's verbs, given the id, the document as the engine holds it -- the
 live worker's, else its `.xbf`):

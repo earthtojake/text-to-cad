@@ -5,13 +5,13 @@ Three kinds of command. The verbs on a file: ``cad <verb> FILE``, its type by it
 robot.urdf``), each running what the file's type does for it (``cad.registry.VERBS``). An integration's, a tool's own
 operations on its files: ``cad <integration> <operation> FILE`` (``cad_server.cli.integrations``: ``cad kicad drc
 board.kicad_pcb``, ``cad mujoco check robot.xml``), only for the integrations the registry gives operations. And the
-commands that are no file's: ``show`` (a file or a folder on the viewer's page), ``share`` and ``import``, ``run``,
+commands that are no file's: ``viewer`` (a file or a folder on the viewer's page), ``share`` and ``import``, ``run``,
 the server's (``server``: ``start``, ``stop``, ``status``), the CAD app an agent app starts (``mcp``), and the
 installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``telemetry``, ``update``, whose ``update auto`` is
 cad's own switch, and ``plugin``). ``cad --help`` lists them all but ``_UNLISTED``'s.
 
-A spelling the command had (``cad xbf export``, ``cad viewer``, ``cad urdf validate``, ``cad kicad_pcb drc``, bare
-``cad server``) runs nothing: it is answered in one line with the spelling it has now, exit 2 (``_hint``, one table:
+A spelling the command had (``cad xbf export``, ``cad urdf validate``, ``cad kicad_pcb drc``, bare ``cad server``) runs
+nothing: it is answered in one line with the spelling it has now, exit 2 (``_hint``, one table:
 ``_RENAMED``, ``_BARE`` and ``_OPERATIONS_NOW``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
@@ -51,7 +51,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "dfm": ("cad_server.cli.dfm", "check that a part can be made, by CNC, sheet metal, molding or 3D printing"),
     "fea": ("cad_server.cli.fea", "a linear static stress study of a part or a bonded assembly"),
     # A page of the running server's; the launcher exits.
-    "show": ("cad_server.cli.show", "open a file, or a folder as a project, on the viewer's page"),
+    "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     # The server, and the CAD app an agent app's plugin starts: the server started as `cad server start` starts it,
     # then MCP on stdio.
     "server": ("cad_server.cli.server", "the cad server: start, stop, status"),
@@ -94,9 +94,8 @@ INTEGRATION_COMMANDS: dict[str, str] = {name: f"cad_server.cli.{name}" for name,
                                         if entry.operations and not entry.deprecated}
 
 # The commands the command had and has no more, each with the one that does it now: answered in one line, nothing
-# run (``_hint``). `viewer`, the skills' to 0.12; `status` and `stop`, the skill text of 0.11.0 to 0.11.11's.
-_RENAMED: dict[str, str] = {"viewer": "cad show FILE|FOLDER", "status": "cad server status",
-                            "stop": "cad server stop"}
+# run (``_hint``). `status` and `stop`, the skill text of 0.11.0 to 0.11.11's.
+_RENAMED: dict[str, str] = {"status": "cad server status", "stop": "cad server stop"}
 # A command's bare form that ran something and runs nothing now, with what does it now and the words that make a
 # command line no bare form: bare `cad server` (and `cad server --port N`), the server run in this process, which
 # releases 0.10.0 to 0.11.11 told a person to run outside an agent's sandbox (``cad_server.cli.server`` asks it).

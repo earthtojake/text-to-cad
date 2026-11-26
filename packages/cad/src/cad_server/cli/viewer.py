@@ -1,5 +1,4 @@
-"""``cad show FILE|FOLDER``: a file, or a folder as a project, opened on the running server's page, its URL printed
-(``--json``: each one's), and the launcher exits.
+"""``cad viewer`` prints or opens the running server's page URL, and exits.
 
 The parser and launcher contract live in ``cad_server.viewer.main``.
 """
@@ -8,11 +7,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-DEFAULT_PROG = "cad show"
+DEFAULT_PROG = "cad viewer"
 
 
 def build_parser(prog: str = DEFAULT_PROG):
-    """The parser of ``cad show`` (``cad_server.viewer.main``)."""
+    """The parser of ``cad viewer`` (``cad_server.viewer.main``)."""
     from cad_server.viewer.main import build_parser as viewer_parser
 
     return viewer_parser(prog)

@@ -105,7 +105,7 @@ cad_server/
 - **`cad run`**: a program exactly as `uv run` runs it, with cad pinned at this release and the
   integrations its imports use (`_internal/extras.py`, `_internal/scan.py`), in an environment the engine
   makes.
-- **`cad show [FILE|FOLDER ...]`** opens a page of the running server: each file's, a folder as a project.
+- **`cad viewer [FILE|FOLDER ...]`** opens a page of the running server: each file's, a folder as a project.
 - **`cad doctor`**: one read-only report: this cad's release, its Python and where it is installed, its
   data and cache folders and what `cad cache prune` would free, the CAD kernel environment and whether it
   loads, the integrations, whether the server runs and its release, and cad's own update (the switches,
@@ -194,9 +194,9 @@ installer, an earlier release's updater, an agent app's launch -- is removed bef
 A command or an option the skills used is replaced, not kept: its old spelling runs nothing and answers in one
 line with the spelling the command has now, exit 2 (`usage`), from one table (`cli/__init__.py`'s `_hint`):
 `cad xbf export a.xbf a.step` and every other `cad <type> <operation>`, `cad model <operation>` (the skill text
-of releases up to 0.12), `cad viewer`, the short forms `cad status` and `cad stop` (0.11.0 to 0.11.11's skill
-text), bare `cad server` and `cad orcaslicer`: `'cad xbf export' is 'cad export SRC DST' now; 'cad export --help'
-says its options`.
+of releases up to 0.12), the short forms `cad status` and `cad stop` (0.11.0 to 0.11.11's skill text), bare
+`cad server` and `cad orcaslicer`: `'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its
+options`.
 
 On Windows, what a command writes to a pipe or a file is UTF-8, and so is what the program `cad run` runs
 writes (a console is left as it is, as is every stream elsewhere); Windows PowerShell 5.1 decodes a

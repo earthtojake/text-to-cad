@@ -14,7 +14,7 @@ Which apps are offered CAD's tools, and how, `initialize` decides (`cad_server/m
 first**: the CAD server ships to, and offers tools to, one app, the Codex app, the only one whose CAD view
 is verified as solid (a tab beside the thread). Only Codex's manifest names a server
 (`.codex-plugin/plugin.json` → `codex.mcp.json`); every other app gets the skills alone, and its agent shows
-a model in the app's own browser or by the link `cad show` prints, as the skills say. A server someone adds
+a model in the app's own browser or by the link `cad viewer` prints, as the skills say. A server someone adds
 by hand to another app is offered no tools either, whatever that app declares: its `tools/list` is empty,
 its connection completes, and its instructions name the `cad` command
 ([decisions](../../docs/contributing/decisions.md)).
@@ -162,7 +162,7 @@ the second, a copy of `latest` or `main` registered no `cad` server in Codex. Wi
 
 Decided 2026-11-13: Claude gets text-to-cad as skills alone, on every install route, the install
 command's and by hand: its MCP Apps support was too flaky to build on. A model is shown by the
-skills' `cad show` link, in the browser pane or the browser.
+skills' `cad viewer` link, in the browser pane or the browser.
 
 | Host | CAD's server | Cards |
 | --- | --- | --- |
@@ -252,7 +252,7 @@ the launch's `_meta` first (`host/capability.ts`).
   and nothing else, so a project's page is not offered there (`places: false`).
 - **A view moves within its project.** A document in a project (a folder a person opened as one: the home's
   Import › Folder, or a folder chosen in Import where it is one button, a Mac's, whose one chooser takes either; a
-  standalone document's Import its folder as a project; `cad show <folder>`) has the project's
+  standalone document's Import its folder as a project; `cad viewer <folder>`) has the project's
   name before its own in the navbar, which goes to that project's page on the home at the document's folder (the
   document just left ringed there, Escape the way back), and `[` and `]` step through that folder's files; a press
   shows the document in place. A tab, a card and the web viewer do the same, and

@@ -357,7 +357,7 @@ On the merge commit, in this order (the workflow's comments say why each step is
    stops the release), the wheel-contents check, and `python -m build` of the four projects into one
    folder, which must hold a wheel and an sdist of each at the release's version and nothing else.
 4. **Install test.** The `cad`, `cad-server` and `cad-mcp` wheels together into a fresh venv
-   (`cad --help`, `cad show --help`, `cad-mcp --help`, `cad doctor`), then
+   (`cad --help`, `cad viewer --help`, `cad-mcp --help`, `cad doctor`), then
    `scripts/test/test-installed.sh --wheels <the built folder>`, then an `unzip -l` assertion that
    the `cad` wheel about to ship holds `_runtime/viewer` and `_runtime/mcp`. The distributions are
    kept as the workflow artifact `dist-<version>`.

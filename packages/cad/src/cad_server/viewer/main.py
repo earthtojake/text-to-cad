@@ -17,7 +17,7 @@ import webbrowser
 
 from cad_server import assets
 
-DEFAULT_PROG = 'cad show'
+DEFAULT_PROG = 'cad viewer'
 
 
 def resolve_dist_dir(explicit: str) -> str:
@@ -77,7 +77,7 @@ def _files_opened(parsed):
 
 
 def build_parser(prog=DEFAULT_PROG):
-    """The parser of ``cad show``: its options, as the command reads them (``parse_args`` adds the check of
+    """The parser of ``cad viewer``: its options, as the command reads them (``parse_args`` adds the check of
     its FILEs)."""
     from cad_server._internal.cli_parser import parser as command_parser
 
@@ -147,7 +147,7 @@ def main(argv=None, *, prog=DEFAULT_PROG):
         try:
             open_page(answer['url'], opener=webbrowser.open)  # a file of a redirect: no token in argv
         except CannotOpen as error:
-            print(f'cad show: could not open a browser ({error}); open the URL above', file=sys.stderr)
+            print(f'cad viewer: could not open a browser ({error}); open the URL above', file=sys.stderr)
     return 0
 
 
@@ -160,5 +160,5 @@ def _failed(options, prog, error):
     failure = classify(error)
     if options['json']:
         return write(failure, prog=prog, as_json=True)
-    print(f'cad show: {failure}', file=sys.stderr)
+    print(f'cad viewer: {failure}', file=sys.stderr)
     return failure.status

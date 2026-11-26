@@ -23,7 +23,7 @@ CAD view is verified. Every other app is offered none, and shows a model the way
   session per thread, so a call that names no view reaches the thread's own tab.
 - *No tools* (``text``): every other app, whatever it declares (Cursor, the Claude apps, Gemini CLI, ...), and
   Codex launched by a program that shows no views (``codex exec``, its terminal UI). Such an app shows a model
-  with the link ``cad show`` prints.
+  with the link ``cad viewer`` prints.
 - *Inline*, each call to ``cad_show`` mounting a new view in the chat: no app is served it. The development
   switch below reaches it, for testing the page's cards: each launch is stamped with an order for the views to
   retire their elders by, and a view the agent reads is named by the token its ``cad_show`` returned.
@@ -130,7 +130,7 @@ FOLLOWS = ("The page follows the model: rebuilds for a document, saves for a fil
 # A session offered no tools (``text``: see the module): what it is told instead.
 NO_TOOLS_INSTRUCTIONS = (
     "This CAD server offers no tools here: this app shows no CAD views. Use the `cad` command. " + COMMANDS
-    + " To show a model, give the user the link `cad show` prints, which opens in the app's browser pane or their "
+    + " To show a model, give the user the link `cad viewer` prints, which opens in the app's browser pane or their "
     "browser."
 )
 
@@ -240,7 +240,7 @@ def _unreached(page: str | None) -> str:
     and refuses their calls; its card says so, and links ``page``), and CAD can neither read nor capture it.
     What the person can open instead, and the picture the agent can draw itself."""
     instead = (f"give them the model's page to open in their browser instead: {page}" if page
-               else "open the model in their browser instead (`cad show` prints its page)")
+               else "open the model in their browser instead (`cad viewer` prints its page)")
     return ("That viewer has not reached CAD's server. Either the chat has not drawn it yet (it may be waiting for the "
             "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
             "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
@@ -985,7 +985,7 @@ class Server:
             link = self._browser_url(model)
         except ViewerUnavailable as failure:
             raise ToolFailed(f"This app cannot show CAD views, and CAD's server gave no browser page ({failure}). Run "
-                             f"`cad show --host 127.0.0.1 --json {model}` and open the url it prints.",
+                             f"`cad viewer --host 127.0.0.1 --json {model}` and open the url it prints.",
                              "no_viewer") from failure
         if _reads_with_kernel(model):
             self.warm()  # the browser page's first document meshes on a pool already starting

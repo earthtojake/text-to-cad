@@ -42,7 +42,7 @@ export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'find
 export interface CadServerInfo {
   autoReload?: boolean;
   identityToken?: string;
-  /** The folder of the most recent launch (`cad show`), which a launch's relative files are read from. */
+  /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;
   /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;

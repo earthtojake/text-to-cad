@@ -1011,7 +1011,7 @@ class NoticeTest(_Tmp):
     def test_every_command_says_it_but_the_servers_and_telemetry_itself(self) -> None:
         with mock.patch("cad_server.analytics.notify") as told, mock.patch.object(cli, "_run", return_value=0), \
                 mock.patch("sys.stdout", io.StringIO()):
-            for argv in (["cache", "dir"], ["snapshot", "a.dxf"], ["show"], ["mcp"], ["server", "start"],
+            for argv in (["cache", "dir"], ["snapshot", "a.dxf"], ["viewer"], ["mcp"], ["server", "start"],
                          ["telemetry", "off"], ["doctor"]):  # `doctor` is a report, which writes nothing
                 cli.main(argv)
             cli.main(["--help"])

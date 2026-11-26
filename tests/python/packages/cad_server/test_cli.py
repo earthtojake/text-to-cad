@@ -34,10 +34,10 @@ class Registry(unittest.TestCase):
         # The viewer's backend is cad_server.viewer, reached through the front
         # door as a launcher for the shared engine. Registered by dotted module
         # name like everything else, so `cad --help` imports none of it.
-        for name in ("show",):
+        for name in ("viewer",):
             self.assertIn(name, cli._COMMANDS)
             module_name, _ = cli._COMMANDS[name]
-            self.assertTrue(module_name.startswith("cad_server.cli.show"), module_name)
+            self.assertTrue(module_name.startswith("cad_server.cli.viewer"), module_name)
 
     def test_the_verbs_on_a_file_are_registered_and_listed(self):
         for name in ("export", "inspect", "snapshot", "dfm", "fea"):
@@ -186,7 +186,6 @@ class Dispatch(unittest.TestCase):
             ("kicad_pcb", "drc", "b.kicad_pcb"): "'cad kicad_pcb drc' is 'cad kicad drc BOARD' now; 'cad kicad drc --help' says its options",
             ("kicad_sch", "erc", "s.kicad_sch"): "'cad kicad_sch erc' is 'cad kicad erc SCHEMATIC' now; 'cad kicad erc --help' says its options",
             ("kicad_pcb", "export", "b.kicad_pcb", "--to", "step", "-o", "out"): "'cad kicad_pcb export' is 'cad export FILE DIR --to KIND' now; 'cad export --help' says its options",
-            ("viewer", "a.step"): "'cad viewer' is 'cad show FILE|FOLDER' now; 'cad show --help' says its options",
             ("status",): "'cad status' is 'cad server status' now; 'cad server --help' says its options",
             ("stop",): "'cad stop' is 'cad server stop' now; 'cad server --help' says its options",
             ("step",): "'cad step' is no command now: a verb takes the file, its type by its suffix (cad export, cad inspect, cad snapshot, cad dfm, cad fea); 'cad --help' lists them",

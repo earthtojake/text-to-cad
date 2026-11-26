@@ -74,7 +74,7 @@ out: say so when you use it.
 
 The STEP is an ordinary CAD file, not the board's source. Show it as any file
 ([Show the model](../SKILL.md#show-the-model): `cad_show` where your tools include it, else its page
-from `cad show`), convert it with `cad export mechanical/board.step mechanical/board.glb` (or STL,
+from `cad viewer`), convert it with `cad export mechanical/board.step mechanical/board.glb` (or STL,
 3MF) for a requested mesh, and read it into an enclosure model with `step.read`. Check geometry and
 millimetre scale after a conversion. Export again after a board edit; never carry a change made to the
 STEP back into the board by guessing at its meaning.

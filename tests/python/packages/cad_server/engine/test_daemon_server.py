@@ -895,11 +895,11 @@ class SweepTest(unittest.TestCase):
         self.assertEqual(cad("status"), (2, "", "cad: 'cad status' is 'cad server status' now; 'cad server --help' says "
                                                 "its options\n"))
         self.assertEqual(cad("server", "status", "--json")[:2], (0, "null\n"))
-        self.assertEqual(cad("show", unknown), (1, "", f"cad show: {NOT_RUNNING}\n"))
+        self.assertEqual(cad("viewer", unknown), (1, "", f"cad viewer: {NOT_RUNNING}\n"))
         # A client build of its own: a checkout's apps/web is built on one computer and not on another (CI).
         (own / "dist").mkdir()
         (own / "dist" / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
-        code, out, _err = cad("show", unknown, "--json", "--dist", str(own / "dist"))
+        code, out, _err = cad("viewer", unknown, "--json", "--dist", str(own / "dist"))
         self.assertEqual((code, json.loads(out)), (1, {"ok": False, "error": NOT_RUNNING, "reason": "not_running",
                                                        "next": ["cad server start"]}))
         self.assertEqual(list(self.state.iterdir()), [], "nothing started a server")
@@ -933,10 +933,10 @@ class SweepTest(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "the older server's door answered")
                 time.sleep(0.05)
             found.close()
-        refused = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "show", "00000000-0000-5000-8000-000000000000"],
+        refused = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "viewer", "00000000-0000-5000-8000-000000000000"],
                                     env=self.env)
         self.assertEqual((refused.returncode, refused.stderr),
-                         (1, f"cad show: cad here is {version()}; the running server is 0.0.1: install cad 0.0.1, or run "
+                         (1, f"cad viewer: cad here is {version()}; the running server is 0.0.1: install cad 0.0.1, or run "
                              f"`cad server start` to run {version()}'s server\n"))
         theirs = engine_daemon.run([sys.executable, "-c", "from cad.engine.client import request; "
                                     "print(request({'op': 'pid'})['pid'])"], env=self.env)

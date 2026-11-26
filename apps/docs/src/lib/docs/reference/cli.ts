@@ -59,7 +59,7 @@ const GROUPS: { title: string; intro: string; commands: string[] }[] = [
   {
     title: "Running and viewing",
     intro: "",
-    commands: ["cad run", "cad show"],
+    commands: ["cad run", "cad viewer"],
   },
 ];
 // A group's commands, each followed by its subcommands (`cad server start` after `cad server`), as the JSON orders them.

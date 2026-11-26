@@ -323,7 +323,7 @@ class EngineTelemetryTest(unittest.TestCase):
         for switch in ({"DO_NOT_TRACK": "1"}, {"CAD_TELEMETRY": "0"}, {"CAD_ENGINE_WORKER": "1"}):
             with mock.patch.dict(os.environ, switch):
                 engine_telemetry.observe(exported)
-        with mock.patch.object(engine_telemetry, "command", "show"):  # a server's own work: it counts its own
+        with mock.patch.object(engine_telemetry, "command", "viewer"):  # a server's own work: it counts its own
             engine_telemetry.observe(exported)
         # A build is the daemon's to count, where it is answered: a Python caller that imports the server, whose
         # ``Model.build()`` its observer sees, counts it no second time; one built in its own process

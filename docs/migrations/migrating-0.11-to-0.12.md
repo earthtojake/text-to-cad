@@ -65,11 +65,10 @@ A spelling 0.11 had runs nothing now: it answers in one line with the one that d
 | `cad kicad_pcb drc BOARD`, `cad kicad_sch erc SCHEMATIC` | `cad kicad drc BOARD`, `cad kicad erc SCHEMATIC` |
 | `cad kicad_pcb export BOARD --to KIND -o DIR`, a schematic's the same | `cad export BOARD DIR --to KIND` |
 | `cad model <operation> ...` | the verb above |
-| `cad viewer [FILE]` | `cad show [FILE\|FOLDER]` |
 | `cad status`, `cad stop` | `cad server status`, `cad server stop` |
 | bare `cad server` | `cad server start` (`--foreground` runs it in that process) |
 | `cad orcaslicer presets\|complete` | none: OrcaSlicer's own command line slices a project saved from its app as it is |
-| `cad serve DOC` | `cad show DOC`; `cad serve` is answered as any unknown command is |
+| `cad serve DOC` | `cad viewer DOC`; `cad serve` is answered as any unknown command is |
 | `cad export <id> arm.step` | `cad export arm.xbf arm.step` (the id still works) |
 
 `cad export a.xbf b.xbf`, refused in 0.11, writes a copy of the document, its build closure with it.

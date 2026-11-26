@@ -1067,65 +1067,10 @@
    ]
   },
   {
-   "command": "cad show",
-   "summary": "open a file, or a folder as a project, on the viewer's page",
-   "usage": "cad show [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 106,
-   "arguments": [
-    {
-     "name": "FILE",
-     "help": 107,
-     "optional": true,
-     "repeatable": true
-    }
-   ],
-   "options": [
-    {
-     "flags": [
-      "--host"
-     ],
-     "metavar": "HOST",
-     "help": 108
-    },
-    {
-     "flags": [
-      "--port"
-     ],
-     "metavar": "PORT",
-     "help": 109
-    },
-    {
-     "flags": [
-      "--json"
-     ],
-     "help": 110
-    },
-    {
-     "flags": [
-      "--no-open"
-     ],
-     "help": 111
-    },
-    {
-     "flags": [
-      "--dist"
-     ],
-     "metavar": "DIST",
-     "help": 112
-    },
-    {
-     "flags": [
-      "--api-only"
-     ],
-     "help": 113
-    }
-   ]
-  },
-  {
    "command": "cad telemetry",
    "summary": "show or change the usage stats and crash reports CAD sends: status, on, off",
    "usage": "cad telemetry [{status,on,off}]",
-   "description": 114,
+   "description": 106,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -1142,7 +1087,7 @@
    "command": "cad update",
    "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
    "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
-   "description": 115,
+   "description": 107,
    "arguments": [
     {
      "name": "{auto} ...",
@@ -1156,7 +1101,7 @@
      "flags": [
       "--major"
      ],
-     "help": 116
+     "help": 108
     }
    ]
   },
@@ -1164,7 +1109,7 @@
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 117,
+   "description": 109,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -1174,6 +1119,61 @@
       "off"
      ],
      "optional": true
+    }
+   ]
+  },
+  {
+   "command": "cad viewer",
+   "summary": "open a viewer page on the running cad server",
+   "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
+   "description": 110,
+   "arguments": [
+    {
+     "name": "FILE",
+     "help": 111,
+     "optional": true,
+     "repeatable": true
+    }
+   ],
+   "options": [
+    {
+     "flags": [
+      "--host"
+     ],
+     "metavar": "HOST",
+     "help": 112
+    },
+    {
+     "flags": [
+      "--port"
+     ],
+     "metavar": "PORT",
+     "help": 113
+    },
+    {
+     "flags": [
+      "--json"
+     ],
+     "help": 114
+    },
+    {
+     "flags": [
+      "--no-open"
+     ],
+     "help": 115
+    },
+    {
+     "flags": [
+      "--dist"
+     ],
+     "metavar": "DIST",
+     "help": 116
+    },
+    {
+     "flags": [
+      "--api-only"
+     ],
+     "help": 117
     }
    ]
   }
@@ -1285,6 +1285,10 @@
   "a CAD file the viewer opens (a model's .xbf; a folder has no bundle to share); or status, on, off or delete",
   "after delete: the file this computer shared, or a share's delete link",
   "share: the person agrees to sharing, kept for this computer; delete: delete without asking. Where nobody can be asked (an agent, a pipe, --json) neither runs without it",
+  "Show or change the usage stats and crash reports cad sends from CAD's apps (the CAD app in an agent app, and the viewer) and its build daemon. By default, once a cad command has said so: a random install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the viewer's tools and settings are used (never a value or a name), files shown by format, builds and snapshots, how they ended and how long they took, and where cad's own code failed (never a message). `off` sends nothing. Never file names, paths, contents or prompts.",
+  "cad installs every newer release of its major version by itself, and a new major version only when you run `cad update --major`. `cad update` updates cad now to the newest release of its major version, even with automatic updates off: cad asks PyPI and, once nothing is running, installs it. A cad server that was running starts again; with none running, none is started. `cad update auto` shows or changes whether cad updates itself.",
+  "install the newest release of all, a new major version included, which may ask for changes (https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)",
+  "Show or change whether cad updates itself to the newest release of its major version: once nothing has run for a minute, the cad server stops, installs it and starts again. A new major version never installs itself: `cad update --major` installs it. On by default, for a global install (`uv tool install cad`).",
   "Open the running server's viewer page: the home, or each file named (no server running: its one line, which says to run ``cad server start``). The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a share's link, this computer's copy of it) is registered and printed as its page, ``/<id>``. A folder is opened as a project, shown a folder at a time on the home, whose page is printed. Nothing is written to the folder.",
   "a CAD file to open: its page is /<id>; a folder opens as a project, on the home",
   "Pin the engine bind address; default loopback.",
@@ -1292,10 +1296,6 @@
   "Print launch information without opening a browser.",
   "Print the URL without opening a browser.",
   "Built viewer client directory.",
-  "Announce the engine for a Vite frontend, without its client build.",
-  "Show or change the usage stats and crash reports cad sends from CAD's apps (the CAD app in an agent app, and the viewer) and its build daemon. By default, once a cad command has said so: a random install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the viewer's tools and settings are used (never a value or a name), files shown by format, builds and snapshots, how they ended and how long they took, and where cad's own code failed (never a message). `off` sends nothing. Never file names, paths, contents or prompts.",
-  "cad installs every newer release of its major version by itself, and a new major version only when you run `cad update --major`. `cad update` updates cad now to the newest release of its major version, even with automatic updates off: cad asks PyPI and, once nothing is running, installs it. A cad server that was running starts again; with none running, none is started. `cad update auto` shows or changes whether cad updates itself.",
-  "install the newest release of all, a new major version included, which may ask for changes (https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)",
-  "Show or change whether cad updates itself to the newest release of its major version: once nothing has run for a minute, the cad server stops, installs it and starts again. A new major version never installs itself: `cad update --major` installs it. On by default, for a global install (`uv tool install cad`)."
+  "Announce the engine for a Vite frontend, without its client build."
  ]
 }

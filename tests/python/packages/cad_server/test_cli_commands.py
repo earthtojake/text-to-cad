@@ -35,7 +35,7 @@ TYPES = {
     "kicad_pcb": ("export", "inspect", "snapshot"),
     "kicad_sch": ("export", "inspect", "snapshot"),
 }
-COMMANDS = ("export", "inspect", "snapshot", "dfm", "fea", "show", "server", "mcp", "run", "requirement", "doctor",
+COMMANDS = ("export", "inspect", "snapshot", "dfm", "fea", "viewer", "server", "mcp", "run", "requirement", "doctor",
             "cache", "setup", "share", "import", "telemetry", "update", "plugin")
 # Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's updaters run `cad setup`), and the command
 # for programs rather than people (`requirement`, whose output a program reads).
@@ -178,8 +178,8 @@ class TheCommandTable(unittest.TestCase):
                 self.assertEqual((code, out), (2, ""))
                 self.assertEqual(err, f"cad {argv[0]}: {said}\n")
         # And the command that takes a file but is no verb's: the page it opens.
-        code, out, err = _run(["show", "part.py"])
-        self.assertEqual((code, out, err), (2, "", "cad show: part.py is a model's script, not a CAD file: `cad run "
+        code, out, err = _run(["viewer", "part.py"])
+        self.assertEqual((code, out, err), (2, "", "cad viewer: part.py is a model's script, not a CAD file: `cad run "
                                                    "part.py` builds its models and prints each one's page\n"))
         from cad_server.cli.document_types import OPERATIONS, build_parser
         from cad_server.cli.verbs import build_parser as verb_parser

@@ -1168,7 +1168,7 @@ class HeadlessCodexTest(_Session):
         self.server._viewer_url = refuse
         failed = self.call("cad_show", {"source": self.bracket})
         self.assertTrue(failed["isError"])
-        self.assertIn(f"`cad show --host 127.0.0.1 --json {self.bracket}`", failed["content"][0]["text"])
+        self.assertIn(f"`cad viewer --host 127.0.0.1 --json {self.bracket}`", failed["content"][0]["text"])
 
 
 class CodexExecTest(_Session):
@@ -1287,7 +1287,7 @@ class NoToolsTest(_Session):
 
     def test_it_is_offered_no_tools_and_told_the_cad_command(self) -> None:
         self.assertEqual(self.initialized["instructions"], NO_TOOLS_INSTRUCTIONS)
-        for said in ("`cad` command", "`cad show`"):
+        for said in ("`cad` command", "`cad viewer`"):
             self.assertIn(said, NO_TOOLS_INSTRUCTIONS)
         for unsaid in ("skill", "cad setup"):  # nothing sends the agent to set a CAD server up
             self.assertNotIn(unsaid, NO_TOOLS_INSTRUCTIONS)

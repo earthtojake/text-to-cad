@@ -67,7 +67,7 @@ cad run src/bracket.py
 
 ## See it on screen
 
-Your agent shows you the model. In the Codex app, the viewer opens in a CAD tab beside the thread. In every other app the agent opens the page in the app's browser, or gives you the `view:` link to open in yours. You can also run `cad show` yourself, which opens the viewer's home. See [the viewer](/docs/viewer).
+Your agent shows you the model. In the Codex app, the viewer opens in a CAD tab beside the thread. In every other app the agent opens the page in the app's browser, or gives you the `view:` link to open in yours. You can also run `cad viewer` yourself, which opens the viewer's home. See [the viewer](/docs/viewer).
 
 ## Ask for a change
 

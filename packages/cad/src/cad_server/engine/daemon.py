@@ -1051,7 +1051,7 @@ class Daemon:
                                                        http_factory=HTTP_FACTORY, budget=memory_budget(),
                                                        token=token))
                     elif request.get("port"):
-                        # The request's own port (``cad show --port``): that request is refused,
+                        # The request's own port (``cad viewer --port``): that request is refused,
                         # and the engine -- the builds and warm workers of its other clients -- runs
                         # on, unbound, for the next request that serves.
                         raise
@@ -1112,7 +1112,7 @@ class Daemon:
         (``{"op": "http", "port"}``: 0.11.10's switch helper through the flat door, the bridge taking a server of
         0.11.10's place): the port pages were on before the update, which they reload into. Where ``port`` cannot be taken (another process holds it, 0.11.10's own server still among
         them), the ask is answered with the address the server serves (never ``failed``: 0.11.10's helper would stop
-        the server for it). Any other request naming another port (``cad show --port``) is refused as before."""
+        the server for it). Any other request naming another port (``cad viewer --port``) is refused as before."""
         server = self.server
         host = server.http.server_address[0]
         listener = next((each for each in self.listeners if each.server_address[1] == port), None)
@@ -2311,7 +2311,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
     """Run the engine here. ``port``: the HTTP port it must take (``cad server start --port``, which hands a server
     it starts ``--port N`` in ``argv``); ``foreground`` (``cad server start --foreground``): its HTTP server bound
     before anything else, so a port another process holds fails the command at once (``bind``). One started
-    detached binds on the first request that serves, which may name its own port (``cad show --port``) -- but where
+    detached binds on the first request that serves, which may name its own port (``cad viewer --port``) -- but where
     the server it replaced served pages (``resumed``), it serves them there at once, as one in the foreground does,
     unless a port is named (``Daemon.resume``). The release it starts as is recorded (``started``)."""
     from cad.engine.serve import Pressure

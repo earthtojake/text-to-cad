@@ -221,8 +221,8 @@ skill's; slicing a print, the print3d skill's.
 
 Show the person each model you create or change as soon as its first run succeeds, and any model
 or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
-that `cad show --json FILE [FILE ...]` prints for it (never guess the port). Once per project,
-before the first page you show from it, run `cad show --json FOLDER` with the project's folder: it
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Once per project,
+before the first page you show from it, run `cad viewer --json FOLDER` with the project's folder: it
 opens that folder as a project, so the person reaches its other models and files from any one of
 them. Show a page with the first of these you have:
 

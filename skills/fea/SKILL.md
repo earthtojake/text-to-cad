@@ -94,7 +94,7 @@ Units are fixed: mm, N, MPa (pressure, modulus and stress), t/mm³ for density (
    | --- | --- |
    | `result.json` | The answer, which `--json` also prints. Read this first |
    | `stress.png`, `displacement.png` | The deformed part coloured by each field, the deformation exaggerated by `deformation_scale`. They show whether the load points the way you meant and which faces are held |
-   | `result.glb` | The same coloured surface, for `cad show` or any glTF viewer |
+   | `result.glb` | The same coloured surface, for `cad viewer` or any glTF viewer |
    | `result.vtu` | The volume mesh with `displacement` (mm) and `von_mises` (MPa) at its corner nodes |
    | `ccx.inp` | With `--deck`: the input CalculiX solved, to run or edit yourself (`cad run ccx -i ccx`, in that folder) |
 

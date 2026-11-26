@@ -105,7 +105,7 @@ cad mujoco check FILE [--strict] [--json]    a MuJoCo model's file (an MJCF: no 
                                              refuses or warns of, the model-health checks, what collides
                                              as what and the contact excludes; in cad[mujoco]'s
                                              environment (made first) where this one holds no mujoco
-cad show [FILE|FOLDER ...] [--json] [--no-open]
+cad viewer [FILE|FOLDER ...] [--json] [--no-open]
                                              the running server's page: each file's, a folder opened as
                                              a project, or the home (The viewer and the snapshot)
 cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
@@ -147,11 +147,10 @@ runner, `cad_server.cli.document_types`), each verb's its own module (`python -m
 `python -m cad_server.engine VERB ...` takes the engine's verbs, its own entry.
 
 A spelling the command had runs nothing (law 14's first tier): `cad xbf export a.xbf a.step`, `cad model ...`,
-`cad step solve`, `cad urdf validate`, `cad kicad_pcb drc`, `cad kicad_pcb export`, `cad viewer`, `cad status`,
-`cad stop`, bare `cad server` and `cad orcaslicer` are each answered in one line with the spelling the command has
-now, exit 2 (`usage`): `'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its options`. One
-table holds them (`cad_server.cli._hint`: `_RENAMED`, `_BARE`, `_OPERATIONS_NOW`, and a deprecated integration's
-words).
+`cad step solve`, `cad urdf validate`, `cad kicad_pcb drc`, `cad kicad_pcb export`, `cad status`, `cad stop`, bare
+`cad server` and `cad orcaslicer` are each answered in one line with the spelling the command has now, exit 2
+(`usage`): `'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its options`. One table holds
+them (`cad_server.cli._hint`: `_RENAMED`, `_BARE`, `_OPERATIONS_NOW`, and a deprecated integration's words).
 
 Every `SRC` and `FILE` is an on-disk CAD file's path, a model's its `.xbf`, which `cad run SCRIPT.py` writes,
 printing its page (`view: <engine>/<id>`). The id the engine names a document by (`ids`), which the viewer's
@@ -308,7 +307,7 @@ status 1, no traceback; caught, nothing said. Builds run in the daemon's warm wo
 `.xbf`, which has no size to set.
 `CAD_ENGINE_DEFAULT_PORT` stands in for 3245 as the default port (`daemon.default_port`): the
 tests' seam, so a suite holds or frees a default of its own and never touches the machine's 3245.
-`CAD_ENGINE_MEMO=0` turns memo hits off. `CAD_VIEWER_WARM=0` keeps `cad show`
+`CAD_ENGINE_MEMO=0` turns memo hits off. `CAD_VIEWER_WARM=0` keeps `cad viewer`
 from warming the engine at its launch (**The viewer and the snapshot**). `CAD_ENGINE_MESH=processes|inline`
 picks how parts are meshed. The default, `processes`, uses a warm pool of
 processes started with the first page or view, each handed one part's shape as bytes,

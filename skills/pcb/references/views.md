@@ -78,7 +78,7 @@ plan camera, layer visibility and saved ink; it has no lit 3D preview, pose or t
 
 ## The schematic view
 
-`cad show --json board.kicad_sch` opens a schematic a sheet at a time, and the person can pick,
+`cad viewer --json board.kicad_sch` opens a schematic a sheet at a time, and the person can pick,
 measure, draw on it and send a Quick Edit as on a board. They move between sheets as in KiCad's
 Hierarchy Navigator, into a sheet symbol and back up. Picking works as in KiCad: a symbol, pin,
 wire, label, sheet, junction or no-connect, or everything a box touches. The person can also pick a

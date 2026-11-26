@@ -157,7 +157,7 @@ and plan, and the stitching follows them); DRC and the check stay clean.
 
 The thread to keep: **the panel is made from the board.** Every shot builds toward shot 6, where a jack moves on
 the board and the panel's hole follows, and shot 7, where the panel goes to a fabrication service's checks.
-Record in an agent app with text-to-cad installed and this folder open; the viewer pages are `cad show` pages.
+Record in an agent app with text-to-cad installed and this folder open; the viewer pages are `cad viewer` pages.
 
 | # | Prompt the person types | What the viewer shows | Length | The one impressive thing |
 | --- | --- | --- | --- | --- |

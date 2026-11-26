@@ -5,7 +5,7 @@ name: Real install
 # its own, the way a person runs it (install.sh piped to sh; install.ps1 handed to Invoke-Expression by
 # Windows PowerShell 5.1): cad a uv tool from the wheels this tree builds (written again as a release no index
 # holds, above PyPI's newest, and offered to uv), cad's automatic updates on and the plugin's turned on by the
-# install, no server started; `cad server start`, a model built by `cad run`, a file shown by `cad show`,
+# install, no server started; `cad server start`, a model built by `cad run`, a file shown by `cad viewer`,
 # `cad doctor`; the plugin from this tree's `latest` copy through each program's own GitHub route (a local
 # repository the computer's git reads in GitHub's place). Then the command again (cad installed already and nothing
 # newer for it, each program's copy updated), and each program migrated from the state 0.11.10's installer left. The

@@ -120,7 +120,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "doctor": frozenset({"check", "json"}),
     # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
     # line) is not a function signature to mirror.
-    "show": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
+    "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
     # A file shared by its link, or the words status, on, off and delete with the file or link it deletes: the
     # person's agreement (--yes, which a delete asks too) and an upload this process makes mirror no function.
     "share": frozenset({"target", "link", "yes", "json"}),
@@ -211,7 +211,7 @@ class Manifest(unittest.TestCase):
         # A retired command has no entry and no module: it gets the answer of any unknown command, or, for a spelling
         # the skills of 0.11 used, the one line naming the spelling it has now (``test_cli``).
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
-                        "store", "daemon", "daemon status", "where", "install", "serve", "status", "stop", "viewer",
+                        "store", "daemon", "daemon status", "where", "install", "serve", "status", "stop",
                         "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
                         "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf", "uninstall",
                         "sdf", "sdf validate", "sdf snapshot", "xbf export", "step export", "urdf validate",
@@ -224,7 +224,7 @@ class Manifest(unittest.TestCase):
                        "cad_server.cli.mjcf", "cad.mjcf", "cad.engine.mjcf_source", "cad_server.cli.retired",
                        "cad_server._internal.leftovers", "cad_server.cli.sdf", "cad.sdf", "cad.engine.sdf_source",
                        "cad_server.cli.xbf", "cad_server.cli.step", "cad_server.cli.urdf", "cad_server.cli.model",
-                       "cad_server.cli.viewer", "cad_server.cli.serve", "cad_server.cli.status", "cad_server.cli.stop",
+                       "cad_server.cli.serve", "cad_server.cli.status", "cad_server.cli.stop",
                        "cad_server.cli.orcaslicer"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError), warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject

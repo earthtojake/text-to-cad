@@ -1191,8 +1191,8 @@ def _mesh(path: Path, named: str, query: str) -> Facts:
         from cad.engine.said import COMMAND
 
         said = (f"`{COMMAND} inspect {path.name}` alone tells its nodes, meshes and animations, and "
-                f"`{COMMAND} show {path.name}` shows it" if path.suffix.lower() == ".glb" else
-                f"inspect reads nothing more of it: `{COMMAND} show {path.name}` shows it, and the document it "
+                f"`{COMMAND} viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
+                f"inspect reads nothing more of it: `{COMMAND} viewer {path.name}` shows it, and the document it "
                 "was exported from, inspected, tells the rest")
         raise ValueError(f"{path.name} is a mesh: it has no B-rep for a ref to name and no build closure (only an "
                          f".xbf carries one); {said}")

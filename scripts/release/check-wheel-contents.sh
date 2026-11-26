@@ -80,7 +80,7 @@ REQUIRED=(
   "cad_server/assets.py"
   "cad_server/cli/__init__.py"
   "cad_server/cli/verbs.py"
-  "cad_server/cli/show.py"
+  "cad_server/cli/viewer.py"
   "cad_server/cli/document_types.py"
   "cad_server/viewer/__init__.py"
   "cad_server/viewer/__main__.py"

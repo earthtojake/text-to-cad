@@ -2,7 +2,7 @@
 
 CAD's tools show models as views in the app, and the one app whose CAD view is verified is the Codex app (a
 tab beside the thread). So the Codex app alone is offered them: every other app, whatever it declares, is
-offered no tools at all and shows a model the way it shows any web page (the ``cad show`` link).
+offered no tools at all and shows a model the way it shows any web page (the ``cad viewer`` link).
 
 The Codex app greets the server as ``codex-mcp-client``, and so do ``codex exec`` and the Codex terminal UI,
 which show no views; from 0.169 the app and perhaps the others declare the ``io.modelcontextprotocol/ui``

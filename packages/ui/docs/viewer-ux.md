@@ -158,7 +158,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
 
 - A folder becomes a project only when a person or an agent opens it as one: a folder imported on the home (the
   navbar's Import, or the "+" by Projects in the sidebar), a standalone document's Import its folder as a project, or
-  `cad show <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
+  `cad viewer <folder>`. Nothing else makes one: a run never does, and nothing is written to the folder. Removing one
   forgets it, and nothing on disk changes.
 - **A project is its folder, linked.** Its page lists what is in the folder now, so a file another tool drops in
   appears, and one deleted in the file manager goes; nothing is recorded of a project but where its folder is. Why: the
@@ -1013,7 +1013,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 
 - What a person reads says "browser" for the browser (Open in ▸ Browser, the CAD app's Open in browser) and "the
   viewer" or "this page" for the page, in every locale. The page has no other name.
-- Developer docs and the skills call it the viewer too, and its command is `cad show`. Where a reader has no context
+- Developer docs and the skills call it the viewer too, and its command is `cad viewer`. Where a reader has no context
   (a file read on its own, a package's description), it is "the text-to-cad viewer".
 - The skills say what a person can do in the viewer, never where its controls are or how they look: that is this
   document's alone.

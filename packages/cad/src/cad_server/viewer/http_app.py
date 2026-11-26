@@ -146,7 +146,7 @@ def _update_identity_digest(digest, base_dir, *, suffix: str = "") -> None:
         digest.update(b"\0")
 
 
-# What a page's address answers where no client is built (``_serve_dist``): the sentence ``cad show`` says.
+# What a page's address answers where no client is built (``_serve_dist``): the sentence ``cad viewer`` says.
 NOT_BUILT = "The viewer client is not built; build apps/web or install the cad wheel"
 
 
@@ -524,7 +524,7 @@ class CadApp:
             # empty base is load-bearing: os.path.join("", x) resolves against
             # the CURRENT WORKING DIRECTORY, which would silently turn the
             # viewer into a static server for wherever it was launched from.
-            # It says why, as ``cad show`` does: a build's ``view:`` link leads here in a
+            # It says why, as ``cad viewer`` does: a build's ``view:`` link leads here in a
             # checkout whose client is not built, and a bare "Not found" named nothing to fix.
             response.send_plain(404, NOT_BUILT)
             return
@@ -1008,7 +1008,7 @@ class CadApp:
     def preview_parameters(self, ident, values, page) -> dict:
         """A model's preview (``_preview``): the engine's, so an application with none under it has none."""
         raise ApiError(404, "documents are served by the installation's engine",
-                       "open the document in the CAD Viewer: `cad show <file>`")
+                       "open the document in the CAD Viewer: `cad viewer <file>`")
 
     def _parameter_answer(self, response, asked) -> None:
         """The answer of a change of parameters or a preview (``asked``), or its refusal as the routes answer one:
@@ -1037,7 +1037,7 @@ class CadApp:
         """A model's parameters set (``_parameters``): the engine's, so an application with none under it has
         no model to set."""
         raise ApiError(404, "documents are served by the installation's engine",
-                       "open the document in the CAD Viewer: `cad show <file>`")
+                       "open the document in the CAD Viewer: `cad viewer <file>`")
 
     def _read(self, request, route: str, query=(), prefetch=True) -> tuple[int, str, dict, bytes]:
         """The engine's answer to one of its document reads (``route``: ``/api/doc/<id>...``,
@@ -1045,7 +1045,7 @@ class CadApp:
         starts meshing its parts, which a page reads next. Documents are the engine's: an
         application with none under it serves none."""
         raise ApiError(404, "documents are served by the installation's engine",
-                       "open the document in the viewer: `cad show <file>`")
+                       "open the document in the viewer: `cad viewer <file>`")
 
     def _relay(self, request, response, route: str, query=()) -> None:
         """The engine's answer to ``route``, sent on: its error, a JSON object, gains a ``hint``."""
@@ -1463,7 +1463,7 @@ class CadApp:
         try:
             chosen = self.picker.choose(folder=folder, start=start, either=either)
         except PickerFailed as failure:
-            command = "`cad show <file>` or `cad show <folder>`" if either else "`cad show <folder>`" if folder else "`cad show <file>`"
+            command = "`cad viewer <file>` or `cad viewer <folder>`" if either else "`cad viewer <folder>`" if folder else "`cad viewer <file>`"
             raise ApiError(500, str(failure), f"open it with {command} instead") from None
         if chosen is None:
             response.send_json(200, {"cancelled": True})

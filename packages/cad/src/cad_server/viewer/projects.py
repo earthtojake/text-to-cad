@@ -1,6 +1,6 @@
 """Projects: folders a person opened as one, each shown a folder at a time.
 
-A folder becomes a project only when someone opens it as one: ``cad show <folder>``, or Import,
+A folder becomes a project only when someone opens it as one: ``cad viewer <folder>``, or Import,
 Folder on the viewer's Home (``POST /api/v1/projects``), which a standalone document's menu offers
 too, starting at its folder. Nothing else makes one: a run never does, no file in the folder marks
 one, and nothing is written to the folder. A project is one entry of the library

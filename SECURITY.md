@@ -32,11 +32,11 @@ credentials, all made from one token:
 - **The token** is yours, not one server's: made once, kept in a file only you
   can read in cad's data folder (`engines/token`), and served by the server at
   every start, through updates, until you rotate it. No URL carries it,
-  and only `cad show --api-only --json` prints it, for the development
+  and only `cad viewer --api-only --json` prints it, for the development
   client's proxy. Your own clients read it through the server's door and send
   it as a Bearer header.
 - **A link** is what every URL text-to-cad prints or opens carries (`cad_show`'s,
-  `cad show`'s, a build's `view:` line, the page it opens in your
+  `cad viewer`'s, a build's `view:` line, the page it opens in your
   browser): `?token=` with an expiry and the token's signature of it. It works
   until you rotate the token (`cad server --rotate-token`, which ends every link
   and every session at once), as a Jupyter server's URL token does; the token is

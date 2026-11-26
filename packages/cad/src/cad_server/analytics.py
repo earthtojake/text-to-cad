@@ -1,5 +1,5 @@
 """cadgen's telemetry: usage counts and crash reports from the processes that do CAD's work --
-``cad-mcp`` (the CAD app in an agent app), ``cad show`` (the browser viewer), every ``cadgen``
+``cad-mcp`` (the CAD app in an agent app), ``cad viewer`` (the browser viewer), every ``cadgen``
 command, whose exports and snapshots the engine runs, and the engine's daemon, which counts the model builds
 it answers (a model's own process counts nothing): how many people use
 CAD, how often, what they make, how it goes and where cadgen's own code fails -- counts, times,

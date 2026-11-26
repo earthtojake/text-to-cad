@@ -320,7 +320,7 @@ class EngineApp:
         return {'link': link, 'expires': int(link.partition('.')[0])}
 
     def launch(self, options):
-        """A launch of the one page (``cad show``, a text-only host's link, the dev client's
+        """A launch of the one page (``cad viewer``, a text-only host's link, the dev client's
         ``--api-only``): each file it names (``files``: on-disk CAD files, a relative one read from its
         folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``, and each
         folder it names is opened as a project (``projects``: ``{id, name, root, made}``, ``projects.py``). ``url`` is the

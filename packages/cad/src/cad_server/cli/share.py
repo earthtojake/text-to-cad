@@ -131,7 +131,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 def _target(target: str) -> tuple[str, str]:
     """What FILE|ID names, as ``(the file's canonical path, its type's id)``: a share's link this computer's copy of it
     (``engine.cli.linked``), a document id the file the engine names by it (``_located``), else a path read from this
-    folder. Refused by the failure contract, as ``cad show`` refuses a FILE, where it is no file a share is of: a
+    folder. Refused by the failure contract, as ``cad viewer`` refuses a FILE, where it is no file a share is of: a
     model's script (its ``.xbf`` is, which running it writes), a path that is not there, a folder, a file of no
     document type."""
     import shlex

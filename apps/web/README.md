@@ -2,7 +2,7 @@
 
 A local-filesystem CAD review app. This directory is the React CLIENT; the
 backend is the installation's engine, hosting the `cad_server.viewer` HTTP app.
-The built client ships inside the same wheel. `cad show [FILE ...]` opens the
+The built client ships inside the same wheel. `cad viewer [FILE ...]` opens the
 engine's one page and exits; a FILE that is a folder is opened as a project, on the home. The page addresses every
 document by path, `/<uuid>`: a model's id, or a file's id once a launcher (or the page itself) registers it, derived
 from the file's canonical path. `/` is the home, and each place on it has its own address: `/` Recents,
@@ -106,14 +106,14 @@ to the page (dev refuses a `VIEWER_` variable named like a token), and the dev s
 no CORS headers, so no other origin reads what its token-bearing proxy answers. Build shared packages first; Vite needs no web
 production build.
 
-Prod is `cad show`, run from anywhere. It serves the client bundled by
+Prod is `cad viewer`, run from anywhere. It serves the client bundled by
 `scripts/bundle/bundle.sh` or installed in the wheel. To explicitly select this
 checkout's web build, start from the repository root:
 
 ```bash
 npm run build:web
 export CAD_VIEWER_DIST="$PWD/apps/web/dist"
-cad show --host 127.0.0.1 --json [FILE ...]
+cad viewer --host 127.0.0.1 --json [FILE ...]
 ```
 
 The launcher reaches the running engine and its one page (where none runs it says so in one line,
@@ -384,7 +384,7 @@ bottom, centred on the window as the strip is, the bottom row its alone. DXF is 
 Display card the Background alone, and its Layers tab in the view's panel from the first frame.
 
 A project is a folder a person opened as one (Import's Folder on the home, a standalone
-document's Import its folder as a project, or `cad show <folder>`); its page on the home lists its
+document's Import its folder as a project, or `cad viewer <folder>`); its page on the home lists its
 folder's files, the CAD files and the rest together, the document just left ringed. Below 600px of
 FileViewer width (a phone) the chrome is touch-sized (the phone's scale) and the panel is a sheet under the navbar.
 Preview is the navbar's button right of Display: it takes the whole page,

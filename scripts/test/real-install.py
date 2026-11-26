@@ -18,7 +18,7 @@ named ``latest`` before it clones (there is none: it clones); that one request r
    by the install command's last step (``cad plugin update auto``); no server started by the install; each program holds our plugin (``text-to-cad@earthtojake``; Gemini CLI: the extension ``text-to-cad`` from
    GitHub at ``latest``) exactly once, copied from the local repository.
 2. cad: ``cad server start``; a box built by ``cad run`` and its page link answering with its token, refused without;
-   a file shown by ``cad show`` the same way; ``cad doctor`` exit 0.
+   a file shown by ``cad viewer`` the same way; ``cad doctor`` exit 0.
 3. again: the local repository moved on as a release moves it; the command again: cad found ("Updating cad"), nothing
    newer for it (a person's run asks it, ``cad update``) and no install, each app ``updated``, one copy each, the new
    commit's.
@@ -325,14 +325,14 @@ class Run:
         say("ok    cad server start; cad run box.py built the box; its page answers 200 with its token, 403 without")
         (models / "part.stl").write_text(STL, encoding="ascii")
         if not self.client:
-            say("note  cad show not run: these wheels carry no packaged client, which it refuses to start without")
+            say("note  cad viewer not run: these wheels carry no packaged client, which it refuses to start without")
             return self.doctor()
-        shown = self.cad("show", "part.stl", "--no-open", cwd=models).out
+        shown = self.cad("viewer", "part.stl", "--no-open", cwd=models).out
         link = re.search(r"(http://\S+\?token=\S+)", shown)
         if not link:
-            raise rc.Failed(f"cad show part.stl printed no link with a token:\n{shown}")
-        self.page(link[1], "cad show part.stl")
-        say("ok    cad show part.stl: its page answers 200 with its token, 403 without")
+            raise rc.Failed(f"cad viewer part.stl printed no link with a token:\n{shown}")
+        self.page(link[1], "cad viewer part.stl")
+        say("ok    cad viewer part.stl: its page answers 200 with its token, 403 without")
         self.doctor()
 
     def doctor(self) -> None:

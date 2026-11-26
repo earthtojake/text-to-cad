@@ -125,7 +125,7 @@ a child that cannot measure itself is never retired for memory.
 The meshing pool starts with the first page, view or inspection, never with a build. A build
 serves its document, so the daemon's server starts with the first `python model.py`; its meshing
 pool waits. Every process starts on the first mesh a page asks for, or on `Server.warm`: sent by
-`cad show` at launch (`CAD_VIEWER_WARM=0` skips it), called when an app launches a view the kernel
+`cad viewer` at launch (`CAD_VIEWER_WARM=0` skips it), called when an app launches a view the kernel
 reads (a model, an xbf, a STEP, a robot: never a mesh the page parses itself, a DXF or a KiCad file, whose
 view must not wait for, or fail on, a pool it never uses) and when a build's `view:` link lands -- there on a
 thread of its own, one at a time (`EngineApp._warm`), so the page is answered at once even where the pool's start

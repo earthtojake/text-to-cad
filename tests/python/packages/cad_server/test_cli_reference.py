@@ -44,7 +44,7 @@ class TheCopyIsTheCommand(unittest.TestCase):
         self.assertLessEqual(answered, listed)
         # No spelling the command had is listed, nor a deprecated integration.
         self.assertFalse({command for command in listed if command.split()[1] in
-                          ("viewer", "xbf", "step", "urdf", "kicad_pcb", "orcaslicer", "status", "stop", "serve")})
+                          ("xbf", "step", "urdf", "kicad_pcb", "orcaslicer", "status", "stop", "serve")})
         # What else is there is a command's subcommand, after it: `cad server start` follows `cad server`.
         for command in sorted(listed - answered):
             self.assertIn(command.rsplit(" ", 1)[0], listed, command)

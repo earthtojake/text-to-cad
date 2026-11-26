@@ -24,7 +24,7 @@ and edits through its IPC API. There is no board model or build step; the files 
 | Check a change | `cad kicad drc`, snapshots | [Check each change](#check-each-change) |
 | Review before ordering | DRC, then measurements, then the checklist | [Before ordering](#before-ordering) |
 | Export fabrication files, a BOM, or a STEP for an enclosure | `cad export board.kicad_pcb DIR --to KIND` | [Manufacturing](references/manufacturing.md) |
-| Show a board or a schematic; what the person can see or pick in it; a missing 3D model | `cad show --json FILE` | [Show the model](#show-the-model), [views](references/views.md) |
+| Show a board or a schematic; what the person can see or pick in it; a missing 3D model | `cad viewer --json FILE` | [Show the model](#show-the-model), [views](references/views.md) |
 
 ## Setup
 
@@ -184,8 +184,8 @@ unless the person says to go ahead, and the report then names every error they w
 
 Show the person each model you create or change as soon as its first run succeeds, and any model
 or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
-that `cad show --json FILE [FILE ...]` prints for it (never guess the port). Once per project,
-before the first page you show from it, run `cad show --json FOLDER` with the project's folder: it
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Once per project,
+before the first page you show from it, run `cad viewer --json FOLDER` with the project's folder: it
 opens that folder as a project, so the person reaches its other models and files from any one of
 them. Show a page with the first of these you have:
 

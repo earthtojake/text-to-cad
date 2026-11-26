@@ -126,7 +126,7 @@ cd .. && cad run board/check_fit.py && cd board   # against the CAD model
 ## See it
 
 ```bash
-cad show --json pinball.kicad_pcb pinball.kicad_sch     # prints each file's url
+cad viewer --json pinball.kicad_pcb pinball.kicad_sch     # prints each file's url
 cad snapshot pinball.kicad_pcb tmp/copper.png --display copper
 cad snapshot pinball.kicad_sch tmp/mcu.png --sheet /MCU/
 ```

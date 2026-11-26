@@ -44,7 +44,7 @@ cad run arm.py                              # builds it in the engine's warm wor
 cad export arm.xbf arm.3mf --tolerance 0.01 # a translation of the document it wrote: the format is the suffix's
 cad export arm.xbf arm.glb                  # one destination a command, as cp takes one
 cad snapshot arm.xbf arm.png                # a still of it, drawn by OCCT
-cad show arm.xbf                            # the document on the running server's page
+cad viewer arm.xbf                          # the document on the running server's page
 cad inspect arm.xbf                         # what it holds, then its build closure
 ```
 
@@ -101,7 +101,7 @@ its operations and what writes it.
 
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
-materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad show [FILE]`: a
+materials, references to geometry, snapshots drawn by OCCT; the viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path, a folder opened
 as a project); a file shared for anyone with its link to open and to download (`cad share`: its view bundle, the code
 and the files that made it, and a model's `.xbf`, uploaded to the share service; `cad import`: a share's files

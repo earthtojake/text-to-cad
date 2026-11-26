@@ -153,14 +153,14 @@ service's origin and that id), whose file is still where it was shared from, is 
 nothing, FOLDER included (said where one is given), and says where its files are, which is where to work on them:
 `arm was shared from this computer: it is <root>/XBF/arm.xbf, its files in <root>, its script <root>/arm.py. Nothing
 was downloaded; work there.`, or a file document's own file. `--json`: `local` (true), `name`, `file`, `root`,
-`entry` (a model's), `ignored` (the FOLDER given, or null) and `next` (`cad run <root>/<script>`, or `cad show
+`entry` (a model's), `ignored` (the FOLDER given, or null) and `next` (`cad run <root>/<script>`, or `cad viewer
 <file>`: these files are this computer's own). A share of another service, one expired, or one whose file moved or
 went is no such share: its link is downloaded as any other.
 
 ## A share's link names this computer's copy
 
 Wherever cad takes a document -- the source of every `cad <type> <operation>` (`snapshot`, `inspect`, `export`, a
-check), a Quick Edit packet's `input` (and a job's), a ref's FILE, `cad show`'s FILEs and `cad share`'s -- a share's
+check), a Quick Edit packet's `input` (and a job's), a ref's FILE, `cad viewer`'s FILEs and `cad share`'s -- a share's
 view link, `<origin>/<id>` of the service `CAD_SHARE_URL` names or of `https://cad.fun`, names this computer's copy of
 the share, so that a shared page's prompt reads here as a local page's does:
 

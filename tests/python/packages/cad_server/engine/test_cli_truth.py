@@ -215,7 +215,7 @@ class MeshTest(unittest.TestCase):
         self.assertEqual(refused.returncode, 2)
         self.assertEqual(refused.stderr, "python -m cad_server.engine inspect: rotor.stl is a mesh: it has no B-rep for a "
                                          "ref to name and no build closure (only an .xbf carries one); inspect reads "
-                                         "nothing more of it: `cad show rotor.stl` shows it, and the document it "
+                                         "nothing more of it: `cad viewer rotor.stl` shows it, and the document it "
                                          "was exported from, inspected, tells the rest\n")
         self.assertIn("`cad inspect rotor.glb` alone tells its nodes, meshes and animations",
                       inspect("rotor.glb", "rotor").stderr)
