@@ -404,6 +404,8 @@ both as data; `--query structure`, the same with nothing measured: no bounds, vo
 For an XBF file, the summary and structure include that same saved closure.
 With a reference it returns geometry facts. No form meshes a part, and a part's volume and box
 are measured once and kept by its geometry, in memory alone.
+An inspection of a changed STEP waits for the new file to be read. If it changes between
+reading the structure and measuring it, inspect it again.
 `query="build"` (`--query build`) returns saved-file metadata and closure or live
 build metadata. File metadata does not imply a live worker.
 
