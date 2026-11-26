@@ -1,6 +1,6 @@
-"""``cad step solve``, ``cad model solve`` and ``cad model solve`` are the library's operation, run where its integrations
-are: in the command's own process when its environment holds the kernel, netgen and ccx, else by the library's runner
-of one operation (``cad._internal.operation``) in the environment of ``cad[build123d,calculix,netgen]`` the engine
+"""``cad fea FILE`` is the library's operation, a STEP's or an xbf's ``solve``, run where its integrations are: in the
+command's own process when its environment holds the kernel, netgen and ccx, else by the library's runner of one
+operation (``cad._internal.operation``) in the environment of ``cad[build123d,calculix,netgen]`` the engine
 makes. Here this Python
 stands in for that environment, so the runner's real subprocess runs the study, and what comes back is the result
 the operation returned, as its own type; a study's options are refused before any environment is made."""
@@ -22,7 +22,7 @@ from tests.python.support.paths import SOURCE_PATH
 
 from cad.results import FeaResult  # noqa: E402
 from cad_server._internal import integration_env  # noqa: E402
-from cad_server.cli import step  # noqa: E402
+from cad_server.cli import fea  # noqa: E402
 
 
 @contextlib.contextmanager
@@ -45,7 +45,7 @@ class SolveElsewhereTest(unittest.TestCase):
         out = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp, elsewhere(made), contextlib.redirect_stdout(out), \
                 contextlib.redirect_stderr(io.StringIO()):
-            code = step.main(["solve", str(_write_assembly(Path(tmp))), "--json"])
+            code = fea.main([str(_write_assembly(Path(tmp))), "--json"])
         self.assertEqual(code, 0, out.getvalue())
         # The calculix integration's environment, which holds the kernel and netgen beside it (the registry's
         # ``alongside``).
@@ -68,7 +68,7 @@ class SolveElsewhereTest(unittest.TestCase):
                     contextlib.redirect_stderr(io.StringIO()) as err, contextlib.redirect_stdout(io.StringIO()):
                 part = _write_assembly(Path(tmp))
                 argv = [str(part) if value == "PART" else value for value in argv]
-                self.assertEqual(step.main(["solve", str(part), *argv]), 2)
+                self.assertEqual(fea.main([str(part), *argv]), 2)
                 self.assertIn(said, err.getvalue())
         self.assertEqual(made, [])
 
