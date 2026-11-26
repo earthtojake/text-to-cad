@@ -1330,7 +1330,7 @@ def notice(now: float | None = None) -> str | None:
         said = kept.get("said")
         if now - since < BEHIND_SECONDS or (_time(said) and 0 <= now - said < DAY):
             return None
-        line = _behind(version, target, now)
+        line = behind_line(version, target, now)
         _keep(path, {**kept, "behind": target, "said": now})
         return line
     except Exception:  # noqa: BLE001 - the line never fails the command it follows, and one not kept is not said
@@ -1372,7 +1372,7 @@ def _lag(now: float) -> tuple[str, str | None, dict[str, Any]] | None:
     return version, chosen.target if chosen is not None else None, kept if isinstance(kept, dict) else {}
 
 
-def _behind(version: str, target: str, now: float) -> str:
+def behind_line(version: str, target: str, now: float) -> str:
     """``notice``'s line for this cad, release ``version``, behind ``target``."""
     found = global_install()
     installer = found.installer if found is not None else None

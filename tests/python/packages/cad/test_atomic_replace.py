@@ -309,8 +309,12 @@ class WriteBytesAtomicTest(unittest.TestCase):
             )
 
 
-# The one module allowed a bare ``os.replace``, by its path from the repository's root, and why.
+# The modules allowed a bare ``os.replace``, by their path from the repository's root, and why.
 EXEMPT = {
+    # The go-between of a start outside a Windows app package: run by its file, isolated, it imports the standard
+    # library alone, so not the helper. Its one rename moves its own answer under a name nobody holds before it is
+    # there, and it waits out a scanner's moment itself.
+    "packages/cad/src/cad/engine/handoff.py",
     # cad's update worker: its rename writes no file. It moves a running cad.exe aside, under a name of its own, before
     # uv runs, and puts it back where uv left none. A rename that fails is skipped on purpose: uv then meets the file,
     # and the worker's repair follows.

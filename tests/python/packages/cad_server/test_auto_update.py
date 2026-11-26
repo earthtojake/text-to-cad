@@ -537,7 +537,7 @@ class PipxTest(Case):
             self.assertEqual(auto_update.button(), {"version": "0.1.0", "latest": "0.2.0", "state": "idle"})
             self.assertEqual(auto_update.asked(pypi=lambda: {"latest": "0.2.0"}),
                              {"ok": True, "updating": "0.2.0", "from": "0.1.0"})
-            self.assertEqual(auto_update._behind("0.1.0", "0.2.0", time.time()),
+            self.assertEqual(auto_update.behind_line("0.1.0", "0.2.0", time.time()),
                              "cad: cad 0.2.0 is out and this is 0.1.0: `cad update` updates it")
         self.assertIsNone(auto_update.blocked(found))
         told = json.loads(auto_update.helper_command("0.2.0", now=5.0, version="0.1.0", record="r", install=found)[-1])

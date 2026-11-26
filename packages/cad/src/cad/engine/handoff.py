@@ -94,7 +94,16 @@ def answer(path: str, value: dict[str, Any]) -> None:
     part = f"{path}.part"
     with open(os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as handle:
         json.dump(value, handle)
-    os.replace(part, path)
+    # A scanner reading the file just written refuses its rename for a moment, as cad's rename helper waits out (this
+    # module imports the standard library alone); the answer's own name is held by nobody before it is there.
+    for wait in (0.05, 0.1, 0.2, 0.4, 0.8, None):
+        try:
+            os.replace(part, path)
+            return
+        except PermissionError:
+            if wait is None:
+                raise
+            time.sleep(wait)
 
 
 if __name__ == "__main__":

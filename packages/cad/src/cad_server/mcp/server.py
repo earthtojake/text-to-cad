@@ -257,7 +257,7 @@ def attention(now: float | None = None) -> list[str]:
             if not auto.switches()["on"]:
                 lines.append(UPDATES_OFF.format(target=chosen.target, version=__version__))
             elif failed or auto.blocked(install) is not None or auto.notice(now) or auto.stayed_behind(now):
-                lines.append(auto._behind(__version__, chosen.target, now).removeprefix("cad: "))
+                lines.append(auto.behind_line(__version__, chosen.target, now).removeprefix("cad: "))
     except Exception:  # noqa: BLE001 - a line never fails the session it rides on
         LOG.debug("could not tell whether cad is behind", exc_info=True)
     return lines + [notices.said(notice) for notice in notices.applying()]
