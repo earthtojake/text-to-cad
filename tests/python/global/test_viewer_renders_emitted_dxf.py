@@ -1,7 +1,7 @@
 """What the DXF engine writes is what the Viewer and the CLI can draw.
 
 Two halves of one product: the engine's DXF export (``cad.engine.export.dxf``)
-writes drawings through build123d's ``ExportDXF``, and ``cad_server.drawing_payload`` is
+writes drawings through build123d's ``ExportDXF``, and ``cad.engine.drawing_payload`` is
 what the Viewer's DXF pane gets them back through (`GET /api/v1/documents/dxf/<id>/drawing`). An entity
 the engine emits and the payload does not carry simply vanishes from the picture: a
 hole that is cut but not shown, which is the worst kind of silence in a cut file.
@@ -62,7 +62,7 @@ def _emitted_entity_types() -> collections.Counter:
 
 
 def _payload_for_emitted_drawing() -> dict:
-    from cad_server.drawing_payload import build_drawing_payload
+    from cad.engine.drawing_payload import build_drawing_payload
 
     document = _emitted_document()
     # A fresh temp directory of its own: the payload is read from a FILE, which

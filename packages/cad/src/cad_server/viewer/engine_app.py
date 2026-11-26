@@ -276,6 +276,7 @@ class EngineApp:
         for app in apps:
             if app._exports is not None:
                 app._exports.close()
+            app.drawings.close()
         if self._mcp is not None:
             self._mcp.close()
         self.analytics.close()

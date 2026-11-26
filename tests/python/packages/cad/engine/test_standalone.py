@@ -28,8 +28,8 @@ OURS = {"cad", "cadgen", "cad_server", "cad_mcp"}
 # so no module drives a browser.
 LIBRARIES = {"OCP", "build123d", "bd_materials", "threejs_materials", "numpy", "PIL"}
 # By module, what one imports beyond those: ezdxf, build123d's own DXF library, which the DXF
-# export writes and checks a drawing with.
-BESIDES = {"export/dxf.py": {"ezdxf"}}
+# export writes and checks a drawing with, and the drawing process flattens the viewer's DXF pane with.
+BESIDES = {"export/dxf.py": {"ezdxf"}, "drawing_payload.py": {"ezdxf"}}
 
 
 def library_files() -> list[Path]:
