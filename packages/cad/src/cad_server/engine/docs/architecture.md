@@ -147,7 +147,7 @@ whatever is in flight, where the version feed as last read names a newer release
 release and stops there (`ready`, nothing switched, nothing restarted); the switch follows, where the feed still calls
 for that release, as the server next starts (the start is the switch, begun before it serves anything, and stands
 aside for it: `daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`), or at
-once on `cad update` or the viewer's button. Only the switch's drain minds what is in flight, ten minutes at most. Meanwhile a command that finds no server
+once on `cad update` or the viewer's button. Only the switch's drain minds what is in flight, five seconds at most. Meanwhile a command that finds no server
 waits for the next (`client.SWITCHING`), and a server of the release being left starts none in its place
 (`daemon.main`, `auto_update.leaving`); a `cad server start` that fails asks for the update before it gives up; a
 start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With `cad plugin

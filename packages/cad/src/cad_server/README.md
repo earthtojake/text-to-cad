@@ -275,7 +275,7 @@ cad_server._internal.auto_update_helper` by the environment's interpreter, so it
    major; the same release is `current`); named (`store.publish`). Nothing that runs is touched: uv stopped at
    its 15 minutes leaves no release. An attempt that only gets its release ready ends here, `ready`.
 2. **Switch** (`switching`, kept first). The pointer read, for the way back. A server that answers is drained:
-   asked to stop once nothing is in flight, and waited for ten minutes at most (`client.drain`), after which
+   asked to stop once nothing is in flight, and waited for five seconds at most (`client.drain`), after which
    the next start replaces it. The pointer written (`store.point`), then `cad server start` where a server ran
    or one is wanted, which must leave a server of the release, else `cad --version`, which must name it. A `cad`
    command that finds no server meanwhile, or an older one, waits for the next (`client.SWITCHING`, 30 s), and a

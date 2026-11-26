@@ -69,8 +69,10 @@ WINDOWS = os.name == "nt"
 NO_WINDOW = 0x08000000 if WINDOWS else 0  # CREATE_NO_WINDOW: no console flashes for uv or cad
 # How often the worker marks its attempt as still underway (``Beat``): well inside ``auto_update.LOST_SECONDS``.
 BEAT_SECONDS = 60
-# How long a server is given to end what is in flight before the switch goes on without it.
-DRAIN_SECONDS = 600.0
+# How long a server is given to end what is in flight before the switch goes on without it: a moment, so a command
+# about to end ends, and a restart asked for stops the rest of the work (cut short, its command says cad updated
+# itself while it ran).
+DRAIN_SECONDS = 5.0
 # How long ``cad server start`` and ``cad --version`` may take, and a question to the server.
 RUN_SECONDS, ASK_SECONDS = 120.0, 30.0
 

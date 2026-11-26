@@ -197,8 +197,8 @@ RUN_NAMES = ("CAD_INSTALL_ATTEMPT", "CAD_PLUGIN_SERVER_RUN")
 # Set to ``1`` for ``cad plugin update auto on`` where the plugin's step did not end with every app it found gone well
 # (``switch_on``): cad then turns the switch on and takes nothing as up to date. Never the caller's.
 FAILED_ENV = "CAD_INSTALL_FAILED"
-# How long ``cad update`` may take: a minute past the ten minutes cad's update gives a busy server before it switches;
-# past it, the update goes on by itself.
+# How long ``cad update`` may take: the release built and checked, then the switch (seconds from a warm cache, a
+# download's time from a cold one); past it, the update goes on by itself.
 UPDATE_SECONDS = 11 * 60
 # What ``cad plugin install`` reads: who began its run, and the file where it says what it did.
 PLUGIN_BY_ENV = "CAD_PLUGIN_BY"
