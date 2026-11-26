@@ -231,7 +231,11 @@ them. Show a page with the first of these you have:
 2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
    Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
    open the page there yourself, and give the person the link as well.
-3. Neither: give the person the link, to open in their browser.
+3. Neither, and the person is at this computer: give them the link, to open in their browser.
+4. They are not (you run in a cloud sandbox, or they are on a phone): share it, `cad share FILE` (a
+   model's `.xbf`), and give them the view link it prints; share it again after each change. The first
+   share on a computer is refused until the person agrees: pass on what it says, and run it again with
+   `--yes` once they have.
 
 The page follows every run of the model. A file you export is a download: give its path. Showing is
 for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
