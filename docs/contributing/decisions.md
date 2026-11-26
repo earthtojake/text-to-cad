@@ -118,9 +118,11 @@ cad` keeps no range, so a person's own `uv tool upgrade cad` takes the newest of
 included. A computer that 0.11.12 to 0.11.17 updated keeps the range their update wrote there
 (`cad>=X,<1`), which cad never rewrites: once `cad update --major` has taken it past that range, uv's
 own upgrade would put an older cad over the newer one, so `cad update` and `cad doctor` say so
-there, with the command that clears it (`uv tool install --force cad`). A second copy of cad's
-packages is on disk (linked from uv's cache
-where the file system links), and a third for a while after an update. `uv tool uninstall cad` leaves
+there, with the command that clears it (`uv tool install --force cad`). Besides what uv
+installed, the store keeps the release that runs and the one before it (the way back), each linked from
+uv's cache where the file system links, and a release waiting for its restart; every tidying of the store
+(each update's end, each server start, `cad cache prune`) removes the rest, and a release a process still
+runs once nothing does. `uv tool uninstall cad` leaves
 the store in the state folder ([Removing](../install.md#removing)). A release needs the installed
 cad's Python: one that asks for a newer Python waits until the person installs cad again.
 
