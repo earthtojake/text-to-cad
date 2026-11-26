@@ -338,9 +338,12 @@ last drawn — shortened: a mark's points to a quarter of a pixel of the view it
 two decimals finer, a stroke within half a pixel of its line (Douglas–Peucker), a mark without its id or a default,
 an area its outline alone, and what a mark touches and the parts a view hides by their selectors within the file. `input` is the file's
 address as `File:` names it, so the same views and ink on a local and a shared page make packets that differ
-in it alone. `snapshotPacketText` is the packet as a message carries it, inline and whole: compact JSON with
-no character a single-quoted argument ends at (an apostrophe is written `\u0027`, and PowerShell's typographic
-quotes, U+2018 to U+201B, their escapes too), so `--job '<packet>'` pastes as one argument in bash and PowerShell alike.
+in it alone. `snapshotPacketText` is the packet as a message carries it, inline and whole: compact JSON in ASCII
+alone, with no character a single-quoted argument ends at (an apostrophe is written `\u0027`, and every character
+that is not ASCII its escape too, PowerShell's typographic quotes, U+2018 to U+201B, among them), so `--job
+'<packet>'` pastes as one argument in bash and PowerShell alike, and `'<packet>' | cad <type> snapshot --job -`
+carries it whole where Windows PowerShell 5.1, which takes the double quotes out of a program's arguments, pipes
+ASCII by default.
 
 Native KiCad board plots use the read-only payload contract in [plot-payload](docs/plot-payload.md).
 `lib/plot2d` draws its layers; `lib/board2d` handles picking and nets; `lib/board3d` stands the

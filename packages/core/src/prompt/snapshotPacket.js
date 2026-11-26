@@ -226,15 +226,18 @@ function drawnIn(annotation, views) {
   return found;
 }
 
-// What a single-quoted argument ends at, in bash (`'`) and in PowerShell (`'`, and its typographic quotes, U+2018 to
-// U+201B): each is written as its JSON escape, which only a string can hold.
-const QUOTES = /['\u2018-\u201b]/g;
+// What a packet's text writes as its JSON escape, which only a string can hold: what a single-quoted argument ends at,
+// in bash (`'`) and in PowerShell (`'`, and its typographic quotes, U+2018 to U+201B), and every other character
+// that is not ASCII, which Windows PowerShell 5.1 pipes to a program as ASCII by default (`'<packet>' | cad <type>
+// snapshot --job -`, where its quotes are taken from an argument): a code unit at a time, a surrogate pair as two.
+const ESCAPED = /['\u0080-\uffff]/g;
 
 /**
- * A packet as a message carries it: compact JSON, no space, with no character a single-quoted argument ends at,
- * so `cad <type> snapshot --job '<packet>'` takes it as it is pasted, in bash and PowerShell alike.
+ * A packet as a message carries it: compact JSON, no space, in ASCII alone, with no character a single-quoted
+ * argument ends at, so `cad <type> snapshot --job '<packet>'` takes it as it is pasted, in bash and PowerShell
+ * alike, and a pipe that speaks ASCII alone carries it whole.
  * @param {object} packet
  */
 export function snapshotPacketText(packet) {
-  return JSON.stringify(packet).replace(QUOTES, quote => `\\u${quote.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  return JSON.stringify(packet).replace(ESCAPED, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }

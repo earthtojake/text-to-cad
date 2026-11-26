@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -140,9 +141,40 @@ _LINKED = ("; or a share's link (https://cad.fun/<id>): this computer's copy of 
            "in the folder cad fork wrote it into")
 
 
+# A key as JSON with its double quotes taken out spells one: bare, after an object's opening or a comma.
+_BARE_KEY = re.compile(r"[{,]\s*[A-Za-z_][A-Za-z0-9_]*\s*:")
+
+
+def _unquoted(prog: str) -> Callable[[list[str]], None]:
+    """The screen of a snapshot's words (``cli_parser``'s ``screens``): a packet given to ``--job`` or
+    ``--annotation`` as JSON whose double quotes a shell took out -- Windows PowerShell 5.1 takes them out of
+    every argument it passes a program, so ``--job '<packet>'`` arrives as ``{input:...}``, cut at its spaces --
+    refused in one line saying so, and to pipe it in instead (``-``: standard input, which no shell rewrites so)."""
+
+    def screen(tokens: list[str]) -> None:
+        for at, token in enumerate(tokens):
+            flag, equals, value = token.partition("=")
+            if flag not in ("--job", "--annotation"):
+                continue
+            text = (value if equals else tokens[at + 1] if at + 1 < len(tokens) else "").strip()
+            if not text.startswith(("{", "[")) or '"' in text or not _BARE_KEY.search(text):
+                continue
+            try:
+                json.loads(text)
+            except ValueError:
+                rest = "" if flag == "--job" else " SRC OUT.png"
+                raise Failure(f"{flag} got JSON with its double quotes taken out: Windows PowerShell 5.1 removes them "
+                              f"from a program's arguments. Pipe the packet in instead: '<packet>' | {prog}{rest} "
+                              f"{flag} -", "invalid_argument") from None
+
+    return screen
+
+
 def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> argparse.ArgumentParser:
     from cad.engine import snapshot
 
+    if hasattr(parser, "screens"):
+        parser.screens.append(_unquoted(parser.prog))
     parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [--out DIR] [options]"
     parser.add_argument("document", metavar="SRC", nargs="?", help=_source_help(
         document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .srdf), "

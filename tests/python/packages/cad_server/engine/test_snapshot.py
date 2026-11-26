@@ -617,6 +617,34 @@ class SnapshotTest(unittest.TestCase):
                 self.assertEqual(found["reason"], reason)
                 self.assertIn(said, found["error"])
         self.assertEqual(stale.read_bytes(), b"an earlier run's")
+        # Windows PowerShell 5.1 takes the double quotes out of every argument it passes a program, and cuts the rest at
+        # its spaces: such a packet is refused in one line, before anything is read, saying to pipe it in instead. Piped,
+        # the page's packet is ASCII alone (every other character its \u escape, as Windows PowerShell 5.1 pipes ASCII by
+        # default), and reads whole.
+        for argv in (["--job", "{input:a.xbf,jobs:[{camera:iso,outputs:[{label:view", "1}]}]}"],
+                     [str(self.document), str(folder / "out.png"), "--annotation={units:mm,marks:[]}"]):
+            with self.subTest(argv=argv):
+                printed = io.StringIO()
+                with contextlib.redirect_stdout(printed), self.assertRaises(SystemExit) as exited:
+                    cli.main(["snapshot", *argv, "--json"])
+                found = json.loads(printed.getvalue())
+                flag = "--job" if argv[0] == "--job" else "--annotation"
+                self.assertEqual((exited.exception.code, found["reason"]), (2, "invalid_argument"))
+                self.assertEqual(found["error"], f"{flag} got JSON with its double quotes taken out: Windows PowerShell "
+                                                 "5.1 removes them from a program's arguments. Pipe the packet in instead: "
+                                                 "'<packet>' | python -m cad_server.engine snapshot"
+                                                 f"{'' if flag == '--job' else ' SRC OUT.png'} {flag} -")
+        done = subprocess.run([sys.executable, "-m", "cad_server.cli", "model", "snapshot", "--job", "{input:x}"],
+                              env={**os.environ, "PYTHONPATH": str(SRC)}, capture_output=True, text=True, timeout=120)
+        self.assertEqual((done.returncode, done.stdout, len(done.stderr.splitlines())), (2, "", 1), done.stderr)
+        self.assertIn("Pipe the packet in instead: '<packet>' | cad model snapshot --job -", done.stderr)
+        named = {**packet, "jobs": [{**packet["jobs"][0], "outputs": [{"label": "vue \u00e9 \u4e2d", "colour": 1}]}]}
+        text = json.dumps(named, separators=(",", ":"))  # ensure_ascii: as the page writes it
+        self.assertEqual(text.encode("ascii").decode("ascii"), text)
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed), mock.patch("sys.stdin", io.StringIO(text)):
+            self.assertEqual(cli.main(["snapshot", "--job", "-", "--json"]), 2)
+        self.assertIn("has no colour", json.loads(printed.getvalue())["error"])
 
     def test_a_packet_as_a_message_carries_it_is_read_and_its_unnamed_outputs_named(self) -> None:
         """A packet as a Quick Edit's message carries it: its outputs name no path, each written into the folder given

@@ -151,6 +151,13 @@ of the file's warm render process; `daemon=False` serves each file once for all 
 Each picture's line says the file it wrote; `--json` prints `{"ok": true, "pictures": [what each drew,
 its `output` the file]}`.
 
+Windows PowerShell 5.1 takes the double quotes out of every argument it passes a program (and cuts what is
+left at its spaces), so `--job '<packet>'` arrives there as `{input:...}`: a `--job` or `--annotation` given JSON
+with its quotes taken out is refused before anything is read (`invalid_argument`, exit 2), in one line saying so
+and to pipe it in instead, `'<packet>' | cad <type> snapshot --job -` (the parser's screen, `engine/cli.py`
+`_unquoted`). The page writes a packet in ASCII alone, every other character its `\u` escape, since a pipe there
+is ASCII by default.
+
 **Native KiCad stills.** A `.kicad_pcb` is a file source, with no XCAF document or model worker.
 `formats/kicad/plot.py` builds the plot payload from the board and its sibling project, its pours KiCad's
 refill of a copy (`formats/kicad/poured.py`: the server's `_internal/boards.refill`, kicode in the

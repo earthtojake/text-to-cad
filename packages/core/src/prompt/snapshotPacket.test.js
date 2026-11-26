@@ -160,9 +160,9 @@ test("a stroke goes within half a pixel of its view, each point it keeps with it
   assert.deepEqual([straight.points, straight.widths], [[0, 0, 0, 460, 0, 0], [1, 1]]);
 });
 
-test("the same views and ink give the same packet whatever the file's address, and its text carries no quote a shell's single quotes end at", () => {
+test("the same views and ink give the same packet whatever the file's address, and its text is ASCII with no quote a shell's single quotes end at", () => {
   const annotation = { units: 'mm', marks: [
-    { id: 'ink-t', kind: 'text', points: [0, 0, 0, 5, 0, 0, 5, 2, 0, 0, 2, 0], color: '#000000', text: "Jake's lid isn't \u2018right\u2019", fontPx: 14, view: 'view 1' },
+    { id: 'ink-t', kind: 'text', points: [0, 0, 0, 5, 0, 0, 5, 2, 0, 0, 2, 0], color: '#000000', text: "Jake's lid isn't \u2018right\u2019, é 中 😀", fontPx: 14, view: 'view 1' },
     stroke({ touches: [{ part: 'i3', ref: `98427829-14ec-563f-a02d-9372a85cecef#"Jake's bracket"/f:base.make_box1.6` }] }),
   ] };
   const views = [view('view 1', { display: { mode: 'solid', grid: false, hidden: ["98427829-14ec-563f-a02d-9372a85cecef#\"O'Brien's arm\""] } })];
@@ -171,9 +171,12 @@ test("the same views and ink give the same packet whatever the file's address, a
   assert.deepEqual({ ...local, input: shared.input }, shared);
   const text = snapshotPacketText(local);
   assert.equal(/['\u2018-\u201b]/.test(text), false);
-  assert.ok(text.includes('Jake\\u0027s lid isn\\u0027t \\u2018right\\u2019'));
+  // Every character not ASCII is its escape, a surrogate pair two of them: a pipe that speaks ASCII alone (Windows
+  // PowerShell 5.1's, by default) carries it whole.
+  assert.equal(/[^\x00-\x7f]/.test(text), false);
+  assert.ok(text.includes('Jake\\u0027s lid isn\\u0027t \\u2018right\\u2019, \\u00e9 \\u4e2d \\ud83d\\ude00'), text);
   // Compact, and the same values when read back.
-  assert.equal(text, JSON.stringify(local).replace(/['\u2018-\u201b]/g, quote => `\\u${quote.charCodeAt(0).toString(16).padStart(4, '0')}`));
+  assert.equal(text, JSON.stringify(local).replace(/['\u0080-\uffff]/g, quote => `\\u${quote.charCodeAt(0).toString(16).padStart(4, '0')}`));
   assert.equal(text.includes(' "') || text.includes('": '), false);
   assert.deepEqual(JSON.parse(text), local);
   assert.deepEqual([JSON.parse(text).annotation.marks[1].touches, JSON.parse(text).hidden], [[`"Jake's bracket"/f:base.make_box1.6`], [`"O'Brien's arm"`]]);
