@@ -143,7 +143,7 @@ def _given(function: Callable[..., Any], options: dict[str, Any], said: str) -> 
 
 def operation(document_type: str, name: str) -> Callable[..., Any]:
     """The function that does operation ``name`` for a source of ``document_type``, its signature and words that
-    type's (what ``cad <type> <operation>`` and the verbs' command lines are made from), a source of another type
+    type's (what the verbs' command lines are made from), a source of another type
     refused by name before anything runs. Made once a pair; it says nothing of being deprecated (``per_type``
     does)."""
     key = (document_type, name)

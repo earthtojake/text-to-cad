@@ -102,6 +102,8 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual(("check", "drc", "erc", "presets", "complete"), registry.INTEGRATION_OPERATIONS)
         self.assertEqual(("check", "drc", "erc"), registry.FILE_OPERATIONS)
         self.assertFalse(set(registry.INTEGRATIONS) & set(registry.DOCUMENT_TYPES))
+        self.assertFalse(set(registry.VERBS) & (set(registry.INTEGRATIONS) | set(registry.DOCUMENT_TYPES)),
+                         "a name is a type's, an integration's or a verb's, never two (law 26)")
         for found in registry.INTEGRATIONS.values():
             self.assertEqual(bool(set(found.operation_names) & set(registry.FILE_OPERATIONS)), bool(found.files))
             if found.name != "kicad":  # KiCad's checks are of document types' files, by its own name

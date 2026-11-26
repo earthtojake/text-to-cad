@@ -46,8 +46,8 @@ guide records what the types so far needed, and is no template for the next.
       the one manufacturing check every 3D type shares), answering `cad.results.CheckResult` (findings
       with a severity, a code and a location). A tool's own check of its files (KiCad's `drc` and
       `erc`) is its integration's operation instead (`cad kicad drc`). A new operation name is a change
-      to the closed set; a new shared one must be code-free, frequently needed and meaningful across
-      types (law 26).
+      to the closed set; a new verb must be code-free, frequently needed and meaningful across types
+      (law 26).
 - [ ] **Its command line.** Each operation's runner is made in `cad_server/cli/document_types.py`
       (`OPERATIONS`): a check's options are generated from its function's signature, and one that needs
       a parser of its own gets one there. Pin the verbs' commands of the type in

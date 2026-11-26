@@ -65,7 +65,7 @@ These words mean one thing each, in the code, the commands and every document.
   and `.stp` are `step`). `xbf` is a model built from code, and its document is its `.xbf` (`.xbf` is `xbf`),
   which every run writes (law 10) and whose id is the model's, addressed by the file's path or the handle its
   call returns; the engine's live build makes it live while a worker holds it. `xbf.read` reads one. `model`, the earlier id of that
-  document, is an alias of `xbf` wherever a type is looked up, deprecated and listed nowhere (law 26). A
+  document, is an alias of `xbf` wherever a type is looked up, deprecated and listed nowhere (law 14). A
   document type is a file cad shows: each has a view. A file cad writes or checks and never
   shows is none, whatever cad does with it: an MJCF, MuJoCo's own model file, is an export's destination and
   the mujoco integration's to check, and MuJoCo Studio shows it.
@@ -74,12 +74,13 @@ These words mean one thing each, in the code, the commands and every document.
   `kicad`, `trimesh`, `mujoco`, `coacd`, `netgen`, `calculix`, `blender`), never for a capability. It is
   three things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
   helpers that take its objects, producers and operations; and a process kind: in-process, separate process,
-  or both. An integration has an operation of its own only on a file of its tool's that is no document type:
-  `check`, answering findings as a type's check does (`cad mujoco check robot.xml`, `cad.mujoco.check`).
-  The `orcaslicer` integration (`cad.orcaslicer`) is deprecated: it completed the presets OrcaSlicer
-  stores, from its own folders, for its command line, and cannot from OrcaSlicer 2.5 on, which keeps the
-  built-in ones in binary caches; a project saved from the app slices as it is (law 28). Its command,
-  `cad orcaslicer`, runs nothing: it answers in one line with that (law 14's first tier).
+  or both. An integration's operations are its tool's own checks of its files -- KiCad's `drc` of a board and
+  `erc` of a schematic, `check` of a MuJoCo model's file, which is no document type -- each answering findings
+  as a type's check does (`cad kicad drc board.kicad_pcb`, `cad.kicad.drc`). The `orcaslicer` integration
+  (`cad.orcaslicer`) is deprecated: it completed the presets OrcaSlicer stores, from its own folders, for its
+  command line, and cannot from OrcaSlicer 2.5 on, which keeps the built-in ones in binary caches; a project
+  saved from the app slices as it is (law 28). Its command, `cad orcaslicer`, runs nothing: it answers in one
+  line with that (law 14's first tier).
 - **Dependency**: one installable package or binary, named only in the distribution's metadata and lock
   files, never in the API, the CLI or the docs. It becomes an integration only when we write code for that
   tool: OCP is a dependency of `build123d`, not an integration.
@@ -88,13 +89,12 @@ These words mean one thing each, in the code, the commands and every document.
 - **Edit**: code that changes a native file of a type in place, in the caller's process, rather than
   making it: `kicad_pcb.edit` and `kicad_sch.edit`, a `with` block over the open document. An edit is no
   producer and no operation.
-- **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
-  `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
-  (a 3D type's manufacturing check), `interference` (a B-rep type's check that no two parts share volume),
-  `solve` (a B-rep type's stress study), `ranges` (a mechanism's joint stops,
-  found from its geometry), `drc` (a board's design rule check), `erc` (a schematic's electrical
-  rules check), `validate` (a robot description's conformance check). Each type implements those that make
-  sense for it.
+- **Operation**: one of a closed set: what a document type does for a verb. The verbs are `export`, `inspect`,
+  `snapshot`, `dfm` and `fea`, the same in the library (`cad.export`) and the command (`cad export`), each
+  running the operation its source's type has for it (`cad.registry.VERBS`): `inspect` is a robot
+  description's `validate` too, and with `interference` or `ranges` a B-rep's interference check or a
+  mechanism's joint stops; `fea` is a B-rep's `solve`. Each type implements those that make sense for it. A
+  tool's own check of its files is its integration's operation, not a type's (`drc`, `erc`, `check`).
 
 `python -m cad.registry <type>` prints a type's help, worked out from the registry: the content it carries,
 its operations and what writes it.
@@ -311,12 +311,12 @@ renumbers the list and every citation in the same change.
     clients closing never stop it; kernel work runs in child processes, never in its request threads;
     there are no page sessions. An id is found from its path alone: the library's, or a project folder's
     (the engine's **Architecture** and **Starting and updating**).
-20. **Operations on documents are Python functions the CLI exposes; process control is the CLI's
-    alone.** *Every document.* A type's operations are functions of that type (`cad.export`,
-    `cad.kicad.drc`, `cad.inspect`), one to one with the commands that call them (`cad export`, `cad
-    kicad drc`, `cad inspect`). Serving, the engine's status and stopping it
-    are commands only, with no function of the library. Every successful
-    server-backed build reports its id and its page.
+20. **Operations on documents are the verbs the CLI exposes; process control is the CLI's alone.**
+    *Every document.* What is done to a document is a verb, one function of the library's root
+    (`cad.export`, `cad.inspect`, `cad.snapshot`, `cad.dfm`, `cad.fea`; a tool's check, its integration's:
+    `cad.kicad.drc`), one to one with the command that calls it (`cad export`, `cad kicad drc`). Serving, the
+    engine's status and stopping it are commands only, with no function of the library. Every successful
+    server-backed build reports its page.
 21. **Push, not pull: a model is what its last run told the engine.** *Models.* The engine's knowledge
     of a model comes from a run an agent or a person starts, which pushes the model's code, key and
     document to it. The engine never reads a script to learn what a model is, never watches one, never
@@ -341,10 +341,11 @@ renumbers the list and every citation in the same change.
     it, and the server's, the viewer's and the JavaScript's lists of formats are read or generated from
     it (`python -m cad.registry --js`), never kept by hand.
 23. **A document type is one object.** *The package.* `cad.<type>` holds the type's decorator where it
-    has one, its reader where it has one, and its operations one to one with the CLI's. Its attributes
-    load on first use, so `import cad` imports no kernel. A file of another type is refused by name
-    before anything runs; `cad.xbf`'s file is the `.xbf` a model is saved as (law 26). A
-    type's package is neutral about producers: it imports no third-party library.
+    has one, its reader and its edit where it has them, and what the verbs run of it; a type's operation
+    under its own name (`cad.<type>.<operation>`) is the verb's earlier spelling (law 14). Its attributes
+    load on first use, so `import cad` imports no kernel. A file of another type is refused by name before
+    anything runs; `cad.xbf`'s file is the `.xbf` a model is saved as (law 26). A type's package is neutral
+    about producers: it imports no third-party library.
 24. **An integration is named for its tool and holds only our code for it.** *The package.*
     `cad.<integration>` holds the helpers we define that take that tool's objects and the producers it
     registers; it re-exports nothing of the tool and imports only its own extra's dependencies. cad
@@ -357,22 +358,17 @@ renumbers the list and every citation in the same change.
     makes the file of the returned value. A matcher reads the value's type names and modules, never
     importing a library to ask. Exactly one producer per return type per document type; a return none
     takes fails loudly, naming what the document is made of.
-26. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot`
-    are shared by every type that has them (`inspect` and `read` where a type has them); every other
-    operation is named for what it does and means one thing: `dfm`, `interference`, `solve`, `ranges`,
-    `drc`, `erc`, `validate`. `xbf` is a model, in the library and the command alike, by its id, its handle or
-    its `.xbf`, which is its document: live while the engine holds its build, else read as the file it is (it names
-    no `made_by` then: law 7). One type, one word, everywhere -- the registry,
-    the server's kinds, the viewer: `@xbf` writes the file, `xbf.read` reads it, the verbs take it
-    (`cad.export`, `cad export`), and an `.xbf` opened is an `xbf` document. The `model` spellings (`cad.model`,
-    `@model`) are the xbf's under that name, each saying it is deprecated, `cad model` answers with the verb that
-    does it now, and the HTTP API's `model` kind answers as `xbf`'s (law 14). One result shape
-    per operation: a check returns findings, each with
-    a severity, a code and a location (`cad.results.CheckResult`), and `export` says the files it wrote.
-    A new shared operation must be code-free, frequently needed and meaningful across types. A file cad
-    checks and never shows has no document type, and its check is its tool's integration's (`cad mujoco
-    check robot.xml`, the one such operation). A name is a type's or an integration's, never both, and
-    an operation lives in one place.
+26. **The CLI is `cad <verb> <file>`.** *Every document.* A file's suffix says its type, and the verb runs
+    what that type does for it; a type that lacks the verb is refused in one line naming the types that have
+    it, before anything runs. The verbs are `export` (one destination, its format by its suffix, as `cp`
+    writes one), `inspect` (`--interference`, `--ranges`), `snapshot`, `dfm` and `fea`, each meaning one thing;
+    a tool's own operation on its files is `cad <integration> <operation> <file>` (`cad kicad drc`, `cad
+    mujoco check`). `xbf` is a model, in the library and the command alike, by its handle or its `.xbf`, which
+    is its document: live while the engine holds its build, else read as the file it is (it names no
+    `made_by` then: law 7). One type, one word, everywhere. One result shape per verb: a check returns
+    findings, each with a severity, a code and a location (`cad.results.CheckResult`), and `export` says the
+    files it wrote. A new verb must be code-free, frequently needed and meaningful across types. A name is a
+    type's, an integration's or a verb's, never two, and an operation lives in one place.
 27. **An integration runs where its extra is installed.** *The package.* In the command's own process
     when that environment holds the extra, else in the integration's own environment
     (`cad[<integration>]` at the installation's release, made once on first need), as a subprocess. No

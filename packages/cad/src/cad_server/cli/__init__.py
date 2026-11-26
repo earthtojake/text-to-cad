@@ -88,7 +88,7 @@ VERB_COMMANDS = ("export", "inspect", "snapshot", "dfm", "fea")
 
 # Each integration's command, by its name, for those with operations of their own on their tool's files:
 # ``cad <integration> <operation>`` (``cad_server.cli.integrations``); a deprecated one's command line is answered
-# with what to do instead (``_hint``). A name is a type's or an integration's, never both
+# with what to do instead (``_hint``). A name is a type's, an integration's or a verb's, never two
 # (``tests/python/packages/cad/test_registry.py``).
 INTEGRATION_COMMANDS: dict[str, str] = {name: f"cad_server.cli.{name}" for name, entry in INTEGRATIONS.items()
                                         if entry.operations and not entry.deprecated}

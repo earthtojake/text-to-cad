@@ -9,9 +9,10 @@ The words are the library README's (**Definitions**, laws 22 to 27); this is how
 `Operation` with the integration it needs -- `decorator`, `reader` and `wire`) and `INTEGRATIONS` (each
 an `Integration`: `name`, `extra`, `process`, the `commands` its extra installs, for an external program
 its `Probe` -- the program, the minimum version, the install hint and the variable that names it outright
--- and, only for its tool's own files that are no document type, its `operations` and the `files` those on
-one file take (`FILE_OPERATIONS`): `mujoco`'s `check` on `.xml` and `.mjcf`; `orcaslicer`'s `presets` and
-`complete`, on presets found by name, take none). `by_extension` and
+-- and its `operations`, its tool's own checks of its files, with the `files` those on one file take
+(`FILE_OPERATIONS`): `kicad`'s `drc` on `.kicad_pcb` and `erc` on `.kicad_sch`, `mujoco`'s `check` on `.xml`
+and `.mjcf`, which is no document type's; `orcaslicer`'s `presets` and `complete`, on presets found by name, take
+none). `by_extension` and
 `type_of` map a file to its type. Every layer reads it: the viewer's file kinds, the content types its
 file route sends, the catalog's extensions, the routes each kind
 answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
@@ -85,7 +86,7 @@ integration's operations on its tool's own files are made the same way, by `cad_
 (`INTEGRATION_COMMANDS`, `cad_server.cli.<integration>`): each generated from its function's signature,
 its file refused by name where it is a document type's (which names that type's own check), any other
 file's, or not there, and run in this process where it holds the integration, else in that integration's
-environment. A name is a type's or an integration's, never both.
+environment. A name is a type's, an integration's or a verb's, never two.
 
 **The manufacturing check.** A 3D type's `dfm` (`xbf`, `step`, `stl`, `glb`, `threemf`) and a DXF's (a
 sheet's cut file) are the registry's `dfm` operation of family `manufacturing`, one function the library

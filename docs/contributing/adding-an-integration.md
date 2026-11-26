@@ -93,19 +93,21 @@ write code for that tool: OCP is a dependency of `build123d`, not an integration
         variables naming its own settings folders, which a run points at private folders;
       - `commands`, the tool's own command lines its extra installs;
       - for an external program, its `Probe`;
-      - only for the tool's own files that are no document type, `operations` and the `files` those
-        that take one file take (`FILE_OPERATIONS`).
+      - only for the tool's own checks of its files (KiCad's `drc` of a board, MuJoCo's `check` of a
+        model's file, which is no document type), `operations` and the `files` those that take one file
+        take (`FILE_OPERATIONS`).
 
       `python -m cad.registry <name>` prints the entry's help. `cad run`'s choice of extra and
       `cad doctor`'s line for the integration come from the entry, with nothing more to write.
-- [ ] **An operation of its own**, only for such files: a function `cad.<name>.<operation>` that is
+- [ ] **An operation of its own**, only for such a check: a function `cad.<name>.<operation>` that is
       fully annotated and answers its operation's one result (a check's findings), named from the
       closed set (`cad.registry.INTEGRATION_OPERATIONS`), and its command
       `cad <name> <operation> [FILE]`, generated from the function (`cad_server/cli/integrations.py`).
       Its module, `cad_server/cli/<name>.py`, is a copy of `cli/mujoco.py` with the name changed. Pin
       both in `tests/python/packages/cad/test_registry.py` and, under
-      `tests/python/packages/cad_server/`, `test_cli_commands.py` and `test_public_surface.py`. A file
-      that has a document type has its operations there, never here (law 26).
+      `tests/python/packages/cad_server/`, `test_cli_commands.py` and `test_public_surface.py`. What a
+      document type does for a verb is the type's operation, never here: an operation lives in one place
+      (law 26).
 - [ ] **Our code**, in `packages/cad/src/cad/<name>/` for the library's side (helpers that take the
       tool's objects; producers in `_producers.py`, gathered in `cad.registry._producers`), and in the
       server for a program the server runs. It imports only its own extra's dependencies and

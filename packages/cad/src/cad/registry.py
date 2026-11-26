@@ -1,16 +1,17 @@
 """The document types and the integrations: one table, the single source of every layer.
 
 A **document type** is what is in a file. Each has one lowercase underscore id, the same in Python
-(``cad.<id>``), the ``cad`` command (``cad <id> <operation>``), the server, the viewer and the
-JavaScript generated from this table (``python -m cad.registry --js``). The table maps extensions to
-ids (``.step`` and ``.stp`` are both ``step``); 3MF's id is ``threemf`` because an id is a Python name.
+(``cad.<id>``), the ``cad`` command (``cad <verb> FILE`` reads it from the file's suffix), the server, the
+viewer and the JavaScript generated from this table (``python -m cad.registry --js``). The table maps
+extensions to ids (``.step`` and ``.stp`` are both ``step``); 3MF's id is ``threemf`` because an id is a Python
+name.
 
 An **integration** is our support for one third-party tool, named for the tool's own project: one
 extra (``cad[<name>]``) grouping what our code for it needs, our code for it (helpers that take its
 objects, producers and operations), and a process kind. A **producer** is code that makes a document
 type from some input; many integrations may produce one type, each stating which parts of the type's
-content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
-shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
+content it provides. The **operations** are a closed set (``OPERATIONS``), what a document type does for a
+verb: ``export``, ``snapshot`` and ``inspect``, each its verb's, and the rest named for what they do --
 ``dfm`` a 3D type's manufacturing check, ``interference`` a B-rep type's check that no two parts share volume,
 ``solve`` a B-rep type's stress study, ``ranges`` a mechanism's joint stops found from its geometry,
 ``validate`` a robot description's conformance check.
@@ -51,8 +52,9 @@ __all__ = ["ALIASES", "DOCUMENT_TYPES", "FILE_OPERATIONS", "INTEGRATIONS", "INTE
            "interference_check", "manufacturing_check", "operation_for", "platform_of", "producer_for",
            "producers_for", "resolve", "type_of", "types_for"]
 
-#: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
-#: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
+#: The operations, a closed set: what a document type does for a verb (``VERBS``) -- ``export``, ``snapshot`` and
+#: ``inspect`` each its verb's, and the others named for what they do -- each a type implements where it makes
+#: sense.
 OPERATIONS = ("export", "snapshot", "inspect", "dfm", "interference", "solve", "ranges", "validate")
 #: The verbs on a file, ``cad <verb> FILE`` and ``cad.<verb>``, each with the operations it runs, the first a
 #: file's type has (``operation_for``): ``inspect`` a robot description's ``validate``, ``fea`` the stress study.

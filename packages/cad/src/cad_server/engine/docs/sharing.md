@@ -159,7 +159,7 @@ went is no such share: its link is downloaded as any other.
 
 ## A share's link names this computer's copy
 
-Wherever cad takes a document -- the source of every `cad <type> <operation>` (`snapshot`, `inspect`, `export`, a
+Wherever cad takes a document -- the source of every verb (`cad snapshot`, `cad inspect`, `cad export`, a
 check), a Quick Edit packet's `input` (and a job's), a ref's FILE, `cad viewer`'s FILEs and `cad share`'s -- a share's
 view link, `<origin>/<id>` of the service `CAD_SHARE_URL` names or of `https://cad.fun`, names this computer's copy of
 the share, so that a shared page's prompt reads here as a local page's does:
