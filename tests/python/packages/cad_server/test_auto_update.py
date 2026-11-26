@@ -35,6 +35,69 @@ from tests.python.support.agent_apps import a_home_of_its_own
 
 RECEIPT = '[tool]\nrequirements = [{ name = "cad" }]\nentrypoints = [{ name = "cad" }]\n'
 
+# A process the switch spares, run by its own command up to the moment the worker runs uv, where it prints the compiled
+# modules it has loaded from the environment's site-packages (``WorkerTest``): ``update``, ``cad update`` waiting on the
+# worker; ``start``, a ``cad server start`` standing by while the update switches away from its release; ``daemon``,
+# the server whose start becomes the update, beginning it. Only what reaches a server, the record or uv is stood in for.
+SPARED = """import importlib.machinery, json, os, site, sys, sysconfig, types
+from unittest import mock
+
+packages = tuple(os.path.normcase(os.path.realpath(folder)) + os.sep for folder in {
+    *site.getsitepackages(), sysconfig.get_paths()["purelib"], sysconfig.get_paths()["platlib"]})
+seen = []
+
+
+def compiled():
+    seen.append(sorted(name for name, module in list(sys.modules.items())
+                       if (getattr(module, "__file__", None) or "").endswith(tuple(importlib.machinery.EXTENSION_SUFFIXES))
+                       and os.path.normcase(os.path.realpath(module.__file__)).startswith(packages)))
+
+
+from cad_server._internal import auto_update
+from cad.engine import client
+
+which = sys.argv[1]
+if which == "daemon":
+    from cad_server.engine import daemon
+
+    def restart(**_options):
+        compiled()
+        return {"release": "9.9.9"}
+
+    with mock.patch.object(auto_update, "restart", restart), mock.patch.object(auto_update, "leaving", lambda *_: True):
+        code = daemon.main([])
+else:
+    import cad_server.cli as cli
+    from cad_server.cli import update
+
+    def look(*_arguments):
+        compiled()
+        return None, {"at": 1.0, "outcome": "installed", "release": "9.9.9"}, None, False
+
+    def leaving(*_arguments):
+        compiled()
+        return True
+
+    patches = ([mock.patch.object(auto_update, "global_install", return_value=object()),
+                mock.patch.object(client, "request", return_value={"ok": True, "updating": "9.9.9", "from": "0.1.0",
+                                                                   "since": 0.0}),
+                mock.patch.object(update, "look", look)] if which == "update" else
+               [mock.patch.object(client, "make_way", return_value=None),
+                mock.patch.object(client, "_spawn", return_value=types.SimpleNamespace(poll=lambda: 0, pid=1)),
+                mock.patch.object(client, "_connect", lambda *_a, **_k: types.SimpleNamespace(
+                    release="9.9.9", close=lambda: None) if seen else None),
+                mock.patch.object(auto_update, "leaving", leaving)])
+    for patch in patches:
+        patch.start()
+    try:
+        code = cli.main(["update"] if which == "update" else ["server", "start"])
+    except SystemExit as leaving_:
+        code = leaving_.code
+if code != 0 or not seen:
+    sys.exit(f"{which}: exit {code}, the moment never reached")
+print(json.dumps(seen[0]))
+"""
+
 
 class Case(unittest.TestCase):
     def setUp(self) -> None:
@@ -1466,14 +1529,13 @@ class WorkerTest(unittest.TestCase):
         environment's (numpy, Pillow), and imports every module it uses before uv runs, as it starts."""
         from tests.python.support.paths import SOURCE_PATH
 
-        probe = ("import importlib.machinery, sys, sysconfig, os\n"
+        probe = ("import importlib.machinery, os, site, sys, sysconfig\n"
                  "import cad_server._internal.auto_update_helper\n"
-                 "stdlib = [os.path.normcase(os.path.realpath(sysconfig.get_paths()[name])) for name in "
-                 "('stdlib', 'platstdlib')] + [os.path.normcase(os.path.realpath(os.path.join(sys.base_prefix, "
-                 "'DLLs')))]\n"
+                 "packages = tuple(os.path.normcase(os.path.realpath(folder)) + os.sep for folder in "
+                 "{*site.getsitepackages(), sysconfig.get_paths()['purelib'], sysconfig.get_paths()['platlib']})\n"
                  "compiled = sorted(name for name, module in list(sys.modules.items()) if "
                  "(getattr(module, '__file__', None) or '').endswith(tuple(importlib.machinery.EXTENSION_SUFFIXES)) "
-                 "and not os.path.normcase(os.path.realpath(module.__file__)).startswith(tuple(stdlib)))\n"
+                 "and os.path.normcase(os.path.realpath(module.__file__)).startswith(packages))\n"
                  "print(compiled)\n")
         done = subprocess.run([sys.executable, "-P", "-c", probe], capture_output=True, text=True, timeout=120,
                               env={**os.environ, "PYTHONPATH": SOURCE_PATH})
@@ -1482,6 +1544,28 @@ class WorkerTest(unittest.TestCase):
         body = source.split("\nWINDOWS = ", 1)[1]
         imported = [line.strip() for line in body.splitlines() if line.strip().startswith(("import ", "from "))]
         self.assertTrue(all(line.startswith(("import ctypes", "from ctypes")) for line in imported), imported)
+
+    def test_the_processes_the_switch_spares_have_loaded_nothing_compiled_when_uv_runs(self) -> None:
+        """On Windows the switch leaves three processes of the environment running while uv upgrades it (``spared``):
+        the ``cad update`` that waits on the worker, the ``cad server start`` whose start became the update, and the
+        server process that began it there. A compiled module one of them had loaded (numpy's or Pillow's ``.pyd``)
+        could not be deleted, and would stop uv midway where that package changes. Each runs here by its real command
+        (``cad_server.cli.main``, the daemon's ``main``) up to the moment the worker runs uv -- ``cad update`` waiting on
+        it (``update.look``), ``cad server start`` standing by for the next server (``auto_update.leaving``), the
+        server beginning the update (``auto_update.restart``) -- with the server, the update's own steps and uv out of
+        the picture, and says which compiled modules it has loaded from the environment's site-packages: none."""
+        from tests.python.support.paths import SOURCE_PATH
+
+        engine = Path(tempfile.mkdtemp(prefix="eng-"))
+        self.addCleanup(shutil.rmtree, engine, ignore_errors=True)
+        for spared in ("update", "start", "daemon"):
+            with self.subTest(spared):
+                done = subprocess.run([sys.executable, "-c", SPARED, spared], capture_output=True, text=True,
+                                      timeout=120, cwd=str(self.tmp),
+                                      env={**os.environ, "PYTHONPATH": SOURCE_PATH, "CAD_ENGINE_DIR": str(engine),
+                                           "CAD_STATE_DIR": str(self.tmp / "state"), "CAD_UPDATE_CHECK": "0"})
+                self.assertEqual((done.returncode, done.stdout.strip().splitlines()[-1:]), (0, ["[]"]),
+                                 done.stdout + done.stderr)
 
     def test_the_worker_runs_as_a_module_of_the_environment_and_keeps_its_outcome(self) -> None:
         """A real process, as the trigger starts it, with an engine folder of its own: uv not there, so nothing is
