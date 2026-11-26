@@ -120,8 +120,8 @@ included. A computer that 0.11.12 to 0.11.17 updated keeps the range their updat
 own upgrade would put an older cad over the newer one, so `cad update` and `cad doctor` say so
 there, with the command that clears it (`uv tool install --force cad`). Besides what uv
 installed, the store keeps the release that runs and one waiting for its restart, each linked from uv's
-cache where the file system links; every tidying of the store (each update's end, each server start, `cad
-cache prune`) removes the rest, and a release a process still runs once nothing does. The way back at a
+cache where the file system links; every tidying of the store (each update's end, each server start and then
+hourly, `cad cache prune`) removes the rest, and a release a process still runs once nothing does. The way back at a
 switch needs no release kept for it: nothing tidies while an update is underway, so the release before is
 whole until the switch has ended, and going back is writing the pointer read before it. `uv tool uninstall cad` leaves
 the store in the state folder ([Removing](../install.md#removing)). A release needs the installed

@@ -619,6 +619,9 @@ def _reportable(report: dict[str, Any]) -> bool:
         return True
 
 
+# How often a quiet server tidies the store of cad's update beyond its start (``Daemon.caught_up``).
+TIDY_SECONDS = 3600.0
+
 class Daemon:
     def __init__(self, cap: int | None = None, port: int | None = None) -> None:
         self.port = port  # ``cad server start --port``: the HTTP port this engine must take, or None
@@ -691,6 +694,7 @@ class Daemon:
         from cad_server._internal.plugin_catch_up import Catcher
 
         self.catching = Catcher(self.began, wait=catch_up_seconds())
+        self.tidied = float("-inf")  # when this server last tidied the store (``caught_up``)
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1923,9 +1927,11 @@ class Daemon:
             self.tend()
 
     def caught_up(self, *, starting: bool = False) -> None:
-        """What follows cad's own update, at the server's start and at each quiet tending (``tend``): at the start
-        (``starting``), the store tidied where no attempt is underway (``store.clean``: releases nothing runs or points
-        at but the one that is ready, ``auto_update.kept``, a pointer that means nothing); the install command run
+        """What follows cad's own update, at the server's start and at each quiet tending (``tend``): the store tidied
+        where no attempt is underway (``store.clean``: releases nothing runs or points at but the one that is ready,
+        ``auto_update.kept``, a pointer that means nothing), at the start (``starting``) and then at most once each
+        ``TIDY_SECONDS`` -- so the release a switch left, which the switch's own worker still ran as it tidied, goes
+        within that time of the switch, not only at the server's next start; the install command run
         once where cad is newer than the release it is up to date for and the person's switch says so
         (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its lock),
         then the last update attempt counted once, where it ended and nothing it waits for is underway
@@ -1936,7 +1942,9 @@ class Daemon:
         try:
             from cad_server._internal import auto_update, store
 
-            if starting and auto_update.underway() is None:
+            now = time.monotonic()
+            if (starting or now - self.tidied >= TIDY_SECONDS) and auto_update.underway() is None:
+                self.tidied = now
                 store.clean(keep=auto_update.kept())
             self.catching.tend(told)
             auto_update.report()

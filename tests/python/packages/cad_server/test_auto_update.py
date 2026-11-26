@@ -2479,11 +2479,39 @@ class ReadyTest(Case):
         from cad_server.engine.daemon import Daemon
 
         self.made()
-        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(),
+        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=float("-inf"),
                                          catching=types.SimpleNamespace(tend=lambda told: None))
         with mock.patch.object(store, "clean") as clean, mock.patch.object(auto_update, "report"):
             Daemon.caught_up(stand_in, starting=True)
         clean.assert_called_once_with(keep=[store.folder("0.2.0")])
+
+    def test_a_quiet_server_tidies_the_store_at_most_once_an_hour_and_never_while_an_update_is_underway(self) -> None:
+        # The release a switch left goes at a later tidying (the switch's own worker still ran it as it tidied): a
+        # server that runs for days tidies within the hour after the switch, not only at its next start.
+        import threading
+
+        from cad_server.engine import daemon
+        from cad_server.engine.daemon import Daemon
+
+        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=float("-inf"),
+                                         catching=types.SimpleNamespace(tend=lambda told: None))
+        clock = [10_000.0]
+        underway = [None]
+        with mock.patch.object(store, "clean") as clean, mock.patch.object(auto_update, "report"), \
+                mock.patch.object(daemon.time, "monotonic", side_effect=lambda: clock[0]), \
+                mock.patch.object(auto_update, "underway", side_effect=lambda: underway[0]):
+            Daemon.caught_up(stand_in, starting=True)
+            Daemon.caught_up(stand_in)
+            clock[0] += daemon.TIDY_SECONDS - 1
+            Daemon.caught_up(stand_in)
+            self.assertEqual(clean.call_count, 1, "at the start, then nothing within the hour")
+            clock[0] += 1
+            underway[0] = {"outcome": "underway"}
+            Daemon.caught_up(stand_in)
+            self.assertEqual(clean.call_count, 1, "never while an update is underway")
+            underway[0] = None
+            Daemon.caught_up(stand_in)
+            self.assertEqual(clean.call_count, 2, "an hour on, quiet, it tidies again")
 
 
 class ServerUpdateTest(Case):
@@ -3527,7 +3555,7 @@ class PluginCatchUpTest(Case):
         from cad_server.engine.daemon import Daemon
 
         calls: list[str] = []
-        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(),
+        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=float("-inf"),
                                          catching=types.SimpleNamespace(tend=lambda told: calls.append("catch up")))
         with mock.patch.object(auto_update, "report", side_effect=lambda: calls.append("count")):
             Daemon.caught_up(stand_in)
