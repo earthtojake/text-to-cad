@@ -409,6 +409,8 @@ export default {
   "home.noMatchingModels": "一致するものはありません。",
   "home.filesAria": "ファイル",
   "home.foldersAria": "フォルダー",
+  "home.recent": "最近",
+  "home.allFiles": "すべてのファイル",
   "home.loadingFiles": "ファイルを読み込み中",
   "home.modelsAria": "CAD モデル",
   "home.fileUnavailable": "ファイルを利用できません",

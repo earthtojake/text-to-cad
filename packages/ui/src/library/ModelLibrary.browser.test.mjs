@@ -141,7 +141,7 @@ test("a card and a place are real links: a plain click stays in this view, and â
     const folder = page.getByRole("link", { name: "Open dxf", exact: true });
     assert.equal(await folder.getAttribute("href"), "/?place=gearbox&path=dxf");
     const tiles = await page.locator("[data-library-folders] > li").evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
-    const columns = await page.locator(".cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
+    const columns = await page.locator("[data-library-all] .cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
     assert.deepEqual([tiles.length, tiles.every(([, , height]) => height === 46)], [3, true]);
     assert.deepEqual(tiles.map(([x, width]) => [x, width]), columns.slice(0, tiles.length));
     const [folderTab] = await Promise.all([context.waitForEvent("page"), folder.click({ modifiers: ["ControlOrMeta"] })]);
@@ -513,12 +513,13 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
     const line = 232 + 16;
     // One inset on all four sides (16px), and the title's glyph, a folder's tile and the first card all on its line.
     assert.deepEqual(await px(page.locator("[data-library-content]"), "paddingTop", "paddingRight", "paddingBottom", "paddingLeft"), ["16px", "16px", "16px", "16px"]);
+    // gearbox's top leads with Recent; the listing is under All files.
     const folders = page.locator("[data-library-folders] > li");
-    const cards = page.locator(".cad-library-card");
+    const cards = page.locator("[data-library-all] .cad-library-card");
     assert.deepEqual([(await box(page.locator("[data-library-head] svg").first())).x, (await box(folders.first())).x, (await box(cards.first())).x], [line, line, line]);
     // The content 16px under the toolbar, which stands 16px under the title's row.
     const [head, toolbar] = [await box(page.locator("[data-library-head]")), await box(page.locator("[data-library-toolbar]"))];
-    assert.deepEqual([toolbar.y - head.bottom, (await box(folders.first())).y - toolbar.bottom], [16, 16]);
+    assert.deepEqual([toolbar.y - head.bottom, (await box(page.locator("[data-library-toolbar] + *"))).y - toolbar.bottom], [16, 16]);
     // A folder: a tile of the cards' family, a card's box and 10px corners in a card's column, a card's 12px inset round
     // its glyph and its name, in a card's 1px border (46px tall), its name a card's name in size and weight, its glyph where a card's name
     // starts; 16px apart and 16px over the cards.
@@ -550,9 +551,9 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
     // The list: a header of muted labels the control tall, on the line, then rows the control + 16 tall with a row's
     // corners, each picture the control + 4 tall at 3:2 on the line; names and facts one size, told apart by colour.
     await page.getByRole("button", { name: "List" }).click();
-    const rows = page.locator(".cad-library-row");
+    const rows = page.locator("[data-library-all] .cad-library-row");
     await rows.first().waitFor();
-    const header = page.locator("[data-library-columns]");
+    const header = page.locator("[data-library-all] [data-library-columns]");
     assert.deepEqual([(await box(header)).height, (await box(header)).x, await type(header.locator("span")), (await style(header, "borderBottomWidth"))[0]], [28, line, "13px 20px 400", "0px"]);
     const file = rows.filter({ has: page.locator("[data-library-picture]") }).first();
     const small = await box(file.locator("[data-library-picture]"));
@@ -645,21 +646,68 @@ test("Sort is one ghost control: its glyph, the sort's name and a muted chevron,
   } finally { await context.close(); }
 });
 
+test("a project's top page leads with Recent, one row of the cards' grid, then All files; a resize changes how many stand across, and a search replaces it", async () => {
+  const { context, page } = await home("place=gearbox&recents=many");
+  try {
+    // Two labels, the body's size at medium weight in the foreground, each 8px over what it labels: Recent 16px under the
+    // toolbar, All files 16px under Recent's row.
+    const labels = page.locator("[data-library-content] h2");
+    assert.deepEqual(await labels.allTextContents(), ["Recent", "All files"]);
+    assert.deepEqual([await type(labels.nth(0)), await type(labels.nth(1)), (await style(labels.nth(0), "color"))[0]], ["13px 20px 500", "13px 20px 500", await token(page, "--foreground")]);
+    const toolbar = await box(page.locator("[data-library-toolbar]"));
+    const [recentLabel, allLabel] = [await box(labels.nth(0)), await box(labels.nth(1))];
+    const row = await box(page.getByRole("list", { name: "Recent" }));
+    const folders = await box(page.locator("[data-library-folders]"));
+    assert.deepEqual([recentLabel.x, recentLabel.y - toolbar.bottom, row.y - recentLabel.bottom, allLabel.y - row.bottom, folders.y - allLabel.bottom], [232 + 16, 16, 8, 16, 8]);
+    // One row of the cards' grid: as many as fit across at 1440px beside the sidebar, five, in the listing's columns.
+    const cards = () => page.locator("[data-library-recent] .cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, y, width } = node.getBoundingClientRect(); return [x, y, width]; }));
+    const listed = await page.locator("[data-library-all] .cad-library-card").evaluateAll((nodes) => nodes.slice(0, 5).map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
+    const shown = await cards();
+    assert.deepEqual([shown.length, new Set(shown.map(([, y]) => y)).size, shown.map(([x, , width]) => [x, width])], [5, 1, listed]);
+    // Newest first; each card's line its activity alone, as a card's always is.
+    assert.deepEqual(await page.locator("[data-library-recent] [data-library-label]").allTextContents(), ["plate_0.dxf", "plate_1.dxf", "plate_2.dxf", "housing.xbf", "plate_3.dxf"]);
+    assert.equal(await page.locator("[data-library-recent] [data-library-status]").first().textContent(), "Viewed 30m ago");
+    // A narrower window takes cards out of the row, a wider one puts them back, with no reload.
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await page.waitForFunction(() => document.querySelectorAll("[data-library-recent] .cad-library-card").length === 3);
+    assert.equal(new Set((await cards()).map(([, y]) => y)).size, 1);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForFunction(() => document.querySelectorAll("[data-library-recent] .cad-library-card").length === 5);
+    // A search replaces it, labels and all, with the search's results.
+    await page.getByRole("searchbox", { name: "Search models" }).fill("plate_1");
+    await page.locator("[data-library-recent]").waitFor({ state: "detached" });
+    await page.getByRole("link", { name: "Open plate_1.dxf", exact: true }).waitFor();
+    assert.equal(await labels.count(), 0);
+    // The list: at most five rows, under a header of their own with Where, each its folder below the project's top.
+    await page.getByRole("searchbox", { name: "Search models" }).fill("");
+    await page.getByRole("button", { name: "List" }).click();
+    const rows = page.getByRole("list", { name: "Recent" }).locator(".cad-library-row");
+    await rows.first().waitFor();
+    assert.deepEqual(await rows.evaluateAll((nodes) => nodes.map((node) => node.querySelector('[data-column="where"]').textContent)), ["dxf", "dxf", "dxf", "housing/v3", "dxf"]);
+    assert.deepEqual(await page.locator("[data-library-recent] [data-library-columns] span").allTextContents(), ["Name", "Where", "Kind", "Size", "Updated", "Created"]);
+  } finally { await context.close(); }
+  // Below the top, the folder's page as it is: no Recent and no labels.
+  const below = await home("place=gearbox&path=housing&recents=many", undefined, { waitFor: "[data-library-folders]" });
+  try {
+    assert.deepEqual([await below.page.locator("[data-library-recent]").count(), await below.page.locator("[data-library-content] h2").count()], [0, 0]);
+  } finally { await below.context.close(); }
+});
+
 test("at a phone's scale the home's rows, texts and gutters are the phone's: 46px folders, 52px list rows, each text 2px up, the same 16px inset", async () => {
   const { context, page } = await home("place=gearbox", { width: 390, height: 844 });
   try {
     await page.locator('[data-viewer-layout="mobile"]').waitFor();
     await still(page);
     assert.deepEqual(await px(page.locator("[data-library-content]"), "paddingTop", "paddingLeft", "paddingRight"), ["16px", "16px", "16px"]);
-    const card = page.locator(".cad-library-card").first();
+    const card = page.locator("[data-library-all] .cad-library-card").first();
     assert.deepEqual([(await box(page.locator("[data-library-folders] > li").first())).height, await type(page.locator("[data-library-title]")), await type(card.locator("[data-library-label]")),
       await type(card.locator("[data-library-status]")), (await box(card.locator("[data-library-format]"))).height], [46, "17px 22px 500", "15px 20px 500", "15px 20px 400", 28]);
     await page.getByRole("button", { name: "List" }).click();
-    const row = page.locator(".cad-library-row").filter({ has: page.locator("[data-library-picture]") }).first();
+    const row = page.locator("[data-library-all] .cad-library-row").filter({ has: page.locator("[data-library-picture]") }).first();
     await row.waitFor();
     // Its two actions, a finger's 36px each, stand clear of its last column.
     const [open, action, updated] = [await box(row), await box(row.getByRole("button").last()), await box(row.locator('[data-column="updated"]'))];
-    assert.deepEqual([open.height, (await box(page.locator("[data-library-columns]"))).height, action.height, updated.right <= (await box(row.getByRole("button").nth(1))).x], [52, 36, 36, true]);
+    assert.deepEqual([open.height, (await box(page.locator("[data-library-all] [data-library-columns]"))).height, action.height, updated.right <= (await box(row.getByRole("button").nth(1))).x], [52, 36, 36, true]);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "nothing wider than the phone");
   } finally { await context.close(); }
 });

@@ -338,6 +338,8 @@ export default {
   "home.noMatchingModels": "No matches.",
   "home.filesAria": "Files",
   "home.foldersAria": "Folders",
+  "home.recent": "Recent",
+  "home.allFiles": "All files",
   "home.loadingFiles": "Loading files",
   "home.modelsAria": "CAD models",
   "home.fileUnavailable": "File unavailable",

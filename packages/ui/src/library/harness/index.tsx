@@ -18,7 +18,8 @@ import { ModelLibrary, type LibraryFolder, type LibraryModel, type LibraryProjec
 // `?scheme=dark`, `?width=<px>` the home's width (the window's without it), `?panel=<json>` the sidebar as a host kept
 // it (`{"open":false,"width":320}`), `?state=empty` a library with nothing in it yet (the welcome), `?state=reading` one
 // whose list never answers (the placeholders), `?state=failing` one whose documents do not open (the error's line),
-// `?state=partial` a host that lists only part of each folder, `?actions=0` a host that can do nothing with a file.
+// `?state=partial` a host that lists only part of each folder, `?actions=0` a host that can do nothing with a file,
+// `?recents=many` six more of gearbox's files below its top opened lately (its Recent then holds more than a row).
 // What the home asked its host to open in an app is on `window.homeOpenedIn`. What the home asks its host to keep of the sidebar is on `window.homePanel`, as
 // written, the links it asked its host to open on `window.homeOpened`, and the folders it asked for on
 // `window.homeFolders`.
@@ -86,7 +87,10 @@ async function folder(project: string, { path = "", q = "" }: { path?: string; q
   return { project: found, path, folders: names.map(name => ({ name, path: path ? `${path}/${name}` : name })),
     documents: below.filter(({ rest }) => !rest.includes("/")).map(({ file }) => file).sort((a, b) => collator.compare(a.name, b.name)), truncated: state === "partial" };
 }
-const RECENTS = [TREE[2], TREE[0], TREE[6], ...["bracket.step", "hinge.step", "layered.dxf", "arm.urdf", "pair.glb"]
+// gearbox's recents: housing/v3/housing.xbf and exports/housing.step below its top, gearbox.xbf at it; with
+// `?recents=many`, six of its dxf plates too, opened in the last hours.
+const MORE = params.get("recents") === "many" ? TREE.slice(7, 13).map((entry, index) => ({ ...entry, opened: NOW - (index + 0.5) * HOUR })) : [];
+const RECENTS = [TREE[2], TREE[0], TREE[6], ...MORE, ...["bracket.step", "hinge.step", "layered.dxf", "arm.urdf", "pair.glb"]
   .map((name, index) => row(`/home/me/parts/${name}`, index + 3, { pinned: index === 0 }))];
 const never = new Promise<never>(() => {});
 const library = { list: () => state === "reading" ? never : Promise.resolve(state === "empty" ? [] : RECENTS), change: async () => RECENTS, thumbnail: async () => null,

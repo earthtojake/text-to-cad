@@ -274,6 +274,19 @@ chrome that floats over the picture. The home is the navbar over the library: it
     library; `[` and `]` and the search of documents pass it by. A host that opens no apps shows it in its file
     manager on a press, and where it can do neither the card is no control at all.
   - The kinds' tabs narrow the documents; Sort orders every file; the folders stand first in the folder's own order.
+- **A project's top page leads with its recent files.** At a project's top (its own folder, not one below it), where
+  files of the project below the top were opened by someone or built by a run, a block labelled "Recent" comes first,
+  then the listing under "All files". It holds the library's rows of the project whose folder is below its top (the
+  list Recents shows; no folder is read for it), by last activity, newest first: in the grid one row of the cards' grid,
+  as many cards as fit across at the width on screen (five at 1440px beside the sidebar), the rest left out, and a
+  resize changes how many; in the list at most five rows, under a header of their own with Where, each its folder
+  below the top. The kinds' tab narrows it as it narrows the listing, and a search replaces it with the search's
+  results. Each label is the body's size at medium weight in the foreground, 8px over what it labels, and All files
+  stands 16px under the Recent row. With no such files there is no block and no label: the page is the folder. Why: in
+  a project the files worked on are rarely in its top folder, and Google Drive, Dropbox, Box, Figma, Fusion and
+  Onshape put recent or suggested files at the home or the root (Drive's Suggested row on its Home, Box's Recents on
+  All Files), not on every folder's page; so a project's top, its root, leads with them, and a folder below it is that
+  folder alone.
   - The folder is read as it is shown and again every two seconds while it is up, so a file written meanwhile joins
     it. Where the host listed only part of a very large folder, a line under its last row says so.
 - **Its documents**, all of them, with no Show more: a folder lists at most what the host answers of it, and Recents a
@@ -1026,3 +1039,5 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   what it is, as Figma's is.
 - **A second small size for a card's line, the formats or the sidebar.** Figma's file browser is one body size told
   apart by weight and colour; the sidebar is a page's navigation, at the page's body size.
+- **Recent files on every folder's page.** A folder's page is the folder; recent files lead at a project's root, as
+  Drive's and Box's lead at theirs.

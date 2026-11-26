@@ -424,7 +424,9 @@ A sidebar at the left lists the places, with no counts: Recents (every document 
 document in no project is found there and by the search), Starred (`?view=pinned`: the library's `pinned` rows), and
 each project (`GET /api/v1/projects`, the latest activity first). A
 project's page is one folder of it (`GET /api/v1/projects/<id>?path=`): its subfolders, each its glyph and its name,
-a row and a link into it, then every file directly in it; from the sidebar it opens at the project's top, and from a
+a tile among the cards (a row in the list) and a link into it, then every file directly in it; at the project's top, where files below it were opened or
+built lately, a Recent row of them (the library's rows, newest first) leads, over the listing labelled All files; from
+the sidebar it opens at the project's top, and from a
 document's navbar at the document's folder. A file the viewer does not open (a PDF, a script, another tool's native
 file) is a card and a row like the rest, with its extension for a badge: a press opens it in an app of the
 computer's (`GET /api/v1/local/open-in?id=`, then `POST /api/v1/local/open`: the OS's own handler where the server

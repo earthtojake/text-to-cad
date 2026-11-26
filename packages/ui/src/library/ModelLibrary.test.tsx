@@ -649,6 +649,54 @@ it("a project's page lists its folders first, then its files, and its heading le
   expect([row.textContent, [...row.querySelectorAll('[data-column]')].map(cell => cell.textContent)]).toEqual(['drawings————', ['—', '—', '—', '—']]);
 });
 
+// A project's top page leads with Recent: the library's rows of the project below its top folder, newest first, as
+// Drive's Home leads with Suggested files and Box's All Files with its Recents; then the listing under All files.
+it("a project's top page leads with its files opened or built below the top, newest first, then the listing under All files; never below the top, never in a search", async () => {
+  const tag = project('p1', 'heart-tag'), gear = project('p2', 'gear');
+  const now = Date.now() / 1000;
+  const opened = (of: LibraryProject, below: string, hours: number) => ({ ...file(of, below), opened: now - hours * 3600 });
+  const rows = [opened(tag, 'housing/v3/housing.xbf', 3), opened(tag, 'top.step', 1), opened(tag, 'exports/housing.step', 7), opened(tag, 'dxf/plate.dxf', 2),
+    ...['a', 'b', 'c'].map((name, index) => opened(tag, `dxf/old/${name}.dxf`, 20 + index)), opened(gear, 'sub/gear.step', 0.5), model('loose.step', { opened: now })];
+  const host = hosted([tag, gear], [file(tag, 'top.step'), file(tag, 'top.dxf'), file(tag, 'housing/v3/housing.xbf'), file(tag, 'exports/housing.step'), file(tag, 'dxf/plate.dxf')]);
+  const page = (path = '', layout: 'grid' | 'list' = 'list') => <ModelLibrary library={library(rows, host)} layout={layout} place={{ view: 'project', project: 'p1', ...(path ? { path } : {}) }} />;
+  const view = render(page());
+  const recent = await screen.findByRole('list', { name: 'Recent' });
+  // Two labels, Recent over its rows and All files over the listing, the page's headings under its title.
+  const main = screen.getByRole('main');
+  expect([...main.querySelectorAll('h1, h2')].map(heading => [heading.tagName, heading.textContent])).toEqual([['H1', 'heart-tag'], ['H2', 'Recent'], ['H2', 'All files']]);
+  // The project's files below its top, by last activity, newest first; at most five rows in the list; none of its top
+  // folder (they are the listing's), none of another project and none of no project. Each says its folder below the top.
+  const named = (list: HTMLElement) => within(list).getAllByRole('listitem').map(item => [item.querySelector('[data-library-label]')?.textContent, item.querySelector('[data-column="where"]')?.textContent]);
+  expect(named(recent)).toEqual([['plate.dxf', 'dxf'], ['housing.xbf', 'housing/v3'], ['housing.step', 'exports'], ['a.dxf', 'dxf/old'], ['b.dxf', 'dxf/old']]);
+  expect(within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem').map(item => item.querySelector('[data-library-label]')?.textContent))
+    .toEqual(['housing', 'exports', 'dxf', 'top.step', 'top.dxf']);
+  // Read from the library alone: the host was asked for the folder on screen and nothing else.
+  expect(host.folder.mock.calls.map(([, options]) => options)).toEqual(host.folder.mock.calls.map(() => ({ path: '' })));
+  // The kinds' tab narrows it as it narrows the listing.
+  fireEvent.click(screen.getByRole('button', { name: 'Drawings' }));
+  expect(named(screen.getByRole('list', { name: 'Recent' })).map(([name]) => name)).toEqual(['plate.dxf', 'a.dxf', 'b.dxf', 'c.dxf']);
+  fireEvent.click(screen.getByRole('button', { name: 'All' }));
+  // A search replaces it: the search's results, with no Recent and no labels.
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'hous' } });
+  await waitFor(() => expect(host.folder).toHaveBeenLastCalledWith('p1', { path: '', q: 'hous' }));
+  await waitFor(() => expect(opens()).toEqual(['Open housing.xbf', 'Open housing.step']));
+  expect([screen.queryByRole('list', { name: 'Recent' }), main.querySelectorAll('h2').length]).toEqual([null, 0]);
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: '' } });
+  await screen.findByRole('list', { name: 'Recent' });
+  // In the grid it is one row of the cards' grid, its cards the listing's.
+  view.rerender(page('', 'grid'));
+  expect(screen.getByRole('list', { name: 'Recent' }).querySelector('.cad-library-card [data-library-status]')?.textContent).toBe('Viewed 2h ago');
+  // Below the top, the folder's page as it is: no Recent, no labels.
+  view.rerender(page('housing'));
+  await screen.findByRole('button', { name: 'Open v3' });
+  expect([screen.queryByRole('list', { name: 'Recent' }), screen.getByRole('main').querySelectorAll('h2').length]).toEqual([null, 0]);
+  cleanup();
+  // A project with nothing opened below its top: its page as it is.
+  render(<ModelLibrary library={library([opened(tag, 'top.step', 1)], hosted([tag], [file(tag, 'top.step'), file(tag, 'dxf/plate.dxf')]))} layout="list" place={{ view: 'project', project: 'p1' }} />);
+  await screen.findByRole('button', { name: 'Open top.step' });
+  expect([screen.queryByRole('list', { name: 'Recent' }), screen.getByRole('main').querySelectorAll('h2').length]).toEqual([null, 0]);
+});
+
 // A folder's page lists every file in it. A file the viewer does not open (`documentKind: null`, as a CAD host's row of it
 // says) is a card or a row like the rest, and a press on it opens it, as a press on a document does: in an app of the
 // computer's, there being no page for it.

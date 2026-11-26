@@ -409,6 +409,8 @@ export default {
   "home.noMatchingModels": "일치하는 항목이 없습니다.",
   "home.filesAria": "파일",
   "home.foldersAria": "폴더",
+  "home.recent": "최근",
+  "home.allFiles": "모든 파일",
   "home.loadingFiles": "파일 불러오는 중",
   "home.modelsAria": "CAD 모델",
   "home.fileUnavailable": "파일을 사용할 수 없음",

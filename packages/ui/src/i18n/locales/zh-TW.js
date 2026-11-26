@@ -410,6 +410,8 @@ export default {
   "home.noMatchingModels": "沒有符合的項目。",
   "home.filesAria": "檔案",
   "home.foldersAria": "資料夾",
+  "home.recent": "最近",
+  "home.allFiles": "所有檔案",
   "home.loadingFiles": "正在載入檔案",
   "home.modelsAria": "CAD 模型",
   "home.fileUnavailable": "無法使用檔案",

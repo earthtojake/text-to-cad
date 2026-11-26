@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownUp, ChevronDown, Clock, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Search, Star } from "lucide-react";
 import { Badge } from "../primitives/badge.jsx";
@@ -251,6 +251,40 @@ export function below(path: string, root: string): string {
   return shown === base ? "" : base && shown.startsWith(`${base}/`) ? shown.slice(base.length + 1) : shown;
 }
 
+/** `path` below `root`, `/`-separated, where it is strictly below it; null for the folder itself and for any other. */
+const strictlyBelow = (path: string, root: string): string | null => {
+  const shown = slashed(path), base = slashed(root);
+  return base && shown.startsWith(`${base}/`) ? shown.slice(base.length + 1) : null;
+};
+
+/**
+ * The files a project's top page leads with (`docs/viewer-ux.md`, "The home"): the library's rows (`items`, what
+ * Recents lists: opened by someone, or built by a run) of `project` that are not in its top folder but below it, by
+ * last activity, newest first. Read from the library alone, never from a folder.
+ */
+export function recentBelow<Model extends LibraryModel>(items: readonly Model[], project: Pick<LibraryProject, "id" | "root">, locale?: string): Model[] {
+  return sortDocuments(items.filter(item => item.project === project.id && strictlyBelow(item.folder ?? "", project.root)), "activity", undefined, locale);
+}
+
+/**
+ * How many columns a grid (`element`) draws now, as the browser resolved its tracks: a grid of `auto-fill` columns
+ * lists every one, filled or not. Measured again whenever its box changes size, so a resize changes the count with no
+ * reload. One where it is not laid out.
+ */
+function useColumns(element: HTMLElement | null): number {
+  const [count, setCount] = useState(1);
+  useLayoutEffect(() => {
+    if (!element) return undefined;
+    const measure = () => setCount(Math.max(1, getComputedStyle(element).gridTemplateColumns.split(" ").filter(track => track && track !== "none").length));
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element]);
+  return count;
+}
+
 /** Whether every word of `query` is in its name or its path. */
 const matches = (item: LibraryModel, words: readonly string[]) => {
   const text = `${item.name}\n${item.path}`.toLowerCase();
@@ -290,6 +324,8 @@ const LIST_MS = 2_000;
 const SEARCH_WAIT_MS = 150;
 /** The orders a place's documents can be in, as Sort's menu lists them. */
 const SORTS: readonly LibrarySort[] = ["activity", "name", "kind"];
+/** The most rows a project's top page's Recent shows in the list; in the grid, its one row holds what fits across. */
+const RECENT_ROWS = 5;
 
 // A card's or a row's picture (`thumbnails.ts`'s one picture), read once it is on screen: the one its row names, else its
 // kind's glyph. A card's is its full width and carries its format's badge (`badge`: the system's chip, 8px in from the
@@ -365,6 +401,8 @@ const ROW_OPEN_CLASS = cn("cad-library-open w-full cursor-pointer rounded-md px-
   "focus-visible:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset group-data-opening/entry:bg-brand-subtle",
   "group-data-from/entry:ring-2 group-data-from/entry:ring-brand group-data-from/entry:ring-inset");
 const CAPTION_CLASS = "flex min-w-0 flex-col p-3 group-data-missing/entry:opacity-50";
+// A label over a block of a place (a project's top page's Recent and All files): the body's size, medium, in the foreground.
+const SECTION_LABEL_CLASS = "m-0 font-medium text-foreground";
 // A folder among the cards: a card's box (its own name, so a card is still a file's), a card's inset all round its glyph
 // and its name, so its name stands where a card's does.
 const FOLDER_TILE_CLASS = CARD_CLASS.replace("cad-library-card", "cad-library-folder");
@@ -498,7 +536,10 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * A project's page is one folder of it (`library.folder`, read again every `LIST_MS`): its subfolders first, each its
  * glyph and its name and a way into it, then every file directly in it, the documents and the files no page opens
  * together (`isDocument`: one of those is a card or a row like the rest, opened in an app of the computer's by a
- * press, `openFile`, with Open in in its ⋯ and no star). Recents and Starred are the library's rows. Each document is
+ * press, `openFile`, with Open in in its ⋯ and no star). At the project's top, the files of it opened or built lately
+ * below the top (`recentBelow`, the library's rows) lead, labelled Recent: one row of the cards' grid, as many as fit
+ * across, or five rows of the list; the listing follows, labelled All files. Recents and Starred are the library's
+ * rows. Each document is
  * a card (a picture badged with its format -- for an `.xbf` file "Part" or "Assembly", by its `parts`, "XBF" (its
  * format) where that is not known -- over the name and its last activity with its verb; no glyph, place or size,
  * which the list has) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created). A card's picture is
@@ -730,11 +771,20 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const chips = kindChips(inPlace);
   const shownKind = chips.includes(kind) ? kind : "all";
   const matching = shownModels(ordered, query, shownKind);
+  // A project's top page leads with what was opened or built below its top folder (`recentBelow`), as Drive's Home leads
+  // with its Suggested files and Box's All Files with its Recents: one row of the grid, as many cards as fit across
+  // (`useColumns`), or five rows of the list, then the listing under "All files". Never on a folder below the top, and
+  // never in a search, which replaces it; the kinds' tab narrows it as it narrows the listing.
+  const [recentGrid, setRecentGrid] = useState<HTMLUListElement | null>(null);
+  const fitAcross = useColumns(recentGrid);
+  const recent = place.view === "project" && !folderPath && !searching && shownProject ? shownModels(recentBelow(all, shownProject, locale), "", shownKind) : [];
+  const recentShown = recent.slice(0, layout === "list" ? RECENT_ROWS : fitAcross);
+  const [recentLabel, allLabel] = [useId(), useId()];
   const now = Date.now();
   // The document just left, among the place's: its card is ringed and brought into view.
   const left = (item: Model) => Boolean(from && (slashed(item.path) === slashed(from.path) || (from.id && item.id === from.id)));
   const ringed = useRef<HTMLLIElement | null>(null);
-  const leftKey = from && matching.some(left) ? `${folderAt || here}\n${from.path}` : "";
+  const leftKey = from && [...recentShown, ...matching].some(left) ? `${folderAt || here}\n${from.path}` : "";
   useEffect(() => { if (leftKey) ringed.current?.scrollIntoView?.({ block: "nearest" }); }, [leftKey]);
   // Escape goes back to the document just left, while nothing else has the key: a menu or a dialog that is up, a
   // field being typed in, or something that spends its own Escape.
@@ -849,8 +899,9 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   </span>;
   // A row's columns, muted: where it is, its kind and size, then its two times with no verb: when it last changed, and when the library first knew it.
   const cell = (column: string, value: ReactNode) => <span key={column} className={cn(COLUMN_CLASS[column], "text-muted-foreground")} data-column={column}>{value}</span>;
-  const columns = (item: Model) => <>
-    {whereColumn ? cell("where", where(item)) : null}
+  // `at`: where it is, its column's cell (a Recent row's folder below the project's top, where the listing has none).
+  const columns = (item: Model, at: string | null = whereColumn ? where(item) : null) => <>
+    {at === null ? null : cell("where", at)}
     {cell("kind", format(item) || "—")}
     {cell("size", sizeLabel(item.size, locale) || "—")}
     {cell("updated", item.missing ? t("home.fileUnavailable") : age(item.updated))}
@@ -906,6 +957,15 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   };
   // The place's folders and files: in the list, rows under their header, the folders first; else the folders, tiles in
   // the cards' columns, over the cards.
+  // A document's card: its picture, badged, over its caption, the name, a card's title, over its one line. No glyph:
+  // the picture and its badge say what it is.
+  const card = (item: Model) => entry(item, false, <>
+    <Picture item={item} load={load} opening={opening === item.path} badge={format(item) || null} />
+    <span className={CAPTION_CLASS}>
+      <span className="truncate font-medium text-foreground" data-library-label="">{item.name}</span>
+      <span className="truncate text-muted-foreground" data-library-status="">{status(item)}</span>
+    </span>
+  </>);
   const documents = (list: readonly Model[]) => layout === "list"
     ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className={LIST_CLASS} aria-label={t("home.filesAria")}>
       {folders.map(folderRow)}
@@ -913,15 +973,15 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     : <>
       {folders.length ? <ul className={GRID_CLASS} aria-label={t("home.foldersAria")} data-library-folders="">
         {folders.map(folderTile)}</ul> : null}
-      {list.length ? <ul className={GRID_CLASS} aria-label={t("home.filesAria")}>{list.map(item => entry(item, false, <>
-        <Picture item={item} load={load} opening={opening === item.path} badge={format(item) || null} />
-        {/* The caption: the name, a card's title, over its one line. No glyph: the picture and its badge say what it is. */}
-        <span className={CAPTION_CLASS}>
-          <span className="truncate font-medium text-foreground" data-library-label="">{item.name}</span>
-          <span className="truncate text-muted-foreground" data-library-status="">{status(item)}</span>
-        </span>
-      </>))}</ul> : null}
+      {list.length ? <ul className={GRID_CLASS} aria-label={t("home.filesAria")}>{list.map(card)}</ul> : null}
     </>;
+  // A project's top page's Recent (`recentShown`): one row of cards in the cards' columns, or rows of the list under a
+  // header of their own with Where, each its folder below the project's top.
+  const recentWhere = (item: Model) => (shownProject ? strictlyBelow(item.folder, shownProject.root) : null) ?? "";
+  const recentList = layout === "list"
+    ? <div className="cad-library-table" data-where=""><Columns where={t("home.columnWhere")} /><ul className={LIST_CLASS} aria-labelledby={recentLabel}>
+      {recentShown.map(item => entry(item, true, <>{name(item)}{columns(item, recentWhere(item))}</>))}</ul></div>
+    : <ul ref={setRecentGrid} className={GRID_CLASS} aria-labelledby={recentLabel}>{recentShown.map(card)}</ul>;
   // Import, the host's chooser of a file or a folder: the scale's outline button, neutral as every control of the row is
   // (never a filled primary), its chevron a dropdown's.
   const importMenu = importFile || importFolder ? <DropdownMenu modal={false}>
@@ -1032,6 +1092,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // A place with nothing to list, or nothing that matches, says so in one muted line, where its first row would stand.
   const line = (state: string, text: string, status = false) => <p className="m-0 text-muted-foreground" role={status ? "status" : undefined} data-library-state={state}>{text}</p>;
   const reading = place.view === "project" ? !listing && !folderRead?.failed && Boolean(library.folder) : items === null;
+  // The listing: the folders and the files, and under a folder listed only in part a line saying so.
+  const listed = <>
+    {documents(matching)}
+    {listing?.truncated ? <p className="m-0 text-muted-foreground" data-library-truncated="">{t("home.projectTruncated")}</p> : null}
+  </>;
   const body = items === null || awaited ? <Placeholders layout={layout} />
     : place.view === "project" && !shownProject ? line("gone", projectsFailed ? t("home.projectsFailed") : t("home.projectGone"))
       : shownProject?.missing ? line("missing", t("home.projectMissing"))
@@ -1040,10 +1105,18 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
             : empty && place.view === "recents" ? welcome
               : !inPlace.length && !folders.length ? line("empty", searching ? t("home.noMatchingModels") : nothing)
                 : !matching.length && !folders.length ? line("unmatched", t("home.noMatchingModels"), true)
-                  : <>
-                    {documents(matching)}
-                    {listing?.truncated ? <p className="m-0 text-muted-foreground" data-library-truncated="">{t("home.projectTruncated")}</p> : null}
-                  </>;
+                  : recentShown.length ? <>
+                    {/* Two blocks 16px apart, each under its label 8px over it (the body's size, medium, in the
+                        foreground): Recent's one row, then the listing as it is without it. */}
+                    <section className="grid min-w-0 gap-2" aria-labelledby={recentLabel} data-library-recent="">
+                      <h2 className={SECTION_LABEL_CLASS} id={recentLabel}>{t("home.recent")}</h2>
+                      {recentList}
+                    </section>
+                    <section className="grid min-w-0 gap-2" aria-labelledby={allLabel} data-library-all="">
+                      <h2 className={SECTION_LABEL_CLASS} id={allLabel}>{t("home.allFiles")}</h2>
+                      <div className="grid min-w-0 gap-4">{listed}</div>
+                    </section>
+                  </> : listed;
   // Whether the place lists anything, or will: its toolbar (the kinds' tabs, Sort and the layout) stands then, and over
   // a search on a project's page that finds nothing, never over a line that says the place has nothing to list.
   const lists = items === null || awaited ? true
