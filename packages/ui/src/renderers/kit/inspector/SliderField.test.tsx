@@ -218,3 +218,25 @@ it('neither types, steps nor scrubs while it is off', () => {
   fireEvent.pointerMove(label, { clientX: 140 });
   expect(onValueChange).not.toHaveBeenCalled();
 });
+
+// The browser throws NotFoundError capturing, or releasing, a pointer it does not know (a synthetic press's
+// id). The scrub works uncaptured then, and neither escapes the label's handlers as the page's crash.
+it('scrubs from its label when the browser cannot capture the pointer', () => {
+  const { container, onValueChange, onValueCommit } = hole();
+  const label = container.querySelector('[data-slider-field-label]') as HTMLElement;
+  const unknown = () => { throw new DOMException('No active pointer with the given id is found.', 'NotFoundError'); };
+  Object.assign(label, { setPointerCapture: unknown, releasePointerCapture: unknown, hasPointerCapture: () => false });
+  const errors: unknown[] = [];
+  const record = (event: ErrorEvent) => { errors.push(event.error); event.preventDefault(); };
+  window.addEventListener('error', record);
+  try {
+    fireEvent.pointerDown(label, { clientX: 100, button: 0 });
+    fireEvent.pointerMove(label, { clientX: 105 });
+    fireEvent.pointerUp(label, { clientX: 105 });
+  } finally {
+    window.removeEventListener('error', record);
+  }
+  expect(errors).toEqual([]);
+  expect(onValueChange).toHaveBeenLastCalledWith(7.8);
+  expect(onValueCommit).toHaveBeenCalledWith(7.8);
+});

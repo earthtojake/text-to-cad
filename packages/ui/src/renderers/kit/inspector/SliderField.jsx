@@ -3,6 +3,7 @@ import { Slider } from "@cad/ui/primitives/slider";
 import { FieldLabel } from "@cad/ui/primitives/field-label";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { cn } from "@cad/ui/utils";
+import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import { SliderValueField } from "./SliderValueField.jsx";
 import { clampNumber, decimalsOf } from "./numberText.js";
 
@@ -60,7 +61,7 @@ export function SliderField({
     onPointerDown: event => {
       if (event.button !== 0 || event.pointerType === "touch") return;
       scrub.current = { x: event.clientX, from: Number(value) || 0, last: Number(value) || 0, moved: false };
-      event.currentTarget.setPointerCapture?.(event.pointerId);
+      capturePointer(event.currentTarget, event.pointerId);
     },
     onPointerMove: event => {
       const drag = scrub.current;
@@ -76,7 +77,7 @@ export function SliderField({
     onPointerUp: event => {
       const drag = scrub.current;
       scrub.current = null;
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      releasePointer(event.currentTarget, event.pointerId);
       if (drag?.moved) onValueCommit?.(drag.last);
     },
     onPointerCancel: () => { scrub.current = null; },

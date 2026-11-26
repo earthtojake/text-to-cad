@@ -2,6 +2,7 @@ import * as React from "react"
 import { Slider as SliderPrimitive } from "radix-ui"
 
 import { cn } from "@cad/ui/utils"
+import { capturePointer } from "../lib/pointerCapture.js"
 
 // shadcn's slider: every slider in the viewer is this one (a row may size and place it). A slider
 // with an `origin` (Position's joints: a joint's rest is mostly mid-range) fills from that value to
@@ -20,6 +21,18 @@ function stepDecimals(step) {
   return Math.min(10, exponent ? Number(exponent[1]) : (text.split(".")[1] || "").length)
 }
 
+// Radix captures every press's pointer, unguarded, and then slides. `setPointerCapture` throws NotFoundError
+// for a pointer the browser does not know (a synthetic press's id, as an automation's script dispatches one),
+// which escaped Radix's handler as the page's crash; and a slide begun uncaptured would never end, since
+// Radix ends (and commits) only a captured one. So the pointer is captured here first, as Radix would, and a
+// press that cannot be is no slide: its default prevented, Radix's handlers skip it.
+function captureOrSkip(onPointerDown) {
+  return event => {
+    onPointerDown?.(event)
+    if (!event.defaultPrevented && !capturePointer(event.target, event.pointerId)) event.preventDefault()
+  }
+}
+
 /**
  * A value arrives as a sum of floats (a percentage of a range, a pose in degrees), and the thumb
  * would announce it as `28.000000000000004`: each value is rounded to the precision of `step`, so
@@ -34,6 +47,7 @@ function Slider({
   step = 1,
   thumbProps,
   origin,
+  onPointerDown,
   ...props
 }) {
   const decimals = stepDecimals(step)
@@ -64,6 +78,7 @@ function Slider({
         className
       )}
       {...props}
+      onPointerDown={captureOrSkip(onPointerDown)}
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
