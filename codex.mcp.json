@@ -3,6 +3,7 @@
     "cad": {
       "command": "uvx",
       "args": [
+        "--isolated",
         "--no-config",
         "--managed-python",
         "--python",

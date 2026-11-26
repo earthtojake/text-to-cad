@@ -5,7 +5,7 @@ renderers `apps/web` composes (`cadRenderers`: every format the viewer opens, a 
 schematic among them, and the file handler's extensions with them: `cad_server/mcp/server.py`'s
 `EXTENSIONS`), behind a different host — an MCP Apps bridge instead of an HTTP origin. The computer's engine serves its tools, page resource and HTTP routes.
 `cad mcp` is the stateless stdio shim that agent hosts launch (Codex's plugin line runs it as
-`uvx --no-config --managed-python --python 3.14 cad@<VERSION> mcp`): it starts that
+`uvx --isolated --no-config --managed-python --python 3.14 cad@<VERSION> mcp`): it starts that
 engine once, as `cad server start` does, then forwards JSON-RPC to `/mcp` using its token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves
 the engine, its workers and other clients alive.
