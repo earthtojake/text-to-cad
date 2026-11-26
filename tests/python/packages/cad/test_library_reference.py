@@ -25,8 +25,7 @@ COPY = repo_path("apps", "docs", "src", "lib", "docs", "library-reference.genera
 class TheCopyIsTheLibrary(unittest.TestCase):
     def test_the_docs_site_reads_the_librarys_declarations(self) -> None:
         self.assertEqual(reference.as_docs_json(), COPY.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad._internal.reference --docs "
-                         "> apps/docs/src/lib/docs/library-reference.generated.json")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_every_declared_name_is_in_it(self) -> None:
         import cad

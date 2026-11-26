@@ -1,8 +1,9 @@
 /**
  * /docs/reference/cli, "The cad command": the command line's own description of itself
- * (`cli-reference.generated.json`, `python -m cad_server._internal.cli_reference --docs`) set as one
- * Markdown page, so the table of contents, the page's Markdown, the search and /llms.txt read it as
- * they read any page. Nothing here is written by hand but the introduction and the groups below:
+ * (`cli-reference.generated.json`, `python -m cad_server._internal.cli_reference --docs`, which
+ * `scripts/generated/regenerate.py` writes) set as one Markdown page, so the table of contents, the page's
+ * Markdown, the search and /llms.txt read it as they read any page. Nothing here is written by hand but the
+ * introduction and the groups below:
  * every command the JSON has is on the page, a command no group names under "Other".
  */
 import generated from "../cli-reference.generated.json";

@@ -1,7 +1,8 @@
 /**
  * /docs/reference/library, "The cad library": the library's own description of its public names
- * (`library-reference.generated.json`, `python -m cad._internal.reference --docs`) set as one Markdown
- * page, as the command line's page is (`cli.ts`). Each name is a heading whose id is its dotted path
+ * (`library-reference.generated.json`, `python -m cad._internal.reference --docs`, which
+ * `scripts/generated/regenerate.py` writes) set as one Markdown page, as the command line's page is
+ * (`cli.ts`). Each name is a heading whose id is its dotted path
  * (`#cad.step.export`) and whose kind shows beside it (`{#id kind=...}`, read by `source.ts`), then
  * its signature, and its docstring made Markdown (`text.ts`).
  */

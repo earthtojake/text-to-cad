@@ -26,9 +26,9 @@ guide records what the types so far needed, and is no template for the next.
       producer (`decorator`) or changed in place by an edit (`Edit`: `<type>.edit`, a `with` block),
       never both (law 29). `wire` only if a released protocol already spells it otherwise; a new type
       never needs one. `python -m cad.registry <id>` prints the entry's help.
-- [ ] **Regenerate the JavaScript**: `python -m cad.registry --js >
-      packages/core/src/lib/documentTypes.generated.js`, and the documentation site's copy,
-      `python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`.
+- [ ] **Regenerate what is made from the code**: `scripts/generated/regenerate.py` writes the JavaScript
+      table of the types (`packages/core/src/lib/documentTypes.generated.js`) and the documentation site's
+      copy of the registry and its references again (`--check` names what is stale).
       `tests/python/packages/cad/test_registry.py` fails until you do.
 - [ ] **The type's package**, `packages/cad/src/cad/<id>/__init__.py`, ending in `_bind(__name__)`
       (`cad._internal.document_type.bind`), with the id added to `cad._TYPES`

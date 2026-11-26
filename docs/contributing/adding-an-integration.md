@@ -158,6 +158,6 @@ write code for that tool: OCP is a dependency of `build123d`, not an integration
       package, and the engine's Document types and integrations page for what the integration runs.
 - [ ] **Skill notes**: the skill that uses it says what the tool is and when it is fetched, after its
       setup block (the setup block itself is the shared text every skill carries word for word).
-- [ ] **The docs site's copy of the registry**: regenerate it (`python -m
-      cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`,
-      which `tests/python/packages/cad/test_registry.py` holds to the table).
+- [ ] **The docs site's copy of the registry**: regenerate it with `scripts/generated/regenerate.py`, which
+      writes every file made from the code again (`tests/python/packages/cad/test_registry.py` holds the
+      copy to the table).

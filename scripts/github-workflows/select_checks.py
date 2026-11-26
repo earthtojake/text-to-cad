@@ -280,7 +280,7 @@ RULES: tuple[Rule, ...] = (
     Rule((
         "scripts/test/test-api.sh", "scripts/test/test-share.sh", "scripts/test/test.sh",
         "scripts/release/**", "scripts/github-workflows/deploy-vercel-app.sh", "scripts/look/**",
-        "scripts/git-hooks/**", "scripts/bench/**", "scripts/README.md",
+        "scripts/git-hooks/**", "scripts/bench/**", "scripts/generated/**", "scripts/README.md",
         ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
         ".github/workflows/deploy-docs.yml", ".github/workflows/deploy-api.yml", ".github/workflows/deploy-share.yml",
         ".github/dependabot.yml", ".github/release.yml", ".github/FUNDING.yml", ".githooks/**",

@@ -20,8 +20,7 @@ COPY = repo_path("apps", "docs", "src", "lib", "docs", "cli-reference.generated.
 class TheCopyIsTheCommand(unittest.TestCase):
     def test_the_docs_site_reads_the_commands_parsers(self) -> None:
         self.assertEqual(reference.as_docs_json(), COPY.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad_server._internal.cli_reference --docs "
-                         "> apps/docs/src/lib/docs/cli-reference.generated.json")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_every_command_cad_help_lists_is_in_it(self) -> None:
         from cad.registry import types_for

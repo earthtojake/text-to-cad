@@ -27,12 +27,12 @@ DOCS = repo_path("apps", "docs", "src", "lib", "docs", "registry.generated.json"
 class TheTableIsTheSource(unittest.TestCase):
     def test_the_javascript_is_generated_from_the_registry(self) -> None:
         self.assertEqual(registry.as_js(), GENERATED.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad.registry --js > packages/core/src/lib/documentTypes.generated.js")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_the_docs_site_reads_the_registry(self) -> None:
         # The documentation site's pages of the types and the integrations are this table's own words.
         self.assertEqual(registry.as_docs_json(), DOCS.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_every_type_is_well_formed(self) -> None:
         seen: dict[str, str] = {}

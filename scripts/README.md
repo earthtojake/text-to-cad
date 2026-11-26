@@ -12,6 +12,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Build it and assert it is complete | `scripts/bundle/bundle.sh --check` |
 | Run code tests | `scripts/test/test.sh` |
 | Run docs checks | `scripts/test/test-docs.sh` |
+| Regenerate every file made from the code (the docs site's references and registry, @cad/core's types), or check them | `scripts/generated/regenerate.py`, `scripts/generated/regenerate.py --check` |
 | Check the release version and every stamp of it | `scripts/release/check-version.sh` |
 | Check the shipping contract | `scripts/github-workflows/check-builds.sh` |
 | Install this checkout into the agent apps to test it, and go back | `scripts/install/dev_install.py`, `scripts/install/dev_install.py --release` |
@@ -379,6 +380,15 @@ this edit still BUILD? It no longer has anything to say about the index.
 
 `build/library.mjs` — the esbuild library build `packages/core` and
 `packages/ui` share; each package's `scripts/build.mjs` calls it.
+
+`generated/regenerate.py [--check]` — every committed file generated from the code, made again from this
+checkout's sources: the docs site's command and library references (`apps/docs/src/lib/docs/cli-reference.generated.json`,
+`library-reference.generated.json`) and its copy of the registry (`registry.generated.json`), and @cad/core's
+table of document types (`packages/core/src/lib/documentTypes.generated.js`), each by its source's own module
+(`python -m cad_server._internal.cli_reference --docs`, `cad._internal.reference --docs`, `cad.registry --docs`,
+`cad.registry --js`), in the Python the test runners take. `--check` writes nothing and names each stale file
+(exit 1). Run by hand after changing a command, a public name of the library or the registry, which the tests
+that hold each file to its source ask for; tested by `tests/python/global/test_regenerate.py`.
 
 `brand/` — `export-logos.mjs` exports app and plugin icons from the committed SVGs.
 Run by hand when the brand changes; ordinary builds use the committed files. See

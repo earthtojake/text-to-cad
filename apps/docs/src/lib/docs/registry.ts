@@ -1,8 +1,9 @@
 /**
  * The document types and the integrations, as the library's registry says them (`cad.registry`):
  * each type's operations, and what each integration brings. `registry.generated.json` is that table
- * (`python -m cad.registry --docs`), and tests/python/packages/cad/test_registry.py fails when the
- * two differ, so a page here never says of a type or an integration anything the library does not.
+ * (`python -m cad.registry --docs`, which `scripts/generated/regenerate.py` writes), and
+ * tests/python/packages/cad/test_registry.py fails when the two differ, so a page here never says of a
+ * type or an integration anything the library does not.
  */
 import generated from "./registry.generated.json";
 
