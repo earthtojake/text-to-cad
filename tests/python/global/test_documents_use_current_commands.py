@@ -11,8 +11,10 @@ in its place (``REMOVED``: ``cad serve``, ``cad delete``), which is answered as 
 ``test_documented_commands.py`` puts the skills' fenced command lines through the parsers; this reads the rest of the
 text, prose and code alike: a type's operation (``cad step inspect``, ``cad <type> snapshot``) wherever it stands, and
 any other earlier spelling where it is code, in a code span or a string, since "the cad server" and "its cad step" are
-prose. The sample models are no test's to read (``test_tests_are_self_contained.py``), and a generated file is its
-source's text (``scripts/generated/regenerate.py``).
+prose. A shell runs the command through a variable that holds it as often as by its name (``"$COMMAND_PATH" xbf
+export``, ``& $cad server stop``, the installed-mode checks' way), or by its path (``"$VENV/bin/cad" server stop``):
+each of those is the command line too. The sample models are no test's to read (``test_tests_are_self_contained.py``),
+and a generated file is its source's text (``scripts/generated/regenerate.py``).
 
 The documents about the earlier spellings themselves name them on purpose: the migration guides, the hint table and
 its tests, the bridge from releases 0.10.0 to 0.11.11 that runs their commands, and the pages that say what an old
@@ -82,7 +84,12 @@ CODE = ("`", "'", '"')
 # a string or a clause does.
 _GAP = r"(?:[ \t]+|[ \t]*\n[ \t]*(?:(?:#|//|\*)[ \t]*)?)"
 _WORD = r"[^\s`'\"(),;:|\]]+"
-MENTION = re.compile(rf"(?<![\w./@-])cad(?P<words>(?:{_GAP}{_WORD}){{1,6}})")
+_WORDS = rf"(?P<words>(?:{_GAP}{_WORD}){{1,6}})"
+MENTION = re.compile(rf"(?<![\w./@$-])cad{_WORDS}")
+# The command run by a shell: through a variable that holds it (``$cad``, ``$CAD``, ``$COMMAND``, ``"$COMMAND_PATH"``,
+# braced or not), or by a path that ends in it (``"$VENV/bin/cad"``, ``"$dir\cad.exe"``).
+_HOLDER = r"\$\{?(?:cad|CAD|[A-Z_]*COMMAND[A-Z_]*)\}?"
+RUN = re.compile(rf'(?:"{_HOLDER}"|{_HOLDER}(?![\w}}])|"[^"\n]*[/\\]cad(?:\.exe|\.cmd)?"){_WORDS}')
 
 
 def asked(argv: list[str]) -> list[str]:
@@ -110,15 +117,18 @@ def earlier(argv: list[str], in_code: bool) -> bool:
 
 
 def mentions(text: str) -> list[tuple[int, list[str], bool]]:
-    """Each mention of ``cad`` and the words after it: its line, the words and whether it is code."""
+    """Each mention of ``cad`` and the words after it, in the text's order: its line, the words and whether it is
+    code -- a shell's run of the command always is (``RUN``)."""
     found = []
-    for match in MENTION.finditer(text):
-        argv = [word if set(word) == {"."} else word.rstrip(".!?")
-                for word in re.split(r"\s+(?:(?:#|//|\*)\s+)?", match.group("words").strip())]
-        argv = [word for word in argv if word]
-        if argv:
-            found.append((text.count("\n", 0, match.start()) + 1, argv, text[match.start() - 1: match.start()] in CODE))
-    return found
+    for pattern in (MENTION, RUN):
+        for match in pattern.finditer(text):
+            argv = [word if set(word) == {"."} else word.rstrip(".!?")
+                    for word in re.split(r"\s+(?:(?:#|//|\*)\s+)?", match.group("words").strip())]
+            argv = [word for word in argv if word]
+            if argv:
+                code = pattern is RUN or text[match.start() - 1: match.start()] in CODE
+                found.append((match.start(), text.count("\n", 0, match.start()) + 1, argv, code))
+    return [(line, argv, code) for _at, line, argv, code in sorted(found, key=lambda mention: mention[0])]
 
 
 def _files() -> list[str]:
@@ -172,7 +182,9 @@ class DocumentsUseCurrentCommands(unittest.TestCase):
                      "(cad <type> export, exports.py)", "`cad\n  model snapshot` draws",
                      "# `cad kicad_pcb\n#  snapshot`", "`cad dxf` has no", "`cad status`", "``cad stop``",
                      '"cad status --json"', "`cad server --port N`", "`cad orcaslicer`", "`cad serve DOC`",
-                     "`cad delete`", "`cad help step export`"):
+                     "`cad delete`", "`cad help step export`", '"$COMMAND_PATH" xbf export a.xbf a.step \\\n  >log',
+                     'fail "$COMMAND step dfm --process $process"', "& $cad status", '"${CAD}" stop',
+                     '"$VENV/bin/cad" kicad_pcb drc b.kicad_pcb', '& "$tool\\cad.exe" serve a.xbf'):
             with self.subTest(text=text):
                 self.assertTrue(held(text))
         for text in ("`cad export a.xbf a.step`", "`cad inspect FILE --interference`", "`cad kicad drc BOARD`",
@@ -180,7 +192,9 @@ class DocumentsUseCurrentCommands(unittest.TestCase):
                      "`cad server --rotate-token --port 3245 --yes`", "`cad viewer arm.xbf`", "`cad help kicad drc`",
                      "`cad <verb> --help`", "`cad --version`", "`cad[build123d]`", "``cad.export``",
                      "uv run cad export a.xbf a.stl", "the cad server is running", "its cad step ended 0",
-                     "a text-to-cad model"):
+                     "a text-to-cad model", '"$COMMAND_PATH" export a.xbf a.step', '"$COMMAND_PATH" server start',
+                     '"$VENV/bin/cad" server stop', '"$SHIM_COMMAND" --help', '"$GIT" status', "$py model.py",
+                     '"$PYTHON_BIN" -c "import cad"', "Use $cad to create the model"):
             with self.subTest(text=text):
                 self.assertFalse(held(text))
 

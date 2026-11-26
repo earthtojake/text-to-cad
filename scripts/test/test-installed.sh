@@ -411,11 +411,11 @@ done
 echo "   built an xbf and the STEP and STL it declares"
 
 # The script above wrote the files the model DECLARES. This is the other half: an export of
-# the document to a destination the command names.
+# the document to a destination the command names, one a command.
 step "Export the document"
-"$COMMAND_PATH" xbf export models/XBF/probe.xbf models/exported.step models/exported.stl \
-  >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND xbf export"; }
 for written in exported.step exported.stl; do
+  "$COMMAND_PATH" export models/XBF/probe.xbf "models/$written" >"$WORK/export.log" 2>&1 \
+    || { cat "$WORK/export.log" >&2; fail "$COMMAND export models/XBF/probe.xbf models/$written"; }
   [ -s "$EMPTY/models/$written" ] || { cat "$WORK/export.log" >&2; fail "export wrote no models/$written"; }
 done
 echo "   wrote a STEP and an STL from the document"
@@ -425,11 +425,11 @@ echo "   wrote a STEP and an STL from the document"
 step "Check the part for each process"
 for process in cnc sheet molding printing; do
   status=0
-  "$COMMAND_PATH" step dfm models/probe.step --process "$process" >"$WORK/dfm-$process.log" 2>&1 || status=$?
+  "$COMMAND_PATH" dfm models/probe.step --process "$process" >"$WORK/dfm-$process.log" 2>&1 || status=$?
   # A verdict either way (a cube is no sheet): 0 or 1. 2 is the command refused, 3 a check that did not run.
   case "$status" in
     0|1) ;;
-    *) cat "$WORK/dfm-$process.log" >&2; fail "$COMMAND step dfm --process $process exited $status" ;;
+    *) cat "$WORK/dfm-$process.log" >&2; fail "$COMMAND dfm --process $process exited $status" ;;
   esac
 done
 echo "   a verdict for cnc, sheet, molding and printing"
