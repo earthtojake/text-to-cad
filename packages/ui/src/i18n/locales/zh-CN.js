@@ -410,6 +410,7 @@ export default {
   "home.noMatchingModels": "没有匹配项。",
   "home.filesAria": "文件",
   "home.foldersAria": "文件夹",
+  "home.otherFilesAria": "其他文件",
   "home.recent": "最近",
   "home.allFiles": "所有文件",
   "home.loadingFiles": "正在加载文件",

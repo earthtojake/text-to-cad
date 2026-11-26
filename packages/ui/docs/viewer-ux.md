@@ -245,13 +245,13 @@ chrome that floats over the picture. The home is the navbar over the library: it
   Why: one document, one identity, one "model" type; two Assembly cards of the same thing asked the person which to
   open. An `.xbf` exported to another path, or copied, is another file, so a card of its own, and STEP, GLB and the
   other exports always are. A file that is gone is gone from every list.
-- **A folder's page** (`library.folder`): its subfolders first, then every file directly in it, the CAD files and the
-  rest together, nothing below them flattened in; hidden files and folders are not listed. Why: a folder shows its
-  direct children, folders and files together, as Finder, Explorer, Drive and a CAD data panel do; a flat list of
-  everything below lost where each file was, and a tree is a second way to see the same thing. One way to see a
-  project, with no setting or switch between ways. And a project's folder holds an engineer's other files too
-  (datasheets, drawings, scripts, another tool's native files): the page shows the folder as it is and hands each
-  file to the app that opens it.
+- **A folder's page** (`library.folder`): its subfolders first, then every file directly in it, the documents and then
+  the files the viewer does not open, nothing below them flattened in; hidden files and folders are not listed. Why: a
+  folder shows its direct children, folders and files together, as Finder, Explorer, Drive and a CAD data panel do; a
+  flat list of everything below lost where each file was, and a tree is a second way to see the same thing. One way to
+  see a project, with no setting or switch between ways. And a project's folder holds an engineer's other files too
+  (datasheets, drawings, scripts, another tool's native files): the page shows the folder as it is and hands each file
+  to the app that opens it.
   - A subfolder is its glyph and its name, drawn in the family of the files beside it. Among cards it is a tile of the
     cards' own: a card's box, corners and column, a card's 12px inset round one line inside a card's border (46px tall), its name a card's
     name in size and weight, its glyph where a card's name starts; the folders are a grid of their own, 16px over the
@@ -260,20 +260,28 @@ chrome that floats over the picture. The home is the navbar over the library: it
     folder, a real link where the host gives places an address. Why a tile of the cards' family: a folder and a file
     on one page are read as one set, so they share a box, a column and a name's type; the sidebar's row drawn among
     cards read as a different surface, its folders a line of small labels beside large cards.
-  - **A file the viewer does not open** (a PDF, a script, notes, another CAD tool's native file) is a card or a row
-    like the rest: the plain tile with its kind's glyph, its extension as its name writes it for a badge and a Kind,
-    upper case (`PDF`, `PY`, `F3D`; none with no extension), its name, and when it was edited. Nothing about it is
-    dimmed: it is a file of the folder. **A press opens it**, as a press on a document opens the document: with no page
-    for it, in an app of the computer's, chosen from what the host answers for the file as it is pressed: the OS's own
-    handler where the host offers it; else the first app the host lists (an editor, for code); and where it lists
-    neither, the place's line says no app here opens it, by its name. An open the host refuses is said on the same line,
-    in the host's words. It is a button, not a link (it has no address), worked as a document's card is: the same ring,
-    Enter and Space, the same pointer. Its ⋯ is the card's menu with what applies: Open in ▸ (each app the host lists,
-    then Default app where it is offered; the rows the navbar's Open in draws), Copy path and the file manager; with no
-    app and no handler, those two alone. It has no star and no Open in new tab, being in no
-    library; `[` and `]` and the search of documents pass it by. A host that opens no apps shows it in its file
-    manager on a press, and where it can do neither the card is no control at all.
-  - The kinds' tabs narrow the documents; Sort orders every file; the folders stand first in the folder's own order.
+  - **A file the viewer does not open** (a PDF, a script, notes, another CAD tool's native file) comes after the
+    documents. In the grid it is a compact tile of the folders' family, in a grid of its own 16px under the cards: a
+    folder tile's box, column, corners, 12px inset and 46px, its kind's glyph where a folder's glyph stands, its name
+    (medium, truncating), and its ⋯ at its right end, centred in a square as tall as the tile's inside, there as a
+    card's actions are (under the pointer, in focus, always where nothing hovers). In the list it is a row after the
+    documents' rows: the plain tile with its kind's glyph, its name, its extension as its name writes it for its Kind,
+    upper case (`PDF`, `PY`, `F3D`; a dash with no extension), its size and when it was edited. A search's results are
+    one set, as found: there it is a card or a row like the rest, its extension its badge. Nothing about it is dimmed:
+    it is a file of the folder. Why a tile: a file the viewer cannot picture has nothing to show in a picture's space,
+    so it takes a folder's compact tile and comes after the files the viewer can show. **A press opens it**, as a
+    press on a document opens the document: with no page for it, in an app of the computer's, chosen from what the
+    host answers for the file as it is pressed: the OS's own handler where the host offers it; else the first app the
+    host lists (an editor, for code); and where it lists neither, the place's line says no app here opens it, by its
+    name. An open the host refuses is said on the same line, in the host's words; while it is asked for, a spinner
+    stands where its glyph is. It is a button, not a link (it has no address), worked as a document's card is: the
+    same ring, Enter and Space, the same pointer. Its ⋯ is a card's menu with what applies: Open in ▸ (each app the
+    host lists, then Default app where it is offered; the rows the navbar's Open in draws), Copy path and the file
+    manager; with no app and no handler, those two alone. It has no star and no Open in new tab, being in no library;
+    `[` and `]` and the search of documents pass it by. A host that opens no apps shows it in its file manager on a
+    press, and where it can do neither the tile is no control at all.
+  - The kinds' tabs narrow the documents; Sort orders the documents, and then the other files, each group in its
+    order; the folders stand first in the folder's own order.
 - **A project's top page leads with its recent files.** At a project's top (its own folder, not one below it), where
   files of the project below the top were opened by someone or built by a run, a block labelled "Recent" comes first,
   then the listing under "All files". It holds the library's rows of the project whose folder is below its top (the
@@ -1041,3 +1049,5 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   apart by weight and colour; the sidebar is a page's navigation, at the page's body size.
 - **Recent files on every folder's page.** A folder's page is the folder; recent files lead at a project's root, as
   Drive's and Box's lead at theirs.
+- **A card for a file the viewer does not open.** Its picture's space held only a glyph on an empty gradient, a
+  picture's room with no picture in it; it is a folder's compact tile, after the cards.

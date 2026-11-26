@@ -206,14 +206,15 @@
  * panel over this page) and the place on screen, on the page's colour. It is drawn with the scale's tokens and the
  * shared primitives where it is written (`library/ModelLibrary.tsx`): the panel's inset for its gutters, the spacing
  * scale between its blocks, three sizes (the title's `text-heading` at medium weight, the body's `text-ui`, a chip's
- * own step), a card's box for a folder among the cards, the system's chip for a format. What is left here is what a
+ * own step), a card's box for a folder or a file the viewer does not open among the cards, the system's chip for a format. What is left here is what a
  * class cannot say where it stands: a card's marks under the pointer and the keyboard, and the navbar's search and
  * Import giving way in a narrow navbar. */
-/* A card, or a folder's tile among the cards, under the pointer: its edge the foreground at 20%, a field's hover
-   outline. In keyboard focus, or being opened:
+/* A card, or a folder's or a file's tile among the cards, under the pointer: its edge the foreground at 20%, a field's
+   hover outline. In keyboard focus, or being opened:
    the brand's edge and a 1px ring. The document just left (`data-from`): ringed 2px in the brand, under the pointer too. */
-.cad-library-card:not([data-missing]):hover, .cad-library-folder:hover { border-color: color-mix(in srgb, var(--foreground) 20%, transparent); }
-.cad-library-card:has(.cad-library-open:focus-visible), .cad-library-card[data-opening], .cad-library-folder:has(.cad-library-open:focus-visible) { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.cad-library-card:not([data-missing]):hover, .cad-library-folder:hover, .cad-library-file:hover { border-color: color-mix(in srgb, var(--foreground) 20%, transparent); }
+.cad-library-card:has(.cad-library-open:focus-visible), .cad-library-card[data-opening], .cad-library-folder:has(.cad-library-open:focus-visible),
+.cad-library-file:has(.cad-library-open:focus-visible), .cad-library-file[data-opening] { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
 .cad-library-card[data-from], .cad-library-card[data-from]:hover { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand); }
 /* Under 700px of navbar the search is its control-sized icon until it is pressed (`data-open`), then the field, 200px;
    under 480px Import is its icon alone. */

@@ -409,6 +409,7 @@ export default {
   "home.noMatchingModels": "一致するものはありません。",
   "home.filesAria": "ファイル",
   "home.foldersAria": "フォルダー",
+  "home.otherFilesAria": "その他のファイル",
   "home.recent": "最近",
   "home.allFiles": "すべてのファイル",
   "home.loadingFiles": "ファイルを読み込み中",

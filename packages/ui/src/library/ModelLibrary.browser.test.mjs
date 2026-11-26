@@ -137,13 +137,15 @@ test("a card and a place are real links: a plain click stays in this view, and �
     await page.locator('[data-library-title]:text-is("gearbox")').waitFor();
     assert.deepEqual([page.url(), await project.getAttribute("aria-current"), context.pages().length], [`${origin}/?`, "page", 1]);
     // Its page: its folders first, each a link to its own page, a tile of the cards' family (a card's box: its 1px
-    // border round a card's 12px inset round one line, 46px) in the cards' columns, then its files.
+    // border round a card's 12px inset round one line, 46px) in the cards' columns, then its files: the cards, then the
+    // tiles of the files the viewer does not open, in the same columns.
     const folder = page.getByRole("link", { name: "Open dxf", exact: true });
     assert.equal(await folder.getAttribute("href"), "/?place=gearbox&path=dxf");
-    const tiles = await page.locator("[data-library-folders] > li").evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
-    const columns = await page.locator("[data-library-all] .cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
+    const across = (selector) => page.locator(selector).evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
+    const [tiles, cards, others] = [await across("[data-library-folders] > li"), await across("[data-library-all] .cad-library-card"), await across("[data-library-other-files] > li")];
     assert.deepEqual([tiles.length, tiles.every(([, , height]) => height === 46)], [3, true]);
-    assert.deepEqual(tiles.map(([x, width]) => [x, width]), columns.slice(0, tiles.length));
+    const columns = (boxes) => boxes.slice(0, 3).map(([x, width]) => [x, width]);
+    assert.deepEqual([columns(tiles).slice(0, cards.length), columns(tiles)], [columns(cards), columns(others)]);
     const [folderTab] = await Promise.all([context.waitForEvent("page"), folder.click({ modifiers: ["ControlOrMeta"] })]);
     assert.equal(folderTab.url(), `${origin}/?place=gearbox&path=dxf`);
     await folderTab.close();
@@ -530,12 +532,10 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
     assert.equal((await box(folder.locator("svg"))).x, (await box(cards.first().locator("[data-library-label]"))).x);
     assert.equal((await box(cards.first())).y - (await box(folders.first())).bottom, 16);
     // A card: a card's 10px corners, the picture at 3:2 edge to edge, the caption padded by a card's 12px inset all round;
-    // 16px between cards, across and down.
-    // The first card of the second row, however many stand across.
-    const across = await cards.evaluateAll((nodes) => nodes.findIndex((node) => node.getBoundingClientRect().y > nodes[0].getBoundingClientRect().y));
-    const [first, second, below] = [await box(cards.nth(0)), await box(cards.nth(1)), await box(cards.nth(across))];
+    // 16px between cards, across (here) and down (a folder of more than a row, below).
+    const [first, second] = [await box(cards.nth(0)), await box(cards.nth(1))];
     // Columns share the width in fractions of a pixel, so a 3:2 picture's height is fractional too: measured to the pixel.
-    assert.deepEqual([Math.round(second.x - first.right), Math.round(below.y - first.bottom), (await px(cards.first(), "borderTopLeftRadius"))[0]], [16, 16, "10px"]);
+    assert.deepEqual([Math.round(second.x - first.right), (await px(cards.first(), "borderTopLeftRadius"))[0]], [16, "10px"]);
     const picture = await box(cards.first().locator("[data-library-picture]"));
     assert.deepEqual([picture.width, Math.round(picture.height * 3)], [first.width - 2, Math.round(picture.width * 2)]);
     const caption = cards.first().locator("[data-library-label]").locator("xpath=..");
@@ -576,6 +576,14 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
     assert.deepEqual([(await box(back)).height, await type(back), ...(await px(back, "paddingLeft", "paddingRight")), await type(back.locator("kbd")), (await style(back.locator("kbd"), "borderTopWidth"))[0]],
       [28, "13px 20px 400", "8px", "8px", "11px 16px 400", "1px"]);
   } finally { await deep.context.close(); }
+  // Cards 16px apart down too: the first card of the second row, however many stand across.
+  const plates = await home("place=gearbox&path=dxf");
+  try {
+    const cards = plates.page.locator(".cad-library-card");
+    const across = await cards.evaluateAll((nodes) => nodes.findIndex((node) => node.getBoundingClientRect().y > nodes[0].getBoundingClientRect().y));
+    assert.ok(across > 0, "more than a row of cards");
+    assert.equal(Math.round((await box(cards.nth(across))).y - (await box(cards.nth(0))).bottom), 16);
+  } finally { await plates.context.close(); }
   // A place with nothing to list says so in one muted line where its first row would stand, 16px under its title: no
   // toolbar, with nothing to narrow, order or lay out.
   const bare = await home("place=bare", undefined, { waitFor: "[data-library-state]" });
@@ -659,9 +667,10 @@ test("a project's top page leads with Recent, one row of the cards' grid, then A
     const row = await box(page.getByRole("list", { name: "Recent" }));
     const folders = await box(page.locator("[data-library-folders]"));
     assert.deepEqual([recentLabel.x, recentLabel.y - toolbar.bottom, row.y - recentLabel.bottom, allLabel.y - row.bottom, folders.y - allLabel.bottom], [232 + 16, 16, 8, 16, 8]);
-    // One row of the cards' grid: as many as fit across at 1440px beside the sidebar, five, in the listing's columns.
+    // One row of the cards' grid: as many as fit across at 1440px beside the sidebar, five, in the listing's columns (its
+    // other files' tiles fill five).
     const cards = () => page.locator("[data-library-recent] .cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, y, width } = node.getBoundingClientRect(); return [x, y, width]; }));
-    const listed = await page.locator("[data-library-all] .cad-library-card").evaluateAll((nodes) => nodes.slice(0, 5).map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
+    const listed = await page.locator("[data-library-all] [data-library-other-files] > li").evaluateAll((nodes) => nodes.slice(0, 5).map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
     const shown = await cards();
     assert.deepEqual([shown.length, new Set(shown.map(([, y]) => y)).size, shown.map(([x, , width]) => [x, width])], [5, 1, listed]);
     // Newest first; each card's line its activity alone, as a card's always is.
@@ -712,22 +721,46 @@ test("at a phone's scale the home's rows, texts and gutters are the phone's: 46p
   } finally { await context.close(); }
 });
 
-test("a file that is no document is a card and a row like the rest, pressed as a button: it opens in an app, and its ⋯ holds Open in", async () => {
+test("a file that is no document is a 46px tile of the folders' family after the cards: pressed as a button it opens in an app, and its ⋯ at its right end holds Open in", async () => {
   const { context, page } = await home("place=gearbox");
   try {
-    // The same card: its extension for a badge, the plain tile, its name and when it was edited; a button, not a link.
-    const script = page.getByRole("button", { name: "Open build.py", exact: true });
-    const [card, document] = [page.locator(".cad-library-card", { has: script }), page.locator(".cad-library-card", { has: page.getByRole("link", { name: "Open gearbox.xbf", exact: true }) })];
-    assert.deepEqual([await card.locator("[data-library-format]").textContent(), await card.locator("[data-library-status]").textContent(), await script.getAttribute("href"), await card.locator("a").count(),
-      Math.round((await box(card)).height), (await style(card, "opacity"))[0], (await style(script, "cursor"))[0]], ["PY", "Edited 1d ago", null, 0, Math.round((await box(document)).height), "1", "pointer"]);
-    assert.equal(await page.locator(".cad-library-card", { has: page.getByRole("button", { name: "Open Makefile", exact: true }) }).locator("[data-library-format]").count(), 0, "no badge with no extension");
-    // The keyboard reaches it as it reaches a document's card, with the same ring; Enter opens it: here, a script, in
-    // the first app the host lists.
-    await script.focus();
+    // After the cards, a grid of its own 16px under them, in the cards' columns: a folder tile's box (its 1px border and
+    // 10px corners round a 12px inset round one 20px line, 46px), its kind's glyph where a folder's is, its name a
+    // card's name; a button, not a link.
+    const tiles = page.getByRole("list", { name: "Other files" });
+    const cards = await box(page.locator("[data-library-all]").getByRole("list", { name: "Files", exact: true }));
+    const [first, second] = [tiles.locator("> li").nth(0), tiles.locator("> li").nth(1)];
+    assert.equal(Math.round((await box(tiles)).y - cards.bottom), 16);
+    const columns = await page.locator("[data-library-all] .cad-library-card").evaluateAll((nodes) => nodes.map((node) => { const { x, width } = node.getBoundingClientRect(); return [x, width]; }));
+    const across = await tiles.locator("> li").evaluateAll((nodes) => nodes.map((node) => { const { x, width, height } = node.getBoundingClientRect(); return [x, width, height]; }));
+    assert.deepEqual([across.every(([, , height]) => height === 46), across.slice(0, columns.length).map(([x, width]) => [x, width])], [true, columns]);
+    const folder = page.locator("[data-library-folders] > li").first();
+    assert.deepEqual(await px(first, "borderTopWidth", "borderTopLeftRadius", "backgroundColor"), await px(folder, "borderTopWidth", "borderTopLeftRadius", "backgroundColor"));
+    const [tile, glyph, label] = [await box(first), await box(first.locator("svg").first()), first.locator("[data-library-label]")];
+    assert.deepEqual([glyph.x - tile.x, glyph.width, Math.round(glyph.y + glyph.height / 2 - tile.y)], [(await box(folder.locator("svg"))).x - (await box(folder)).x, 16, 23]);
+    assert.deepEqual([await label.textContent(), await type(label), (await style(label, "color"))[0]], ["bearing-6204-datasheet.pdf", "13px 20px 500", await token(page, "--foreground")]);
+    const press = page.getByRole("button", { name: "Open build.py", exact: true });
+    assert.deepEqual([await press.getAttribute("href"), await second.locator("a").count(), await second.locator("[data-library-picture], [data-library-format], [data-library-status]").count(), (await style(press, "cursor"))[0]],
+      [null, 0, 0, "pointer"]);
+    // Its ⋯, there under the pointer, as a card's: in a square at its right end as tall as its inside, so the button is
+    // padded alike on every side (10px) and its glyph ends 16px in; a long name ends where that square starts.
+    const more = first.getByRole("button", { name: "Actions for bearing-6204-datasheet.pdf" });
+    assert.equal((await style(more, "opacity"))[0], "0");
+    await first.hover();
+    await page.waitForFunction((node) => getComputedStyle(node).opacity === "1", await more.elementHandle());
+    const [button, dots] = [await box(more), await box(more.locator("svg"))];
+    assert.deepEqual([button.y - tile.y - 1, tile.bottom - 1 - button.bottom, tile.right - 1 - button.right, button.width, tile.right - 1 - dots.right], [10, 10, 10, 24, 16]);
+    assert.ok(await label.evaluate((node) => node.scrollWidth > node.clientWidth), "the long name truncates");
+    assert.equal(Math.round((await box(label)).right), Math.round(tile.right - 1 - 44));
+    // The keyboard reaches it as it reaches a card, with the same ring, and its ⋯ shows in focus; Enter opens it: here, a
+    // script, in the first app the host lists.
+    await page.mouse.move(700, 20);
+    await press.focus();
     await page.keyboard.press("Tab");
     await page.keyboard.press("Shift+Tab");
     const brand = await token(page, "--brand");
-    assert.ok((await style(card, "boxShadow"))[0].includes(`${brand} 0px 0px 0px 1px`), "the focused card's ring");
+    assert.ok((await style(second, "boxShadow"))[0].includes(`${brand} 0px 0px 0px 1px`), "the focused tile's ring");
+    await page.waitForFunction((node) => getComputedStyle(node).opacity === "1", await second.getByRole("button", { name: "Actions for build.py" }).elementHandle());
     await page.keyboard.press("Enter");
     await page.waitForFunction(() => window.homeOpenedIn?.length === 1);
     // A file the OS's handler takes opens with it; the page goes nowhere and no menu opens.
@@ -735,12 +768,21 @@ test("a file that is no document is a card and a row like the rest, pressed as a
     await page.waitForFunction(() => window.homeOpenedIn?.length === 2);
     assert.deepEqual([await page.evaluate(() => window.homeOpenedIn.map(({ path, target, app }) => [path.split("/").pop(), target, app])), page.url(), await page.getByRole("menu").count()],
       [[["build.py", "source", "vscode"], ["bearing-6204-datasheet.pdf", "source", "default"]], `${origin}/?place=gearbox`, 0]);
-    // Its ⋯, there under the pointer: Open in (the host's apps), Copy path and the file manager.
-    await card.hover();
-    await card.getByRole("button", { name: "Actions for build.py" }).click();
+    // Its ⋯: Open in (the host's apps), Copy path and the file manager.
+    await second.hover();
+    await second.getByRole("button", { name: "Actions for build.py" }).click();
     await page.getByRole("menuitem", { name: "Open in", exact: true }).click();
     assert.deepEqual([await page.getByRole("menu", { name: "Open in" }).getByRole("menuitem").allTextContents(), await page.getByRole("menu").first().locator(":scope [role=menuitem]").allTextContents()],
       [["VS Code", "PyCharm"], ["Open in", "Copy path", "Show in file manager"]]);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    // In the list, a row after the documents' rows, its extension its Kind.
+    await page.getByRole("button", { name: "List" }).click();
+    const rows = page.locator("[data-library-all] .cad-library-row");
+    await rows.first().waitFor();
+    const named = await rows.evaluateAll((nodes) => nodes.map((node) => [node.querySelector("[data-library-label]").textContent, node.querySelector('[data-column="kind"]').textContent]));
+    assert.deepEqual(named.slice(3), [["gearbox.xbf", "Assembly"], ["spur_gear.xbf", "Part"], ["bearing-6204-datasheet.pdf", "PDF"], ["build.py", "PY"], ["NOTES.md", "MD"],
+      ["gearbox.f3d", "F3D"], ["tolerances.dat", "DAT"], ["Makefile", "—"]]);
   } finally { await context.close(); }
   // Nothing here opens it: said in the place's line, under the heading row.
   const none = await home("place=gearbox&path=housing/v3");
@@ -749,4 +791,17 @@ test("a file that is no document is a card and a row like the rest, pressed as a
     const said = none.page.getByRole("alert");
     assert.deepEqual([await said.textContent(), (await style(said, "color"))[0], await type(said)], ["No app on this computer opens run.sh.", await token(none.page, "--destructive"), "13px 20px 400"]);
   } finally { await none.context.close(); }
+  // A finger's phone: the same 46px tile, one across, its ⋯ a finger's 36px, always there, still padded alike (4px) with
+  // its glyph 16px in.
+  const phone = await home("place=gearbox", { width: 390, height: 844 }, { hasTouch: true });
+  try {
+    const { page } = phone;
+    await page.locator('[data-viewer-layout="mobile"]').waitFor();
+    await still(page);
+    const first = page.getByRole("list", { name: "Other files" }).locator("> li").first();
+    const more = first.getByRole("button", { name: "Actions for bearing-6204-datasheet.pdf" });
+    const [tile, button, dots] = [await box(first), await box(more), await box(more.locator("svg"))];
+    assert.deepEqual([tile.x, tile.width, tile.height, (await style(more, "opacity"))[0], button.width, button.y - tile.y - 1, tile.right - 1 - button.right, tile.right - 1 - dots.right],
+      [16, 358, 46, "1", 36, 4, 4, 16]);
+  } finally { await phone.context.close(); }
 });

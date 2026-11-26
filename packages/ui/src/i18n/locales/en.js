@@ -338,6 +338,7 @@ export default {
   "home.noMatchingModels": "No matches.",
   "home.filesAria": "Files",
   "home.foldersAria": "Folders",
+  "home.otherFilesAria": "Other files",
   "home.recent": "Recent",
   "home.allFiles": "All files",
   "home.loadingFiles": "Loading files",

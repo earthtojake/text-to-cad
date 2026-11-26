@@ -698,9 +698,9 @@ it("a project's top page leads with its files opened or built below the top, new
 });
 
 // A folder's page lists every file in it. A file the viewer does not open (`documentKind: null`, as a CAD host's row of it
-// says) is a card or a row like the rest, and a press on it opens it, as a press on a document does: in an app of the
-// computer's, there being no page for it.
-it("lists every file of a folder; a press on one that is no document opens it with the default handler, else the host's first app, and says so where nothing opens it", async () => {
+// says) comes after the documents: in the grid a tile of the folders' family, in the list a row; and a press on it opens
+// it, as a press on a document does: in an app of the computer's, there being no page for it.
+it("lists every file of a folder, the documents first; a press on one that is no document opens it with the default handler, else the host's first app, and says so where nothing opens it", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   // A submenu's list scrolls in the chrome's scroll region, which measures itself.
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
@@ -733,8 +733,8 @@ it("lists every file of a folder; a press on one that is no document opens it wi
     asked.length = 0;
     const view = render(page(layout));
     await screen.findByRole('link', { name: 'Open arm.xbf' });
-    // Every file, in the host's order, documents and the rest together.
-    expect(opens()).toEqual(['Open arm.xbf', 'Open datasheet.pdf', 'Open build.py', 'Open Makefile', 'Open run.sh', 'Open locked.pdf', 'Open lid.step']);
+    // Every file: the documents, then the files no page opens, each in the Sort's order (here the host's: they tie).
+    expect(opens()).toEqual(['Open arm.xbf', 'Open lid.step', 'Open datasheet.pdf', 'Open build.py', 'Open Makefile', 'Open run.sh', 'Open locked.pdf']);
     // A document is a link with its star and ⋯. A file that is none has no page, so it is a button, with its ⋯ and no
     // star; it is neither dimmed nor disabled, and never the ringed one.
     expect([entryOf('arm.xbf').querySelector('a')?.getAttribute('href'), within(entryOf('arm.xbf')).getAllByRole('button').map(button => button.getAttribute('aria-label'))])
@@ -744,10 +744,17 @@ it("lists every file of a folder; a press on one that is no document opens it wi
       expect([entry.querySelector('a'), within(entry).getAllByRole('button').map(each => each.getAttribute('aria-label')), button.hasAttribute('disabled'), button.getAttribute('aria-haspopup'),
         entry.hasAttribute('data-missing'), entry.hasAttribute('data-from')]).toEqual([null, [`Open ${name}`, `Actions for ${name}`], false, null, false, false]);
     }
-    // Its badge (a card's) or Kind (a row's) is its extension as its name writes it, upper case; with none, nothing.
-    const kind = (name: string) => layout === 'grid' ? entryOf(name).querySelector('[data-library-format]')?.textContent ?? null : entryOf(name).querySelector('[data-column="kind"]')?.textContent;
-    expect(['datasheet.pdf', 'build.py', 'Makefile'].map(kind)).toEqual(layout === 'grid' ? ['PDF', 'PY', null] : ['PDF', 'PY', '—']);
-    if (layout === 'grid') expect(entryOf('build.py').querySelector('[data-library-status]')?.textContent).toMatch(/^Edited /);
+    if (layout === 'grid') {
+      // In the grid, the documents' cards, then those files' tiles, in a list of their own: each its kind's glyph and its
+      // name, with no picture, badge or line (it has no picture to show).
+      const named = (list: string) => within(screen.getByRole('list', { name: list })).getAllByRole('listitem').map(item => item.querySelector('[data-library-label]')?.textContent);
+      expect([named('Files'), named('Other files')]).toEqual([['arm.xbf', 'lid.step'], ['datasheet.pdf', 'build.py', 'Makefile', 'run.sh', 'locked.pdf']]);
+      expect([entryOf('build.py').querySelector('[data-library-picture], [data-library-format], [data-library-status]'), Boolean(entryOf('build.py').querySelector('[data-glyph="file"] svg'))])
+        .toEqual([null, true]);
+    } else {
+      // In the list, rows after the documents', each Kind its extension as its name writes it, upper case; a dash with none.
+      expect(['datasheet.pdf', 'build.py', 'Makefile'].map(name => entryOf(name).querySelector('[data-column="kind"]')?.textContent)).toEqual(['PDF', 'PY', '—']);
+    }
     // Nothing is asked of the host until a press. Then the file is opened: by the OS's own handler where it is offered...
     expect(asked).toEqual([]);
     await press('datasheet.pdf');
@@ -812,6 +819,51 @@ it("lists every file of a folder; a press on one that is no document opens it wi
   expect(reported(reports)).toMatchObject({ file_open_app: 11, home_reveal: 1 });
 });
 
+it("orders a folder's page in groups, each in the Sort's order: its folders, its documents, then the files no page opens", async () => {
+  const tag = project('p1', 'heart-tag');
+  const files = [file(tag, 'zeta.step', { documentKind: 'step', updated: 50 }), file(tag, 'beta.pdf', { documentKind: null, updated: 90 }),
+    file(tag, 'alpha.xbf', { documentKind: 'model', updated: 10 }), file(tag, 'gamma.py', { documentKind: null, updated: 20 }), file(tag, 'sub/inner.step')];
+  // A host that shows a file in its file manager: each file is a press.
+  const fileActions = { platform: 'linux' as const, perform: { 'copy-path': () => {}, reveal: () => {} } };
+  const page = (sort: 'activity' | 'name', layout: 'grid' | 'list') => <ModelLibrary library={library([], hosted([tag], files))} fileActions={fileActions} layout={layout}
+    sort={sort} onSortChange={() => {}} place={{ view: 'project', project: 'p1' }} />;
+  const view = render(page('activity', 'list'));
+  await screen.findByRole('button', { name: 'Open zeta.step' });
+  // Newest first within each group: beta.pdf, the newest of all, still after the documents.
+  expect(opens()).toEqual(['Open sub', 'Open zeta.step', 'Open alpha.xbf', 'Open beta.pdf', 'Open gamma.py']);
+  view.rerender(page('name', 'list'));
+  expect(opens()).toEqual(['Open sub', 'Open alpha.xbf', 'Open zeta.step', 'Open beta.pdf', 'Open gamma.py']);
+  // The grid in the same order: the folders' tiles, the documents' cards, then the other files' tiles.
+  view.rerender(page('name', 'grid'));
+  expect([opens(), ['Folders', 'Files', 'Other files'].map(list => within(screen.getByRole('list', { name: list })).getAllByRole('listitem').length)])
+    .toEqual([['Open sub', 'Open alpha.xbf', 'Open zeta.step', 'Open beta.pdf', 'Open gamma.py'], [1, 2, 2]]);
+});
+
+it("keeps a search's results one set, as found, a file that is no document a card among them; and while a file's tile is being opened, a spinner stands where its glyph is", async () => {
+  const tag = project('p1', 'heart-tag');
+  const host = hosted([tag], [file(tag, 'arm.xbf', { documentKind: 'model' }), file(tag, 'build.py', { documentKind: null }), file(tag, 'build.step', { documentKind: 'step' })]);
+  let answer!: (files: unknown) => void;
+  const openApp = vi.fn(async () => {});
+  const fileActions = { platform: 'linux' as const, perform: { 'copy-path': () => {} }, apps: () => new Promise(resolve => { answer = resolve; }) as never, openApp };
+  render(<ModelLibrary library={library([], host)} fileActions={fileActions} place={{ view: 'project', project: 'p1' }} />);
+  const press = await screen.findByRole('button', { name: 'Open build.py' });
+  const tile = press.closest('li')!;
+  expect(tile.closest('ul')?.getAttribute('aria-label')).toBe('Other files');
+  // Pressed, its apps are asked for: a spinner where its glyph was, until the host answers and the app is opened.
+  await act(async () => { fireEvent.click(press); });
+  expect([tile.hasAttribute('data-opening'), press.getAttribute('aria-busy'), Boolean(within(tile).queryByLabelText('Opening build.py')), tile.querySelector('[data-glyph]')])
+    .toEqual([true, 'true', true, null]);
+  await act(async () => { answer({ targets: [{ target: 'source', kind: 'code', name: 'build.py', present: true, apps: [{ id: 'vscode', name: 'VS Code' }], default: false }] }); });
+  await waitFor(() => expect(openApp).toHaveBeenCalledWith(expect.objectContaining({ id: 'file-p1-build.py' }), 'source', 'vscode'));
+  await waitFor(() => expect([tile.hasAttribute('data-opening'), Boolean(tile.querySelector('[data-glyph="file"]'))]).toEqual([false, true]));
+  // A search: one set as found, the file no page opens a card like the rest, its extension its badge.
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'build' } });
+  await waitFor(() => expect(host.folder).toHaveBeenLastCalledWith('p1', { path: '', q: 'build' }));
+  await waitFor(() => expect(opens()).toEqual(['Open build.py', 'Open build.step']));
+  expect([screen.queryByRole('list', { name: 'Other files' }), screen.getByRole('button', { name: 'Open build.py' }).closest('li')?.querySelector('[data-library-format]')?.textContent])
+    .toEqual([null, 'PY']);
+});
+
 it('a file that is no document does what its host can: shown in the file manager where the host opens no apps, and no control at all where it can do neither', async () => {
   const tag = project('p1', 'heart-tag');
   const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), file(tag, 'notes.md', { documentKind: null })];
@@ -824,12 +876,12 @@ it('a file that is no document does what its host can: shown in the file manager
   expect(done).toEqual(['/Users/sam/cad/heart-tag/notes.md']);
   expect(items(await menu('notes.md'))).toEqual(['Copy path', 'Show in file manager']);
   view.unmount();
-  // A host that can only copy a path: the card is there, named and badged, and is no control; its ⋯ offers Copy path.
+  // A host that can only copy a path: the tile is there, named, and is no control; its ⋯ offers Copy path.
   view = render(page({ platform: 'linux', perform: { 'copy-path': () => {} } }));
   await screen.findByRole('button', { name: 'Open arm.xbf' });
   let card = screen.getByText('notes.md').closest('li')!;
-  expect([within(card).queryByRole('link'), within(card).getAllByRole('button').map(button => button.getAttribute('aria-label')), card.querySelector('[data-library-format]')?.textContent])
-    .toEqual([null, ['Actions for notes.md'], 'MD']);
+  expect([within(card).queryByRole('link'), within(card).getAllByRole('button').map(button => button.getAttribute('aria-label')), card.querySelector('[data-library-label]')?.textContent])
+    .toEqual([null, ['Actions for notes.md'], 'notes.md']);
   expect(items(await menu('notes.md'))).toEqual(['Copy path']);
   view.unmount();
   // A host that can do nothing with a file: no control at all.

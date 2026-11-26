@@ -407,6 +407,12 @@ const SECTION_LABEL_CLASS = "m-0 font-medium text-foreground";
 // and its name, so its name stands where a card's does.
 const FOLDER_TILE_CLASS = CARD_CLASS.replace("cad-library-card", "cad-library-folder");
 const FOLDER_OPEN_CLASS = "cad-library-open flex w-full min-w-0 cursor-pointer items-center gap-2 p-3 text-left text-inherit no-underline outline-none";
+// A file the viewer does not open, among the cards: the folder's tile (its own name), its ⋯ in a square at its right
+// end as tall as the tile's inside (its line and its insets), centred there, so the button is padded alike on every side
+// and its glyph ends 16px in on both scales; the name ends where that square starts.
+const FILE_TILE_CLASS = CARD_CLASS.replace("cad-library-card", "cad-library-file");
+const FILE_OPEN_CLASS = cn(FOLDER_OPEN_CLASS, "pr-[calc(var(--cad-leading-ui)+24px)] disabled:cursor-default");
+const FILE_ACTIONS_CLASS = "absolute inset-y-0 right-0 grid w-[calc(var(--cad-leading-ui)+24px)] place-items-center";
 /** A placeholder's bar on the line its text will stand on (`TreeRowsLoading`'s bar). */
 const bar = (line: string, width: string) => <span className={cn("flex items-center", line)}><span className={cn("block h-2 rounded-full bg-muted-foreground/20", width)} /></span>;
 
@@ -534,9 +540,10 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * button and its menu) and grid or list (one segmented control) at its right.
  *
  * A project's page is one folder of it (`library.folder`, read again every `LIST_MS`): its subfolders first, each its
- * glyph and its name and a way into it, then every file directly in it, the documents and the files no page opens
- * together (`isDocument`: one of those is a card or a row like the rest, opened in an app of the computer's by a
- * press, `openFile`, with Open in in its ⋯ and no star). At the project's top, the files of it opened or built lately
+ * glyph and its name and a way into it, then every file directly in it, the documents, then the files no page opens
+ * (`isDocument`: in the grid each a tile of the folders' family after the cards, having no picture to show; in the list
+ * a row after the documents'; opened in an app of the computer's by a press, `openFile`, with Open in in its ⋯ and no
+ * star), each group in the Sort's order. At the project's top, the files of it opened or built lately
  * below the top (`recentBelow`, the library's rows) lead, labelled Recent: one row of the cards' grid, as many as fit
  * across, or five rows of the list; the listing follows, labelled All files. Recents and Starred are the library's
  * rows. Each document is
@@ -832,11 +839,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // forgets a file: a file goes where the person deletes it, in their file manager. Star or Unstar, from the card's
   // star or its menu: counted alike, by the names the counts shipped with (`home_pin`, `home_unpin`).
   const star = (item: Model) => { usage.used(item.pinned ? "home_unpin" : "home_pin"); void change(item.pinned ? "unpin" : "pin", item); };
-  const actions = (item: Model, row: boolean) => {
+  // Where they stand: over a card's picture's corner (`card`, outline buttons on the picture's light ground), over a
+  // row's right end (`row`), or centred in a file's tile's end square (`tile`).
+  const ACTIONS_AT = { card: "light top-2 right-2 flex items-center gap-1", row: "top-1/2 right-2 flex -translate-y-1/2 items-center gap-1", tile: FILE_ACTIONS_CLASS } as const;
+  const actions = (item: Model, at: keyof typeof ACTIONS_AT) => {
     const document = isDocument(item);
-    const variant = row ? "ghost" : "outline";
+    const variant = at === "card" ? "outline" : "ghost";
     const starLabel = t(item.pinned ? "home.unstar" : "home.star");
-    return <div className={cn("absolute flex items-center gap-1", row ? "top-1/2 right-2 -translate-y-1/2" : "light top-2 right-2")} data-library-actions="">
+    return <div className={cn("absolute", ACTIONS_AT[at])} data-library-actions="">
       {document ? <TooltipHint content={starLabel}>
         <Button variant={variant} size="icon-xs" className={cn(ACTION_CLASS, "text-muted-foreground aria-pressed:text-foreground")} aria-label={starLabel} aria-pressed={item.pinned}
           data-library-star="" onClick={() => star(item)}><Star aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button>
@@ -921,7 +931,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         aria-label={label} aria-busy={opening === item.path || undefined} onPress={() => open(item)}>{body}</PressTarget>
         : pressable(item) ? <PressTarget className={className} aria-label={label} aria-busy={opening === item.path || undefined} onPress={() => openFile(item)} data-library-file="">{body}</PressTarget>
           : <div className={cn(className, "cursor-auto")} data-library-file="">{body}</div>}
-      {actions(item, row)}
+      {actions(item, row ? "row" : "card")}
     </li>;
   };
   // A subfolder of the folder on screen: its glyph and its name, a way into it (a real link where the host gives places
@@ -942,6 +952,24 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </PressTarget>
     </li>;
   };
+  // A file the viewer does not open, in the grid: it has no picture to show in a picture's space, so it is the folders'
+  // compact tile, after the cards: its kind's glyph (a picture's tile shows the same for it) and its name, a press that
+  // opens it in an app (`openFile`, a button: it has no address), and its ⋯ at its right end, there as a card's are.
+  // While it is being opened a spinner stands where its glyph is.
+  const fileTile = (item: Model) => {
+    const busy = opening === item.path;
+    const body = <>
+      {busy ? <Spinner className="size-glyph flex-none" aria-label={t("home.openingAria", { name: item.name })} />
+        : <span className="flex flex-none text-muted-foreground"><DocumentGlyph path={item.path} className="size-glyph" strokeWidth={TREE_GLYPH_STROKE} /></span>}
+      <span className="truncate font-medium text-foreground" data-library-label="">{item.name}</span>
+    </>;
+    return <li key={item.path} className={FILE_TILE_CLASS} data-opening={busy || undefined}>
+      {pressable(item) ? <PressTarget className={FILE_OPEN_CLASS} aria-label={t("home.openAria", { name: item.name })} aria-busy={busy || undefined}
+        onPress={() => openFile(item)} data-library-file="">{body}</PressTarget>
+        : <div className={cn(FILE_OPEN_CLASS, "cursor-auto")} data-library-file="">{body}</div>}
+      {actions(item, "tile")}
+    </li>;
+  };
   const folderRow = (folder: LibraryFolderRef) => {
     const { href, label, onPress } = folderLink(folder);
     return <li key={folder.path} className={ROW_CLASS} data-folder="">
@@ -955,8 +983,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </PressTarget>
     </li>;
   };
-  // The place's folders and files: in the list, rows under their header, the folders first; else the folders, tiles in
-  // the cards' columns, over the cards.
   // A document's card: its picture, badged, over its caption, the name, a card's title, over its one line. No glyph:
   // the picture and its badge say what it is.
   const card = (item: Model) => entry(item, false, <>
@@ -966,14 +992,21 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       <span className="truncate text-muted-foreground" data-library-status="">{status(item)}</span>
     </span>
   </>);
-  const documents = (list: readonly Model[]) => layout === "list"
+  // The place's folders and files, the folders first, then the documents, then the files the viewer does not open
+  // (`others`), each group in the Sort's order: in the list, rows under their header; in the grid, the folders' tiles,
+  // the documents' cards, then those files' tiles, each a grid of the cards' columns, 16px apart (Drive's folders over
+  // its files). A search's results are one set, as it found them (`others` empty).
+  const listRow = (item: Model) => entry(item, true, <>{name(item)}{columns(item)}</>);
+  const documents = (list: readonly Model[], others: readonly Model[]) => layout === "list"
     ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className={LIST_CLASS} aria-label={t("home.filesAria")}>
       {folders.map(folderRow)}
-      {list.map(item => entry(item, true, <>{name(item)}{columns(item)}</>))}</ul></div>
+      {list.map(listRow)}
+      {others.map(listRow)}</ul></div>
     : <>
       {folders.length ? <ul className={GRID_CLASS} aria-label={t("home.foldersAria")} data-library-folders="">
         {folders.map(folderTile)}</ul> : null}
       {list.length ? <ul className={GRID_CLASS} aria-label={t("home.filesAria")}>{list.map(card)}</ul> : null}
+      {others.length ? <ul className={GRID_CLASS} aria-label={t("home.otherFilesAria")} data-library-other-files="">{others.map(fileTile)}</ul> : null}
     </>;
   // A project's top page's Recent (`recentShown`): one row of cards in the cards' columns, or rows of the list under a
   // header of their own with Where, each its folder below the project's top.
@@ -1094,7 +1127,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const reading = place.view === "project" ? !listing && !folderRead?.failed && Boolean(library.folder) : items === null;
   // The listing: the folders and the files, and under a folder listed only in part a line saying so.
   const listed = <>
-    {documents(matching)}
+    {searching ? documents(matching, []) : documents(matching.filter(item => isDocument(item)), matching.filter(item => !isDocument(item)))}
     {listing?.truncated ? <p className="m-0 text-muted-foreground" data-library-truncated="">{t("home.projectTruncated")}</p> : null}
   </>;
   const body = items === null || awaited ? <Placeholders layout={layout} />
