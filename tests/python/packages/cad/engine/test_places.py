@@ -252,7 +252,7 @@ class OutsidePackageTest(unittest.TestCase):
                 mock.patch.object(places, "_breakaway", side_effect=OSError(5, "refused")), \
                 mock.patch.object(places.subprocess, "Popen", return_value="started") as popen:
             self.assertEqual(places.outside_package(["cad"], creationflags=8), "started")
-        popen.assert_called_once_with(["cad"], env=None, cwd=None, creationflags=8)
+        popen.assert_called_once_with(["cad"], creationflags=8)
 
 
 class Kernel:

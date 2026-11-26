@@ -742,8 +742,7 @@ class Started:
         return self.returncode
 
 
-def outside_package(command: list[str], *, env: dict[str, str] | None = None, cwd: str | None = None,
-                    creationflags: int = 0, **options: Any) -> Any:
+def outside_package(command: list[str], **options: Any) -> Any:
     """``command`` started as ``subprocess.Popen(command, ..., **options)`` starts it -- but on Windows, from inside an
     app package (``packaged``), outside it: inside one, new files under AppData land in the app's private copy while
     deletes are real, so a server or an update started there would leave cad broken for every other program. A
@@ -754,10 +753,11 @@ def outside_package(command: list[str], *, env: dict[str, str] | None = None, cw
     Raises only as ``subprocess.Popen`` does."""
     if packaged():
         try:
-            return _breakaway(command, env=env, cwd=cwd, flags=creationflags)
+            return _breakaway(command, env=options.get("env"), cwd=options.get("cwd"),
+                              flags=options.get("creationflags", 0))
         except Exception:  # noqa: BLE001 - started as elsewhere: what runs there refuses what it must not do
             pass
-    return subprocess.Popen(command, env=env, cwd=cwd, creationflags=creationflags, **options)
+    return subprocess.Popen(command, **options)
 
 
 def _breakaway(command: list[str], *, env: dict[str, str] | None, cwd: str | None, flags: int,

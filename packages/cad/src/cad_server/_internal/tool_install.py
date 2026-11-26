@@ -20,10 +20,10 @@ make one install: uv locks its tool folder, the others wait, then find cad insta
 
 **Never down** (``_refuse_higher``): ``cad<N`` moves a tool of a higher major down to this major, with exit status 0,
 so the install never runs where uv's tool ``cad`` already holds a release of a higher major -- the newest
-``cad-<release>.dist-info`` in its environment, read by name (``auto_update.installed``), so it is seen where its
-launcher is missing and ``auto_update.installed_tool`` finds none, and from a Python other than the tool's own -- nor
-where uv cannot say where its tools are (``uv tool dir``): ``Failed``, and nothing moved or run. A tool folder with no release to read (half made) is no reason to
-refuse: uv repairs it.
+``cad-<release>.dist-info`` in its environment, half made too, read by name (``auto_update.installed``), so it is seen
+where its launcher is missing and ``auto_update.installed_tool`` finds none, and from a Python other than the tool's
+own -- nor where uv cannot say where its tools are (``uv tool dir``): ``Failed``, and nothing moved or run. A tool
+folder with no release to read (half made) is no reason to refuse: uv repairs it.
 
 BRIDGE-ONLY, the one exception: the ``cad`` command 0.10.0 to 0.11.11 wrote in uv's bin folder (``old_launcher``),
 which uv would refuse to replace. Where uv's bin folder holds it (``uv tool dir --bin``; on Windows its ``cad.exe``),
@@ -140,7 +140,7 @@ def _held(uv: str) -> tuple[int, ...] | None:
     folder = _tools(uv)
     if folder is None:
         raise Failed("uv could not say where its tools are, so cad was left as it is")
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", auto_update.installed(folder / "cad") or "")
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", auto_update.installed(folder / "cad", whole=False) or "")
     return tuple(int(part) for part in match.groups()) if match else None
 
 

@@ -418,22 +418,23 @@ def site_packages(prefix: str | os.PathLike[str] | None = None) -> list[Path]:
     return [found for pattern in ("Lib/site-packages", "lib/python*/site-packages") for found in sorted(folder.glob(pattern))]
 
 
-def holds(folder: str | os.PathLike[str]) -> str | None:
+def holds(folder: str | os.PathLike[str], *, whole: bool = True) -> str | None:
     """The newest release of cad the packages folder ``folder`` holds whole: a ``cad-<release>.dist-info`` with its
-    ``RECORD`` and ``METADATA`` (an install stopped midway leaves one with neither); None where it holds none."""
+    ``RECORD`` and ``METADATA`` (an install stopped midway leaves one with neither; ``whole`` false: any, by its name
+    alone); None where it holds none."""
     found = []
     for path in Path(folder).glob("cad-*.dist-info"):
         numbers = release(path.name[len("cad-"):-len(".dist-info")])
-        if numbers is not None and (path / "RECORD").is_file() and (path / "METADATA").is_file():
+        if numbers is not None and (not whole or (path / "RECORD").is_file() and (path / "METADATA").is_file()):
             found.append(numbers)
     return ".".join(map(str, max(found))) if found else None
 
 
-def installed(prefix: str | os.PathLike[str] | None = None) -> str | None:
+def installed(prefix: str | os.PathLike[str] | None = None, *, whole: bool = True) -> str | None:
     """The release of cad the environment at ``prefix`` (``sys.prefix``) holds now, as its packages folder says
-    (``holds``), whatever release this process runs: a process started before an update runs the release before it.
-    None where it holds none."""
-    found = [held for folder in site_packages(prefix) if (held := holds(folder)) is not None]
+    (``holds``; ``whole`` false: one an install left half made too), whatever release this process runs: a process
+    started before an update runs the release before it. None where it holds none."""
+    found = [held for folder in site_packages(prefix) if (held := holds(folder, whole=whole)) is not None]
     return max(found, key=release) if found else None
 
 
