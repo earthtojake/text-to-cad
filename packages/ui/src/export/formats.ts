@@ -23,7 +23,7 @@ const DXF: ExportChoice = { format: 'dxf', label: 'DXF', extension: '.dxf' };
 const XBF: ExportChoice = { format: 'xbf', label: 'XBF', extension: '.xbf' };
 // An xbf's XBF is the file itself, as it is on disk: an xbf is not written from another.
 const ORIGINAL: ExportChoice = { format: 'original', label: 'XBF', extension: '.xbf' };
-// A KiCad board's, each written by KiCad (`cad export --to <format>`), named as the server names
+// A KiCad board's, each written by KiCad (`cad export`'s `--as <format>`), named as the server names
 // the download: a folder of files (the Gerbers, the drill files, the two PDF pages) is one .zip.
 const BOARD: ExportChoice[] = [
   { format: 'gerbers', label: 'Gerbers', extension: '-gerbers.zip' },
@@ -38,7 +38,7 @@ const BOARD: ExportChoice[] = [
   { format: 'dxf', label: 'DXF', extension: '-outline.dxf' },
 ];
 
-// A KiCad schematic's, each written by KiCad (`cad export --to <format>`): the PDF of every sheet,
+// A KiCad schematic's, each written by KiCad (`cad export`'s `--as <format>`): the PDF of every sheet,
 // an SVG a sheet (one .zip), KiCad's netlist and the BOM.
 const SCHEMATIC: ExportChoice[] = [
   { format: 'pdf', label: 'PDF', extension: '.pdf' },

@@ -78,7 +78,7 @@ def setup(b):
         b.create_items([arc, flat])
     # The schematic's parts and nets
     with tempfile.TemporaryDirectory() as tmp:
-        (netlist,) = cad.export(str(SCHEMATIC), tmp, to="netlist").written
+        (netlist,) = cad.export(str(SCHEMATIC), Path(tmp) / "orbit.net").written
         result = b.import_netlist(str(netlist))
         print("netlist:", result.report.strip().splitlines()[-3:] if result.report else "", "new footprints",
               result.new_footprint_count, "errors", result.error_count)

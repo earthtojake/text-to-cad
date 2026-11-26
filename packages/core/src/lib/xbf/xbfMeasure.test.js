@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { measureLabelText, measurementMark } from "../viewer/measureDimension.js";
 import { measureEntityPair, pickEntityKey } from "../viewer/measureEntities.js";
 import { measurementFromPicks } from "../viewer/measurement.js";
+import { ENGINE_LOOK } from "./look.generated.js";
 import { loadXbfDocument } from "./xbfDocument.js";
 import { xbfFaceSurface } from "./xbfEntities.js";
 import { xbfMeasureEntity, xbfMeasureVertex } from "./xbfMeasure.js";
@@ -28,7 +29,7 @@ const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFOR
 /** The bracket's scene, read from an engine that answers the fixture. */
 async function bracket() {
   const fetch = async (url) => {
-    if (url.endsWith("/api/v1/look")) return new Response(read("look.json"));
+    if (url.endsWith("/api/v1/look")) return new Response(JSON.stringify(ENGINE_LOOK));
     if (url.endsWith("/api/v1/look/environment")) return new Response(ENVIRONMENT);
     const part = /\/parts\/([^/]+)$/.exec(url);
     return new Response(part ? read(`bracket/${part[1]}.xbm`) : JSON.stringify(STRUCTURE));

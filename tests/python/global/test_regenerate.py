@@ -1,7 +1,7 @@
 """``scripts/generated/regenerate.py``: one command makes every file generated from the code again, and ``--check``
 names the stale ones and writes nothing. Every tracked ``*.generated.*`` file is one it makes; what each holds is
 held to its source by that file's own test (``test_cli_reference.py``, ``test_library_reference.py``,
-``test_registry.py``)."""
+``test_registry.py``, ``test_look.py``)."""
 
 from __future__ import annotations
 

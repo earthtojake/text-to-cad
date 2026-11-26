@@ -20,9 +20,9 @@ settings, Open in and Reveal) is the HTTP client's, `CadClient`. A view bundle's
 files, through a source that answers the bytes of a path (a share's packs, or files held in the page),
 with no request per element and nothing that needs an engine: no `exports`, no
 `setModelParameters` or `previewModelParameters`, and its engine document `final`. It answers KiCad's
-plots too (`plotPayload`, `boardModels`), and a board's 3D model by its document id as an engine document
-of the bundle the board's holds of it. Its resources read
-the bundle's own paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb` and
+plots too (`plotPayload`), and has no `boardModels`: a board's view is 2D alone, its 3D a GLB of its own. The look an
+engine document is drawn in is the page's own, never the bundle's: core's record of it and the image the host hands
+the service (`environment`). Its resources read the bundle's own paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb` and
 `meshes/<sha256>.<format>`), resolve a mesh's neighbours inside the bundle alone, and hand a worker
 bytes, a copy of its own.
 

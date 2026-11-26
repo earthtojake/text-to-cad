@@ -29,7 +29,7 @@ pins is free:
 1. What the mechanics fix: connectors, buttons, LEDs, mounting holes, an antenna and its keep-out, anything
    the enclosure locates. These go first and are locked. A horizontal connector sits at a board edge with
    its mating face out over it: check it in a GLB export opened in the viewer (`cad export
-   board.kicad_pcb tmp/glb --to glb`).
+   board.kicad_pcb tmp/board.glb`).
 2. What the vendor fixes, and the high-frequency paths: an RF network, a regulator's hot loop, a ground
    tied to one pin.
 3. Decoupling and filter capacitors, each at its own pin, supply pad toward the pin, even when a

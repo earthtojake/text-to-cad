@@ -539,8 +539,8 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     from cad_server._internal.cli_parser import parser as command_parser
 
     descriptions = {
-        "export": "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless, "
-                  "into a folder.",
+        "export": "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless: "
+                  "what DST says, --as naming it where DST cannot.",
         "inspect": "What a saved KiCad board holds: its format, thickness, size, layers, parts and nets.",
     }
     parser = command_parser(prog, description=descriptions[operation])
@@ -548,11 +548,16 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     if operation == "export":
         from cad.kicad._export import EXPORTS
 
-        parser.add_argument("--to", required=True, choices=EXPORTS,
-                            help="what to write: gerbers and drill (a folder of files), pos (placement CSV), bom (the "
-                                 "schematic's parts CSV), step and glb (3D), odb (ODB++ zip), ipc2581, pdf (a front and "
-                                 "a back fabrication drawing) or dxf (the outline and holes)")
-        parser.add_argument("out", type=Path, metavar="DIR", help="the folder to write into, made when missing")
+        parser.add_argument("dst", metavar="DST",
+                            help="where to write it: a .step (or .stp) or a .glb (its 3D), a .dxf (the outline and "
+                                 "holes), an .xml (IPC-2581) or a .csv (--as pos, the placement, or --as bom); or a "
+                                 "folder (ending in /, or one that is there: made when missing) or a .zip for the "
+                                 "Gerbers, the drill files, the ODB++ (a .zip is KiCad's compressed ODB++, a folder "
+                                 "its tree) or the PDF (a drawing of each side, the back mirrored), --as naming which")
+        parser.add_argument("--as", dest="as_", choices=EXPORTS, metavar="KIND",
+                            help="what to write, where DST cannot say it: gerbers, drill, odb or pdf into a folder or "
+                                 "a .zip; pos or bom into a .csv. Given where DST says it (step, glb, dxf, ipc2581), "
+                                 "the two must agree")
     parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
                         help="print the answer as one JSON line on stdout")
     return parser
@@ -638,7 +643,7 @@ def _present(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     options names is there -- a ``Path`` option of a check is a file it reads (``cad inspect robot.srdf --urdf
     robot.urdf``) --, a file that is not there being the command line's failure (``not_found``), as the
     operation's own file is (``_typed``), said before anything runs. Only a generated parser's: a hand-written
-    one's ``Path`` may be a folder to write (``cad export board.kicad_pcb DIR``)."""
+    one's ``Path`` may be a file or a folder to write."""
     from cad_server._internal.cli_errors import Failure
 
     named = [action for action in parser._actions if action.option_strings and action.type is Path]  # noqa: SLF001
@@ -672,10 +677,14 @@ def _failed(as_json: bool, prog: str, words: str, reason: str = "failed") -> int
 
 
 def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
-    """A KiCad file's export (``cad export FILE DIR --to KIND``), the kicad integration's: run here when this process
-    runs KiCad, else in the environment of ``cad[kicad]``."""
+    """A KiCad file's export (``cad export FILE DST [--as KIND]``), the kicad integration's: where DST says, checked
+    before KiCad runs (``cad.kicad._destination.resolve``: a refusal writes nothing); KiCad's export into a folder of
+    its own, run here when this process runs KiCad, else in the environment of ``cad[kicad]``; then its files put
+    where DST says (``place``)."""
 
     def run(argv: list[str], prog: str) -> int:
+        from cad._internal.refused import ArgumentRefused
+        from cad.kicad._destination import place, resolve, scratch
         from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
         parser = _board_parser if document_type == "kicad_pcb" else _schematic_parser
@@ -683,28 +692,35 @@ def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
         args = _typed(parser(prog, "export"), document_type, "export", named).parse_args(argv)
         given = getattr(args, named)
         as_json = bool(getattr(args, JSON_FLAG_DEST))
-        source, out = Path(given).expanduser().resolve(), Path(args.out).expanduser().resolve()
+        source = Path(given).expanduser().resolve()
         try:
-            if _runs_kicad_here():
-                import importlib
+            plan = resolve(document_type, source, args.dst, args.as_)
+        except ArgumentRefused as refused:
+            return _failed(as_json, prog, str(refused), "invalid_argument")
+        try:
+            with scratch() as folder:
+                if _runs_kicad_here():
+                    import importlib
 
-                done = importlib.import_module(f"cad.{document_type}").export(source, args.to, out)
-                written, warnings = [str(path) for path in done.written], list(done.warnings)
-            else:
-                from cad_server._internal.integration_env import Failed
+                    done = importlib.import_module(f"cad.{document_type}").export(source, plan.kind, folder,
+                                                                                    **plan.options)
+                    written, warnings = list(done.written), list(done.warnings)
+                else:
+                    from cad_server._internal.integration_env import Failed
 
-                try:
-                    found = _kicad_elsewhere(document_type, "export", [str(source), args.to, str(out)], {}, prog)
-                except Failed as error:
-                    raise RuntimeError(str(error)) from None
-                written = [str(path) for path in found.get("written") or ()]
-                warnings = list(found.get("warnings") or ())
+                    try:
+                        found = _kicad_elsewhere(document_type, "export", [str(source), plan.kind, folder],
+                                                 plan.options, prog)
+                    except Failed as error:
+                        raise RuntimeError(str(error)) from None
+                    written, warnings = list(found.get("written") or ()), list(found.get("warnings") or ())
+                placed = [str(path) for path in place(plan, written, folder)]
         except (RuntimeError, OSError, ValueError) as error:
             return _failed(as_json, prog, str(error))
         for line in warnings:
             print(f"{prog}: warning: {line}", file=sys.stderr)
-        return _answer(as_json, {"ok": True, "to": args.to, "written": written, "warnings": warnings},
-                       [f"wrote {path}" for path in written])
+        return _answer(as_json, {"ok": True, "as": plan.kind, "written": placed, "warnings": warnings},
+                       [f"wrote {path}" for path in placed])
 
     return run
 
@@ -757,8 +773,8 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
                                  "default; the title block is drawn unless --display '{\"title\": false}')")
         return parser
     descriptions = {
-        "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, into a folder: a pdf of "
-                  "every sheet, an svg per sheet, the netlist (the board imports it) or a BOM.",
+        "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, what DST says: a PDF of "
+                  "every sheet, the netlist (the board imports it), a BOM, or an SVG per sheet.",
         "inspect": "What a saved KiCad schematic holds: its sheets, parts and nets, read from its project's root; "
                    "with REF, what that reference names (#U3, #U3.7, #net:VBUS, #sheet:/Power/, #wire:<uuid>).",
     }
@@ -768,8 +784,12 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     if operation == "export":
         from cad.kicad._schematic import EXPORTS
 
-        parser.add_argument("--to", required=True, choices=EXPORTS, help="what to write: " + ", ".join(EXPORTS))
-        parser.add_argument("out", type=Path, metavar="DIR", help="the folder to write into, made when missing")
+        parser.add_argument("dst", metavar="DST",
+                            help="where to write it: a .pdf (every sheet), a .net (the netlist) or a .csv (the BOM); "
+                                 "or a folder (ending in /, or one that is there: made when missing) or a .zip for its "
+                                 "SVGs, one a sheet")
+        parser.add_argument("--as", dest="as_", choices=EXPORTS, metavar="KIND",
+                            help="what to write (pdf, svg, netlist or bom): DST says it, and the two must agree")
     else:
         parser.add_argument("ref", metavar="REF", nargs="?", help="a reference to resolve: #U3, #U3.7, #net:GND")
     parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",

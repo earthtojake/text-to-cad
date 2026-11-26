@@ -10,14 +10,17 @@ would reach them.
 
 from __future__ import annotations
 
+import re
 import tempfile
 import unittest
 import warnings
+import zipfile
 from pathlib import Path
 from unittest import mock
 
 import cad
 from cad._internal import aliases, verbs
+from cad._internal.refused import ArgumentRefused
 from cad.engine import api
 
 
@@ -168,6 +171,25 @@ class TheEarlierSpellings(unittest.TestCase):
                          {"__name__": owner, "validate": cad.urdf.validate, "robot": robot})
                     self.assertEqual([], _deprecations(caught))
 
+    def test_the_runner_of_an_operation_in_another_environment_says_nothing(self) -> None:
+        """The command runs an operation in an integration's environment by ``python -m cad._internal.operation``,
+        which is ``__main__`` there, no module of the library's by its name: it runs the type's operation, never the
+        alias, so nothing is said to the person who typed the command."""
+        import json
+        import os
+        import subprocess
+        import sys
+
+        with tempfile.TemporaryDirectory() as folder:
+            robot = Path(folder) / "robot.urdf"
+            robot.write_text('<robot name="r"><link name="base"/></robot>', encoding="utf-8")
+            request = json.dumps({"type": "urdf", "operation": "validate", "args": [str(robot)], "kwargs": {}})
+            done = subprocess.run([sys.executable, "-W", "always", "-m", "cad._internal.operation"], input=request,
+                                  text=True, capture_output=True, check=True, timeout=120,
+                                  env={**os.environ, "PYTHONPATH": os.pathsep.join(path for path in sys.path if path)})
+        self.assertTrue(json.loads(done.stdout.strip().splitlines()[-1])["result"]["ok"], done.stdout)
+        self.assertNotIn("deprecated", done.stderr)
+
     def test_the_switch_turns_every_warning_off(self) -> None:
         with mock.patch.object(aliases, "SPELLINGS_WARN", False), Said(self) as caught:
             try:
@@ -198,6 +220,83 @@ class TheEarlierSpellings(unittest.TestCase):
                 self.assertLessEqual(set(inspect.signature(alias).parameters), set(hints), "a hint for each parameter")
 
 
+class TheDestination(unittest.TestCase):
+    """``cad.export(source, dst, as_=None)``: what is written is what ``dst`` says -- a file by its suffix; of a KiCad
+    file a folder or a ``.zip`` too -- and ``as_`` names the kind only where ``dst`` cannot, agreeing with it where
+    ``dst`` says it. Each refusal comes before anything runs, naming what fits."""
+
+    def test_a_document_s_export_is_one_file_and_as_agrees_with_its_suffix(self) -> None:
+        _fresh("xbf", "export")
+        self.addCleanup(_fresh, "xbf", "export")
+        with mock.patch.object(api, "export", return_value=["written"]) as export:
+            self.assertEqual(["written"], cad.export("arm.xbf", "arm.step", as_="step"))
+            self.assertEqual(["written"], cad.export("arm.xbf", "arm.3mf", "3mf"))
+            self.assertEqual(["written"], cad.export("arm.xbf", "arm.xml", as_="mjcf"))
+        self.assertEqual([call.args for call in export.call_args_list],
+                         [("arm.xbf", "arm.step"), ("arm.xbf", "arm.3mf"), ("arm.xbf", "arm.xml")])
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(api, "export", side_effect=AssertionError("ran")):
+            for dst, as_, said in (
+                    ("out/", None, "out/ is a folder, and the export is one file: name the file"),
+                    (folder, None, f"{folder} is a folder, and the export is one file"),
+                    ("arm.step", "glb", "arm.step's suffix says STEP, and as_=glb says GLB: they must agree"),
+                    ("arm.urdf", "mjcf", "arm.urdf's suffix says URDF, and as_=mjcf says MJCF: they must agree"),
+                    ("arm.step", "gerbers", "as_=gerbers: the export is one of step, glb, stl, 3mf, dxf, xbf, mjcf, "
+                                            "urdf")):
+                with self.subTest(dst=dst, as_=as_), self.assertRaisesRegex(ArgumentRefused, re.escape(said)):
+                    cad.export("arm.xbf", dst, as_=as_)
+        with self.assertRaisesRegex(TypeError, r"cad.export\(source, dst, as_=KIND\): as_ names the kind where dst "
+                                               "cannot"):
+            cad.export("b.kicad_pcb", "fab", to="gerbers")
+
+    def test_a_kicad_file_s_export_is_put_where_dst_says(self) -> None:
+        """KiCad writes into a folder of its own, as it names its files (stood in for here: the KiCad suite runs it),
+        and its files are put where ``dst`` says: one file at the file named, several into the folder named or zipped
+        into the ``.zip``, an ODB++ into a folder its tree. What cannot say what to write is refused before it runs."""
+        ran: list[tuple[str, bool]] = []
+
+        def kicad(board: Path, to: str, out_dir: Path, *, warn: object = None, compressed: bool = True) -> list[Path]:
+            ran.append((to, compressed))
+            names = {"step": ["b.step"], "gerbers": ["b-F_Cu.gbr", "b-job.gbrjob"],
+                     "odb": ["b-odb.zip"] if compressed else ["matrix/matrix", "steps/pcb/profile"]}[to]
+            for name in names:
+                (out_dir / name).parent.mkdir(parents=True, exist_ok=True)
+                (out_dir / name).write_text(name, encoding="utf-8")
+            return sorted((out_dir / name).resolve() for name in names)
+
+        with tempfile.TemporaryDirectory() as folder, mock.patch("cad.kicad._export.export", kicad):
+            root = Path(folder).resolve()
+            board = root / "b.kicad_pcb"
+            board.write_text("(kicad_pcb)", encoding="utf-8")
+            done = cad.export(board, root / "3d" / "board.step")
+            self.assertEqual((done.to, done.written), ("step", (root / "3d" / "board.step",)))
+            self.assertEqual("b.step", (root / "3d" / "board.step").read_text(encoding="utf-8"))
+            done = cad.export(board, f"{root}/fab/gerbers/", as_="gerbers")
+            self.assertEqual(done.written, (root / "fab" / "gerbers" / "b-F_Cu.gbr",
+                                            root / "fab" / "gerbers" / "b-job.gbrjob"))
+            done = cad.export(board, root / "fab" / "gerbers.zip", "gerbers")
+            self.assertEqual(done.written, (root / "fab" / "gerbers.zip",))
+            with zipfile.ZipFile(root / "fab" / "gerbers.zip") as archive:
+                self.assertEqual(archive.namelist(), ["b-F_Cu.gbr", "b-job.gbrjob"])
+            done = cad.export(board, f"{root}/fab/odb/", as_="odb")
+            self.assertEqual(done.written, (root / "fab" / "odb" / "matrix" / "matrix",
+                                            root / "fab" / "odb" / "steps" / "pcb" / "profile"))
+            cad.export(board, root / "fab" / "odb.zip", as_="odb")
+            self.assertEqual("b-odb.zip", (root / "fab" / "odb.zip").read_text(encoding="utf-8"))
+            self.assertEqual(ran, [("step", True), ("gerbers", True), ("gerbers", True), ("odb", False), ("odb", True)])
+            for dst, as_, said in (
+                    (f"{root}/out/", None, "out/ is a folder, which takes a board's Gerbers, drill files, ODB++ or PDF: "
+                                           "name which, as_=gerbers, as_=drill, as_=odb or as_=pdf"),
+                    (root / "out.csv", None, "out.csv is a .csv, which takes a board's placement or BOM: name which, "
+                                             "as_=pos or as_=bom"),
+                    (root / "out.glb", "step", "out.glb is a board's GLB, and as_=step names its STEP: they must agree")):
+                with self.subTest(dst=dst), self.assertRaisesRegex(ArgumentRefused, re.escape(said)):
+                    cad.export(board, dst, as_=as_)
+            self.assertFalse((root / "out").exists(), "a refused export writes nothing")
+            with self.assertRaisesRegex(TypeError, "cad.export of a kicad_pcb takes as_ alone"):
+                cad.export(board, root / "b.step", tolerance=0.1)
+        self.assertEqual(len(ran), 5, "KiCad ran for no refused export")
+
+
 class AShape(unittest.TestCase):
     """A shape a program holds: saved as a model's ``.xbf`` (``cad.save``), exported to any other file
     (``cad.export``); the file types' callable forms are their earlier spellings."""
@@ -224,10 +323,20 @@ class AShape(unittest.TestCase):
         self.assertEqual(write.call_args_list[1].args[5:], (0.02, None))
         with self.assertRaisesRegex(ValueError, r"cad.save\(shape, 'part.xbf'\)"):
             cad.export(self.SHAPE, "part.xbf")
-        with self.assertRaisesRegex(TypeError, "give the one file to write"):
+        with self.assertRaisesRegex(TypeError, "give where to write it"):
             cad.export(self.SHAPE)
         with self.assertRaisesRegex(TypeError, "takes no tolerance or angle"):
             cad.export(self.SHAPE, "part.step", tolerance=0.02)
+        # One file, named: as_ agrees with its suffix, and a folder is no file -- each refused before it is written.
+        with mock.patch.object(api, "write_shape", return_value=Path("part.3mf")) as write:
+            self.assertEqual(Path("part.3mf"), cad.export(self.SHAPE, "part.3mf", as_="3mf"))
+        self.assertEqual(write.call_args.args[:3], (self.SHAPE, "threemf", "part.3mf"))
+        with mock.patch.object(api, "write_shape", side_effect=AssertionError("written")):
+            for dst, as_, said in (("part.step", "glb", "part.step's suffix says STEP, and as_=glb says GLB: they must "
+                                                        "agree"),
+                                   ("parts/", None, "parts/ is a folder, and the export is one file: name the file")):
+                with self.subTest(dst=dst), self.assertRaisesRegex(ArgumentRefused, re.escape(said)):
+                    cad.export(self.SHAPE, dst, as_=as_)
 
     def test_a_handle_or_a_file_exports_a_copy_of_its_xbf(self) -> None:
         _fresh("xbf", "export")

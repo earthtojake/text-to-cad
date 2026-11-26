@@ -10,7 +10,7 @@ import { browserLanguage } from './host/browserLanguage.js';
 import App from './App';
 import BundleApp from './BundleApp';
 import { ShareDelete, ShareFailed } from './SharePage';
-import { sharePromptSubject, shareService } from './host/share.js';
+import { lookEnvironment, sharePromptSubject, shareService } from './host/share.js';
 import { readDocumentId } from './client/workbench/fileParam.js';
 import { StartingView } from './StartingView';
 import { sessionTabRecord } from './persistence/tabRecord';
@@ -85,7 +85,8 @@ function startEngine(element: HTMLElement) {
 /**
  * A shared view bundle's page, as a share service serves it at `/<id>`: the view reads the share's manifest and
  * its view's packs from this page's own origin (`shareService`), opens them with the key its id gives
- * (`openShare`) and shows the bundle (`BundleApp`), its prompts naming the model by the share's link
+ * (`openShare`, with the look's environment image this build holds: `lookEnvironment`) and shows the bundle
+ * (`BundleApp`), its prompts naming the model by the share's link
  * (`sharePromptSubject`); the delete link (`#delete=<secret>`) is
  * the page that deletes it (`ShareDelete`). The secret is read from the address once, here, and is never written
  * anywhere: not to the address or its history, storage, a log or a request but the DELETE's header. Until the
@@ -108,7 +109,7 @@ function startShare(element: HTMLElement, address: NonNullable<ReturnType<typeof
     const open = async () => {
       page(<div aria-hidden="true" data-boot-navbar="" />);
       try {
-        client = await openShare(id, shareService(id), { signal: controller.signal });
+        client = await openShare(id, shareService(id), { signal: controller.signal, environment: lookEnvironment });
       } catch (error) {
         if (!controller.signal.aborted) page(<ShareFailed error={error} locale={locale} onRetry={() => void open()} />);
         return;

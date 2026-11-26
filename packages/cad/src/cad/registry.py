@@ -377,8 +377,9 @@ _TYPES = (
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
-        (Operation("export", "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, "
-                             "step, glb, odb, ipc2581, pdf or dxf", "kicad"),
+        (Operation("export", "write its fabrication and 3D outputs with KiCad: a .step, .glb, .dxf (its outline), .xml "
+                             "(IPC-2581) or .csv (--as pos or bom); its gerbers, drill, odb or pdf into a folder or a "
+                             ".zip, --as naming which", "kicad"),
          Operation("snapshot", "draw it flat, as the viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets")),
         reader=True,
@@ -388,7 +389,8 @@ _TYPES = (
         "kicad_sch", "KiCad schematic", "a KiCad schematic, read with every sheet of its project's hierarchy",
         (".kicad_sch",), "text/plain; charset=utf-8", "plot",
         ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"),
-        (Operation("export", "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder", "kicad"),
+        (Operation("export", "write it with KiCad: a .pdf of every sheet, its .net netlist or a .csv BOM; an SVG a "
+                             "sheet into a folder or a .zip", "kicad"),
          Operation("snapshot", "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG"),
          Operation("inspect", "what the schematic holds: its sheets, parts and nets; with a ref, what that names")),
         reader=True,

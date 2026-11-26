@@ -32,7 +32,7 @@ colours on the dark canvas, the same colours darkened to read on the light one.
 
 In 3D the board is a slab whose two faces are drawn as the 2D view draws them, each part standing
 on its 3D model. A pick there takes what the 2D view would take at that point of the face, or the
-part whose body is in front of it.
+part whose body is in front of it. A shared board's page has no 3D: it draws the board in 2D alone.
 
 A part's model is the STEP its footprint names, looked for only in these folders, in this order:
 
@@ -50,7 +50,7 @@ ones a project's library tables resolve to; otherwise the newest installed KiCad
 A part without a model stands as a block, and the viewer tells the person why:
 VRML only, not found, outside the folders above, too large, not a STEP, embedded in the board, or
 too many models. `cad inspect board.kicad_pcb --json` reports each model the same way
-(`models`), and a STEP or GLB export (`cad export board.kicad_pcb DIR --to step|glb`, `cad.export`) holds
+(`models`), and a STEP or GLB export (`cad export board.kicad_pcb board.step`, or `board.glb`) holds
 exactly the models found. `cad run kicad-cli` reads KiCad's library as KiCad does, where a `.wrl`
 name needs its `.wrl` file (KiCad 10's library ships STEP alone), so prefer the typed export.
 

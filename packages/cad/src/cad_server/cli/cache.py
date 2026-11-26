@@ -48,11 +48,11 @@ COMMANDS = ("dir", "prune", "clean")
 #: is next opened, built, checked or shared, and the note it writes then names it.
 UNUSED_DAYS = 30
 #: The most disk the meshes kept by the geometry they are of may take: each shared file's part meshes in its view
-#: bundle (``documents/<id>/view/``, a board's STEP models' bundles in it too) and each part's convex hulls
-#: (``hulls/``). A gibibyte is about what the CAD kernel's own environment takes, so the meshes never cost more than the
-#: kernel does: room for the part meshes of a dozen large shared assemblies, or the hulls of thousands of parts. Past
-#: it the meshes used longest ago (read or written: ``places.used``) go first, each made again when it is next needed
-#: -- a part's mesh by the engine in seconds as its file is shared again, its hulls by CoACD in minutes, once.
+#: bundle (``documents/<id>/view/``) and each part's convex hulls (``hulls/``). A gibibyte is about what the CAD
+#: kernel's own environment takes, so the meshes never cost more than the kernel does: room for the part meshes of a
+#: dozen large shared assemblies, or the hulls of thousands of parts. Past it the meshes used longest ago (read or
+#: written: ``places.used``) go first, each made again when it is next needed -- a part's mesh by the engine in seconds
+#: as its file is shared again, its hulls by CoACD in minutes, once.
 MESH_BYTES = 2**30
 # What cad keeps in its cache folder, each made again on demand (the module): ``documents/`` is its documents', and stays.
 OWN = ("base", "pycache", "hulls", "mjcf", "homes", "interference")
@@ -221,9 +221,9 @@ def _disk(found: os.stat_result) -> int:
 def meshes(leaving: Iterable[Path] = ()) -> tuple[list[tuple[Path, int]], int]:
     """The meshes ``prune`` removes, each with the disk it takes, the least recently used first, and the disk all the
     meshes take: of the meshes kept by the geometry they are of (``MESH_BYTES``) -- each view bundle's part meshes
-    (``parts/<key>/<tessellation>.xbm``, a board's STEP models' bundles' too) and each part's hulls
-    (``hulls/<digest>.npz``) -- the ones used longest ago (the later of a mesh's last read and last write:
-    ``places.used``) past the cap, once ``leaving`` (documents' folders ``prune`` removes) are gone."""
+    (``parts/<key>/<tessellation>.xbm``) and each part's hulls (``hulls/<digest>.npz``) -- the ones used longest ago
+    (the later of a mesh's last read and last write: ``places.used``) past the cap, once ``leaving`` (documents'
+    folders ``prune`` removes) are gone."""
     from cad_server.engine.library import DOCUMENTS
     from cad_server.sharing import VIEW
 

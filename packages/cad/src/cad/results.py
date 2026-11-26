@@ -177,9 +177,9 @@ class CheckResult:
 
 @dataclass(frozen=True)
 class ExportResult:
-    """The outcome of an ``export`` that writes files of its own kinds (``cad.kicad_pcb.export``): the
-    source, what it was exported as, the files written, and what was said beside (a part without its 3D
-    model), one line each."""
+    """The outcome of an ``export`` that writes files of its own kinds (a KiCad file's, ``cad.export(board, dst,
+    as_=...)``): the source, the kind it was exported as (``to``, what ``as_`` names), the files written, and what
+    was said beside (a part without its 3D model), one line each."""
 
     path: Path
     to: str

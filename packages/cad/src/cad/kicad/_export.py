@@ -14,7 +14,7 @@ wrote. The board is read, never rewritten. What each writes into ``out_dir``:
               ``MPN`` and ``LCSC`` where any part carries one (``BOM_FIELDS``' spellings)
 ``step``      ``<board>.step``: the board and its parts, STEP models substituted for VRML ones
 ``glb``       ``<board>.glb``: the same and its copper, mask and silkscreen, as binary glTF
-``odb``       ``<board>-odb.zip``: ODB++, zipped, millimetres
+``odb``       ``<board>-odb.zip``: ODB++, zipped, millimetres; uncompressed (``compressed=False``), its tree
 ``ipc2581``   ``<board>-ipc2581.xml``: IPC-2581 revision C, millimetres
 ``pdf``       ``<board>-front.pdf`` and ``<board>-back.pdf`` (mirrored, as seen from below): one page a side,
               ``PDF_LAYERS`` -- its copper, silkscreen and fabrication layers over the outline
@@ -76,9 +76,11 @@ def schematic_of(board: Path) -> Path:
     return board.with_suffix(".kicad_sch")
 
 
-def commands(cli: Path, board: Path, to: str, out_dir: Path, scratch: Path | None = None) -> list[list[str]]:
+def commands(cli: Path, board: Path, to: str, out_dir: Path, scratch: Path | None = None, *,
+             compressed: bool = True) -> list[list[str]]:
     """The ``kicad-cli`` command line(s) that export ``board`` as ``to`` into ``out_dir`` (a BOM is written
-    into ``scratch`` first, then rewritten into ``out_dir``: ``_bom``)."""
+    into ``scratch`` first, then rewritten into ``out_dir``: ``_bom``); an ODB++ zipped, unless ``compressed`` is
+    false: its tree, KiCad's uncompressed ODB++, into ``out_dir`` itself."""
     if to not in EXPORTS:
         raise _unknown(to)
     pcb = [str(cli), "pcb", "export", to]
@@ -102,7 +104,8 @@ def commands(cli: Path, board: Path, to: str, out_dir: Path, scratch: Path | Non
         return [[*pcb, "--subst-models", "--force", *(BOARD_LAYERS if to == "glb" else ()),
                  "-o", str(out_dir / f"{stem}.{to}"), str(board)]]
     if to == "odb":
-        return [[*pcb, "--units", "mm", "--compression", "zip", "-o", str(out_dir / f"{stem}-odb.zip"), str(board)]]
+        return [[*pcb, "--units", "mm", "--compression", "zip" if compressed else "none",
+                 "-o", str(out_dir / f"{stem}-odb.zip") if compressed else folder, str(board)]]
     if to == "ipc2581":
         return [[*pcb, "--units", "mm", "--version", "C", "-o", str(out_dir / f"{stem}-ipc2581.xml"), str(board)]]
     if to == "pdf":
@@ -187,7 +190,7 @@ def _missing_models(to: str, completed: subprocess.CompletedProcess, step: Path)
     missing = (f"{len(parts)} part{'s' if len(parts) != 1 else ''} without a 3D model ({', '.join(parts[:12])}"
                f"{', ...' if len(parts) > 12 else ''}): the model file was not found") if parts else ""
     only_vrml = f"{vrml} model{'s' if vrml != 1 else ''} only in VRML, which a STEP cannot hold" if vrml else ""
-    return f"{step.name} is written, " + "; ".join(filter(None, (missing, only_vrml)))
+    return f"the {to.upper()} is written, " + "; ".join(filter(None, (missing, only_vrml)))
 
 
 def _listing(out_dir: Path) -> dict[Path, tuple[int, int]]:
@@ -236,12 +239,13 @@ def _bom(raw: Path, out: Path) -> Path:
 
 
 def export(board: Path, to: str, out_dir: Path, *, cli: Path | None = None, timeout: float = _TIMEOUT_SECONDS,
-           warn: Callable[[str], None] | None = None) -> list[Path]:
+           warn: Callable[[str], None] | None = None, compressed: bool = True) -> list[Path]:
     """Export the saved ``board`` as ``to`` (one of :data:`EXPORTS`) into ``out_dir``, made if missing,
     and return the files the run wrote or changed there, sorted. ``cli`` defaults to the ``kicad-cli``
     that :func:`~cad.kicad._program.ready` finds; what is said beside (a part without its 3D model) goes to
-    ``warn``, else stderr. Raises :class:`KicadRunError` when ``kicad-cli`` cannot run or refuses the board,
-    and :class:`KicadMissingError` when there is none."""
+    ``warn``, else stderr; ``compressed`` false writes an ODB++ as its uncompressed tree (``commands``). Raises
+    :class:`KicadRunError` when ``kicad-cli`` cannot run or refuses the board, and :class:`KicadMissingError` when
+    there is none."""
     if to not in EXPORTS:
         raise _unknown(to)
     board = Path(board).resolve()
@@ -262,7 +266,7 @@ def export(board: Path, to: str, out_dir: Path, *, cli: Path | None = None, time
     with private_run("cad-export-", cli) as (scratch, env), project_as_found(board):
         if to in ("step", "glb"):
             env.update(library_variables(library(board, scratch / "3dmodels")))
-        for command in commands(cli, board, to, out_dir, scratch):
+        for command in commands(cli, board, to, out_dir, scratch, compressed=compressed):
             try:
                 completed = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
                                            timeout=timeout, check=False)

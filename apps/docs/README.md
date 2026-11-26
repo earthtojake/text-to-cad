@@ -96,8 +96,8 @@ page, and its contents at the right, in the site's tokens and primitives.
   library's registry (`cad.registry`): `src/lib/docs/registry.generated.json` is that table, held to it by
   `tests/python/packages/cad/test_registry.py`, and `src/lib/docs/registry.ts` reads it.
 - **Every generated file, one command.** `scripts/generated/regenerate.py` makes each file this site reads from
-  the code again (the registry's copy and the two references below), and @cad/core's table of document types,
-  from this checkout's sources; `--check` writes nothing and names the stale ones. Run it after changing the
+  the code again (the registry's copy and the two references below), and @cad/core's table of document types and
+  copy of the engine's look, from this checkout's sources; `--check` writes nothing and names the stale ones. Run it after changing the
   registry, a command or a public name of the library.
 - **The Reference is generated.** `/docs/reference/cli` (the `cad` command) and
   `/docs/reference/library` (the `cad` library) are made as the site builds from two generated files

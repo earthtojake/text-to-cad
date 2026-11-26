@@ -112,8 +112,13 @@ class TheCommandTable(unittest.TestCase):
         self.assertEqual([line.split()[0] for line in types.splitlines()[1:]], list(TYPES))
         code, said, _ = _run(["export", "--help"])
         self.assertEqual((code, said.splitlines()[0]),
-                         (0, "usage: cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]"))
-        self.assertIn("cad export BOARD|SCHEMATIC DIR --to KIND", said)
+                         (0, "usage: cad export SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] "
+                             "[--json]"))
+        # Its DST and --as are every type's: a KiCad file's folder and .zip, and the kinds they need named.
+        said = " ".join(said.split())
+        self.assertIn("or of a KiCad file a folder (ending in /, or one that is there: made when missing) or a .zip",
+                      said)
+        self.assertIn("a board's gerbers, drill, odb or pdf into a folder or a .zip, its pos or bom into a .csv", said)
 
     def test_a_verb_s_help_names_every_file_its_source_may_be(self) -> None:
         # `cad dfm --help` is every type's options in one: its source is every file the verb takes, not the first
@@ -145,8 +150,7 @@ class TheCommandTable(unittest.TestCase):
                     if mode is not None and operation_for(verb, document_type, mode) is None:
                         continue
                     missing = f"no-such-file{TYPES_TABLE[document_type].extensions[0]}"
-                    extra = (["out", "--to", "pdf"] if document_type.startswith("kicad_") and verb == "export"
-                             else rest.get(verb, [])) + ([f"--{mode}"] if mode else [])
+                    extra = rest.get(verb, []) + ([f"--{mode}"] if mode else [])
                     with self.subTest(command=f"{verb} {document_type} {mode or ''}"):
                         code, out, err = _run([verb, missing, *extra])
                         self.assertEqual((code, out, err), (2, "", f"cad {verb}: no such file: {missing}\n"))
@@ -250,6 +254,42 @@ class TheCommandTable(unittest.TestCase):
             code, _, err = _run(["export", str(saved)])
             self.assertEqual(code, 2)
             self.assertIn("the following arguments are required: DST", err)
+
+    def test_a_model_s_export_is_one_file_named_and_as_agrees_with_its_suffix(self) -> None:
+        """A model's, a STEP's or a mesh's export is one file: a folder is refused, no name being made up for it, and
+        ``--as`` names the kind DST's suffix says, or is refused naming both -- before the engine is asked."""
+        from unittest import mock
+
+        from cad.engine import api
+
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(api, "export", side_effect=AssertionError("ran")):
+            saved = Path(folder) / "arm.xbf"
+            saved.write_bytes(b"")
+            for dst, rest, said in (
+                    ("out/", [], "out/ is a folder, and the export is one file: name the file (its format by its "
+                                 "suffix: part.step, part.glb, ...)"),
+                    (folder, [], f"{folder} is a folder, and the export is one file"),
+                    ("arm.step", ["--as", "glb"], "arm.step's suffix says STEP, and --as glb says GLB: they must "
+                                                  "agree"),
+                    ("arm.xml", ["--as", "urdf"], "arm.xml's suffix says MJCF, and --as urdf says URDF")):
+                with self.subTest(dst=dst, rest=rest):
+                    code, out, err = _run(["export", str(saved), dst, *rest])
+                    self.assertEqual((code, out), (2, ""))
+                    self.assertTrue(err.startswith(f"cad export: {said}"), err)
+                    code, out, _ = _run(["export", str(saved), dst, *rest, "--json"])
+                    self.assertEqual((code, json.loads(out)["reason"]), (2, "invalid_argument"))
+            code, _, err = _run(["export", str(saved), "arm.step", "--as", "gerbers"])
+            self.assertEqual(code, 2)
+            self.assertIn("argument --as: invalid choice: 'gerbers'", err)
+        with tempfile.TemporaryDirectory() as folder, mock.patch.object(api, "export", return_value=[]) as export:
+            saved = Path(folder) / "arm.xbf"
+            saved.write_bytes(b"")
+            for dst, kind in (("arm.step", "step"), ("arm.stp", "step"), ("arm.3mf", "3mf"), ("arm.xml", "mjcf")):
+                with self.subTest(dst=dst):
+                    self.assertEqual(_run(["export", str(saved), dst, "--as", kind])[0], 0)
+        self.assertEqual([call.args for call in export.call_args_list],
+                         [(str(saved), dst) for dst in ("arm.step", "arm.stp", "arm.3mf", "arm.xml")])
 
     def test_an_xbf_takes_a_model_by_its_id_or_saved_as_a_file(self) -> None:
         """Every verb of an xbf takes the ``.xbf`` a model is saved as beside a document id: the file is told by its
@@ -423,6 +463,78 @@ class KicadChecks(unittest.TestCase):
         for operation, file in (("drc", "BOARD"), ("erc", "SCHEMATIC")):
             text = " ".join(build_parser("kicad", operation).format_help().split())
             self.assertIn(f"usage: cad kicad {operation} [-h] [--json] {file}", text)
+
+
+class KicadExports(unittest.TestCase):
+    """``cad export FILE DST [--as KIND]`` of a KiCad board or schematic: DST says what is written, ``--as`` naming it
+    where DST cannot. Every refusal is said before KiCad runs and writes nothing; the earlier spelling, ``cad export
+    FILE DIR --to KIND``, runs nothing and names this one. What KiCad writes is the KiCad suite's
+    (``tests/python/packages/kicad``)."""
+
+    def setUp(self) -> None:
+        self._tempdir = tempfile.TemporaryDirectory(prefix="kicad-exports-")
+        self.addCleanup(self._tempdir.cleanup)
+        self.root = Path(self._tempdir.name)
+        self.board, self.schematic = self.root / "b.kicad_pcb", self.root / "b.kicad_sch"
+        for file in (self.board, self.schematic):
+            file.write_text("(kicad_pcb)" if file.suffix == ".kicad_pcb" else "(kicad_sch)", encoding="utf-8")
+
+    def test_a_destination_that_cannot_say_what_to_write_is_refused_and_nothing_runs(self) -> None:
+        from unittest import mock
+
+        fab = self.root / "fab"
+        refusals = (
+            ([str(self.board), f"{fab}/"], f"{fab}/ is a folder, which takes a board's Gerbers, drill files, ODB++ or "
+                                           "PDF: name which, --as gerbers, --as drill, --as odb or --as pdf"),
+            ([str(self.board), f"{fab}.zip"], f"{fab}.zip is a .zip, which takes a board's Gerbers, drill files, "
+                                              "ODB++ or PDF: name which, --as gerbers, --as drill, --as odb or --as "
+                                              "pdf"),
+            ([str(self.board), f"{fab}/b.csv"], f"{fab}/b.csv is a .csv, which takes a board's placement or BOM: name "
+                                                "which, --as pos or --as bom"),
+            ([str(self.board), f"{fab}/", "--as", "glb"], f"{fab}/ is a folder, and a board's GLB is one file: name "
+                                                          f"the file ({fab}/b.glb)"),
+            ([str(self.board), f"{fab}.zip", "--as", "pos"], f"{fab}.zip is a .zip, and a board's placement is one "
+                                                             f"file: name the file ({fab}.csv)"),
+            ([str(self.board), f"{fab}/b.glb", "--as", "step"], f"{fab}/b.glb is a board's GLB, and --as step names "
+                                                                "its STEP: they must agree"),
+            ([str(self.board), f"{fab}/b.glb", "--as", "gerbers"], "--as gerbers writes several files: name a folder "
+                                                                   f"(ending in /) or a .zip, not {fab}/b.glb"),
+            ([str(self.board), f"{fab}/b.pdf"], f"{fab}/b.pdf: a board's PDF is two files, a drawing of each side: "
+                                                "name a folder or a .zip, with --as pdf"),
+            ([str(self.board), str(self.board), "--as", "step"], f"{self.board} is the board itself: an export never "
+                                                                 "writes over its source"),
+            ([str(self.schematic), f"{fab}/", "--as", "netlist"], f"{fab}/ is a folder, and a schematic's netlist is "
+                                                                  f"one file: name the file ({fab}/b.net)"),
+            ([str(self.schematic), f"{fab}/b.svg"], f"{fab}/b.svg: a schematic's export is a .pdf, .net or .csv "
+                                                    "file, a folder or a .zip"))
+        with mock.patch("cad.kicad._destination.scratch", side_effect=AssertionError("ran")):
+            for argv, said in refusals:
+                with self.subTest(argv=argv[1:]):
+                    code, out, err = _run(["export", *argv])
+                    self.assertEqual((code, out, err), (2, "", f"cad export: {said}\n"))
+                    code, out, err = _run(["export", *argv, "--json"])
+                    self.assertEqual((code, err), (2, ""))
+                    self.assertEqual(json.loads(out), {"ok": False, "error": said, "reason": "invalid_argument"})
+        self.assertFalse(fab.exists(), "a refused export writes nothing")
+        code, _, err = _run(["export", str(self.board), f"{fab}/", "--as", "svg"])
+        self.assertEqual(code, 2)
+        self.assertIn("argument --as: invalid choice: 'svg'", err)
+
+    def test_the_earlier_spelling_runs_nothing_and_names_the_one_it_has_now(self) -> None:
+        from unittest import mock
+
+        said = ("'cad export FILE DIR --to KIND' is 'cad export FILE DST --as KIND' now; 'cad export --help' says its "
+                "options")
+        with mock.patch("cad.kicad._destination.scratch", side_effect=AssertionError("ran")):
+            for argv in ([str(self.board), "fab", "--to", "gerbers"], ["--to=pdf", str(self.schematic), "sheets"],
+                         [str(self.board), "fab", "--to", "glb", "--json"]):
+                with self.subTest(argv=argv):
+                    code, out, err = _run(["export", *argv])
+                    self.assertEqual(code, 2)
+                    if "--json" in argv:
+                        self.assertEqual((json.loads(out), err), ({"ok": False, "error": said, "reason": "usage"}, ""))
+                    else:
+                        self.assertEqual((out, err), ("", f"cad export: {said}\n"))
 
 
 if __name__ == "__main__":

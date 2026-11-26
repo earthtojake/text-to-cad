@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import * as THREE from "three";
 
 import { applyExplodedViewProgress, computeExplodedViewLayout } from "../viewer/explodedView.js";
+import { ENGINE_LOOK } from "./look.generated.js";
 import { loadXbfDocument } from "./xbfDocument.js";
 import { XBM_HEADER_BYTES, XBM_MAGIC, XBM_VERSION } from "./xbm.js";
 import { createXbfScene } from "./xbfScene.js";
@@ -27,7 +28,7 @@ import { createXbfScene } from "./xbfScene.js";
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), "__fixtures__");
 const GOLDEN = JSON.parse(fs.readFileSync(path.join(FIXTURES, "explode.json"), "utf8"));
 // The engine's look, which a document is read with (`xbfLook.js`); Explode does not depend on it.
-const LOOK = fs.readFileSync(path.join(FIXTURES, "look.json"), "utf8");
+const LOOK = JSON.stringify(ENGINE_LOOK);
 // Its environment image: 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128).
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n"),
   255, 255, 255, 128]).buffer;

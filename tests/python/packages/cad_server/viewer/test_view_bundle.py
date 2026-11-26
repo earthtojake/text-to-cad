@@ -4,12 +4,11 @@ size and digest, each is the live answer byte for byte (but what a structure say
 answered on: a file's ``path``, a model's ``closure``, where a robot's meshes are; and the two things it
 holds apart, its mechanism and its prototypes' element names, which its reader puts back), a prototype's
 names are a file named by its bytes, a part's table holds exactly what asking for each element answers of its
-geometry, a document's part files are asked at once, a bundle written again after an edit rewrites the
-changed part's files and no other part's, a writing that fails leaves the folder as it was, and no file of a
+geometry, no bundle holds the look an engine document is drawn in, a document's part files are asked at once, a
+bundle written again after an edit rewrites the changed part's files and no other part's, a writing that fails leaves the folder as it was, and no file of a
 bundle names a folder of the computer it was made on. A model (its ``.xbf``), a STEP, an STL, a DXF, a URDF, a KiCad
-board (its plot, its 3D models table, and each STEP the table names a bundle of its own, as the board's page reads it)
-and a KiCad schematic (each sheet a page, the hierarchy's index once, which its reader puts back) each have one; an
-export takes no ``.view`` destination.
+board (its plot alone, in 2D, whatever STEPs its 3D models table finds) and a KiCad schematic (each sheet a page, the
+hierarchy's index once, which its reader puts back) each have one; an export takes no ``.view`` destination.
 
 The models are written into a fresh temporary folder and built there, the board and the schematic are the KiCad
 suite's test files (``tests/python/support``), with a STEP the model's run wrote for a 3D model of the board's project
@@ -318,10 +317,9 @@ class ViewBundleTest(unittest.TestCase):
             self.assertEqual(buffer, self.live(f"{part}?tessellation={quote(tessellation)}"))
             self.assertEqual((held / "elements.json").read_bytes(), self.live(part + "/elements"))
         self.assertEqual((folder / "measure.json").read_bytes(), self.live(api + "/measure"))
-        self.assertEqual((folder / "look.json").read_bytes(), self.live("/api/v1/look"))
-        self.assertEqual((folder / "look" / "environment.hdr").read_bytes(), self.live("/api/v1/look/environment"))
-        # No page kept a picture of it.
-        self.assertNotIn("thumbnail.png", self.files(folder))
+        # Not the look it is drawn in, the same for every document of a release: a page that reads a bundle carries
+        # its own. And no page kept a picture of it.
+        self.assertEqual({"look.json", "look/environment.hdr", "thumbnail.png"} & self.files(folder), set())
 
     def test_each_bundled_answer_is_the_live_answer(self) -> None:
         for name in ("model", "step"):
@@ -348,36 +346,19 @@ class ViewBundleTest(unittest.TestCase):
         self.assertEqual(json.loads(drawing)["schemaVersion"] > 0, True, drawing[:200])
         self.assertEqual((self.out / "dxf" / "drawing.json").read_bytes(), drawing)
 
-    def test_a_boards_bundle_is_its_plot_its_models_table_and_each_model_a_bundle_of_its_own(self) -> None:
+    def test_a_boards_bundle_is_its_plot_alone(self) -> None:
         folder, api = self.out / "board", self.api("board")
-        # The board's plot and its 3D models table, each the live answer byte for byte: no KiCad here, so the
-        # board as saved, which the plot says.
+        # The board's plot, the live answer byte for byte: no KiCad here, so the board as saved, which the plot says.
         plot = self.live(api + "/plot")
         self.assertEqual((folder / "plot.json").read_bytes(), plot)
         self.assertEqual((json.loads(plot)["kind"], json.loads(plot)["pours"]["refilled"]), ("board", False))
-        table = self.live(api + "/models")
-        self.assertEqual((folder / "models.json").read_bytes(), table)
-        # Each model the table names by a document id -- the LED's, its project's, and the resistor's, the 3D
-        # library's -- a bundle of its own at documents/<id>/: what a page reads of that STEP, by the same rules.
-        found = {row["document"]: row for row in json.loads(table)["models"].values() if "document" in row}
-        self.assertEqual(sorted(row["file"] for row in found.values()), ["R_0603_1608Metric.step", "led.step"])
-        listed = self.manifest(folder)["files"]
-        self.assertEqual({path.split("/")[1] for path in listed if path.startswith("documents/")},
-                         {self.segment(ident) for ident in found})
-        for ident, row in found.items():
-            with self.subTest(model=row["file"]):
-                inner = folder / "documents" / self.segment(ident)
-                manifest = self.manifest(inner)
-                structure = json.loads(self.live(row["api"] + "/structure"))
-                self.assertEqual(manifest["document"],
-                                 {"id": ident, "kind": "step", "name": row["file"], "version": structure["version"]})
-                # Its files are the board's too, below its folder, each as its own manifest lists it.
-                self.assertEqual({f"documents/{self.segment(ident)}/{path}": entry for path, entry in manifest["files"].items()},
-                                 {path: entry for path, entry in listed.items()
-                                  if path.startswith(f"documents/{self.segment(ident)}/") and not path.endswith("/manifest.json")})
-                self.assertIn(f"documents/{self.segment(ident)}/manifest.json", listed)
-                self.engine_answers(inner, row["api"], "step", {**structure, "path": row["file"]})
-        # Written again unchanged, nothing is written, the models' content-named files kept as they were.
+        # And nothing else: the engine's page stands the LED on its project's STEP and the resistor on the 3D library's,
+        # as the models table finds them, but a share shows a board in 2D (its 3D is a GLB of its own).
+        table = json.loads(self.live(api + "/models"))["models"]
+        self.assertEqual(sorted(row["file"] for row in table.values() if "document" in row),
+                         ["R_0603_1608Metric.step", "led.step"])
+        self.assertEqual(self.files(folder), {"manifest.json", "plot.json"})
+        # Written again unchanged, nothing is written.
         from cad.engine import api as engine
 
         again = engine.bundle(self.sources["board"], folder)
@@ -511,7 +492,6 @@ class ViewBundleTest(unittest.TestCase):
         self.assertEqual(set(edited["removed"]), gone)
         # Written: the new part's files, and the document's own that say it changed. Nothing else.
         self.assertEqual(set(edited["written"]), added | {"manifest.json", "structure.json", "measure.json"})
-        self.assertLessEqual({"look.json", "look/environment.hdr"}, kept)
         for path in kept:
             self.assertEqual((folder / path).stat().st_mtime_ns, stamps[path], f"{path} was written again")
         self.assertEqual(self.files(folder), {*after["files"], "manifest.json"})

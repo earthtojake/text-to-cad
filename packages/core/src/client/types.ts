@@ -301,7 +301,8 @@ export interface CadWorkspaceService {
   plotPayload?(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
   /**
    * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
-   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
+   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path. A
+   * service without an engine (a view bundle's) has none, and its board is drawn in 2D alone.
    */
   boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
@@ -402,6 +403,11 @@ export interface ViewBundleSource {
   dispose?(): void;
 }
 /**
+ * The bytes of the look's environment image as the page's build holds it (the engine's `studio.hdr`, the same in
+ * every release's look): what a view bundle's service answers `/api/v1/look/environment` with, which no bundle holds.
+ */
+export type ViewBundleEnvironment = (options?: CadRequestOptions) => Promise<ArrayBuffer>;
+/**
  * One file of a share (`ShareManifest`): the SHA-256 and the size of its own bytes, and where its gzip member
  * lies: `[pack id, offset, length]` ranges of the packs' bytes (before sealing), joined in order.
  */
@@ -475,7 +481,7 @@ export interface CadActivity {
   crash?: CadPageCrash;
 }
 
-/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad export --to`). */
+/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad export --as`). */
 export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
   | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf' | 'svg' | 'netlist';
 export interface ExportSource { doc: string; revision: string }

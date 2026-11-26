@@ -191,7 +191,7 @@ the parent's that the child does not set (a lost one is ERC's `lib_symbol_mismat
 
 The board takes its parts and nets from the schematic's netlist. There is no "Update PCB": a schematic
 edit reaches the board through the netlist exported from the saved schematic (`cad export
-board.kicad_sch tmp --to netlist` writes `tmp/board.net`) and imported in a board's edit. One script does
+board.kicad_sch tmp/board.net`) and imported in a board's edit. One script does
 both, the schematic's block first:
 
 ```python
@@ -200,7 +200,7 @@ from cad import kicad_pcb, kicad_sch
 
 with kicad_sch.edit("board.kicad_sch") as s:
     ...                                       # saved at this block's end
-(netlist,) = cad.export("board.kicad_sch", "tmp", to="netlist").written
+(netlist,) = cad.export("board.kicad_sch", "tmp/board.net").written
 with kicad_pcb.edit("board.kicad_pcb") as b:
     print(b.import_netlist(str(netlist)).report)  # dry_run=True first, to see what it would change
 ```
@@ -232,6 +232,7 @@ for key in sorted(set(want) | set(have)):
 A part on one and not the other, or a pin on another net, is a change the netlist import has not
 carried, or one made on the board alone.
 
-The schematic's other exports: `--to pdf` (every sheet), `--to svg` (a file per sheet), `--to bom` (a CSV, a
-line per value, footprint and `MPN`: `Refs` in ranges such as `C103-C106`, `Value`, `Footprint`, `MPN`,
-`Qty`, `DNP`). An assembler's BOM is the board's ([manufacturing](manufacturing.md#exports)).
+The schematic's other exports: a `.pdf` (every sheet), a folder (`sheets/`) or a `.zip` of its SVGs (a
+file per sheet), a `.csv` (its BOM, a line per value, footprint and `MPN`: `Refs` in ranges such as
+`C103-C106`, `Value`, `Footprint`, `MPN`, `Qty`, `DNP`). An assembler's BOM is the board's
+([manufacturing](manufacturing.md#exports)).

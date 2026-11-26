@@ -1,4 +1,7 @@
-{
+// GENERATED from the engine's look of the regular display modes (cad.engine.render.look): do not edit.
+// scripts/generated/regenerate.py makes it again; tests/python/packages/cad/engine/test_look.py fails
+// when this file and the look differ.
+export const ENGINE_LOOK = Object.freeze({
   "version": 4,
   "backdrop": "#f0f4f9",
   "lights": [
@@ -115,4 +118,4 @@
     "specular": 0.08,
     "shininess": 0.35
   }
-}
+});

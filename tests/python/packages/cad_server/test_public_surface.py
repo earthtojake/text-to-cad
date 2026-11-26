@@ -86,10 +86,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "plugin": frozenset({"command", "install", "update", "refresh"}),
     # The engine's verbs (cad_server.engine.cli), each type's: a document's export (a model's, a STEP's) meshes a GLB,
     # an STL or a 3MF to a tolerance and an angle, and takes a robot description's joints from a zero state; a
-    # mesh's, to the other mesh kinds, does neither.
-    **{f"export {document_type}": frozenset({"source", "destinations", "tolerance", "angle", "zero", "json"})
+    # mesh's, to the other mesh kinds, does neither. Each names the kind it writes (--as), agreeing with its file's.
+    **{f"export {document_type}": frozenset({"source", "destinations", "as_", "tolerance", "angle", "zero", "json"})
        for document_type in ("xbf", "step")},
-    **{f"export {document_type}": frozenset({"source", "destinations", "json"})
+    **{f"export {document_type}": frozenset({"source", "destinations", "as_", "json"})
        for document_type in ("stl", "glb", "threemf")},
     **{f"snapshot {document_type}": SNAPSHOT
        for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf")},
@@ -98,12 +98,13 @@ ADAPTERS: dict[str, frozenset[str]] = {
        for document_type in ("xbf", "step")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
     "snapshot kicad_pcb": SNAPSHOT | {"window"},
-    # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
-    "export kicad_pcb": frozenset({"board", "to", "out"}),
+    # A KiCad board's exports, kicad-cli's, from a fixed list, to a file, a folder or a .zip (--as naming the kind
+    # where it cannot); and its summary, the library's.
+    "export kicad_pcb": frozenset({"board", "dst", "as_"}),
     "inspect kicad_pcb": frozenset({"board"}),
     # A KiCad schematic's: its exports, kicad-cli's; its summary and what a reference names; its still, the
     # engine's snapshot with the sheet to draw and its page's edge.
-    "export kicad_sch": frozenset({"schematic", "to", "out"}),
+    "export kicad_sch": frozenset({"schematic", "dst", "as_"}),
     "inspect kicad_sch": frozenset({"schematic", "ref"}),
     "snapshot kicad_sch": SNAPSHOT | {"sheet", "border"},
     **{f"inspect {document_type}": frozenset({"document", "ref", "query", "json"})

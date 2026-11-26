@@ -1,8 +1,8 @@
 """The regular display modes' look (``render/look.py``): one record, served at ``GET /api/v1/look``
 as the viewer reads it, with its environment image where the record says it is
-(``GET /api/v1/look/environment``), and the copy
-of it the viewer's tests parse (``packages/core/src/lib/xbf/__fixtures__/look.json``) the same
-record; the image decodes as three's HDRLoader decodes it, and maps onto the cube map OCCT reads."""
+(``GET /api/v1/look/environment``), and the copy of it @cad/core holds (``packages/core/src/lib/xbf/
+look.generated.js``: what a page with no engine draws by, and what the viewer's tests parse) the module the record
+makes; the image decodes as three's HDRLoader decodes it, and maps onto the cube map OCCT reads."""
 
 from __future__ import annotations
 
@@ -15,13 +15,11 @@ from pathlib import Path
 import numpy as np
 
 from cad.engine.render.finish import cube_faces, decode_hdr, sample
-from cad.engine.render.look import LOOK
+from cad.engine.render.look import LOOK, as_js
 from cad.engine.serve import Server
 from tests.python.support.http_listener import listener
 
-FIXTURE = Path(__file__).resolve().parents[5] / "packages" / "core" / "src" / "lib" / "xbf" / "__fixtures__" / "look.json"
-REGENERATE = ("regenerate it: PYTHONPATH=packages/cad/src python -c \"import json; from cad.engine.render.look "
-              "import LOOK; print(json.dumps(LOOK.json(), indent=2))\" > packages/core/src/lib/xbf/__fixtures__/look.json")
+GENERATED = Path(__file__).resolve().parents[5] / "packages" / "core" / "src" / "lib" / "xbf" / "look.generated.js"
 
 
 class LookTest(unittest.TestCase):
@@ -40,7 +38,11 @@ class LookTest(unittest.TestCase):
             self.assertEqual(answer.read(), LOOK.environment_path.read_bytes())
 
     def test_the_viewers_copy_is_the_record(self) -> None:
-        self.assertEqual(json.loads(FIXTURE.read_text(encoding="utf-8")), LOOK.json(), REGENERATE)
+        text = GENERATED.read_text(encoding="utf-8")
+        self.assertEqual(text, as_js(), "regenerate: scripts/generated/regenerate.py")
+        # A module whose one export is the record, as the engine serves it.
+        body = text[text.index("Object.freeze(") + len("Object.freeze("):text.rindex(");")]
+        self.assertEqual(json.loads(body), LOOK.json())
 
     def test_the_environment_is_the_studio_in_the_documents_frame(self) -> None:
         image = decode_hdr(LOOK.environment_path.read_bytes())

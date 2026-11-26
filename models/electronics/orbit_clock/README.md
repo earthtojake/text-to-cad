@@ -112,13 +112,14 @@ cad kicad drc orbit.kicad_pcb
 cad run check_orbit.py                           # prints nothing when the board is clean
 
 # fabrication files
-for k in gerbers drill pos bom pdf; do cad export orbit.kicad_pcb fab/$k --to $k; done
-cad export orbit.kicad_sch fab/schematic --to pdf
-cad export orbit.kicad_pcb DXF --to dxf            # the outline and drilled holes
-cad export orbit.kicad_pcb GLB --to glb            # the board with its parts, to look at
+for k in gerbers drill pdf; do cad export orbit.kicad_pcb fab/$k/ --as $k; done
+for k in pos bom; do cad export orbit.kicad_pcb fab/$k.csv --as $k; done
+cad export orbit.kicad_sch fab/schematic.pdf
+cad export orbit.kicad_pcb DXF/orbit-outline.dxf   # the outline and drilled holes
+cad export orbit.kicad_pcb GLB/orbit.glb           # the board with its parts, to look at
 
 # the printed parts, read from the board: its STEP with every part, converted once to an xbf
-cad export orbit.kicad_pcb STEP --to step          # STEP/orbit.step
+cad export orbit.kicad_pcb STEP/orbit.step
 cad export STEP/orbit.step XBF/orbit.xbf
 cad run src/orbit.py                             # prints each model's id
 cad run src/check_fit.py                         # interference and clearances, also written to tmp/fit.txt
@@ -136,7 +137,7 @@ and vias. After a board change, export the STEP and the xbf again before
 `render.py` is a Blender scene as a plain `import bpy` script, written the render skill's way: the clock at the
 end of its explode, out of the stand, with the LEDs lit to show 2:14:23. It reads `GLB/orbit_assembly.glb` (every
 part and the explode, `cad run src/exports.py`) and `GLB/orbit.glb` (the board's copper, mask and silkscreen,
-`cad export orbit.kicad_pcb GLB --to glb`), laying the board's layers on the assembly's PCB, so make
+`cad export orbit.kicad_pcb GLB/orbit.glb`), laying the board's layers on the assembly's PCB, so make
 both first. `cad run` gives it cad's blender integration: Blender's module on Python 3.13, with cad, whose
 `cad.blender.load` it loads both GLBs with.
 

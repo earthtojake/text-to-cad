@@ -19,11 +19,12 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
   rules check of a schematic (``_schematic``), the integration's operations on its tool's files: ``cad kicad
   drc BOARD`` and ``cad kicad erc SCHEMATIC``, one to one.
 * ``_export``: the board's fabrication, assembly and 3D outputs by ``kicad-cli`` (``EXPORTS``: gerbers,
-  drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.export(board, folder, to=...)`` and ``cad
-  export BOARD DIR --to KIND`` are written by.
+  drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), each into a folder as KiCad names its files.
 * ``_schematic``: a schematic's electrical rules check and its outputs (``EXPORTS``: pdf, svg, netlist,
-  bom) by ``kicad-cli``, from its project's root sheet (``erc``; ``cad.export(schematic, folder, to=...)``,
-  ``cad export SCHEMATIC DIR --to KIND``).
+  bom) by ``kicad-cli``, from its project's root sheet (``erc``).
+* ``_destination``: where ``cad.export(file, dst, as_=KIND)`` and ``cad export FILE DST [--as KIND]`` put
+  either's: DST a file by its suffix, a folder or a ``.zip``, checked before KiCad runs, and the files KiCad
+  wrote put there.
 * ``route`` (``_route``, its search in ``_routing``): copper for the connections an agent names, in the order
   it names them, written into the board a ``kicad_pcb.edit`` block has open: KiPy's board in, the copper out
   through it, every rule the board's own; it answers a ``Routed``.

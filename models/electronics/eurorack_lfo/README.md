@@ -136,10 +136,11 @@ cad kicad drc twin_orbit.kicad_pcb
 cad run check_twin_orbit.py                     # prints nothing when the board is clean
 
 # fabrication (JLCPCB 2-layer)
-for k in gerbers drill pos bom pdf; do cad export twin_orbit.kicad_pcb fab/$k --to $k; done
+for k in gerbers drill pdf; do cad export twin_orbit.kicad_pcb fab/$k/ --as $k; done
+for k in pos bom; do cad export twin_orbit.kicad_pcb fab/$k.csv --as $k; done
 (cd fab && zip -qr gerbers_jlcpcb.zip gerbers drill)
-cad export twin_orbit.kicad_sch fab/schematic --to pdf
-cad export twin_orbit.kicad_pcb GLB --to glb      # the board with its parts, to look at
+cad export twin_orbit.kicad_sch fab/schematic.pdf
+cad export twin_orbit.kicad_pcb GLB/twin_orbit.glb   # the board with its parts, to look at
 
 # the panel, read from the board: the board's STEP with its origin at the board's top-left corner
 cad run kicad-cli pcb export step --force --subst-models --user-origin 100x50mm -o STEP/twin_orbit.step twin_orbit.kicad_pcb

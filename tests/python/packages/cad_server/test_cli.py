@@ -185,7 +185,7 @@ class Dispatch(unittest.TestCase):
             ("srdf", "validate", "r.srdf"): "'cad srdf validate' is 'cad inspect FILE' now; 'cad inspect --help' says its options",
             ("kicad_pcb", "drc", "b.kicad_pcb"): "'cad kicad_pcb drc' is 'cad kicad drc BOARD' now; 'cad kicad drc --help' says its options",
             ("kicad_sch", "erc", "s.kicad_sch"): "'cad kicad_sch erc' is 'cad kicad erc SCHEMATIC' now; 'cad kicad erc --help' says its options",
-            ("kicad_pcb", "export", "b.kicad_pcb", "--to", "step", "-o", "out"): "'cad kicad_pcb export' is 'cad export FILE DIR --to KIND' now; 'cad export --help' says its options",
+            ("kicad_pcb", "export", "b.kicad_pcb", "--to", "step", "-o", "out"): "'cad kicad_pcb export' is 'cad export FILE DST --as KIND' now; 'cad export --help' says its options",
             ("status",): "'cad status' is 'cad server status' now; 'cad server --help' says its options",
             ("stop",): "'cad stop' is 'cad server stop' now; 'cad server --help' says its options",
             ("step",): "'cad step' is no command now: a verb takes the file, its type by its suffix (cad export, cad inspect, cad snapshot, cad dfm, cad fea); 'cad --help' lists them",

@@ -17,9 +17,9 @@ signature rule):
 
 The schematic in one look, and what a reference names, is ``cad.inspect`` (``cad inspect SCHEMATIC [REF]``),
 one sheet drawn flat ``cad.snapshot`` (``cad snapshot SCHEMATIC OUT.png --sheet /Power/``), KiCad's outputs of it
-(a pdf, svgs, the netlist, a BOM) ``cad.export(schematic, folder, to=...)``, and KiCad's electrical rules check
-``cad.kicad.erc`` (``cad kicad erc SCHEMATIC``): the last two run KiCad's own ``kicad-cli``, the ``kicad``
-integration's (kicode, ``cad[kicad]``), as the board's do.
+(a ``.pdf``, the ``.net`` netlist, a ``.csv`` BOM, its SVGs into a folder or a ``.zip``) ``cad.export(schematic,
+dst)``, and KiCad's electrical rules check ``cad.kicad.erc`` (``cad kicad erc SCHEMATIC``): the last two run KiCad's
+own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``), as the board's do.
 """
 
 from __future__ import annotations

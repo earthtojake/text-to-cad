@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
+import { ENGINE_LOOK } from '../lib/xbf/look.generated.js';
 import { fetchXbfElementFacts, fetchXbfPartGroups, xbfDocumentSource } from '../lib/xbf/xbfDocument.js';
 import { openViewBundle, viewBundleMemorySource, viewBundleSegment, VIEW_BUNDLE_ORIGIN } from './bundle.js';
 
 // A view bundle made here, file by file, as the layout writes one (the engine's documentation, "View bundle"):
 // a STEP's two parts, one of them keyed as a STEP's are (a key with `:` in it), each with its buffer and its
-// table; the document's structure, measures, mechanism and look. A buffer's bytes are no mesh: this reads
-// them, it draws nothing.
+// table; the document's structure, measures and mechanism. A buffer's bytes are no mesh: this reads them, it draws
+// nothing. The look is no file of it: the page's own copies answer it, the record @cad/core holds and the image its
+// build holds (`ENVIRONMENT`, handed to the service as its host hands it).
 const ID = '1024a2f2-2b65-5151-8299-282973f2a9fc';
 const TESSELLATION = '0.25-28.5';
 const PLATE = 'step-f8f4-0:1:2';
@@ -29,9 +31,9 @@ const FILES = {
   [`parts/${PEG}/elements.json`]: encode(table('peg', [3])),
   'measure.json': encode({ [PLATE]: { volume: 240, solids: 1 }, [PEG]: { volume: 12, solids: 1 } }),
   'kinematics.json': encode({ pairs: [] }),
-  'look.json': encode({ version: 4, environment: { url: '/api/v1/look/environment', intensity: 0.5 } }),
-  'look/environment.hdr': new Uint8Array([35, 63, 82, 65]),
 };
+const ENVIRONMENT = new Uint8Array([35, 63, 82, 65]);
+const environment = async () => ENVIRONMENT.slice().buffer;
 function manifestOf(files, document = { id: ID, kind: 'step', name: 'pair.step', version: 'v1' }) {
   const listed = Object.fromEntries(Object.entries(files).map(([path, bytes]) => [path, {
     bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -62,7 +64,7 @@ test('a key is spelled as one path segment as the layout spells it', () => {
 for (const [kind, make] of Object.entries(SOURCES)) {
   test(`an engine document's every read is answered from the bundle, from ${kind}`, async () => {
     const { source, asked } = make();
-    const client = await openViewBundle(source);
+    const client = await openViewBundle(source, { environment });
     // The bundle's one document, by the name it keeps: a file's own name, a model's id.
     assert.equal(client.file, '/pair.step');
     assert.equal((await client.resolveEntry('/pair.step')).id, ID);
@@ -81,9 +83,9 @@ for (const [kind, make] of Object.entries(SOURCES)) {
       const part = await served.fetch(`${where.url}/parts/${encodeURIComponent(key)}?tessellation=${TESSELLATION}`);
       assert.deepEqual(await bytesOf(part), STEP_BUNDLE[`${path}/${TESSELLATION}.xbm`], key);
     }
-    // The look, and its environment where the look names it, by the engine's path.
-    assert.deepEqual(await bytesOf(await served.fetch(`${where.base}/api/v1/look`)), STEP_BUNDLE['look.json']);
-    assert.deepEqual(await bytesOf(await served.fetch(`${where.base}/api/v1/look/environment`)), STEP_BUNDLE['look/environment.hdr']);
+    // The look, and its environment where the look names it, by the engine's path: the page's own copies.
+    assert.deepEqual(await (await served.fetch(`${where.base}/api/v1/look`)).json(), ENGINE_LOOK);
+    assert.deepEqual(await bytesOf(await served.fetch(`${where.base}/api/v1/look/environment`)), ENVIRONMENT);
     assert.deepEqual(await (await served.fetch(`${where.url}/kinematics`)).json(), { pairs: [] });
     assert.deepEqual(await (await served.fetch(`${where.url}/parts/${encodeURIComponent(PLATE)}/volume`)).json(), { volume: 240, solids: 1 });
 
@@ -112,6 +114,27 @@ for (const [kind, make] of Object.entries(SOURCES)) {
     client.dispose();
   });
 }
+
+test("the look is the page's own: a bundle's look/ is never read, and with no image from the page its environment is none", async () => {
+  // A bundle that lists a look and its image beside the model's files (the layout before the look became the page's).
+  const held = { ...FILES, 'look.json': encode({ version: 3 }), 'look/environment.hdr': new Uint8Array([1, 2]) };
+  const { source, asked } = countedSource({ ...held, 'manifest.json': manifestOf(held) });
+  const client = await openViewBundle(source, { environment });
+  const served = await client.engineDocument('/pair.step');
+  const { base } = xbfDocumentSource(served.url);
+  assert.deepEqual(await (await served.fetch(`${base}/api/v1/look`)).json(), ENGINE_LOOK);
+  assert.deepEqual(await bytesOf(await served.fetch(`${base}/api/v1/look/environment`)), ENVIRONMENT);
+  assert.deepEqual(asked.filter(({ path }) => path.startsWith('look')), []);
+  client.dispose();
+  // A host that hands the service no image: the record still, and the environment no answer, saying so.
+  const bare = await openViewBundle(viewBundleMemorySource(STEP_BUNDLE));
+  const plain = await bare.engineDocument('/pair.step');
+  assert.deepEqual(await (await plain.fetch(`${base}/api/v1/look`)).json(), ENGINE_LOOK);
+  const none = await plain.fetch(`${base}/api/v1/look/environment`);
+  assert.equal(none.status, 404);
+  assert.match((await none.json()).error, /holds no copy of the look's environment/);
+  bare.dispose();
+});
 
 test("a mesh file's bytes, a robot's meshes and a drawing are read through the service, from either source", async () => {
   const stl = new Uint8Array([115, 111, 108, 105, 100]);
@@ -154,20 +177,13 @@ test("a mesh file's bytes, a robot's meshes and a drawing are read through the s
   }
 });
 
-// A KiCad board's bundle as its writer lays one out: its plot and its 3D models table, the table naming two models by
-// their document ids -- the STEP above, a bundle of its own at documents/<id>/ whose files the board's manifest lists too,
-// and one the engine would not open, which the bundle holds none of -- and one missing from the computer it was shared
-// from; and a schematic's, each sheet a page and the hierarchy's index once.
+// A KiCad board's bundle as its writer lays one out: its plot alone, a share showing a board in 2D; and a schematic's,
+// each sheet a page and the hierarchy's index once.
 const BOARD = '5b1a2f2c-2b65-5151-8299-282973f2a9fc';
-const UNREAD = '9d0e2f2c-2b65-5151-8299-282973f2a9fc';
+const BOARD_DOCUMENT = { id: BOARD, kind: 'kicad_pcb', name: 'blinky.kicad_pcb', version: 'b1' };
 const PLOT = { schemaVersion: 2, kind: 'board', sheets: [{ id: 'board', layers: [] }], board: { parts: [] }, pours: { refilled: true } };
-const MODELS = { models: {
-  '${KIPRJMOD}/models/led.step': { file: 'led.step', document: ID, api: `/api/v1/documents/step/${ID}`, stamp: '1-7' },
-  '${KIPRJMOD}/models/broken.step': { file: 'broken.step', document: UNREAD, api: `/api/v1/documents/step/${UNREAD}`, stamp: '2-9' },
-  '${KIPRJMOD}/models/gone.step': { file: 'gone.step', missing: 'not-found' } } };
-const nested = (prefix, files) => Object.fromEntries(Object.entries(files).map(([path, bytes]) => [`${prefix}${path}`, bytes]));
-const BOARD_FILES = { 'plot.json': encode(PLOT), 'models.json': encode(MODELS), ...nested(`documents/${viewBundleSegment(ID)}/`, STEP_BUNDLE) };
-const BOARD_BUNDLE = { ...BOARD_FILES, 'manifest.json': manifestOf(BOARD_FILES, { id: BOARD, kind: 'kicad_pcb', name: 'blinky.kicad_pcb', version: 'b1' }) };
+const BOARD_FILES = { 'plot.json': encode(PLOT) };
+const BOARD_BUNDLE = { ...BOARD_FILES, 'manifest.json': manifestOf(BOARD_FILES, BOARD_DOCUMENT) };
 const INDEX = { root: 'divider.kicad_sch', sheets: [{ path: '/', name: '/' }, { path: '/Load/', name: 'Load' }], parts: [], nets: [] };
 const PAGES = Object.fromEntries(['/', '/Load/'].map(sheet => [sheet,
   { schemaVersion: 2, kind: 'schematic', generator: 'eeschema', sheets: [{ path: sheet, layers: [] }], warnings: [] }]));
@@ -176,30 +192,23 @@ const SCHEMATIC_FILES = { 'schematic.json': encode(INDEX),
 const SCHEMATIC_BUNDLE = { ...SCHEMATIC_FILES,
   'manifest.json': manifestOf(SCHEMATIC_FILES, { id: BOARD, kind: 'kicad_sch', name: 'divider.kicad_sch', version: 's1' }) };
 
-test("a board's plot and 3D models table are its bundle's, and each model a bundle of its own read by its id", async () => {
-  for (const { source, asked } of [countedSource(BOARD_BUNDLE), { source: viewBundleMemorySource(BOARD_BUNDLE), asked: null }]) {
-    const client = await openViewBundle(source);
-    assert.equal(client.file, '/blinky.kicad_pcb');
-    assert.equal((await client.resolveEntry('/blinky.kicad_pcb')).kind, 'kicad_pcb');
-    assert.deepEqual(await client.plotPayload(client.file), PLOT);
-    assert.deepEqual(await client.boardModels(client.file), MODELS.models);
-    // A model the table names, by its document id, as the board's 3D view opens one: an engine document whose
-    // structure and parts, at the tessellation it names, are the bundle of its own.
-    const served = await client.engineDocument(ID);
-    assert.equal(served.final, true);
-    const where = xbfDocumentSource(served.url);
-    assert.equal(where.doc, ID);
-    assert.deepEqual(await bytesOf(await served.fetch(`${where.url}/structure`)), STEP_BUNDLE['structure.json']);
-    for (const [key, path] of [[PLATE, 'parts/step-f8f4-0~3A1~3A2'], [PEG, `parts/${PEG}`]]) {
-      const part = await served.fetch(`${where.url}/parts/${encodeURIComponent(key)}?tessellation=${TESSELLATION}`);
-      assert.deepEqual(await bytesOf(part), STEP_BUNDLE[`${path}/${TESSELLATION}.xbm`], key);
+test("a board's plot is its bundle's, and the board has no 3D: no models table, no model read by its id", async () => {
+  // A bundle that holds a models table and a STEP's bundle beside the plot is read the same: nothing of them is read.
+  const more = { ...BOARD_FILES, 'models.json': encode({ models: { '${KIPRJMOD}/models/led.step': { file: 'led.step', document: ID } } }),
+    ...Object.fromEntries(Object.entries(STEP_BUNDLE).map(([path, bytes]) => [`documents/${viewBundleSegment(ID)}/${path}`, bytes])) };
+  for (const files of [BOARD_BUNDLE, { ...more, 'manifest.json': manifestOf(more, BOARD_DOCUMENT) }]) {
+    for (const { source, asked } of [countedSource(files), { source: viewBundleMemorySource(files), asked: null }]) {
+      const client = await openViewBundle(source);
+      assert.equal(client.file, '/blinky.kicad_pcb');
+      assert.equal((await client.resolveEntry('/blinky.kicad_pcb')).kind, 'kicad_pcb');
+      assert.deepEqual(await client.plotPayload(client.file), PLOT);
+      // No models table, so the board's view offers no 3D, and no STEP is a document of the bundle.
+      assert.equal(client.boardModels, undefined);
+      await assert.rejects(client.engineDocument(ID), error => error.code === 'cad-file-missing');
+      await assert.rejects(client.engineDocument(client.file), /no engine document/);
+      if (asked) assert.deepEqual(asked.map(({ path }) => path), ['manifest.json', 'plot.json']);
+      client.dispose();
     }
-    // Its files are read through the board's: each one listed there, under the model's folder.
-    if (asked) assert.ok(asked.some(({ path }) => path === `documents/${viewBundleSegment(ID)}/structure.json`), JSON.stringify(asked));
-    // One the bundle holds none of is no file of it: the board's view stands its part as a block.
-    await assert.rejects(client.engineDocument(UNREAD), error => error.code === 'cad-file-missing');
-    await assert.rejects(client.engineDocument(client.file), /no engine document/);
-    client.dispose();
   }
 });
 
@@ -213,7 +222,6 @@ test("a schematic's plot is read a sheet at a time, the hierarchy's index put ba
     // A sheet the hierarchy has not is refused, as the engine's page refuses it.
     await assert.rejects(client.plotPayload(client.file, { sheet: '/Power/' }), error => error.status === 400 && /no sheet \/Power\//.test(error.message));
     await assert.rejects(client.plotPayload(client.file), /a sheet at a time/);
-    assert.deepEqual(await client.boardModels(client.file), {});
     client.dispose();
   }
 });

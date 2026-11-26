@@ -552,7 +552,7 @@
       "operations": [
         {
           "name": "export",
-          "summary": "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, step, glb, odb, ipc2581, pdf or dxf",
+          "summary": "write its fabrication and 3D outputs with KiCad: a .step, .glb, .dxf (its outline), .xml (IPC-2581) or .csv (--as pos or bom); its gerbers, drill, odb or pdf into a folder or a .zip, --as naming which",
           "integration": "kicad",
           "engine": false,
           "files": []
@@ -618,7 +618,7 @@
       "operations": [
         {
           "name": "export",
-          "summary": "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder",
+          "summary": "write it with KiCad: a .pdf of every sheet, its .net netlist or a .csv BOM; an SVG a sheet into a folder or a .zip",
           "integration": "kicad",
           "engine": false,
           "files": []

@@ -367,8 +367,8 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>What is uploaded.</strong> The file’s view, which is what the hosted viewer draws: for a
             model its parts as meshes with their names, measurements and joints, and for other files the
-            like (a drawing, a board’s layers and its parts’ 3D models, a schematic’s sheets). Then the files
-            that anyone with the link can download:
+            like (a drawing, a board’s layers, a schematic’s sheets). Then the files that anyone with the link
+            can download:
             <ul>
               <li>
                 for a model, its <code>.xbf</code> file and the files of the code that built it: its script,

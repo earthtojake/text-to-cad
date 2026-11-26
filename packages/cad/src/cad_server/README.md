@@ -80,9 +80,9 @@ cad_server/
 `cad --help` lists them all.
 
 - **The verbs**: `cad <verb> FILE`, the file's type by its suffix as the library's registry names it:
-  `cad export SRC DST` (one destination, as `cp` writes one, its format by its suffix; a KiCad board's or
-  schematic's outputs into a folder, `cad export BOARD DIR --to KIND`), `cad inspect FILE [REF]` (what a
-  document holds; a robot description's conformance check; `--interference`, which parts share volume;
+  `cad export SRC DST [--as KIND]` (one destination, as `cp` writes one: a file by its suffix, or of a KiCad
+  board or schematic a folder or a `.zip` too, `--as` naming the kind where DST cannot), `cad inspect FILE [REF]`
+  (what a document holds; a robot description's conformance check; `--interference`, which parts share volume;
   `--ranges`, each joint's stops), `cad snapshot FILE OUT.png`, `cad dfm FILE` (whether a part can be made) and
   `cad fea FILE` (a stress study). A model is its `.xbf`, the file that is its document and whose id is the
   model's (`cad export arm.xbf arm.glb`). Each check's findings carry a severity, a code and a location

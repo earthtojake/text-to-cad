@@ -19,22 +19,26 @@
 //   a small `structure.json` and a part's names travel only when they change. A part's buffer is
 //   `parts/<key>/<tessellation>.xbm`; one element's facts, and a part's groups, come out of the part's
 //   one table (`parts/<key>/elements.json`), read once, so nothing is asked per element. The document is
-//   `final`: there is no engine to wait on for a next version;
+//   `final`: there is no engine to wait on for a next version. The look it is drawn in (`/api/v1/look` and its
+//   environment image) is no file of a bundle, being the same for every document of a release: it is answered
+//   from the page's own copies, the record this build of @cad/core holds (`lib/xbf/look.generated.js`, made from the
+//   engine's) and the image its host's build holds (`environment`), and nothing of a bundle's `look/` is read;
 // - a drawing's (`drawing`), a robot's (`robot`) and a mesh file's bytes, through the service's
 //   resources, which read bundle paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb`
 //   and `meshes/<sha256>.<format>`, as its structure names them);
-// - a KiCad board's plot and 3D models table (`plotPayload`, `boardModels`: `plot.json`, `models.json`), and each
-//   model the table names by a document id, a bundle of its own at `documents/<id>/`, read as an engine document by
-//   that id (`engineDocument`), as the board's page reads it; a schematic's plot a sheet at a time
-//   (`sheets/<path>.json`), the hierarchy's index (`schematic.json`) put back where the page asks for it.
+// - a KiCad board's plot (`plotPayload`: `plot.json`), and a schematic's a sheet at a time (`sheets/<path>.json`), the
+//   hierarchy's index (`schematic.json`) put back where the page asks for it.
 //
 // Whatever needs an engine is no method here, so the viewer leaves out what calls it: saving or
 // previewing a model's parameters, exports, a version to wait on, the library, the projects, the
-// person's settings and everything under `/api/v1/local`. A path the manifest does not list is
-// answered 404, and a file whose size is not what the manifest says fails loudly.
+// person's settings and everything under `/api/v1/local`. A board's 3D models table (`boardModels`) is no method
+// either, so a board's view offers no 3D: a share shows a board in 2D, and its 3D is a GLB of its own, shared as a
+// file of its own. A path the manifest does not list is answered 404, and a file whose size is not what the
+// manifest says fails loudly.
 
 import { retainGlbMeshWorker } from '../lib/render/glbMeshWorkerClient.js';
 import { retainStlMeshWorker } from '../lib/render/stlMeshWorkerClient.js';
+import { ENGINE_LOOK } from '../lib/xbf/look.generated.js';
 import { scopeCadResources } from './resources.js';
 
 /** The one layout this reader reads: a manifest of another `format` is refused whole. */
@@ -46,12 +50,10 @@ export const VIEW_BUNDLE_MANIFEST = 'manifest.json';
  */
 export const VIEW_BUNDLE_ORIGIN = 'http://view-bundle.invalid';
 
-// The documents a bundle holds that a page reads as the engine's own (structure, parts, tables, look).
+// The documents a bundle holds that a page reads as the engine's own (structure, parts, tables).
 const ENGINE_KINDS = new Set(['xbf', 'step']);
 // Every kind a manifest may name (the API's), and the renderer's.
 const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srdf', 'kicad_pcb', 'kicad_sch']);
-// Where a board's bundle holds each 3D model's, by the model's document id.
-const MODELS = 'documents/';
 // A part's elements, as the API's routes name them, and as a table keys them.
 const ELEMENT_ROUTES = new Set(['faces', 'edges', 'vertices']);
 // What a prototype's names file holds, in the order the engine's structure gives them.
@@ -132,11 +134,11 @@ export function readViewBundleManifest(value) {
 
 /**
  * Open the bundle `source` holds: its manifest read and checked, then the service that answers the viewer
- * from it (`createViewBundleClient`).
+ * from it (`createViewBundleClient`, which takes `environment`).
  * @param {import('./types.js').ViewBundleSource} source
- * @param {{ signal?: AbortSignal }} [options]
+ * @param {{ signal?: AbortSignal, environment?: import('./types.js').ViewBundleEnvironment | null }} [options]
  */
-export async function openViewBundle(source, { signal } = {}) {
+export async function openViewBundle(source, { signal, environment = null } = {}) {
   let text;
   try {
     text = decoder.decode(await source.read(VIEW_BUNDLE_MANIFEST, { signal }));
@@ -146,7 +148,7 @@ export async function openViewBundle(source, { signal } = {}) {
   }
   let parsed;
   try { parsed = JSON.parse(text); } catch { throw new Error('This is no view bundle: its manifest.json is not JSON.'); }
-  return createViewBundleClient(source, readViewBundleManifest(parsed));
+  return createViewBundleClient(source, readViewBundleManifest(parsed), { environment });
 }
 
 /** The catalog's row of a bundle's document, as an envelope's `entry` gives it to a page. */
@@ -162,12 +164,15 @@ function entryOf(manifest) {
 
 /**
  * The viewer's CAD service over one view bundle (`manifest`, already read: `openViewBundle` reads it). Disposing
- * it disposes `source` too, where the source has something to let go of.
+ * it disposes `source` too, where the source has something to let go of. `environment`: the bytes of the look's
+ * environment image as the page's build holds it, read when a view asks for them; with none, an engine document's
+ * look has no image to read, and the document does not open.
  * @param {import('./types.js').ViewBundleSource} source
  * @param {import('./types.js').ViewBundleManifest} manifest
+ * @param {{ environment?: import('./types.js').ViewBundleEnvironment | null }} [options]
  * @returns {import('./types.js').CadViewBundleClient}
  */
-export function createViewBundleClient(source, manifest) {
+export function createViewBundleClient(source, manifest, { environment = null } = {}) {
   const document = manifest.document;
   const entry = entryOf(manifest);
   const files = manifest.files;
@@ -245,6 +250,14 @@ export function createViewBundleClient(source, manifest) {
     if (mechanism) restored.kinematics = kinematics;
     return json(restored);
   }
+  /** The look's environment image, the page's own copy (`environment`), as the engine answers it. */
+  async function environmentAnswer(signal) {
+    if (typeof environment !== 'function') return json({ error: "This page holds no copy of the look's environment image." }, 404);
+    const combined = signal ? AbortSignal.any([signal, lifetime.signal]) : lifetime.signal;
+    const bytes = await environment({ signal: combined });
+    if (combined.aborted) throw abortError();
+    return new Response(bytes, { headers: { 'content-type': 'image/vnd.radiance' } });
+  }
   /** What a part's table says of one of its elements, or of its groups: its answer's body. */
   async function fromTable(key, route, ordinal, signal) {
     const table = await once(`parts/${viewBundleSegment(key)}/elements.json`, signal);
@@ -256,8 +269,9 @@ export function createViewBundleClient(source, manifest) {
 
   async function answer(url, signal) {
     const { pathname, searchParams } = url;
-    if (pathname === '/api/v1/look') return fileAnswer('look.json', signal);
-    if (pathname === '/api/v1/look/environment') return fileAnswer('look/environment.hdr', signal);
+    // The look, the page's own: a constant of the release, never a bundle's file.
+    if (pathname === '/api/v1/look') return json(ENGINE_LOOK);
+    if (pathname === '/api/v1/look/environment') return environmentAnswer(signal);
     if (pathname === `/api/v1/documents/${encodeURIComponent(document.id)}/thumbnail`) return fileAnswer('thumbnail.png', signal);
     const at = /^\/api\/v1\/documents\/[a-z0-9]+\/([^/]+)\/(.+)$/.exec(pathname);
     if (!at || decodeURIComponent(at[1]) !== document.id) return refused(pathname);
@@ -333,25 +347,6 @@ export function createViewBundleClient(source, manifest) {
   };
   const resources = scopeCadResources(provider, lifetime.signal);
 
-  // ---- a board's 3D models: each a bundle of its own, at `documents/<id>/`, by its document id ---------------
-  const models = new Map();
-  /**
-   * The bundle of the 3D model a board's table names by its document id `id`, read through this one (its files are
-   * listed in this manifest too): opened once; null where this bundle holds none.
-   */
-  function modelBundle(id) {
-    if (typeof id !== 'string' || !id) return null;
-    let held = models.get(id);
-    if (held) return held;
-    let prefix;
-    try { prefix = `${MODELS}${viewBundleSegment(id)}/`; } catch { return null; }
-    if (!Object.hasOwn(files, `${prefix}${VIEW_BUNDLE_MANIFEST}`)) return null;
-    held = openViewBundle({ read: (path, options) => read(`${prefix}${path}`, options) });
-    models.set(id, held);
-    held.catch(() => { if (models.get(id) === held) models.delete(id); });
-    return held;
-  }
-
   const catalog = Object.freeze({ entries: [entry], revision: document.version });
   const snapshot = Object.freeze({ entries: Object.freeze([entry]), revision: 1, hydrated: true, refreshing: false, error: '',
     engineGone: false, engineRefused: false, catalogRevision: document.version });
@@ -373,13 +368,7 @@ export function createViewBundleClient(source, manifest) {
     refresh: async () => catalog,
     async resolveEntry(path) { return own(path, entry); },
     entryOf: path => (names(path) ? entry : null),
-    async engineDocument(file, options = {}) {
-      // A 3D model a board's table names, by its document id: the bundle of its own this one holds.
-      const model = names(file) ? null : modelBundle(file);
-      if (model) {
-        if (disposed) throw abortError();
-        return (await model).engineDocument(file, options);
-      }
+    async engineDocument(file) {
       await own(file, null);
       if (!ENGINE_KINDS.has(document.kind)) throw new Error(`A view bundle of a ${document.kind} is no engine document.`);
       // Read as the document written down, which is what an .xbf is: whatever kind the manifest names, the
@@ -407,12 +396,6 @@ export function createViewBundleClient(source, manifest) {
       const plot = await readJson(page, { signal });
       return index === false ? plot : { ...plot, schematic: await readJson('schematic.json', { signal }) };
     },
-    async boardModels(file, { signal } = {}) {
-      await own(file, null);
-      if (!Object.hasOwn(files, 'models.json')) return {};
-      const reply = await readJson('models.json', { signal });
-      return reply?.models && typeof reply.models === 'object' ? reply.models : {};
-    },
     createRenderSession() {
       if (disposed) throw new Error('This view bundle has been closed.');
       const controller = new AbortController();
@@ -433,8 +416,6 @@ export function createViewBundleClient(source, manifest) {
       disposed = true;
       lifetime.abort();
       for (const session of [...sessions]) session.dispose();
-      for (const model of models.values()) model.then(client => client.dispose(), () => {});
-      models.clear();
       tables.clear();
       source.dispose?.();
     },

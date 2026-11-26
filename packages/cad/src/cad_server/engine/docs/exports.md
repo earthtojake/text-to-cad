@@ -24,8 +24,8 @@ download returns its original bytes (`original`), including an `xbf/8` file conv
 memory for viewing. Use
 `cad export old.xbf upgraded.xbf` to save that conversion to a different path
 (**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
-file offers the other two mesh kinds and nothing else. A KiCad board offers KiCad's files of it, each `cad export
-BOARD DIR --to <kind>` (Gerbers, Drill, Position, BOM, STEP, GLB, ODB++, IPC-2581, PDF, DXF), run by the job on its
+file offers the other two mesh kinds and nothing else. A KiCad board offers KiCad's files of it, the kinds `cad
+export BOARD DST --as <kind>` writes (Gerbers, Drill, Position, BOM, STEP, GLB, ODB++, IPC-2581, PDF, DXF), run by the job on its
 own thread in the environment of `cad[kicad]` (made on first need), from the board at the bytes shown
 (the catalog's hash, checked before; its `mtime_ns-size`, after): one file downloads as it is, a folder
 of them (the Gerbers, the drill files, the PDF's two pages) as `<board>-<kind>.zip`. A job the writer refuses (a DXF

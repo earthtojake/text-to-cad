@@ -3,7 +3,10 @@
 ``occt.py`` draws it on OCCT's PBR raster (``finish.py``; X-ray on its Phong program), the engine
 serves it as JSON (``GET /api/v1/look``, its environment at ``GET /api/v1/look/environment``:
 ``serve.py``), and the viewer draws an engine document's regular modes by it through three's
-physical materials (core's ``lib/xbf/xbfLook.js``). Preview's photographic look is not here.
+physical materials (core's ``lib/xbf/xbfLook.js``). It is a constant of the release, the same for every
+document, so a page with no engine carries its own copy (``as_js``: the bundled ``@cad/core``'s
+``lib/xbf/look.generated.js``, and its build's own ``studio.hdr``) and no view bundle holds it. Preview's
+photographic look is not here.
 
 **The light.** One key, a directional light at ``intensity`` (radiance: a white surface facing it
 reflects ``intensity / pi``), and one environment, ``studio.hdr`` beside this module, lighting
@@ -80,6 +83,7 @@ framings from the origin.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -230,3 +234,15 @@ LOOK = Look(
 )
 
 DRAWING = Drawing(paper="#ffffff", ink="#171717", line_width=1.0, margin=16.0)
+
+_JS_HEAD = ("// GENERATED from the engine's look of the regular display modes (cad.engine.render.look): do not edit.\n"
+            "// scripts/generated/regenerate.py makes it again; tests/python/packages/cad/engine/test_look.py fails\n"
+            "// when this file and the look differ.\n")
+
+
+def as_js() -> str:
+    """The look as ``GET /api/v1/look`` serves it (``Look.json``), as the ES module ``@cad/core``'s
+    ``lib/xbf/look.generated.js`` is: the copy a page with no engine (a share's) draws an engine document's
+    regular modes by."""
+    body = json.dumps(LOOK.json(), indent=2, ensure_ascii=False)
+    return f"{_JS_HEAD}export const ENGINE_LOOK = Object.freeze({body});\n"

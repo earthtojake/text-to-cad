@@ -977,14 +977,14 @@ async function shareGate() {
   if (args.shareBoard || args.shareSchematic) await kicadShares();
 }
 
-// The board's view settings, the navbar's Display: its card's Mode is 2D or 3D.
+// The board's view settings, the navbar's Display: its card's Side, and on the engine's page its Mode, 2D or 3D.
 const DISPLAY = "[data-navbar-view-controls] [data-display-settings]";
 
 async function kicadShares() {
   // A KiCad board and schematic shared as the model is (`--share-board`, `--share-schematic`: what `cad share --json`
-  // printed), opened from the share service with no engine: the board drawn on its canvas, and in 3D its LED standing
-  // on the STEP its project holds -- a bundle of its own in the board's, read by the model's id -- and its resistor,
-  // whose model is nowhere, a block; the schematic's root sheet, then the sheet the Hierarchy shows, read on its own.
+  // printed), opened from the share service with no engine: the board drawn on its canvas in 2D alone, though its LED
+  // stands on a STEP its project holds (a share shows a board in 2D: its 3D is a GLB of its own); the schematic's root
+  // sheet, then the sheet the Hierarchy shows, read on its own.
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   const asked = [];
   context.on("request", (request) => asked.push(new URL(request.url()).pathname));
@@ -1004,13 +1004,22 @@ async function kicadShares() {
       await page.goto(shared.view, { waitUntil: "domcontentloaded" });
       if (what === "board") {
         await page.locator('[data-board-surface] [aria-busy="false"][data-board-settled="true"]').first().waitFor();
+        // Display's card has the board's Side and no Mode, and the navbar no Preview.
         const card = page.locator("[data-display-settings-card]");
         await page.locator(DISPLAY).click();
-        await card.locator('[data-settings-select="dimension"]').click();
-        await page.getByRole("menu").locator('[data-board-dimension-option="3d"]').click();
+        await card.locator('[data-settings-select="side"]').waitFor();
+        if (await card.locator('[data-settings-select="dimension"]').count()) failures.push("share: the shared board's Display offers 2D/3D");
         await card.getByRole("button", { name: "Close display settings", exact: true }).click();
-        // The LED's model read from the share, baked and placed: one body, one model; the resistor's, a block.
-        await page.locator('[data-board-3d][data-board-bodies="1"][data-board-models="1"][data-board-blocks="1"]').waitFor();
+        await card.waitFor({ state: "detached" });
+        if (await page.locator("[data-navbar-view-controls]").getByRole("button", { name: "Preview", exact: true }).count()) {
+          failures.push("share: the shared board offers Preview");
+        }
+        // 3, which draws a board in 3D on the engine's page, does nothing here: ⇧F after it turns the board over, in 2D.
+        await page.locator("[data-board-surface] canvas[role=img]").click();
+        await page.keyboard.press("3");
+        await page.keyboard.press("Shift+F");
+        await page.locator(`${DISPLAY}[data-view-side="bottom"]`).waitFor();
+        if (await page.locator("[data-board-3d]").count()) failures.push("share: 3 drew the shared board in 3D");
       } else {
         await page.locator('[data-schematic-sheet="/"]').waitFor();
         await page.locator('[data-schematic-surface] [aria-busy="false"][data-board-settled="true"]').first().waitFor();

@@ -280,6 +280,11 @@ tool the document cannot use is absent, never drawn disabled:
   `setModelParameters` or `previewModelParameters`.
 - **No next version**: its engine document is `final`, so the view reads it once and waits on nothing.
 - **No Export**: the service has no `exports` and the host no `downloads`.
+- **A board in 2D alone**: the service has no `boardModels`, so a board's view has no Mode, no 3D and no Preview
+  (a share's 3D is a GLB of its own, shared as a file of its own).
+- **The look is the page's own**: no bundle holds the look an engine document is drawn in, a constant of the release.
+  The service answers its record from @cad/core's copy, and its environment image from the one the host's build holds,
+  which the host hands it (`openViewBundle(source, { environment })`); a host that hands none shows no engine document.
 - **No home, Recents, projects, Open, Open in, Reveal, Copy path or Copy link**: no `library`, a file source
   that only reads its one document (`createCadFileSource`), no `projectFolder` to step through, and no
   `fileActions`, so the navbar draws no ⋯.

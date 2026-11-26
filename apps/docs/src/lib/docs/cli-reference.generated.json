@@ -3,8 +3,8 @@
  "verbs": [
   {
    "command": "cad export",
-   "summary": "write a file to another, one destination, its format by its suffix (a KiCad file's outputs into a folder, --to KIND)",
-   "usage": "cad export SRC DST [--tolerance MM] [--angle DEG] [--zero STATE] [--json]\ncad export BOARD|SCHEMATIC DIR --to KIND [--json]",
+   "summary": "write a file to one destination, what DST says: a file by its suffix, or of a KiCad file a folder or a .zip too (--as KIND where DST cannot say it)",
+   "usage": "cad export SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]",
    "arguments": [
     {
      "name": "SRC",
@@ -19,50 +19,56 @@
    "options": [
     {
      "flags": [
+      "--as"
+     ],
+     "metavar": "KIND",
+     "help": 2,
+     "choices": [
+      "step",
+      "glb",
+      "stl",
+      "3mf",
+      "dxf",
+      "xbf",
+      "mjcf",
+      "urdf",
+      "gerbers",
+      "drill",
+      "pos",
+      "bom",
+      "odb",
+      "ipc2581",
+      "pdf",
+      "svg",
+      "netlist"
+     ]
+    },
+    {
+     "flags": [
       "--tolerance"
      ],
      "metavar": "MM",
-     "help": 2
+     "help": 3
     },
     {
      "flags": [
       "--angle"
      ],
      "metavar": "DEG",
-     "help": 3
+     "help": 4
     },
     {
      "flags": [
       "--zero"
      ],
      "metavar": "STATE",
-     "help": 4
+     "help": 5
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 5
-    },
-    {
-     "flags": [
-      "--to"
-     ],
-     "metavar": "{gerbers,drill,pos,bom,step,glb,odb,ipc2581,pdf,dxf}",
-     "help": 6,
-     "choices": [
-      "gerbers",
-      "drill",
-      "pos",
-      "bom",
-      "step",
-      "glb",
-      "odb",
-      "ipc2581",
-      "pdf",
-      "dxf"
-     ],
-     "required": true
+     "help": 6
     }
    ],
    "types": [
@@ -1188,12 +1194,12 @@
  ],
  "texts": [
   "the file, its type by its suffix: .xbf, .step, .stp, .stl, .glb, .3mf, .kicad_pcb or .kicad_sch, a model's .xbf read as the file it is, never as the model the engine holds; or a share's link (https://cad.fun/<id>): this computer's copy of it, the file it shared or the copy in the folder cad import wrote it into",
-  "the file to write, its format by its suffix: .step, .glb, .stl, .3mf, .dxf (of a planar document), .xbf (a copy of the document, never over its own file), .xml (MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): the document as its code built it, checked (a DXF's drawing too) before it is written: a refused export writes nothing",
+  "where to write it, a file by its suffix: .step (or .stp), .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF; a board's IPC-2581) or .urdf, a board's .csv (its placement or BOM), a schematic's .pdf, .net or .csv; or of a KiCad file a folder (ending in /, or one that is there: made when missing) or a .zip, of the files KiCad writes. An output of one file is named as that file, never a folder: no name is made up, and a refused export writes nothing",
+  "the kind written, where DST cannot say it: a board's gerbers, drill, odb or pdf into a folder or a .zip, its pos or bom into a .csv; given where DST says it, the two must agree",
   "mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least 0.001), where it is finer than the viewer's quarter per cent of a part: for a print whose fits are finer, or a picture whose curves are: DST a .glb, an .stl or a .3mf",
   "mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees (1 to 28.5, the viewer's own): small radii drawn in more segments; DST a .glb, an .stl or a .3mf",
   "take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each joint's value there its zero, its limits and the other states around it (as built without it)",
   "print what was written as JSON, a robot description's with what it holds (robot)",
-  "what to write: gerbers and drill (a folder of files), pos (placement CSV), bom (the schematic's parts CSV), step and glb (3D), odb (ODB++ zip), ipc2581, pdf (a front and a back fabrication drawing) or dxf (the outline and holes)",
   "the file, its type by its suffix: .xbf, .step, .stp, .glb, .urdf, .srdf, .kicad_pcb or .kicad_sch, a model's .xbf read as the file it is, never as the model the engine holds; or a share's link (https://cad.fun/<id>): this computer's copy of it, the file it shared or the copy in the folder cad import wrote it into",
   "[FILE#][OWNER/]ELEMENT or [FILE#]OWNER (cad.engine.refs; FILE a share's link too): OWNER a part's or an assembly's label, or its occurrence path (hand/finger.2); ELEMENT an element name (f:..., e:..., v:...) or face N (edge, vertex). An element answers what the kernel measures of it, placed where its occurrence stands, and what made it; a part or an assembly its volume, mass and world bounds, a part its placement. Without it: what the document holds (its state, parts, bounds, volume, materials, joints, couplings, states, sequences, animations, parameters and declared files), then its build closure",
   "inspect a summary and the closure (the default without REF); the structure: the summary without its bounds, volume and masses, so nothing is measured, and the closure; the closure alone; geometry (requires REF); or build metadata. Never builds a model or meshes a part; a part's volume and box are measured once by the engine and kept for its geometry",
@@ -1291,7 +1297,7 @@
   "run it in this process, its log on this terminal, until it is stopped",
   "what was stopped as JSON",
   "the server's answer as JSON",
-  "Share a file: anyone with its link opens it in the hosted viewer, and downloads the files that made it (the link's .zip, which `cad import` writes into a folder), with no sign-in, until 7 days after its last share. FILE is a CAD file the viewer opens; a model is shared by its .xbf. What goes is the file, the files that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's project file, local libraries, 3D models and sheets -- and its view: its shapes as meshes with their names, measurements and joints, a board's layers and its parts' 3D models, a schematic's sheets. Never an installed library. Sharing it again keeps the link and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a share.",
+  "Share a file: anyone with its link opens it in the hosted viewer, and downloads the files that made it (the link's .zip, which `cad import` writes into a folder), with no sign-in, until 7 days after its last share. FILE is a CAD file the viewer opens; a model is shared by its .xbf. What goes is the file, the files that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's project file, local libraries, 3D models and sheets -- and its view: its shapes as meshes with their names, measurements and joints, a board's layers in 2D (its 3D is a GLB of its own: `cad export BOARD board.glb`, then share that), a schematic's sheets. Never an installed library. Sharing it again keeps the link and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a share.",
   "a CAD file the viewer opens (a model's .xbf; a folder has no bundle to share); or status, on, off or delete",
   "after delete: the file this computer shared, or a share's delete link",
   "share: the person agrees to sharing, kept for this computer; delete: delete without asking. Where nobody can be asked (an agent, a pipe, --json) neither runs without it",

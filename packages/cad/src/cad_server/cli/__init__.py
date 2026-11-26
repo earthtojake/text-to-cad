@@ -10,9 +10,9 @@ the server's (``server``: ``start``, ``stop``, ``status``), the CAD app an agent
 installation's (``requirement``, ``setup``, ``doctor``, ``cache``, ``telemetry``, ``update``, whose ``update auto`` is
 cad's own switch, and ``plugin``). ``cad --help`` lists them all but ``_UNLISTED``'s.
 
-A spelling the command had (``cad xbf export``, ``cad urdf validate``, ``cad kicad_pcb drc``, bare ``cad server``) runs
-nothing: it is answered in one line with the spelling it has now, exit 2 (``_hint``, one table:
-``_RENAMED``, ``_BARE`` and ``_OPERATIONS_NOW``).
+A spelling the command had (``cad xbf export``, ``cad urdf validate``, ``cad kicad_pcb drc``, bare ``cad server``,
+``cad export BOARD DIR --to KIND``) runs nothing: it is answered in one line with the spelling it has now, exit 2
+(``_hint``, one table: ``_RENAMED``, ``_BARE``, ``_OPERATIONS_NOW`` and ``_KICAD_EXPORT``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
 release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
@@ -44,7 +44,7 @@ from cad.registry import ALIASES, DOCUMENT_TYPES, INTEGRATIONS
 # device's engine makes for it): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
     # The verbs on a file, its type by its suffix (``cad_server.cli.verbs``).
-    "export": ("cad_server.cli.export", "write a file to another, one destination, its format by its suffix"),
+    "export": ("cad_server.cli.export", "write a file to DST: a file by its suffix, a folder or a .zip"),
     "inspect": ("cad_server.cli.inspect_", "what a document holds; a robot description's check; --interference, "
                                             "--ranges"),
     "snapshot": ("cad_server.cli.snapshot", "draw a file as the viewer does, into a PNG"),
@@ -108,6 +108,9 @@ _OPERATIONS_NOW: dict[str, str] = {
     "dfm": "cad dfm FILE", "interference": "cad inspect FILE --interference", "ranges": "cad inspect FILE --ranges",
     "solve": "cad fea FILE", "validate": "cad inspect FILE", "drc": "cad kicad drc BOARD",
     "erc": "cad kicad erc SCHEMATIC"}
+# A KiCad file's export as the command spelled it (``cad kicad_pcb export``, then ``cad export FILE DIR --to KIND``),
+# and as it is now: the destination says what is written, ``--as`` naming it where the destination cannot.
+_KICAD_EXPORT = "cad export FILE DST --as KIND"
 
 _USAGE_HEAD = ("usage: cad <verb> FILE [args...] | cad <integration> <operation> FILE [args...]\n"
                "       | cad <command> [args...]\n\n")
@@ -205,6 +208,8 @@ def _hint(argv: list[str]) -> str | None:
     """The one line that answers a spelling the command had, naming the one it has now (``cad export``: ``cad
     export SRC DST``), or None for a command line that is no such spelling."""
     word = argv[0]
+    if word == "export" and any(token == "--to" or token.startswith("--to=") for token in argv[1:]):
+        return f"'cad export FILE DIR --to KIND' is '{_KICAD_EXPORT}' now; 'cad export --help' says its options"
     if word in _BARE and not _BARE[word][1] & set(argv[1:]):
         return f"'cad {word}' alone is '{_BARE[word][0]}' now; 'cad {word} --help' says its forms"
     if word in _RENAMED:
@@ -213,7 +218,7 @@ def _hint(argv: list[str]) -> str | None:
         operation = argv[1] if len(argv) > 1 else ""
         now = _OPERATIONS_NOW.get(operation)
         if word in ("kicad_pcb", "kicad_sch") and operation == "export":
-            now = "cad export FILE DIR --to KIND"
+            now = _KICAD_EXPORT
         if now is not None:
             verb = " ".join(now.split()[1:3]) if now.startswith("cad kicad") else now.split()[1]
             return f"'cad {word} {operation}' is '{now}' now; 'cad {verb} --help' says its options"

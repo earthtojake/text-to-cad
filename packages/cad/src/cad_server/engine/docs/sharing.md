@@ -29,9 +29,10 @@ file, and shares to a link of its own.
 
 - **What.** Its files (**The files that made it**, below) and its view: a model's or a STEP's parts as meshes,
   with their names, measurements and joints; an STL's, a GLB's or a 3MF's mesh; a DXF's drawing as the viewer draws
-  it; a URDF's or an SRDF's links, joints and mesh files; a KiCad board's layers as KiCad draws them, its pours
-  KiCad's refill, and its parts' 3D models; a KiCad schematic's sheets. The picture a page kept (`thumbnail.png`) is
-  left out of the view: it may be of an earlier version. A folder and a script are refused in one line each.
+  it; a URDF's or an SRDF's links, joints and mesh files; a KiCad board's layers as KiCad draws them, in 2D, its
+  pours KiCad's refill (its 3D is a GLB of its own, `cad export BOARD board.glb`, shared as a file of its own); a
+  KiCad schematic's sheets. The picture a page kept (`thumbnail.png`) is left out of the view: it may be of an
+  earlier version. A folder and a script are refused in one line each.
 - **Where.** The share service, `https://cad.fun`, which keeps everything of a share encrypted (AES-256-GCM)
   under a key it derives from the share's id, and keeps neither the id nor the key. The id is the link's: whoever
   has the view link can open the model, and download its files from the files' link, `<view link>.zip`.
@@ -88,7 +89,7 @@ checkout's root and the home folder):
 - of a board, its project file (`<board>.kicad_pro`) and its custom rules (`.kicad_dru`) beside it, its project's
   footprint and symbol libraries -- `fp-lib-table` and `sym-lib-table` and each library they list there (a
   `.pretty`'s footprints, a `.kicad_sym`) -- and the 3D model files its footprints name in the project (`${KIPRJMOD}`'s,
-  a variable the project defines, a path), a VRML name with the STEP beside it, which the view draws;
+  a variable the project defines, a path), a VRML name with the STEP beside it, which the viewer's 3D draws;
 - of a schematic, every sheet of the hierarchy it is drawn in (from its project's root sheet, which a sheet shared
   on its own is drawn from too), the root's project file and its project's symbol libraries;
 - never a library of KiCad's (`${KICAD9_FOOTPRINT_DIR}`, `${KICAD9_3DMODEL_DIR}`, a variable the project does not
