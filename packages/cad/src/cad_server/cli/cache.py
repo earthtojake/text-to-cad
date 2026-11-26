@@ -11,9 +11,9 @@ records, Recents and settings in the state folder, and anything else in the fold
 - ``prune``: what this release of cad cannot use: the environments made for another release (their marker names it,
   ``base.marked``), and the release folders of the layout of 0.11.11 and earlier (``<state>/releases/<release>``,
   ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start;
-  and the releases cad's update keeps that nothing runs or points at any more (its store, which is in the state
-  folder, not the cache: ``store.clean``) but the one it has ready to restart on, left as they are while an update is
-  underway (``_store``).
+  and the releases cad's update stored that nothing runs or points at any more, the one it switched away from too
+  (its store, which is in the state folder, not the cache: ``store.clean``), but the one it has ready to restart on,
+  left as they are while an update is underway (``_store``).
 - ``clean``: all of the cache, and what ``prune`` removes of it; refused while a server runs, which runs from it.
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
@@ -172,9 +172,8 @@ def _store() -> tuple[int, int, str]:
             found = json.loads(pointer.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(found, dict):
-            named |= {os.path.normcase(os.path.abspath(str(found[key]))) for key in ("path", "previous")
-                      if found.get(key)}
+        if isinstance(found, dict) and found.get("path"):
+            named.add(os.path.normcase(os.path.abspath(str(found["path"]))))
     for name in gone:
         path = root / name
         what = ("a pointer that names nothing any more" if name.startswith("pointer-") else

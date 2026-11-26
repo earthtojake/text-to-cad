@@ -327,7 +327,7 @@ class PointerTest(StoreCase):
         self.assertIsNone(store.pointer(self.prefix))
         self.assertIsNone(store.pointed(self.prefix))
         self.assertEqual(store.active(self.prefix), "1.0.0", "no pointer: the cad installed there")
-        written = store.point(self.stored, previous="elsewhere", prefix=self.prefix)
+        written = store.point(self.stored, prefix=self.prefix)
         folder = os.path.normcase(os.path.realpath(self.prefix))
         name = "pointer-%08x.json" % (binascii.crc32(folder.encode("utf-8", "surrogatepass")) & 0xFFFFFFFF)
         self.assertEqual(store.pointer_path(self.prefix), self.state / "store" / name)
@@ -336,7 +336,7 @@ class PointerTest(StoreCase):
         self.assertEqual({key: value for key, value in written.items() if key != "at"},
                          {"pointer": 1, "python": sys.implementation.cache_tag, "prefix": folder,
                           "record": "cad-1.0.0.dist-info/RECORD", "stamp": [stamp.st_mtime_ns, stamp.st_size],
-                          "path": str(self.stored), "release": "1.0.1", "previous": "elsewhere"})
+                          "path": str(self.stored), "release": "1.0.1"})
         self.assertEqual(json.loads((self.state / "store" / name).read_text(encoding="utf-8")), written)
         self.assertEqual(store.pointer(self.prefix), written)
         self.assertEqual(store.pointed(self.prefix), written)
@@ -457,7 +457,11 @@ class CleanTest(StoreCase):
                     ("1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5", "1.0.6", "1.0.7", "1.0.8")}
         now = time.time()
         old = now - store.STALE_SECONDS - 60
-        store.point(releases["1.0.1"], previous=str(releases["1.0.2"]), prefix=here)
+        store.point(releases["1.0.1"], prefix=here)
+        # As a release before this one wrote it, naming the release it ran before: that one is kept no more.
+        pointer = store.pointer_path(here)
+        pointer.write_text(json.dumps({**json.loads(pointer.read_text(encoding="utf-8")),
+                                       "previous": str(releases["1.0.2"])}), encoding="utf-8")
         store.point(releases["1.0.3"], prefix=other)  # another environment's, which lasts
         store.point(releases["1.0.4"], prefix=gone)
         shutil.rmtree(gone)  # its environment is gone
@@ -467,7 +471,7 @@ class CleanTest(StoreCase):
         for prefix in (here, other, gone, replaced):
             os.utime(store.pointer_path(prefix), (old, old))  # written long ago
         # A pointer that means nothing as yet, written a moment ago: an update may be writing it.
-        store.point(releases["1.0.7"], previous=str(releases["1.0.8"]), prefix=fresh)
+        store.point(releases["1.0.7"], prefix=fresh)
         shutil.rmtree(fresh)
         unreadable = [write(store.root() / "pointer-00000000.json", "{not json"),
                       write(store.root() / "pointer-00000001.json", "[1, 2]")]
@@ -481,9 +485,10 @@ class CleanTest(StoreCase):
         write(store.root() / "1.0.11-a-file", "a file where a release's folder would be")
         removed = store.clean(keep=[releases["1.0.0"]], now=now)
         self.assertEqual(sorted(removed), sorted([
-            store.pointer_path(gone).name, store.pointer_path(replaced).name, releases["1.0.4"].name,
-            releases["1.0.5"].name, releases["1.0.6"].name, unmarked.name, trash.name, abandoned.name]))
-        for name in ("1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.7", "1.0.8"):
+            store.pointer_path(gone).name, store.pointer_path(replaced).name, releases["1.0.2"].name,
+            releases["1.0.4"].name, releases["1.0.5"].name, releases["1.0.6"].name, releases["1.0.8"].name,
+            unmarked.name, trash.name, abandoned.name]))
+        for name in ("1.0.0", "1.0.1", "1.0.3", "1.0.7"):
             self.assertIsNotNone(store.marker(releases[name]), f"{name} is kept")
         self.assertTrue(building.is_dir(), "a build that may still run is left")
         self.assertTrue((store.root() / "1.0.11-a-file").is_file())
@@ -493,13 +498,91 @@ class CleanTest(StoreCase):
         self.assertEqual(store.clean(keep=[releases["1.0.0"]], now=now), [], "nothing more to take")
         later = now + store.STALE_SECONDS + 1
         self.assertEqual(sorted(store.clean(keep=[releases["1.0.0"]], now=later)), sorted([
-            store.pointer_path(fresh).name, releases["1.0.7"].name, releases["1.0.8"].name]),
+            store.pointer_path(fresh).name, releases["1.0.7"].name]),
             "the same pointer, once old, and the releases it alone named")
 
     def test_clean_never_raises(self) -> None:
         self.assertEqual(store.clean(), [], "no store at all")
         write(self.state / "store", "a file where the store would be")
         self.assertEqual(store.clean(), [])
+
+
+class SwitchTidyTest(StoreCase):
+    """The worker's update (``auto_update_helper.update``) over this store, from the stored release 1.0.1 to 1.0.2: its
+    switch and the tidying it ends with. A stand-in ``run`` is uv, the release's own check and the environment's
+    ``cad``; a stand-in server answers once a ``cad server start`` of the release the environment runs succeeded."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from cad_server._internal import auto_update_helper as helper
+
+        self.helper = helper
+        self.prefix, _packages = environment(self.root / "env")
+        self.old = self.published("1.0.1")
+        store.point(self.old, prefix=self.prefix)
+        self.new = store.folder("1.0.2")
+        self.serving: str | None = None
+        self.starts = {"1.0.1": True, "1.0.2": True}
+        for patch in (mock.patch.object(sys, "prefix", str(self.prefix)),
+                      mock.patch.object(store, "packages", return_value=None),
+                      mock.patch.object(store, "running", return_value=None),
+                      mock.patch.object(helper, "answering", side_effect=lambda: self.serving and (self.serving, None))):
+            self.enterContext(patch)
+        self.told = {"record": str(self.state / "auto-update.json"), "log": None, "from": "1.0.1", "at": 1.0,
+                     "tries": 1, "wanted": "1.0.2", "asked": True, "major": False, "start": True, "target": "1.0.2",
+                     "requirement": "cad==1.0.2", "cad": "cad", "uv": "uv", "installer": "uv"}
+
+    def run_(self, command: list[str], timeout: float) -> tuple[int | None, str]:
+        if command[0] == "uv":
+            target = Path(command[command.index("--target") + 1])
+            dist_info(target, "1.0.2")
+            write(target / "cad" / "__init__.py", "RELEASE = '1.0.2'\n")
+            return 0, "Installed 40 packages"
+        if command[1:3] == ["-I", "-S"]:
+            return 0, "cad 1.0.2\n"
+        running = store.active(self.prefix)
+        if command[1:] == ["server", "start"]:
+            if not self.starts[running]:
+                return 1, "cad server start: the engine server did not start"
+            self.serving = running
+            return 0, f"started the cad server (cad {running})\n"
+        raise AssertionError(command)
+
+    def update(self) -> dict[str, Any]:
+        return self.helper.update(self.told, run=self.run_)
+
+    def test_the_release_switched_away_from_goes_at_the_switch_s_own_tidying(self) -> None:
+        found = self.update()
+        self.assertEqual((found["outcome"], store.pointed(self.prefix)["path"]), ("installed", str(self.new)))
+        self.assertNotIn("previous", store.pointer(self.prefix), "the pointer names the release it runs alone")
+        self.assertIsNotNone(store.marker(self.new))
+        self.assertFalse(self.old.exists(), "nothing reads the release before once the switch is over")
+
+    def test_one_a_process_still_runs_stays_and_goes_once_that_process_ends(self) -> None:
+        child = holding(self.old / store.MARKER)
+        self.addCleanup(release, child)
+        self.assertEqual(self.update()["outcome"], "installed")
+        self.assertIsNotNone(store.marker(self.old), "still run: whole")
+        release(child)
+        self.assertEqual(store.clean(), [self.old.name], "the next tidying takes it")
+        self.assertIsNotNone(store.marker(self.new))
+
+    def test_a_switch_whose_server_does_not_start_goes_back_to_the_release_before_still_there(self) -> None:
+        self.starts["1.0.2"] = False
+        there = []
+        restore = store.restore
+
+        def restoring(kept: dict[str, Any] | None, **kwargs: Any) -> None:
+            there.append(store.marker(self.old) is not None)
+            restore(kept, **kwargs)
+
+        with mock.patch.object(store, "restore", side_effect=restoring):
+            found = self.update()
+        self.assertEqual(there, [True], "nothing tidies while the switch is underway: the release before is whole")
+        self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "start_failed", True))
+        self.assertEqual((store.pointed(self.prefix)["path"], self.serving), (str(self.old), "1.0.1"))
+        self.assertIsNotNone(store.marker(self.old), "the release before runs again, and stays")
+        self.assertFalse(self.new.exists(), "the release that did not start is not kept")
 
 
 class SwitchesTest(unittest.TestCase):

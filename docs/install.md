@@ -523,9 +523,9 @@ folders, which you can delete by hand:
 
 `cad doctor` and `cad cache dir` print where they are on your computer; run them before you remove
 cad. What uv downloaded stays in uv's cache until you run `uv cache prune`. The data folder also
-holds, in `store`, the releases cad's own update installed, the one that runs and the one before it:
-about 180 MB each, less where they share their files with uv's cache. `cad cache prune` removes those
-nothing runs.
+holds, in `store`, the releases cad's own update installed, the one that runs and one waiting for its
+restart: about 180 MB each, less where they share their files with uv's cache. `cad cache prune` removes
+those nothing runs.
 
 ## What it needs
 

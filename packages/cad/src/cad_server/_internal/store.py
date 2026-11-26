@@ -31,6 +31,10 @@ it is open; elsewhere by taking the marker's lock alone, which no process shares
 is deleted, so a release is whole or gone, and what cannot be deleted yet (on Windows a library another release's
 process has loaded through a link to the same file) waits in its ``.trash-`` folder for the next ``clean``.
 
+**What it keeps** (``clean``): the release each pointer names and the one an update has ready (``keep``). Any other
+goes once no process runs it, the one an update switched away from too: the way back at a switch puts back the
+pointer it read, and nothing tidies the store while an update is underway.
+
 Everything here asks ``sys.modules`` for ``_cad_release`` and never imports it: it acts as the interpreter starts,
 and only then.
 """
@@ -302,11 +306,10 @@ def _write(path: Path, kept: dict[str, Any] | None) -> None:
     write_bytes_atomic(path, json.dumps(kept, sort_keys=True).encode("utf-8"))
 
 
-def point(path: str | os.PathLike[str] | None, *, previous: str | None = None,
+def point(path: str | os.PathLike[str] | None, *,
           prefix: str | os.PathLike[str] | None = None) -> dict[str, Any] | None:
     """The environment at ``prefix`` (this one) pointed at the stored release at ``path``, for the cad installed there
-    now (``own``); ``previous``: the stored release it ran before, kept for the way back and from ``clean``. With no
-    ``path``, the pointer removed: the environment runs its own packages. Written whole or not at all: a process
+    now (``own``). With no ``path``, the pointer removed: the environment runs its own packages. Written whole or not at all: a process
     starting meanwhile reads the pointer before or this one. What was written. ``OSError`` where it cannot be, or
     where ``path`` is no stored release or the environment holds no cad to write it for."""
     prefix = Path(prefix or sys.prefix)
@@ -324,7 +327,7 @@ def point(path: str | os.PathLike[str] | None, *, previous: str | None = None,
     stamp = record.stat()
     written = {"pointer": 1, "python": tag(), "prefix": environment(prefix),
                "record": record.relative_to(here).as_posix(), "stamp": [stamp.st_mtime_ns, stamp.st_size],
-               "path": str(Path(path)), "release": kept["release"], "previous": previous, "at": time.time()}
+               "path": str(Path(path)), "release": kept["release"], "at": time.time()}
     _write(pointer_path(prefix), written)
     return written
 
@@ -502,8 +505,8 @@ def clean(keep: Iterable[str | os.PathLike[str] | None] = (), *, now: float | No
     is gone, cad was installed there again since it was written, or the release it names is gone), once it is
     ``STALE_SECONDS`` old; one that cannot be read is left, and so is a newer one, with the releases it names: an
     update may be writing it. Then each stored release is removed that is not one of ``keep``, not one a pointer
-    names, of whatever environment, nor one it ran before (``"previous"``), not the one this process runs, and that
-    no process runs (``remove``); each ``.trash-`` folder is deleted as far as it can be; and each ``.building-``
+    names, of whatever environment, not the one this process runs, and that no process runs (``remove``): the one an
+    update switched away from goes at the first tidying no process runs it in; each ``.trash-`` folder is deleted as far as it can be; and each ``.building-``
     folder older than ``ABANDONED_SECONDS``, whose build died. The names removed. Never raises."""
     now = time.time() if now is None else now
     removed: list[str] = []
@@ -520,7 +523,7 @@ def clean(keep: Iterable[str | os.PathLike[str] | None] = (), *, now: float | No
             continue
         try:
             if _lasting(found) or now - entry.stat().st_mtime <= STALE_SECONDS:
-                named += [found.get("path"), found.get("previous")]
+                named.append(found.get("path"))
                 continue
             os.unlink(entry.path)
             removed.append(entry.name)

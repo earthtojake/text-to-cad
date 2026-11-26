@@ -207,10 +207,12 @@ stored release is one folder of the import path.
 
 **In use.** A release is removed only where no process holds its marker: on Windows by renaming its folder,
 which the system refuses while a file in it is open; elsewhere by taking the marker's lock, which each process
-that runs it shares. The tidying (`store.clean`) keeps what a pointer names and the release it ran before, and
-removes pointers that mean nothing (once ten minutes old), builds that died (an hour old) and every other release
-no process runs but the one that is ready (`auto_update.kept`, below). The worker tidies as it ends; a server as it
-starts, and `cad cache prune`, where no attempt is underway.
+that runs it shares. The tidying (`store.clean`) keeps what a pointer names, and removes pointers that mean
+nothing (once ten minutes old), builds that died (an hour old) and every other release no process runs but the
+one that is ready (`auto_update.kept`, below): the one an update switched away from too, as the way back needs
+only the pointer it read. The worker tidies as it ends; a server as it starts, and `cad cache prune`, where no
+attempt is underway. The worker runs the release it switches away from where that was a stored one, so that one
+goes at a later tidying.
 
 **When** (`due`). The server reads the version feed (`updates.py`, at most once an hour, in the background):
 `api.texttocad.dev/v1/releases`, `latest` and the newest of each major (`lines`), kept in the state folder's

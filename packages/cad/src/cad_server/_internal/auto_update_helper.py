@@ -39,7 +39,9 @@ In order (``update``):
 5. **Outcome**, kept in the record: ``installed``, ``current`` or ``failed``, with ``detail``, ``cause`` where it did
    not install what it was for (one of ``CAUSES``), ``restored``, and ``started`` (``"start": false`` where no server
    was wanted) -- or ``ready``, kept as step 2 decided it; then the store tidied (``store.clean``), the release built
-   kept where it was installed or is ready.
+   kept where it was installed or is ready. The release switched away from is not kept: the way back needed only
+   the pointer read in memory, and that release goes once no process runs it (this worker, when it ran it, runs
+   it to its end, so then at a later tidying).
 
 No step is tried twice in a run: the schedule tries a failed release again (``auto_update.next_try``). uv stopped at
 its deadline leaves only a folder that is no release yet. Why a build failed is told from uv's words (``cause_of``:
@@ -263,14 +265,13 @@ def switch(told, run, path, built, log, mark=lambda phase: None):
     from cad_server._internal import store
 
     kept = store.pointer()
-    previous = (store.pointed() or {}).get("path")
     server = answering()
     if server is not None:
         drain(server, log)
     wanted = server is not None or told.get("start") is True
     unwritten = None  # the pointer's own failure: nothing was switched
     try:
-        store.point(path, previous=previous)
+        store.point(path)
     except OSError as error:
         unwritten = f"{type(error).__name__}: {error}"
     ok, said = (False, unwritten) if unwritten else runs(told, run, built["release"], wanted)

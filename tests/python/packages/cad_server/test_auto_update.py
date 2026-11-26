@@ -1324,8 +1324,8 @@ class WorkerTest(unittest.TestCase):
     def _pointed(self, prefix=None):
         return self.pointer
 
-    def _point(self, path, *, previous=None, prefix=None):
-        self.calls.append(("point", Path(path).name, previous))
+    def _point(self, path, *, prefix=None):
+        self.calls.append(("point", Path(path).name))
         self.pointer = {"pointer": 1, "path": str(path), "release": self._marker(path)["release"]}
         return self.pointer
 
@@ -1376,7 +1376,7 @@ class WorkerTest(unittest.TestCase):
         found = self.update()
         self.assertEqual(self.commands(), ["uv build", "-I -S", "server start"])
         self.assertEqual(self.calls, [("publish", "0.2.0"), ("drain", helper.DRAIN_SECONDS),
-                                      ("point", "0.2.0-cp314", None), ("clean", ["0.2.0-cp314"])])
+                                      ("point", "0.2.0-cp314"), ("clean", ["0.2.0-cp314"])])
         self.assertEqual(self.phases, ["building", "switching"], "kept as uv builds, then before anything stopped")
         self.assertEqual(found, {"release": "0.2.0", "outcome": "installed", "from": "0.1.0", "at": 1.0, "tries": 1,
                                  "ended": found["ended"], "detail": f"cad 0.2.0 runs from {self._folder('0.2.0')}",
@@ -1388,14 +1388,14 @@ class WorkerTest(unittest.TestCase):
                      "| Installed 40 packages", "$ cad server start", "asked to stop once nothing is in flight: gone",
                      "ended ", ": installed"):
             self.assertIn(said, log)
-        # From a stored release: the one it ran before kept for the way back, and from ``clean``.
+        # From a stored release: the tidying keeps the one switched to alone (``test_store.SwitchTidyTest``).
         self.ran.clear(), self.calls.clear()
         self.stored["0.2.0"] = self._folder("0.2.0")
         self.pointer = {"path": str(self._folder("0.2.0")), "release": "0.2.0"}
         self.verifies, self.starts["0.2.1"] = "0.2.1", True
         self.assertEqual(self.update(**{"from": "0.2.0", "target": "0.2.1", "requirement": "cad==0.2.1"})["outcome"],
                          "installed")
-        self.assertIn(("point", "0.2.1-cp314", str(self._folder("0.2.0"))), self.calls)
+        self.assertEqual(self.calls[-2:], [("point", "0.2.1-cp314"), ("clean", ["0.2.1-cp314"])])
 
     def test_a_release_stored_already_is_run_once_and_switched_to_unbuilt(self) -> None:
         self.stored["0.2.0"] = self._folder("0.2.0")
@@ -1497,7 +1497,7 @@ class WorkerTest(unittest.TestCase):
         found = self.update()
         self.assertEqual(self.commands(), ["uv build", "-I -S", "server start", "server start"])
         self.assertEqual(self.calls, [("publish", "0.2.0"), ("drain", helper.DRAIN_SECONDS),
-                                      ("point", "0.2.0-cp314", None), ("restore", None), ("clean", [])],
+                                      ("point", "0.2.0-cp314"), ("restore", None), ("clean", [])],
                          "the pointer written back exactly as it was read: none")
         self.assertEqual((found["outcome"], found["cause"], found["restored"], found["started"]),
                          ("failed", "start_failed", True, "started the cad server (cad 0.1.0)"))

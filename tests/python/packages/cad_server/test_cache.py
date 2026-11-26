@@ -122,7 +122,9 @@ class CacheTest(unittest.TestCase):
         building = store.root() / f"{store.BUILDING}1-dead"
         building.mkdir()
         os.utime(building, (0, 0))
-        auto_update._keep(store.root() / "pointer-00000000.json", {"pointer": 1, "path": str(named), "previous": None})
+        # A pointer as a release before this one wrote it, naming the release it ran before: that one is kept no more.
+        auto_update._keep(store.root() / "pointer-00000000.json", {"pointer": 1, "path": str(named),
+                                                                   "previous": str(old)})
         theirs = self.environment("theirs00", OTHER, MB)
         # As a process that runs the release holds it (``store``, "In use"): its marker open, which on Windows
         # refuses the folder's rename, and elsewhere under the marker's shared lock.

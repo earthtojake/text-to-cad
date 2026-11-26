@@ -91,7 +91,7 @@ Python), runs it once, and then names that folder in one small file, the pointer
 the pointer as its Python starts and runs that release in place of the installed files: in the same
 process, with no second program started. The server restarts onto it later, once nothing is in
 flight ([when](#the-restart-waits-until-nobody-would-notice)). A
-release no process runs any more is removed, but the current one and the one before it. Installing
+release no process runs any more is removed, but the current one and one waiting for its restart. Installing
 cad again with uv always runs what uv installed: a pointer holds only for the install it was written
 for.
 
@@ -119,10 +119,11 @@ included. A computer that 0.11.12 to 0.11.17 updated keeps the range their updat
 (`cad>=X,<1`), which cad never rewrites: once `cad update --major` has taken it past that range, uv's
 own upgrade would put an older cad over the newer one, so `cad update` and `cad doctor` say so
 there, with the command that clears it (`uv tool install --force cad`). Besides what uv
-installed, the store keeps the release that runs and the one before it (the way back), each linked from
-uv's cache where the file system links, and a release waiting for its restart; every tidying of the store
-(each update's end, each server start, `cad cache prune`) removes the rest, and a release a process still
-runs once nothing does. `uv tool uninstall cad` leaves
+installed, the store keeps the release that runs and one waiting for its restart, each linked from uv's
+cache where the file system links; every tidying of the store (each update's end, each server start, `cad
+cache prune`) removes the rest, and a release a process still runs once nothing does. The way back at a
+switch needs no release kept for it: nothing tidies while an update is underway, so the release before is
+whole until the switch has ended, and going back is writing the pointer read before it. `uv tool uninstall cad` leaves
 the store in the state folder ([Removing](../install.md#removing)). A release needs the installed
 cad's Python: one that asks for a newer Python waits until the person installs cad again.
 
