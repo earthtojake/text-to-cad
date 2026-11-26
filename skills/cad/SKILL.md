@@ -148,7 +148,7 @@ code `made_by` names. A Quick Edit prompt carries its document under `File:`, it
 `References:` and a snapshot packet, inline JSON. Where the person drew on the view, look at what they
 drew before editing: `cad model snapshot --job '<packet>'` draws each view with their ink
 ([annotations](references/snapshot-review.md#annotations-and-quick-edit-views)). A cad.fun
-link names a shared model: `cad fork LINK` writes its files into a folder; work on those.
+link names a shared model: `cad import LINK` writes its files into a folder; work on those.
 
 ## Check each change
 

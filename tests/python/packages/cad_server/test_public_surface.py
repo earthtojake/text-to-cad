@@ -122,7 +122,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # person's agreement (--yes, which a delete asks too) and an upload this process makes mirror no function.
     "share": frozenset({"target", "link", "yes", "json"}),
     # A share's files written into a folder: a download this process makes, and a folder it writes, mirror no function.
-    "fork": frozenset({"link", "folder", "json"}),
+    "import": frozenset({"link", "folder", "json"}),
 }
 
 # Commands that own their command line outright and mirror no function.

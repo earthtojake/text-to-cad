@@ -127,7 +127,7 @@ cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_
 ## Annotations and Quick Edit views
 
 A Quick Edit prompt carries a snapshot packet, inline JSON after its references. The prompt names
-files relative to your workspace, else from `~/`, or a shared model by its cad.fun link (`cad fork
+files relative to your workspace, else from `~/`, or a shared model by its cad.fun link (`cad import
 LINK` first: then `cad <type> snapshot` reads the link as the copy it wrote). The packet holds:
 
 - `input`: what the person looked at: a model's id, a file's path, or a cad.fun link;

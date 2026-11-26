@@ -51,12 +51,12 @@ cad_server/
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the data folder
-  sharing.py             # `cad share`'s and `cad fork`'s client of the share service: a share's names and links,
+  sharing.py             # `cad share`'s and `cad import`'s client of the share service: a share's names and links,
                          #   a shared file's files (a model's .xbf and its closure's), the cad-share/2 packs of the
                          #   files a share lacks, the service's API (urllib, in the command's own process), a
                          #   share's zip written into a folder, a share's link as the name of this computer's copy
-                         #   of it, and what is kept: the agreement, the setting, the shares' and forks' records,
-                         #   and what a share keeps in its file's folder of the cache
+                         #   of it, and what is kept: the agreement, the setting, each share and import in its
+                         #   file's entry of the library, and what a share keeps in its file's folder of the cache
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
   updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
@@ -165,12 +165,12 @@ cad_server/
   sharing is on and agreed, and this computer's live shares; `off` refuses every share until `on`. **`cad share
   delete FILE|ID|LINK`**: a share deleted, asked first. The agreement, the setting, a share in its file's entry of
   the library and the cache's folders are written by the server that runs, as every change of the library is, else
-  by the command (the engine's **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command
+  by the command (the engine's **Sharing**). **`cad import LINK [FOLDER]`**: a share's files downloaded by the command
   itself into a folder, every entry kept inside it, a model's `.xbf` among them, and the file the share is of added to
   the library with the link it came from; it runs nothing and makes no project, and prints the commands that show it
   and build it. Of a share this computer made, it downloads nothing and says where its files are. A share's link
   names this computer's copy of it wherever cad takes a document, as the library holds them: the file it shared,
-  else the file its fork wrote.
+  else the file its import wrote.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
@@ -317,8 +317,8 @@ says so and updates nothing.
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
 `~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, the library
 (`library.json`, which this user alone may read, as it holds the keys of their shares: the project folders, and the
-files a person opened, starred, built, shared or imported, a shared file's entry with each share of it and a forked
-file's with the link it came from), the page token and port, the telemetry spool and the feed's last answer. The cache
+files a person opened, starred, built, shared or imported, a shared file's entry with each share of it and an
+imported file's with the link it came from), the page token and port, the telemetry spool and the feed's last answer. The cache
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: what the engine derived of a
 document (a file's count and picture, `documents/<id>/note.json`; a board's plots, kept checks; a shared file's last
 view bundle, `documents/<id>/view/`), the environments, bytecode and the integrations' private homes, all made again

@@ -1,7 +1,7 @@
 """Sharing a file: its view bundle kept in its folder of cad's cache, and the files that made it, uploaded to the
 share service where its share lacks them, for anyone with its link to open in the hosted viewer and to download
-(``cad share``, ``cad_server.cli.share``); and a share's files written into a folder (``cad fork``,
-``cad_server.cli.fork``; the engine's **Sharing**). A share is of one file, named by its canonical path: a model is
+(``cad share``, ``cad_server.cli.share``); and a share's files written into a folder (``cad import``,
+``cad_server.cli.import_``; the engine's **Sharing**). A share is of one file, named by its canonical path: a model is
 shared by its ``.xbf``, and a file that moves is another file, which shares to another link.
 
 What is here is the client's half of the protocol, ``cad-share/2``, the standard library alone:
@@ -33,20 +33,20 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   and one that names none commits again, once. A connection that cannot be made, or an answer that is not the
   service's (a proxy's refusal: no JSON ``error``), is ``Unreachable``; the service's own refusal is ``Refused``, with
   its ``error`` and ``hint``;
-- **a fork** (``fork_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``import_record``): a share's zip read as
+- **an import** (``import_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``import_record``): a share's zip read as
   the service makes one, one folder of files, and written into a folder through one made beside it, refusing any
   entry that would land outside it; nothing of it is run; the shared file found among them (a model's ``.xbf``, a
   file document's file), which the library keeps with the link it came from;
 - **a share's link as a document's name** (``document_link``, ``copy_of``, ``local``): wherever cad takes a
   document, a share's view link of the service this computer shares with or of cad.fun names this computer's copy of
-  it -- the file it shared under that link, else the file a fork of it wrote, as the library holds them --, a
+  it -- the file it shared under that link, else the file an import of it wrote, as the library holds them --, a
   ``#<selector>`` after it the same in the copy as in the share; a link this computer has no copy of is refused in a
-  line naming the fork that makes one (``NoCopy``);
+  line naming the import that makes one (``NoCopy``);
 - **what is kept** (``change``): the person's agreement and whether sharing is on (the settings' ``share`` section:
   ``{"agreed": <ISO time>, "on": false}``, on where ``on`` is absent); in the library (``cad_server.engine.library``,
   which this user alone may read), each shared file's entry's ``shares``, by each service's origin: its view link, its
   two keys, its expiry and where the files that made it are (``record_of``, which ``records`` makes again), and a
-  forked file's entry's ``imported``, the link it came from (``import_record``); and in the shared file's own folder
+  imported file's entry's ``imported``, the link it came from (``import_record``); and in the shared file's own folder
   of the cache (``folder_of``, ``<cache>/documents/<id>/``): its view bundle (``VIEW``), made only when it is shared
   and written over at each share, the base the next one reuses; where each file of the share's last commit lives
   (``STORED``); and the lock one ``cad share`` of the file holds at a time (``LOCK``, ``held``). A command asks the
@@ -113,10 +113,10 @@ MOST_MADE = 32
 MADE_CHARACTERS = 100
 # What a share's name is where its document's gives nothing a manifest takes.
 UNNAMED = "share"
-# The most of a share's zip a fork downloads, and the most it writes out of it: a share is at most 256 MiB as the
+# The most of a share's zip an import downloads, and the most it writes out of it: a share is at most 256 MiB as the
 # service stores it (``MAX_SHARE_BYTES``, by default), its files compressed.
 ZIP_BYTES = 1024 * 1024 * 1024
-FORK_BYTES = 4 * 1024 * 1024 * 1024
+IMPORT_BYTES = 4 * 1024 * 1024 * 1024
 # The names Windows gives its devices, which no file there takes (``con.py`` neither).
 _DEVICES = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)),
                       *(f"LPT{n}" for n in range(1, 10))})
@@ -179,7 +179,7 @@ def _token(size: int) -> str:
 
 def _ident() -> str:
     """A new share's id: 16 random bytes, drawn again while their text begins with ``-`` (one draw in 64), which a
-    command line reads as an option (``cad fork <id>``)."""
+    command line reads as an option (``cad import <id>``)."""
     while (ident := _token(16)).startswith("-"):
         pass
     return ident
@@ -348,7 +348,7 @@ class Sources:
     cad's release, the build's libraries and its platform, each as text; None where no closure says); each file left
     out and why (``left_out``: ``(path, why)``, ``outside`` the files' root, ``gone`` from the disk, or a ``name`` no
     share takes); whether the build read a file the engine could not see (``unseen``: its closure's key is null),
-    which a fork may not rebuild it without; and the file shared, a model's ``.xbf`` or a file document's own file:
+    which an import may not rebuild it without; and the file shared, a model's ``.xbf`` or a file document's own file:
     its absolute path (``file``) and its path among ``files`` (``shared``)."""
 
     files: tuple[File, ...] = ()
@@ -452,7 +452,7 @@ def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources
     (``previous.of``: every path relative to the ``.xbf``'s folder): the script, every module, and every input of kind
     ``file`` or ``read`` the build found, each at its path under the files' root (``root_of``); a ``font`` only where
     it lies in that root (a system font is recorded nowhere else needed); and the ``.xbf`` itself, at its path there,
-    so a fork has the model with nothing run. ``built`` is when the model was last made here: the ``.xbf``'s time, or
+    so an import has the model with nothing run. ``built`` is when the model was last made here: the ``.xbf``'s time, or
     its last run's where that is later (a run that took the ``.xbf`` whole writes nothing). A file outside the root is
     left out, as is an input gone from the disk, each said (``left_out``). ``Stale`` for the script or a module gone
     from the disk, and for any file of them modified after ``built``: those are not the files the ``.xbf`` was made
@@ -583,7 +583,7 @@ def _placed(name: str, folder: str, variables: dict[str, str]) -> tuple[str, boo
     name was relative: ``${KIPRJMOD}`` is the project's ``folder``, a variable the project defines its value (its
     ``.kicad_pro``'s ``text_variables``), a relative place is under ``folder``. None for a name that holds any other
     variable -- a library of KiCad's (``${KICAD9_3DMODEL_DIR}``) or one the person's own settings name, an installed
-    library a fork has of its own -- and for a network share, a device or a drive-relative name, which nothing here
+    library an import has of its own -- and for a network share, a device or a drive-relative name, which nothing here
     looks at (on Windows, looking connects to the share's server)."""
     unknown = False
 
@@ -663,7 +663,7 @@ def _model_files(board: str) -> list[str]:
 
 
 def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
-    """The files a fork of a KiCad board or schematic needs to open it and work on it (``kind``: ``kicad_pcb`` or
+    """The files an import of a KiCad board or schematic needs to open it and work on it (``kind``: ``kicad_pcb`` or
     ``kicad_sch``), each at its path under the files' root (``root_of``, from the file's folder): the file itself;
     of a board, its project file (``<board>.kicad_pro``) and custom rules (``.kicad_dru``) beside it, its project's
     footprint and symbol libraries (``fp-lib-table``, ``sym-lib-table`` and the libraries they list in it:
@@ -1080,11 +1080,11 @@ def parse_link(link: str) -> tuple[str, str, str | None] | None:
     return (origin, ident, secret) if _SECRET.fullmatch(secret) else None
 
 
-# --- a fork ------------------------------------------------------------------------------------------------------
+# --- an import ---------------------------------------------------------------------------------------------------
 
 
-def fork_link(text: str, service: str) -> tuple[str, str] | None:
-    """What ``cad fork`` takes, as ``(origin, id)``: a share's view link (``<origin>/<id>``, whatever its fragment), its
+def import_link(text: str, service: str) -> tuple[str, str] | None:
+    """What ``cad import`` takes, as ``(origin, id)``: a share's view link (``<origin>/<id>``, whatever its fragment), its
     files' link (``<origin>/<id>.zip``), or its id alone, of the share service at ``service``; None for anything
     else."""
     from urllib.parse import urlsplit
@@ -1216,7 +1216,7 @@ def _place(stage: Path, folder: Path) -> None:
 def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]], folder: Path) -> list[tuple[str, int]]:
     """``entries`` (``zip_entries``) of ``archive`` written into ``folder`` -- one not there yet, or an empty one --
     through a folder made beside it, moved into place once every file is written whole: each checked against its
-    CRC-32 as ``zipfile`` reads it, ``FORK_BYTES`` at most in all, never over another (two paths this system takes for
+    CRC-32 as ``zipfile`` reads it, ``IMPORT_BYTES`` at most in all, never over another (two paths this system takes for
     one). Whatever fails leaves no file of this run's (``Damaged`` for the zip's fault, ``OSError`` for the disk's).
     Each file written, by its path, with its size."""
     import zipfile
@@ -1224,8 +1224,8 @@ def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]],
 
     folder = Path(os.path.abspath(folder))
     folder.parent.mkdir(parents=True, exist_ok=True)
-    # Made as any folder is (``mkdtemp``'s would be this user's alone), and named so no two forks share one.
-    stage = folder.parent / f".cad-fork-{secrets.token_hex(8)}"
+    # Made as any folder is (``mkdtemp``'s would be this user's alone), and named so no two imports share one.
+    stage = folder.parent / f".cad-import-{secrets.token_hex(8)}"
     stage.mkdir()
     written: list[tuple[str, int]] = []
     total = 0
@@ -1238,8 +1238,8 @@ def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]],
                 with archive.open(info) as source, open(target, "xb") as out:
                     while chunk := source.read(1 << 20):
                         size, total = size + len(chunk), total + len(chunk)
-                        if total > FORK_BYTES:
-                            raise Damaged(f"its files are more than the {FORK_BYTES // 1024 ** 3} GiB a fork writes")
+                        if total > IMPORT_BYTES:
+                            raise Damaged(f"its files are more than the {IMPORT_BYTES // 1024 ** 3} GiB an import writes")
                         out.write(chunk)
             except (FileExistsError, NotADirectoryError):
                 raise Damaged(f"two of its files are one file on this computer: {path}") from None
@@ -1254,7 +1254,7 @@ def unpack(archive: zipfile.ZipFile, entries: list[tuple[str, zipfile.ZipInfo]],
 
 
 def shared_file(folder: Path | str, paths: list[str], entry: str | None) -> str | None:
-    """The file a share is of, among the ``paths`` of its files a fork wrote into ``folder`` (``/`` separated): a
+    """The file a share is of, among the ``paths`` of its files an import wrote into ``folder`` (``/`` separated): a
     model's ``.xbf`` -- of a share whose ``entry`` is a script, the ``.xbf`` there whose build closure names that script
     (``previous.of``: its path relative to the ``.xbf``'s folder), and of several, the one no other of them read --; of
     one that names none, the one SRDF at its folder's top (drawn with its URDF), else the one URDF there, else the one
@@ -1302,7 +1302,7 @@ _SHEET_FILE = re.compile(r'\(\s*property\s+"Sheet ?file"\s+"((?:[^"\\]|\\.)*)"')
 
 
 def _root_sheet(folder: Path, sheets: list[str]) -> str | None:
-    """Of the ``sheets`` a fork wrote into ``folder`` (``/`` separated), the root of the hierarchy they draw: the
+    """Of the ``sheets`` an import wrote into ``folder`` (``/`` separated), the root of the hierarchy they draw: the
     one beside a project file of its name (``<project>.kicad_sch``, which KiCad opens the project at), else the one
     no other of them draws as a sheet. None where none is one alone. A share of a schematic holds every sheet of its
     hierarchy, which its root draws, whichever of them was shared: the same pages."""
@@ -1327,14 +1327,14 @@ def _root_sheet(folder: Path, sheets: list[str]) -> str | None:
 
 
 def import_record(origin: str, ident: str, file: Path | str) -> dict[str, Any]:
-    """What the library keeps of a fork (``change``'s ``imported``): the share's view link, and the file it wrote that
+    """What the library keeps of an import (``change``'s ``imported``): the share's view link, and the file it wrote that
     the share is of (``shared_file``'s, absolute), whose entry the link is kept in, so the link names it here
     (``copy_of``)."""
     return {"link": f"{origin}/{ident}", "path": os.path.abspath(file)}
 
 
 def _imported(row: Any) -> bool:
-    """Whether ``row`` is a fork's (``import_record``): a share's view link and an absolute path."""
+    """Whether ``row`` is an import's (``import_record``): a share's view link and an absolute path."""
     link = parse_link(row["link"]) if isinstance(row, dict) and isinstance(row.get("link"), str) else None
     return link is not None and link[2] is None and isinstance(row.get("path"), str) and os.path.isabs(row["path"])
 
@@ -1384,19 +1384,19 @@ def _of(link: str, origin: str, ident: str) -> bool:
 
 def copy_of(origin: str, ident: str) -> str:
     """The path of this computer's copy of the share at ``origin`` with the id ``ident``, as the library holds it: the
-    file it shared under that link (an entry's ``shares``, ``records``); else the file a fork of it wrote (an entry's
-    ``imported``: a model's ``.xbf`` among the files, there with nothing run). ``NoCopy``, in a line naming the fork
-    that makes one, for a link this computer neither shared nor forked, and one whose fork's file is gone."""
+    file it shared under that link (an entry's ``shares``, ``records``); else the file an import of it wrote (an
+    entry's ``imported``: a model's ``.xbf`` among the files, there with nothing run). ``NoCopy``, in a line naming the
+    import that makes one, for a link this computer neither shared nor imported, and one whose import's file is gone."""
     link = f"{origin}/{ident}"
     for row in records():
         if row["id"] == ident and row["service"].lower() == origin.lower():
             return row["document"]["path"]
-    fork = f"cad fork {link}"
+    command = f"cad import {link}"
     for entry in _library().read()["files"].values():
         if isinstance(entry.get("imported"), str) and _of(entry["imported"], origin, ident) \
                 and os.path.isfile(entry["path"]):
             return entry["path"]
-    raise NoCopy(f"{link} is a shared model this computer has no copy of: run `{fork}`.", (fork,))
+    raise NoCopy(f"{link} is a shared model this computer has no copy of: run `{command}`.", (command,))
 
 
 def local(text: str, *, ref: bool = False) -> str:
@@ -1503,7 +1503,7 @@ def record_of(share: Share, document: dict[str, Any], answer: dict[str, Any], so
     """A share's record, one a shared file and service: its names and links, when it expires, the file it is of
     (``document``: ``{"id", "kind", "name", "path"}``, ``path`` the file's canonical path, its entry's in the library,
     and ``id`` that path's), and where on this computer the files that made it are (``files``: their ``root``, and the
-    script among them, ``entry``, a model's), which ``cad fork`` of its link points at rather than downloading them.
+    script among them, ``entry``, a model's), which ``cad import`` of its link points at rather than downloading them.
     The library keeps it in the file's entry (``change``), of which ``records`` makes it again."""
     return {"id": share.id, "write": share.write, "delete": share.delete, "service": share.service,
             "view": share.view, "remove": share.remove, "expires": answer["expires"], "document": document,
@@ -1779,8 +1779,8 @@ def _forget(ident: str) -> Callable[[dict[str, Any]], None]:
 
 
 def _import(row: dict[str, Any]) -> Callable[[dict[str, Any]], None]:
-    """The library changed to keep a fork's ``row`` (``import_record``'s): its file's entry, made where it had none,
-    holds the link it came from, which no other entry holds then: a link names the latest fork of it."""
+    """The library changed to keep an import's ``row`` (``import_record``'s): its file's entry, made where it had
+    none, holds the link it came from, which no other entry holds then: a link names the latest import of it."""
     from cad.engine.ids import canonical, file_id
 
     path = canonical(row["path"])
@@ -1801,7 +1801,7 @@ def change(request: dict[str, Any]) -> dict[str, Any]:
     record>, "stored": <its STORED>}`` (the record kept in its file's entry of the library, in place of any of the same
     share, or of the same file at the same service, and ``stored``, where given, written in the file's folder),
     ``{"forget": <share id>}`` (the share dropped from its entry, and what it kept in its file's folder, which the asker
-    holds the lock of, removed, where no other live share is of that file) or ``{"imported": <a fork's record>}``
+    holds the lock of, removed, where no other live share is of that file) or ``{"imported": <an import's record>}``
     (``import_record``: its file's entry holds its link). A share past its expiry goes from its entry as the library is
     written, and what a share kept in every folder no live share's file names is removed (``_sweep``), under the
     library's lock. ``{"ok": true, "settings"}``, or ``{"failed"}`` in one line for a change it does not take.
@@ -1833,7 +1833,7 @@ def change(request: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "settings": settings(), "folder": str(folder)}
     elif "imported" in request:
         if not _imported(request["imported"]):
-            return {"failed": "not a fork's record"}
+            return {"failed": "not an import's record"}
         _library().change(_import(request["imported"]))
     else:
         record, forget, kept = request.get("record"), request.get("forget"), request.get("stored")

@@ -981,7 +981,7 @@ def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, 
         if isinstance(source, str):
             from cad_server.engine.cli import linked
 
-            # A share's link: this computer's copy of it, the file it shared or its fork's (``engine.cli.linked``).
+            # A share's link: this computer's copy of it, the file it shared or its import's (``engine.cli.linked``).
             source = linked(source)
             setattr(parsed, attribute, source)
         if source is not None:

@@ -17,7 +17,7 @@ export function shareApiUrl(id, origin = window.location.origin) {
 
 /**
  * What a prompt from share `id`'s view names the model by, on `origin` (the page's own), as the viewer host's
- * `promptSubject`: the share's link (`<origin>/<id>`), which an agent on any computer can reach (`cad fork` gets the
+ * `promptSubject`: the share's link (`<origin>/<id>`), which an agent on any computer can reach (`cad import` gets the
  * files that made it), never the page's own name for the model: a Quick Edit's `File:`, each reference and its
  * snapshot packet's `input` say it, and nothing else of the prompt differs from the engine's page's.
  * @param {string} id

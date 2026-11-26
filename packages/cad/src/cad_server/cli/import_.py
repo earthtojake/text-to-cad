@@ -1,5 +1,5 @@
-"""``cad fork LINK [FOLDER]`` -- the files of a shared file, written into a folder of this computer's
-(``cad_server.sharing``; the engine's **Sharing**).
+"""``cad import LINK [FOLDER]`` -- the files of a shared file, written into a folder of this computer's, and the
+file added to its library (``cad_server.sharing``; the engine's **Sharing**): the share's own command's match.
 
 LINK is a share's view link (``<origin>/<id>``), its files' link (``<origin>/<id>.zip``), or its id alone, of the share
 service ``CAD_SHARE_URL`` names (``https://cad.fun`` by default). This process downloads ``<origin>/<id>.zip``
@@ -11,16 +11,16 @@ all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). A
 model is there at once, read as any ``.xbf`` is, with nothing run. The shared file it wrote (``sharing.shared_file``)
 goes into the library with the link it came from (``sharing.import_record``), asked of the running server as ``cad
 share`` keeps a share, so that it is among the viewer's Recents and the share's link names it here wherever cad takes a
-document (``sharing.copy_of``).
-It says what it wrote, the file it is of and the script that builds it, and where what built it (``Cad-Share-Made``)
+document (``sharing.copy_of``). It says what it wrote, the file it is of and the script that builds it, and where what built it (``Cad-Share-Made``)
 differs from this computer's cad and libraries, which a build here records (``_here``). It runs nothing, and makes no
 project: the next steps it prints are ``cad viewer FOLDER/<file>``, which shows it as it was shared, and, of a model,
 ``cad run FOLDER/<script>``, which builds it here, since someone else's code is the person's to run. ``--json``
 answers in one object.
 
 A share this computer made (``sharing.made_here``: a live share of that origin and id in the library, whose file is
-still where it was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where its files are --
-the file, and a model's root and the script among its files -- which is where to work on them (``_local``).
+still where it was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where
+its files are -- the file, and a model's root and the script among its files -- which is where to work on them
+(``_local``).
 """
 
 from __future__ import annotations
@@ -36,17 +36,16 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-DEFAULT_PROG = "cad fork"
+DEFAULT_PROG = "cad import"
 DESCRIPTION = (
-    "Write the files of a shared file into a folder: a model's .xbf, its script, the modules of its project and the "
-    "files it reads, at their paths there; a file document's file and what it draws from (a robot's meshes, a KiCad "
-    "project's files). LINK is the share's link (https://cad.fun/<id>), "
-    "its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs "
-    "from this computer's cad and libraries, then the commands that show it and build it, for the person to run. It "
-    "adds the shared file to the library with its link, so it is among the viewer's Recents and the share's link "
-    "names it here wherever cad takes a document. A "
-    "share this computer made is not downloaded: it says where its files are, to work on them there, and writes "
-    "nothing.")
+    "Write the files of a shared file into a folder, as `cad share` sent them: a model's .xbf, its script, the modules "
+    "of its project and the files it reads, at their paths there; a file document's file and what it draws from (a "
+    "robot's meshes, a KiCad project's files). LINK is the share's link (https://cad.fun/<id>), its files' link "
+    "(<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs from this "
+    "computer's cad and libraries, then the commands that show it and build it, for the person to run. It adds the "
+    "shared file to the library with its link, so it is among the viewer's Recents and the share's link names it "
+    "here wherever cad takes a document. A share this computer made is not downloaded: it says where its files are, "
+    "to work on them there, and writes nothing.")
 # How long this computer's CAD kernel environment may take to say its libraries.
 VERSIONS_SECONDS = 60.0
 # What a build records of its libraries and its Python, asked of the CAD kernel environment's own Python.
@@ -71,7 +70,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 
     args = build_parser(prog).parse_args(list(sys.argv[1:] if argv is None else argv))
     try:
-        return _fork(args.link, args.folder, as_json=args.json, prog=prog)
+        return _import(args.link, args.folder, as_json=args.json, prog=prog)
     except Failure as failure:
         return write(classify(failure), prog=prog, as_json=args.json)
     except Exception as error:
@@ -86,17 +85,18 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 
 
 def _refused_folder(folder: Path) -> None:
-    """The failure of a FOLDER that is not one a fork writes into: a file, or a folder that holds anything."""
+    """The failure of a FOLDER that is not one an import writes into: a file, or a folder that holds anything."""
     from cad_server._internal.cli_errors import Failure
 
     if folder.is_dir():
         if any(folder.iterdir()):
-            raise Failure(f"{folder} holds files already: fork into a new folder, or an empty one", "invalid_argument")
+            raise Failure(f"{folder} holds files already: import into a new folder, or an empty one",
+                          "invalid_argument")
     elif os.path.lexists(folder):
-        raise Failure(f"{folder} is a file: fork into a new folder, or an empty one", "invalid_argument")
+        raise Failure(f"{folder} is a file: import into a new folder, or an empty one", "invalid_argument")
 
 
-def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
+def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     import zipfile
 
     from cad_server import sharing
@@ -104,7 +104,7 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     from cad_server._internal.cli_errors import Failure
 
     service = share_url()
-    found = sharing.fork_link(link, service)
+    found = sharing.import_link(link, service)
     if found is None:
         # Not said back: a mistyped link may still hold a share's id or secret.
         raise Failure("that is no share's link: a share's link is <origin>/<id>, its files' <origin>/<id>.zip, and "
@@ -160,7 +160,7 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
         try:
             sharing.keep(imported=sharing.import_record(origin, ident, Path(folder, *shared.split("/"))))
         except OSError as error:
-            print(f"{prog}: warning: this computer's library could not keep the fork ({error}), so the share's link "
+            print(f"{prog}: warning: this computer's library could not keep the import ({error}), so the share's link "
                   "names no copy of it here: name its files by their paths", file=sys.stderr, flush=True)
     made, here = said["made"], _here()
     differs = [{"name": name, "made": value, "here": here[name]} for name, value in (made or {}).items()
@@ -177,7 +177,7 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
         return 0
     from cad_server.cli.share import _size
 
-    print(f"Forked {top} into {shown}: {len(written)} file{'s' if len(written) != 1 else ''}, {_size(size)}"
+    print(f"Imported {top} into {shown}: {len(written)} file{'s' if len(written) != 1 else ''}, {_size(size)}"
           + (f"; it is {shared}" if shared is not None else "")
           + (f"; its script is {entry}" if entry is not None else ""), flush=True)
     if made is not None:

@@ -13,13 +13,13 @@
                              "imported": "https://cad.fun/<share id>"}}}
 
 A project is a folder a person opened as one, keyed by ``ids.derived_id`` of its canonical ``root``. A file is
-a CAD file a page opened, a person pinned, a run wrote as a model's ``.xbf``, ``cad share`` shared or ``cad fork``
+a CAD file a page opened, a person pinned, a run wrote as a model's ``.xbf``, ``cad share`` shared or ``cad import``
 wrote, keyed by ``ids.file_id`` of its canonical ``path``: ``created`` when the library first knew it, ``opened``
 once a page opened it, ``pinned`` only when true, ``reached`` only while a page named it by another path that still
 reaches it (a file in a linked folder); ``shares`` only while it is shared, by each share service's origin: the
 share's view link, its two keys (the secrets that write and delete it), when it expires, and where the files that
 made it are on this computer (their ``root``, and a model's script among them, ``entry``), which
-``cad_server.sharing`` keeps; ``imported`` only for a shared file a fork wrote, the share's view link it came from,
+``cad_server.sharing`` keeps; ``imported`` only for a shared file an import wrote, the share's view link it came from,
 which then names it here. Nothing else is kept of a document: it is its file, and everything said of it is read
 from the file or worked out from its path. An entry goes when it is forgotten (``Library.forget``: a shared
 file's keys with it), and with any write once its file is gone, unless it is pinned or a share of it is live: a
@@ -36,7 +36,7 @@ is the file's version now: a file that changed has no count and no picture until
 opens it, a run builds it), which replaces the note whole. Nothing is read to fill one. The cache folder
 deleted loses nothing that is not made again.
 
-One process writes both, the engine's: a command that shares or forks a file asks it to (``{"op": "share"}``), and
+One process writes both, the engine's: a command that shares or imports a file asks it to (``{"op": "share"}``), and
 writes the library itself only where no engine answers. A change is a read and a write under one lock of this
 process (``state.lock``), landed whole (``state.Folder.write``), so no reader meets half a file; two processes
 writing at once (a CAD app's server with no engine under it) can lose one of the two changes (an open's time, a

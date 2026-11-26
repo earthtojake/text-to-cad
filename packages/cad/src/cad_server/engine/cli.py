@@ -138,7 +138,7 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
 
 # Wherever a verb takes a document, a share's link names this computer's copy of it (``linked``).
 _LINKED = ("; or a share's link (https://cad.fun/<id>): this computer's copy of it, the file it shared or the copy "
-           "in the folder cad fork wrote it into")
+           "in the folder cad import wrote it into")
 
 
 # A key as JSON with its double quotes taken out spells one: bare, after an object's opening or a comma.

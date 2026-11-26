@@ -13,7 +13,7 @@ built client as its static assets.
 
 **PURPOSE** — keep a share, sealed, for 7 days; hand its bytes to whoever has its link; and serve
 the page that opens it and the zip of the files that made it. Its routes, statuses, headers and
-formats (`cad-share/2`) are a contract with every released `cad share` and `cad fork` and with the
+formats (`cad-share/2`) are a contract with every released `cad share` and `cad import` and with the
 page: they never break.
 
 **MAY DEPEND ON** — Cloudflare Workers' runtime (the web-standard `Request`, `Response` and
@@ -22,7 +22,7 @@ the local runner and the tests: no npm dependencies, so there is nothing to inst
 of the root npm workspaces and has no lockfile. Its static assets are `apps/web`'s build output,
 copied in before a deploy; it imports nothing of any app or package.
 
-**DEPENDED ON BY** — nothing in the repo imports it. `cad share` and `cad fork` (`packages/cad`)
+**DEPENDED ON BY** — nothing in the repo imports it. `cad share` and `cad import` (`packages/cad`)
 reach it over HTTPS (`CAD_SHARE_URL` points them at another origin), and the viewer's share mode
 (`apps/web`, `packages/core`) is the page it serves at `/<id>`.
 
@@ -175,7 +175,7 @@ what a pack holds: a file's size and SHA-256 are for the page to check.
 ## The files' zip
 
 **`GET /<id>.zip`** (and `HEAD`), `<id>` a share's id: the files that made it, as a zip, made from
-the stored members as it is sent. The page links to it; `cad fork` downloads it.
+the stored members as it is sent. The page links to it; `cad import` downloads it.
 
 | Status | `error` | When |
 | --- | --- | --- |

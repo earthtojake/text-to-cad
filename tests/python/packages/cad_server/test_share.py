@@ -1,4 +1,4 @@
-"""``cad share`` and ``cad fork``, the client's half of the share protocol (``cad-share/2``), run against a stand-in
+"""``cad share`` and ``cad import``, the client's half of the share protocol (``cad-share/2``), run against a stand-in
 service written here that speaks its API and holds a client to it -- a pack named by the SHA-256 of its body, the
 owner and its two hashes made by the first write and a write of another secret refused, a manifest of the protocol's
 shape (its name, entry and made, its view and the files that made it), a commit's 409 naming the packs it lacks, a
@@ -26,13 +26,13 @@ beside it. With no engine: the files that made a model, from a closure an ``.xbf
 root and the two caps on it, what is left out and the refusals; what is sent, the files a bundle's manifest lists as
 gzip members in reading order and then the files that made it, one member for identical bytes, in packs closed at
 4 MiB with a file split over two (a large ``.xbf`` among them), a 409 naming missing packs sending their files again
-(twice at most), one naming none committing again once, and a 429 waited out; and ``cad fork``: the files written as
+(twice at most), one naming none committing again once, and a 429 waited out; and ``cad import``: the files written as
 the zip holds them, a model's ``.xbf`` among them, the file it is of, the script that builds it and the next steps
 said, where what built it differs from this computer, nothing run, a folder that holds files refused, a share gone
 said, every entry refused that would land outside its folder, and the shared file kept in the library with the link it
 came from, one entry a link.
-A share's link wherever cad takes a document: the file this computer shared under it, else its fork's copy of the
-shared file (a model's ``.xbf``, there with nothing run), else refused in one line naming the fork to make, a fork
+A share's link wherever cad takes a document: the file this computer shared under it, else its import's copy of the
+shared file (a model's ``.xbf``, there with nothing run), else refused in one line naming the import to make, an import
 whose folder is gone too. The fixtures are made in a temporary folder.
 """
 
@@ -566,14 +566,14 @@ class ShareTest(unittest.TestCase):
 
         return sharing.folder_of(file_id(self.base / target))
 
-    def fork(self, *args: str, cwd: Path, elsewhere: bool = False) -> Any:
-        """``cad fork``, on this computer, or ``elsewhere``: on another, with a state, a cache and an engine folder of
-        its own (no server runs there, so the fork's record is kept by the command), which keep no record of this
+    def import_(self, *args: str, cwd: Path, elsewhere: bool = False) -> Any:
+        """``cad import``, on this computer, or ``elsewhere``: on another, with a state, a cache and an engine folder of
+        its own (no server runs there, so the import's record is kept by the command), which keep no record of this
         computer's shares."""
         other = Path(tempfile.mkdtemp(prefix="elsewhere-", dir=self.base)) if elsewhere else None
         more = {"CAD_STATE_DIR": str(other / "state"), "CAD_CACHE_DIR": str(other / "cache"),
                 "CAD_ENGINE_DIR": str(other / "engine")} if other else {}
-        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", "fork", *args], env=self.env(**more),
+        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", "import", *args], env=self.env(**more),
                                  cwd=cwd)
 
     # --- agreeing, and the setting -------------------------------------------------------------------------------
@@ -625,7 +625,7 @@ class ShareTest(unittest.TestCase):
                                              "delete": record["delete"], "expires": record["expires"],
                                              "root": str(self.base), "entry": None}})
         self.assertEqual(sorted(path.name for path in self.state.glob("*.json") if "shares" in path.name
-                                or "forks" in path.name), [])
+                                or "imports" in path.name), [])
         if os.name != "nt":
             self.assertEqual(stat.S_IMODE((self.state / "library.json").stat().st_mode), 0o600)
         # Agreed once: another document needs no --yes.
@@ -738,19 +738,19 @@ class ShareTest(unittest.TestCase):
         by_id = self.shared(target=file_id(self.base / "tetra.stl"))
         self.assertEqual((by_id["id"], by_id["again"], by_id["files"]["count"], by_id["sent"]["files"]),
                          (found["id"], True, 1, 0))
-        # Forked on this computer, which shared it: the file is where it was, and nothing is downloaded or written.
-        place = Path(tempfile.mkdtemp(prefix="fork-", dir=self.base))
-        here = self.fork(found["zip"], cwd=place)
+        # Imported on this computer, which shared it: the file is where it was, and nothing is downloaded or written.
+        place = Path(tempfile.mkdtemp(prefix="import-", dir=self.base))
+        here = self.import_(found["zip"], cwd=place)
         self.assertEqual(here.returncode, 0, here.stdout + here.stderr)
         self.assertEqual(here.stdout, f"tetra.stl was shared from this computer: it is {self.base / 'tetra.stl'}. "
                                       "Nothing was downloaded; work there.\n")
         self.assertEqual((list(place.iterdir()), [seen for seen in self.service.seen if seen[0] == "GET"]), ([], []))
-        # Forked on another computer: the file itself, and the step that shows it.
-        forked = self.fork(found["zip"], cwd=place, elsewhere=True)
-        self.assertEqual(forked.returncode, 0, forked.stdout + forked.stderr)
+        # Imported on another computer: the file itself, and the step that shows it.
+        imported = self.import_(found["zip"], cwd=place, elsewhere=True)
+        self.assertEqual(imported.returncode, 0, imported.stdout + imported.stderr)
         self.assertEqual((place / "tetra.stl" / "tetra.stl").read_bytes(), (self.base / "tetra.stl").read_bytes())
-        self.assertIn(f"Next: cad viewer {os.path.join('tetra.stl', 'tetra.stl')}", forked.stdout)
-        self.assertNotIn("Made with", forked.stdout)
+        self.assertIn(f"Next: cad viewer {os.path.join('tetra.stl', 'tetra.stl')}", imported.stdout)
+        self.assertNotIn("Made with", imported.stdout)
 
     def test_a_urdfs_mesh_files_go_and_one_outside_its_folder_is_left_out_and_said(self) -> None:
         robot = _write(self.base / "robot", {"arm.urdf": URDF, "meshes/base.stl": STL, "notes.md": "not drawn"})
@@ -795,7 +795,7 @@ class ShareTest(unittest.TestCase):
         (project / ".git").mkdir()  # a checkout's root: the project's files are the ones under it
         return workspace, project
 
-    def test_a_model_shares_its_xbf_and_the_files_that_built_it_and_forks_back_into_a_folder(self) -> None:
+    def test_a_model_shares_its_xbf_and_the_files_that_built_it_and_imports_back_into_a_folder(self) -> None:
         from cad.engine.ids import file_id
 
         workspace, project = self.project("workspace")
@@ -840,32 +840,32 @@ class ShareTest(unittest.TestCase):
         self.assertTrue(parts)
         self.assertEqual({path: (bundle / path).stat().st_mtime_ns for path in parts}, stamps)
 
-        # Forked by its view link on this computer, which shared it: where its files are said, nothing downloaded, and
+        # Imported by its view link on this computer, which shared it: where its files are said, nothing downloaded, and
         # the folder named not written.
-        place = Path(tempfile.mkdtemp(prefix="fork-", dir=self.base))
-        here = self.fork(found["view"], "copy", cwd=place)
+        place = Path(tempfile.mkdtemp(prefix="import-", dir=self.base))
+        here = self.import_(found["view"], "copy", cwd=place)
         self.assertEqual(here.returncode, 0, here.stdout + here.stderr)
         self.assertRegex(here.stdout, rf"^plate(\.xbf)? was shared from this computer: it is {re.escape(str(xbf))}, its "
                                       rf"files in {re.escape(str(project))}, its script "
                                       rf"{re.escape(str(project / 'plate.py'))}\. Nothing was downloaded, and copy was "
                                       r"not written; work there\.\n$")
-        mine = json.loads(self.fork(found["view"], "--json", cwd=place).stdout)
+        mine = json.loads(self.import_(found["view"], "--json", cwd=place).stdout)
         self.assertEqual(mine, {"ok": True, "local": True, "name": mine["name"], "file": str(xbf),
                                 "root": str(project), "entry": "plate.py", "ignored": None,
                                 "next": [f"cad run {project / 'plate.py'}"]})
         self.assertEqual((list(place.iterdir()), [seen for seen in self.service.seen if seen[0] == "GET"]), ([], []))
 
-        # Forked on another computer: the same bytes at the same paths, the .xbf among them, nothing run, and the steps
+        # Imported on another computer: the same bytes at the same paths, the .xbf among them, nothing run, and the steps
         # that show it and build it said.
-        forked = self.fork(found["view"], "copy", cwd=place, elsewhere=True)
-        self.assertEqual(forked.returncode, 0, forked.stdout + forked.stderr)
+        imported = self.import_(found["view"], "copy", cwd=place, elsewhere=True)
+        self.assertEqual(imported.returncode, 0, imported.stdout + imported.stderr)
         written = sorted(path.relative_to(place / "copy").as_posix() for path in (place / "copy").rglob("*")
                          if path.is_file())
         self.assertEqual(written, expected)
         for path in expected:
             self.assertEqual((place / "copy" / path).read_bytes(), (project / path).read_bytes(), path)
-        lines = forked.stdout.splitlines()
-        self.assertRegex(lines[0], r"^Forked plate into copy: 5 files, [\d.]+ (B|KiB); it is plate\.xbf; its script "
+        lines = imported.stdout.splitlines()
+        self.assertRegex(lines[0], r"^Imported plate into copy: 5 files, [\d.]+ (B|KiB); it is plate\.xbf; its script "
                                    r"is plate\.py$")
         self.assertEqual(lines[1], "Made with the cad and libraries this computer has")
         self.assertEqual(lines[2], "Nothing was run: the code is someone else's, the person's to read and run. Next: "
@@ -916,12 +916,12 @@ class ShareTest(unittest.TestCase):
         self.assertIn(f"{project / 'lib' / 'sizes.py'}, which built plate.xbf, is gone",
                       json.loads(refused.stdout)["error"])
 
-    def test_a_shares_link_is_the_file_it_shared_else_the_copy_its_fork_wrote(self) -> None:
+    def test_a_shares_link_is_the_file_it_shared_else_the_copy_its_import_wrote(self) -> None:
         """Wherever cad takes a document, the share's link is this computer's copy of it: the file it shared under that
-        link; else, its record gone and the share forked here, the copy of the shared file the fork wrote, a model's
+        link; else, its record gone and the share imported here, the copy of the shared file the import wrote, a model's
         .xbf there at once with nothing run; a ref's selector the same in either. A link this computer has no copy of,
-        its fork's folder since gone too, is refused, as a ref's file, an inspect's document, a snapshot's source, an
-        export's and a packet's input, in one line naming the fork to make."""
+        its import's folder since gone too, is refused, as a ref's file, an inspect's document, a snapshot's source, an
+        export's and a packet's input, in one line naming the import to make."""
         from cad.engine.ids import file_id
         from cad_server.engine import cli
 
@@ -939,8 +939,8 @@ class ShareTest(unittest.TestCase):
 
         self.write_records([])
         place = Path(tempfile.mkdtemp(prefix="linked-", dir=self.base))
-        forked = self.fork(link, "copy", cwd=place)
-        self.assertEqual(forked.returncode, 0, forked.stdout + forked.stderr)
+        imported = self.import_(link, "copy", cwd=place)
+        self.assertEqual(imported.returncode, 0, imported.stdout + imported.stderr)
         copy = place / "copy" / "plate.xbf"
         for args in (("model", "inspect", f"{link}#plate"), ("model", "inspect", link, f"{link}#plate"),
                      ("model", "inspect", str(copy), f"{link}#plate")):
@@ -954,15 +954,15 @@ class ShareTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CAD_SHARE_URL": self.service.url}):
             self.assertEqual(cli._linked_inputs({"input": link, "jobs": [{"input": link}, {"camera": "iso"}]}),
                              {"input": str(copy), "jobs": [{"input": str(copy)}, {"camera": "iso"}]})
-        self.assertNotEqual(file_id(copy), ident)  # the fork's copy is a file of its own
+        self.assertNotEqual(file_id(copy), ident)  # the import's copy is a file of its own
 
-        # Its folder gone, the fork is no copy: refused as a link this computer never saw.
+        # Its folder gone, the import is no copy: refused as a link this computer never saw.
         shutil.rmtree(place / "copy")
-        refusal = {"ok": False, "reason": "not_found", "next": [f"cad fork {link}"],
-                   "error": f"{link} is a shared model this computer has no copy of: run `cad fork {link}`."}
+        refusal = {"ok": False, "reason": "not_found", "next": [f"cad import {link}"],
+                   "error": f"{link} is a shared model this computer has no copy of: run `cad import {link}`."}
         other = f"{self.service.url}/{'B' * 22}"
-        unknown = {"ok": False, "reason": "not_found", "next": [f"cad fork {other}"],
-                   "error": f"{other} is a shared model this computer has no copy of: run `cad fork {other}`."}
+        unknown = {"ok": False, "reason": "not_found", "next": [f"cad import {other}"],
+                   "error": f"{other} is a shared model this computer has no copy of: run `cad import {other}`."}
         packet = json.dumps({"input": other, "jobs": [{"camera": "iso", "outputs": [{"label": "view 1"}]}]})
         for args, given, answer in (
                 (("model", "inspect", link), None, refusal), (("model", "inspect", f"{other}#plate"), None, unknown),
@@ -1355,7 +1355,7 @@ class SourcesTest(unittest.TestCase):
                                                                               ("/p/b.json", "gone")), True),
                                 "model", "arm"), [
             "Left out, outside the project: /q/a.json", "Left out, no longer on the disk: /p/b.json",
-            "Its build read a file cad could not see, which the share does not hold: a fork may not rebuild it "
+            "Its build read a file cad could not see, which the share does not hold: an import may not rebuild it "
             "without that file"])
         self.assertEqual(_notes(sharing.Sources(), "model", "crate"), [
             "Its .xbf alone went: no build closure names the code that made crate (a shape a program handed over, or a "
@@ -1513,7 +1513,7 @@ class SendTest(unittest.TestCase):
         pieces = manifest["files"]["plate.xbf"]["at"]
         self.assertEqual(len({piece[0] for piece in pieces}), 2, pieces)  # its member runs from one pack into the next
         self.assertEqual(self.service.read(share.id, "plate.xbf", "files"), xbf)
-        # And the share's zip, which a fork downloads, holds it whole.
+        # And the share's zip, which an import downloads, holds it whole.
         with tempfile.TemporaryFile() as archive:
             sharing.download(self.service.url, share.id, archive)
             archive.seek(0)
@@ -1659,8 +1659,8 @@ class SendTest(unittest.TestCase):
         self.assertEqual([entry.name for entry in folder.iterdir()], ["note.json"])
 
 
-class ForkTest(unittest.TestCase):
-    """``cad fork``, run as a person runs it, against a share this test makes on the stand-in service with no engine:
+class ImportTest(unittest.TestCase):
+    """``cad import``, run as a person runs it, against a share this test makes on the stand-in service with no engine:
     a model's files, which a script among them would say it ran."""
 
     @classmethod
@@ -1675,9 +1675,9 @@ class ForkTest(unittest.TestCase):
         from cad_server import sharing
 
         self.service.reset()
-        self.base = Path(os.path.realpath(tempfile.mkdtemp(prefix="fork-")))
+        self.base = Path(os.path.realpath(tempfile.mkdtemp(prefix="import-")))
         self.addCleanup(shutil.rmtree, self.base, True)
-        # Each script says, where it runs, that it did: a fork runs none. The script's name is no ASCII, as the
+        # Each script says, where it runs, that it did: an import runs none. The script's name is no ASCII, as the
         # service's header carries it. The model's .xbf, which names that script in its build closure, goes too.
         closure = {"schema": "cadgen.engine closure/2", "source": {"kind": "script", "path": "modèle.py",
                                                                     "function": "plate"}, "inputs": [], "key": None}
@@ -1700,8 +1700,8 @@ class ForkTest(unittest.TestCase):
         # This computer's state: no record of the share, until a test writes one (``recorded``).
         self.state = self.base / "state"
 
-    def fork(self, *args: str, **more: str) -> Any:
-        return subprocess.run([sys.executable, "-m", "cad_server.cli", "fork", *args], cwd=self.here,
+    def import_(self, *args: str, **more: str) -> Any:
+        return subprocess.run([sys.executable, "-m", "cad_server.cli", "import", *args], cwd=self.here,
                               env={**os.environ, "PYTHONPATH": SOURCE_PATH, "CAD_SHARE_URL": self.service.url,
                                    "CAD_TELEMETRY": "0", "CAD_UPDATE_CHECK": "0", "PYTHONIOENCODING": "utf-8",
                                    "CAD_STATE_DIR": str(self.state), "CAD_ENGINE_DIR": str(self.base / "engine"),
@@ -1733,15 +1733,15 @@ class ForkTest(unittest.TestCase):
         self.recorded(xbf)
         for link in (self.share.view, self.share.zip, self.share.id):
             with self.subTest(link=link):
-                done = self.fork(link)
+                done = self.import_(link)
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertEqual(done.stdout, f"plate was shared from this computer: it is {xbf}, its files in "
                                               f"{self.project}, its script {script}. Nothing was downloaded; work "
                                               "there.\n")
         # A folder named is not written, and the answer says so.
-        named = self.fork(self.share.view, "copy")
+        named = self.import_(self.share.view, "copy")
         self.assertIn("Nothing was downloaded, and copy was not written; work there.", named.stdout)
-        found = json.loads(self.fork(self.share.view, "copy", "--json").stdout)
+        found = json.loads(self.import_(self.share.view, "copy", "--json").stdout)
         self.assertEqual(found, {"ok": True, "local": True, "name": "plate", "file": str(xbf),
                                  "root": str(self.project), "entry": "modèle.py", "ignored": "copy",
                                  "next": [f"cad run {self.quoted(str(script))}"]})
@@ -1749,10 +1749,10 @@ class ForkTest(unittest.TestCase):
         # A file document's: its own file.
         mesh = _write(self.base / "parts", {"tetra.stl": STL})
         self.recorded(mesh / "tetra.stl", kind="stl")
-        self.assertEqual(self.fork(self.share.view).stdout, "tetra.stl was shared from this computer: it is "
+        self.assertEqual(self.import_(self.share.view).stdout, "tetra.stl was shared from this computer: it is "
                                                              f"{mesh / 'tetra.stl'}. Nothing was downloaded; work "
                                                              "there.\n")
-        self.assertEqual(json.loads(self.fork(self.share.view, "--json").stdout)["next"],
+        self.assertEqual(json.loads(self.import_(self.share.view, "--json").stdout)["next"],
                          [f"cad viewer {self.quoted(str(mesh / 'tetra.stl'))}"])
         self.assertEqual(self.downloads(), [])
 
@@ -1763,7 +1763,7 @@ class ForkTest(unittest.TestCase):
                                  ("its file moved", self.base / "moved" / "plate.xbf", {})):
             with self.subTest(name):
                 self.recorded(path, **more)
-                done = self.fork(self.share.view, name, "--json")
+                done = self.import_(self.share.view, name, "--json")
                 self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
                 self.assertFalse(json.loads(done.stdout)["local"])
                 self.assert_written(self.here / name)
@@ -1780,21 +1780,21 @@ class ForkTest(unittest.TestCase):
         """A path as a person pastes it into this platform's shell."""
         return subprocess.list2cmdline([path]) if os.name == "nt" else shlex.quote(path)
 
-    def test_a_fork_writes_the_files_says_what_built_them_and_runs_nothing(self) -> None:
+    def test_a_import_writes_the_files_says_what_built_them_and_runs_nothing(self) -> None:
         import platform
 
         from cad.engine import previous
 
         size = sum(len(data.encode()) for data in self.files.values())
-        done = self.fork(self.share.view)
+        done = self.import_(self.share.view)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assert_written(self.here / "plate__the_first")  # its folder, named as the zip names it
         # The shared file it wrote is in the library, this user's alone, with the link it came from, by which the
         # share's link names it here: the .xbf whose closure names the share's script.
-        self.assertEqual(self.forks(), [{"link": self.share.view,
+        self.assertEqual(self.imports(), [{"link": self.share.view,
                                          "path": str(self.here / "plate__the_first" / "plate.xbf")}])
         lines = done.stdout.splitlines()
-        self.assertEqual(lines[0], f"Forked plate__the_first into plate__the_first: 5 files, {size} B; it is "
+        self.assertEqual(lines[0], f"Imported plate__the_first into plate__the_first: 5 files, {size} B; it is "
                                    "plate.xbf; its script is modèle.py")
         self.assertEqual(lines[1], f"Made with cad 0.0.1, system Plan9, where this computer has cad {previous.version()}, "
                                    f"system {platform.system()}: a build here may differ from the shared view")
@@ -1802,17 +1802,17 @@ class ForkTest(unittest.TestCase):
                                    f"cad viewer {self.quoted(os.path.join('plate__the_first', 'plate.xbf'))} shows it "
                                    "as it was shared; "
                                    f"cad run {self.quoted(os.path.join('plate__the_first', 'modèle.py'))} builds it here")
-        # No project, and of its files the shared one alone: a fork writes its files, and its entry.
+        # No project, and of its files the shared one alone: an import writes its files, and its entry.
         library = json.loads((self.state / "library.json").read_text(encoding="utf-8"))
         self.assertEqual((library["projects"], len(library["files"])), ({}, 1))
         self.assertEqual(list(self.here.rglob("RAN")), [])
         self.assertEqual(list(self.here.rglob("__pycache__")), [])
         self.assertEqual([seen[1] for seen in self.service.seen if seen[0] == "GET"], [f"/{self.share.id}.zip"])
         # By its files' link and by its id alone, into a folder named: the same files, and --json's one object.
-        named = self.fork(self.share.zip, "zipped")
+        named = self.import_(self.share.zip, "zipped")
         self.assertEqual(named.returncode, 0, named.stdout + named.stderr)
         self.assert_written(self.here / "zipped")
-        as_json = self.fork(self.share.id, str(self.here / "by id"), "--json")
+        as_json = self.import_(self.share.id, str(self.here / "by id"), "--json")
         self.assertEqual(as_json.returncode, 0, as_json.stdout + as_json.stderr)
         self.assert_written(self.here / "by id")
         found = json.loads(as_json.stdout)
@@ -1826,10 +1826,10 @@ class ForkTest(unittest.TestCase):
         self.assertEqual([row["name"] for row in found["differs"]], ["cad", "system"])
         self.assertEqual(found["next"], [f"cad viewer {self.quoted(str(self.here / 'by id' / 'plate.xbf'))}",
                                          f"cad run {self.quoted(str(self.here / 'by id' / 'modèle.py'))}"])
-        # One entry a share's link: the latest fork of it.
-        self.assertEqual(self.forks(), [{"link": self.share.view, "path": str(self.here / "by id" / "plate.xbf")}])
+        # One entry a share's link: the latest import of it.
+        self.assertEqual(self.imports(), [{"link": self.share.view, "path": str(self.here / "by id" / "plate.xbf")}])
 
-    def forks(self) -> list[dict[str, Any]]:
+    def imports(self) -> list[dict[str, Any]]:
         """The files the library keeps with the link they came from (``imported``), in a file this user alone may read
         or write."""
         path = self.state / "library.json"
@@ -1842,14 +1842,14 @@ class ForkTest(unittest.TestCase):
     def test_a_link_names_the_copy_this_computer_keeps_and_is_refused_where_it_keeps_none(self) -> None:
         """Wherever cad takes a document, a share's link of this service or of cad.fun names this computer's copy of
         it, as the library holds it: the file it shared under the link, a selector after it kept; else the file a
-        fork of it wrote that the share is of -- a model's .xbf, a file document's file --, the latest fork of it; and
-        with neither, or a fork whose file is gone, refused in one line naming the fork. Another origin's link, or a
+        import of it wrote that the share is of -- a model's .xbf, a file document's file --, the latest import of it; and
+        with neither, or an import whose file is gone, refused in one line naming the import. Another origin's link, or a
         files' link, names no document."""
         from cad_server import sharing
 
         view = self.share.view
-        refusal = (f"{view} is a shared model this computer has no copy of: run `cad fork {view}`.",
-                   (f"cad fork {view}",))
+        refusal = (f"{view} is a shared model this computer has no copy of: run `cad import {view}`.",
+                   (f"cad import {view}",))
         with mock.patch.dict(os.environ, {"CAD_SHARE_URL": self.service.url, "CAD_STATE_DIR": str(self.state)}):
             with self.assertRaises(sharing.NoCopy) as none:
                 sharing.local(f"{view}#plate")
@@ -1869,8 +1869,8 @@ class ForkTest(unittest.TestCase):
             self.assertEqual((sharing.local(view), sharing.local(f"{view}#tetra", ref=True)),
                              (str(mesh), f"{json.dumps(str(mesh), ensure_ascii=False)}#tetra"))
 
-            # Forked: the file of the fork's that the share is of, the .xbf there with nothing run; the latest fork of
-            # a link the one entry that holds it; a fork whose file is gone, no copy.
+            # Imported: the file of the import's that the share is of, the .xbf there with nothing run; the latest import of
+            # a link the one entry that holds it; an import whose file is gone, no copy.
             _library(self.state, [])
             copy = _write(self.here / "copy", self.files)
             self.assertEqual(sharing.shared_file(copy, sorted(self.files), "modèle.py"), "plate.xbf")
@@ -1878,7 +1878,7 @@ class ForkTest(unittest.TestCase):
             self.assertEqual(sharing.local(f"{view}#plate"), f"{copy / 'plate.xbf'}#plate")
             sharing.change({"imported": sharing.import_record(self.service.url, self.share.id, mesh)})
             self.assertEqual(sharing.local(view), str(mesh))
-            self.assertEqual(self.forks(), [{"link": view, "path": str(mesh)}])
+            self.assertEqual(self.imports(), [{"link": view, "path": str(mesh)}])
             mesh.unlink()
             with self.assertRaises(sharing.NoCopy) as gone:
                 sharing.local(view)
@@ -1889,7 +1889,7 @@ class ForkTest(unittest.TestCase):
                 sharing.local(view)
             self.assertEqual((str(moved.exception), moved.exception.next), refusal)
 
-    def test_the_shared_file_of_a_fork_is_the_xbf_its_script_builds_or_a_file_documents_file(self) -> None:
+    def test_the_shared_file_of_a_import_is_the_xbf_its_script_builds_or_a_file_documents_file(self) -> None:
         from cad_server import sharing
 
         def xbf(script: str, *read: str) -> str:
@@ -1927,7 +1927,7 @@ class ForkTest(unittest.TestCase):
                                                       "sub/power.kicad_sch", "top.kicad_sch"], None), "lone.kicad_sch")
 
     def test_what_this_computer_cannot_say_of_its_libraries_is_said_not_compared(self) -> None:
-        from cad_server.cli import fork as command
+        from cad_server.cli import import_ as command
 
         here = {"cad": "0.0.1", "build123d": None, "OCP": None, "python": None, "system": "Plan9", "arch": "x"}
         out = io.StringIO()
@@ -1962,20 +1962,20 @@ class ForkTest(unittest.TestCase):
         (self.here / "a file").write_text("mine", encoding="utf-8")
         for folder in ("taken", "a file"):
             with self.subTest(folder=folder):
-                refused = self.fork(self.share.view, folder, "--json")
+                refused = self.import_(self.share.view, folder, "--json")
                 self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
                 self.assertEqual(json.loads(refused.stdout)["reason"], "invalid_argument")
         self.assertEqual(self.service.seen[-1][0], "PUT", "refused before anything was downloaded")
         self.assertEqual(sorted(path.name for path in (self.here / "taken").iterdir()), ["mine.txt"])
         (self.here / "empty").mkdir()
-        self.assertEqual(self.fork(self.share.view, "empty").returncode, 0)
+        self.assertEqual(self.import_(self.share.view, "empty").returncode, 0)
         self.assert_written(self.here / "empty")
-        gone = self.fork(f"{self.service.url}/{'A' * 22}", "--json")
+        gone = self.import_(f"{self.service.url}/{'A' * 22}", "--json")
         self.assertEqual(gone.returncode, 2, gone.stdout + gone.stderr)
         self.assertEqual(json.loads(gone.stdout), {"ok": False, "error": "This shared model has expired or was "
                                                                          "deleted.", "reason": "not_found"})
         for link in ("https://cad.fun/nope", "not a link"):
-            self.assertEqual(json.loads(self.fork(link, "--json").stdout)["reason"], "invalid_argument")
+            self.assertEqual(json.loads(self.import_(link, "--json").stdout)["reason"], "invalid_argument")
 
     def test_an_entry_that_would_land_outside_its_folder_is_refused_and_nothing_is_left(self) -> None:
         def crafted(*entries: tuple[str, bytes, int]) -> bytes:
@@ -2007,7 +2007,7 @@ class ForkTest(unittest.TestCase):
                 ("no folder", "outside the one folder", crafted(("escaped.py", b"x", regular),))):
             with self.subTest(name):
                 self.service.zips[self.share.id] = zipped
-                refused = self.fork(self.share.view, "--json")
+                refused = self.import_(self.share.view, "--json")
                 self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
                 self.assertIn("did not arrive as a share's zip", json.loads(refused.stdout)["error"])
                 self.assertIn(said, json.loads(refused.stdout)["error"])
@@ -2018,7 +2018,7 @@ class ForkTest(unittest.TestCase):
                                            ("b.py", gzip.compress(b"print(2)\n" * 50, mtime=0))]))
         good[good.index(b"PK\x01\x02") - 3] ^= 0xFF  # a byte of the last file's deflate stream, before the directory
         self.service.zips[self.share.id] = bytes(good)
-        broken = self.fork(self.share.view, "--json")
+        broken = self.import_(self.share.view, "--json")
         self.assertEqual(broken.returncode, 1, broken.stdout + broken.stderr)
         self.assertEqual(list(self.here.iterdir()), [])
 

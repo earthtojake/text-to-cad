@@ -6,7 +6,7 @@ A page of [the engine's documentation](../README.md). A name in bold in parenthe
 that made it, with no sign-in. A share is of one file, named by its canonical path, and is two things under one id:
 the view, the file's view bundle (**View bundle**: what its page reads), and its files: the file itself and, of a
 model, the files that made it, at the paths they have in the project. A model is shared by its `.xbf`, its document
-(**Document lifetime**). `cad fork` writes a share's files into a folder, a model's `.xbf` among them, so the model is
+(**Document lifetime**). `cad import` writes a share's files into a folder, a model's `.xbf` among them, so the model is
 there at once with nothing run; the share's link then names that copy wherever cad takes a document.
 
 ```bash
@@ -16,7 +16,7 @@ cad share status               # on or off, agreed or not, and this computer's l
 cad share off                  # every share refused, --yes or not, until `cad share on`
 cad share delete arm.xbf --yes # the share of a file this computer shared
 cad share delete 'https://cad.fun/<id>#delete=<secret>' --yes
-cad fork https://cad.fun/<id> arm   # its files written into ./arm; it runs nothing
+cad import https://cad.fun/<id> arm # its files written into ./arm, its file the library's; it runs nothing
 ```
 
 FILE|ID is turned into the file's canonical path (`ids.canonical`) before anything else: a path read from the folder
@@ -60,7 +60,7 @@ the `.xbf`'s folder:
 
 - its script, every module in `modules`, and every input of kind `file` or `read` the build found (its digest not
   null) that is on the disk still;
-- the `.xbf` itself: the model as its last run made it, which a fork reads as any `.xbf` with nothing run, and
+- the `.xbf` itself: the model as its last run made it, which an import reads as any `.xbf` with nothing run, and
   which a later in-browser kernel may read too. Its pack is any size: a file larger than a pack goes on into the
   next (**The packs**);
 - each at its path under **the files' root**: the deepest folder that holds all of them, but never above the nearest
@@ -75,14 +75,14 @@ the `.xbf`'s folder:
   `next`: `cad run SCRIPT`): run it, then share. A script or a module the closure names that is gone from the disk is
   refused the same way (`not_found`, exit 2); an input gone is left out, and said;
 - a build that read a file the engine could not see leaves the closure's key null (**Body retention**): the share
-  goes, and a line says a fork may not rebuild it without that file. An `.xbf` that holds no closure (a shape a
+  goes, and a line says an import may not rebuild it without that file. An `.xbf` that holds no closure (a shape a
   program handed over, a file exported from another document) goes alone, at its own name, said.
 
 **A file document**: the file itself, at its own name; a URDF's mesh files too (each `<mesh filename>` of its visuals
 and collisions, resolved as the viewer resolves one), and an SRDF's URDF with that one's, each at its path under the
 file's folder: one outside it is left out, and said.
 
-**A KiCad board or schematic**: the file itself and what a fork needs to open it and work on it, each at its path under
+**A KiCad board or schematic**: the file itself and what an import needs to open it and work on it, each at its path under
 the files' root, which is found as a model's is (the deepest folder that holds them, from the file's, capped at a
 checkout's root and the home folder):
 
@@ -93,7 +93,7 @@ checkout's root and the home folder):
 - of a schematic, every sheet of the hierarchy it is drawn in (from its project's root sheet, which a sheet shared
   on its own is drawn from too), the root's project file and its project's symbol libraries;
 - never a library of KiCad's (`${KICAD9_FOOTPRINT_DIR}`, `${KICAD9_3DMODEL_DIR}`, a variable the project does not
-  define, a model KiCad's 3D library holds): an installed library, which a fork's KiCad has;
+  define, a model KiCad's 3D library holds): an installed library, which an importer's KiCad has;
 - a file outside the root, and one the project names that is gone, left out and said, as a model's are.
 
 Never: a file the build did not read (a README beside the script, another script, tests, `.env`), or an installed
@@ -119,14 +119,14 @@ library (named by its version in `made`).
    has its switch written, since a sandboxed shell may write neither the state folder nor the cache; with none
    answering, the command writes them itself.
 
-Its requests, and `cad fork`'s, are ones a person asks for by name (law 17): nothing else in cad reaches the service,
+Its requests, and `cad import`'s, are ones a person asks for by name (law 17): nothing else in cad reaches the service,
 and nothing shares again on its own: a build changes no share until `cad share` runs again.
 
-## Forking
+## Importing
 
-`cad fork LINK [FOLDER] [--json]`: LINK a view link, a files' link (`<origin>/<id>.zip`), or a share's id at the
-service `CAD_SHARE_URL` names. The command downloads `<origin>/<id>.zip` in its own process, as `cad share` uploads,
-and writes its files into FOLDER, by default `./<name>`, the folder the zip holds. A FOLDER that is there and holds
+`cad import LINK [FOLDER] [--json]`, `cad share`'s match: LINK a view link, a files' link (`<origin>/<id>.zip`), or a
+share's id at the service `CAD_SHARE_URL` names. The command downloads `<origin>/<id>.zip` in its own process, as `cad
+share` uploads, and writes its files into FOLDER, by default `./<name>`, the folder the zip holds. A FOLDER that is there and holds
 anything is refused (`invalid_argument`), before anything is downloaded. Every entry is refused that would land
 outside it -- an absolute path, a `..`, a drive, a link, anything but a file or a folder, a path twice, an entry
 outside the zip's one folder -- and every file is written into a folder made beside FOLDER, checked against its
@@ -166,10 +166,10 @@ view link, `<origin>/<id>` of the service `CAD_SHARE_URL` names or of `https://c
 the share, so that a shared page's prompt reads here as a local page's does:
 
 - **a share this computer made**: the file it shared under that link, by its entry in the library;
-- **else a fork of it**: the file of the fork's the share is of, by its entry in the library, whose file is there; a
+- **else an import of it**: the file of the import's the share is of, by its entry in the library, whose file is there; a
   model's `.xbf` is there with nothing run;
-- **else** -- neither, or a fork whose file is gone -- it is refused in one line, ``<link> is a shared model this
-  computer has no copy of: run `cad fork <link>`.`` (`not_found`, exit 2, with `next`).
+- **else** -- neither, or an import whose file is gone -- it is refused in one line, ``<link> is a shared model this
+  computer has no copy of: run `cad import <link>`.`` (`not_found`, exit 2, with `next`).
 
 A selector after the link, `<link>#<selector>`, is the same in the copy as in the share: `cad model inspect
 'https://cad.fun/<id>#head_shell/f:...'`. A link of another origin, or a files' link (`.zip`), is no document's name.
@@ -193,7 +193,7 @@ by the file's canonical path, and its entry's `shares` holds, by each share serv
 
 `link` is the view link, `write` and `delete` the share's keys, `expires` its expiry as the service said it, and
 `root` and `entry` where on this computer the files that made it are: their root, and the script among them (a
-model's), which `cad fork` of its link points at (**Forking**). What a command says of a share is worked out from
+model's), which `cad import` of its link points at (**Importing**). What a command says of a share is worked out from
 there: its delete link (`<link>#delete=<delete secret>`), and its file's id, kind and name from its path. A share past
 its expiry goes from its entry as the library is written, and that file's next share is a new one; an entry whose
 file is gone stays while a share of it is live, listed and deleted as any, and is never shared to again. A file
@@ -202,9 +202,9 @@ keys is none. The id and the secrets are said only inside the links and in the l
 given, said back where this computer has no copy of it): in no other line of any command, no log, no telemetry and no
 file of the cache. The command is counted as any command is, nothing of the share.
 
-A forked file is in it too: the file of the fork's that the share is of (`sharing.shared_file`), its entry's
+An imported file is in it too: the file of the import's that the share is of (`sharing.shared_file`), its entry's
 `imported` the share's view link it came from, which names it from then on (**A share's link names this computer's
-copy**), so it is among the viewer's Recents. One entry holds a link: the latest fork of it. Where the fork could not
+copy**), so it is among the viewer's Recents. One entry holds a link: the latest import of it. Where the import could not
 tell which of its files the share is of, none is in the library, and the command says so.
 
 What a development build of 0.12 kept beside the library (`shares.json`, `forks.json`) is not read: those shares are
@@ -295,7 +295,7 @@ and uploaded again, then the commit made again, twice at most. A `409` naming no
 manifest meanwhile): committed again, once. A `403`, to a pack or the commit, is a share of that id that another
 write secret made: the command makes a new share, new names and all, and sends every file, once.
 
-**`GET /<id>.zip`**, a fork's: its files, a model's `.xbf` among them, as a zip of one folder named for the share,
+**`GET /<id>.zip`**, an import's: its files, a model's `.xbf` among them, as a zip of one folder named for the share,
 made by the service from their stored members; `Cad-Share-Entry` and `Cad-Share-Made` (`<name>=<value>, ...`) say its entry and
 its `made`, each name and value percent-encoded UTF-8. `404` for a share expired or deleted.
 

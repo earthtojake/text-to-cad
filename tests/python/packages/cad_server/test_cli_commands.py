@@ -40,7 +40,7 @@ TYPES = {
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
 COMMANDS = ("serve", "status", "stop", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
-            "viewer", "share", "fork", "telemetry", "update", "plugin")
+            "viewer", "share", "import", "telemetry", "update", "plugin")
 # Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), the commands for
 # programs rather than people, and `xbf`, the earlier spelling of `cad model`, which runs it saying it is deprecated
 # and which the skill text of releases up to 0.11.17 says (``test_older_xbf_spellings.py``).

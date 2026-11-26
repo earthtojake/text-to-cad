@@ -121,10 +121,11 @@ cad share status|on|off [--json]             whether sharing is on and agreed, a
 cad share delete FILE|ID|LINK [--yes] [--json]
                                              the share of a file this computer shared, or of a delete link,
                                              deleted from the service; asked first
-cad fork LINK [FOLDER] [--json]              a share's files downloaded by this process into FOLDER (./<name>; one
+cad import LINK [FOLDER] [--json]            a share's files downloaded by this process into FOLDER (./<name>; one
                                              that holds files is refused), every entry kept inside it, a model's
-                                             .xbf among them; runs nothing; of a share this computer made, where
-                                             its file is, nothing downloaded (Forking)
+                                             .xbf among them, the file it is of added to the library; runs
+                                             nothing; of a share this computer made, where its file is, nothing
+                                             downloaded (Importing)
 ```
 
 The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it

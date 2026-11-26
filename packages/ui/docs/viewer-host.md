@@ -293,7 +293,7 @@ tool the document cannot use is absent, never drawn disabled:
 
 A shared view bundle is a view bundle a share service keeps, sealed, for anyone with its link, which is the
 share's address alone, beside the files that made it (a model's `.xbf`, its code and the files its build read; a
-file document's file), which `cad fork <link>` gets. Its host is the view bundle's host above, unchanged: the web's
+file document's file), which `cad import <link>` gets. Its host is the view bundle's host above, unchanged: the web's
 share mode (`/<id>`, [apps/web](../../../apps/web/README.md#a-shared-view-bundle)) opens it with
 `openShare(id, service)` (`@cad/core/client`), which reads the share's manifest from the page's own origin, then
 each file of the view from the packs it lies in, fetched once each and kept by the browser (never a pack only the

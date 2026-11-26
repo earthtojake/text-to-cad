@@ -170,9 +170,9 @@ where those files ship, so these scripts are what produces them.
   (`npx --no-install playwright install chromium`). Runs the format and camera
   gates and the prompt gate (a Quick Edit copied from the engine's page, its snapshot inline), then
   stops the engine and runs the share gate (the model shared by its `.xbf` with `cad share --yes`, then
-  shared again unchanged by its id and forked by `cad fork`, against the share service's own Worker, run by
+  shared again unchanged by its id and imported by `cad import`, against the share service's own Worker, run by
   `apps/share/serve.mjs`, which serves the bundled client too: the same link and no file sent again, the
-  script that built it and its `.xbf` forked byte for byte as another computer would, viewed under the
+  script that built it and its `.xbf` imported byte for byte as another computer would, viewed under the
   service's content security policy with a face's facts and read-only parameters, a copied prompt the engine
   page's for the same model but for its address (the prompt gate copies that one, its snapshot inline), an
   unknown id said to be gone, deleted from its delete link; then a KiCad board and schematic shared the same way,

@@ -1,8 +1,8 @@
 """A KiCad board and a KiCad schematic shared by ``cad share`` to the share service itself, run on this computer
-(``apps/share/serve.mjs``: the real Worker, ``tests/python/support/share_service.py``), then forked by ``cad fork`` as
-another computer forks a share.
+(``apps/share/serve.mjs``: the real Worker, ``tests/python/support/share_service.py``), then imported by ``cad import`` as
+another computer imports a share.
 
-What a share of each holds, as its manifest says once unsealed: the file itself and what a fork needs to open it and
+What a share of each holds, as its manifest says once unsealed: the file itself and what an import needs to open it and
 work on it -- of a board, its project file, its custom rules, its project's footprint and symbol libraries and the 3D
 model files its footprints name in the project (a VRML name with the STEP beside it, which the view draws); of a
 schematic, every sheet of its hierarchy, its project file and its project's symbol libraries -- each at its path under
@@ -10,7 +10,7 @@ the files' root, which a checkout's root caps; never a file of the folder that n
 local settings, a sheet no sheet draws), nor a library of KiCad's. A file outside the root, and one named and gone, is
 left out and said. Its view is the one the engine wrote into the file's folder of cad's cache: the board's plot, its 3D
 models table and each model the table names a bundle of its own; a schematic's sheets, a page each, and its
-hierarchy's index. A fork writes every file byte for byte, and says which is the file the share is of: the board, or
+hierarchy's index. An import writes every file byte for byte, and says which is the file the share is of: the board, or
 the root of the hierarchy, whichever of its sheets was shared, since its root draws the same pages.
 
 An engine of this file's own writes each view; no KiCad runs (the board is drawn as saved, as where its refill is
@@ -120,12 +120,12 @@ class KiCadShare(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         return json.loads(done.stdout)
 
-    def forked(self, link: str) -> tuple[dict[str, Any], Path]:
-        """``cad fork`` of ``link`` on another computer, with a state, a cache and an engine folder of its own: what it
+    def imported(self, link: str) -> tuple[dict[str, Any], Path]:
+        """``cad import`` of ``link`` on another computer, with a state, a cache and an engine folder of its own: what it
         said, and the folder it wrote."""
         other = Path(tempfile.mkdtemp(prefix="elsewhere-", dir=self.base))
-        folder = other / "forked"
-        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "fork", link, str(folder), "--json"],
+        folder = other / "imported"
+        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "import", link, str(folder), "--json"],
                                  env=self.env(CAD_STATE_DIR=str(other / "state"), CAD_CACHE_DIR=str(other / "cache"),
                                               CAD_ENGINE_DIR=str(other / "engine")), cwd=other)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -145,7 +145,7 @@ class KiCadShare(unittest.TestCase):
         for path in expected:
             self.assertEqual((folder / path).read_bytes(), (root / path).read_bytes(), path)
 
-    def test_a_board_shares_its_project_and_its_view_and_forks_back_byte_for_byte(self) -> None:
+    def test_a_board_shares_its_project_and_its_view_and_imports_back_byte_for_byte(self) -> None:
         found = self.shared("blinky.kicad_pcb", self.board)
         manifest = share_service.manifest(self.origin, found["id"])
         expected = ["blinky.kicad_dru", "blinky.kicad_pcb", "blinky.kicad_pro", "fp-lib-table",
@@ -169,13 +169,13 @@ class KiCadShare(unittest.TestCase):
         self.assertEqual(len(models), 2, sorted(view))
         self.assertIn("its view (its layers, with 2 3D models)", found["sent"]["what"])
 
-        forked, folder = self.forked(found["view"])
-        self.assertEqual((forked["file"], forked["entry"], forked["files"]["count"]), ("blinky.kicad_pcb", None,
+        imported, folder = self.imported(found["view"])
+        self.assertEqual((imported["file"], imported["entry"], imported["files"]["count"]), ("blinky.kicad_pcb", None,
                                                                                         len(expected)))
-        self.assertEqual(forked["next"], [f"cad viewer {folder / 'blinky.kicad_pcb'}"])
+        self.assertEqual(imported["next"], [f"cad viewer {folder / 'blinky.kicad_pcb'}"])
         self.same_files(folder, self.board, expected)
 
-    def test_a_schematic_shares_every_sheet_of_its_hierarchy_and_a_fork_opens_its_root(self) -> None:
+    def test_a_schematic_shares_every_sheet_of_its_hierarchy_and_a_import_opens_its_root(self) -> None:
         expected = sorted(["divider.kicad_pro", "divider.kicad_sch", "load.kicad_sch", "sym-lib-table",
                            *self.libraries])
         pages = {"sheets/~2F.json", "sheets/~2FLoad~2F.json"}
@@ -191,9 +191,9 @@ class KiCadShare(unittest.TestCase):
                 self.assertEqual((found["files"]["file"], found["files"]["left_out"]), (shared, []))
                 self.assertEqual(set(manifest["view"]), {"manifest.json", "schematic.json", *pages})
                 self.assertIn("its view (2 sheets)", found["sent"]["what"])
-                # A fork finds the root the hierarchy is drawn from, which draws the same pages.
-                forked, folder = self.forked(found["view"])
-                self.assertEqual(forked["file"], "divider.kicad_sch")
+                # An import finds the root the hierarchy is drawn from, which draws the same pages.
+                imported, folder = self.imported(found["view"])
+                self.assertEqual(imported["file"], "divider.kicad_sch")
                 self.same_files(folder, self.schematic, expected)
         self.assertEqual(len(links), 2)
 

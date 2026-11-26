@@ -51,7 +51,7 @@ DEFAULT_PROG = "cad share"
 ACTIONS = ("status", "on", "off", "delete")
 DESCRIPTION = (
     "Share a file: anyone with its link opens it in the hosted viewer, and downloads the files that made it (the "
-    "link's .zip, which `cad fork` writes into a folder), with no sign-in, until 7 days after its last share. FILE is "
+    "link's .zip, which `cad import` writes into a folder), with no sign-in, until 7 days after its last share. FILE is "
     "a CAD file the viewer opens, or a document id; a model is shared by its .xbf. What goes is the file, the files "
     "that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf "
     "records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's "
@@ -271,7 +271,7 @@ def _sources(path: str, kind: str) -> tuple[Any, float | None]:
     from cad.engine import previous
     from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
-    from cad_server.cli.fork import _command
+    from cad_server.cli.import_ import _command
 
     if kind != "model":
         return sharing.file_sources(path, kind), None
@@ -355,7 +355,7 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
                 sent = _sent(share, found, sources, title, None, prog)
             except sharing.Refused as again:
                 raise _refused(again) from None
-        record = sharing.record_of(share, document, sent.answer, sources)  # with where its files are, for a fork
+        record = sharing.record_of(share, document, sent.answer, sources)  # with where its files are, for an import
         unkept = None
         try:
             sharing.keep(record=record, stored=sent.stored)
@@ -406,7 +406,7 @@ def _notes(sources: Any, kind: str, name: str) -> list[str]:
         if paths:
             lines.append(f"{said[0].upper()}{said[1:]}: {', '.join(paths)}")
     if sources.unseen:
-        lines.append("Its build read a file cad could not see, which the share does not hold: a fork may not rebuild "
+        lines.append("Its build read a file cad could not see, which the share does not hold: an import may not rebuild "
                      "it without that file")
     if kind == "model" and sources.entry is None:
         lines.append(f"Its .xbf alone went: no build closure names the code that made {name} (a shape a program "
