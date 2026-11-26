@@ -120,9 +120,10 @@ where those files ship, so these scripts are what produces them.
   own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
   tool, updating itself through the store (the release installed in a folder of cad's state folder, then the
   pointer written; uv's tool, its receipt and its files never changed): by itself the release only got ready,
-  nothing restarted, then the server restarted on it at its next start, by the viewer's button, by a typed `cad
-  update` (with PyPI out of reach too) or once it was ready a day, and never by itself with automatic updates off
-  or a feed that names it no more; typed with `cad update` with and without a server running, beside a server
+  nothing restarted, then the server restarted on it at its next start, by the viewer's button or by a typed `cad
+  update` (with PyPI out of reach too), and never by itself at a tending, however busy the server (a page asking
+  and a command running all along: ready at once all the same) and however long the release has been ready, nor
+  with automatic updates off or a feed that names it no more; typed with `cad update` with and without a server running, beside a server
   that started at once, switched off, back by itself from a release whose server cannot start (typed, or at the
   start that switched to it ready, then held back), a ready release damaged before its restart built again, past
   an installed release whose server cannot start, untouched by a release uv cannot install or one that fails its

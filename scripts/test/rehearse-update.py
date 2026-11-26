@@ -11,11 +11,11 @@ the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed i
 (``CAD_PYPI_URL``), which names what the feed names. Every computer's server takes a port of its own
 (``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). This build's servers tend themselves every two
 seconds, not every half minute (``CAD_ENGINE_TEND_SECONDS``), and so wait two of those tendings, not a minute, after
-they start before the plugin first catches up; nothing else of their timing changes, so a step that waits for a minute
-with nothing run still waits that minute. Where a route needs time to pass beyond that, it sets back the stamp that
-time is read from, while nothing writes it: the feed's (an hour, ``an_hour_passes``), in ``self-stopped-midway`` the
-last beat of a worker it stopped (twenty minutes), and in ``self-ready-day`` the end of the attempt that got a release
-ready (a day; ``self-ready-day`` alone waits a real minute with no command). No real agent app is on any PATH.
+they start before the plugin first catches up; nothing else of their timing changes. Where a route needs time to pass
+beyond that, it sets back the stamp that time is read from, while nothing writes it: the feed's (an hour,
+``an_hour_passes``), in ``self-stopped-midway`` the last beat of a worker it stopped (twenty minutes), and in
+``self-ready-busy`` the end of the attempt that got a release ready (a day). No route waits for a server to be idle:
+cad's own update never does. No real agent app is on any PATH.
 
 Every computer has a folder of releases of its own, holding only those that are out (``Box.out``): the install command
 installs PyPI's newest, and cad's own update the newest of a major, or the release the feed or PyPI names (``uv pip
@@ -52,10 +52,11 @@ restart onto it comes later, by one of the ways a route takes: the server's next
 (``restarted_at_start``: ``cad server start`` says the release that was ready is running, and no server of the release
 before answers the door in between, as a client looking every 50 ms sees it), the button (``restarted_by_button``:
 ``POST /api/v1/local/update`` ``{}``), a typed ``cad update`` (``typed_restart``: the restart alone said), with PyPI
-reachable or not, or the day (``self-ready-day``).
+reachable or not; never by itself at a tending, however busy the server and however long the release has been ready
+(``self-ready-busy``).
 
 - ``self-update``: with ``cad plugin update auto on``, the feed names the next release and an hour passes; the running
-  server, idle, gets it ready at its first try; then a person clicks the viewer's button (202, the button ``working``
+  server gets it ready at its next tending, at its first try; then a person clicks the viewer's button (202, the button ``working``
   at its ``switching`` step: nothing is left to install), and the next release's server answers, through the store as
   above, its record ``installed`` and a person's; that server serves the viewer it carries (``viewer``: ``GET /`` the
   page of the wheel the route built, its module script, and a process of the environment finding the viewer inside the
@@ -76,7 +77,7 @@ reachable or not, or the day (``self-ready-day``).
   ``cad --version`` says the next release through the store, no server and no process of the computer runs
   afterwards, automatic updates stay off, and no ``cad plugin install`` runs (no server runs to catch the plugin up).
 - ``self-at-start``: the plugin's switch off, the server stopped, the feed's file already naming the next release, then
-  ``cad server start``: the server starts at once as the release installed, and the start says so; then, idle, it
+  ``cad server start``: the server starts at once as the release installed, and the start says so; then it
   gets the next release ready in the background at its first try; then the server is stopped and started again, and
   that start is the switch: the next release's server answers, the update automatic; no ``cad plugin install`` runs.
 - ``self-off``: with ``cad update auto off``, the server reads the feed naming the next release, and a start of the
@@ -99,7 +100,7 @@ reachable or not, or the day (``self-ready-day``).
 - ``self-unrunnable``: the same for a release that installs but does not pass its own check (its
   ``cad_server/_internal/selftest.py`` raises): cause ``broken``.
 - ``self-major``: the rule that a new major never installs itself. With the next release and a release a major up out,
-  the server, idle, gets the next release ready, never the higher major, and a typed ``cad update`` restarts on it
+  the server gets the next release ready, never the higher major, and a typed ``cad update`` restarts on it
   (naming the higher major); then, automatic updates off, a typed ``cad update`` says the next release is the newest
   of its major and names the higher one in one line, beginning nothing; ``cad update --major`` installs the higher
   major; then, automatic updates on, with a newer release of that major and one two majors up out, the server gets the
@@ -110,7 +111,7 @@ reachable or not, or the day (``self-ready-day``).
   folders in the home, pip offered this tree's releases by ``PIP_FIND_LINKS``): the install command, a person's run,
   finds nothing newer for pipx's cad (its own ``cad update``), installs no uv tool, hands over to that cad's ``cad
   plugin install`` and turns the plugin's switch on by that cad (``cad plugin update auto on``); the next release
-  and a release a major up out and an hour passed, the server, idle, gets the next release ready, never the higher
+  and a release a major up out and an hour passed, the server gets the next release ready, never the higher
   major, and its next start is the switch, through the store as uv's cad updates, and the new cad's server runs ``cad
   plugin install`` once; then, automatic updates off, a typed ``cad update`` with nothing newer in its major says so
   and names the higher major, and with the release after out updates pipx's cad to it, whose server runs ``cad plugin
@@ -146,11 +147,12 @@ reachable or not, or the day (``self-ready-day``).
   own packages, no pointer), and from there this tree's ``cad update`` updates through the store (uv's tool stays,
   the pointer appears). Every computer of a shipped release arrives this way. The shipped release reads this tree's
   release from the stand-ins as it reads PyPI's: the feed's ``/v1/releases`` and ``CAD_PYPI_URL``.
-- ``self-ready-day``: the next release ready by itself; a page asking ``GET /api/v1/server`` every 2 s and no command
-  for a minute and two tendings more (where the update of the release before restarted the server): the same server
-  process, the record still ``ready`` and uncounted, the button ``ready``. Then the record's ``ended`` set back a day
-  (and a minute), the page asking still: the server restarts on it by itself at its next tending, the update
-  automatic. The one route that waits a real minute.
+- ``self-ready-busy``: a server never left alone: from before the feed names the next release to the end of the route,
+  a page asks ``GET /api/v1/server`` every 2 s and a command (``cad server status``) runs every 3 s. The release gets
+  ready all the same, at once (begun within a few tendings of the server reading the feed; the route says how many
+  commands the server answered before it began), and nothing restarts by itself: ten tendings, then the record's
+  ``ended`` set back a day (and a minute) and ten tendings more, the same server process, the record still ``ready``
+  and uncounted, the button ``ready``. Then the server's next start is the switch, the page and the commands going on.
 - ``self-ready-waits``: the next release ready by itself, and never switched to by itself where it must not be: with
   automatic updates off, ``cad server start`` starts the release before (the button still offers the restart); with
   them on again but the feed as last read naming it no more (taken back from the feed and PyPI), the same, and the
@@ -302,8 +304,8 @@ INSTALL_PY = REPO_ROOT / "scripts" / "install" / "install.py"
 # A server started as a page link starts it, by a Python of the release (its own client), and what it says: its token
 # and port.
 START = "import json\nfrom cad.engine import client\nprint(json.dumps(client.request({'op': 'http'})))"
-# Asked as no command (``internal``): a rehearsal's look never counts as work, which would keep a server from the idle
-# its update and the bridge's hand-over wait for.
+# Asked as no command (``internal``): a rehearsal's look never counts as work, which would keep a server from the quiet
+# moment the bridge's hand-over waits for.
 # Whether the shipped release's server answers its own client, asked by that client: "None" once it is gone.
 OLD_STATUS = ("from cad.engine import client\ntry:\n    gone = client.request({'op': 'status'}, start=False) is None\n"
               "except ConnectionError:\n    gone = True\nprint(gone)")
@@ -654,8 +656,8 @@ class Box:
 
     def hour_later(self) -> None:
         """The uv tool's server, as an hour passes while it runs: stopped by its own command (which returns once its
-        lock is free: it writes nothing after), the feed's stamp set back, and started again, idle: it reads the
-        feed at its first tending. Where cad's own update has a release ready, that start may be the switch to it
+        lock is free: it writes nothing after), the feed's stamp set back, and started again: it reads the feed at its
+        first tending. Where cad's own update has a release ready, that start may be the switch to it
         (``restarted_at_start``), and says the release that was ready is running."""
         was = self.version().removeprefix("cad ")
         held = self.read("auto-update.json")
@@ -1248,7 +1250,7 @@ def self_update(box: Box) -> None:
     box.hour_later()
     ready = made_ready(box, before.env, NEW, NEXT, box.ask(rc.interpreter(before.env), "status") or {})
     read_feed(box, "releases", "cad")
-    say(f"        {NEXT} ready by itself, idle, at its first try, beside {NEW}, whose server runs on; the button says "
+    say(f"        {NEXT} ready by itself, at its first try, beside {NEW}, whose server runs on; the button says "
         "ready")
     # Then a person clicks the viewer's button, which restarts the server on it.
     record = restarted_by_button(box, NEW, NEXT, ready)
@@ -1427,7 +1429,7 @@ def self_at_start(box: Box) -> None:
         raise Failed(f"{box.label}: cad server start exited {done.returncode}: {done.stdout}{done.stderr}\n"
                      f"{box.said()}")
     ready = made_ready(box, before.env, NEW, NEXT, box.ask(rc.interpreter(before.env), "status") or {})
-    say(f"        `cad server start` answered at once as {NEW} ({took:.1f} s: {done.stdout.strip()!r}); then, idle, "
+    say(f"        `cad server start` answered at once as {NEW} ({took:.1f} s: {done.stdout.strip()!r}); then "
         f"{NEXT} ready in the background at its first try, the {NEW} server running on")
     # The server's next start is the switch.
     record, line = restarted_at_start(box, before.env, NEW, NEXT, ready)
@@ -1848,9 +1850,9 @@ def self_hop(box: Box) -> None:
 
 # --- a release that is ready --------------------------------------------------------------------------------------
 
-# How long no command may have run before the day's rule restarts the server onto a release ready a day
-# (``auto_update.IDLE_SECONDS``), and the day (``auto_update.DAY``).
-IDLE_SECONDS, DAY_SECONDS = 60.0, 86400.0
+# How far ``self-ready-busy`` sets back the end of the attempt that got a release ready: a day and a minute, past any
+# rule by how long a release has been ready.
+DAY_SECONDS = 86400.0 + 60.0
 
 
 class Page:
@@ -1877,6 +1879,31 @@ class Page:
         return list(self.seen)
 
 
+class Commands:
+    """An agent at work on the computer: ``cad server status`` run every ``every`` seconds, a command the server counts
+    as one (it is no rehearsal's look, ``ASK``), whether a server answers or not, until ``stop``. ``ran``: when each
+    one a server answered ended (``time.time``)."""
+
+    def __init__(self, box: Box, every: float = 3.0) -> None:
+        self.box, self.every, self.done = box, every, threading.Event()
+        self.ran: list[float] = []
+        self.thread = threading.Thread(target=self.call, daemon=True)
+        self.thread.start()
+
+    def call(self) -> None:
+        while True:
+            done = self.box.run([self.box.cad(), "server", "status"], check=False, timeout=60)
+            if done.returncode == 0:
+                self.ran.append(time.time())
+            if self.done.wait(self.every):
+                return
+
+    def stop(self) -> list[float]:
+        self.done.set()
+        self.thread.join(90)
+        return list(self.ran)
+
+
 def still_ready(box: Box, env: Path, ready: dict, button: str) -> None:
     """The release ``ready`` names (its record) still ready and switched to by nothing: the record as it was, and the
     release it began from still the one that runs (its server and ``cad --version``); the viewer's button in state
@@ -1891,42 +1918,53 @@ def still_ready(box: Box, env: Path, ready: dict, button: str) -> None:
                      f"{box.said()}")
 
 
-def self_ready_day(box: Box) -> None:
-    """A release ready for a day restarts the server on it by itself at the first minute with no command, though a
-    page asks the server something all along; before the day, a minute with no command and that page restarts
-    nothing."""
+def self_ready_busy(box: Box) -> None:
+    """A server never left alone, as an agent at work and an open page keep it: a page asking every 2 s and a command
+    every 3 s throughout. The release still gets ready at once, nothing restarts by itself however long it has been
+    ready, and the server's next start is the switch."""
     box.set_up("off")
     before = uv_installed(box)
     python = rc.interpreter(before.env)
     box.out(NEXT)
-    box.hour_later()
-    first = box.ask(python, "status") or {}
-    ready = made_ready(box, before.env, NEW, NEXT, first)
-    page = Page(box)
+    page, commands = Page(box), Commands(box)
     try:
-        # A minute with no command and two tendings more (where an update of the release before restarted the server)
-        # while the page asks: nothing restarts, and nothing is counted.
-        box.until(lambda: ((box.ask(python, "status") or {}).get("up") or 0) > IDLE_SECONDS + 2 * TEND_SECONDS + 5,
-                  "a minute with no command, and two tendings more")
+        box.hour_later()
+        first = box.ask(python, "status") or {}
+        up = time.time() - (first.get("up") or 0)
+        ready = made_ready(box, before.env, NEW, NEXT, first)
+        checked = box.read("releases.json").get("checked") or 0
+        if not 0 <= ready["at"] - checked <= 3 * TEND_SECONDS + 10:
+            raise Failed(f"{box.label}: the feed read at {checked:.1f}, the attempt begun at {ready['at']:.1f}: not at "
+                         f"once\n{box.said()}")
+        earlier = sum(1 for at in list(commands.ran) if up <= at <= ready["at"])
+        # Ready, the page and the commands going on: ten tendings, then the release ready a day (its record's `ended`
+        # set back: the server writes no record of a release that is ready), and ten more: nothing restarts.
+        def ten_tendings() -> None:
+            since = (box.ask(python, "status") or {}).get("up") or 0
+            box.until(lambda: ((box.ask(python, "status") or {}).get("up") or 0) > since + 10 * TEND_SECONDS + 1,
+                      "ten tendings more")
+
+        ten_tendings()
         still_ready(box, before.env, ready, "ready")
-        if (box.ask(python, "status") or {}).get("pid") != first.get("pid"):
-            raise Failed(f"{box.label}: the server restarted: {first}, now {box.ask(python, 'status')}")
-        asked = len(page.seen)
-        say(f"        {NEXT} ready by itself beside {NEW}; a minute with no command and two tendings more, a page asking "
-            f"every 2 s ({asked} times): the same {NEW} server (pid {first.get('pid')}), still ready, nothing counted")
-        # Ready a day: its record's `ended` set back a day (the server writes no record of a release that is ready),
-        # nothing else asked of the server but the page's questions.
-        _keep(box.state / "auto-update.json", {**ready, "ended": ready["ended"] - DAY_SECONDS - 60})
-        began = time.monotonic()
-        record = updated(box, NEXT, after=ready)
-        took = time.monotonic() - began
+        _keep(box.state / "auto-update.json", {**ready, "ended": ready["ended"] - DAY_SECONDS})
+        ready = box.read("auto-update.json")
+        ten_tendings()
+        still_ready(box, before.env, ready, "ready")
+        now = box.ask(python, "status") or {}
+        if now.get("pid") != first.get("pid"):
+            raise Failed(f"{box.label}: the server restarted by itself: {first}, now {now}\n{box.said()}")
+        asked, called = len(page.seen), len(commands.ran)
+        say(f"        {NEXT} ready by itself beside {NEW} {ready['at'] - checked:.1f} s after the feed was read, "
+            f"commands answered before it began: {earlier}; ready a day too, then twenty tendings with a page asking "
+            f"every 2 s ({asked} times) and a command every 3 s ({called} answered): the same {NEW} server (pid "
+            f"{first.get('pid')}), still ready, nothing counted")
+        # The next start is the switch, the page and the commands going on.
+        _record, line = restarted_at_start(box, before.env, NEW, NEXT, ready)
     finally:
-        seen = page.stop()
-    if (record.get("asked"), record.get("from"), record.get("tries")) != (False, NEW, 1) or "restored" in record:
-        raise Failed(f"{box.label}: the switch the day began: {record}\n{box.said()}")
+        seen, ran = page.stop(), commands.stop()
     through_store(box, before, NEXT)
-    say(f"        then its `ended` set back a day: the server restarted on it by itself {took:.0f} s later, at its next "
-        f"tending, the page asking still ({len(seen) - asked} times more); {NEW} -> {NEXT} through the store")
+    say(f"        then {line}; {NEW} -> {NEXT} through the store (the page asked {len(seen)} times, {len(ran)} commands "
+        "answered)")
     pages(box, NEXT)
 
 
@@ -2147,7 +2185,7 @@ def self_pipx(box: Box) -> None:
     if record.get("installer") != "pipx" or box.tool():
         raise Failed(f"{box.label}: the update of pipx's cad: {record}, uv's cad tool {box.tool()}")
     caught_up(box, NEXT)
-    say(f"        {HIGH} and {NEXT} out: {NEXT} ready by itself, idle, never {HIGH}; {line}; {NEW} -> {NEXT} through "
+    say(f"        {HIGH} and {NEXT} out: {NEXT} ready by itself, never {HIGH}; {line}; {NEW} -> {NEXT} through "
         f"the store; pipx still lists {NEW}, its metadata and the environment as pipx left them; then the new server "
         "ran `cad plugin install`, once, exit 0")
     pages(box, NEXT)
@@ -2615,7 +2653,7 @@ SELF = {"self-update": self_update, "self-typed": self_typed, "self-typed-stoppe
         "self-broken": self_broken, "self-unbuildable": self_unbuildable, "self-unrunnable": self_unrunnable,
         "self-major": self_major, "self-pipx": self_pipx, "self-called": self_called, "self-held": self_held,
         "self-reinstall": self_reinstall, "self-stopped-midway": self_stopped_midway, "self-hop": self_hop,
-        "self-ready-day": self_ready_day, "self-ready-waits": self_ready_waits,
+        "self-ready-busy": self_ready_busy, "self-ready-waits": self_ready_waits,
         "self-ready-rollback": self_ready_rollback, "self-ready-damaged": self_ready_damaged}
 BRIDGE = {"updater": updater, "automatic": automatic, "updater-fallback": updater_fallback, "store-only": store_only,
           "rollback": rollback, "install-command": install_command, "typed": typed, "store-typed": store_typed,

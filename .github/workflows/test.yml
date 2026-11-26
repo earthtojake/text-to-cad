@@ -449,9 +449,9 @@ jobs:
   # tree published as releases no index holds (wheels uv reads beside the index, a local version feed), real uv, real
   # servers and the real install command; this build's servers there tend themselves every 2 s, not every 30 s
   # (CAD_ENGINE_TEND_SECONDS). cad updating itself through the store, uv's tool never changed (`self`: by itself the
-  # release got ready with nothing restarted, then the server restarted on it at its next start, by the button, by a
-  # typed `cad update` with PyPI reachable or not, or once it was ready a day (a real minute with no command, a page
-  # asking), never with automatic updates off or a feed that names it no more; typed with and without a server
+  # release got ready with nothing restarted, at once while a page asks and a command runs all along, then the server
+  # restarted on it at its next start, by the button or by a typed `cad update` with PyPI reachable or not, never by
+  # itself at a tending however long it was ready, nor with automatic updates off or a feed that names it no more; typed with and without a server
   # running, after a start that serves at once, switched off, back by itself from a release whose server cannot start
   # (typed, or at the start that switched to it ready, then held back), a ready release damaged before its restart
   # built again, past an installed one whose server cannot, untouched by a release uv cannot install or
@@ -466,8 +466,7 @@ jobs:
   # and on Windows of 0.10.0, which this build takes over. Each checks the end state (uv's cad in the bin folder, its
   # server answering, the records 0.11.11's clients read naming it, the switches as the route leaves them, nothing of
   # a past release deleted) and that no file of the runner's own home moved. Measured with uv's cache warm: `self`
-  # about 7 minutes on a 4-core Linux machine (its twenty routes, one real minute of it waited; sixteen routes took
-  # under 4 there), `bridge` about 8 on macOS; a fresh runner adds 0.11.11's first setup, which downloads its kernel.
+  # about 7 minutes on a 4-core Linux machine (its twenty routes; sixteen routes took under 4 there), `bridge` about 8 on macOS; a fresh runner adds 0.11.11's first setup, which downloads its kernel.
   # Before a release ships (a full run), nightly, and on a change to the installers, the rehearsal or the code of this
   # build it runs. Two shards a system, each on a runner of its own (the routes take the true default port, one at a
   # time): 1/2 cad updating itself and the oldest releases' bridges, 2/2 the bridge from 0.11.11 and 0.10.4's. Whole,
@@ -501,7 +500,7 @@ jobs:
 
       # The rehearsal builds this tree's wheels from the source with the standard library alone
       # (tests/python/support/machine.py): nothing of cad is installed here.
-      - name: cad updating itself through the store (ready, then restarted at a start, by the button, typed, offline or after a day; typed, typed with no server, at a start, switched off, back from a server that cannot start, past one, unbuildable, unrunnable, damaged, inside its major, by pipx, called all along, held open, reinstalled, stopped midway, from 0.11.17)
+      - name: cad updating itself through the store (ready, then restarted at a start, by the button, typed, offline, never by itself however busy; typed, typed with no server, at a start, switched off, back from a server that cannot start, past one, unbuildable, unrunnable, damaged, inside its major, by pipx, called all along, held open, reinstalled, stopped midway, from 0.11.17)
         if: matrix.shard == '1/2'
         timeout-minutes: 30
         run: python scripts/test/rehearse-update.py self --uv-cache "${{ runner.temp }}/uv"
