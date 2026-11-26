@@ -1,4 +1,4 @@
-"""``cad xbf inspect DOC`` without a ref: what the document holds, on one screen, before its build
+"""``cad inspect DOC`` without a ref: what the document holds, on one screen, before its build
 closure -- its state, parts, bounds, volume, materials, joints, states, sequences and declared
 files -- read from the document the engine holds, and nothing built; ``--json`` the same as data;
 ``--query structure`` the same lists with nothing measured. Measuring is lazy: a build no inspection

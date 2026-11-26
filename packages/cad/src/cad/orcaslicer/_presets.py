@@ -101,7 +101,7 @@ def locate(found: Index, kind: str, ref: str, printer: tuple[str, Path] | None =
     if path.is_file():
         return path
     if (kind, ref) not in found:
-        raise ArgumentRefused(f"No {kind} preset named {ref!r}; list them with cad orcaslicer presets {kind}.")
+        raise ArgumentRefused(f"No {kind} preset named {ref!r}; list them with cad.orcaslicer.presets({kind!r}).")
     candidates = found[(kind, ref)]
     if printer is None or len(candidates) == 1:
         return candidates[0]

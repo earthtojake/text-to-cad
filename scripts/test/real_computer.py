@@ -488,7 +488,7 @@ class Computer:
 
     def stop(self, cad: Path | None = None, seconds: float = GONE_SECONDS) -> list[str]:
         """The computer's cad server stopped by its own command, every process from its folder awaited until gone
-        (``cad stop`` returns once the server's door is shut and its lock free: the server's process is still
+        (``cad server stop`` returns once the server's door is shut and its lock free: the server's process is still
         exiting then, and a kernel worker's multiprocessing resource tracker ends only after the worker), then what
         is still running after ``seconds`` ended. What had to be ended, which the caller treats as left behind."""
         if cad is not None and cad.exists():

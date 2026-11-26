@@ -123,7 +123,7 @@ read can retain that cached value, so assign assembly materials before reading c
 `Range` values with bounds, rather than the library choosing a single typical number: modulus of elasticity is GPa, tensile and yield
 strengths are MPa. `bd_materials.core.PROPERTY_UNITS` defines the other units. A native
 physical material's `mass(volume_mm3)` and build123d's default `shape.mass()` return grams;
-`cad <type> inspect` continues to report kilograms. `None` is unknown; the native
+`cad inspect` continues to report kilograms. `None` is unknown; the native
 `NOT_SUITABLE` range is distinct and survives XBF serialization.
 
 **Appearance.** Use `material.pbr.override(...)` to return an edited native look, then
@@ -145,7 +145,7 @@ exports draw the part in its material's scalar look, every map and texture trans
 (`document.scalar_pbr`), and the document keeps them whole, so drawing them later changes no
 format. What is left out is named once, from the materials: the structure's prototype lists it
 under `untextured` (map names by material name, only where there are any), a still's report
-and a snapshot's `warning:` line, an export's line to its log, `cad <type> inspect`'s `textures`
+and a snapshot's `warning:` line, an export's line to its log, `cad inspect`'s `textures`
 list and the scene's `untextured` say it from there. Reading returns
 native `FinishedMaterial` objects with that resolved look and an equal `process`; it does not
 recreate a finish's recipe (`finish`, `color`, `thickness_mm`, `opacity`, `roughness`, `scale` and
@@ -166,5 +166,5 @@ when processes joined the document): a document built before then is taken as cu
 A material edit changes document content without changing geometry keys. Warm document
 patches and cold builds write identical bytes. GLB and the viewer retain clearcoat,
 anisotropy, transmission, attenuation and emission. OCCT stills use the documented
-approximations in **The look**. A part's chip card and `cad <type> inspect` weigh it from its
+approximations in **The look**. A part's chip card and `cad inspect` weigh it from its
 volume and native density, summed over an assembly.

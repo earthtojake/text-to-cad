@@ -6,12 +6,11 @@ defaults, and it refuses a process whose ``compatible_printers`` does not name t
 without us, and all this integration adds:
 
 - ``presets(kind, match=...)`` lists the presets a person can select, of one kind (``machine``, ``process`` or
-  ``filament``), from their own OrcaSlicer folders and the app's built-in profiles: ``cad orcaslicer presets``.
+  ``filament``), from their own OrcaSlicer folders and the app's built-in profiles.
 - ``complete(printer=..., process=..., filament=(...), out=...)`` writes a printer, a process and each filament
   complete into a folder -- every parent merged in, the process and filaments naming the printer as compatible,
   each saved as a user preset that ``inherits`` its system preset -- as ``printer.json``, ``process.json`` and
-  ``filament-N.json``, ready for OrcaSlicer's ``--load-settings`` and ``--load-filaments``: ``cad orcaslicer
-  complete``.
+  ``filament-N.json``, ready for OrcaSlicer's ``--load-settings`` and ``--load-filaments``.
 
 Everything else is OrcaSlicer's own: the slice is its command line, run as it is, and its app opens a model for
 the person. Nothing here runs OrcaSlicer, needs the engine or the CAD kernel, or reaches the network: it reads

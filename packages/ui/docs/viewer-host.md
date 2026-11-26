@@ -416,10 +416,10 @@ The input and the annotation ([annotation](annotation.md)) appear once; measurem
 are the person's and never go. Projection and lens are preserved. The page makes it, the same code for every
 host (`snapshotPacket`, `@cad/core/prompt`: a job per view, its picture named by its label alone, shortened to
 what each view could show), and the message carries it inline and whole, whatever its size, after the
-references: ``Snapshot JSON (`cad <type> snapshot --job`):`` over its compact JSON in a `json` block. Nothing is
+references: ``Snapshot JSON (`cad snapshot --job`):`` over its compact JSON in a `json` block. Nothing is
 written and no path is named. Hosts use `resolvePromptMessage` to resolve its `inlineText`, which waits for the
 folders the message names files by, keeping destination binding inside the gesture. Drawing, selecting and typing
-keep data in memory. Nothing renders at the press. The agent hands the packet to `cad <type> snapshot --job` as
+keep data in memory. Nothing renders at the press. The agent hands the packet to `cad snapshot --job` as
 it is (or on standard input, `-`), which draws each view with the ink over it.
 **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts

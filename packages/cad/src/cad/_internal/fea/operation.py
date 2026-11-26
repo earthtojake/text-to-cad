@@ -1,4 +1,4 @@
-"""The stress study every B-rep document type shares: ``cad.<type>.solve(source, study=..., out=...)``.
+"""The stress study every B-rep document type shares: ``cad.fea(source, study=..., out=...)``.
 
 ``model`` and ``step`` each answer ``solve`` with the same function, made for the type here (``solve_for``):
 its signature takes a source of the type and plain values alone, so it is the type's (the signature rule), and what

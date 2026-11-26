@@ -1,4 +1,4 @@
-"""The study file: what a stress study (``cad <type> solve --study``) is asked to compute.
+"""The study file: what a stress study (``cad fea --study``) is asked to compute.
 
 A study is JSON (a path, an inline JSON string, or a dict from a library
 caller) of this shape::

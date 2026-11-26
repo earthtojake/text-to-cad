@@ -537,7 +537,7 @@ def measured(data: Any) -> dict[str, Any]:
     (``BRepGProp``), and how many it has -- a part of faces or wires alone has none, and no volume to
     weigh -- how many of them are inside out (``inverted``: faces pointing inward, a negative volume,
     which a boolean of build123d can make), and its box in its own frame (``{"min", "max"}``, None for
-    an empty part), which ``cad <type> inspect`` places where each occurrence stands for the document's
+    an empty part), which ``cad inspect`` places where each occurrence stands for the document's
     bounds. A function of those bytes alone, so the engine keeps it by the part's geometry key."""
     return _whole(read_shape(data))
 

@@ -104,7 +104,7 @@ class ServeTest(unittest.TestCase):
         self.assertEqual(waited.call_args.args[2], 0.0, "a negative wait waits not at all")
 
     def test_a_version_wait_on_a_model_deleted_meanwhile_ends_not_found(self) -> None:
-        # A page waits on a model's next version; `cad delete` forgets the model: the wait ends 404,
+        # A page waits on a model's next version; its file gone, the server forgets the model: the wait ends 404,
         # as every read of it does now, never as the server's own failure.
         held = self.server.document(self.ident)
         model = "a0000000-0000-5000-8000-00000000000d"
@@ -454,7 +454,7 @@ def kernel_facts(data: bytes) -> dict:
 
 
 class InspectionReadTest(unittest.TestCase):
-    """What ``cad <type> inspect`` reads through the engine's door (``Server.read``): a structure that
+    """What ``cad inspect`` reads through the engine's door (``Server.read``): a structure that
     sends no part to the mesher, and each part's facts measured once by its geometry key -- an edit
     measures only the parts whose key is new. Measuring is lazy: a build of a document no inspection
     measured reads and measures nothing; once one has, each later build's new parts are measured

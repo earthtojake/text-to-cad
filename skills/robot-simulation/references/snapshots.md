@@ -60,7 +60,7 @@ No `cad` command draws a MuJoCo model's file. In its place:
 say:
 
 - A robot file carries each part's colour and its material's name, not the material's look. `cad
-  model snapshot` draws a metal's sheen (its flat faces dark where they mirror the studio's dark
+  snapshot` of the model draws a metal's sheen (its flat faces dark where they mirror the studio's dark
   side, so a grey arm shows black panels), and the URDF's still draws the same parts in flat
   colours: compare the two by shape and pose, not by shading.
 - A clip's `at` is in metres, the file's own unit: `--display '{"clip": {"axis": "x", "at": 0.05}}'`.

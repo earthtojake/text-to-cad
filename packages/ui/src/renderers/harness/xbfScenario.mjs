@@ -7,7 +7,7 @@ import { harnessBundle } from './bundle.mjs';
 import { chromium } from 'playwright';
 
 // An engine document the harness can open: core's bracket (`lib/xbf/__fixtures__/bracket`, a
-// served document's structure and its two part buffers, as `cad serve` answers them: a
+// served document's structure and its two part buffers, as the server answers them: a
 // filleted plate and two instances of one peg), served as the engine's API serves it under each
 // pane's origin (`cad_server/viewer/http_app.py`): `GET /api/v1/documents?path=` its envelope, `POST
 // /api/v1/documents` where the page reads the document, and its kind's reads under

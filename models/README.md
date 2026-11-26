@@ -91,7 +91,7 @@ cad export NAME.xbf GLB/NAME.glb         # a file of it, on request
 
 A model script is Python and takes no options: running it asks the engine to build each
 model its `__main__` calls, in the script's warm worker (the engine starts on demand;
-`cad stop` stops it), so a second run of an unchanged model replays it from memory.
+`cad server stop` stops it), so a second run of an unchanged model replays it from memory.
 A script's models count as one run of the memo's last four, however many it builds, so a
 robot and its links replay together. Nothing is written beside a model: no sidecar, no
 cache.

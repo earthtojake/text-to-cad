@@ -90,7 +90,7 @@ class RootExports(unittest.TestCase):
                 self.assertEqual(str(refused.exception), said)
 
     def test_cad_model_is_a_model_held_or_saved_and_its_operations_run_on_the_file_as_the_file_s(self):
-        """``cad.xbf``'s operations take the ``.xbf`` a model is saved as, as ``cad model`` does: the source
+        """``cad.xbf``'s operations take the ``.xbf`` a model is saved as, as ``cad inspect arm.xbf`` does: the source
         says which of the two it is, and the operation is the model's either way -- the engine's verb given the
         path, a check asked of the engine as a model's, its source the file."""
         from unittest import mock

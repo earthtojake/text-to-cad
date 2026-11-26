@@ -1,4 +1,4 @@
-"""``cad <type> interference``: the interference check asked of a real engine -- measured in a checks process,
+"""``cad inspect --interference``: the interference check asked of a real engine -- measured in a checks process,
 answered again from the result the engine keeps, its verdict the command's status (0 clear, 1 parts share
 volume), an option the document does not answer refused by name, and the same from Python by the model's handle."""
 

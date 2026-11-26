@@ -67,7 +67,7 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
  *   now, else null; `sceneRevision`: the version of what is drawn (the preview's, else the document's).
  */
 /**
- * Whether a document's read failed because the engine no longer holds it (`cad delete` while it is
+ * Whether a document's read failed because the engine no longer holds it (its file deleted while it is
  * open, among others): the file viewer then opens the file again, which says so in the document's
  * own words ("This model is not saved"), not as a load that failed.
  */

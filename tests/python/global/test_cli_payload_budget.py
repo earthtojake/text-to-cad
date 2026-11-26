@@ -31,7 +31,7 @@ class CompactStdoutTests(unittest.TestCase):
         "packages/cad/src/cad_server/cli/share.py",
         # `cad import --json`: the files it wrote, the script that builds them, and what built them.
         "packages/cad/src/cad_server/cli/import_.py",
-        # A document type's operation refused before it ran (`cad stl export part.glb --json`).
+        # A manufacturing check refused before it ran (`cad dfm part.stl --process cnc --json`).
         "packages/cad/src/cad_server/cli/document_types.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result
         # here rather than in its own module, so one entry covers all of them.

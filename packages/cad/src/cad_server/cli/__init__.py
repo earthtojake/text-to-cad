@@ -303,7 +303,7 @@ def _main(argv: list[str]) -> int:
     if not argv or argv[0] in {"-h", "--help"}:
         sys.stdout.write(_usage())
         return 0
-    if argv[0] == "help":  # `cad help step export` is `cad export --help`, at any depth
+    if argv[0] == "help":  # `cad help export` is `cad export --help`, at any depth (`cad help kicad drc`)
         return _main([*argv[1:], "--help"]) if argv[1:] else _main([])
 
     if argv[0] in {"-V", "--version"}:

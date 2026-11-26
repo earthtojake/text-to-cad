@@ -540,7 +540,7 @@ class RefsTest(unittest.TestCase):
             self.assertAlmostEqual(nub.shape.center().Y, 20.0, places=6)
 
     def test_every_ref_of_every_finding_resolves_in_every_process(self) -> None:
-        """What a finding says is a ref is one ``cad step inspect DOC REF`` takes (``refs.resolve_structure``,
+        """What a finding says is a ref is one ``cad inspect DOC REF`` takes (``refs.resolve_structure``,
         its resolver): each of its ``refs``, its ``location`` where it names a face, an edge or a vertex, and
         each ref and place of its overflow ``items`` -- one element each, never a bare ``face 13`` of an
         assembly's part nor two refs joined in one string. Small parts that fail rules of every process: sharp

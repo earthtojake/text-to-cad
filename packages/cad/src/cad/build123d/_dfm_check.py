@@ -1,4 +1,4 @@
-"""The manufacturing check of exact geometry: what ``cad.<type>.dfm(source, process=...)`` runs for a
+"""The manufacturing check of exact geometry: what ``cad.dfm(source, process=...)`` runs for a
 STEP, an xbf or a document the engine holds, once its options are resolved (``cad._internal.manufacturing``)
 -- in one of the engine's checks processes (``held``), or in this process where no engine can be reached
 (``measure``) -- and what ``cad.dfm(shape, process=...)`` runs for a live shape, in the process that holds it.

@@ -5,7 +5,7 @@
 /out/
 /reports/
 /tmp/
-# And what any model writes on request (cad <type> export), as in every project.
+# And what any model writes on request (cad export), as in every project.
 /STEP/
 /STL/
 /GLB/

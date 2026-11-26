@@ -1,6 +1,6 @@
 """Every job the engine runs says where it is in one progress event (``progress.py``): a build's stages
 and each body it runs, by name, one frame each, over the worker's pipe and through the daemon -- to the
-build's caller, to ``cad status`` from another shell, to a page waiting on a served document, and,
+build's caller, to ``cad server status`` from another shell, to a page waiting on a served document, and,
 last, in each report; an export's, a snapshot's and a measurement's stages the same way, to their
 callers; and a terminal draws any of them as a bar."""
 
@@ -418,7 +418,7 @@ class DaemonProgressTest(unittest.TestCase):
         engine_daemon.reap(process)
 
     def busy(self) -> dict | None:
-        """The busy worker's last frame, as ``cad status`` has it."""
+        """The busy worker's last frame, as ``cad server status`` has it."""
         from cad.engine.client import request
 
         status = request({"op": "status"}, start=False) or {}

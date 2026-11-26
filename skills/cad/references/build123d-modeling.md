@@ -126,7 +126,7 @@ Prefer these to `bd_materials`' textured finishes (`bead_blast`, `brushed`, `zin
 `tin_plate`), which draw flat at roughness 1. Texture maps (every wood, cardboard and CFRP in the
 catalogue, a finish such as `processes.mjf()`) are kept in an xbf but not drawn: the viewer,
 snapshots and GLB and 3MF exports draw the part in its material's scalar look and name what
-they left out (`PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`; `cad xbf
+they left out (`PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`; `cad
 inspect` lists the parts under `textures`). Set the scalar values with `pbr.override(...)` when
 the look matters. What each file keeps of a material is in [formats](exports.md#formats).
 

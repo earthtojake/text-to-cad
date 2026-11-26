@@ -13,7 +13,7 @@ path. A document's state (`models.STATES`, what `cad server status` lists):
 - `live`: a live worker holds it, with its memo and its trace: its page is the model, its parameters editable
   and its provenance asked of that worker.
 - `held`: no worker holds it, and its `.xbf` is there: the engine answers it from that file, as it answers any
-  file -- a page reads it by its id and reads it again when its bytes change, `cad <type> inspect`, an export and
+  file -- a page reads it by its id and reads it again when its bytes change, `cad inspect`, an export and
   a snapshot by its id go to the documents worker with its path (`Daemon.document`), and what made an element is
   null (law 7: provenance is the worker's).
 - `building`, `failed`: its build now, or its last one.
@@ -205,7 +205,7 @@ Where none can be read, the budget alone applies. `Pressure.simulate` is the tes
 
 Asked of the server, an id that names nothing is a refusal (`serve.NotHeld`): the server answers
 its type with its words (`daemon.refused`) and the caller raises it as that type (`api._failed`), so
-`cad <type> inspect`, `export`, `snapshot` and `serve` of such an id exit 2. The engine runs nothing to bring a
+`cad inspect`, `export`, `snapshot` and `viewer` of such an id exit 2. The engine runs nothing to bring a
 document back: no access, no start and no restart runs code.
 
 `cad server stop` stops the engine, whatever release runs it (`places.endpoints()`: its one door).

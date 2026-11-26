@@ -333,7 +333,7 @@ acknowledged outcomes: `PromptContextPort.deliver` hands a context to its destin
 person's message (`sent`); this package never submits a prompt or knows a session.
 
 A Quick Edit's snapshot packet is the page's, the same code for every host (`prompt/snapshotPacket.js`):
-`snapshotPacket({ input, type, views, annotation, references })` is what `cad <type> snapshot --job` draws
+`snapshotPacket({ input, type, views, annotation, references })` is what `cad snapshot --job` draws
 again — a job per view (its `camera`, and its `display`, `kinematics`, `jointValues`, `animation` and
 `selection` where it has them; a 3D view's `output` framing, a drawing's none; its picture by its `label`
 and size, never a path), a board's `references`, the ink, and the parts hidden and isolated where it was
@@ -344,7 +344,7 @@ address as `File:` names it, so the same views and ink on a local and a shared p
 in it alone. `snapshotPacketText` is the packet as a message carries it, inline and whole: compact JSON in ASCII
 alone, with no character a single-quoted argument ends at (an apostrophe is written `\u0027`, and every character
 that is not ASCII its escape too, PowerShell's typographic quotes, U+2018 to U+201B, among them), so `--job
-'<packet>'` pastes as one argument in bash and PowerShell alike, and `'<packet>' | cad <type> snapshot --job -`
+'<packet>'` pastes as one argument in bash and PowerShell alike, and `'<packet>' | cad snapshot --job -`
 carries it whole where Windows PowerShell 5.1, which takes the double quotes out of a program's arguments, pipes
 ASCII by default.
 

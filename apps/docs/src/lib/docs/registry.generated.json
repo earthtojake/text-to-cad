@@ -905,7 +905,7 @@
     },
     {
       "name": "orcaslicer",
-      "summary": "OrcaSlicer, the slicer, whose command line slices only with complete presets: `cad orcaslicer presets machine` lists the presets a person can select, from their own OrcaSlicer folders and the app's profiles, and `cad orcaslicer complete` writes a printer, a process and filaments complete, every parent merged in and the printer named as compatible, for OrcaSlicer's own command line to slice with",
+      "summary": "OrcaSlicer, the slicer, whose command line slices only with complete presets: `cad.orcaslicer.presets(\"machine\")` lists the presets a person can select, from their own OrcaSlicer folders and the app's profiles, and `cad.orcaslicer.complete(...)` writes a printer, a process and filaments complete, every parent merged in and the printer named as compatible, for OrcaSlicer's own command line to slice with",
       "extra": null,
       "process": "in-process",
       "operations": [

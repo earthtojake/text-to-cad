@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -27,11 +28,11 @@ OPERATIONS = re.compile(rf"(?<![\w])(?:cad\.)?{TYPES}\.(?:export|snapshot|inspec
 # ``@step("x.step")`` or ``xbf("XBF/arm.xbf")``, takes a string, or nothing).
 CALLED = re.compile(r"(?<![@\w.])(?:cad\.)?(?:xbf|model|step|stl|glb|threemf|dxf)\(\s*(?!(?:out|name)=)"
                     r"[A-Za-z_][\w.]+(?:\([^()]*\))?\s*[,)]")
-# What else is read beside the skills: the documents a person reads (the migration guides, which name the earlier
-# spellings on purpose, aside). The sample models are no test's to read (tests/python/global/test_tests_are_self_contained.py).
-DOCS = [REPO_ROOT / "README.md", REPO_ROOT / "docs" / "install.md", REPO_ROOT / "packages" / "cad" / "README.md",
-        *sorted((REPO_ROOT / "apps" / "docs" / "content").rglob("*.md")),
-        *sorted((REPO_ROOT / "packages" / "cad" / "src" / "cad_server" / "engine" / "docs").glob("*.md"))]
+# What else is read beside the skills: every tracked document (the migration guides, which name the earlier spellings
+# on purpose, aside). The sample models are no test's to read (tests/python/global/test_tests_are_self_contained.py).
+_LISTED = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files", "*.md"], capture_output=True, text=True, check=True)
+DOCS = [REPO_ROOT / name for name in _LISTED.stdout.splitlines()
+        if not name.startswith(("docs/migrations/", "models/", "skills/"))]
 
 
 def _tables() -> tuple[dict[str, dict[str, str]], dict[str, str], dict[str, dict[str, tuple[str, str]]]]:

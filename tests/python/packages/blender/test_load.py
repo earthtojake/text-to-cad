@@ -1,7 +1,7 @@
 """``cad.blender.load`` inside the real bpy, through the real path: one script that imports cad, build123d and bpy.
 
 A model with a motion, an ``animation()`` and a nested sub-assembly is built by the checkout's ``cad run`` and
-exported to a GLB by ``cad xbf export`` (finer, ``--tolerance`` and ``--angle``), in a folder of the test's own with
+exported to a GLB by ``cad export`` (finer, ``--tolerance`` and ``--angle``), in a folder of the test's own with
 an engine of its own. A probe script then runs under ``cad run``, which makes the environment of cad's blender and
 build123d integrations for it (bpy 5.2.3 on Python 3.13, from PyPI the first time, uv's cache after), and says what it
 found as one JSON line. In that one process it builds a part with the engine (``@glb``) and another with build123d's

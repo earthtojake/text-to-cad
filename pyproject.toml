@@ -21,7 +21,7 @@ cad = { workspace = true }
 dev = [
   # The library editable, with its build123d extra: this environment runs models itself, so it is its own base
   # environment and the server makes none (cad_server/_internal/base.py). With its trimesh extra, so
-  # `cad <type> dfm` measures a mesh here and the server makes no cad[trimesh] environment for it
+  # `cad dfm` measures a mesh here and the server makes no cad[trimesh] environment for it
   # (cad_server/_internal/integration_env.py); its mujoco extra (mujoco-core and mujoco-studio, about 20 MB), so
   # `cad mujoco check` compiles here and `cad run mujoco-studio` serves Studio's web viewer from here; and its
   # coacd extra (one wheel, about 3 MB), so a MuJoCo function's `decompose` cuts a part into convex hulls here.

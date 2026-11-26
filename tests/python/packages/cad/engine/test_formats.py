@@ -624,7 +624,7 @@ class MeshFileTest(FixtureTest):
 
 def _without_material_packages() -> contextlib.AbstractContextManager[None]:
     """``bd_materials`` and ``threejs_materials`` absent, as a mesh-only install has them: an import
-    of either then raises, the way the reporter's ``cad threemf dfm`` environment does."""
+    of either then raises, the way it did in the reporter's environment for ``cad dfm`` of a 3MF."""
     return mock.patch.dict(sys.modules, {"bd_materials": None, "bd_materials.core": None,
                                          "threejs_materials": None})
 

@@ -8,7 +8,7 @@ written as files in one folder, so that a page can show the document with no eng
 it. It is a share's view: `cad share` has the running server write the shared file's bundle into that file's
 folder of cad's cache, `documents/<id>/view/`, and uploads its files, sending only the ones its share does not
 hold yet (**Sharing**); the hosted viewer opens it from the share service. Nothing else writes one: it is no
-export (no `cad <type> export` destination names one, and a `.view` folder is refused as any suffix no
+export (no `cad export` destination names one, and a `.view` folder is refused as any suffix no
 export knows), and the engine writes one only when a file is shared (law 2). The library's half of it is
 `api.bundle(path, folder)`, the request `{"op": "bundle", "path", "folder"}`; its answer is what was written:
 the folder, its `document`, how many `files` it holds, and the paths this writing `written` and `removed`.

@@ -1,7 +1,7 @@
 """A board still's references, lit as the viewer lights its selection.
 
 A Quick Edit packet from a board names what the person picked (``references``: board references,
-``#R1``, ``#track:<uuid>``, ``#F.Cu@x10y5..x20y15``), and ``cad <type> snapshot --job`` draws them
+``#R1``, ``#track:<uuid>``, ``#F.Cu@x10y5..x20y15``), and ``cad snapshot --job`` draws them
 over the board in the viewer's highlight (``@cad/core``'s ``board2d/boardOverlay.js``): a part's
 outline and pads, a pad, a net's copper, a track, a via, a zone, a text's and a dimension's box, a
 graphic's ink, a point's crosshair, an area's box. Each is resolved against the board as it is

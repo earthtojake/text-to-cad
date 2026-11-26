@@ -1,5 +1,5 @@
-"""A saved KiCad board through the commands: ``cad <type> snapshot`` draws the file as it is now, and ``cad
-kicad_pcb drc`` on a machine without KiCad says how to get it.
+"""A saved KiCad board through the commands: ``cad snapshot`` draws the file as it is now, and ``cad
+kicad drc`` on a machine without KiCad says how to get it.
 
 The board is the test board (``tests/python/support/kicad_board.py``), written fresh: no corpus model.
 DRC with a real KiCad is the KiCad suite's (``tests/python/packages/kicad``).

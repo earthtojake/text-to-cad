@@ -1,4 +1,4 @@
-"""``cad.<type>.ranges``: each joint of a mechanism swept alone against the parts' surfaces.
+"""``cad.inspect(source, ranges=True)``: each joint of a mechanism swept alone against the parts' surfaces.
 
 A base with a wall, an arm on a hinge and a carriage on a slide, built to an xbf: the arm turns until it
 meets the wall one way and the base the other, the carriage slides until it meets the wall one way and an end

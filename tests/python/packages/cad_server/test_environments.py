@@ -6,7 +6,7 @@ engine's daemon runs the core.
 
 uv is reached through a wrapper first on PATH that logs what it is asked. The engine is this file's
 own (the runner's ``CAD_ENGINE_DIR``), the core registered as its state folder's current installation,
-started by the core's ``cad server start`` -- with the core's Python -- and stopped by its ``cad stop``. The fake-uv
+started by the core's ``cad server start`` -- with the core's Python -- and stopped by its ``cad server stop``. The fake-uv
 contracts (keys, commands, refusals) are test_base.py's.
 """
 

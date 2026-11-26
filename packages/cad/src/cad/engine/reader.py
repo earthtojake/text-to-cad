@@ -652,7 +652,7 @@ _READ_MESH: Any = None
 def read_mesh(path: Any) -> Mesh:
     """A mesh file (``MESH_SUFFIXES``: an ``.stl``) as data, never a shape (``Mesh``: its
     vertices, triangles and name, and ``bounding_box()``): what a model sizes or places B-rep
-    by. In a build the read is the model's own, keyed by the file's bytes as ``read_step``'s is
+    by. In a build the read is the model's own, keyed by the file's bytes as ``step.read``'s is
     (one of the closure's ``inputs``): a later build's read of the same bytes is this object, and
     a changed file runs the body that reads it. A file a model of the build writes is refused."""
     global _READ_MESH

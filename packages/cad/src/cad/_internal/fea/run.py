@@ -1,4 +1,4 @@
-"""What a stress study does, end to end: ``cad.<type>.solve`` (``cad._internal.fea.operation``) calls :func:`setup`
+"""What a stress study does, end to end: ``cad.fea`` (``cad._internal.fea.operation``) calls :func:`setup`
 with no study and :func:`solve_study` with one."""
 
 from __future__ import annotations

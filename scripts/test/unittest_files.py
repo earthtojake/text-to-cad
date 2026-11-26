@@ -92,7 +92,7 @@ HEARTBEAT_SECONDS = 60
 # would likely hang too and each would wait out its guard.
 HUNG_EXIT = 3
 # A file's engine daemon goes when the file ends (``stop_engine``): an engine never stops on a
-# timer, so one a killed run leaves behind runs until it is stopped (``cad stop`` with its
+# timer, so one a killed run leaves behind runs until it is stopped (``cad server stop`` with its
 # folder) or its folder is removed (an engine whose door is gone stops).
 
 # Stopping a file's daemon waits for its workers to exit.

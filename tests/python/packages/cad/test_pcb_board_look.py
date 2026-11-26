@@ -2,7 +2,7 @@
 tiny board with a stack-up and a comb-shaped custom pad (`tests/python/support/kicad_look_board.py`).
 
 A custom pad is its anchor and primitives united, as KiCad makes its copper: a comb is a comb in the
-index (`kicad_pcb.read`), in the plot the viewer and `cad kicad_pcb snapshot` draw, and in its mask
+index (`kicad_pcb.read`), in the plot the viewer and `cad snapshot` draw, and in its mask
 opening, never the hull round it. The stack-up (its layers' colours, the copper finish) is carried as the
 file names it, for a 3D view to draw the board in. The union under both is unit-tested on its own.
 """

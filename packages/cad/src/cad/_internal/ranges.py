@@ -1,4 +1,4 @@
-"""The joint stops every document type with a mechanism shares: ``cad.<type>.ranges(source)``.
+"""The joint stops every document type with a mechanism shares: ``cad.inspect(source, ranges=True)``.
 
 ``model`` and ``step`` each answer ``ranges`` with the same function, made for the type here (``ranges_for``):
 its signature takes a source of the type and plain values alone, so it is the type's (the signature rule), and what it

@@ -607,7 +607,7 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
     ? json({ id, kind: 'xbf', entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
     : missing(`no document ${id} is held`)) });
   assert.equal((await client.resolveEntry(id)).id, id);
-  held = false;  // `cad delete`
+  held = false;  // its file deleted
   await client.refresh({ file: id });
   assert.equal(client.entryOf(id), null, 'its row is gone');
   const failure = await client.resolveEntry(id).catch((error) => error);

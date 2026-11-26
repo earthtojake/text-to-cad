@@ -138,7 +138,7 @@ units are set, nothing is drawn twice (an exact duplicate is a double cut), no e
 length, every cut profile closes (polylines, circles, and chains of lines, arcs and splines), and
 something is drawn.
 
-`cad dxf` has no `inspect`: read a `.dxf` with `ezdxf`, which comes with the build123d
+`cad inspect` takes no `.dxf`: read one with `ezdxf`, which comes with the build123d
 integration, in a script run by `cad run`. Such a script gets that integration by importing
 build123d or, as here, by naming it in its header; one that imports `ezdxf` alone runs without
 it (`No module named 'ezdxf'`):

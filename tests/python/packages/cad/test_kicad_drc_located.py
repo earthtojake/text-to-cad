@@ -1,4 +1,4 @@
-"""What ``cad kicad_pcb drc`` says of each finding beyond KiCad's report, read off the saved board (``cad.kicad._located``).
+"""What ``cad kicad drc`` says of each finding beyond KiCad's report, read off the saved board (``cad.kicad._located``).
 
 KiCad's JSON report names a finding's items by uuid, position and a sentence; the check adds what the board says
 each is -- its kind, layers, net and the board reference that names it -- and the layer the description ends

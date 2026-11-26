@@ -1,6 +1,6 @@
 # The manufacturing checks
 
-`cad.<type>.dfm(source, process=...)` and `cad dfm SRC --process cnc|sheet|molding|printing`:
+`cad.dfm(source, process=...)` and `cad dfm SRC --process cnc|sheet|molding|printing`:
 whether a part can be made by a process, and what to change where it cannot. This is the mechanism; the
 library README's **Manufacturing checks** says what the check is for and how it is called.
 
@@ -1446,7 +1446,7 @@ half of a 107-part check's 1.9 GB.
 
 ### The check
 
-`cad dfm --process printing` (`cad.step.dfm(..., process="printing")`,
+`cad dfm --process printing` (`cad.dfm(..., process="printing")`,
 `cad.build123d.printing(shape, ...)`) measures a part as it stands on the plate (its lowest point, Z up) for one
 technology: `--technology fdm|sls|sla|mjf|pbf` (default `fdm`; `pbf` is metal powder bed fusion, DMLS/SLM).
 Options: `--build-volume XxYxZ` (mm, the printer's; default a typical machine of the technology's, assumed), `--angle-limit` (deg from

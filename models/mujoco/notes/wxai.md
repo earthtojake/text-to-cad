@@ -356,6 +356,6 @@ snapshot failed with "no X display" and the pictures were drawn in-process inste
 
 - `src/lib/` has no `__init__.py`, and the model imports `lib.step_axes` as a namespace package. The
   models README warns that a namespace package is not imported afresh by a warm worker, so after an
-  edit to `step_axes.py`, `cad stop` (or `daemon=False`) picks it up.
+  edit to `step_axes.py`, `cad server stop` (or `daemon=False`) picks it up.
 - The model copies every occurrence with `.located(...)` before labelling or jointing it. The STEP
   reader's objects are memoised per worker and must not be mutated.

@@ -256,7 +256,7 @@ def reported(reports: list[dict[str, Any]], wall: float, fresh: bool | None, as_
 
 def written(rows: Any, typed: Any) -> None:
     """A line on stdout per file an export wrote or found holding its bytes already (``rows``), each
-    named as ``typed`` names it (``given``): ``cad <type> export``'s, and a program's own ``export()`` call's;
+    named as ``typed`` names it (``given``): ``cad export``'s, and a program's own ``export()`` call's;
     after a robot description's, what it holds on stderr (``robot``)."""
     for row in rows:
         if row.written:

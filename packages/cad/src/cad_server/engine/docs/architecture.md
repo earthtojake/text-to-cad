@@ -81,7 +81,7 @@ folder (`places.engine_dir`; **Starting and updating**): its door, lock and port
 `engines/engine.json`, beside the page token, which every release reads.
 
 **A link outlives its engine.** The port is the device's and the page token the user's, not one
-engine's (`daemon.bind`). A port named -- `--port` (`cad server --port`, or a `serve`/`viewer`
+engine's (`daemon.bind`). A port named -- `--port` (`cad server start --port`, or a `serve`/`viewer`
 request's), else `CAD_ENGINE_PORT` (0: any free port), read from the engine's own environment --
 is taken or refused. Else the engine's own port: 3245 (`daemon.DEFAULT_PORT`, 0xCAD) when it can, as
 Vite, Jupyter and Next.js take theirs; when another program holds it, the next free port

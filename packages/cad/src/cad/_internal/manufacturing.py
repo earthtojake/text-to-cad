@@ -1,4 +1,4 @@
-"""The manufacturing check every 3D document type shares: ``cad.<type>.dfm(source, process=...)``.
+"""The manufacturing check every 3D document type shares: ``cad.dfm(source, process=...)``.
 
 ``model`` (held, or its ``.xbf``), ``stl``, ``threemf``, ``glb``, ``step`` and, as a sheet's cut file, ``dxf`` each answer
 ``dfm`` with the same function, made for the type here (``dfm_for``): its signature takes a path (or, for a

@@ -346,8 +346,8 @@ fail for reasons no run of ours can fix: an app release that fails every git ins
 one nobody is signed in to.
 
 **What it costs.** A few commands stay for those releases: `cad setup --engine-update`; plain
-`cad setup`, which a `cad update` typed on those releases runs; and the hidden short forms `cad status`
-and `cad stop` their skill text uses. An app that fails in the bridge's run gets three tries a
+`cad setup`, which a `cad update` typed on those releases runs; and, for the short forms `cad status`
+and `cad stop` their skill text uses, a line naming `cad server status` and `cad server stop`. An app that fails in the bridge's run gets three tries a
 release, not one a day: one that would come right by itself within the month waits for the next
 release of cad, or for a person's `cad plugin install`. The bridge's run is counted as done where an
 app failed; the app is counted by the run of `cad plugin install` that met it, as any run's apps

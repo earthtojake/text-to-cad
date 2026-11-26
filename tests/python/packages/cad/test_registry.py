@@ -229,7 +229,7 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertIn("carries: geometry", said)
         self.assertIn('@step("out.step")', said)
         self.assertIn("written by: no producer", registry.help_text("urdf"))
-        # A board and a schematic are written by their edits (``cad kicad_pcb --help``, ``cad kicad_sch --help``).
+        # A board and a schematic are written by their edits (``python -m cad.registry kicad_pcb``, ``... kicad_sch``).
         self.assertIn('with kicad_pcb.edit("board.kicad_pcb") as board: the open board', registry.help_text("kicad_pcb"))
         self.assertIn('with kicad_sch.edit("schematic.kicad_sch") as schematic: the open schematic',
                       registry.help_text("kicad_sch"))

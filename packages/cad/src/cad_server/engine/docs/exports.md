@@ -257,7 +257,7 @@ The xbf is saved first, then each derived file. Nothing of them is sent to a pag
 a declared file follows that file's bytes (**Document lifetime**).
 
 **Functions** (`api`, behind the library's verbs, `cad.export`, `cad.snapshot` and `cad.inspect`; `serve`,
-`status`, `stop`, `delete` and `server` only the CLI calls): one per command, each through the daemon. No function builds source text;
+`status` and `stop` only the CLI calls): one per command, each through the daemon. No function builds source text;
 a shape made elsewhere is saved, never built (`cad.save(shape, "plate.xbf")`, **Shapes handed over**).
 `export(source, *destinations)` a list of `Written`; `check(source, check)` a manufacturing check's report,
 measured in the engine's checks processes (**Document types and integrations**); `snapshot(source, out, ...)` a `Drawn`, and `snapshot(job=PACKET, ...)` (with `source` in place of the packet's input, as `--job PACKET SRC`) a list of them, one verb with two input shapes, anything else refused as Python refuses a call; `inspect(doc)` what

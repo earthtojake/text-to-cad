@@ -153,9 +153,9 @@ Copy Prompt, Queue or Send is pressed, and the page makes their snapshot packet 
 annotation (`snapshotPacket`, `@cad/core/prompt`; Measure's measurements never go), which the message
 carries inline and whole: each mark without its id, its points to a quarter pixel of the view it was
 drawn in, a stroke within half a pixel of its line, and what it touches as the selectors it was drawn
-over within the file. No images are rendered at handoff. `cad <type> snapshot --job` draws each view
+over within the file. No images are rendered at handoff. `cad snapshot --job` draws each view
 with the ink from the packet as it is (or `-`, on standard input), and
-`cad <type> snapshot <document> <out.png> --annotation - --camera authored` the view the ink was
+`cad snapshot <document> <out.png> --annotation - --camera authored` the view the ink was
 last drawn in, over the model or over an edit of it.
 The Annotation chip does not copy references or save individual files.
 Queue and Send clear the annotation with the note; Copy Prompt keeps it.

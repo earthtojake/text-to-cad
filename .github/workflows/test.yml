@@ -523,8 +523,8 @@ jobs:
 
   # ---- integration: each with what it drives installed -------------------------------------------
 
-  # The stress study (cad <type> solve) and its result (cad fea) with their integrations installed as on a
-  # person's computer: netgen, cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
+  # The stress study (cad fea) with its integrations installed as on a person's computer: netgen,
+  # cad[netgen], meshes, and CalculiX's ccx, cad[calculix] (the cad-ccx package), solves.
   # Its suite (tests/python/packages/fea, test-fea.sh) is this job's alone: the study's parse, checks and
   # materials, the solves against hand calculations, assemblies, the results folder and its pictures (drawn under
   # Xvfb), and the command through the library's runner of one operation. The full suite stays on Linux.

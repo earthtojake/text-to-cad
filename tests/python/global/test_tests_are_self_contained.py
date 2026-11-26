@@ -14,7 +14,7 @@ never builds on the developer's daemon (that is a convention, not something this
 guard can tell apart from a subprocess that merely runs Python). A test module that names
 an engine folder names its own state and cache folders too, or calls
 ``engine_daemon.isolate``: an engine with only its folder its own still records and caches
-its documents in the developer's (they then show in every `cad status`).
+its documents in the developer's (they then show in every `cad server status`).
 """
 
 from __future__ import annotations

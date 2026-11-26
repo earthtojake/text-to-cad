@@ -192,7 +192,7 @@ class ExportResult:
 
 @dataclass(frozen=True)
 class FeaFace:
-    """One B-rep face of a part, as a stress study's setup lists it (``cad <type> solve`` with no study): the ref a
+    """One B-rep face of a part, as a stress study's setup lists it (``cad fea`` with no study): the ref a
     study names it by, and enough geometry to pick it from a description."""
 
     #: The face's ref (``bracket/face 17``), as the viewer copies it.
@@ -277,7 +277,7 @@ def _check_lines(s: dict) -> list[str]:
 
 @dataclass(frozen=True)
 class FeaResult(CheckResult):
-    """The outcome of a stress study (``cad.<type>.solve``, ``cad <type> solve``; ``result.json`` in the folder a solve
+    """The outcome of a stress study (``cad.fea``, ``cad fea``; ``result.json`` in the folder a solve
     writes holds it): a check, so ``ok``, the document
     (``path``), its findings and ``measurements`` are every check's, and ``--json`` is this whole result.
 

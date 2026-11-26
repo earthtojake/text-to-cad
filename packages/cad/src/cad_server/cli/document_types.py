@@ -246,7 +246,7 @@ def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: 
 
 
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad dfm FILE``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
+    """``cad dfm FILE``: the library's manufacturing check (``cad.dfm``), its ``--process`` the
     type's -- cnc, sheet, molding or printing for a B-rep, printing for a mesh, sheet for a DXF.
     A B-rep's (a model, an xbf, a STEP) is asked of the engine, which measures it in the kernel process that
     holds the document (``cad.engine.api.check``). Where the engine measures nothing (none to reach, another
@@ -327,10 +327,10 @@ def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentPars
 
 
 def _interference(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad inspect FILE --interference``: the library's interference check (``cad.<type>.interference``), asked of
-    the engine, which measures it in a checks process; this command holds no kernel and needs none. Its
-    ``--fit`` takes two values a time, which no signature derives a flag for, so
-    its parser is an adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
+    """``cad inspect FILE --interference``: the library's interference check (``cad.inspect(source,
+    interference=True)``), asked of the engine, which measures it in a checks process; this command holds no kernel
+    and needs none. Its ``--fit`` takes two values a time, which no signature derives a flag for, so its parser is an
+    adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
     3 none found but a pair unmeasured, 2 an option refused by name."""
 
     def run(argv: list[str], prog: str) -> int:
@@ -442,7 +442,7 @@ def _named(source: Any) -> str:
 
 def _solve(document_type: str) -> Callable[[list[str], str], int]:
     """``cad fea SOURCE [--study STUDY --out DIR]``: the library's stress study
-    (``cad.<type>.solve``), run here when this environment holds the kernel, netgen and CalculiX, else in the
+    (``cad.fea``), run here when this environment holds the kernel, netgen and CalculiX, else in the
     environment of ``cad[build123d,calculix,netgen]`` (``cad_server._internal.integration_env``), its options refused
     here first, before one is made."""
 
@@ -494,8 +494,8 @@ def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: s
 
 def _ranges(document_type: str) -> Callable[[list[str], str], int]:
     """``cad inspect FILE --ranges [--step S] [--clearance MM] [--joint NAME]``: the library's joint stops
-    (``cad.<type>.ranges``), run here when this environment holds the kernel, else in the installation's base, which
-    does (``cad_server._internal.integration_env``), its options refused here first."""
+    (``cad.inspect(source, ranges=True)``), run here when this environment holds the kernel, else in the
+    installation's base, which does (``cad_server._internal.integration_env``), its options refused here first."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad._internal.ranges import INTEGRATION, RESOLUTION, StopsResult, options

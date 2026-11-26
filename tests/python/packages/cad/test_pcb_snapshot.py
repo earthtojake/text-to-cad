@@ -1,4 +1,4 @@
-"""`cad <type> snapshot --job` replays a board view as a Quick Edit saved it: its window, its Display, its ink.
+"""`cad snapshot --job` replays a board view as a Quick Edit saved it: its window, its Display, its ink.
 
 A Quick Edit on a board makes a job packet, which its message carries: each view a plan-view
 camera (the window the board view showed, in the plot's plan frame, y up) and the board's Display,
@@ -164,7 +164,7 @@ class BoardJobReplayTest(unittest.TestCase):
 
 
 class BoardWindowTest(unittest.TestCase):
-    """A display's ``window`` (``cad kicad_pcb snapshot --window``) frames that box of the board, in KiCad's
+    """A display's ``window`` (``cad snapshot BOARD --window``) frames that box of the board, in KiCad's
     millimetres (y down), filling the picture; from below, mirrored with the board."""
 
     @classmethod

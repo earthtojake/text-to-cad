@@ -1,4 +1,4 @@
-"""``cad <type> dfm --process cnc|sheet|molding|printing``: a type's manufacturing check, as a command (a mesh's:
+"""``cad dfm --process cnc|sheet|molding|printing``: a type's manufacturing check, as a command (a mesh's:
 printing alone).
 
 The measurements are the library's (``tests/python/packages/cad/test_trimesh_*.py``); this holds the

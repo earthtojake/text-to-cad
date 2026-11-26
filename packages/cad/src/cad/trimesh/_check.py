@@ -1,4 +1,4 @@
-"""The manufacturing check of a mesh, measured with trimesh: what ``cad.<type>.dfm(source,
+"""The manufacturing check of a mesh, measured with trimesh: what ``cad.dfm(source,
 process="printing")`` runs for an STL, a 3MF or a GLB once its options are resolved
 (``cad._internal.manufacturing``, which refuses every other process for a mesh: they are judged on exact
 geometry).

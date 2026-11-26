@@ -191,7 +191,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     carries) and read it in `mirror_tree`. The build line said `lib/kit.py` had changed
     and rebuilt in seconds, and the right-hand drives were still placed the old way, 6
     degrees off their bolt holes: the memo's hits handed back shapes made before the
-    change, without the attribute. `cad stop` and `cad delete` did not clear it (the
+    change, without the attribute. `cad server stop` and deleting the document did not clear it (the
     bodies came back from the disk cache under the same key); a further edit on a fresh
     worker did, 174 s cold. A check of the brackets against the drives found it, not the
     build. A memo hit should not survive a change to the function that made the shape, or
@@ -233,7 +233,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    too) is right, and the plugin offers the primitive, but an assembly of 851 parts has
    thousands of near pairs, poses, a mirrored side, and solids that take 0.3 to 40 s
    each to intersect. I wrote that machinery twice, and the first version was wrong
-   (above). A built-in `cad xbf check interference [--pose NAME | --sweep JOINT]`,
+   (above). A built-in `cad inspect FILE --interference [--pose NAME | --sweep JOINT]`,
    exact, pruned by boxes, parallel, with fits declared by name, would be the single
    most valuable addition for assemblies. Even a documented, tested helper would do.
    For scale: this model has 1,353 pairs of parts whose boxes meet as built (leaving out
@@ -274,14 +274,14 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 
 17. **A worker retired for memory makes the next run cold without saying so.** With the
     default 3.9 GB budget the 1.2 GB worker of a 68 s model was retired several times
-    (`retired: galatea.py (RSS)` in `cad status`). The next `cad run` just reports
+    (`retired: galatea.py (RSS)` in `cad server status`). The next `cad run` just reports
     `cold in 67.73s`. Say why in the run's own line, and name `CAD_ENGINE_MEMORY_MB`.
 
 18. **Loft seams are drawn as edges in shaded pictures.** Every lofted skin shows a line
     where its sections close. I rotated each seam under a cut-out. An option to draw
     only sharp edges would be the real fix.
 
-19. **A still for a person needs a studio, and the command line has none.** `cad xbf
+19. **A still for a person needs a studio, and the command line has none.** `cad
     snapshot` draws "technical OCCT images": flat light, no shadow, no reflection, so a
     gloss-black part is a black silhouette and a white one has no form but its edges. The
     viewer has a photographic Preview, but a checkout serves no built client (the page is
@@ -300,7 +300,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     size together passed the machine's memory, and the kernel killed the robot's worker
     mid-picture (`the worker for galatea.py exited (-9) ... Drawing the picture`: the
     message is exact). Its memo went with it: the next build was 133 s cold instead of
-    22 s. `cad status` could show each worker's memory against the budget, and the
+    22 s. `cad server status` could show each worker's memory against the budget, and the
     engine could refuse a new job rather than lose a warm worker.
 
 22. **A snapshot's background is clear or white, nothing else.** `output` takes
@@ -339,7 +339,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 31. **The skill says to keep a vendor's STEP beside the model; this repository keeps no
     CAD file in Git.** The five drives are 53 MB. What reconciles the two is a fetch
     script that names the maker's commit and each file's checksum, and an ignored
-    `vendor/` folder. A `cad step fetch <url> --sha256 ...` (or a documented pattern for
+    `vendor/` folder. A `cad fetch <url> --sha256 ...` (or a documented pattern for
     it) would make that the path of least effort, and the build's error for a missing
     xbf could name the command.
 
@@ -530,7 +530,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     reach: a software rasteriser at niceness 19 still cost a four-core Cycles render
     beside it about a third of its speed (niceness shares out processor time, not the
     caches or the memory's bandwidth), and nothing told the session that started it that
-    another session's long job had the machine. A line in `cad status` for the programs
+    another session's long job had the machine. A line in `cad server status` for the programs
     `cad run` has running, with their start times, would have.
 
 48. **The robot-simulation skill has nothing on standing.** `references/guardrails.md`
@@ -568,7 +568,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   `overlap_volume` on two of its solids is exact and takes seconds.
 - The build line's delta (`bounds 627 x 419 x 1,745 (was 585 x 569 x 1,745)`) caught
   two unintended changes on the spot.
-- `cad status`: one screen that says what every worker is doing and why one went away.
+- `cad server status`: one screen that says what every worker is doing and why one went away.
 - Exports: a GLB with eight animation clips in 13 s, a 67 MB STEP in 5 s.
 - Snapshot `isolated`, `pose` and `transparent` cover most review pictures without
   touching the model, and a camera preset frames the isolated parts, so "this link alone
@@ -665,7 +665,7 @@ that did not hold as written, and what a reader should take from them instead.
   `CAD_ENGINE_MEMORY_MB` is the documents' budget, not the workers' cap.
 - **18.** `--display shaded` draws no edges at all. The seam line is in `solid`, the default, and
   in the x-ray, hidden-line and wireframe modes.
-- **21.** `cad status` already shows each worker's memory and the total against the cap. The `-9`
+- **21.** `cad server status` already shows each worker's memory and the total against the cap. The `-9`
   was the system's out-of-memory killer, which the engine's cap does not see coming: it counts its
   own workers, not a `cad run` program or a check's processes.
 - **26.** More than a line beside `handle.shape`: the skill's own `world_parts` helper called

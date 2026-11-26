@@ -92,9 +92,9 @@ class TheReasons(unittest.TestCase):
                 self.assertEqual(found.next, ("cad server start",) if isinstance(error, (NotRunning, OtherRelease)) else ())
 
     def test_the_document_carries_what_a_person_must_do(self) -> None:
-        self.assertEqual(document(Failure("asked", "usage", next=["cad status --json"], user_action=True)),
+        self.assertEqual(document(Failure("asked", "usage", next=["cad server status --json"], user_action=True)),
                          {"ok": False, "error": "asked", "reason": "usage", "userActionRequired": True,
-                          "next": ["cad status --json"]})
+                          "next": ["cad server status --json"]})
         self.assertEqual(document(Failure("boom")), {"ok": False, "error": "boom", "reason": "failed"})
 
 
@@ -158,11 +158,13 @@ class Consent(unittest.TestCase):
         self.assertEqual(consent.retry("cad server", ["a b", "--yes", "--json"]), "cad server 'a b' --json --yes")
         consent.confirm("replacing the page token", "Replace it?", yes=True, as_json=True, command="unused")
         with mock.patch.object(consent, "interactive", return_value=False), self.assertRaises(Failure) as asked:
-            consent.confirm("replacing the page token", "Replace it?", yes=False, as_json=False, command="cad server X --yes")
+            consent.confirm("replacing the page token", "Replace it?", yes=False, as_json=False,
+                            command="cad server --rotate-token --yes")
         self.assertEqual(document(asked.exception), {
-            "ok": False, "reason": "confirmation_required", "userActionRequired": True, "next": ["cad server X --yes"],
+            "ok": False, "reason": "confirmation_required", "userActionRequired": True,
+            "next": ["cad server --rotate-token --yes"],
             "error": "replacing the page token needs a yes, and no one can be asked here (no terminal, or --json): nothing "
-                     "was changed; `cad server X --yes` says yes"})
+                     "was changed; `cad server --rotate-token --yes` says yes"})
         for answer, goes_on in (("y\n", True), ("YES\n", True), ("n\n", False), ("\n", False), ("", False)):
             with self.subTest(answer=answer), mock.patch.object(consent, "interactive", return_value=True), \
                     mock.patch.object(sys, "stdin", io.StringIO(answer)), contextlib.redirect_stderr(io.StringIO()) as err:

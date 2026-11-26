@@ -32,7 +32,7 @@ returns a `Document` (`api.Document`) -- `.id`, `.url` (its page), `.name`, `.sh
 result, transferred into the caller and the kernel loaded on first access, never before),
 `.export(*paths)` and `.snapshot(out, **picture_options)`, which are `export(handle, ...)` and
 `snapshot(handle, ...)`; an export the program's own code makes says each file it wrote, a line each,
-as `cad <type> export` does. The decorated function stays the function and its id (`arm.id`);
+as `cad export` does. The decorated function stays the function and its id (`arm.id`);
 `arm.build(verify=, profile=)` is the debug seam, a `Report`. Inside another model's body a call
 builds the child document as before and returns its handle too, whose `.shape` is the result in
 that process: a body composes `peg().shape`, and a child called for its files alone stays a bare

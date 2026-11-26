@@ -111,7 +111,7 @@ class EngineTest(unittest.TestCase):
     def test_a_check_outlives_its_caller_and_the_next_call_reuses_its_result(self) -> None:
         """Its caller killed (a shell's time limit), a check runs to its end and keeps its result: the same call
         again measures nothing. A check waiting behind another says so (a pool of one checks process), and
-        `cad status` lists the one running; once that one's caller is gone, its process is killed for the one
+        `cad server status` lists the one running; once that one's caller is gone, its process is killed for the one
         waiting, which a fresh one measures, and it keeps nothing."""
         import cad
         from cad.engine import api
@@ -161,7 +161,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_killed_command_s_check_is_seen_gone_and_gives_its_process_to_a_caller_memory_has_no_room_for(
             self) -> None:
-        """`cad step dfm` killed (SIGKILL, as a shell's or `subprocess.run`'s time limit kills it): `cad status`
+        """`cad dfm` killed (SIGKILL, as a shell's or `subprocess.run`'s time limit kills it): `cad server status`
         says at once that no caller of its check is there. A check whose caller is there, waiting with a slot of
         the pool free but no room in the engine's memory for another checks process (a cap of 1 MB), takes the
         abandoned check's place: its process killed, a fresh one measures the one waited for."""

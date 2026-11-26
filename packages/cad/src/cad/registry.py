@@ -526,11 +526,11 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         # PyPI's wheels with what they need: 262 MB on macOS arm64, 356 on Windows x86-64, 429 on Linux x86-64.
         holds="Blender as a Python module", download_mb=430),
     "orcaslicer": Integration(
-        "orcaslicer", "OrcaSlicer, the slicer, whose command line slices only with complete presets: `cad orcaslicer "
-                      "presets machine` lists the presets a person can select, from their own OrcaSlicer folders and "
-                      "the app's profiles, and `cad orcaslicer complete` writes a printer, a process and filaments "
-                      "complete, every parent merged in and the printer named as compatible, for OrcaSlicer's own "
-                      "command line to slice with",
+        "orcaslicer", "OrcaSlicer, the slicer, whose command line slices only with complete presets: "
+                      "`cad.orcaslicer.presets(\"machine\")` lists the presets a person can select, from their own "
+                      "OrcaSlicer folders and the app's profiles, and `cad.orcaslicer.complete(...)` writes a printer, "
+                      "a process and filaments complete, every parent merged in and the printer named as compatible, "
+                      "for OrcaSlicer's own command line to slice with",
         # The person's own OrcaSlicer: our code never runs it (so no probe), and reads and writes its presets, JSON
         # files, with the standard library alone (so no extra), in the process that calls it.
         extra=None, process="in-process",

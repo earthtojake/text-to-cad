@@ -1,4 +1,4 @@
-"""A manufacturing check's result (``cad <type> dfm``, ``cad.<type>.dfm``) as the engine's checks processes
+"""A manufacturing check's result (``cad dfm``, ``cad.<type>.dfm``) as the engine's checks processes
 measure it (``checks_runner.Runner``, ``worker._check``): a STEP's and an xbf's from its file, a model's from
 the bytes the engine holds of it. It equals the one the same document gets read from a file in a process of its
 own, for every process, with no process given and ranking candidates; the same check of an unchanged document

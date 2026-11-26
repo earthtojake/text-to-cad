@@ -704,12 +704,12 @@ _READ_XBF: Callable[[Any], Any] | None = None
 
 def read_xbf(path: Any) -> Any:
     """``xbf.read(path)``: a model saved as a file (``.xbf``) as a build123d shape: a copy of its
-    geometry, as ``read_step`` gives a STEP's -- a compound tree of its assembly, every part and group
+    geometry, as ``step.read`` gives a STEP's -- a compound tree of its assembly, every part and group
     named, coloured and given its materials (painted faces too) as the document has them,
     each element named as the document names it. Its mechanism and configurations are not
     imported: a part is a part. Read once per worker and held, keyed by the file's bytes, as
-    ``read_step`` is. The fast way to bring a vendor STEP in: convert it once (``cad step
-    export vendor.step vendor.xbf``) and read the xbf. Any other file is refused by name, with
+    ``step.read`` is. The fast way to bring a vendor STEP in: convert it once (``cad export
+    vendor.step vendor.xbf``) and read the xbf. Any other file is refused by name, with
     the reader that takes it (``step.read``, ``stl.read``)."""
     global _READ_XBF
     if _READ_XBF is None:

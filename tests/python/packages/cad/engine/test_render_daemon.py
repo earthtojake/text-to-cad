@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
 
 class DaemonRenderTest(unittest.TestCase):
-    """`cad <type> snapshot` drawn by OCCT through the daemon: a render process per served
+    """`cad snapshot` drawn by OCCT through the daemon: a render process per served
     document, warm from its second picture, sent its model's new version by the next picture with
     only the parts it lacks, gone with the daemon; and in this process with ``daemon=False`` from Python. Nothing is written but
     the pictures, and the daemon's door, lock and clients' pipes."""

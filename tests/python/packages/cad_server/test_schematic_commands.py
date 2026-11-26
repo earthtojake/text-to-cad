@@ -1,5 +1,5 @@
-"""A saved KiCad schematic through the commands: ``cad kicad_sch snapshot --sheet`` draws one sheet as it is
-now, ``cad kicad_sch inspect`` says what it holds and what a reference names, and ``cad kicad_sch erc``
+"""A saved KiCad schematic through the commands: ``cad snapshot --sheet`` draws one sheet as it is
+now, ``cad inspect`` says what it holds and what a reference names, and ``cad kicad erc``
 without a kicad-cli to run says how to get one.
 
 The schematic is the test project (``tests/python/support/kicad_schematic.py``), written fresh. ERC and the
