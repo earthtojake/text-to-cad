@@ -2,7 +2,7 @@
 same buffer whichever way it is meshed, a document read again after another process
 rebuilt it, a model's declared xbf served as a file following its bytes alone, and the cap on
 the buffers held; an inspection's read, which meshes nothing; each part's facts, measured once by
-its key, in batches, on the pool's queue for facts."""
+its key, in batches, on the pool's queue for facts; and each part's whole table, made once by its key."""
 
 from __future__ import annotations
 
@@ -615,6 +615,108 @@ class PoolFactsTest(unittest.TestCase):
         self.assertEqual([[key for key, _data in batch] for batch in serve._batches(parts, 2)], [["a"], ["b", "c", "d"]])
         light = [(f"p{at}", b"x" * 100) for at in range(30)]
         self.assertEqual(len(serve._batches(light, 8)), 1, "a light document is one job")
+
+
+def kernel_table(data: bytes) -> dict:
+    """What the kernel's table of a part (``mesh.Topology.elements``) stands in for here: one made of its bytes alone."""
+    return {"faces": {"1": {"kind": "face", "ordinal": 1, "area": float(len(data))}}, "edges": {}, "vertices": {},
+            "groups": {"faces": {"1": 1}, "edges": {}}}
+
+
+def answered(table: dict) -> bytes:
+    """A table as its route answers it."""
+    return json.dumps(table, separators=(",", ":")).encode()
+
+
+class PartTableTest(unittest.TestCase):
+    """A part's whole table (``.../elements``, what a view bundle holds of it) is made once by its geometry key and
+    kept under the budget: every version that holds the part answers it, and an edit makes only the new part's. On
+    the daemon's pool each is one job of the facts queue however many ask, tables asked at once are made at once,
+    and one the kernel refuses is every asker's error and made again when next asked."""
+
+    def test_a_part_s_table_is_made_once_by_its_key_and_held_under_the_budget(self) -> None:
+        server = Server(mesh_mode="inline", http_factory=listener)
+        server.start()
+        self.addCleanup(server.stop)
+        made: list[bytes] = []
+
+        class Kernel:  # ``mesh.Topology``, standing in: each table it makes counted
+            def __init__(self, data: bytes) -> None:
+                self.data = data
+
+            def elements(self) -> dict:
+                made.append(self.data)
+                return kernel_table(self.data)
+
+        mock.patch("cad.engine.mesh.Topology", Kernel).start()
+        self.addCleanup(mock.patch.stopall)
+
+        def table(key: str) -> bytes:
+            status, body = server.read(f"/api/doc/{PLATE}/part/{key}/elements")
+            self.assertEqual(status, 200, body)
+            return body
+
+        registered(server, {"k1": b"one", "k2": b"three"})
+        self.assertEqual([table(key) for key in ("k1", "k2", "k1")],
+                         [answered(kernel_table(data)) for data in (b"one", b"three", b"one")])
+        self.assertEqual(made, [b"one", b"three"], "each part's table made once, however often it is asked")
+        registered(server, {"k1": b"one", "k3": b"seven"}, version=2)  # the next build: k2 became k3
+        self.assertEqual(table("k3"), answered(kernel_table(b"seven")))
+        table("k1")
+        self.assertEqual(made, [b"one", b"three", b"seven"], "an edit makes the new part's alone")
+        self.assertEqual(server.memory()["facts"], sum(len(key) + len(answered(kernel_table(data))) for key, data in
+                                                       (("k1", b"one"), ("k2", b"three"), ("k3", b"seven"))),
+                         "held under the budget, counted with the parts' facts as the JSON they answer")
+        server.trim(0)
+        self.assertEqual((server.tables.size, server.tables.get("k1")), (0, None), "and evicted under it")
+        self.assertEqual(table("k1"), answered(kernel_table(b"one")))
+        self.assertEqual(made[-1], b"one", "made again when asked")
+
+    def test_on_the_pool_a_table_is_one_job_and_tables_asked_at_once_are_made_at_once(self) -> None:
+        server = Server(isolated=True)
+        self.addCleanup(server.stop)
+        jobs: list[tuple] = []
+        changed = threading.Condition()
+
+        def run(fn, *args, priority):
+            future: concurrent.futures.Future = concurrent.futures.Future()
+            with changed:
+                jobs.append((fn, args, priority, future))
+                changed.notify_all()
+            return future
+
+        def jobs_by(count: int) -> list[tuple]:
+            with changed:
+                self.assertTrue(changed.wait_for(lambda: len(jobs) >= count, timeout=30), jobs)
+                return list(jobs)
+
+        mock.patch.object(server.mesher, "run", side_effect=run).start()
+        self.addCleanup(mock.patch.stopall)
+        registered(server, {"k1": b"one", "k2": b"three"})
+        doc = server.document(PLATE)
+
+        def ask(key: str) -> bytes | Exception:
+            try:
+                return server.table(doc, key)
+            except RuntimeError as refused:
+                return refused
+
+        with concurrent.futures.ThreadPoolExecutor(3) as askers:
+            asked = [askers.submit(ask, key) for key in ("k1", "k1", "k2")]
+            # Both parts' tables are under way at once, each one job in the facts queue.
+            one, two = sorted(jobs_by(2), key=lambda job: job[1])
+            self.assertEqual([(fn, args, priority) for fn, args, priority, _future in (one, two)],
+                             [(serve._table, ("k1", b"one"), FACT), (serve._table, ("k2", b"three"), FACT)])
+            one[3].set_result(answered(kernel_table(b"one")))
+            two[3].set_exception(RuntimeError("the kernel refused the part"))
+            answers = [found.result(30) for found in asked]
+            self.assertEqual(answers[:2], [answered(kernel_table(b"one"))] * 2)
+            self.assertEqual(str(answers[2]), "the kernel refused the part")
+            self.assertEqual(server.table(doc, "k1"), answered(kernel_table(b"one")))
+            self.assertEqual(len(jobs), 2, "a table held is asked of no one")
+            again = askers.submit(ask, "k2")
+            jobs_by(3)[2][3].set_result(answered(kernel_table(b"three")))
+            self.assertEqual(again.result(30), answered(kernel_table(b"three")), "a refused part is asked again")
 
 
 class PoolQueueTest(unittest.TestCase):

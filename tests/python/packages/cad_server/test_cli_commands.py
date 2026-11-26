@@ -33,14 +33,14 @@ TYPES = {
     "stl": ("export", "snapshot", "dfm"),
     "glb": ("export", "snapshot", "inspect", "dfm"),
     "threemf": ("export", "snapshot", "dfm"),
-    "dxf": ("snapshot", "dfm"),
-    "urdf": ("snapshot", "validate"),
-    "srdf": ("snapshot", "validate"),
+    "dxf": ("export", "snapshot", "dfm"),
+    "urdf": ("export", "snapshot", "validate"),
+    "srdf": ("export", "snapshot", "validate"),
     "kicad_pcb": ("export", "snapshot", "inspect", "drc"),
     "kicad_sch": ("export", "snapshot", "inspect", "erc"),
 }
 COMMANDS = ("serve", "status", "stop", "server", "mcp", "run", "requirement", "doctor", "cache", "setup",
-            "viewer", "telemetry", "update", "plugin")
+            "viewer", "share", "fork", "telemetry", "update", "plugin")
 # Run, never listed by `cad --help`: the bridge's (0.10.0 to 0.11.11's skill text and updaters), the commands for
 # programs rather than people, and `xbf`, the earlier spelling of `cad model`, which runs it saying it is deprecated
 # and which the skill text of releases up to 0.11.17 says (``test_older_xbf_spellings.py``).
@@ -110,7 +110,7 @@ class TheCommandTable(unittest.TestCase):
         code, said, _ = _run(["--help"])
         self.assertEqual(0, code)
         self.assertIn("document types, the files cad shows (cad <type> <operation> FILE):", said)
-        self.assertRegex(said, r"\n  srdf +snapshot, validate +SRDF: \.srdf\n")
+        self.assertRegex(said, r"\n  srdf +export, snapshot, validate +SRDF: \.srdf\n")
         self.assertRegex(said, r"\n  model +export, snapshot, inspect, dfm, interference, solve, ranges +model: a document id, "
                                r"held in memory, or an \.xbf file\n")
         types = said.split("document types, the files cad shows", 1)[1].split("\n\n", 1)[0]
@@ -320,7 +320,7 @@ class TheCommandTable(unittest.TestCase):
             "cad step has no operation 'exprt' (did you mean 'export'?); it has export, snapshot, inspect, dfm, interference, "
             "solve, ranges; "
             "'cad step --help' says what each does")})
-        self.assertEqual(2, type_main("dxf", ["export", "a.dxf"]))
+        self.assertEqual(2, type_main("dxf", ["inspect", "a.dxf"]))
         code, out, err = _run(["stl"])
         self.assertEqual((code, out), (2, ""))
         self.assertTrue(err.startswith("cad stl: cad stl needs an operation\n\nusage: cad stl <operation> FILE"), err)

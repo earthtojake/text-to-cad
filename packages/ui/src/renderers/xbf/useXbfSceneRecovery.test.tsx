@@ -59,3 +59,23 @@ for (const reconnects of [true, false]) {
     hook.unmount();
   });
 }
+
+it('reads a final document (a view bundle\'s) once, and waits on no next version of it', async () => {
+  vi.useFakeTimers();
+  const fetch = vi.fn(() => Promise.reject(new Error('a final document is never asked for its version')));
+  const served = { url: 'http://view-bundle.invalid/api/v1/documents/xbf/one', fetch, final: true };
+  const client = { engineDocument: vi.fn().mockResolvedValue(served) };
+  // Its own document alone: a version another case queued and never read is none of this one's.
+  vi.mocked(loadXbfDocument).mockReset().mockResolvedValueOnce({
+    version: 'v1', source: { url: served.url, origin: 'http://view-bundle.invalid', base: 'http://view-bundle.invalid', doc: 'one', kind: 'xbf' },
+    structure: { instances: [{}] }, parts: new Map(), look: {}, fetch,
+    load: { fetched: [], kept: [], structureMs: 0, partsMs: 0, bytes: 0 }, release: vi.fn(),
+  } as never);
+  const hook = renderHook(() => useXbfScene({ client, file: 'one' }));
+  await vi.waitFor(() => expect(hook.result.current).toMatchObject({ revision: 'v1', busy: false, error: null }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(client.engineDocument).toHaveBeenCalledTimes(1);
+  expect(loadXbfDocument).toHaveBeenCalledTimes(1);
+  hook.unmount();
+});

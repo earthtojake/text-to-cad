@@ -32,7 +32,8 @@ cad_server/
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
                          #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
-                         #   (robots), Quick Edit's packets (prompt_files)
+                         #   (robots), a document's view bundle, its page's reads written as a
+                         #   folder (bundle)
   plugin/                # the plugin in the agent apps, and the one place that names an app, a plugin or
                          #   a skill: the table of apps (apps), this computer and its files (computer),
                          #   where the plugin comes from and what is ours (source), what a person's
@@ -50,6 +51,12 @@ cad_server/
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the data folder
+  sharing.py             # `cad share`'s and `cad fork`'s client of the share service: a share's names and links,
+                         #   the files that made a document, the cad-share/2 packs of the files a share lacks, the
+                         #   service's API (urllib, in the command's own process), a share's zip written into a
+                         #   folder, a share's link as the name of this computer's copy of it, and what is kept:
+                         #   the agreement, the setting, the shares' and forks' records, and each shared
+                         #   document's folder in the cache
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
   updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
@@ -147,6 +154,21 @@ cad_server/
   release), as 0.11.12 and 0.11.13 read it too. `cad plugin` is the one command that reaches `plugin/`, and that package the
   one place in cad that names an agent app, a plugin or a skill.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
+- **`cad share TARGET [--yes]`**: a document (an id the engine holds, or a file the viewer opens) shared for anyone
+  with its link to open in the hosted viewer and to download the files that made it (a model's script, modules and
+  the files it read, from its build closure, as its last run read them; a file's file), for 7 days after its last
+  share: the server writes its view bundle into the document's folder in the cache, over the one it wrote there
+  last, and the command uploads the files the share lacks itself, so an agent app's sandbox sees the connection, and
+  sharing it again sends only what changed. The first share on a computer is refused without `--yes`, the person's
+  yes, in lines that say what goes, where, who can open it, for how long and how to delete it. **`cad share
+  status|on|off`**: whether sharing is on and agreed, and this computer's live shares; `off` refuses every share
+  until `on`. **`cad share delete TARGET|LINK`**: a share deleted, asked first. The agreement, the setting, the
+  records and the cache's folders are written by the server that runs, as `cad update auto`'s switch is, else by the
+  command (the engine's **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command itself
+  into a folder, every entry kept inside it, and a record of the fork kept; it runs nothing, and prints the command
+  that builds it. Of a share this computer made, it downloads nothing and says where its files are. A share's link
+  names this computer's copy of it where `cad <type> snapshot` and `cad <type> inspect` take a document: the document
+  it shared, else the model built from its fork's folder.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
@@ -293,10 +315,12 @@ says so and updates nothing.
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
 `~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, the library
 (`library.json`: the project folders, the files a person opened or pinned), the page token and port, the
-telemetry spool and the feed's last answer. The cache
+telemetry spool, the feed's last answer, and the shares' and the forks' records (`shares.json`, `forks.json`, which
+this user alone may read). The cache
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: what the engine derived of a
-document (a file's count and picture, `documents/<id>/note.json`; a board's plots, kept checks), the environments,
-bytecode and the integrations' private homes, all made again on demand. A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
+document (a file's count and picture, `documents/<id>/note.json`; a board's plots, kept checks; a shared file's last
+view bundle, `documents/<id>/view/`), the environments, bytecode and the integrations' private homes, all made again
+on demand. A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
 is in the local application data, which Windows virtualizes for every process an app package (the Claude
 desktop app) starts. A release reads what the release before wrote and migrates it on first touch, once
 (`cad_server.engine.library`); nothing in the cache is converted.

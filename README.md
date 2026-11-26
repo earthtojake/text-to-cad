@@ -87,4 +87,8 @@ By default, text-to-cad sends usage stats and crash reports, tagged with a rando
 ID and never including your files, paths or prompts. The
 [privacy policy](https://www.texttocad.dev/privacy-policy) says what is sent and
 how to turn it off, and the [terms of service](https://www.texttocad.dev/terms-of-service)
-govern using text-to-cad.
+govern using text-to-cad. Sharing is separate: `cad share` uploads a model's view (its
+shapes as meshes, names and measurements) and the files that made it (its code and the
+files it reads), and only once you have said yes, to cad.fun, where anyone with its link
+can open it and download those files until 7 days after it was last shared; `cad share
+off` turns it off.

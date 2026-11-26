@@ -1,4 +1,4 @@
-import type { PromptContextPort } from '@cad/core/prompt';
+import type { PromptContextPort, ResourceRef } from '@cad/core/prompt';
 import type { FileActions, FileSource } from '../file-viewer/types.js';
 import type { ControlCount } from '../usage/controls.js';
 
@@ -14,22 +14,22 @@ export interface ClipboardPort {
   writeImage(image: Blob | Promise<Blob>): Promise<void>;
 }
 /**
- * A Quick Edit's .snapshot.json, made at Copy/Queue/Send: shared input, inline annotation
- * and measurements, with one job per drawn view (`cad <type> snapshot --annotation PACKET --camera authored` draws each),
- * and, from a board, the references the prompt names in it (`references`: its selectors, which `--job` lights).
- * `create` returns compact inline JSON up to 1024 UTF-8 bytes, otherwise writes it and answers its path; `read` fetches it. `createHttpPromptFiles` (`@cad/core/client`) is the
+ * How a host's Quick Edit names the files on this computer (a Quick Edit's snapshot packet is the page's own, made
+ * for every host alike: `@cad/core/prompt`'s `snapshotPacket`). `createHttpPromptFiles` (`@cad/core/client`) is the
  * viewer server's.
  */
 export interface PromptFiles {
-  create(request: {
-    name: string; input: string;
-    views: Array<Record<string, unknown> & { label: string }>;
-    annotation: Record<string, unknown> | null;
-    references?: string[];
-  }): Promise<{ snapshot: string; inline?: never } | { inline: string; snapshot?: never }>;
-  read(path: string): Promise<Blob>;
   /** The folders a Quick Edit's message names its files by (`displayPath`): the workspace and the home. */
-  folders?(): Promise<{ start?: string; home?: string }>;
+  folders(): Promise<{ start?: string; home?: string }>;
+}
+/**
+ * What this host's prompts name the document on screen by, where an agent reading them could not reach it as the
+ * view names it (a shared model, whose page is on another computer than the agent): `resource` stands for it in a
+ * Quick Edit's and a screenshot's prompt, as its file, in each reference into it, which keeps its target, and in its
+ * snapshot packet's `input`, and in what Copy Reference and a chip copy.
+ */
+export interface PromptSubject {
+  resource?: ResourceRef;
 }
 /**
  * What the app menu links to — the running version (its release notes), the source and the
@@ -84,8 +84,10 @@ export interface ViewerHost {
   fileActions?: FileActions;
   clipboard: ClipboardPort;
   promptContext: PromptContextPort;
-  /** Makes a Quick Edit's views and annotation as one snapshot JSON file. Absent: a prompt carries none of them. */
+  /** How a Quick Edit's message names this computer's files: from the workspace, else `~/`. Absent: each by its absolute path. */
   promptFiles?: PromptFiles;
+  /** What a prompt names the document on screen by. Absent: as the view names it. */
+  promptSubject?: PromptSubject;
   /**
    * Show a file, by its absolute path, in this view: a pick in the explorer, a renderer's link.
    * `home` shows the host's home in this view: its recent models, what it shows with no file. A

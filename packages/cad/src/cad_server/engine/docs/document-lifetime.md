@@ -174,17 +174,18 @@ exits on its own: it answers, and is stopped. A worker that died is let go of th
 **One budget.** Everything the daemon holds is counted against one budget: each served
 document's structure (as JSON), its shape bytes and the bytes made from live shapes (`Served.size`), every
 tessellation (`MeshCache`, which has no cap of its
-own in the daemon) and every part's facts (`FactCache`, each counted as its JSON). Evicting a document drops all of it.
+own in the daemon), every part's facts (`FactCache`, each counted as its JSON) and every part's face table (`Server.tables`,
+a second `FactCache`, each counted as its JSON). Evicting a document drops all of it.
 Bytes are counted as they are put, never sampled. Workers and render processes are processes of
 their own, held together to the workers' memory cap (**The engine server and its workers**). The budget is `CAD_ENGINE_MEMORY_MB`, else a quarter
 of the machine's physical memory (`serve.memory_budget`: macOS `hw.memsize`, Linux
 `sysconf(SC_PHYS_PAGES)` or the cgroup's `memory.max` when that is less, Windows
 `GlobalMemoryStatusEx`). Past it, what is held is evicted from memory down to 80 % of it
 (`Server.trim`): tessellations first, least recently used first (a tessellation is made again from
-its shape), then the parts' facts (measured again when asked); then documents, least recently used first, in one order: every document is read again
+its shape), then the parts' face tables (made again when asked), then the parts' facts (measured again when asked); then documents, least recently used first, in one order: every document is read again
 from where it is kept, under the same id, on its next access, and reading runs no code -- a file
 from its file, a model's document from its worker, or from its `.xbf` once no worker holds it. A document a page watches is never
-evicted, nor its tessellations or its parts' facts (law 18, connected means warm), nor the document being served as it is put.
+evicted, nor its tessellations, its parts' tables or its parts' facts (law 18, connected means warm), nor the document being served as it is put.
 The STEP reads held by their bytes go with the first document evicted.
 
 **Pressure.** The daemon's server asks the operating system's memory-pressure signal every two

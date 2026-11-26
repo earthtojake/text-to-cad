@@ -115,7 +115,8 @@ class Report:
 class Written:
     """One file an export wrote, or found holding its bytes already and left as it was
     (``written`` False); a robot description's (an MJCF, a URDF) with what it holds (``robot``:
-    ``Description.summary``, with the notes it was written with), None for any other file."""
+    ``Description.summary``, with the notes it was written with), None for any other file; a view
+    bundle's folder with what it holds (``view``)."""
 
     path: Path
     kind: str
@@ -123,6 +124,9 @@ class Written:
     seconds: float
     written: bool = True
     robot: dict[str, Any] | None = None
+    #: A view bundle's (kind ``view``, ``path`` its folder): its ``document`` (id, kind, name, version), how
+    #: many ``files`` it holds, and the paths this export ``written`` and ``removed`` in it. None for a file.
+    view: dict[str, Any] | None = None
 
 
 @dataclass
@@ -592,7 +596,9 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None, angl
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
-    ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, and ``.xml`` or ``.mjcf``: an MJCF, the
+    ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` of a planar document, ``.view``: a view bundle, the folder of
+    what the document's page reads, made ahead so a page shows it with no engine, in an export of its own
+    (``_bundled``); and ``.xml`` or ``.mjcf``: an MJCF, the
     document's robot description as MuJoCo reads one, its meshes in an ``assets`` folder beside it,
     ``export/mjcf.py``; ``.urdf``: the same description as ROS reads one, its meshes in a ``meshes``
     folder beside it, ``export/urdf.py``): the document of an
@@ -647,11 +653,13 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
                progress: Callable[[dict], None] | None = None, tolerance: float | None = None,
                angle: float | None = None, zero: str | None = None) -> list[Written]:
-    from cad.engine.export import ExportRefused, angle_of, kind_of, tolerance_of, zero_of
+    from cad.engine.export import VIEW, ExportRefused, angle_of, kind_of, tolerance_of, zero_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
     resolved = [Path(os.fspath(destination)).resolve() for destination in destinations]
+    if any(destination.suffix.lower() == VIEW for destination in resolved):
+        return _bundled(source, resolved, daemon, {"tolerance": tolerance, "angle": angle, "zero": zero})
     for destination in resolved:
         kind_of(destination)
     tolerance, angle = tolerance_of(tolerance, resolved), angle_of(angle, resolved)
@@ -685,6 +693,58 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
                           "not at the zero state: it is older than this library. Update cad and export again")
     return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True),
                     row.get("robot")) for row in done["files"]]
+
+
+def _bundled(source: Any, folders: list[Path], daemon: bool, options: dict[str, Any]) -> list[Written]:
+    """An export whose destinations are view bundles (``export.VIEW``): each folder written by the server
+    that answers the document's page, from the answers it gives that page (the engine's **View bundle**) --
+    so only through the engine, and in a command of its own: a bundle is no translation, takes none of a
+    translation's options, and is not written beside one."""
+    from cad.engine.export import VIEW, ExportRefused
+
+    other = [folder.name for folder in folders if folder.suffix.lower() != VIEW]
+    if other:
+        raise ExportRefused(f"a view bundle ({VIEW}) is exported in a command of its own: export "
+                            f"{', '.join(other)} in another")
+    given = [name for name, value in options.items() if value is not None]
+    if given:
+        raise ExportRefused(f"a view bundle takes no {' or '.join(given)}: it holds what the document's page reads")
+    if not daemon:
+        raise ExportRefused("a view bundle is written by the CAD server, from what it answers the document's "
+                            "page: export it without daemon=False")
+    spec = _viewed(_called(source, daemon))
+    try:
+        done = _ask({"op": "bundle", "source": spec, "destinations": [str(folder) for folder in folders]})["done"]
+    except EngineError as error:
+        if str(error).startswith("unknown request"):  # a server of a release before the bundle
+            raise Outdated("the CAD server running writes no view bundle: it is older than this library. Update "
+                           "cad and export again") from None
+        raise
+    return [Written(Path(row["path"]), "view", row["bytes"], row["seconds"], bool(row["written"] or row["removed"]),
+                    view={key: row[key] for key in ("document", "files", "written", "removed")})
+            for row in done["files"]]
+
+
+def _viewed(source: Any) -> dict[str, Any]:
+    """What a view bundle is written of: a document's handle or its id (``{"id"}``), or a file of any
+    document type by its path (``{"path"}``): every type has a page, so a wider set than a translation
+    reads (``_source``). Which of them a bundle is made of yet is the server's to say."""
+    from cad.engine.export import ExportRefused
+    from cad.engine.ids import is_id
+    from cad.registry import type_of
+
+    if isinstance(source, Document):
+        return {"id": source.id}
+    text = os.fspath(source)
+    if is_id(text):
+        return {"id": text}
+    path = Path(text).resolve()
+    if type_of(path) is None:
+        raise ExportRefused(f"{path.name} is no CAD file: a view bundle is written of a document id or a file "
+                            "the viewer opens")
+    if not path.is_file():
+        raise ExportRefused(f"no document {path}")
+    return {"path": str(path)}
 
 
 def _called(source: Any, daemon: bool) -> Any:
@@ -841,8 +901,8 @@ def _outside(measures: dict[str, Any], why: str) -> None:
         pass
 
 
-def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: Any = None, camera: Any = None,
-             grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
+def snapshot(source: Any = None, out: Any = None, *, job: Any = None, folder: Any = None, display: Any = None,
+             camera: Any = None, grid: bool = False, preview: bool = False, pose: Any = None, width: int | None = None,
              height: int | None = None, size_profile: str | None = None, daemon: bool = True, annotation: Any = None,
              measurements: Any = None, progress: Any = None) -> Drawn | list[Drawn]:
     """Draw a document (``.xbf``, ``.step``, or a document id: the one the engine holds) or a mesh
@@ -857,13 +917,16 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     was (``snapshot.write_png``). ``preview`` draws the viewer's Preview in place of a display mode: the
     model lit in a studio, in its materials, on a floor with its shadow, in perspective.
 
-    ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
-    ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
-    object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
-    and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
-    of its outputs (``snapshot.job_pictures``). ``source`` is then drawn in place of every job's
-    input; a flag given overrides every job. Every request is checked before anything renders, and
-    a picture that fails writes none of the job's, leaving every output as it was.
+    ``job`` is every picture a job names (``cad <type> snapshot --job``), a list of ``Drawn``: a
+    Quick Edit packet (the JSON a Quick Edit's message carries, a file of it, or its object), a job
+    or a list of jobs, each job a view drawn as it was -- its camera, display, hidden and isolated
+    parts, pose, the packet's ink and dimensions -- at its output settings, into each of its outputs
+    (``snapshot.job_pictures``): at its path, or, naming none, in ``folder`` (the current folder when
+    it is None) as ``<its input's stem>-<its label>.png``; ``out`` is one picture's, refused with a job.
+    ``source`` is then drawn in
+    place of every job's input; a flag given overrides every job. Every request is checked before
+    anything renders, and a picture that fails writes none of the job's, leaving every output as it
+    was.
 
     Where each picture is goes, frame by frame, to ``progress`` (``progress.py``: ``scene`` while the
     document is served, meshed and its scene made, ``draw`` while the frame is drawn, ``write`` as
@@ -873,23 +936,23 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
 
     frames, bar = progressing.sink(progress)
     try:
-        return _pictured(source, out, job=job, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
-                         width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
+        return _pictured(source, out, job=job, folder=folder, display=display, camera=camera, grid=grid, preview=preview,
+                         pose=pose, width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                          measurements=measurements, progress=frames)
     finally:
         if bar is not None:
             bar.close()
 
 
-def _pictured(source: Any, out: Any, *, job: Any, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
-              width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
+def _pictured(source: Any, out: Any, *, job: Any, folder: Any, display: Any, camera: Any, grid: bool, preview: bool,
+              pose: Any, width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
               measurements: Any, progress: Callable[[dict], None] | None) -> Drawn | list[Drawn]:
     """``snapshot``, its frames to ``progress`` (a callable, or None for nowhere)."""
     if job is not None:
         if out is not None:
-            raise TypeError("snapshot() takes out or job, not both: a job's outputs name its pictures")
-        return _job(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose, width=width,
-                    height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
+            raise TypeError("snapshot() takes out for one picture: a job's pictures go to folder")
+        return _job(job, source, folder, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
+                    width=width, height=height, size_profile=size_profile, daemon=daemon, annotation=annotation,
                     measurements=measurements, progress=progress)
     if source is None or out is None:
         raise TypeError(f"snapshot() missing required argument: {'source' if source is None else 'out'!r}")
@@ -973,16 +1036,17 @@ def _whole(source: Any) -> None:
                           part="source")
 
 
-def _job(job: Any, source: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
+def _job(job: Any, source: Any, folder: Any, *, display: Any, camera: Any, grid: bool, preview: bool, pose: Any,
          width: int | None, height: int | None, size_profile: str | None, daemon: bool, annotation: Any,
          measurements: Any, progress: Callable[[dict], None] | None = None) -> list[Drawn]:
-    """``snapshot(job=...)``: every picture the job names (see ``snapshot``)."""
+    """``snapshot(job=...)``: every picture the job names, one that names no path in ``folder`` (see
+    ``snapshot``)."""
     from cad.engine import snapshot as drawing
 
     _heard("source", os.fspath(source) if source is not None else drawing.job_input(job))
-    pictures = drawing.job_pictures(job, source, display=display, camera=camera, grid=grid, preview=preview, pose=pose,
-                                    width=width, height=height, size_profile=size_profile, annotation=annotation,
-                                    measurements=measurements)
+    pictures = drawing.job_pictures(job, source, folder=folder, display=display, camera=camera, grid=grid,
+                                    preview=preview, pose=pose, width=width, height=height, size_profile=size_profile,
+                                    annotation=annotation, measurements=measurements)
     return [Drawn(Path(found["output"]), found["width"], found["height"], found)
             for found in drawing.draw_pictures(pictures, daemon=daemon, progress=progress)]
 

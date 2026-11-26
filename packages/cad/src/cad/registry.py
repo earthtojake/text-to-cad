@@ -261,9 +261,14 @@ _KERNEL = "build123d"
 _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each kind by its suffix "
                                        "(.step, .glb, .stl, .3mf, .dxf, .xbf, .xml (MJCF, its meshes beside it), "
                                        ".urdf (its meshes beside it)); "
-                                       "--tolerance and --angle mesh a .glb, an .stl or a .3mf finer", _KERNEL,
+                                       "--tolerance and --angle mesh a .glb, an .stl or a .3mf finer; a folder "
+                                       "ending .view is its view bundle, what its page reads, made ahead", _KERNEL,
                                        engine=True)
-_EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
+_EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf); a folder ending "
+                                   ".view is its view bundle, what its page reads", engine=True)
+# A type whose one export is its view bundle: nothing translates it, and its page's reads are the server's own.
+_EXPORT_VIEW = Operation("export", "write its view bundle, a folder ending .view: what its page reads, made ahead "
+                                   "so a page shows it with no engine", engine=True)
 _SNAPSHOT = Operation("snapshot", "draw it as the viewer does, into a PNG", _KERNEL, engine=True)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
                                          "element or part is and what made it", _KERNEL, engine=True)
@@ -335,16 +340,18 @@ _TYPES = (
         (_EXPORT_MESH, _SNAPSHOT, _DFM_MESH), decorator=True, wire="3mf"),
     DocumentTypeEntry(
         "dxf", "DXF", "a 2D drawing of a planar document", (".dxf",), "application/dxf", "drawing",
-        ("2D geometry", "layers"), (_SNAPSHOT, _DFM_CUT), decorator=True),
+        ("2D geometry", "layers"), (_EXPORT_VIEW, _SNAPSHOT, _DFM_CUT), decorator=True),
     DocumentTypeEntry(
         "urdf", "URDF", "a robot description (ROS's Unified Robot Description Format)", (".urdf",),
         "application/xml; charset=utf-8", "robot", ("links", "joints", "inertials", "mesh references"),
-        (Operation("validate", "check it for conformance: structure, joints, inertials, mesh references"), _SNAPSHOT)),
+        (Operation("validate", "check it for conformance: structure, joints, inertials, mesh references"), _EXPORT_VIEW,
+         _SNAPSHOT)),
     DocumentTypeEntry(
         "srdf", "SRDF", "a MoveIt semantic robot description, read against its URDF", (".srdf",),
         "application/xml; charset=utf-8", "robot",
         ("planning groups", "end effectors", "group states", "disabled collision pairs", "virtual joints"),
-        (Operation("validate", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),
+        (Operation("validate", "check it against its URDF: every name, chain, state and disabled pair"), _EXPORT_VIEW,
+         _SNAPSHOT)),
     DocumentTypeEntry(
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",

@@ -121,7 +121,10 @@ key beside its tessellation (`serve.FactCache`), under the same memory budget an
 tessellations (**Document lifetime**), and written nowhere: a memo of them beside the document or
 in the cache folder would be a derived file (law 2).
 They are measured once, whichever document or version holds the part, so an edit measures only
-the parts whose key it changed. `GET /api/v1/documents/<kind>/<id>/measure` (`?keys=K,...` for some;
+the parts whose key it changed. (A part's face table -- each face's, edge's and vertex's facts and how a
+pick grows, `mesh.Part.elements`, which a view bundle holds whole -- is kept the same way, by the same key, in
+`Server.tables`: made once on the pool, whichever document asks, written nowhere, and evicted between the
+tessellations and the facts.) `GET /api/v1/documents/<kind>/<id>/measure` (`?keys=K,...` for some;
 the engine's `/api/doc/<id>/volumes`) answers every part's at once, and `.../parts/<key>/volume`
 one part's: the parts no one measured yet go to the pool together, in batches of about a megabyte of shape bytes (`serve.FACT_BYTES`: a light document is one
 job, a heavy one spread over the pool a page warmed, else over two processes at most,

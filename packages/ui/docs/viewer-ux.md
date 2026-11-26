@@ -676,7 +676,8 @@ engine; everything else in the viewer only looks.
   while it can save; it sends the changed values in one request). Both are off while nothing differs.
 - **The status** says why the buttons are off, or "Saved" once a save is answered, else nothing; never a count of
   unsaved values. Why: why the buttons are off is read where they are.
-  - "Edit these in the script." (an .xbf opened as a file), "Run the script again to edit." (the script's process has
+  - "Edit these in the script." (an .xbf opened as a file, and any document shown from a view bundle, which has no
+    engine to build it: [viewer-host.md](viewer-host.md#a-view-bundles-host)), "Run the script again to edit." (the script's process has
     gone), "Script changed. Run it again." (the file was edited by hand since it ran).
   - Any other reason Save is off is its hint: one short line, never the engine's message, which can run to many lines.
   - A parameter that cannot be written is off and says why ("Set in lib/spec.py.", "Calculated in the code.").

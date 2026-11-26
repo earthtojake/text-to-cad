@@ -29,11 +29,18 @@ cad step export FILE DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE]
                                              what each holds said on stderr (--json: its row's robot)
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
+cad model|xbf|step|glb|stl|threemf|dxf|urdf|srdf export SRC DST.view [--json]
+                                             the document's view bundle, a folder: what its page reads, made
+                                             ahead so a page shows it with no engine (View bundle); in a
+                                             command of its own, with none of the options above
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
-                [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE]
+                [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE|JSON|-] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
-cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
-                                             every picture a Quick Edit packet (or a job file) names
+cad TYPE snapshot --job PACKET|JSON|- [SRC] [--out DIR] [the same flags, each over every job]
+                                             every picture a Quick Edit packet (or a job file) names, one
+                                             that names no path in DIR as <input's stem>-<label>.png; SRC,
+                                             a packet's input and inspect's DOC or a ref's FILE may be a
+                                             share's link: this computer's copy of it (Sharing)
 cad serve DOC [--port N]
 cad model inspect ID|FILE.xbf [REF] [--query Q] [--json] | step|glb inspect FILE [REF] [...]
                                              what the document holds, then its build closure; with REF
@@ -107,6 +114,21 @@ cad kicad_sch inspect SCHEMATIC [REF] [--json]
 cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display JSON] [...]
                                              one sheet drawn flat (the root unless --sheet names another)
 cad server start [--port N] [--foreground] | stop [--json] | status [--json]; cad server --rotate-token [--yes]
+cad share FILE|ID [--yes] [--json]           one file shared, by its canonical path: a model by its .xbf (its
+                                             view bundle, its .xbf and the files its build closure names: its
+                                             script, modules and the files it read), any other file with its
+                                             view; uploaded by this process for anyone with its link to open and
+                                             download, 7 days from its last share; a closure file changed since
+                                             the .xbf was written, and a .py, are refused; the first share on a
+                                             computer is refused without --yes, the person's yes (Sharing)
+cad share status|on|off [--json]             whether sharing is on and agreed, and the live shares; on, off
+cad share delete FILE|ID|LINK [--yes] [--json]
+                                             the share of a file this computer shared, or of a delete link,
+                                             deleted from the service; asked first
+cad fork LINK [FOLDER] [--json]              a share's files downloaded by this process into FOLDER (./<name>; one
+                                             that holds files is refused), every entry kept inside it, a model's
+                                             .xbf among them; runs nothing; of a share this computer made, where
+                                             its file is, nothing downloaded (Forking)
 ```
 
 The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
@@ -151,11 +173,12 @@ the help on stdout and exits 0, and does nothing else: it moves no earlier relea
 and says no telemetry notice. Nor does a command whose answer is JSON say the notice: it waits for a run a
 person reads, and nothing is sent by default until it is said.
 
-**Consent.** A command that destroys -- `cad server --rotate-token` -- says its plan first, what it removes, and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
+**Consent.** A command that destroys -- `cad server --rotate-token`, `cad share delete` -- says its plan first, what it removes, and then asks: at a terminal, `... (y/N)` on stderr, anything but `y` or `yes` changing
 nothing (`declined`, exit 1); where no one can be asked (no terminal, `--json`, CI), it changes nothing
 without `-y`/`--yes`, failing `confirmation_required` (exit 2) with the exact command with `--yes`
 (`cad_server._internal.consent`). `--yes` answers that question and no other. `cad setup` asks nothing:
-installing is what was asked.
+installing is what was asked. `cad share`'s first share asks for its own yes, once a computer, by the same
+`--yes` (**Sharing**).
 
 **The failure contract**, every command's alike (`cad_server._internal.cli_errors`). A failure's class
 sets the exit status, the same with `--json` and without: 2 for the command line and its input -- a
@@ -176,7 +199,7 @@ a command takes it, puts one on stderr):
 option or argument the command line got wrong), `invalid_argument` (a value refused by name before
 anything ran: out of range, a pose the document lacks), `wrong_type`, `not_found` (a file that is not
 there, an id that names no document), `confirmation_required` (with
-`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined`, `not_running`,
+`"userActionRequired": true` and `"next"`, the command with `--yes`), exit 2; `declined` (a no to a question, or kept: sharing turned off), `not_running`,
 `other_release`, `engine_unavailable`, `failed`, `internal_error`, exit 1; `canceled`, exit 130. Without `--json` a
 failure is its words on stderr. A
 command line no parser can read is the parser's own usage error (`cli_parser`: every command's options are

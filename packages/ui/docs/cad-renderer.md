@@ -739,6 +739,11 @@ pairs (core's `lib/xbf/xbfKinematics.js`), a geared pair written through its gea
 a STEP's are (`xbfJointHandles.js`). A pair the engine could not keep a value for is said in the
 tab, under the rows.
 
+A document its client serves as `final` (a view bundle's, [the host's side](viewer-host.md#a-view-bundles-host))
+is read once and waits on no next version: there is no engine to build one. Everything else is the same: its
+structure, parts, look and mechanism are the document's, and a chip's facts and Select tangent faces' groups are
+asked of the same routes, which its client answers from each part's one table.
+
 A document with motions plays them from the shell's routine transport, named by its runtime's
 `noun`, over `useXbfMotion.js`: the top of its Joints tab (`kit/tools/playbar/AnimationSection.jsx`'s
 `AnimationControls`: a Sequence dropdown row of the motions by name, Play or Pause and the scrubber (its start the
@@ -937,13 +942,14 @@ the shell what is selected as `references`, in the prompt grammar (an `.xbf`'s a
 `model.glb#n12`, the file's `nodes[12]`; a 3MF's objects, `model.3mf#o2.1`, its build's second
 item's first component; an STL's bodies, `model.stl#b2`; the file itself always
 goes), and the
-shell hands Quick Edit the file, its prompt (`quickEditPrompt`: the views it
+shell hands Quick Edit the file, its prompt (`quickEditPrompt.snapshot`: the views it
 carries — the view on screen, from `ShellViewport.promptCamera` and the renderer's
-`viewState`, its pose and hidden and isolated parts — and the files `host.promptFiles`
-makes of them, with the annotations as an annotation file) and the viewer's Escape. `quickEditPrompt.js` builds the context at
-the press, from what is live then (`createQuickEditContext`), and the text a copy writes
+`viewState`, its pose and hidden and isolated parts — and the annotation, read at the press)
+and the viewer's Escape. `quickEditPrompt.js` builds the context at
+the press, from what is live then (`createQuickEditContext`), its snapshot packet the page's
+(core's `snapshotPacket`), inline, and the text a copy writes
 (`copiedQuickEdit`, over core's `formatPromptMessage`), its files named from the workspace
-(`host.promptFiles.folders()`), the inline packet's `input` too. The drawing tools hand it whether there is
+(`host.promptFiles.folders()`), the packet's `input` too. The drawing tools hand it whether there is
 ink, and the Annotation chip copies its `.annotation.json` file's path. Copying without
 Quick Edit is the copy shortcut — the selection's references, or, while Draw is up, the
 view with its annotations — which writes the clipboard directly. See

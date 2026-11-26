@@ -28,7 +28,8 @@ from cad_server import cli
 from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, NotDerivable, cli_from_function, function_parameters, parser_dests)
 
 # The manifest: robot namespace -> exactly the verbs it exports. A robot description is an
-# authored file, so there is nothing to declare; each format's snapshot is the engine's.
+# authored file, so there is nothing to declare; each format's snapshot is the engine's, and so is its
+# export, its view bundle.
 PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
@@ -58,9 +59,9 @@ MIRRORS: dict[str, tuple[str, str]] = {
     **{f"{document_type} ranges": (f"cad.{document_type}", "ranges") for document_type in ("model", "step")},
 }
 
-# The engine snapshot's options (``cad.engine.snapshot``).
-SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "preview", "camera", "width", "height",
-                      "size_profile", "pose", "annotation", "measurements", "json"})
+# The engine snapshot's options (``cad.engine.snapshot``): ``out_folder`` is ``--out DIR``, a job's folder.
+SNAPSHOT = frozenset({"document", "out", "job", "out_folder", "display", "grid", "preview", "camera", "width",
+                      "height", "size_profile", "pose", "annotation", "measurements", "json"})
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An adapter has no
 # generated parser to compare against a signature, so the declaration IS the contract, and a
@@ -83,8 +84,9 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # neither.
     **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "angle", "zero", "json"})
        for document_type in ("model", "step")},
+    # A drawing's and a robot description's one export is its view bundle, a folder: the same surface.
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
-       for document_type in ("stl", "glb", "threemf")},
+       for document_type in ("stl", "glb", "threemf", "dxf", "urdf", "srdf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("model", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf")},
     # A B-rep type's interference check: its poses and fits repeat, lists no signature derives.
@@ -118,6 +120,11 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
     # line) is not a function signature to mirror.
     "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
+    # A document shared by its link, or the words status, on, off and delete with the TARGET or link it deletes: the
+    # person's agreement (--yes, which a delete asks too) and an upload this process makes mirror no function.
+    "share": frozenset({"target", "link", "yes", "json"}),
+    # A share's files written into a folder: a download this process makes, and a folder it writes, mirror no function.
+    "fork": frozenset({"link", "folder", "json"}),
 }
 
 # Commands that own their command line outright and mirror no function.
@@ -213,7 +220,7 @@ class Manifest(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_a_known_format_with_a_wrong_verb_lists_that_formats_verbs(self):
-        for noun, verbs in {"urdf": ("validate", "snapshot"), "srdf": ("validate", "snapshot")}.items():
+        for noun, verbs in {"urdf": ("validate", "snapshot", "export"), "srdf": ("validate", "snapshot", "export")}.items():
             for rest in (("bogus",), ()):
                 with self.subTest(noun=noun, rest=rest):
                     code, out, err = self._dispatch(noun, *rest)
@@ -227,7 +234,7 @@ class Manifest(unittest.TestCase):
                               else err.split("operations:")[1])
                     for verb in verbs:
                         self.assertIn(verb, listed)
-                    self.assertNotIn("export", listed)
+                    self.assertNotIn("inspect", listed)
                     if rest:
                         self.assertNotIn("usage:", err)
                         self.assertIn(f"'cad {noun} --help' says what each does", err)
@@ -238,7 +245,7 @@ class Manifest(unittest.TestCase):
         code, out, err = self._dispatch("urdf", "--help")
         self.assertEqual((0, ""), (code, err))
         self.assertIn("\n  validate ", out)
-        self.assertNotIn("export", out.split("operations:")[1])
+        self.assertNotIn("inspect", out.split("operations:")[1])
 
     def test_an_unknown_noun_names_it_and_where_the_commands_are(self):
         # Never the whole list: the word, at most one suggestion, and the help that lists them.
@@ -258,8 +265,8 @@ class Manifest(unittest.TestCase):
         # No retired-surface recognition: the answer is Python's own error, not a note about history.
         urdf = importlib.import_module("cad.urdf")
         with self.assertRaises(AttributeError) as caught:
-            urdf.export  # noqa: B018 - the attribute access IS the assertion
-        self.assertIn("export", str(caught.exception))
+            urdf.inspect  # noqa: B018 - the attribute access IS the assertion
+        self.assertIn("inspect", str(caught.exception))
         self.assertNotIn("deleted", str(caught.exception))
 
     def test_the_engines_verbs_are_commands_of_their_own(self):

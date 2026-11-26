@@ -3,10 +3,11 @@ ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
     cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
-        model's, an xbf's, a STEP's)
+        model's, an xbf's, a STEP's; a DST ending .view is a view bundle's folder, in a command of its own)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
-        [--size-profile P] [--json]
+        [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE|JSON|-] [--measurements FILE] [--width N]
+        [--height N] [--size-profile P] [--json]
+    cad <type> snapshot --job PACKET|JSON|- [SRC] [--out DIR] [the same flags]
     cad serve DOC [--port N]
     cad server status [--json] | stop [--json]      (``cad_server.cli.server``, which starts it too)
     cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
@@ -14,7 +15,8 @@ ordinary Python scripts call decorated models explicitly.
 SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad step``, ``cad stl``, ...), or, for
 ``cad model``, a model's document id (``ids``), the id ``cad run SCRIPT.py`` prints for it, or the ``.xbf`` file
 a model is saved as (``cad_server.cli.document_types``). A script is never a source: no verb imports or builds
-one.
+one. Where ``snapshot`` and ``inspect`` take a document -- SRC, DOC, a packet's input, a ref's FILE -- a share's
+link names this computer's copy of it (``linked``: ``sharing.local``).
 
 The ``cad`` command runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
 ``python -m cad_server.engine VERB ...``, takes the same verbs as subcommands (``main``). A verb's failure
@@ -36,7 +38,7 @@ from typing import Any, Callable
 from cad.engine import said as _said
 from cad_server._internal.cli_errors import Failure
 
-__all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", "run",
+__all__ = ["VERBS", "Failed", "answered", "build_parser", "linked", "main", "parser_for", "run",
            "inspect_main", "inspect_parser"]
 
 
@@ -64,20 +66,40 @@ def _meshes(document_type: str | None) -> bool:
     return DOCUMENT_TYPES[document_type].view == "mesh"
 
 
+def _bundled_alone(document_type: str | None) -> bool:
+    """Whether a type's one export is its view bundle (a drawing's, a robot description's: nothing translates
+    it)."""
+    if document_type is None:
+        return False
+    from cad.registry import DOCUMENT_TYPES
+
+    return DOCUMENT_TYPES[document_type].view not in ("document", "mesh")
+
+
 def _export_arguments(export: argparse.ArgumentParser, document_type: str | None = None) -> None:
     export.add_argument("source", metavar="SRC", help=_source_help(
         document_type, "an .xbf, a .step, a document id (a model's, which cad run SCRIPT.py prints), or a mesh "
                        "file (.glb, .stl, .3mf), which exports to the other two mesh kinds"))
+    if _bundled_alone(document_type):
+        export.add_argument("destinations", nargs="+", metavar="DST",
+                            help="a folder ending .view: its view bundle, what its page reads, made ahead so a "
+                                 "page shows it with no engine")
+        export.add_argument("--json", action="store_true", help="print what was written as JSON")
+        return
     if _meshes(document_type):
         export.add_argument("destinations", nargs="+", metavar="DST",
-                            help="the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries")
+                            help="the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries; or, "
+                                 "in a command of its own, a folder ending .view: its view bundle, what its page "
+                                 "reads, made ahead so a page shows it with no engine")
         export.add_argument("--json", action="store_true", help="print what was written as JSON")
         return
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml "
                              "(MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ "
                              "beside it): the document as its code built it. Every one is checked, a DXF's drawing "
-                             "too, before any is written: a refused export writes none")
+                             "too, before any is written: a refused export writes none. Or, in a command of its own, "
+                             "a folder ending .view: the document's view bundle, what its page reads (its structure, "
+                             "each part's mesh and facts), made ahead so a page shows it with no engine")
     from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
@@ -121,8 +143,9 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
                         help="without REF, the summary (or the structure) and the closure as one JSON object (a "
                              "REF's answer is JSON)")
     parser.add_argument("document", help=_source_help(
-        document_type, "an .xbf, a STEP, or a document id; a GLB says its nodes, meshes and animations"))
-    parser.add_argument("ref", nargs="?", help="[FILE#][OWNER/]ELEMENT or [FILE#]OWNER (cad.engine.refs): OWNER a "
+        document_type, "an .xbf, a STEP, or a document id; a GLB says its nodes, meshes and animations") + _LINKED)
+    parser.add_argument("ref", nargs="?", help="[FILE#][OWNER/]ELEMENT or [FILE#]OWNER (cad.engine.refs; FILE a "
+                                               "share's link too): OWNER a "
                                                "part's or an assembly's label, or its occurrence path (hand/finger.2); "
                                                "ELEMENT an element name (f:..., e:..., v:...) or face N (edge, vertex). "
                                                "An element answers what the kernel measures of it, placed where its "
@@ -132,24 +155,35 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
                                                "parameters and declared files), then its build closure")
 
 
+# Where snapshot and inspect take a document, a share's link names this computer's copy of it (``linked``).
+_LINKED = ("; or a share's link (https://cad.fun/<id>): this computer's copy of it, the document it shared or the "
+           "model built from the folder cad fork wrote it into")
+
+
 def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> argparse.ArgumentParser:
     from cad.engine import snapshot
 
-    parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
+    parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [--out DIR] [options]"
     parser.add_argument("document", metavar="SRC", nargs="?", help=_source_help(
         document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .srdf), "
                        "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a "
                        "model's, which cad run SCRIPT.py prints: drawn from what the engine holds)")
-        + "; with --job, drawn in place of every job's input")
+        + _LINKED + "; with --job, drawn in place of every job's input")
     parser.add_argument("out", metavar="OUT.png", nargs="?",
                         help="the .png to write, or a folder (one that is there, or a path ending in a separator) to "
                              "write <SRC's stem>_<UTC time>.png into")
     parser.add_argument("--job", metavar="PACKET",
-                        help="a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as "
-                             "JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- "
-                             "its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
+                        help="a Quick Edit packet, a job or a list of jobs: its JSON, a file of it, or - to read it "
+                             "from standard input. Every picture its outputs name is drawn, each job's view as it was "
+                             "-- its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
                              "dimensions, at its output settings (padding, tightFrame, transparent, background, "
-                             "renderScale, sizeProfile); the other flags override every job")
+                             "renderScale, sizeProfile), each output at its path or, naming none, in --out; its input "
+                             "(or a job's) may be a share's link, which names this computer's copy of it; the other "
+                             "flags override every job")
+    parser.add_argument("--out", metavar="DIR", dest="out_folder",
+                        help="with --job, the folder each output that names no path is written into, as <its input's "
+                             "stem>-<its label>.png (-2, -3 after it where two would share a name); the current "
+                             "folder by default")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
                                           "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=CLASS "
                                           "(the edges of one class alone: feature, tangent or seam; edges=feature "
@@ -180,9 +214,10 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                                        "values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in "
                                        "the file's unit: a document's mm, a robot's m): the mechanism posed there; as "
                                        "built without it (a robot where the viewer opens it)")
-    parser.add_argument("--annotation", metavar="FILE", help="the viewer's annotation file, or the Quick Edit packet "
-                                                              "(.snapshot.json) that carries it: its ink drawn over the "
-                                                              "model, on the parts it was drawn on")
+    parser.add_argument("--annotation", metavar="FILE", help="the viewer's annotation, or the Quick Edit packet that "
+                                                              "carries it -- its JSON, a file of it, or - to read it "
+                                                              "from standard input --: its ink drawn over the model, "
+                                                              "on the parts it was drawn on")
     parser.add_argument("--measurements", metavar="FILE", help="Measure's dimensions (a JSON list of {start, end, label, "
                                                                 "color}; the points in the viewer's scene coordinates, "
                                                                 "as --camera's lengths), drawn over the model")
@@ -195,8 +230,13 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
     failure raised as ``Failed``, which the command says (``answered``)."""
     from cad.engine import snapshot
 
+    _standard_input(args)
+    args.document = linked(args.document)
     if args.job is not None:
         return _snapshot_job(args, prog)
+    if getattr(args, "out_folder", None) is not None:
+        raise Failed(f"--out names the folder --job writes the pictures that name no path into; a snapshot of SRC "
+                     f"writes OUT.png: give the folder as OUT ({os.path.join(args.out_folder, '')})", 2, "usage")
     if args.document is None or args.out is None:
         raise Failed("the following arguments are required: SRC, OUT.png (or --job PACKET)", 2, "usage")
     if snapshot.by_id(args.document):
@@ -307,20 +347,29 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
 
 def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
-    """``cad <type> snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
-    a line each; with ``--json``, ``{"ok": true, "pictures": [what each drew]}``."""
+    """``cad <type> snapshot --job PACKET [SRC] [--out DIR]``: every picture the job names (``api.snapshot(job=)``),
+    each one that names no path in ``--out``, a line each saying the file it wrote; with ``--json``, ``{"ok": true,
+    "pictures": [what each drew, its "output" the file]}``. The packet's input, and each job's, that is a share's link
+    is this computer's copy of it (``_linked_inputs``), where no SRC is drawn in their place."""
     import time
 
     from cad.engine import api, snapshot
 
     if args.out is not None:
-        raise Failed(f"--job writes the pictures its outputs name, so it takes no OUT ({args.out})", 2, "usage")
+        raise Failed(f"--job writes the pictures its outputs name, so it takes no OUT ({args.out}); --out DIR is the "
+                     "folder of those that name no path", 2, "usage")
+    try:
+        job = snapshot.parse_job(args.job)
+    except snapshot.SnapshotRefused as error:
+        raise _refusal(error) from None
+    if args.document is None:
+        job = _linked_inputs(job)
     started = time.perf_counter()
     try:
-        drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
-                                 preview=args.preview, pose=args.pose, width=args.width, height=args.height,
-                                 size_profile=args.size_profile, annotation=args.annotation,
-                                 measurements=args.measurements)
+        drawn = api.snapshot(args.document, job=job, folder=getattr(args, "out_folder", None), display=args.display,
+                             camera=args.camera, grid=args.grid, preview=args.preview, pose=args.pose,
+                             width=args.width, height=args.height, size_profile=args.size_profile,
+                             annotation=args.annotation, measurements=args.measurements)
     except snapshot.SnapshotRefused as error:
         raise _refusal(error) from None
     except ConnectionError:
@@ -336,6 +385,58 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
             print(f"wrote {os.fspath(picture.path)} ({report['width']}x{report['height']}, {report['displayMode']}"
                   f"{', preview' if report['preview'] else ''}) in {report['timings']['totalMs'] / 1000:.2f}s")
     return 0
+
+
+def linked(text: str | None, *, ref: bool = False) -> str | None:
+    """``text`` -- a document's name, or with ``ref`` a ref's -- with the share's link it starts with in the name of
+    this computer's copy of that share (``sharing.local``), a ``#<selector>`` after it kept; refused in one line where
+    this computer has none (``not_found``, with the command that makes one). Any other text, and None, as it is."""
+    if text is None:
+        return None
+    from cad_server import sharing
+    from cad_server._internal.cli_errors import Failure
+
+    try:
+        return sharing.local(str(text), ref=ref)
+    except sharing.NoCopy as missing:
+        raise Failure(str(missing), "not_found", next=missing.next) from None
+
+
+def _linked_inputs(found: Any) -> Any:
+    """A packet, a job or a list of jobs (``snapshot.parse_job``) with its input, and each job's, that is a share's link
+    named by this computer's copy of it (``linked``)."""
+
+    def named(item: Any) -> Any:
+        if isinstance(item, dict) and isinstance(item.get("input"), str):
+            return {**item, "input": linked(item["input"])}
+        return item
+
+    if isinstance(found, list):
+        return [named(job) for job in found]
+    found = named(found)
+    if isinstance(found, dict) and isinstance(found.get("jobs"), list):
+        found = {**found, "jobs": [named(job) for job in found["jobs"]]}
+    return found
+
+
+def _standard_input(args: argparse.Namespace) -> None:
+    """``--job -`` or ``--annotation -``: the JSON standard input holds, read once (UTF-8), in its place."""
+    asked = [name for name in ("job", "annotation") if getattr(args, name, None) == "-"]
+    if not asked:
+        return
+    if len(asked) > 1:
+        raise Failed("standard input is read once: give - to --job or to --annotation, not both", 2, "usage")
+    flag, stream = f"--{asked[0]} -", sys.stdin
+    if stream is None:
+        raise Failed(f"{flag}: this command has no standard input to read", 2, "usage")
+    data = stream.buffer.read() if hasattr(stream, "buffer") else stream.read().encode("utf-8")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise Failed(f"{flag}: standard input is not UTF-8 text", 2) from None
+    if not text.lstrip().startswith(("{", "[")):
+        raise Failed(f"{flag}: standard input holds no JSON" + ("" if text.strip() else ": it is empty"), 2)
+    setattr(args, asked[0], text)
 
 
 def build_parser(prog: str = "python -m cad_server.engine") -> argparse.ArgumentParser:
@@ -470,7 +571,8 @@ def _export(args: argparse.Namespace, prog: str) -> int:
     if args.json:
         print(json.dumps({"ok": True, "source": str(key(args.source)),
                           "files": [{"path": str(row.path), "kind": row.kind, "bytes": row.bytes, "seconds": row.seconds,
-                                     "written": row.written, **({"robot": row.robot} if row.robot else {})}
+                                     "written": row.written, **({"robot": row.robot} if row.robot else {}),
+                                     **({"view": row.view} if row.view else {})}
                                     for row in written]}))
         return 0
     _said.written(written, args.destinations)
@@ -505,6 +607,8 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
     from cad.engine import api
     from cad.engine.addresses import parts
 
+    # A share's link, as DOC or as a ref's FILE: this computer's copy of it, a selector after it the same there.
+    args.document, args.ref = linked(args.document), linked(args.ref, ref=True)
     referred = args.ref is not None or parts(str(args.document))[1] is not None  # REF, or a FILE#REF's
     query = args.query or (None if referred else "summary")
     try:
@@ -913,7 +1017,8 @@ def status_text(answer: dict[str, Any]) -> str:
 
 # Each verb: its help, the function adding its arguments to a parser, and the function running it.
 VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, str], int]]] = {
-    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF, xbf, MJCF or URDF files, by suffix; a GLB "
+    "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF, xbf, MJCF or URDF files, or its view bundle "
+               "(a .view folder), by suffix; a GLB "
                "carries the document's motions as clips, a DXF draws a planar one, an MJCF and a URDF are its robot "
                "description",
                _export_arguments, _export),

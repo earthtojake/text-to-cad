@@ -3,6 +3,7 @@ export type ResourceRef =
   | { kind: 'workspace-file'; path: string; revision?: string }
   /** A document the engine holds by its id alone (a model's): `path` is the id, never a filesystem path. */
   | { kind: 'cad-model'; path: string; revision?: string }
+  /** A document by its link (a shared model's page): whole, or what is picked in it, in either selector grammar. */
   | { kind: 'url'; url: string; revision?: string };
 /** Zero-based UTF-16 coordinates; text ranges have an exclusive end. */
 export interface TextPosition { line: number; character: number }
@@ -55,4 +56,45 @@ export interface PromptMessageOptions {
   attachmentPath?: (part: Extract<PromptPart, { kind: 'attachment' }>) => string | null | undefined;
   /** The folders the message names files by (`displayPath`); none, each by its absolute path. */
   folders?: PromptFolders | null;
+}
+/**
+ * A view a Quick Edit's snapshot packet carries (`snapshotPacket`): a snapshot job's own words, by the label its ink
+ * names it by ("view 1", "current view"), its picture's size (`width`, `height`) beside its camera.
+ */
+export interface SnapshotView {
+  label: string;
+  camera: { position: number[]; target: number[]; up: number[]; orthographicHalfHeight: number; zoom?: number } | string;
+  width?: number;
+  height?: number;
+  display?: Record<string, unknown> & { hidden?: string[]; isolated?: string[] };
+  kinematics?: Record<string, unknown>;
+  jointValues?: Record<string, number>;
+  animation?: { clip: string; time: number };
+  selection?: { hide?: string[]; focus?: string[] };
+}
+/** The ink a snapshot packet carries: an annotation file's document (`@cad/core/common/annotation.js`). */
+export interface SnapshotAnnotation { units?: string; parts?: Record<string, unknown>; marks: ReadonlyArray<Record<string, unknown>> }
+/** One job of a snapshot packet: a view, its picture named by its label alone. */
+export interface SnapshotJob {
+  camera: SnapshotView['camera'];
+  display?: SnapshotView['display'];
+  kinematics?: SnapshotView['kinematics'];
+  jointValues?: SnapshotView['jointValues'];
+  animation?: SnapshotView['animation'];
+  selection?: SnapshotView['selection'];
+  /** A 3D view's framing; a drawing's view has none. */
+  output?: { padding: 0; tightFrame: false };
+  outputs: Array<{ label: string; width?: number; height?: number }>;
+}
+/** A Quick Edit's snapshot packet: what `cad <type> snapshot --job` draws again, made in the page. */
+export interface SnapshotPacket {
+  /** The file's address, as the message's `File:` line names it. */
+  input: string;
+  jobs: SnapshotJob[];
+  /** What a board's prompt names in it, which `--job` lights. */
+  references?: string[];
+  annotation?: { units?: string; parts?: Record<string, unknown>; marks: Array<Record<string, unknown>> };
+  /** With ink: the parts the view it was last drawn in hid and isolated, by their selectors within the file. */
+  hidden?: string[];
+  isolated?: string[];
 }

@@ -60,6 +60,7 @@ two it leaves out.
    | What only WebGL in a real browser shows | browser spec | `packages/ui/src/**/*.browser.test.mjs` | `js-ui (browser)` |
    | The bundled viewer through the real backend | end to end | `tests/browser/viewer-e2e.mjs`, the one file there | `viewer-e2e` |
    | The version feed, the telemetry receiver | Node test | `apps/api/src/*.test.mjs` | `static` |
+   | The share service | Node test | `apps/share/src/*.test.mjs` | `static` |
 
    `test_ci_workspace_selection.py` lists the names and extensions each runner collects, and fails a
    test file that none does.
@@ -182,7 +183,7 @@ In the table, the packages are `packages/cad`, `packages/aliases` and `scripts/b
 
 | Tier | Job | Runs on a change to | What it runs |
 | --- | --- | --- | --- |
-| static | `static` | anything | The version check (on a pull request, [what merging it releases](releases.md#shipping-a-release)), the tracked tree's rules, the light contracts (every policy test not in the selector's `HEAVY_POLICY`, and the `render` and `sendcutsend` skill suites) and the API's tests |
+| static | `static` | anything | The version check (on a pull request, [what merging it releases](releases.md#shipping-a-release)), the tracked tree's rules, the light contracts (every policy test not in the selector's `HEAVY_POLICY`, and the `render` and `sendcutsend` skill suites), the API's tests and the share service's |
 | unit | `packages (Linux I/2)` | the packages; a file under their suites | The library's, the server's (the engine's and the viewer backend's included) and the transport's suites under Xvfb, or the files of them the change selected |
 | unit | `skills` | the packages; `skills/fea`; a heavy policy test or skill suite | The policy tests and skill suites that load the CAD kernel or the built runtime |
 | unit | `js-core` | `packages/core`, which starts a full run; `apps/docs` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
@@ -197,7 +198,7 @@ In the table, the packages are `packages/cad`, `packages/aliases` and `scripts/b
 | integration | `kicad` | the packages; its suite | `test-kicad.sh`, in the environment of `cad[kicad]` |
 | integration | `blender` | the packages; its suite | `test-blender.sh`, in the environment `cad run` makes for bpy; a test that skips there fails the run |
 | integration | `packaging` | what ships in a wheel (the packages, the UI, `apps/web`, `apps/mcp`); the scripts that build and check it | The bundle from clean, its layout, the wheels' contents and the installed commands |
-| integration | `viewer-e2e` | the packages; the UI; `apps/web`; `tests/browser` | The bundle's viewer through the real backend: the launch smoke test, then the format and camera gates in Chromium |
+| integration | `viewer-e2e` | the packages; the UI; `apps/web`; `tests/browser`; the share service's Worker and runner | The bundle's viewer through the real backend: the launch smoke test, then the format, camera and prompt gates in Chromium, then, with the engine stopped, a view bundle opened from a static file server, and a model `cad share` shared, then shared again unchanged (the same link, no file sent again) and forked (`cad fork` writes the script that built it, byte for byte, from the service's zip, as another computer; on this one it says where the files are), opened from the share service's own Worker (`apps/share/serve.mjs`), where a prompt copied from the view is the one the engine's page copies for the same model (the prompt gate's: its snapshot inline, no file), its address the share's link |
 | release | `packages (Python 3.11 floor I/2)`, `install (Linux)`, `install (Windows)`, `real install`, `update rehearsal (<system> I/2)` | a full run; a change to the thing itself | [The release tier](#the-release-tier) |
 | gate | `CI` | anything | [The one required check](#the-gate) |
 
@@ -207,11 +208,11 @@ What the table leaves out:
   suite with a job of its own (`fea`, `kicad`, `blender`) is that job's alone.
 - A runner under `scripts/test/` runs what it feeds.
 - Prose and metadata run `static` alone: root prose, `docs/`, the plugin manifests and configs,
-  `skills/` but for `skills/fea`, the release scripts and workflows, `apps/api`, `models/`, and
+  `skills/` but for `skills/fea`, the release scripts and workflows, `apps/api`, `apps/share`, `models/`, and
   Markdown under `packages/` and `apps/`. The exceptions are what ships in a wheel
   (`packages/cad/README.md`, its `LICENSE` and the aliases' READMEs: `packaging`) and `apps/web`'s
   Markdown, whose links its tests resolve (`js-web`).
-- `scripts/test/test.sh` is not what CI runs. It chains `test-js.sh`, `test-api.sh`, `test-python.sh`
+- `scripts/test/test.sh` is not what CI runs. It chains `test-js.sh`, `test-api.sh`, `test-share.sh`, `test-python.sh`
   and `test-global.sh` on one machine, and leaves out the suites with a job of their own, the docs
   checks, `packaging`, `viewer-e2e` and the release tier.
 

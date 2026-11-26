@@ -123,7 +123,7 @@ function GlbSurface({ view, data }) {
   const sceneTools = useSceneTools({ shell, scene, features, state: tools, measurable: true, clearParts: selection.clear });
   const selectActive = !previewing && Boolean(scene) && shell.toolMode === GLB_TOOL.SELECT;
   const strip = [shell.tools.own({ id: GLB_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select, icon: SELECT_ICON }), ...sceneTools.tools];
-  const { references, chips } = useSceneReferences({ scene, selection, resource: shell.frame.resource });
+  const { references, chips } = useSceneReferences({ scene, selection, resource: shell.frame.resource, subject: host.promptSubject });
   const resourcePath = shell.frame.resource?.path;
   const nameNode = useCallback(reference => {
     const id = reference?.resource?.path === resourcePath && reference.target?.kind === "cad-selector" ? reference.target.selectors[0] : "";
@@ -139,7 +139,7 @@ function GlbSurface({ view, data }) {
   const viewportRef = useRef(null);
   const contextMenuItems = scene && !previewing && shell.toolMode === GLB_TOOL.SELECT ? press => sceneMenuEntries({
     press, viewport: viewportRef.current, scene, selected: selectionRef.current.selected, t,
-    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])]),
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selected, hit.id])], host.promptSubject),
     onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
     onSelect: (hit, selected) => selection.select(hit.id, { multiSelect: selected }),
     viewer: () => shellRef.current?.frame.viewerRef.current || null

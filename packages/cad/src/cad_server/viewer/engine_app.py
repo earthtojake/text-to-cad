@@ -400,6 +400,13 @@ class EngineApp:
         ident = self.server.remember(path)
         return {'id': ident, 'file': to_posix_path(self.server.file_of(ident))}
 
+    def bundle(self, source, folder, release):
+        """The view bundle of ``source`` (``{"id"}`` or ``{"path"}``) written into ``folder`` from what the
+        one page's app answers a page (``bundle.write``, the engine's **View bundle**): what was done."""
+        from .bundle import write
+
+        return write(self.default_app(), source, folder, release=release)
+
     def sessions(self):
         page = [] if self._default is None else [{'kind': 'viewer', 'start': self._default.start}]
         return page + ([] if self._mcp is None else self._mcp.listing())

@@ -1,0 +1,97 @@
+name: Deploy Share
+
+# Deploys the share service (apps/share): a Cloudflare Worker over an R2 bucket, serving the viewer's
+# built client as its static assets. A dispatch deploys the ref it runs on; nothing else starts it.
+#
+# The account's settings live in GitHub: the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID,
+# and the repository variable SHARE_ORIGIN, the origin the deployed Worker answers on (its custom
+# domain, or until one is attached its workers.dev address), which the smoke check after the deploy
+# asks. The bucket, the lifecycle rule and the domain are set up once by hand (apps/share/README.md).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-share
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Share
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check the deploy's settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SHARE_ORIGIN: ${{ vars.SHARE_ORIGIN }}
+        run: |
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing GitHub Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+          if ! [[ "${SHARE_ORIGIN:-}" =~ ^https://[A-Za-z0-9.-]+$ ]]; then
+            echo "Missing or malformed GitHub Actions variable: SHARE_ORIGIN (https://<host>, no path)" >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Run the share service's tests
+        run: scripts/test/test-share.sh
+
+      - name: Install the JavaScript workspaces
+        run: npm ci
+
+      - name: Build the shared packages
+        run: npm run build:packages
+
+      - name: Build the viewer
+        run: npm run build -w @cad/web
+
+      - name: Copy the viewer into the Worker's assets
+        run: npm --prefix apps/share run build
+
+      - name: Deploy the Worker
+        working-directory: apps/share
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4.167.0 deploy
+
+      # The new version reaches every location within moments, not at once: each check is asked
+      # again, a few seconds apart, for at most a minute, until it answers what the deploy should.
+      - name: Check the deployed service
+        env:
+          SHARE_ORIGIN: ${{ vars.SHARE_ORIGIN }}
+        run: |
+          check() {
+            local label="$1" expected="$2" url="$3" got=""
+            for _ in $(seq 1 20); do
+              got="$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' "$url" || true)"
+              if [ "$got" = "$expected" ]; then
+                echo "$label: $got"
+                return 0
+              fi
+              sleep 3
+            done
+            echo "$label: expected '$expected', got '$got' from $url" >&2
+            return 1
+          }
+          check "GET / redirects" "302 https://www.texttocad.dev/" "$SHARE_ORIGIN/"
+          check "An unknown share is missing" "404 " "$SHARE_ORIGIN/v1/shares/AAAAAAAAAAAAAAAAAAAAAA"

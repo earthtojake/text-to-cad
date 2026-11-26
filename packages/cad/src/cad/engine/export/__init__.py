@@ -71,7 +71,7 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import put
 
-__all__ = ["KINDS", "MAX_ANGLE", "MIN_ANGLE", "MIN_TOLERANCE", "ROBOTS", "TOLERANT", "ExportIncomplete",
+__all__ = ["KINDS", "MAX_ANGLE", "MIN_ANGLE", "MIN_TOLERANCE", "ROBOTS", "TOLERANT", "VIEW", "ExportIncomplete",
            "ExportRefused", "ExportWarning", "Kind", "Prepared", "Source", "View", "angle_of", "described", "kind_of",
            "note", "prepare", "refused", "tolerance_of", "translate", "within", "zero_of"]
 
@@ -177,6 +177,10 @@ KINDS: dict[str, Kind] = {
     "urdf": Kind("urdf", (".urdf",), "cad.engine.export.urdf:write", atomic=False,
                  render="cad.engine.export.urdf:rendered_view"),
 }
+# The suffix of a view bundle's folder: the one destination that is no translation and no kind here. It is
+# what the document's page reads, written by the server that answers the page (the engine's **View bundle**),
+# never by a worker, so ``api.export`` asks the server for it and ``translate`` never meets one.
+VIEW = ".view"
 # What a source file is read as: a document, or a mesh file's triangles.
 SOURCES = (".xbf", ".step", ".stp")
 MESHES = (".glb", ".stl", ".3mf")
@@ -285,7 +289,7 @@ def kind_of(path: Any) -> str:
         if suffix in kind.suffixes:
             return kind.name
     known = ", ".join(suffix for kind in KINDS.values() for suffix in kind.suffixes)
-    raise ExportRefused(f"{Path(path).name}: an export is one of {known}")
+    raise ExportRefused(f"{Path(path).name}: an export is one of {known}, or a view bundle's folder ({VIEW})")
 
 
 # --- a document to translate ---------------------------------------------------------------

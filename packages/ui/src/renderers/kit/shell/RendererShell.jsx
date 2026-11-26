@@ -288,7 +288,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   const clearQuickEdit = () => { onClearReferences?.(); if (frame.annotation.hasAnnotation) frame.annotation.forget(); };
   const forgetAnnotation = frame.annotation.forget;
   // Quick Edit's annotation: while Annotate is up or there is ink. The annotation goes with a note whenever
-  // there is one (its views and annotation file, `frame.quickEditPrompt`); its Annotation chip's X wipes it.
+  // there is one (in its snapshot packet, with the views, `frame.quickEditPrompt`); its Annotation chip's X wipes it.
   const annotation = useMemo(() => frame.annotateToolActive || frame.annotation.hasAnnotation
     ? { present: frame.annotation.hasAnnotation, clear: forgetAnnotation } : null,
   [frame.annotateToolActive, frame.annotation.hasAnnotation, forgetAnnotation]);
