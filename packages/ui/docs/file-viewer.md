@@ -42,9 +42,8 @@ unmount.
 
 Use `defineFileRenderer<T>` to keep the prepared payload paired with its lazy
 component. A definition supplies `id`, numeric `priority`, `matches`, `prepare`,
-and `load`, and optionally `fallback` and `aliases` (the ids it had before: a view the tab saved under one opens
-as this renderer's). Larger priorities win.
-Duplicate IDs (an alias among them) and equal-priority matches
+and `load`, and optionally `fallback`. Larger priorities win.
+Duplicate IDs and equal-priority matches
 produce explicit errors. At most one registration may declare `fallback: true`;
 it runs only when no ordinary registration matches. Registration construction
 and matching do not load the component.

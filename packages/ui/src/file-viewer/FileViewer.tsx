@@ -91,8 +91,6 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
     if (mayTakeKeyboard(element.ownerDocument, element.ownerDocument.defaultView as Window)) element.focus({ preventScroll: true });
   }, [ready, key, appearance.compact]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
-  // A view saved under an id the renderer had before (`aliases`) is its own.
-  const aliasStateKeys = loaded.status === "ready" ? (loaded.renderer.aliases ?? []).map(id => JSON.stringify([loaded.file.path, id])) : [];
 
   // The renderer is re-rendered only when what it is handed changes: not by a navbar action it
   // published, a resize within one layout, or anything else this frame redraws for itself. Its
@@ -101,8 +99,7 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const openedState = useRef<{ key: unknown; value: JsonValue | undefined }>({ key: undefined, value: undefined });
   const openedKey = `${String(key)}\u0000${rendererStateKey}`;
   if (openedState.current.key !== openedKey) {
-    const saved = state.renderers?.[rendererStateKey] ?? aliasStateKeys.map(found => state.renderers?.[found]).find(value => value !== undefined);
-    openedState.current = { key: openedKey, value: saved };
+    openedState.current = { key: openedKey, value: state.renderers?.[rendererStateKey] };
   }
   const rendererState = openedState.current.value;
   // The view's panel, the file's (`filePanel.js`): held here for the file on screen, from
