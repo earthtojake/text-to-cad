@@ -306,11 +306,10 @@ def _write(path: Path, kept: dict[str, Any] | None) -> None:
     write_bytes_atomic(path, json.dumps(kept, sort_keys=True).encode("utf-8"))
 
 
-def point(path: str | os.PathLike[str] | None, *,
-          prefix: str | os.PathLike[str] | None = None) -> dict[str, Any] | None:
+def point(path: str | os.PathLike[str] | None, *, prefix: str | os.PathLike[str] | None = None) -> dict[str, Any] | None:
     """The environment at ``prefix`` (this one) pointed at the stored release at ``path``, for the cad installed there
-    now (``own``). With no ``path``, the pointer removed: the environment runs its own packages. Written whole or not at all: a process
-    starting meanwhile reads the pointer before or this one. What was written. ``OSError`` where it cannot be, or
+    now (``own``). With no ``path``, the pointer removed: the environment runs its own packages. Written whole or not
+    at all: a process starting meanwhile reads the pointer before or this one. What was written. ``OSError`` where it cannot be, or
     where ``path`` is no stored release or the environment holds no cad to write it for."""
     prefix = Path(prefix or sys.prefix)
     if path is None:
@@ -506,8 +505,8 @@ def clean(keep: Iterable[str | os.PathLike[str] | None] = (), *, now: float | No
     ``STALE_SECONDS`` old; one that cannot be read is left, and so is a newer one, with the releases it names: an
     update may be writing it. Then each stored release is removed that is not one of ``keep``, not one a pointer
     names, of whatever environment, not the one this process runs, and that no process runs (``remove``): the one an
-    update switched away from goes at the first tidying no process runs it in; each ``.trash-`` folder is deleted as far as it can be; and each ``.building-``
-    folder older than ``ABANDONED_SECONDS``, whose build died. The names removed. Never raises."""
+    update switched away from goes at the first tidying no process runs it in; each ``.trash-`` folder is deleted
+    as far as it can be; and each ``.building-`` folder older than ``ABANDONED_SECONDS``, whose build died. The names removed. Never raises."""
     now = time.time() if now is None else now
     removed: list[str] = []
     try:
