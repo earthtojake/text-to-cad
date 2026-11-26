@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 # A base with two arms and a spare pin: the one model of the group. link_arm and
 # link_pin are plain functions it calls; the arm is placed twice and holds two
 # placements of the pin, so the pin's B-rep is one prototype placed five times,
@@ -11,7 +11,7 @@ from link_arm import link_arm
 from link_pin import link_pin
 
 
-@model
+@xbf
 def link_robot():
     base = bd.Box(60.0, 30.0, 6.0)
     base.label = "base"

@@ -60,7 +60,7 @@ sizes here.
 ## Check it
 
 ```bash
-cad model dfm "$ID" --process cnc --material aluminum --axes 5 --tools 3,6,10
+cad xbf dfm "$ID" --process cnc --material aluminum --axes 5 --tools 3,6,10
 cad step dfm shaft.step --process cnc --turning --material stainless
 ```
 

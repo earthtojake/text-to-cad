@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -16,7 +16,7 @@ HOLE_EDGE_INSET_MM = 12.0
 BLANK_LENGTH_MM = LEG_A_LENGTH_MM + LEG_B_LENGTH_MM
 
 
-@model
+@xbf
 def l_bracket_flat():
     # The blank is drawn in its own first-quadrant coordinates (0,0 at the
     # bottom-left corner), which is how a flat pattern is dimensioned on the

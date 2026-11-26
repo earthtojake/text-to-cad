@@ -22,7 +22,7 @@ the as-built configuration of the document's mechanism.
 """
 
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 from dataclasses import dataclass
 from math import cos, pi, sin, sqrt
@@ -1523,7 +1523,7 @@ def _palm_module(side: str, sign: float, wrist: Point) -> tuple[bd.Compound, Poi
     ), palm_center
 
 
-@model
+@xbf
 def sculpted_humanoid():
     """Return the complete labeled humanoid assembly in its athletic pose."""
 

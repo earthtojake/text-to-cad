@@ -3,7 +3,7 @@ motion works + chronograph works, all authored in the shared MOVEMENT local
 frame (see `lib/spec.py`), so composition is identity — no re-posing here.
 """
 
-from cad import model
+from cad import xbf
 
 import chrono_works
 import keyless_works
@@ -18,7 +18,7 @@ import build123d as bd
 # and `case.py` write a file.
 
 
-@model
+@xbf
 def movement():
     children = []
 

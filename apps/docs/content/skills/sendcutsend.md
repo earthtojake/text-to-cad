@@ -11,7 +11,7 @@ The check starts from the order context: file type, process (laser cutting, CNC 
 
 SendCutSend's three published source files are fetched fresh each time: the ordering guide (workflow and file format rules), the catalog JSON (materials, thicknesses, size limits and services) and the specs JSON (engineering values such as hole, bridge and bend figures, joined to the catalog by exact SKU). They are treated as data that can change or have gaps, not as a stable API.
 
-The measurements come from the actual upload file, not the script that made it. A model's upload is exported first with `cad model export part.xbf part.step` or `part.dxf`. `cad step inspect` gives a STEP's bodies, bounds and volume, or reads one face, such as a bend's cylinder and its radius. text-to-cad's own sheet-metal check runs on the file with the SKU's figures where the specs list them:
+The measurements come from the actual upload file, not the script that made it. A model's upload is exported first with `cad xbf export part.xbf part.step` or `part.dxf`. `cad step inspect` gives a STEP's bodies, bounds and volume, or reads one face, such as a bend's cylinder and its radius. text-to-cad's own sheet-metal check runs on the file with the SKU's figures where the specs list them:
 
 ```bash
 cad step inspect part.step 'face 9'

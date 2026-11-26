@@ -9,13 +9,13 @@ reflection is new geometry, so the right side is its own function from the same
 from __future__ import annotations
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import spec as S
 from lib import trim as T
 
 
-@model
+@xbf
 def turn_signal_left():
     x, y, z = S.FRONT_SIGNAL_POS
     return bd.Compound(children=T.build_turn_signal((x, y, z), 1.0), label="turn_signal")

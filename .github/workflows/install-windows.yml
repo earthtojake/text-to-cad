@@ -228,10 +228,10 @@ jobs:
           . "$env:RUNNER_TEMP\e2e.ps1"
           $dir = Join-Path $env:RUNNER_TEMP 'models\box'
           Save "$dir\box.py" @'
-          from cad import model
+          from cad import xbf
 
 
-          @model
+          @xbf
           def box():
               import build123d as bd
 
@@ -294,10 +294,10 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'models\with'
           Save "$dir\strip.py" @'
           import own_extra
-          from cad import model
+          from cad import xbf
 
 
-          @model
+          @xbf
           def strip():
               import build123d as bd
 
@@ -329,10 +329,10 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'models\ranged'
           Save "$dir\strip.py" @'
           import own_extra
-          from cad import model
+          from cad import xbf
 
 
-          @model
+          @xbf
           def ranged():
               import build123d as bd
 
@@ -368,10 +368,10 @@ jobs:
           $header = "# /// script`n# dependencies = [`"own-extra @ $env:OWN_WHEEL_URL`"]`n# ///`n"
           Save "$dir\headed.py" ($header + @'
           import own_extra
-          from cad import model
+          from cad import xbf
 
 
-          @model
+          @xbf
           def headed():
               import build123d as bd
 
@@ -402,10 +402,10 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'models\venv'
           Save "$dir\model.py" @'
           import own_extra
-          from cad import model
+          from cad import xbf
 
 
-          @model
+          @xbf
           def viaenv():
               import build123d as bd
 
@@ -463,10 +463,10 @@ jobs:
           Need $r 'cad server start, accented state folder' @("cad $([regex]::Escape($env:CAD_RELEASE))")
           $dir = Join-Path $env:RUNNER_TEMP 'models\accented'
           Save "$dir\box.py" @'
-          from cad import model
+          from cad import xbf
 
 
-          @model
+          @xbf
           def box():
               import build123d as bd
 

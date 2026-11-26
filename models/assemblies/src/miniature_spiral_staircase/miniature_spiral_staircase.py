@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 from math import cos, radians, sin
 
 import build123d as bd
@@ -151,7 +151,7 @@ def _make_baluster(index: int):
     return part
 
 
-@model
+@xbf
 def miniature_spiral_staircase():
     """Return a labeled miniature spiral staircase compound in millimeters."""
     parts = [

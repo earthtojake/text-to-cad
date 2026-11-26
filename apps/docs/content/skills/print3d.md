@@ -3,14 +3,14 @@ title: print3d
 description: The print3d skill slices a part into printer-ready G-code with OrcaSlicer and hands it to your printer's app.
 ---
 
-The `print3d` skill slices a part into printer-ready G-code with OrcaSlicer and hands the result to your printer's app. For a Bambu Lab printer that is Bambu Connect or Bambu Studio, where you press Print yourself. Whether a part will print well at all is a separate question, answered by the printing check in the `cad` skill's [manufacturing checks](/docs/cad#manufacturing-checks), for example `cad model dfm "$ID" --process printing --technology fdm`.
+The `print3d` skill slices a part into printer-ready G-code with OrcaSlicer and hands the result to your printer's app. For a Bambu Lab printer that is Bambu Connect or Bambu Studio, where you press Print yourself. Whether a part will print well at all is a separate question, answered by the printing check in the `cad` skill's [manufacturing checks](/docs/cad#manufacturing-checks), for example `cad xbf dfm "$ID" --process printing --technology fdm`.
 
 ## How it works
 
 OrcaSlicer's command line reads `.stl`, `.3mf`, `.obj` and `.amf`, so a model or a STEP is exported to a mesh first:
 
 ```bash
-cad model export part.xbf part.3mf
+cad xbf export part.xbf part.3mf
 cad step export part.step part.3mf
 ```
 

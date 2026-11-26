@@ -3,7 +3,7 @@
 # ///
 """Galatea's presentation stills and clips: `cad run src/renders.py [name ...]` writes them to tmp/renders/.
 
-Each still is one `cad model snapshot` of a document the server holds (the robot, or one
+Each still is one `cad xbf snapshot` of a document the server holds (the robot, or one
 of the standing models of `stances.py`), drawn shaded through a long lens on a clear
 background at twice its size, then set on a pale studio backdrop with a contact shadow.
 A clip is a motion drawn frame by frame, the robot posed by its joint values under a

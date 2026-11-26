@@ -120,7 +120,7 @@ nuts. The one human input is which printed parts form which link; every other pa
 touches, a servo as a unit by its case and its horns to the link they drive, which reproduces the
 maker's grouping. Each axis is the drive horn's rim, checked against the parts' own bores (0.00 mm).
 The joint stops come from a self-collision sweep of the CAD (`src/so101_ranges.py`, written before
-`cad model ranges` shipped; its numbers are the ones `so101.py` writes), within 5-10 deg of
+`cad xbf ranges` shipped; its numbers are the ones `so101.py` writes), within 5-10 deg of
 the references, with no number taken from them. Mass: printed parts as PLA with a 0.8 mm solid skin
 and the maker's 15% infill (277 g where solid would be 709 g), each servo at its published 55 g (the
 STEP's servo model overlaps itself), fasteners at the STEP's own steels. The two axes that differ, the
@@ -186,7 +186,7 @@ ranked by how much they cost a CAD-to-simulation user:
    effort=, velocity=)` gives the drive's limits (`cad urdf validate` warns of a 0), and links and
    joints are named in their own kinds.
 8. **Fixed: no joint limits from geometry.** The STEP has no stops; a model script's own self-collision
-   sweep found them for SO-101 in 41 s. `cad model ranges` (also `cad step ranges`) now sweeps each
+   sweep found them for SO-101 in 41 s. `cad xbf ranges` (also `cad step ranges`) now sweeps each
    joint alone until its parts meet and prints a table of each joint's stops (0.3 mm by default;
    `--joint` names the joints to sweep).
 9. **Fixed: reading a large STEP is slow to work with.** build123d's `located` on a `step.read` leaf

@@ -35,9 +35,9 @@ function Summary({ text }: { text: string }) {
 // builds the bracket every other bracket drawing shows.
 const BRACKET_SCRIPT = [
   "import build123d as bd",
-  "from cad import model",
+  "from cad import xbf",
   "",
-  "@model",
+  "@xbf",
   "def bracket():",
   "    plate = bd.Box(60, 40, 4)",
   "    wall = bd.Pos(0, -18, 22) * bd.Box(60, 4, 40)",
@@ -47,9 +47,9 @@ const BRACKET_SCRIPT = [
 
 // Python, lightly: keywords and the decorator in the brand blue, numbers in the foreground.
 function highlight(line: string) {
-  return line.split(/(\b(?:import|from|as|def|return)\b|@model|\b\d+\b)/).map((part, index) => {
+  return line.split(/(\b(?:import|from|as|def|return)\b|@xbf|\b\d+\b)/).map((part, index) => {
     if (!part) return null;
-    if (/^(import|from|as|def|return|@model)$/.test(part)) return <span key={index} className="text-brand">{part}</span>;
+    if (/^(import|from|as|def|return|@xbf)$/.test(part)) return <span key={index} className="text-brand">{part}</span>;
     if (/^\d+$/.test(part)) return <span key={index} className="text-foreground">{part}</span>;
     return part;
   });

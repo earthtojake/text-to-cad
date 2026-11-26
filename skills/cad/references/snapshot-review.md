@@ -18,9 +18,9 @@ nothing is built), a document file (`.xbf`, `.step`), a mesh (`.stl`, `.3mf`, `.
 never a ref into one (`$ID#bracket`): `--display '{"isolated": ["bracket"]}'` draws one part alone.
 
 ```bash
-cad model snapshot "$ID" tmp/review.png
-cad model snapshot "$ID" tmp/below_behind.png --camera 225:-30
-cad model snapshot "$ID" tmp/top.png --display hidden-line --grid --camera top
+cad xbf snapshot "$ID" tmp/review.png
+cad xbf snapshot "$ID" tmp/below_behind.png --camera 225:-30
+cad xbf snapshot "$ID" tmp/top.png --display hidden-line --grid --camera top
 ```
 
 With no flags a snapshot is the `solid` display from an orthographic isometric camera fitted to the
@@ -97,7 +97,7 @@ of a large curved part (a faceted outline, uneven shading). For a still that nee
 export the model as a GLB at the tolerance wanted and draw that file:
 
 ```bash
-cad model export src/bracket.xbf tmp/fine.glb --tolerance 0.02 --angle 3
+cad xbf export src/bracket.xbf tmp/fine.glb --tolerance 0.02 --angle 3
 cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
 ```
 
@@ -109,7 +109,7 @@ relation to a floor. `display.clip` takes `enabled`, `axis` (`x`, `y` or `z`, lo
 and `invert`; the cut is capped. Look straight at the cut:
 
 ```bash
-cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
+cad xbf snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
 ```
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
@@ -120,8 +120,8 @@ numbered segment and its path written with either, so one entry leaves out a kin
 part wherever it is; a glob that matches nothing is refused.
 
 ```bash
-cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
-cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
+cad xbf snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad xbf snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
 ```
 
 ## Annotations and Quick Edit views
@@ -145,7 +145,7 @@ LINK` first: then `cad <type> snapshot` reads the link as the copy it wrote). Th
 Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cad model snapshot "$ID" tmp/quick_edit.png --annotation '<packet>' --camera authored
+cad xbf snapshot "$ID" tmp/quick_edit.png --annotation '<packet>' --camera authored
 ```
 
 `--annotation` takes the packet and draws each mark on its part,
@@ -161,8 +161,8 @@ pose, the ink over each), each picture into the current folder (or `--out DIR`) 
 `<input>-<label>.png`, and says where:
 
 ```bash
-cad model snapshot --job '<packet>'
-cad model snapshot --job '<packet>' "$ID"   # the same views, of the document as it is now
+cad xbf snapshot --job '<packet>'
+cad xbf snapshot --job '<packet>' "$ID"   # the same views, of the document as it is now
 ```
 
 `--job` also takes a job (`{input, camera, display, preview, jointValues, output, outputs}`) or a

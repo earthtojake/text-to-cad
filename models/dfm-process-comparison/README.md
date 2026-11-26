@@ -71,7 +71,7 @@ cad step dfm models/dfm-process-comparison/STEP/injection.step --process molding
 ```
 
 Molding is judged on exact geometry, so `injection` is checked from its STEP export
-(`cad model export <id> STEP/injection.step`, as `verify.py` reads it), never from a mesh.
+(`cad xbf export <id> STEP/injection.step`, as `verify.py` reads it), never from a mesh.
 
 (The checks above were run with the skills' measurement scripts these commands replaced; the figures are
 the same measurements.)

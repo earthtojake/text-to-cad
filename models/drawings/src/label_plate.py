@@ -9,7 +9,7 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -27,7 +27,7 @@ SERIAL_ORIGIN_MM = (28.0, 21.0)
 SCORE_POINTS_MM = ((28.0, 15.0), (48.0, 12.0), (68.0, 15.0), (88.0, 12.0))
 
 
-@model
+@xbf
 def label_plate():
     with bd.BuildSketch() as cut:
         with bd.Locations((PLATE_LENGTH_MM / 2.0, PLATE_WIDTH_MM / 2.0)):

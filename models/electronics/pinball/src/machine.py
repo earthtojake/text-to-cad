@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 import dotfont
 import layout as L
@@ -158,32 +158,32 @@ def build(lit: bool, left=None, right=None, ball_at=(L.SHOOTER_X, L.BALL_READY_Y
     return bd.Compound(children=placed + cabinet(T) + legs(T), label=label)
 
 
-@model
+@xbf
 def short_circuit():
     """Powered off, flippers at rest, the ball waiting on the plunger."""
     return build(False)
 
 
-@model
+@xbf
 def short_circuit_lit():
     """Powered on: every light lit, the right flipper up, the ball on its way up the field."""
     return build(True, right=L.FLIPPER_UP, ball_at=(L.CENTER_X, 78.0), label="short_circuit_lit")
 
 
-@model
+@xbf
 def short_circuit_open():
     """Powered off, the glass out (for a clear look at the playfield)."""
     return build(False, label="short_circuit_open", with_glass=False)
 
 
-@model
+@xbf
 def short_circuit_lit_open():
     """Powered on, the glass out."""
     return build(True, right=L.FLIPPER_UP, ball_at=(L.CENTER_X, 78.0), label="short_circuit_lit_open",
                  with_glass=False)
 
 
-@model
+@xbf
 def short_circuit_cradle():
     """For the close-ups: the left flipper held up, the ball cradled on it (8 mm along the bat), lit."""
     return build(True, left=L.FLIPPER_UP, ball_at=(26.98, 53.46), label="short_circuit_cradle", with_glass=False)
@@ -195,14 +195,14 @@ def _bumper_touch(name="C3", angle_deg=-115.0):
     return (x + r * math.cos(math.radians(angle_deg)), y + r * math.sin(math.radians(angle_deg)))
 
 
-@model
+@xbf
 def short_circuit_detail_lane():
     """For the close-ups: the ball rolling over the N lane's gold comb, the left flipper up, lit."""
     return build(True, left=L.FLIPPER_UP, ball_at=(L.TOP_LANES["N"], L.TOP_LANE_Y[0] + 7.6),
                  label="short_circuit_detail_lane", with_glass=False)
 
 
-@model
+@xbf
 def short_circuit_detail_bumper():
     """For the close-ups: the ball against C3's ring, standing on its gold comb, powered off."""
     return build(False, ball_at=_bumper_touch(), label="short_circuit_detail_bumper", with_glass=False)

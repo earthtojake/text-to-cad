@@ -6,14 +6,14 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
 from lib import clamp_plate_profile
 
 
-@model
+@xbf
 def clamp_plate():
     top = clamp_plate_profile.plate().faces().sort_by(bd.Axis.Z)[-1]
     return bd.Pos(0, 0, -clamp_plate_profile.THICKNESS_MM) * top

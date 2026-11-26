@@ -21,7 +21,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -141,7 +141,7 @@ def _make_leaf_b():
     return leaf
 
 
-@model
+@xbf
 def print_in_place_hinge():
     """Return the print-in-place hinge as a labeled two-leaf assembly compound."""
     leaf_a = _make_leaf_a()

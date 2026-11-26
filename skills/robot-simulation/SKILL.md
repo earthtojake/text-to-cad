@@ -13,7 +13,7 @@ robot_state_publisher), an SRDF beside it for MoveIt's planning semantics, and a
 There are two routes to one:
 
 - **Generate it from CAD.** A text-to-cad model that holds the mechanism, materials and named frames
-  is the source of truth: `cad model export` writes the URDF or MJCF, with frames, limits, masses,
+  is the source of truth: `cad xbf export` writes the URDF or MJCF, with frames, limits, masses,
   inertias and meshes exact from the kernel. The file is regenerated, never edited.
 - **Author it by hand.** A robot with no CAD model here, an SRDF (always), a MuJoCo scene, or a file
   that already exists: the XML is the source of truth. The risk is not XML syntax but frames, axis
@@ -24,7 +24,7 @@ There are two routes to one:
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| A URDF or MJCF from a CAD model | The model's declarations, then `cad model export robot.xbf robot.xml` or `.urdf` | [Generate from CAD](#generate-from-cad), [from CAD](references/from-cad.md) |
+| A URDF or MJCF from a CAD model | The model's declarations, then `cad xbf export robot.xbf robot.xml` or `.urdf` | [Generate from CAD](#generate-from-cad), [from CAD](references/from-cad.md) |
 | Collision shapes, joint dynamics, actuators for MuJoCo | A MuJoCo function, run with `cad run` | [The MuJoCo function](#the-mujoco-function), [MuJoCo environment](references/mujoco-environment.md) |
 | A robot from a vendor's STEP | Read it, group parts into links, find each axis, declare, export | [From a vendor STEP](references/from-a-vendor-step.md) |
 | A MuJoCo scene: several robots, objects, a world | `spec()` for each piece, composed with MuJoCo's own `MjSpec` | [MuJoCo environment](references/mujoco-environment.md#the-scene-in-code) |
@@ -83,9 +83,9 @@ free(root)                             # on a mobile base: not bolted to the wor
 
 ```bash
 cad run src/gripper.py                                       # saves the model as src/gripper.xbf
-cad model ranges "$ID"                                       # stops where the parts meet, to write into the joints
-cad model export src/gripper.xbf sim/gripper.xml
-cad model export src/gripper.xbf description/gripper.urdf --zero home
+cad xbf ranges "$ID"                                       # stops where the parts meet, to write into the joints
+cad xbf export src/gripper.xbf sim/gripper.xml
+cad xbf export src/gripper.xbf description/gripper.urdf --zero home
 ```
 
 `$ID` is the `id:` line the run printed; the suffix picks the format, and meshes are written beside
@@ -98,7 +98,7 @@ An MJCF export also writes a `scene.xml` beside it once (floor, light), which is
 - **Never edit a generated file.** A frame, limit, mass or mesh is changed in the model; a collision
   shape, damping or actuator in the MuJoCo function; a floor or solver setting in the scene.
 - **The kernel cannot know intent**: check that each joint's positive motion is the one meant
-  (`cad model snapshot "$ID" out.png --pose <state>`) and that the collision shapes suit the physics.
+  (`cad xbf snapshot "$ID" out.png --pose <state>`) and that the collision shapes suit the physics.
 
 ### The MuJoCo function
 
@@ -139,7 +139,7 @@ cad mujoco check sim/scene.xml
 ```
 
 `spec`, `fit`, `decompose`, `collisions`, `parts` and `save` are the only helpers; they name a part by
-its label path, as `cad model inspect` prints it. Everything else is MuJoCo's API. `save` writes the
+its label path, as `cad xbf inspect` prints it. Everything else is MuJoCo's API. `save` writes the
 file with its meshes, and a `scene.xml` where there is none, then prints the check's warnings, what
 the model collides as and its contact excludes: read them against the choices the function made. This
 file replaces the plain export ([MuJoCo environment](references/mujoco-environment.md#the-mujoco-function)).
@@ -203,7 +203,7 @@ cad run mujoco-studio --model path/to/scene.xml
 
 | Change | Check it with |
 | --- | --- |
-| A CAD model's mechanism or declarations | Run it, export again (or run its MuJoCo function again), validate the file; `cad model snapshot` at each mechanism state first, where the joint signs show |
+| A CAD model's mechanism or declarations | Run it, export again (or run its MuJoCo function again), validate the file; `cad xbf snapshot` at each mechanism state first, where the joint signs show |
 | A MuJoCo function or a scene script | Run it and read what `save` printed, then `cad mujoco check` on the scene |
 | Any `.urdf` | `cad urdf validate` until clean; `check_urdf` when installed; `cad srdf validate` on an SRDF beside it |
 | A joint origin, axis, sign or limit | Every movable joint moved through its limits, in the viewer or in snapshots at `--pose` values. Only this catches a flipped sign |

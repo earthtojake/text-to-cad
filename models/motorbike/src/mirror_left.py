@@ -9,13 +9,13 @@ tracked by value, so only a changed mount moves this mirror.
 from __future__ import annotations
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from handlebar import MIRROR_MOUNT_LEFT
 from lib import trim as T
 
 
-@model
+@xbf
 def mirror_left():
     return bd.Compound(children=T.build_mirror(1.0, MIRROR_MOUNT_LEFT), label="mirror")
 

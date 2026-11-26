@@ -37,7 +37,7 @@ is a new placement of its result.
 
 from __future__ import annotations
 
-from cad import memo, model
+from cad import memo, xbf
 from cad.ap242 import configuration_sequence, mechanism_state
 
 import math
@@ -252,7 +252,7 @@ MOTIONS = {
 }
 
 
-@model
+@xbf
 def lyra():
     link = links()
     # Root to leaf: each joint on its parent link, connected at the relaxed pose.
@@ -275,87 +275,87 @@ def lyra():
 # --- the URDF's link meshes: each link alone, in its part-local frame -------------------------
 
 
-@model
+@xbf
 def palm():
     return links()["palm"]
 
 
-@model
+@xbf
 def index_proximal():
     return links()["index_proximal"]
 
 
-@model
+@xbf
 def index_middle():
     return links()["index_middle"]
 
 
-@model
+@xbf
 def index_distal():
     return links()["index_distal"]
 
 
-@model
+@xbf
 def middle_proximal():
     return links()["middle_proximal"]
 
 
-@model
+@xbf
 def middle_middle():
     return links()["middle_middle"]
 
 
-@model
+@xbf
 def middle_distal():
     return links()["middle_distal"]
 
 
-@model
+@xbf
 def ring_proximal():
     return links()["ring_proximal"]
 
 
-@model
+@xbf
 def ring_middle():
     return links()["ring_middle"]
 
 
-@model
+@xbf
 def ring_distal():
     return links()["ring_distal"]
 
 
-@model
+@xbf
 def pinky_proximal():
     return links()["pinky_proximal"]
 
 
-@model
+@xbf
 def pinky_middle():
     return links()["pinky_middle"]
 
 
-@model
+@xbf
 def pinky_distal():
     return links()["pinky_distal"]
 
 
-@model
+@xbf
 def thumb_base():
     return links()["thumb_base"]
 
 
-@model
+@xbf
 def thumb_metacarpal():
     return links()["thumb_metacarpal"]
 
 
-@model
+@xbf
 def thumb_proximal():
     return links()["thumb_proximal"]
 
 
-@model
+@xbf
 def thumb_distal():
     return links()["thumb_distal"]
 

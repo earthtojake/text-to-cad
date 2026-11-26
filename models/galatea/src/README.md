@@ -52,7 +52,7 @@ cad run src/renders.py hero stride walk      # stills and clips by name; all of 
 ```
 
 A run writes nothing. Files are written on request, into folders Git ignores:
-`cad model export <id> GLB/galatea.glb` carries the ten motions as animation clips, and
+`cad xbf export <id> GLB/galatea.glb` carries the ten motions as animation clips, and
 the exploded view (`lib/show.py`) as an eleventh.
 
 `links()` in `galatea.py` is the one `@memo` stage: all 73 links at the zero pose, which
@@ -439,7 +439,7 @@ renders the robot's GLB with Blender's Cycles (the `render` skill; `cad run` giv
 script that imports `bpy` its Blender), on the CPU where there is no GPU.
 
 ```
-cad model export <id> GLB/galatea.glb --tolerance 0.08 --angle 8    # 78 MB; again after every change to the model
+cad xbf export <id> GLB/galatea.glb --tolerance 0.08 --angle 8    # 78 MB; again after every change to the model
 cad run src/film.py list                         # the cut: its pieces and their lengths
 cad run src/film.py still knee 20 --draft        # one frame, 960 x 540, in a few seconds: framing and light
 cad run src/film.py shot knee --preview --step 2 # a shot's motion, small and quick

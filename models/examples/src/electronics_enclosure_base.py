@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 import build123d as bd
 
 
@@ -26,7 +26,7 @@ STANDOFF_LOCATIONS = (
 )
 
 
-@model
+@xbf
 def electronics_enclosure_base():
     """Return a single solid open-top electronics enclosure base in millimeters."""
     inner_length = OUTER_LENGTH - 2.0 * WALL_THICKNESS

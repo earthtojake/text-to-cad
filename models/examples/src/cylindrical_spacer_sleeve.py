@@ -3,13 +3,13 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 # Prompt: Cylindrical spacer sleeve with a central through-bore and rounded rim edges.
 
 from lib.simple_model_library import make_cylindrical_spacer_sleeve
 
 
-@model
+@xbf
 def cylindrical_spacer_sleeve():
     part = make_cylindrical_spacer_sleeve()
     authored_color = part.color

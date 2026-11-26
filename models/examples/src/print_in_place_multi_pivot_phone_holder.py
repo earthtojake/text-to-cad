@@ -34,7 +34,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -244,7 +244,7 @@ def _make_cradle():
 PIVOTS = (("base_pivot", Y_J1), ("elbow_pivot", Y_J2), ("wrist_pivot", Y_J3))
 
 
-@model
+@xbf
 def print_in_place_multi_pivot_phone_holder():
     """Return the print-in-place holder as a labeled four-link assembly compound."""
     links = [_make_base(), _make_lower_arm(), _make_upper_arm(), _make_cradle()]

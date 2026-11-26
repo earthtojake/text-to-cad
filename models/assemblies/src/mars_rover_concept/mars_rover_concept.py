@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
 from cad.gltf import animation
 
@@ -1370,7 +1370,7 @@ _POSES = {
 }
 
 
-@model
+@xbf
 def mars_rover_concept():
     # Top-level children, in order (the joints address them by label):
     #  1 terrain            2 chassis_frame     3 body_core        4 body_shell

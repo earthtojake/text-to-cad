@@ -29,11 +29,11 @@ joints, mechanism states, couplings and configuration sequences, read
 ```python
 # src/hinged_box.py
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import animation, configuration_sequence, mechanism_state
 
 
-@model
+@xbf
 def hinged_box_showcase():
     ...                                                            # a body, a hinged lid, a latch, two feet
     mechanism_state(box, "shut", hinge=0)
@@ -51,7 +51,7 @@ def hinged_box_showcase():
 
 ```bash
 cad run src/hinged_box.py                             # saves src/hinged_box_showcase.xbf
-cad model export src/hinged_box_showcase.xbf GLB/hinged_box_showcase.glb
+cad xbf export src/hinged_box_showcase.xbf GLB/hinged_box_showcase.glb
 ```
 
 `animation(assembly, name, duration=)` returns a builder; every call returns it, so calls

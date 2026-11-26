@@ -7,7 +7,7 @@ called the four finger models; here each finger's combs are one `@memo` stage,
 model and the four-finger review both place, so a build makes each finger's combs once.
 """
 
-from cad import memo, model
+from cad import memo, xbf
 
 import build123d as bd
 
@@ -31,38 +31,38 @@ def finger_guide_mounts(finger):
     return mounts
 
 
-@model
+@xbf
 def index_guide_mounts():
     """Physical reaction combs for the index finger, in assembled neutral fan."""
     return finger_guide_mounts("index")
 
 
-@model
+@xbf
 def middle_guide_mounts():
     """Physical reaction combs for the middle finger, in assembled neutral fan."""
     return finger_guide_mounts("middle")
 
 
-@model
+@xbf
 def ring_guide_mounts():
     """Physical reaction combs for the ring finger, in assembled neutral fan."""
     return finger_guide_mounts("ring")
 
 
-@model
+@xbf
 def little_guide_mounts():
     """Physical reaction combs for the little finger, in assembled neutral fan."""
     return finger_guide_mounts("little")
 
 
-@model
+@xbf
 def phalanx_guide_mounts_review():
     """Complete four-finger phalanx guide-comb mounting hardware."""
     return bd.Compound(label="four_finger_phalanx_guide_mounts",
                        children=[finger_guide_mounts(finger) for finger in ("index", "middle", "ring", "little")])
 
 
-@model
+@xbf
 def guide_comb_review():
     """Exact mid-finger reaction comb and original skeletal rail mounting study."""
     pieces = [make_phalanx(45, 18, label="original_middle_proximal_frame")]
@@ -74,26 +74,26 @@ def guide_comb_review():
     return bd.Compound(label="supported_split_reaction_comb_review", children=pieces)
 
 
-@model
+@xbf
 def fixed_outlet_review():
     """Two fixed PIP drive-guide outlets with real removable side-rail mounts."""
     return bd.Compound(label="fixed_pip_guide_outlet_mounts",
                        children=[make_phalanx(45, 18), *make_fixed_outlet_pair(45, 18, 4.5, "middle_pip_drive_guide")])
 
 
-@model
+@xbf
 def fixed_outlet_mounts_review():
     """Four-finger fixed guide outlet hardware; full range acceptance is pending."""
     return bd.Compound(label="fixed_guide_outlet_mounts", children=[p[0] for p in fixed_phalanx_guide_mounts()])
 
 
-@model
+@xbf
 def yaw_reaction_mounts_review():
     """Eight carrier-anchored finger MCP yaw-reaction outlet mouths."""
     return bd.Compound(label="eight_finger_yaw_reaction_outlet_mounts", children=[s for s, f, y, k in yaw_reaction_mounts()])
 
 
-@model
+@xbf
 def yaw_outlet_mount_review():
     """Reaction mouths attached to the universal carrier beside both drive drums."""
     p = [make_universal_carrier(), *make_yaw_reaction_mounts(18, "middle_mcp")]
@@ -102,7 +102,7 @@ def yaw_outlet_mount_review():
     return bd.Compound(label="yaw_reaction_open_mouth_clamps", children=p)
 
 
-@model
+@xbf
 def yaw_guide_macro_review():
     """The index MCP's yaw mouths on its actual carrier, beside both flexion drums."""
     parts = make_yaw_reaction_mounts(18, "index_mcp")
@@ -114,7 +114,7 @@ def yaw_guide_macro_review():
     return bd.Compound(label="mounted_index_yaw_mouth_macro", children=parts)
 
 
-@model
+@xbf
 def thumb_cmc_negative_jaw_repair_review():
     """A continuous CMC reaction arm routed around both yaw drums.
 
@@ -127,13 +127,13 @@ def thumb_cmc_negative_jaw_repair_review():
     return bd.Compound(label="continuous_CMC_reaction_arm", children=[bd.Pos(*THUMB_CMC) * bd.Rot(0, 0, 45) * selected[0]])
 
 
-@model
+@xbf
 def thumb_downstream_mounts_review():
     """The thumb's downstream guide mounts."""
     return bd.Compound(label="thumb_downstream_guide_mounts", children=[s for s, f, y, k in thumb_downstream_mounts()])
 
 
-@model
+@xbf
 def thumb_reaction_arm_context_candidate():
     """Context-constrained reaction-arm candidate; not yet a clearance certificate."""
     shape = bd.Pos(*THUMB_CMC) * bd.Rot(0, 0, 45) * make_candidate(bow_x=4., bow_y=-14.)

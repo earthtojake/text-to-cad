@@ -17,7 +17,7 @@ The drawing documents geometry; it does not build it. It is a PDF written by a P
 
 ## How it works
 
-The part comes from one of two places. For a part with a model, the script calls the model function (for example `enclosure()`) and takes its `.shape`. For a part that exists only as a file, it reads the STEP with `step.read` or an `.xbf` with `model.read`.
+The part comes from one of two places. For a part with a model, the script calls the model function (for example `enclosure()`) and takes its `.shape`. For a part that exists only as a file, it reads the STEP with `step.read` or an `.xbf` with `xbf.read`.
 
 Your agent writes `<name>_drawing.py` beside the model. Dimension values such as hole pitch, overall size and wall thickness are imported from the model module, so moving a feature moves its dimension. A short drawing script:
 

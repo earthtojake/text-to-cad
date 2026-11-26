@@ -6,7 +6,7 @@ their atlas. Each model was its own script in `models/tendon_hand/src/`; they sh
 nothing expensive, so none is a `@memo` and no model calls another.
 """
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -213,7 +213,7 @@ CANDIDATE = [{'flex': 0.0,
                         [3.0, 12.25, 0.0]]]}]}]
 
 
-@model
+@xbf
 def bowden_review():
     """Four-lane two-axis neutral reaction guide prototype at neutral pose."""
     children = []
@@ -224,7 +224,7 @@ def bowden_review():
     return bd.Compound(label="four_lane_universal_bowden_geometry_prototype", children=children)
 
 
-@model
+@xbf
 def transport_review():
     """Exact six-lane MCP-yaw transport prototype; supports remain separate work."""
     bodies = []
@@ -236,7 +236,7 @@ def transport_review():
     return bd.Compound(label="coaxial_transport_six_lane_geometry_prototype", children=bodies)
 
 
-@model
+@xbf
 def middle_routing_review():
     """Middle finger full routing prototype from palm input to eight terminations."""
     children = []
@@ -264,7 +264,7 @@ def middle_routing_review():
     return bd.Compound(label="middle_finger_full_tendon_routing_prototype", children=children)
 
 
-@model
+@xbf
 def thumb_cmc_transport_review():
     """Six neutral CMC tendon and reaction-liner swept solids for strict validation."""
     children = []
@@ -274,7 +274,7 @@ def thumb_cmc_transport_review():
     return bd.Compound(label="thumb_cmc_six_continuous_reaction_transports", children=children)
 
 
-@model
+@xbf
 def thumb_cmc_candidate_review():
     """The six CMC transports with the candidate atlas above, outlet at y 16."""
     children = []

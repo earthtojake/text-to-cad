@@ -36,7 +36,7 @@ clip: the small seconds 9.6 deg, the minute hand 0.16 deg).
 import math
 
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
 from cad.gltf import animation
 
@@ -561,7 +561,7 @@ def _movement_ring():
     return ring
 
 
-@model
+@xbf
 def moonwatch():
     case = watch.case()
 

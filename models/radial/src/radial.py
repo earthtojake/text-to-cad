@@ -17,7 +17,7 @@ A GLB exported from the model carries all three as clips.
 
 from __future__ import annotations
 
-from cad import memo, model
+from cad import memo, xbf
 
 from lib import (
     accessory as accessory_lib,
@@ -226,7 +226,7 @@ def mount():
 # Declares its xbf, the corpus's example of a slow model's result kept across runs and
 # engine restarts: a cold build takes most of an hour. Every body replays; a no-op without
 # the file still samples the running motion again (5 s), which a run that takes it skips.
-@model("../XBF/radial.xbf")
+@xbf("../XBF/radial.xbf")
 def radial():
     systems = [
         crankcase(), crankshaft(), rods(), pistons(), barrels(), heads(), valvetrain(), cam(), pushrods(),

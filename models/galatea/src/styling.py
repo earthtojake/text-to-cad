@@ -10,7 +10,7 @@ mechanism.
 """
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import geo
 from lib.dims import ANKLE, ELBOW, HIP, KNEE, SHOULDER
@@ -192,7 +192,7 @@ def leg():
                  piece(upper, "foot_shell", "shell"))
 
 
-@model
+@xbf
 def galatea_styling():
     left_arm, left_leg = arm(), leg()
     return group("galatea_styling", head(), torso(), left_arm, mirror_tree(left_arm, "r_arm"), left_leg, mirror_tree(left_leg, "r_leg"))

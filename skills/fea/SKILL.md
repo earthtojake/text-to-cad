@@ -30,7 +30,7 @@ safety factor is no answer to them (a drop or a braking load can be estimated as
 | Compare design variants | The same study on each, faces mapped, mesh size held | [Compare variants](#compare-variants) |
 
 The study reads a saved `.step` or `.xbf`, or a model the server holds by its id
-(`cad model solve <id>`), and solves the whole document: to study one part of an assembly alone,
+(`cad xbf solve <id>`), and solves the whole document: to study one part of an assembly alone,
 export it as a document of its own.
 
 ## Setup

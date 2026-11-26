@@ -7,4 +7,4 @@ vendor/RA2.step is the STEP a vendor sent us for their RA2 two-joint arm: a base
 
 ## Expect
 
-A model script that reads the STEP and declares the mechanism (not a URDF written by hand), exported with `cad model export`. Three links, two revolute joints, each axis along Y; the first joint's origin 20 mm above the base's origin and the second 120 mm above the first (0.02 and 0.12 in the URDF); limits of 1.5708 and 2.0944 rad. Masses from the material: 0.1527, 0.1296 and 0.0691 kg, total 0.3514 kg. `cad urdf validate` OK. The reply says which way positive rotation goes or that the sign is unverified.
+A model script that reads the STEP and declares the mechanism (not a URDF written by hand), exported with `cad xbf export`. Three links, two revolute joints, each axis along Y; the first joint's origin 20 mm above the base's origin and the second 120 mm above the first (0.02 and 0.12 in the URDF); limits of 1.5708 and 2.0944 rad. Masses from the material: 0.1527, 0.1296 and 0.0691 kg, total 0.3514 kg. `cad urdf validate` OK. The reply says which way positive rotation goes or that the sign is unverified.

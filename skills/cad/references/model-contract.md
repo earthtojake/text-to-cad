@@ -24,7 +24,7 @@ files into a model, or working out why a run ran what it ran.
   loaded there, when it is first read and never before, so a script that only builds
   pays nothing for it. In a plain script (a check, a drawing) it is the tree a calling
   body reads, every part placed, named, coloured and given its material, without its
-  joints. Verbs take the handle (`model.export(handle, ...)`, `posed(handle, state)`).
+  joints. Verbs take the handle (`xbf.export(handle, ...)`, `posed(handle, state)`).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module
   level (`from build123d import Box`, an `Axis`, a `Location`, a colour palette, a
@@ -42,12 +42,12 @@ A number a person will tune is declared at the top level of the model's own scri
 goes on with the plain number `model.param` returns:
 
 ```python
-WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")   # unit "mm" or "deg"; step= too
-HOLES = model.param("holes", 4, min=2, max=8)              # an int default: whole numbers
-BORE = model.param("bore", 3 + CLEARANCE)                  # CLEARANCE declared in spec.py
+WALL = xbf.param("wall", 2.0, min=1, max=5, unit="mm")   # unit "mm" or "deg"; step= too
+HOLES = xbf.param("holes", 4, min=2, max=8)              # an int default: whole numbers
+BORE = xbf.param("bore", 3 + CLEARANCE)                  # CLEARANCE declared in spec.py
 ```
 
-`cad model inspect "$ID"` lists them. The viewer saves one only where its default is a plain number in
+`cad xbf inspect "$ID"` lists them. The viewer saves one only where its default is a plain number in
 the model's own script; any other is listed read-only, and changes where it is declared:
 
 ```text
@@ -68,7 +68,7 @@ A copy of a model's xbf lists each parameter at the value it was built with, rea
 ```python
 # src/assembly.py
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from plate import THICKNESS, plate      # src/plate.py: a part model and a constant of its script
 from standoff import standoff_m3        # src/standoff.py: one configuration of a part
@@ -76,7 +76,7 @@ from standoff import standoff_m3        # src/standoff.py: one configuration of 
 PITCH = 30.0
 
 
-@model
+@xbf
 def assembly():
     base = plate().shape
     post = standoff_m3().shape
@@ -205,14 +205,14 @@ from any working folder:
 from pathlib import Path
 
 import build123d as bd
-from cad import model, stl
+from cad import xbf, stl
 
 HERE = Path(__file__).resolve().parent
 
 
-@model
+@xbf
 def rig():
-    motor = model.read(HERE / "../vendor/motor.xbf")
+    motor = xbf.read(HERE / "../vendor/motor.xbf")
     motor.label = "motor"
     pcb = stl.read(HERE / "../scans/pcb.stl").bounding_box()   # an input, by the scan's bytes
     tray = bd.Box(pcb.size.X + 6, pcb.size.Y + 6, 6)
@@ -220,7 +220,7 @@ def rig():
     return bd.Compound(children=[tray, bd.Pos(0, 0, 20) * motor], label="rig")
 ```
 
-- **`step.read(path)` and `model.read(path)`** copy a document's geometry into the model as
+- **`step.read(path)` and `xbf.read(path)`** copy a document's geometry into the model as
   a build123d compound tree: each assembly a `Compound`, each part named, coloured and
   given its material as the file has them, each element keeping the name the file gives
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a
@@ -251,11 +251,11 @@ def rig():
 
 - **The id names the model, not a state of it.** It is that of the model's `.xbf`
   (`bracket.id`, without a call), which is named for the function or for
-  `@model(name="bracket")`. A renamed function is a new document, and two models of one
+  `@xbf(name="bracket")`. A renamed function is a new document, and two models of one
   name in a folder, in one script or two, save one file and are one document, the last
   one built: nothing refuses it.
 - **What names the state** is the key of the code and inputs the document was built
-  from, `handle.report["closure"]["key"]` (`cad model inspect "$ID" --query closure`
+  from, `handle.report["closure"]["key"]` (`cad xbf inspect "$ID" --query closure`
   prints the closure). A file derived from a document (a simulator's description, a GLB
   beside a film) that records the key can tell whether the document has been built from
   other sources since. The key is `None` where the model's code cannot be keyed.
@@ -264,7 +264,7 @@ def rig():
   script again. cad keeps no other copy of it, so to be rid of a document is to delete its
   file. Delete only what the person asked to delete.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
-  shape) is handed over: `model(shape, name="plate")` makes a document of it, served on
+  shape) is handed over: `xbf(shape, name="plate")` makes a document of it, served on
   its page and exported like any other, and returns its handle. Joints, mechanism states
   and sequences on the shape go with it; a GLB's animations are passed as
   `animations=[...]`. Nothing builds it again but the program that handed it over. A

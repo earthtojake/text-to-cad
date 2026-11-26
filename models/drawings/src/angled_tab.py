@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -22,7 +22,7 @@ HOLE_DIAMETER_MM = 6.0
 HOLE_CENTRES_MM = ((25.0, 30.0), (88.0, 48.0))
 
 
-@model
+@xbf
 def angled_tab():
     with bd.BuildSketch() as cut:
         with bd.Locations((PLATE_LENGTH_MM / 2.0, PLATE_WIDTH_MM / 2.0)):

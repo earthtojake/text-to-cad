@@ -20,7 +20,7 @@ part as it stands there, and a part used several times each way it stands (a pri
 molding's draft turn with it): an occurrence turned another way has findings of its own, at its own
 ref, and the totals count every occurrence.
 
-In a check script the same check is `cad.model.dfm(handle, ...)`, `cad.step.dfm(path, process=...)`
+In a check script the same check is `cad.xbf.dfm(handle, ...)`, `cad.step.dfm(path, process=...)`
 or, on a live build123d shape, `cad.build123d.dfm(shape, process=...)`. The options go by name, numbers
 as numbers (`tools=[3, 6]`, `strict=True`), and the result is data: `result.status`, `.findings`,
 `.measurements`.
@@ -38,7 +38,7 @@ figures and cite it. Where two specifications conflict, record both rather than 
 
 ## Read the result
 
-`cad model dfm "$ID" --tools 3,6,10`, on a plate whose pocket corners are 0.5 mm:
+`cad xbf dfm "$ID" --tools 3,6,10`, on a plate whose pocket corners are 0.5 mm:
 
 ```text
 error: cnc.internal_corner_radius, 4 place(s). Hint: radius the corner to at least 1.5 mm, the smallest tool's radius, or add a smaller tool. Source: Protolabs Network (Hubs), How to design parts for CNC machining.
@@ -97,7 +97,7 @@ why nothing was judged, not that the part fails.
   (`cnc.material_assumed`, `resin_unknown`, `sheet.k_factor_assumed`: report it), `several_solids`
   (a warning: one part of several solids, its message saying how the process read them) and
   `several_bodies` (several parts, every occurrence counted).
-- **The place and the figures.** Resolve a ref with `cad model inspect "$ID" '<ref>'`, a file's
+- **The place and the figures.** Resolve a ref with `cad xbf inspect "$ID" '<ref>'`, a file's
   with `cad step inspect part.step '<ref>'`. The figures behind a finding are
   `measurements.<family>.items`, worst first.
 - **What was not judged.** `measurements.rules.outcomes` has one entry for every rule, failed or

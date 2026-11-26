@@ -5,7 +5,7 @@ description: The render skill makes photoreal stills, turntables and films of a 
 
 A render is a picture for people: a hero shot, a README image, a product post, a turntable or a film of a mechanism moving. The `render` skill makes them with Blender, loaded as a Python module, from a scene script your agent writes.
 
-Renders are for looking, not measuring. A lens, lighting and depth of field make a poor ruler, so a render is not evidence for geometry or dimensions: those are checked with `cad model snapshot`.
+Renders are for looking, not measuring. A lens, lighting and depth of field make a poor ruler, so a render is not evidence for geometry or dimensions: those are checked with `cad xbf snapshot`.
 
 ## What it makes
 
@@ -19,7 +19,7 @@ The script is the source. Its images, films and `.blend` are outputs that runnin
 The model is exported to a GLB (a binary glTF 3D file), meshed finer than the viewer's mesh so facets do not show in a close-up:
 
 ```bash
-cad model export part.xbf scene.glb --tolerance 0.02 --angle 5
+cad xbf export part.xbf scene.glb --tolerance 0.02 --angle 5
 ```
 
 `part.xbf` is the model, the file running its script saves beside it. A STEP file exports the same way with `cad step export`. The GLB is a copy, so it is exported again after every model change.

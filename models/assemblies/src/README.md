@@ -1,7 +1,7 @@
 # assemblies models
 
 `models/assemblies` on cadgen 0.8: the repo's demo assemblies, one group per
-assembly, each model a `@model` that writes nothing. `src/<group>/` holds the group's
+assembly, each model a `@xbf` that writes nothing. `src/<group>/` holds the group's
 scripts and its own `lib/`. A group imports its siblings and its
 own `lib/`, and nothing across groups. There are 23 models. The old project had
 27 decorated files: `link_robot` and `research_humanoid` were three each, and
@@ -12,7 +12,7 @@ prints each one's id and page:
 
 ```
 cd planetary_gear_assembly && python planetary_gear_assembly.py
-cad model snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
+cad xbf snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
 ```
 
 | Script | Model | What it is |
@@ -40,9 +40,9 @@ cad model snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the 
 
 ## The port
 
-- `@step(out="../../STEP/<group>/<name>.step")` became `@model`. `build123d` is
+- `@step(out="../../STEP/<group>/<name>.step")` became `@xbf`. `build123d` is
   imported directly. Nothing else reads these models' STEP, so no model declares
-  one; `cad model export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
+  one; `cad xbf export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
   is the planetary gear's, written by hand with `cad <type> export`.
 - No model calls another. `link_robot`'s arm and pin and `research_humanoid`'s
   hands are plain functions called in the one body (the hand models' two scripts

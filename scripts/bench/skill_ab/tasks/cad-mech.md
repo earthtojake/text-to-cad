@@ -6,4 +6,4 @@ Model a small hinged box. The base is a tray 80 x 50 x 30 mm outside (80 along X
 
 ## Expect
 
-One revolute joint, states `closed` and `open`. `cad model interference` run at both. `cad model ranges` run (it reports 174 degrees: the lid's end face lands on the back wall at 180, and the stop is where the surfaces all but touch); the limits written are 174, or up to 180 where the reply shows by exact interference that the lid is clear to there, and it says which and why.
+One revolute joint, states `closed` and `open`. `cad xbf interference` run at both. `cad xbf ranges` run (it reports 174 degrees: the lid's end face lands on the back wall at 180, and the stop is where the surfaces all but touch); the limits written are 174, or up to 180 where the reply shows by exact interference that the lid is clear to there, and it says which and why.

@@ -23,7 +23,7 @@ Parts
 """
 
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -150,7 +150,7 @@ def _make_parts():
     return parts
 
 
-@model
+@xbf
 def motorcycle_seat_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_seat_fidget"

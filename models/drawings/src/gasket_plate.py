@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -17,7 +17,7 @@ CENTER_CUTOUT_DIAMETER_MM = 24.0
 CROSSHAIR_LENGTH_MM = 32.0
 
 
-@model
+@xbf
 def gasket_plate():
     with bd.BuildSketch() as cut:
         bd.RectangleRounded(WIDTH_MM, HEIGHT_MM, CORNER_RADIUS_MM)

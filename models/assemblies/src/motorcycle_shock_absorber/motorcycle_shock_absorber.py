@@ -21,7 +21,7 @@ the only moving joint (rod stroke along Z) stays coaxial and clear.
 """
 
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 from math import cos, sin, tau
 
@@ -290,7 +290,7 @@ def _build():
     return bd.Compound(children=[body_module, rod_module, spring], label="motorcycle_shock_absorber")
 
 
-@model
+@xbf
 def motorcycle_shock_absorber():
     return _build()
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from math import tau
 
 import build123d as bd
@@ -20,7 +20,7 @@ BOLT_CIRCLE_DIAMETER = 60.0
 OUTER_FILLET = 1.5
 
 
-@model
+@xbf
 def circular_flange():
     """Return the circular flange model in millimeters."""
     with bd.BuildPart() as flange:

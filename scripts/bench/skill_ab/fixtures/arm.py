@@ -1,12 +1,12 @@
 """A two-joint arm: a base, an upper arm and a forearm."""
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import mechanism_state
 
 MIN = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 
 
-@model
+@xbf
 def arm():
     base = bd.Cylinder(30, 20, align=MIN)
     base.label = "base"

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 import math
 from collections.abc import Sequence
@@ -390,7 +390,7 @@ def road_gear() -> bd.Compound:
     )
 
 
-@model
+@xbf
 def flying_car():
     return group(
         MODEL_LABEL,

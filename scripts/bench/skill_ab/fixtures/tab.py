@@ -1,6 +1,6 @@
 """A bent mounting tab: 0.090 in sheet, one 90 degree bend."""
 import build123d as bd
-from cad import model
+from cad import xbf
 
 T = 2.286          # mm, 0.090 in
 R = 2.0            # mm, inside bend radius as modelled
@@ -9,7 +9,7 @@ UP = 7.0           # mm, upright flange height (outside)
 WIDTH = 40.0       # mm
 
 
-@model
+@xbf
 def tab():
     outline = bd.Polygon((0, 0), (BASE, 0), (BASE, T), (T, T), (T, UP), (0, UP), align=None)
     corners = outline.vertices()

@@ -180,7 +180,7 @@ import build123d as bd
 from cad.engine import model
 
 
-@model("smoke.xbf")
+@xbf("smoke.xbf")
 def smoke():
     plate = bd.Box(30, 20, 4) - bd.Cylinder(3, 10)
     plate.label = "plate"
@@ -232,12 +232,12 @@ URDF
 mkdir -p "$project/.share"
 cat > "$project/.share/plate.py" <<'PLATE'
 import build123d as bd
-from cad import model
+from cad import xbf
 
-width = model.param("width", 40.0, min=20, max=80, unit="mm")
+width = xbf.param("width", 40.0, min=20, max=80, unit="mm")
 
 
-@model
+@xbf
 def plate():
     body = bd.Box(width, 30, 6) - bd.Pos(width / 4, 0, 0) * bd.Cylinder(4, 10)
     body.label = "plate"

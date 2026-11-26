@@ -11,7 +11,7 @@ functions: each model that shows them makes its own.
 
 import copy
 
-from cad import memo, model
+from cad import memo, xbf
 
 import build123d as bd
 
@@ -54,37 +54,37 @@ def _leaves(node):
     return [leaf for child in node.children for leaf in _leaves(child)] if node.children else [node]
 
 
-@model
+@xbf
 def forearm_frame_review():
     """Two native dark forearm frame bodies, in neutral assembly coordinates."""
     return forearm_frame()
 
 
-@model
+@xbf
 def forearm_guide_banks_review():
     """The 96 forearm guide mouths."""
     return forearm_guide_banks()
 
 
-@model
+@xbf
 def forearm_mount_system_review():
     """Open forearm chassis with every fixed forearm liner reaction mount."""
     return bd.Compound(label="open_forearm_frame_with_96_mouth_supports", children=[forearm_frame(), forearm_guide_banks()])
 
 
-@model
+@xbf
 def forearm_housing_review():
     """Individually removable open forearm side frames and wiring hardware."""
     return bd.Compound(label="forearm_open_housing_and_wiring_provisions", children=forearm_housing())
 
 
-@model
+@xbf
 def actuator_fasteners_review():
     """All assembled actuator and reaction-frame fastener occurrences."""
     return bd.Compound(label="all_actuator_and_frame_fasteners", children=fasteners())
 
 
-@model
+@xbf
 def forearm_housing_context():
     """Open housing around the actual actuator pack and forearm guide banks.
 

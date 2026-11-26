@@ -1,11 +1,11 @@
 """An L-bracket: a base flange and an upright."""
 import build123d as bd
-from cad import model
+from cad import xbf
 
 MIN = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
 
 
-@model
+@xbf
 def bracket():
     base = bd.Box(60, 40, 6, align=MIN)
     upright = bd.Pos(-27, 0, 6) * bd.Box(6, 40, 60, align=MIN)

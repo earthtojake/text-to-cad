@@ -3,7 +3,7 @@ from bd_materials import FinishedMaterial, metals
 from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from cad.ap242 import configuration_sequence, mechanism_state
 
 import math
@@ -27,7 +27,7 @@ def _lift(t):
     return {"lift": 8 * math.sin(math.pi * t / 2)}
 
 
-@model
+@xbf
 def annotation_fixture():
     base = bd.Pos(0, 0, 3) * bd.Box(72, 52, 6)
     shaft = bd.Pos(0, 0, 18) * bd.Cylinder(5, 24)
