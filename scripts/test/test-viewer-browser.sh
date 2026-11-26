@@ -179,7 +179,7 @@ fi
 # (through this test's own engine daemon). Its script goes once it is built, as the hinge's does.
 cat > "$project/smoke_xbf.py" <<'XBF'
 import build123d as bd
-from cad.engine import model
+from cad.engine import xbf
 
 
 @xbf("smoke.xbf")
