@@ -459,7 +459,7 @@ def move(name: str, told: Callable[[str], None]) -> bool:
         command = auto_update.helper_command(release, now=time.time(), version=name, install=found,
                                              record=str(state_dir() / MOVE_RECORD), python=python)
         _start(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-               env=auto_update.environ(), cwd=str(state_dir()), **detached())
+               env=auto_update.environ(), cwd=str(state_dir()), **detached(breakaway=True))
     except (OSError, ValueError) as error:
         told(f"could not hand over to the global cad {release}: {error}")
         return False

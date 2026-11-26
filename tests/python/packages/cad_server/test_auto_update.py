@@ -1294,6 +1294,8 @@ class HelperCommandTest(Case):
             (self.state / auto_update.RECORD).unlink()
             found = auto_update.begin("0.2.0")
             self.assertEqual((found["outcome"], found["cause"]), ("failed", "no_release"), "said by `cad update`")
+        self.assertEqual({key: options[key] for key in places.detached(breakaway=True)}, places.detached(breakaway=True),
+                         "detached, and on Windows out of the job of the app that ran cad where it allows it")
             popen.assert_not_called()
         self.assertEqual(auto_update.event(found)["outcome"], "restored")
 

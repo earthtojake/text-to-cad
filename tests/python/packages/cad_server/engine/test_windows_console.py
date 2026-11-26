@@ -24,7 +24,7 @@ from cad_server.engine.services import RENDER, WORKER
 from cad_server.engine.supervisor import Process
 
 # Windows' values: ``subprocess`` names them on Windows alone.
-NO_WINDOW, NEW_GROUP, DETACHED_PROCESS = 0x08000000, 0x00000200, 0x00000008
+NO_WINDOW, NEW_GROUP, DETACHED_PROCESS, BREAKAWAY = 0x08000000, 0x00000200, 0x00000008, 0x01000000
 
 
 class Started(Exception):
@@ -64,7 +64,8 @@ class WindowsConsoleTest(unittest.TestCase):
                 self.assertNotIn("creationflags", self.popen(start, "posix"))  # POSIX takes no creation flags
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(folder)}):
             started = self.popen(lambda: client._spawn(None))
-            self.assertEqual(started["creationflags"], NO_WINDOW | NEW_GROUP)
+            self.assertEqual(started["creationflags"], NO_WINDOW | NEW_GROUP | BREAKAWAY,
+                             "out of the job of the app that ran cad, where it allows it (places.outside_package)")
             self.assertFalse(started["creationflags"] & DETACHED_PROCESS, "no console at all gives each child a window")
             self.assertNotIn("start_new_session", started)
             self.assertEqual({key: value for key, value in self.popen(lambda: client._spawn(None), "posix").items()

@@ -216,8 +216,9 @@ worker writes, so the record only gains fields.
 
 **The worker** (`auto_update_helper.py`) runs from the release the update goes to, never from the environment it
 replaces: uv builds that release in its cache first (`build`: where it cannot, the attempt fails with uv's cause and
-nothing is touched), then the worker starts from it, detached, with no window and outside any Windows app package (by
-Task Scheduler, `places.outside_package`): `uv tool run --isolated --managed-python --python 3.14 --from "cad==<X>"
+nothing is touched), then the worker starts from it, detached, with no window, outside any Windows app package (by
+Task Scheduler, `places.outside_package`) and out of the job of the app that ran cad where that job allows it (an app
+closing its job would end the update midway; the server's daemon starts so too): `uv tool run --isolated --managed-python --python 3.14 --from "cad==<X>"
 python -P -m cad_server._internal.auto_update_helper <told>` (`from_cache`, `helper_command`). That entry and `told`
 are a contract every later release keeps: an older release starts a newer one's worker by them. uv deletes the old
 files one by one, in the order of the package's `RECORD`, and stops at the first it cannot delete, with nothing put

@@ -651,6 +651,7 @@ def engine_root() -> str:
 # Windows' process creation flags, by number: ``subprocess`` names them on Windows alone.
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+CREATE_BREAKAWAY_FROM_JOB = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x01000000)
 
 
 def windowless() -> dict[str, Any]:
@@ -678,13 +679,17 @@ def standard_input_aside() -> int:
     return kept
 
 
-def detached() -> dict[str, Any]:
+def detached(*, breakaway: bool = False) -> dict[str, Any]:
     """How the daemon is started: outliving the command that needed it. On Windows a console of its
     own with no window and a process group of its own, never no console at all (``DETACHED_PROCESS``),
-    which would give each console program it starts a window of its own (#597); elsewhere a session
-    of its own (``start_new_session`` is POSIX's: Windows takes it as nothing)."""
+    which would give each console program it starts a window of its own (#597); with ``breakaway``,
+    out of the job its starter is in too (``CREATE_BREAKAWAY_FROM_JOB``: an agent app that closes the
+    job of the commands it ran ends every process in it), which only ``outside_package`` is handed,
+    since it starts again without it where the job allows no breakaway. Elsewhere a session of its own
+    (``start_new_session`` is POSIX's: Windows takes it as nothing)."""
     if os.name == "nt":
-        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+                | (CREATE_BREAKAWAY_FROM_JOB if breakaway else 0)}
     return {"start_new_session": True}
 
 
@@ -748,17 +753,26 @@ def outside_package(command: list[str], **options: Any) -> Any:
     Scheduler starts it (``_hand_off``): a task's process is the scheduler's, never the app's child, so no package
     holds it. Its standard streams are the null device, as every caller's are. Where the hand-off cannot be made (no
     ``schtasks``, a policy that refuses it, no session the task can start in, a go-between that never answers), that
-    is logged once and ``command`` is started as it would be elsewhere (cad's update then refuses by itself). The
+    is logged once and ``command`` is started as it would be elsewhere (cad's update then refuses by itself). Out of
+    the starter's job where ``creationflags`` asks it (``detached(breakaway=True)``) and the job allows it: where it
+    does not, Windows refuses the start and ``command`` starts in the job, as ``cad.engine.handoff`` does. The
     process started: what ``poll`` and ``pid`` are asked of. Raises only as ``subprocess.Popen`` does."""
+    flags = options.get("creationflags", 0)
     if packaged():
         env = options.get("env")
         try:
+            # The go-between asks for the breakaway itself, and starts without it where it is refused.
             return _hand_off(command, env=dict(os.environ) if env is None else env,
-                             cwd=options.get("cwd") or os.getcwd(), flags=options.get("creationflags", 0))
+                             cwd=options.get("cwd") or os.getcwd(), flags=flags & ~CREATE_BREAKAWAY_FROM_JOB)
         except Exception as error:  # noqa: BLE001 - started as elsewhere: what runs there refuses what it must not do
             LOG.warning("Task Scheduler could not start %s outside this Windows app package, so it starts inside it: "
                         "%s: %s", Path(command[0]).name, type(error).__name__, error)
-    return subprocess.Popen(command, **options)
+    try:
+        return subprocess.Popen(command, **options)
+    except OSError:
+        if not flags & CREATE_BREAKAWAY_FROM_JOB:
+            raise
+    return subprocess.Popen(command, **{**options, "creationflags": flags & ~CREATE_BREAKAWAY_FROM_JOB})
 
 
 def _hand_off(command: list[str], *, env: dict[str, str], cwd: str | None, flags: int,

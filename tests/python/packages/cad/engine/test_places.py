@@ -239,6 +239,31 @@ class OutsidePackageTest(unittest.TestCase):
         popen.assert_called_once_with(["cad"], env={"A": "1"}, cwd="here", creationflags=8, stdin=-3)
         self.assertFalse(places.packaged() if os.name != "nt" else False, "never packaged off Windows")
 
+    def test_out_of_the_starter_s_job_where_it_allows_it_else_in_it(self) -> None:
+        """``detached(breakaway=True)``: out of the job of the app that ran cad (an app closing it ends what is in it);
+        a job that allows no breakaway refuses the start (access denied), and the command starts in it. A start
+        refused with no breakaway asked raises as Popen does; the go-between is never handed the flag, which it asks
+        for itself and drops where refused (``cad.engine.handoff``)."""
+        away, group = places.CREATE_BREAKAWAY_FROM_JOB, 0x08000200
+        with mock.patch.object(places, "packaged", return_value=False), \
+                mock.patch.object(places.subprocess, "Popen", side_effect=[PermissionError(5, "denied"), "started"]) as popen:
+            self.assertEqual(places.outside_package(["py"], creationflags=group | away, stdin=-3), "started")
+        self.assertEqual(popen.call_args_list, [mock.call(["py"], creationflags=group | away, stdin=-3),
+                                                mock.call(["py"], creationflags=group, stdin=-3)])
+        with mock.patch.object(places, "packaged", return_value=False), \
+                mock.patch.object(places.subprocess, "Popen", side_effect=FileNotFoundError("py")) as popen, \
+                self.assertRaises(FileNotFoundError):
+            places.outside_package(["py"], creationflags=group)
+        popen.assert_called_once()
+        with mock.patch.object(places, "packaged", return_value=True), \
+                mock.patch.object(places, "_hand_off", return_value="started") as hand_off:
+            places.outside_package(["py"], env={}, cwd="here", creationflags=group | away)
+        hand_off.assert_called_once_with(["py"], env={}, cwd="here", flags=group)
+        with mock.patch.object(places, "os", mock.Mock(wraps=os, name="nt")) as faked:
+            faked.name = "nt"
+            self.assertEqual(places.detached(breakaway=True), {"creationflags": group | away})
+            self.assertEqual(places.detached(), {"creationflags": group})
+
     def test_packaged_hands_the_command_to_task_scheduler(self) -> None:
         with mock.patch.object(places, "packaged", return_value=True), \
                 mock.patch.object(places, "_hand_off", return_value="started") as hand_off, \

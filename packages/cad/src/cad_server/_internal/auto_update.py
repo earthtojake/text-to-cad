@@ -922,7 +922,7 @@ def _start(target: str | None, *, automatic: bool, start: bool, wanted: str | No
             return BEGUN, _unbuilt(kept, line, found.uv, wanted_, built, time.monotonic() - began)
         outside_package(from_cache(found.uv, f"cad=={built[0]}", *line), stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environ(), cwd=str(record.parent),
-                        **detached())
+                        **detached(breakaway=True))
     except Exception as error:
         # Kept as underway, an attempt whose worker never started would hold every update for the hour: it failed.
         _keep(record, {**kept, "outcome": "failed", "ended": time.time(), "cause": "helper_start",

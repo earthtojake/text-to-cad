@@ -251,7 +251,8 @@ def environment() -> dict[str, str]:
 def _spawn(port: int | None) -> subprocess.Popen:
     """A server started, detached, by this process's own Python (``sys.executable``: the environment's
     interpreter, never the ``cad`` launcher), its standard streams the null device and a session of its own --
-    on Windows a process group and a console of its own, with no window (``places.detached``) -- so it holds
+    on Windows a process group and a console of its own, with no window, out of the starter's job where it allows
+    it (``places.detached``) -- so it holds
     nothing of the command that started it, and that command, and on Windows its ``cad.exe``, exits as soon as
     the server answers. ``port``: the HTTP port it must take. The engine's folder is first on its ``PYTHONPATH``
     only where this environment would not find it -- a source tree --, so no process the daemon starts in the
@@ -265,7 +266,7 @@ def _spawn(port: int | None) -> subprocess.Popen:
     return places.outside_package([sys.executable, "-P", "-m", DAEMON_MODULE,
                                    *(["--port", str(port)] if port is not None else [])],
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  env=env, cwd=_working_folder(), **places.detached())
+                                  env=env, cwd=_working_folder(), **places.detached(breakaway=True))
 
 
 def _working_folder() -> str | None:
