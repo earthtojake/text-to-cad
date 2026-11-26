@@ -1652,8 +1652,9 @@ class Daemon:
         elif op == "plugin_auto_update":
             send(switch_plugin(request))
         elif op == "share":
-            # What ``cad share`` and ``cad fork`` keep -- the agreement, the setting, a share's record, a fork's --
-            # written for them, as a switch is (``switch_auto_update``): a sandboxed shell may not write the state folder.
+            # What ``cad share`` and ``cad fork`` keep -- the agreement, the setting, a share or a fork in its file's
+            # entry of the library -- written for them, as every change of the library is here, and as a switch is
+            # (``switch_auto_update``): a sandboxed shell may not write the state folder.
             from cad_server import sharing
 
             send(sharing.answer(request))

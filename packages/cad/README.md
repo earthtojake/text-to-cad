@@ -177,8 +177,8 @@ renumbers the list and every citation in the same change.
    declares and its `.xbf` (law 10), the exports a command or a person asks for, and a model's own script only where a person or an
    agent asks to set a parameter it declares (law 30), and nothing beside a model or an input: no
    sidecar, index, memo, mesh or record of a build. What it keeps for itself lives in three folders of
-   the user's own, the same whatever release runs: state (settings, the library of the project folders
-   and the files a person opened or pinned, and the records of shares and of forks; never geometry or source),
+   the user's own, the same whatever release runs: state (settings and the library (the project folders, and the
+   files a person opened, starred, built, shared or imported); never geometry or source),
    cache (the views it derived of a document, keyed by its bytes, a file's count and picture, valid for the file
    as it is, a shared file's last view and where the service keeps its files, bytecode and the environments it
    installs, every one regenerable; never a copy of a model's `.xbf`) and the engine's folder

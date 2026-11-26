@@ -8,17 +8,18 @@ apply; the server is never asked. Its files go into FOLDER (``./<its name>`` by 
 which is refused where it is there and holds anything, and every entry is refused that would land outside it (an
 absolute path, a ``..``, a drive, a link: ``sharing.zip_entries``); they are written beside it first and moved in once
 all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). A model's ``.xbf`` is among them, so the
-model is there at once, read as any ``.xbf`` is, with nothing run. It keeps a record of the fork (``sharing.fork_record``:
-the link, the folder and the shared file in it, ``sharing.shared_file``), asked of the running server as ``cad share``
-keeps its records, so that the share's link names that file here wherever cad takes a document (``sharing.copy_of``).
+model is there at once, read as any ``.xbf`` is, with nothing run. The shared file it wrote (``sharing.shared_file``)
+goes into the library with the link it came from (``sharing.import_record``), asked of the running server as ``cad
+share`` keeps a share, so that it is among the viewer's Recents and the share's link names it here wherever cad takes a
+document (``sharing.copy_of``).
 It says what it wrote, the file it is of and the script that builds it, and where what built it (``Cad-Share-Made``)
-differs from this computer's cad and libraries, which a build here records (``_here``). It runs nothing, and adds no
-project and no file to the library: the next steps it prints are ``cad viewer FOLDER/<file>``, which shows it as it
-was shared, and, of a model, ``cad run FOLDER/<script>``, which builds it here, since someone else's code is the
-person's to run. ``--json`` answers in one object.
+differs from this computer's cad and libraries, which a build here records (``_here``). It runs nothing, and makes no
+project: the next steps it prints are ``cad viewer FOLDER/<file>``, which shows it as it was shared, and, of a model,
+``cad run FOLDER/<script>``, which builds it here, since someone else's code is the person's to run. ``--json``
+answers in one object.
 
-A share this computer made (``sharing.made_here``: a live record of that origin and id, whose file is still where it
-was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where its files are --
+A share this computer made (``sharing.made_here``: a live share of that origin and id in the library, whose file is
+still where it was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where its files are --
 the file, and a model's root and the script among its files -- which is where to work on them (``_local``).
 """
 
@@ -42,7 +43,8 @@ DESCRIPTION = (
     "project's files). LINK is the share's link (https://cad.fun/<id>), "
     "its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs "
     "from this computer's cad and libraries, then the commands that show it and build it, for the person to run. It "
-    "keeps a record of the fork, so the share's link names the shared file here wherever cad takes a document. A "
+    "adds the shared file to the library with its link, so it is among the viewer's Recents and the share's link "
+    "names it here wherever cad takes a document. A "
     "share this computer made is not downloaded: it says where its files are, to work on them there, and writes "
     "nothing.")
 # How long this computer's CAD kernel environment may take to say its libraries.
@@ -151,11 +153,15 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     paths = [path for path, _size in written]
     entry = said["entry"] if said["entry"] in paths else None
     shared = sharing.shared_file(folder, paths, entry)
-    try:
-        sharing.keep(fork=sharing.fork_record(origin, ident, folder, shared))
-    except OSError as error:
-        print(f"{prog}: warning: this computer could not keep a record of the fork ({error}), so the share's link "
-              "names no copy of it here: name its files by their paths", file=sys.stderr, flush=True)
+    if shared is None:
+        print(f"{prog}: warning: cad could not tell which of its files the share is of, so the share's link names "
+              "none of them here: name the file by its path", file=sys.stderr, flush=True)
+    else:
+        try:
+            sharing.keep(imported=sharing.import_record(origin, ident, Path(folder, *shared.split("/"))))
+        except OSError as error:
+            print(f"{prog}: warning: this computer's library could not keep the fork ({error}), so the share's link "
+                  "names no copy of it here: name its files by their paths", file=sys.stderr, flush=True)
     made, here = said["made"], _here()
     differs = [{"name": name, "made": value, "here": here[name]} for name, value in (made or {}).items()
                if name in here and here[name] is not None and here[name] != value]

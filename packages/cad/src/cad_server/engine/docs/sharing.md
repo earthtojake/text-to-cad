@@ -114,9 +114,10 @@ library (named by its version in `made`).
    environment, as `urllib` takes them. A connection that cannot be made, or an answer that is not the service's (a
    proxy's refusal, with no JSON `error`), is said in one line: the network here does not reach the share service, and
    a sandbox that limits hosts must allow its host.
-5. The agreement, the setting, each share's record and the file's folder are written by the running server for the
-   command (`{"op": "share"}`), as `cad update auto` has its switch written, since a sandboxed shell may write neither
-   the state folder nor the cache; with none answering, the command writes them itself.
+5. The agreement, the setting, each share in its file's entry of the library and the file's folder are written by
+   the running server for the command (`{"op": "share"}`), as every change of the library is, and as `cad update auto`
+   has its switch written, since a sandboxed shell may write neither the state folder nor the cache; with none
+   answering, the command writes them itself.
 
 Its requests, and `cad fork`'s, are ones a person asks for by name (law 17): nothing else in cad reaches the service,
 and nothing shares again on its own: a build changes no share until `cad share` runs again.
@@ -139,21 +140,22 @@ board, else the root of a schematic's hierarchy (the sheet beside a project file
 of its sheets draws: whichever of them was shared, it draws the same pages), else its one file. It
 says what it wrote, that file, the script, and where what built it (`Cad-Share-Made`) differs from this computer:
 this release, the CAD kernel environment's libraries and Python (not compared where that environment is not made
-yet), the system and the architecture. It runs nothing, and adds no project and no file to the library: the next
-steps it prints are `cad viewer FOLDER/<file>`, which shows it as it was shared, and, of a model, `cad run
-FOLDER/<script>`, which builds it here, since someone else's code is the person's to read and run. It keeps a record
-of the fork (**What is kept**), written by the running server as a share's is, so that the share's link names that
-file on this computer (**A share's link names this computer's copy**); where it cannot, a line says so. `--json` is
+yet), the system and the architecture. It runs nothing, and makes no project: the next steps it prints are `cad
+viewer FOLDER/<file>`, which shows it as it was shared, and, of a model, `cad run FOLDER/<script>`, which builds it
+here, since someone else's code is the person's to read and run. The file the share is of goes into the library with
+the link it came from (**What is kept**), written by the running server as a share is, so that it is among the
+viewer's Recents and the share's link names it on this computer (**A share's link names this computer's copy**);
+where it cannot, or the command could not tell which file that is, a line says so. `--json` is
 one object: `local` (false), `folder`, `name`, `files` (`count`, `bytes`, `paths`), `file` (the shared file's path in
 the folder, or null), `entry`, `made`, `here`, `differs` (each `name`, `made`, `here`) and `next`.
 
-**A share this computer made.** A link of a live share this computer's records hold (**What is kept**: that service's
-origin and that id), whose file is still where it was shared from, is downloaded by no one: the command writes
+**A share this computer made.** A link of a live share this computer's library holds (**What is kept**: that
+service's origin and that id), whose file is still where it was shared from, is downloaded by no one: the command writes
 nothing, FOLDER included (said where one is given), and says where its files are, which is where to work on them:
 `arm was shared from this computer: it is <root>/XBF/arm.xbf, its files in <root>, its script <root>/arm.py. Nothing
 was downloaded; work there.`, or a file document's own file. `--json`: `local` (true), `name`, `file`, `root`,
 `entry` (a model's), `ignored` (the FOLDER given, or null) and `next` (`cad run <root>/<script>`, or `cad viewer
-<file>`: these files are this computer's own). A record of another service, one expired, or one whose file moved or
+<file>`: these files are this computer's own). A share of another service, one expired, or one whose file moved or
 went is no such share: its link is downloaded as any other.
 
 ## A share's link names this computer's copy
@@ -163,50 +165,50 @@ check), a Quick Edit packet's `input` (and a job's), a ref's FILE, `cad viewer`'
 view link, `<origin>/<id>` of the service `CAD_SHARE_URL` names or of `https://cad.fun`, names this computer's copy of
 the share, so that a shared page's prompt reads here as a local page's does:
 
-- **a share this computer made**: the file it shared under that link, by the path its record holds;
-- **else a fork of it** whose folder is there: the fork's copy of the shared file, by the path its record holds in
-  the folder; a model's `.xbf` is there with nothing run;
-- **else** -- no record, a fork whose folder or file is gone -- it is refused in one line, ``<link> is a shared model
-  this computer has no copy of: run `cad fork <link>`.`` (`not_found`, exit 2, with `next`).
+- **a share this computer made**: the file it shared under that link, by its entry in the library;
+- **else a fork of it**: the file of the fork's the share is of, by its entry in the library, whose file is there; a
+  model's `.xbf` is there with nothing run;
+- **else** -- neither, or a fork whose file is gone -- it is refused in one line, ``<link> is a shared model this
+  computer has no copy of: run `cad fork <link>`.`` (`not_found`, exit 2, with `next`).
 
 A selector after the link, `<link>#<selector>`, is the same in the copy as in the share: `cad model inspect
 'https://cad.fun/<id>#head_shell/f:...'`. A link of another origin, or a files' link (`.zip`), is no document's name.
-Nothing of it goes through the library or the engine's knowledge of a model: the records are this computer's own.
+Nothing of it goes through the engine's knowledge of a model: the library's entries are this computer's own.
 
 ## What is kept
 
 The settings' `share` section: `{"agreed": "<ISO time>"}`, and `"on": false` once turned off.
 
-`shares.json` in the state folder, written whole into a file only this user may read or write (0600 on
-POSIX), one record a shared file and service, found by the file's canonical path, dropped once past its expiry:
+The library (`library.json` in the state folder, `cad_server.engine.library`), which this user alone may read or write
+(0600 on POSIX), as it holds the shares' keys, and which the engine alone writes, as it writes every change of the
+library (a command asks it to, and writes it itself only where none answers). A shared file is in it, its entry found
+by the file's canonical path, and its entry's `shares` holds, by each share service's origin, its share there:
 
 ```json
-{"format": "cad-shares/1", "shares": [{
-  "id": "<share id>", "write": "<write secret>", "delete": "<delete secret>",
-  "service": "https://cad.fun", "view": "<view link>", "remove": "<delete link>",
-  "expires": "2026-12-01T10:00:00Z", "shared": "2026-11-24T10:00:00Z", "bytes": 3880124,
-  "document": {"id": "<the file's id>", "kind": "model", "name": "arm", "path": "/home/me/arm/XBF/arm.xbf"},
-  "files": {"root": "/home/me/arm", "entry": "arm.py"}}]}
+{"path": "/home/me/arm/XBF/arm.xbf", "created": 1764000000.0, "opened": 1764000100.0,
+ "shares": {"https://cad.fun": {"link": "https://cad.fun/<share id>", "write": "<write secret>",
+                                "delete": "<delete secret>", "expires": "2026-12-01T10:00:00Z",
+                                "root": "/home/me/arm", "entry": "arm.py"}}}
 ```
 
-`document` is the file shared: its canonical `path`, which a record is found by, and that path's id (`ids.file_id`);
-`bytes` is the share's size as the service stores it; `files`, where on this computer the files that made it are:
-their root, and the script among them (`entry`, a model's), which `cad fork` of its link points at (**Forking**). A
-record with a `key` (`cad-share/1`'s) is none, as is one past its expiry: that file's next share is a new one. One
-that names no path is of no file: listed and deleted as any, and never shared to again. The id and the secrets are
-said only inside the links and in the records (and a view link a command was given, said back where this computer
-has no copy of it): in no other line of any command, no log, no telemetry and no file of the cache. The command is
-counted as any command is, nothing of the share.
+`link` is the view link, `write` and `delete` the share's keys, `expires` its expiry as the service said it, and
+`root` and `entry` where on this computer the files that made it are: their root, and the script among them (a
+model's), which `cad fork` of its link points at (**Forking**). What a command says of a share is worked out from
+there: its delete link (`<link>#delete=<delete secret>`), and its file's id, kind and name from its path. A share past
+its expiry goes from its entry as the library is written, and that file's next share is a new one; an entry whose
+file is gone stays while a share of it is live, listed and deleted as any, and is never shared to again. A file
+forgotten (the home's Remove) forgets its share's keys: its delete link still deletes it. A share whose entry holds no
+keys is none. The id and the secrets are said only inside the links and in the library (and a view link a command was
+given, said back where this computer has no copy of it): in no other line of any command, no log, no telemetry and no
+file of the cache. The command is counted as any command is, nothing of the share.
 
-`forks.json` beside `shares.json`, written the same way, one record a share's link, the latest fork of it, dropped once
-its folder is gone:
+A forked file is in it too: the file of the fork's that the share is of (`sharing.shared_file`), its entry's
+`imported` the share's view link it came from, which names it from then on (**A share's link names this computer's
+copy**), so it is among the viewer's Recents. One entry holds a link: the latest fork of it. Where the fork could not
+tell which of its files the share is of, none is in the library, and the command says so.
 
-```json
-{"format": "cad-forks/1", "forks": [{
-  "link": "https://cad.fun/<id>", "folder": "/home/me/arm", "file": "XBF/arm.xbf", "forked": "2026-11-24T11:00:00Z"}]}
-```
-
-`file` is the shared file's path in the folder (`sharing.shared_file`), null where the fork could not tell which it is.
+What a development build of 0.12 kept beside the library (`shares.json`, `forks.json`) is not read: those shares are
+deleted by their delete links, and expire.
 
 In the shared file's own folder of cad's cache, `documents/<id>/` (**The store**), beside what the cache keeps of the
 file:
@@ -219,9 +221,10 @@ file:
   none: every file is sent.
 - `share.lock`: held by the `cad share` or `cad share delete` of the file that runs.
 
-As the records are written, these are removed from each folder that no live record names (a share deleted, expired or
-never committed), but one whose lock a command holds; the rest of the folder stays. Nothing there is needed: deleted,
-the next share makes the bundle again and sends every file, and keeps its link, whose secrets are the record's.
+As a share is kept or dropped, these are removed from each folder that no live share's file names (a share deleted,
+expired or never committed), but one whose lock a command holds; the rest of the folder stays. Nothing there is
+needed: deleted, the next share makes the bundle again and sends every file, and keeps its link, whose keys are the
+library's.
 
 ## What it prints
 
@@ -235,7 +238,7 @@ nothing uploaded (4.0 MiB in all)`); then a line for each kind of file left out 
 `kind`, `name`, `path`), `files` (its files: `count`, `bytes`, `entry`, `file` -- the shared file's path among them --,
 `left_out`, each `path` and `reason` -- `outside`, `gone` or `name`, a name no share takes -- and `unseen`, the
 closure's null key), `sent` (`what`, `parts`, this time's `files`, `bytes` and `packs`, `format`), `stored` (the
-share's `files` and `bytes` as the service stores them) and `kept` (whether the record was kept). `status --json` is
+share's `files` and `bytes` as the service stores them) and `kept` (whether the library kept the share). `status --json` is
 `sharing` (`on` or `off`), `agreed`, `service` and `shares` (each its `document`, `view`, `zip`, `delete`,
 `expires`); `delete --json` is `deleted` (false where the service held it no more), `share` (its view link) and
 `document`.

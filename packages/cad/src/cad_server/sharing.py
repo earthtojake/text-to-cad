@@ -33,29 +33,29 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   and one that names none commits again, once. A connection that cannot be made, or an answer that is not the
   service's (a proxy's refusal: no JSON ``error``), is ``Unreachable``; the service's own refusal is ``Refused``, with
   its ``error`` and ``hint``;
-- **a fork** (``fork_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``fork_record``): a share's zip read as the
-  service makes one, one folder of files, and written into a folder through one made beside it, refusing any entry
-  that would land outside it; nothing of it is run; the shared file found among them (a model's ``.xbf``, a file
-  document's file); and the fork's record kept;
+- **a fork** (``fork_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``import_record``): a share's zip read as
+  the service makes one, one folder of files, and written into a folder through one made beside it, refusing any
+  entry that would land outside it; nothing of it is run; the shared file found among them (a model's ``.xbf``, a
+  file document's file), which the library keeps with the link it came from;
 - **a share's link as a document's name** (``document_link``, ``copy_of``, ``local``): wherever cad takes a
   document, a share's view link of the service this computer shares with or of cad.fun names this computer's copy of
-  it -- the file it shared under that link (its record), else the copy of the shared file in the folder a fork wrote
-  it into (the fork's record) --, a ``#<selector>`` after it the same in the copy as in the share; a link this
-  computer has no copy of is refused in a line naming the fork that makes one (``NoCopy``);
+  it -- the file it shared under that link, else the file a fork of it wrote, as the library holds them --, a
+  ``#<selector>`` after it the same in the copy as in the share; a link this computer has no copy of is refused in a
+  line naming the fork that makes one (``NoCopy``);
 - **what is kept** (``change``): the person's agreement and whether sharing is on (the settings' ``share`` section:
-  ``{"agreed": <ISO time>, "on": false}``, on where ``on`` is absent); each share's record, one a shared file and
-  service, by the file's canonical path (``shares.json`` in the state folder, readable and writable by this user
-  alone: ``RECORDS``), and each fork's, one a link (``forks.json`` beside it, the same: ``FORKS``); and in the shared
-  file's own folder of the cache (``folder_of``, ``<cache>/documents/<id>/``): its view bundle (``VIEW``), made only
-  when it is shared and written over at each share, the base the next one reuses; where each file of the share's last
-  commit lives (``STORED``); and the lock one ``cad share`` of the file holds at a time (``LOCK``, ``held``). A command
-  asks the running server to write them (``{"op": "share"}``: ``answer``), as it does every other write a shell's
-  sandbox may be refused, and writes them itself where none answers. As the records are written, the share's files of
-  a folder that no live record names are removed (a share deleted, expired, or never committed), and a fork's record
-  whose folder is gone is dropped. Nothing in the cache is needed: deleted, the next share makes the bundle again and
-  keeps its link, whose secrets are the record's.
+  ``{"agreed": <ISO time>, "on": false}``, on where ``on`` is absent); in the library (``cad_server.engine.library``,
+  which this user alone may read), each shared file's entry's ``shares``, by each service's origin: its view link, its
+  two keys, its expiry and where the files that made it are (``record_of``, which ``records`` makes again), and a
+  forked file's entry's ``imported``, the link it came from (``import_record``); and in the shared file's own folder
+  of the cache (``folder_of``, ``<cache>/documents/<id>/``): its view bundle (``VIEW``), made only when it is shared
+  and written over at each share, the base the next one reuses; where each file of the share's last commit lives
+  (``STORED``); and the lock one ``cad share`` of the file holds at a time (``LOCK``, ``held``). A command asks the
+  running server to write them (``{"op": "share"}``: ``answer``), which writes the library as it writes every change
+  of it, and writes them itself where none answers. As a share is kept or dropped, the share's files of a folder that
+  no live share's file names are removed (a share deleted, expired, or never committed). Nothing in the cache is
+  needed: deleted, the next share makes the bundle again and keeps its link, whose keys are the library's.
 
-The id and the two secrets leave this module only inside the links, in a record, and where the protocol puts them in
+The id and the two secrets leave this module only inside the links, in the library, and where the protocol puts them in
 a request -- the id in its path, the write secret as its ``Authorization``, the delete secret as a hash, or as a
 delete's ``Authorization`` --: never in an exception's words (but a view link a command was given, said back:
 ``NoCopy``), a log, telemetry or the cache, where ``STORED`` names a share by its id's SHA-256 (``Share.named``).
@@ -88,11 +88,6 @@ if TYPE_CHECKING:
     import zipfile
 
 FORMAT = "cad-share/2"
-RECORDS = "shares.json"
-RECORDS_FORMAT = "cad-shares/1"
-# Each fork's record, beside the shares' (``fork_record``).
-FORKS = "forks.json"
-FORKS_FORMAT = "cad-forks/1"
 SECTION = "share"
 EXPIRY_DAYS = 7
 # What a share keeps in its file's folder of the cache (``folder_of``): the view bundle, where each file of its last
@@ -1331,20 +1326,17 @@ def _root_sheet(folder: Path, sheets: list[str]) -> str | None:
     return roots[0] if len(roots) == 1 else None
 
 
-def fork_record(origin: str, ident: str, folder: Path | str, file: str | None) -> dict[str, Any]:
-    """A fork's record (``FORKS``), one a share's link, by which the link names this computer's copy here
-    (``copy_of``): the share's view link, the folder its files were written into (absolute), the file the share is of
-    by its path in that folder (``file``: ``shared_file``'s, None where it names none), and when it was forked."""
-    return {"link": f"{origin}/{ident}", "folder": os.path.abspath(folder), "file": file, "forked": now()}
+def import_record(origin: str, ident: str, file: Path | str) -> dict[str, Any]:
+    """What the library keeps of a fork (``change``'s ``imported``): the share's view link, and the file it wrote that
+    the share is of (``shared_file``'s, absolute), whose entry the link is kept in, so the link names it here
+    (``copy_of``)."""
+    return {"link": f"{origin}/{ident}", "path": os.path.abspath(file)}
 
 
-def _forked(row: Any) -> bool:
-    """Whether ``row`` is a fork's record (``fork_record``)."""
+def _imported(row: Any) -> bool:
+    """Whether ``row`` is a fork's (``import_record``): a share's view link and an absolute path."""
     link = parse_link(row["link"]) if isinstance(row, dict) and isinstance(row.get("link"), str) else None
-    file = row.get("file") if isinstance(row, dict) else None
-    return (link is not None and link[2] is None and isinstance(row.get("folder"), str) and os.path.isabs(row["folder"])
-            and (file is None or (isinstance(file, str) and all(_plain(segment) for segment in file.split("/"))))
-            and isinstance(row.get("forked"), str))
+    return link is not None and link[2] is None and isinstance(row.get("path"), str) and os.path.isabs(row["path"])
 
 
 # --- a share's link as a document's name --------------------------------------------------------------------------
@@ -1391,34 +1383,19 @@ def _of(link: str, origin: str, ident: str) -> bool:
 
 
 def copy_of(origin: str, ident: str) -> str:
-    """The path of this computer's copy of the share at ``origin`` with the id ``ident``: the file it shared under that
-    link (its record, ``records``); else the copy of the shared file in the folder a fork wrote it into (its record,
-    ``forks``: a model's ``.xbf`` among the files, there with nothing run). ``NoCopy``, in a line naming the fork that
-    makes one, for a link this computer neither shared nor forked, a fork whose folder or file is gone, and one that
-    could not tell which of its files the share is of."""
+    """The path of this computer's copy of the share at ``origin`` with the id ``ident``, as the library holds it: the
+    file it shared under that link (an entry's ``shares``, ``records``); else the file a fork of it wrote (an entry's
+    ``imported``: a model's ``.xbf`` among the files, there with nothing run). ``NoCopy``, in a line naming the fork
+    that makes one, for a link this computer neither shared nor forked, and one whose fork's file is gone."""
     link = f"{origin}/{ident}"
-    try:
-        shared = records()
-    except OSError:
-        shared = []
-    for row in shared:
-        if row["id"] == ident and row["service"].lower() == origin.lower() and isinstance(row["document"].get("path"),
-                                                                                          str):
+    for row in records():
+        if row["id"] == ident and row["service"].lower() == origin.lower():
             return row["document"]["path"]
-    try:
-        forked = forks()
-    except OSError:
-        forked = []
     fork = f"cad fork {link}"
-    for row in forked:
-        if not _of(row["link"], origin, ident) or not os.path.isdir(row["folder"]):
-            continue
-        if row.get("file") is None:
-            raise NoCopy(f"{link} is forked into {row['folder']}, and cad could not tell which of its files the share "
-                         "is of: name that file by its path")
-        found = os.path.join(row["folder"], *row["file"].split("/"))
-        if os.path.isfile(found):
-            return found
+    for entry in _library().read()["files"].values():
+        if isinstance(entry.get("imported"), str) and _of(entry["imported"], origin, ident) \
+                and os.path.isfile(entry["path"]):
+            return entry["path"]
     raise NoCopy(f"{link} is a shared model this computer has no copy of: run `{fork}`.", (fork,))
 
 
@@ -1448,56 +1425,62 @@ def now() -> str:
 
 def expired(record: dict[str, Any]) -> bool:
     """Whether a record's share is past its expiry, as the service said it: then the service holds it no more."""
-    try:
-        when = datetime.fromisoformat(str(record.get("expires")).replace("Z", "+00:00"))
-    except ValueError:
-        return True
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
-    return when <= datetime.now(timezone.utc)
+    from cad_server.engine.library import live
+
+    return not live(record)
 
 
-def records_path() -> Path:
+def _library() -> Any:
+    """The library of this computer's state folder (``cad_server.engine.library``), where what sharing keeps of a
+    file is its entry's."""
+    from cad_server.engine.library import Library
+
+    return Library()
+
+
+def library_path() -> Path:
     from cad.engine.places import state_dir
+    from cad_server.engine.library import LIBRARY
 
-    return state_dir() / RECORDS
-
-
-def forks_path() -> Path:
-    from cad.engine.places import state_dir
-
-    return state_dir() / FORKS
+    return state_dir() / LIBRARY
 
 
-def forks(path: Path | None = None) -> list[dict[str, Any]]:
-    """Every fork's record this computer keeps (``FORKS``: ``fork_record``); [] where there are none. ``OSError``
-    where the file is there and cannot be read."""
-    try:
-        text = (path or forks_path()).read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return []
-    try:
-        found = json.loads(text)
-    except ValueError:
-        return []
-    rows = found.get("forks") if isinstance(found, dict) else None
-    return [row for row in rows if _forked(row)] if isinstance(rows, list) else []
+def _held(service: Any, share: Any) -> bool:
+    """Whether ``share`` is one of an entry's ``shares`` as ``record_of`` keeps it, at ``service``: its view link of that
+    origin, its two keys, its expiry, and where the files that made it are."""
+    link = parse_link(share["link"]) if isinstance(share, dict) and isinstance(share.get("link"), str) else None
+    return (link is not None and link[2] is None and isinstance(service, str) and link[0] == service
+            and all(isinstance(share.get(name), str) and _SECRET.fullmatch(share[name]) for name in ("write", "delete"))
+            and isinstance(share.get("expires"), str)
+            and all(isinstance(share.get(name), (str, type(None))) for name in ("root", "entry")))
 
 
-def records(path: Path | None = None) -> list[dict[str, Any]]:
-    """Every share's record this computer keeps (``RECORDS``), the expired among them; [] where there are none. A
-    record of ``cad-share/1``'s (one with a ``key``) is none. ``OSError`` where the file is there and cannot be
-    read."""
-    try:
-        text = (path or records_path()).read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return []
-    try:
-        found = json.loads(text)
-    except ValueError:
-        return []
-    rows = found.get("shares") if isinstance(found, dict) else None
-    return [row for row in rows if _record(row)] if isinstance(rows, list) else []
+def _row(ident: str, path: str, service: str, share: dict[str, Any]) -> dict[str, Any]:
+    """A share of the file at ``path`` (of id ``ident``) at ``service``, as the library keeps it, made a record
+    (``record_of``'s): the file's kind and name worked out from its path."""
+    from cad.registry import type_of
+
+    found = type_of(path)
+    kind = found.wire if found is not None else "file"
+    view = share["link"]
+    return {"id": view.rsplit("/", 1)[1], "write": share["write"], "delete": share["delete"], "service": service,
+            "view": view, "remove": f"{view}#delete={share['delete']}", "expires": share["expires"],
+            "document": {"id": ident, "kind": kind,
+                         "name": share_name(Path(path).stem if kind == "model" else os.path.basename(path)),
+                         "path": path},
+            "files": {"root": share.get("root"), "entry": share.get("entry")}}
+
+
+def records() -> list[dict[str, Any]]:
+    """Every share this computer keeps, a record each (``record_of``'s), the expired among them where the library is
+    not written since: each file's ``shares`` in the library, one a shared file and service."""
+    found = []
+    for ident, entry in _library().read()["files"].items():
+        shares = entry.get("shares")
+        for service, share in (shares.items() if isinstance(shares, dict) else ()):
+            if _held(service, share):
+                found.append(_row(ident, entry["path"], service, share))
+    return found
 
 
 def settings() -> dict[str, Any]:
@@ -1517,32 +1500,29 @@ def share_of(record: dict[str, Any]) -> Share:
 
 
 def record_of(share: Share, document: dict[str, Any], answer: dict[str, Any], sources: Sources) -> dict[str, Any]:
-    """A share's record, one a shared file and service: its names and links, where it lives, when it expires, the file
-    it is of (``document``: ``{"id", "kind", "name", "path"}``, ``path`` the file's canonical path, which a record is
-    found by, and ``id`` that path's), when it was last shared, its size as the service stores it (``bytes``), and where
-    on this computer the files that made it are (``files``: their ``root``, and the script among them, ``entry``, a
-    model's), which ``cad fork`` of its link points at rather than downloading them."""
+    """A share's record, one a shared file and service: its names and links, when it expires, the file it is of
+    (``document``: ``{"id", "kind", "name", "path"}``, ``path`` the file's canonical path, its entry's in the library,
+    and ``id`` that path's), and where on this computer the files that made it are (``files``: their ``root``, and the
+    script among them, ``entry``, a model's), which ``cad fork`` of its link points at rather than downloading them.
+    The library keeps it in the file's entry (``change``), of which ``records`` makes it again."""
     return {"id": share.id, "write": share.write, "delete": share.delete, "service": share.service,
             "view": share.view, "remove": share.remove, "expires": answer["expires"], "document": document,
-            "shared": now(), "bytes": answer["bytes"], "files": {"root": sources.root, "entry": sources.entry}}
+            "files": {"root": sources.root, "entry": sources.entry}}
 
 
 def _record(row: Any) -> bool:
-    """Whether ``row`` is a share's record (``record_of``): what the server keeps for a command, and nothing else --
-    not one of ``cad-share/1``'s, whose link held a ``key``. One that names no file's path (a model's of a release
-    before a share was of a file) is still the share's, to list and to delete, and is of no file."""
+    """Whether ``row`` is a share's record (``record_of``): what the server keeps for a command, and nothing else."""
     from cad.engine.ids import is_id
 
-    if not isinstance(row, dict) or "key" in row:
+    if not isinstance(row, dict):
         return False
     document, files = row.get("document"), row.get("files", {})
     return (isinstance(row.get("id"), str) and _ID.fullmatch(row["id"]) is not None
             and all(isinstance(row.get(name), str) and _SECRET.fullmatch(row[name]) for name in ("write", "delete"))
-            and all(isinstance(row.get(name), str) for name in ("view", "remove", "expires", "shared"))
+            and isinstance(row.get("expires"), str)
             and isinstance(row.get("service"), str) and row["service"].startswith(("https://", "http://"))
-            and type(row.get("bytes")) is int and isinstance(document, dict) and is_id(document.get("id"))
-            and all(isinstance(document.get(name), str) for name in ("kind", "name"))
-            and isinstance(document.get("path"), (str, type(None)))
+            and row.get("view") == f"{row['service']}/{row['id']}" and isinstance(document, dict)
+            and is_id(document.get("id")) and isinstance(document.get("path"), str) and os.path.isabs(document["path"])
             and isinstance(files, dict) and all(isinstance(files.get(name), (str, type(None)))
                                                 for name in ("root", "entry")))
 
@@ -1568,28 +1548,6 @@ def made_here(origin: str, ident: str) -> dict[str, Any] | None:
         path = row["document"].get("path")
         return row if isinstance(path, str) and os.path.isfile(path) else None
     return None
-
-
-def _write_records(path: Path, rows: list[dict[str, Any]]) -> None:
-    """The shares' records written whole (``_write_private``)."""
-    _write_private(path, {"format": RECORDS_FORMAT, "shares": rows})
-
-
-def _write_private(path: Path, found: dict[str, Any]) -> None:
-    """Records written whole, readable and writable by this user alone (a file made 0600 in the same folder, then put
-    in place), so no other user of the computer reads a link or a secret."""
-    from cad._internal.atomic_replace import replace_atomic
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    try:
-        with os.fdopen(handle, "wb") as file:
-            file.write((json.dumps(found, indent=1, sort_keys=True) + "\n").encode("utf-8"))
-        os.chmod(temporary, 0o600)
-        replace_atomic(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
 
 
 def folder_of(document: str) -> Path:
@@ -1786,24 +1744,75 @@ def _write_stored(folder: Path, kept: dict[str, Any]) -> None:
     write_bytes_atomic(folder / STORED, json.dumps(kept, separators=(",", ":")).encode("utf-8"))
 
 
+def _keep_record(record: dict[str, Any]) -> Callable[[dict[str, Any]], None]:
+    """The library changed to keep ``record`` (``record_of``'s) in its file's entry, at its service, in place of any
+    share of that file there and of the same share anywhere else: a share is of one file."""
+    def put(data: dict[str, Any]) -> None:
+        for entry in data["files"].values():
+            shares = entry.get("shares")
+            for service in [service for service, share in (shares.items() if isinstance(shares, dict) else ())
+                            if isinstance(share, dict) and _of(str(share.get("link")), service, record["id"])]:
+                del shares[service]
+            if isinstance(shares, dict) and not shares:
+                del entry["shares"]
+        path = record["document"]["path"]
+        entry = data["files"].setdefault(record["document"]["id"], {"path": path, "created": time.time()})
+        entry.setdefault("shares", {})[record["service"]] = {
+            "link": record["view"], "write": record["write"], "delete": record["delete"],
+            "expires": record["expires"], "root": record["files"]["root"], "entry": record["files"]["entry"]}
+
+    return put
+
+
+def _forget(ident: str) -> Callable[[dict[str, Any]], None]:
+    """The library changed to drop the share of the id ``ident`` from the entry that keeps it."""
+    def drop(data: dict[str, Any]) -> None:
+        for entry in data["files"].values():
+            shares = entry.get("shares")
+            for service in [service for service, share in (shares.items() if isinstance(shares, dict) else ())
+                            if isinstance(share, dict) and _of(str(share.get("link")), service, ident)]:
+                del shares[service]
+            if isinstance(shares, dict) and not shares:
+                del entry["shares"]
+
+    return drop
+
+
+def _import(row: dict[str, Any]) -> Callable[[dict[str, Any]], None]:
+    """The library changed to keep a fork's ``row`` (``import_record``'s): its file's entry, made where it had none,
+    holds the link it came from, which no other entry holds then: a link names the latest fork of it."""
+    from cad.engine.ids import canonical, file_id
+
+    path = canonical(row["path"])
+    origin, ident, _none = parse_link(row["link"]) or ("", "", None)  # a view link: ``_imported`` holds it so
+
+    def put(data: dict[str, Any]) -> None:
+        for entry in data["files"].values():
+            if isinstance(entry.get("imported"), str) and _of(entry["imported"], origin, ident):
+                del entry["imported"]
+        data["files"].setdefault(file_id(path), {"path": path, "created": time.time()})["imported"] = row["link"]
+
+    return put
+
+
 def change(request: dict[str, Any]) -> dict[str, Any]:
     """One change of what is kept, in this process: ``{"set": "on"|"off"}``, ``{"agree": true}``, ``{"folder":
     <file's id>}`` (the file's folder in the cache made, with its lock: answered as ``folder``), ``{"record": <a share's
-    record>, "stored": <its STORED>}`` (the record kept in place of any of the same share, or of the same file -- its
-    canonical path -- at the same service, and ``stored``, where given, written in the file's folder), ``{"forget":
-    <share id>}`` (its record dropped, and what the share kept in its file's folder, which the asker holds the lock
-    of, removed, where no other record names that file) or ``{"fork": <a fork's record>}`` (``fork_record``: kept in
-    place of any of the same link's, every fork's record whose folder is gone dropped). Every record past its expiry
-    is dropped as the records are written, and what a share kept in every folder no live record names removed
-    (``_sweep``). ``{"ok": true, "settings"}``, or ``{"failed"}`` in one line for a change it does not take.
+    record>, "stored": <its STORED>}`` (the record kept in its file's entry of the library, in place of any of the same
+    share, or of the same file at the same service, and ``stored``, where given, written in the file's folder),
+    ``{"forget": <share id>}`` (the share dropped from its entry, and what it kept in its file's folder, which the asker
+    holds the lock of, removed, where no other live share is of that file) or ``{"imported": <a fork's record>}``
+    (``import_record``: its file's entry holds its link). A share past its expiry goes from its entry as the library is
+    written, and what a share kept in every folder no live share's file names is removed (``_sweep``), under the
+    library's lock. ``{"ok": true, "settings"}``, or ``{"failed"}`` in one line for a change it does not take.
     ``OSError`` where the state folder cannot be written."""
-    from cad_server._internal.file_lock import state
+    from cad_server.engine.library import live as alive
     from cad_server.settings import update_section
 
-    asked = [name for name in ("set", "agree", "folder", "record", "forget", "fork") if name in request]
+    asked = [name for name in ("set", "agree", "folder", "record", "forget", "imported") if name in request]
     if len(asked) != 1 or ("stored" in request and asked != ["record"]):
         return {"failed": "a change of what sharing keeps is one of set, agree, folder, record (with stored), forget "
-                          "or fork"}
+                          "or imported"}
     if "set" in request:
         if request["set"] not in ("on", "off"):
             return {"failed": "sharing is set on or off"}
@@ -1822,44 +1831,29 @@ def change(request: dict[str, Any]) -> dict[str, Any]:
         with open(folder / LOCK, "a+b"):
             pass
         return {"ok": True, "settings": settings(), "folder": str(folder)}
-    elif "fork" in request:
-        fork = request["fork"]
-        if not _forked(fork):
+    elif "imported" in request:
+        if not _imported(request["imported"]):
             return {"failed": "not a fork's record"}
-        origin, ident, _none = parse_link(fork["link"]) or ("", "", None)  # a view link: ``_forked`` holds it so
-        path = forks_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with state(path.parent):
-            rows = [row for row in forks(path) if not _of(row["link"], origin, ident) and os.path.isdir(row["folder"])]
-            _write_private(path, {"format": FORKS_FORMAT, "forks": [*rows, fork]})
+        _library().change(_import(request["imported"]))
     else:
         record, forget, kept = request.get("record"), request.get("forget"), request.get("stored")
-        if "record" in request and not (_record(record) and isinstance(record["document"]["path"], str)
-                                        and os.path.isabs(record["document"]["path"])):
+        if "record" in request and not _record(record):
             return {"failed": "not a share's record"}
         if "stored" in request and not (_stored(kept) and kept["share"] == hashlib.sha256(
                 record["id"].encode("ascii")).hexdigest()):
             return {"failed": "not where the files of that record's share are"}
         if "forget" in request and not (isinstance(forget, str) and _ID.fullmatch(forget)):
             return {"failed": "forget names a share's id"}
-        path = records_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with state(path.parent):
-            rows = [row for row in records(path) if not expired(row)]
-            gone: list[dict[str, Any]] = []
-            if record is not None:
-                rows = [row for row in rows if row["id"] != record["id"] and not (
-                    row["service"] == record["service"] and row["document"]["path"] == record["document"]["path"])]
-                rows.append(record)
-            else:
-                gone = [row for row in rows if row["id"] == forget]
-                rows = [row for row in rows if row["id"] != forget]
-            _write_records(path, rows)
-            # The folders, under the records' lock: a record another command writes meanwhile is one this reads.
-            live = {row["document"]["id"] for row in rows}
-            for row in gone:
-                if row["document"]["id"] not in live:
-                    _clear(folder_of(row["document"]["id"]))
+        library = _library()
+        # The folders, under the library's lock: a share another command keeps meanwhile is one this reads.
+        with library._lock():
+            gone = [row["document"]["id"] for row in records() if row["id"] == forget]
+            data = library.change(_keep_record(record) if record is not None else _forget(forget))
+            live = {ident for ident, entry in data["files"].items()
+                    if any(alive(share) for share in (entry.get("shares") or {}).values())}
+            for ident in gone:
+                if ident not in live:
+                    _clear(folder_of(ident))
             _sweep(live, record["document"]["id"] if record is not None else None)
         if kept is not None:
             # The cache's: where it cannot be written, the next share sends the files it would have named again.

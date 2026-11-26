@@ -5,15 +5,26 @@
     {"schema": 1,
      "projects": {"<project id>": {"root": "/abs/folder", "created": 1764000000.0, "opened": 1764000100.0}},
      "files": {"<file id>": {"path": "/abs/file.xbf", "created": 1764000000.0, "opened": 1764000100.0,
-                             "pinned": true, "reached": "/abs/as/a/page/named/it.xbf"}}}
+                             "pinned": true, "reached": "/abs/as/a/page/named/it.xbf",
+                             "shares": {"https://cad.fun": {"link": "https://cad.fun/<share id>",
+                                                            "write": "<write secret>", "delete": "<delete secret>",
+                                                            "expires": "2026-12-01T10:00:00Z",
+                                                            "root": "/abs/project", "entry": "arm.py"}},
+                             "imported": "https://cad.fun/<share id>"}}}
 
 A project is a folder a person opened as one, keyed by ``ids.derived_id`` of its canonical ``root``. A file is
-a CAD file a page opened, a person pinned, or a run wrote as a model's ``.xbf``, keyed by ``ids.file_id`` of
-its canonical ``path``: ``created`` when the library first knew it, ``opened`` once a page opened it,
-``pinned`` only when true, ``reached`` only while a page named it by another path that still reaches it (a
-file in a linked folder). Nothing else is kept of a document: it is its file, and everything said of it is
-read from the file or worked out from its path. An entry goes when it is forgotten (``Library.forget``), and
-with any write once its file is gone, unless it is pinned: a pinned file comes back with its file.
+a CAD file a page opened, a person pinned, a run wrote as a model's ``.xbf``, ``cad share`` shared or ``cad fork``
+wrote, keyed by ``ids.file_id`` of its canonical ``path``: ``created`` when the library first knew it, ``opened``
+once a page opened it, ``pinned`` only when true, ``reached`` only while a page named it by another path that still
+reaches it (a file in a linked folder); ``shares`` only while it is shared, by each share service's origin: the
+share's view link, its two keys (the secrets that write and delete it), when it expires, and where the files that
+made it are on this computer (their ``root``, and a model's script among them, ``entry``), which
+``cad_server.sharing`` keeps; ``imported`` only for a shared file a fork wrote, the share's view link it came from,
+which then names it here. Nothing else is kept of a document: it is its file, and everything said of it is read
+from the file or worked out from its path. An entry goes when it is forgotten (``Library.forget``: a shared
+file's keys with it), and with any write once its file is gone, unless it is pinned or a share of it is live: a
+pinned file comes back with its file. A share past its expiry goes from its entry as the library is written. The
+file is this user's alone to read or write (0600 where the system has modes), since it holds the shares' keys.
 
 ``<cache>/documents/<id>/note.json`` (``places.cache_dir``) is what was last seen of the file of that id, with
 ``picture.png`` beside it::
@@ -25,11 +36,12 @@ is the file's version now: a file that changed has no count and no picture until
 opens it, a run builds it), which replaces the note whole. Nothing is read to fill one. The cache folder
 deleted loses nothing that is not made again.
 
-One process writes both, the engine's. A change is a read and a write under one lock of this process
-(``state.lock``), landed whole (``state.Folder.write``), so no reader meets half a file; two processes writing
-at once (a CAD app's server with no engine under it) can lose one of the two changes (an open's time, a pin)
-and corrupt nothing. A
-library file that does not read is set aside as ``library.json.unreadable`` and started again.
+One process writes both, the engine's: a command that shares or forks a file asks it to (``{"op": "share"}``), and
+writes the library itself only where no engine answers. A change is a read and a write under one lock of this
+process (``state.lock``), landed whole (``state.Folder.write``), so no reader meets half a file; two processes
+writing at once (a CAD app's server with no engine under it) can lose one of the two changes (an open's time, a
+pin) and corrupt nothing. A library file that does not read is set aside as ``library.json.unreadable`` and
+started again.
 
 What an earlier release kept, a record per document (``<state>/documents/<id>/document.json``) and per project
 (``<state>/projects/<id>.json``), is carried into the library the first time it is read with them there, and
@@ -42,16 +54,19 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from cad.engine.ids import canonical, derived_id, file_id, is_id
 from cad_server.engine.state import Folder, file_version, lock
 
-__all__ = ["LIBRARY", "Library", "Notes", "reaching"]
+__all__ = ["LIBRARY", "Library", "Notes", "live", "reaching"]
 
 LIBRARY = "library.json"
 SCHEMA = 1
+# The library holds the keys of the person's shares: this user's alone to read or write.
+MODE = 0o600
 # Where the cache keeps what it derived of the file of an id: its note and picture here, its kept checks and a
 # board's plots beside them.
 DOCUMENTS = "documents"
@@ -76,6 +91,29 @@ def reaching(given: Any, path: str) -> str | None:
         return given if os.path.normcase(canonical(given)) == os.path.normcase(path) else None
     except (OSError, ValueError):
         return None
+
+
+def live(share: Any) -> bool:
+    """Whether ``share`` (an entry's of ``shares``) is before its expiry, as the share service said it."""
+    try:
+        when = datetime.fromisoformat(str((share or {}).get("expires")).replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return when > datetime.now(timezone.utc)
+
+
+def _kept(entry: dict[str, Any]) -> bool:
+    """Whether a file's ``entry`` stays as the library is written: pinned, its file there, or a share of it live.
+    Its shares past their expiry go from it here."""
+    shares = entry.get("shares")
+    if isinstance(shares, dict):
+        for service in [service for service, share in shares.items() if not live(share)]:
+            del shares[service]
+        if not shares:
+            del entry["shares"]
+    return bool(entry.get("pinned")) or os.path.isfile(entry["path"]) or bool(entry.get("shares"))
 
 
 def _empty() -> dict[str, Any]:
@@ -154,7 +192,7 @@ class Library:
         if data is None:
             data = _empty()
             try:
-                self.state.write(f"{LIBRARY}.unreadable", raw)
+                self.state.write(f"{LIBRARY}.unreadable", raw, MODE)
             except OSError:
                 pass
             print(f"cad: {self.state.path(LIBRARY)} does not read: set aside as {LIBRARY}.unreadable, and started "
@@ -163,17 +201,17 @@ class Library:
 
     def change(self, fn: Callable[[dict[str, Any]], Any]) -> dict[str, Any]:
         """``fn(the library)`` changes it in place; written when it differs, without the entries that are not
-        pinned and whose file is gone. The read and the write are under one lock. The library as it is then."""
+        pinned, whose file is gone and of which no share is live (``_kept``), and readable by this user alone
+        (``MODE``). The read and the write are under one lock. The library as it is then."""
         with self._lock():
             before = self._read()
             data = copy.deepcopy(before)
             fn(data)
             if data == before:
                 return before
-            data["files"] = {ident: entry for ident, entry in data["files"].items()
-                             if entry.get("pinned") or os.path.isfile(entry["path"])}
+            data["files"] = {ident: entry for ident, entry in data["files"].items() if _kept(entry)}
             text = json.dumps(data, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
-            path = self.state.write(LIBRARY, text.encode("utf-8"))
+            path = self.state.write(LIBRARY, text.encode("utf-8"), MODE)
             found = os.stat(path)
             _READ[str(self.state.root)] = ((found.st_ino, found.st_mtime_ns, found.st_size), data)
             return data

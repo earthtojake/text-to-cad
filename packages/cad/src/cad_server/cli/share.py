@@ -18,8 +18,8 @@ made it, with no sign-in, for 7 days after its last share (``cad_server.sharing`
   refused in a line. It prints the view link, the files' link, the delete link, the expiry, one line of what
   travelled, and a line for what was left out. The same file shared again from this computer is the same share: the
   link stays, the 7 days start again, and only what changed travels; a file that moved is another file, with a link
-  of its own. Where the service refuses its names (403), or its record is past its expiry or is not one this cad reads
-  (``cad-share/1``'s), it is a new share. A folder is refused: it has no bundle.
+  of its own. Where the service refuses its names (403), or the library's entry of the file holds no share there that
+  is live, with its keys, it is a new share. A folder is refused: it has no bundle.
 - The first share on a computer needs the person's yes: without ``--yes`` it is refused, in lines an agent can
   pass on (what goes -- the code and the files that made it, which anyone with the link can download, and the view --,
   where, who can open it, for how long, how to delete it), naming the same command with ``--yes``, which records the
@@ -30,9 +30,9 @@ made it, with no sign-in, for 7 days after its last share (``cad_server.sharing`
   command that destroys is (``cad_server._internal.consent``); what it kept in the file's folder of cad's cache goes
   with it.
 
-``--json`` answers in one JSON object. Writes of the agreement, the setting, the records and the cache's folders are
-the running server's where one answers (``sharing.keep``), else this process's. A share's id and its secrets are said
-only inside the two links: never in any other line.
+``--json`` answers in one JSON object. Writes of the agreement, the setting, a share in its file's entry of the library
+and the cache's folders are the running server's where one answers (``sharing.keep``), as every write of the library
+is, else this process's. A share's id and its secrets are said only inside the two links: never in any other line.
 """
 
 from __future__ import annotations
@@ -387,7 +387,7 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
               f"{' (the same link as before)' if again else ''}; sharing it again keeps the link and starts the "
               f"{sharing.EXPIRY_DAYS} days again", flush=True)
     if unkept is not None:
-        print(f"{prog}: warning: this computer could not keep the share's record ({unkept}): sharing it again "
+        print(f"{prog}: warning: this computer's library could not keep the share ({unkept}): sharing it again "
               "makes a new link, and only its delete link deletes this one", file=sys.stderr, flush=True)
     return 0
 
@@ -415,14 +415,15 @@ def _notes(sources: Any, kind: str, name: str) -> list[str]:
 
 
 def _records() -> list[dict[str, Any]]:
-    """This computer's records of its shares (``sharing.records``), or the failure that says they cannot be read."""
+    """This computer's shares, as its library holds them (``sharing.records``), or the failure that says they cannot
+    be read."""
     from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
 
     try:
         return sharing.records()
     except OSError as error:
-        raise Failure(f"could not read this computer's shares ({sharing.records_path()}): "
+        raise Failure(f"could not read this computer's shares ({sharing.library_path()}): "
                       f"{error.strerror or error}") from None
 
 

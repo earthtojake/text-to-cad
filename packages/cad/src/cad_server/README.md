@@ -163,13 +163,14 @@ cad_server/
   only what changed. The first share on a computer is refused without `--yes`, the person's yes, in lines that say
   what goes, where, who can open it, for how long and how to delete it. **`cad share status|on|off`**: whether
   sharing is on and agreed, and this computer's live shares; `off` refuses every share until `on`. **`cad share
-  delete FILE|ID|LINK`**: a share deleted, asked first. The agreement, the setting, the records and the cache's
-  folders are written by the server that runs, as `cad update auto`'s switch is, else by the command (the engine's
-  **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command itself into a folder, every
-  entry kept inside it, a model's `.xbf` among them, and a record of the fork kept; it runs nothing and adds nothing
-  to the library, and prints the commands that show it and build it. Of a share this computer made, it downloads
-  nothing and says where its files are. A share's link names this computer's copy of it wherever cad takes a
-  document: the file it shared, else its fork's copy.
+  delete FILE|ID|LINK`**: a share deleted, asked first. The agreement, the setting, a share in its file's entry of
+  the library and the cache's folders are written by the server that runs, as every change of the library is, else
+  by the command (the engine's **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command
+  itself into a folder, every entry kept inside it, a model's `.xbf` among them, and the file the share is of added to
+  the library with the link it came from; it runs nothing and makes no project, and prints the commands that show it
+  and build it. Of a share this computer made, it downloads nothing and says where its files are. A share's link
+  names this computer's copy of it wherever cad takes a document, as the library holds them: the file it shared,
+  else the file its fork wrote.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
@@ -315,9 +316,9 @@ says so and updates nothing.
 
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
 `~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, the library
-(`library.json`: the project folders, the files a person opened or pinned), the page token and port, the
-telemetry spool, the feed's last answer, and the shares' and the forks' records (`shares.json`, `forks.json`, which
-this user alone may read). The cache
+(`library.json`, which this user alone may read, as it holds the keys of their shares: the project folders, and the
+files a person opened, starred, built, shared or imported, a shared file's entry with each share of it and a forked
+file's with the link it came from), the page token and port, the telemetry spool and the feed's last answer. The cache
 folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: what the engine derived of a
 document (a file's count and picture, `documents/<id>/note.json`; a board's plots, kept checks; a shared file's last
 view bundle, `documents/<id>/view/`), the environments, bytecode and the integrations' private homes, all made again

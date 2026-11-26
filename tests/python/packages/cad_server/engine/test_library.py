@@ -1,6 +1,7 @@
-"""The library file (the project folders, the files a person opened or pinned) and the note the cache keeps of
-a file: one entry of one file, written whole under one lock; a note that holds for one version of its file; and
-what 0.11.17 kept, a record per document, carried once and removed."""
+"""The library file (the project folders, the files a person opened, pinned, built, shared or forked) and the note
+the cache keeps of a file: one entry of one file, written whole under one lock, readable by this user alone; a shared
+file's entry kept while a share of it is live, its expired shares going as the library is written; a note that holds
+for one version of its file; and what 0.11.17 kept, a record per document, carried once and removed."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import io
 import json
 import os
 import shutil
+import stat
 import tempfile
 import threading
 import unittest
@@ -82,6 +84,33 @@ class LibraryTest(unittest.TestCase):
         self.library.forget(file_id(tag))
         self.assertEqual(sorted(self.on_disk()["files"]), sorted([file_id(arm), file_id(kept)]))
         self.assertIsNone(self.library.path_of(file_id(gone)))
+
+    def test_a_shared_files_entry_stays_while_a_share_is_live_and_is_this_users_alone(self) -> None:
+        live = {"link": "https://cad.fun/" + "a" * 22, "write": "w" * 43, "delete": "d" * 43,
+                "expires": "2999-01-01T00:00:00Z", "root": str(self.work), "entry": None}
+        spent = {**live, "link": "http://127.0.0.1:1/" + "b" * 22, "expires": "2020-01-01T00:00:00Z"}
+        shared, forked = self.file("shared.stl"), self.file("copy/arm.xbf")
+
+        def keep(data: dict) -> None:
+            data["files"][file_id(shared)] = {"path": str(shared), "created": 1.0,
+                                              "shares": {"https://cad.fun": live, "http://127.0.0.1:1": spent}}
+            data["files"][file_id(forked)] = {"path": str(forked), "created": 1.0, "imported": live["link"]}
+
+        self.library.change(keep)
+        # The share past its expiry goes as the library is written; the live one, and the link a fork came from, stay.
+        self.assertEqual(self.on_disk()["files"][file_id(shared)]["shares"], {"https://cad.fun": live})
+        self.assertEqual(self.on_disk()["files"][file_id(forked)]["imported"], live["link"])
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE((self.state / "library.json").stat().st_mode), 0o600,
+                             "it holds the shares' keys")
+        # Its file gone, a shared file's entry stays while its share is live, and goes with it; a forked one goes.
+        shared.unlink()
+        forked.unlink()
+        self.library.opened(self.file("other.stl"))
+        self.assertEqual(sorted(self.on_disk()["files"]), sorted([file_id(shared), file_id(self.work / "other.stl")]))
+        self.library.change(lambda data: data["files"][file_id(shared)]["shares"]["https://cad.fun"].update(
+            expires="2020-01-02T00:00:00Z"))
+        self.assertEqual(list(self.on_disk()["files"]), [file_id(self.work / "other.stl")])
 
     def test_writers_at_once_lose_no_entry(self) -> None:
         files = [self.file(f"part_{index}.stl") for index in range(40)]
