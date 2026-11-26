@@ -49,6 +49,9 @@ repo-scan*.md
 # Benchmark output is local evidence, not source. Use tmp/ for reports.
 /scripts/bench/**/results/
 /scripts/bench/**/*.json
+# ...but a benchmark's inputs are source: the PCB corpus and its tasks.
+!/scripts/bench/pcb_corpus.json
+!/scripts/bench/pcb_tasks.json
 /scripts/bench/**/*.log
 /scripts/bench/**/*.gz
 /scripts/bench/**/*.cpuprofile

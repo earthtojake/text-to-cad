@@ -380,10 +380,13 @@ hand when the studio or the look changes.
 
 `bench/` — manual measurements, never run in CI ([`bench/README.md`](bench/README.md)):
 `occt_parity.py`, the viewer against OCCT, mode by mode; `dfm_bench.py`, the manufacturing checks
-over a folder of STEP files; and `skill_ab.py`, which lays out an A/B test of the skills (a Git
-ref's against the working tree's, one fresh agent a task) from the tasks in `bench/skill_ab/`. Their
-reports are local output under `tmp/`, never committed here;
-only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`).
+over a folder of STEP files; `skill_ab.py`, which lays out an A/B test of the skills (a Git
+ref's against the working tree's, one fresh agent a task) from the tasks in `bench/skill_ab/`; and the
+PCB benchmark: `pcb_fetch.py` downloads the KiCad projects `pcb_corpus.json` pins (and builds this
+repository's ECAD samples) into `tmp/pcb-corpus/`, and `pcb_bench.py` makes a run folder per task of
+`pcb_tasks.json` and grades what an agent left in it. Their reports are local output under `tmp/`,
+never committed here; only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`,
+`tests/python/global/test_pcb_bench_helpers.py`).
 
 ## CI
 
