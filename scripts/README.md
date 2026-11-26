@@ -118,16 +118,17 @@ where those files ship, so these scripts are what produces them.
   brings a release. Called by `test.yml` and `release-publish.yml`.
 - `rehearse-update.py [ROUTE ...] [--old RELEASE]` — rehearses cad's updates on private computers (each its
   own home, state, engine, cache and `cad` command folders), with real uv and real servers. `self`: cad, a uv
-  tool, updating itself in place with uv (`uv tool upgrade`, uv's receipt left as it is), at the server's next
-  start, by the viewer's button or by a typed `cad update` (with PyPI out of reach too), never in the
-  background, nor with automatic updates off or a feed that names it no more; back by itself from a release
-  whose server cannot start, then held back; inside its major with a higher major out, which `cad update`
-  names and nothing crosses to; by pipx (told to run `pipx upgrade`); while three callers run `cad` every
-  50 ms, while files of the installed release are held open, and after a worker was stopped midway;
-  and the new cad's server running `cad plugin
-  install` once, as its own run under a deadline, where `cad plugin update auto` is on and cad got newer, by
-  itself or by a typed `cad update`, never after a failed update; that run installs the plugin with cad's own
-  code, so it is read from cad's record of it, and the install command's count stays 0.
+  tool, updating itself in place with the computer's own uv (`uv tool upgrade`, no pin written in uv's receipt):
+  at the server's next start once the feed as last read names a newer release, by the viewer's button and by a
+  typed `cad update` (PyPI out of reach too, with and without a server running), never in the background however
+  busy the server, nor with automatic updates off; back by itself from a release whose server cannot start, then
+  held back; untouched by a release uv cannot install; through a source file held open and an upgrade stopped past
+  its `RECORD` (the worker's repair); while three callers run `cad` every 50 ms (on Windows every failure inside the
+  switch, fast, never a cad half replaced); never against a person's own pin, never across a major (`cad update`
+  names it); after its worker was stopped midway; from 0.11.17's own update in place; the new cad's server running
+  `cad plugin install` once where `cad plugin update auto` is on (read from cad's record of it: the install
+  command's count stays 0); and the install command repairing a cad that does not start while a process runs from
+  its environment (`install-repair`).
   `bridge`: a computer on a shipped release (0.11.11, or `--old`'s) arriving at this build by its updater,
   its automatic update, its typed `cad update`, the install command and the uv line, this build's server
   running the install command once where the computer had it (counted: the command hands the apps to the cad

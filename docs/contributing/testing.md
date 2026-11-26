@@ -256,10 +256,14 @@ its pull request. The tier holds:
   Windows) and brings each to this tree's build by the route it takes (where the new server runs the
   install command once, that command hands the apps to the cad it installed); then cad's own update
   in place with uv, at the server's next start, by the viewer's button or by a typed `cad update`
-  (PyPI reachable or not), inside its major, never across one (`cad update` names it), and never by
-  itself in the background, nor with automatic updates off or a feed that no longer names it; back by
-  itself from a release whose server does not start, and then held back; with `cad` called every
-  50 ms and its files held open, and after a person's own reinstall or a worker stopped midway; and after an update, the new server's one `cad plugin install`, read from cad's record of it.
+  (PyPI reachable or not), inside its major, never across one (`cad update` names it), never against a
+  person's own pin, and never in the background, nor with automatic updates off; back by itself from a
+  release whose server does not start, and then held back; untouched by a release uv cannot install;
+  through a file held open and an upgrade stopped past its `RECORD`, which the worker repairs; with `cad`
+  called every 50 ms (on Windows every failure inside the switch, fast, never a cad half replaced), after
+  its worker was stopped midway, and from 0.11.17's own update in place; after an update, the new
+  server's one `cad plugin install`, read from cad's record of it; and the install command repairing a
+  cad that does not start while a process runs from its environment.
   One more route starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each system): its own
   `cad plugin update` runs this tree's install command, which finds no `cad plugin install` there and
   has the newest release's do the work (`uv tool run ... cad@latest plugin install`: this tree's), then
