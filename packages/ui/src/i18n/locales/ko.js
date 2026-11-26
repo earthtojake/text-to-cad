@@ -369,9 +369,10 @@ export default {
 
 
   "home.sort.name": "이름",
+  "home.sort.viewed": "마지막 조회",
+  "home.sort.edited": "마지막 수정",
 
 
-  "home.sort.kind": "종류",
 
 
   "home.openNewTab": "새 탭에서 열기",
@@ -383,10 +384,8 @@ export default {
   "home.backTo": "{name}(으)로 돌아가기",
 
 
-  "home.columnWhere": "위치",
 
 
-  "home.columnProject": "프로젝트",
 
 
   "home.emptyTitle": "아직 아무것도 없습니다",
@@ -418,18 +417,11 @@ export default {
   "home.menuOpen": "열기",
   "home.star": "별표 표시",
   "home.unstar": "별표 해제",
-  "home.kindsAria": "표시",
-  "home.kind.all": "전체",
-  "home.kind.models": "3D 모델",
-  "home.kind.drawings": "도면",
-  "home.kind.boards": "기판",
-  "home.kind.schematics": "회로도",
-  "home.kind.robots": "로봇",
   "home.columnName": "이름",
-  "home.columnKind": "종류",
-  "home.columnSize": "크기",
-  "home.columnUpdated": "업데이트",
-  "home.columnCreated": "생성 날짜",
+  "home.columnType": "종류",
+  "home.columnViewed": "마지막 조회",
+  "home.columnEdited": "마지막 수정",
+  "home.folderType": "폴더",
   "home.openingAria": "{name} 여는 중",
   "home.ageNow": "방금",
   "home.ageEdited": "{age} 편집됨",

@@ -438,11 +438,10 @@ Copy path and the file manager. Its heading is the folder's path, the project's 
 folder on screen a link back up, and its ⋯ (Open in new tab, Copy
 path, Reveal, Remove from CAD, which forgets the project, changes nothing on disk and goes to Recents). The search on
 a project's page asks the server for every file below the folder on screen that holds the
-words (`?path=&q=`, once typing rests) and lists them flat, each saying where it is below that folder; elsewhere it
-narrows the rows in hand. The place's title is the page's one heading (the navbar names no place); under it, wherever
-the place lists anything, a toolbar: the kinds' tabs at its left (All, then 3D models, Drawings, Boards, Schematics and
-Robots, each the place holds, with no count: an `.xbf` and the STEP, STL or GLB exported from it are all 3D models),
-Sort (one ghost button and its menu) and grid or list (one segmented control) at its right; then the documents, all
+words (`?path=&q=`, once typing rests) and lists them flat; elsewhere it
+narrows the rows in hand. The place's title is the page's one heading (the navbar names no place), and wherever
+the place lists anything, at the right of its row, Sort (Last activity, Name, Last viewed, Last edited: one ghost
+button and its menu) and grid or list (one segmented control), there being no filter by kind; then the documents, all
 of them. The grid's documents are framed cards, at least 200px wide and 16px apart: the picture its row names (the light viewport's, 3:2 on the
 model area's light gradient in both themes; a file with none, its kind's glyph on the plain tile), its format's chip
 at its top-left (for an `.xbf`
@@ -452,9 +451,9 @@ document holds one part and "Assembly" when it holds more, as desktop CAD names 
 "STEP", "KiCad PCB"), then, in a compact caption, its name over one line: its last activity with its verb, alone, as
 Figma's cards say it ("Edited now", "Viewed 5m ago",
 "Edited 2h ago", "Viewed 3d ago", then the short date: Edited when it changed after it was last opened, Viewed when it
-was opened after it last changed). The list is a table: Name, Project (or, in a project's search, Where), Kind, Size,
-Updated and Created over rows the control + 16 tall (44px), each a document's small picture and name, its format (as the badge), its size and
-those two ages with no verb; a folder's row has its glyph and a dash in each column. Every file is a card (or a tile)
+was opened after it last changed). The list is a table: Name, Type, Last viewed and Last edited
+over rows the control + 16 tall (44px), each a document's small picture and name, its format (as the badge) and
+those two ages with no verb; a folder's row has its glyph, "Folder" and a dash for each time, and any value not known is a dash. Every file is a card (or a tile)
 and a row of its own, a model's `.xbf` among them. The star and the ⋯ appear on hover (at a card's picture's corner,
 at a tile's or a row's end); a starred one keeps its star, filled. The ⋯ menu holds Open, Open in new tab, Open in (the apps the server lists
 for its files), Copy path, Copy link and Reveal, then Star or Unstar (`PATCH /api/v1/documents`'s `pin` and `unpin`);

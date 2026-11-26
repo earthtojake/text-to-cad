@@ -263,10 +263,9 @@ it('draws the home\'s own controls at its navbar\'s right end: the search and Im
   // The logo first, then the sidebar's toggle, and no ⋯ on the home; the app menu is the sidebar's Settings.
   expect([lead.lastElementChild!.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded'), lead.firstElementChild!.getAttribute('data-navbar-logo'),
     navbar()!.querySelector('[data-testid="file-actions"]'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['true', 'home', null, null]);
-  // The page's own rows: its title, the page's one h1; under it Sort and the layout control at its right, no search; one
-  // kind of document, so no tabs.
+  // The page's own row: its title, the page's one h1, with Sort and the layout control at its right, no search, no tabs.
   const row = document.querySelector<HTMLElement>('[data-library-toolbar]')!;
-  expect([row.previousElementSibling?.querySelector('h1')?.textContent, row.querySelector('h1'), row.querySelector('input'), document.querySelector('[data-library-kinds]'),
+  expect([row.parentElement?.querySelector('h1')?.textContent, row.querySelector('h1'), row.querySelector('input'), document.querySelector('[data-library-kinds]'),
     within(row).getByRole('group', { name: 'Layout' }) !== null]).toEqual(['Recents', null, null, null, true]);
   // Under 700px of navbar the search is its icon until pressed, then the field with the keyboard in it.
   const css = readFileSync(`${process.cwd()}/src/styles/globals.css`, 'utf8');

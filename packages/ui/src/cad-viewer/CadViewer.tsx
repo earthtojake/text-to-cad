@@ -9,7 +9,7 @@ import { I18nProvider, translator } from '../i18n/index.js';
 import type { HomeLocation, ViewerHost } from '../host/types.js';
 import { folderPlace } from '../host/addresses.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, RECENTS, formatLabel, isDocument, sortDocuments, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
+import { ModelLibrary, RECENTS, isDocument, sortDocuments, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { cadRenderers } from './renderers.js';
 import type { LibraryLayout, LibrarySort } from '../tab-store/tabRecord.js';
@@ -259,18 +259,17 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const shownName = String(entry?.name || '') || name || '';
   const projectRef = homed ? (entry?.project as CadEntryProject | null | undefined) ?? null : null;
   const folderRead = useProjectFolder(client, projectRef);
-  // The home's order and its labels, by which the folder's files are stepped through as its page lists them.
+  // The home's order, by which the folder's files are stepped through as its page lists them.
   const { layout, sort, panel: libraryPanel } = settings.library;
   const project = useMemo<FileProject | null>(() => {
     if (!projectRef) return null;
     const folder = projectRef.folder ?? '';
     const place = folderPlace(projectRef.id, folder);
-    const labels = { xbf: t('format.xbf'), part: t('home.formatPart'), assembly: t('home.formatAssembly') };
     const read = folderRead?.folder ?? null;
     return {
       id: projectRef.id, name: projectRef.name, root: projectRef.root,
       // The documents of the folder: a file in it that no page opens is no step of `[` and `]`.
-      documents: read ? sortDocuments(read.documents.filter(isDocument), sort, item => formatLabel(item, labels), locale) : null,
+      documents: read ? sortDocuments(read.documents.filter(isDocument), sort, locale) : null,
       missing: Boolean(read?.project?.missing), error: read ? null : folderRead?.error ?? null,
       href: hrefOf?.({ home: place }) ?? null,
       onShow: () => {
@@ -279,7 +278,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
         home(place);
       },
     };
-  }, [projectRef?.id, projectRef?.name, projectRef?.root, projectRef?.folder, folderRead, sort, locale, t, hrefOf, home, shownId, shownName]);
+  }, [projectRef?.id, projectRef?.name, projectRef?.root, projectRef?.folder, folderRead, sort, locale, hrefOf, home, shownId, shownName]);
   // A document in no project: its ⋯'s Import its folder as a project, the host's chooser starting at its folder, so the
   // person picks the level. Its row says the project it is in once the catalog is read again.
   const importFolder = library?.importFolder;

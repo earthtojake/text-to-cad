@@ -65,15 +65,15 @@ test('the viewer shows one file by its absolute path, the home with none, and wh
   const home = () => props().presentation!.home as { props: { layout: string; sort: string; onLayoutChange(layout: string): void; onSortChange(sort: string): void } };
   expect([home().props.layout, home().props.sort]).toEqual(['grid', 'activity']);
   act(() => home().props.onLayoutChange('list'));
-  act(() => home().props.onSortChange('kind'));
-  expect(tabStore.settings.getSnapshot().library).toEqual({ layout: 'list', sort: 'kind' });
-  expect([home().props.layout, home().props.sort]).toEqual(['list', 'kind']);
+  act(() => home().props.onSortChange('viewed'));
+  expect(tabStore.settings.getSnapshot().library).toEqual({ layout: 'list', sort: 'viewed' });
+  expect([home().props.layout, home().props.sort]).toEqual(['list', 'viewed']);
   // Neither is reset by leaving the home for a file and coming back.
   rerender(view('C:/models/a.step'));
   rerender(view(''));
-  expect([home().props.layout, home().props.sort]).toEqual(['list', 'kind']);
+  expect([home().props.layout, home().props.sort]).toEqual(['list', 'viewed']);
   act(() => home().props.onLayoutChange('grid'));
-  expect(tabStore.settings.getSnapshot().library).toEqual({ layout: 'grid', sort: 'kind' });
+  expect(tabStore.settings.getSnapshot().library).toEqual({ layout: 'grid', sort: 'viewed' });
 
   // The catalog is read again when the person comes back to the page.
   client.refresh.mockClear();

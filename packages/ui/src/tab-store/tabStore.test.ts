@@ -27,7 +27,9 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
   });
   expect(readTabRecord({ version: 2, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list', sort: 'activity' });
   // The home's order is kept with its layout; one that is not an order is the default.
-  expect(readTabRecord({ version: 2, settings: { library: { sort: 'kind' } }, files: {} }).settings.library).toEqual({ layout: 'grid', sort: 'kind' });
+  expect(readTabRecord({ version: 2, settings: { library: { sort: 'edited' } }, files: {} }).settings.library).toEqual({ layout: 'grid', sort: 'edited' });
+  // The order by kind is gone with the kinds: a stored one reads as the default.
+  expect(readTabRecord({ version: 2, settings: { library: { sort: 'kind' } }, files: {} }).settings.library).toEqual({ layout: 'grid', sort: 'activity' });
   expect(readTabRecord({ version: 2, settings: { library: { layout: 'list', sort: 'size' } }, files: {} }).settings.library).toEqual({ layout: 'list', sort: 'activity' });
   // The home's sidebar, kept as a file's panel is: its choice and its width where they are what they should be, no tab, and no field with neither.
   const library = (panel: unknown) => readTabRecord({ version: 2, settings: { library: { layout: 'list', panel } }, files: {} }).settings.library;

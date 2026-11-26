@@ -369,9 +369,10 @@ export default {
 
 
   "home.sort.name": "名前",
+  "home.sort.viewed": "最終閲覧",
+  "home.sort.edited": "最終編集",
 
 
-  "home.sort.kind": "種類",
 
 
   "home.openNewTab": "新しいタブで開く",
@@ -383,10 +384,8 @@ export default {
   "home.backTo": "{name} に戻る",
 
 
-  "home.columnWhere": "場所",
 
 
-  "home.columnProject": "プロジェクト",
 
 
   "home.emptyTitle": "まだ何もありません",
@@ -418,18 +417,11 @@ export default {
   "home.menuOpen": "開く",
   "home.star": "スターを付ける",
   "home.unstar": "スターを外す",
-  "home.kindsAria": "表示",
-  "home.kind.all": "すべて",
-  "home.kind.models": "3Dモデル",
-  "home.kind.drawings": "図面",
-  "home.kind.boards": "基板",
-  "home.kind.schematics": "回路図",
-  "home.kind.robots": "ロボット",
   "home.columnName": "名前",
-  "home.columnKind": "種類",
-  "home.columnSize": "サイズ",
-  "home.columnUpdated": "更新",
-  "home.columnCreated": "作成日",
+  "home.columnType": "種類",
+  "home.columnViewed": "最終閲覧",
+  "home.columnEdited": "最終編集",
+  "home.folderType": "フォルダ",
   "home.openingAria": "{name} を開いています",
   "home.ageNow": "たった今",
   "home.ageEdited": "編集: {age}",

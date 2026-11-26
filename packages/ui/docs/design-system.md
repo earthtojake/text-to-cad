@@ -83,7 +83,7 @@ holds.
     Dropbox's paths are), the parts above the folder on screen and the slashes regular and muted, the folder on screen
     medium in the foreground.
   - **Body**: `text-ui` (13/20; 15/20 on a phone) for everything else: the sidebar's rows and its "Projects" heading,
-    the kinds' tabs, Sort, a card's or a tile's name (medium) and a card's line (regular, muted), the list's header
+    Sort, a card's or a tile's name (medium) and a card's line (regular, muted), the list's header
     (muted) and cells, the welcome's title (medium) and lines, every line and note.
   - **Chip**: the chip's own step (12/16 medium) for a card's format, and nothing else.
   No `text-tiny` (a key cap drawn by `Kbd` keeps its own step). Why: a second small size beside the body read as a
@@ -114,7 +114,7 @@ vertical step.
 - **A card's inset is 12px on all four sides**: the panel inset less the card's 4px gap, so its content stands where
   the docked panel's does.
 - **The Home's place** is padded by the panel inset on all four sides, on a desktop and a phone, and its blocks are
-  16px apart: its title's row, the toolbar's row 16px under it, and the content 16px under that; a label over a block
+  16px apart: its head (one row: the title at the left, Sort and the layout at the right) and the content 16px under it; a label over a block
   of it (a project's top page's Recent and All files) stands 8px over what it labels. Its rows hang past that line as
   the panel's do. Why: the logo, the sidebar and the place share one line, and no width has gutters of its own.
 - **Over the view**, the strip and the tool stack stand 8px in (`CHROME_INSET_PX`), the corner's zoom 12px
@@ -276,7 +276,6 @@ One component for each job. A renderer brings its tools, rows, tabs and state, b
 | A number a slider sets | `SliderField` | `kit/inspector/SliderField.jsx` |
 | A number with no range | `FileSheetNumberProperty` | `kit/inspector/FileSheet.js` |
 | On or off | `Switch` | `primitives/switch.jsx` |
-| One of several, each a toggle in a row (the Home's kinds) | `Pill` in a `PillGroup` | `primitives/pill.jsx` |
 | One of two (or a few) ways to show the same thing (the Home's grid or list) | `SegmentedControl` | `primitives/segmented-control.jsx` |
 | A chip | `Badge`, as `ReferenceChips` draws it | `kit/tools/quick-edit/ReferenceChips.jsx` |
 | Settings over the view | `SettingsCard` | `kit/view-settings/SettingsCard.jsx` |
@@ -436,12 +435,10 @@ the playback scrubber import the slider primitive. Why: no site brings its own s
 
 ### Pills and the segmented control
 
-- **A pill** (`Pill`) is the panel's tab pill: the control tall, 6px in at each side, `rounded-md`, `text-ui`. The one
-  on is `bg-accent` with the foreground at medium weight; the others muted, with `bg-accent/50` under the pointer. It is
-  as wide as its name at medium weight, so turning one on moves nothing, and it has no count, as Figma's and Drive's
-  tabs have none. A row of pills (`PillGroup`) is a labelled group of toggles (`aria-pressed`), one on, 4px apart,
-  hanging 6px past its line so the words stand on it, and wrapping where the row is short: the Home's kinds. The panel's head
-  draws its tabs at the same measures ([The panel's head](#the-panels-head)).
+- **A pill** is the panel's tab pill (`PILL_CLASS`): the control tall, 6px in at each side, `rounded-md`, `text-ui`. The one
+  on is `bg-accent` with the foreground at medium weight; the others muted, with `bg-accent/50` under the pointer. The
+  panel's head draws its tabs with it ([The panel's head](#the-panels-head)). The Home has no row of pills: it filters
+  nothing by kind.
 - **A segmented control** (`SegmentedControl`) is one choice of two (or a few) ways to show the same thing, side by
   side on one muted track (`bg-muted`), the chosen one raised on it (the page's colour and `shadow-xs`; in dark, the
   accent). Each option is a toggle (`aria-pressed`) the control tall, its face drawn 2px in, so the track shows 2px
@@ -624,7 +621,7 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |
 | … "a toolbar button under the pointer is seen…", "Preview's bar takes the backdrop's ink…" | hover fills and ink read on their surface |
 | … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's top, gaps and 12px inset, its 288px width, its dropdowns one width, nothing cut |
-| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home and no "Home" in the navbar; the place's title (its h1) in a row the control tall, the toolbar 16px under it and the content 16px under that, on the 16px inset on every side; the layout's segmented control (its track and faces) and the kinds' tabs, with no counts, at the toolbar's left, wrapping on a narrow page; Sort as one ghost control, its glyph and chevron 8px from its edges, its chevron muted at full strength, its hover and open fill; a menu 6px off its trigger and 6px in; a card and a place as real links; the ring round the document just left, in view; as drawn, on a desktop and a phone: the three sizes (title 15/20 and 17/22 medium, body 13/20 and 15/20, the chip's step) and nothing else; a project's top page's Recent, one row of the cards' grid (five at 1440px) in the listing's columns, its labels 8px over what they label, a resize changing how many stand across and a search replacing it; a card's corners, inset, 3:2 picture and chip, 16px between cards, a folder as a tile of the cards' family, the list's header and its control + 16 rows, a place's one muted line; a file that is no document as a 46px tile of that family in a grid of its own 16px under the cards (its ⋯ at its right end, there under the pointer and in focus, always on a phone), a row after the documents' in the list, a press on either opening it in an app; Import as one button where the system's chooser takes either, else a menu of two; a phone's 36px controls, chips and options |
+| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home and no "Home" in the navbar; the place's title (its h1) in one row the control tall with Sort and the layout centred on it at its right, the content 16px under it, on the 16px inset on every side, the row staying one row on a narrow page and a phone (the title cut first, then Sort its glyph alone); the layout's segmented control (its track and faces); Sort as one ghost control, its glyph and chevron 8px from its edges, its chevron muted at full strength, its hover and open fill; a menu 6px off its trigger and 6px in; a card and a place as real links; the ring round the document just left, in view; as drawn, on a desktop and a phone: the three sizes (title 15/20 and 17/22 medium, body 13/20 and 15/20, the chip's step) and nothing else; a project's top page's Recent, one row of the cards' grid (five at 1440px) in the listing's columns, its labels 8px over what they label, a resize changing how many stand across and a search replacing it; a card's corners, inset, 3:2 picture and chip, 16px between cards, a folder as a tile of the cards' family, the list's header (Name, Type, Last viewed, Last edited) and its control + 16 rows, a place's one muted line; a file that is no document as a 46px tile of that family in a grid of its own 16px under the cards (its ⋯ at its right end, there under the pointer and in focus, always on a phone), a row after the documents' in the list, a press on either opening it in an app; Import as one button where the system's chooser takes either, else a menu of two; a phone's 36px controls, chips and options |
 | `primitives/segmented-control.test.tsx` | the segmented control's pressed state, its one Tab stop and its keys, and its measures from the scale's tokens |
 | `scripts/test/check-ui-strings.mjs`, `i18n/i18n.test.mjs` | no English literal in the chrome; the locales mirror `en.js` |
 | `tests/python/global/test_document_links.py` | every relative link and `#anchor` in these docs lands on a heading |

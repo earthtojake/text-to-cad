@@ -12,9 +12,8 @@ import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { PANEL_PEEK_DELAY_MS, PANEL_PEEK_EXIT_FALLBACK_MS, PANEL_PEEK_LEAVE_MS } from '../../dist/file-viewer/panelPeek.js';
 import { testHost } from '../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../dist/file-viewer/responsive.js';
-import { DOCUMENT_KINDS, below, documentKind, formatLabel, kindChips, sortDocuments } from '../../dist/library/ModelLibrary.js';
+import { below, filterModels, formatLabel, sortDocuments } from '../../dist/library/ModelLibrary.js';
 import { libraryRow } from '@cad/core/client';
-import { DOCUMENT_TYPE_REGISTRY } from '@cad/core/lib/documentTypes.generated.js';
 import type { LibraryFolder, LibraryModel, LibraryNavigation, LibraryProject, ModelLibrarySource } from './ModelLibrary.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -53,7 +52,7 @@ it('starts with its bar (the search at the right, no name of its own), its place
   expect(screen.getByRole('searchbox', { name: 'Search models' }).getAttribute('placeholder')).toBe('Search');
   expect(screen.getByRole('searchbox', { name: 'Search models' }).className).toContain('h-control');
   // The place on screen: its title, the page's one heading of the first level, in a row of its own. With nothing to
-  // list there is no row of tabs, Sort and layout: nothing to narrow, order or lay out.
+  // list there is no Sort or layout in it: nothing to order or lay out.
   const main = screen.getByRole('main', { name: 'CAD models' });
   const head = main.firstElementChild!;
   expect([head.hasAttribute('data-library-head'), head.querySelector('h1')?.textContent, screen.getAllByRole('heading', { level: 1 }).length]).toEqual([true, 'Recents', 1]);
@@ -65,12 +64,14 @@ it('starts with its bar (the search at the right, no name of its own), its place
   expect(screen.getAllByRole('navigation').map(node => node.getAttribute('aria-label'))).toEqual(['Places']);
   expect(screen.queryByRole('link')).toBeNull();
   cleanup();
-  // A place that lists something: under its title, a second row, Sort and the grid/list segmented control at its right.
+  // A place that lists something: in the title's own row, Sort and the grid/list segmented control at its right.
   render(<ModelLibrary library={library([model('a.step')])} onLayoutChange={() => {}} onSortChange={() => {}} />);
   await screen.findByRole('button', { name: 'Open a.step' });
   const toolbar = screen.getByRole('main').querySelector('[data-library-toolbar]')!;
-  expect([toolbar.previousElementSibling?.hasAttribute('data-library-head'), [...toolbar.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))])
+  expect([toolbar.parentElement?.hasAttribute('data-library-head'), [...toolbar.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))])
     .toEqual([true, ['Sort by Last activity', 'Grid', 'List']]);
+  // One row: the head holds the title and the toolbar, and nothing else but the title's own controls; no kind tabs.
+  expect([toolbar.parentElement?.querySelector('h1')?.textContent, screen.queryByRole('group', { name: 'Show' }), document.querySelector('[data-library-kinds]')]).toEqual(['Recents', null, null]);
   // Grid and List are one segmented control: two control-tall toggles on one track.
   expect(screen.getByRole('group', { name: 'Layout' }).hasAttribute('data-segmented-control')).toBe(true);
   expect(['Grid', 'List'].map(name => screen.getByRole('button', { name }).className.includes('h-control'))).toEqual([true, true]);
@@ -239,27 +240,31 @@ it('names a card by its file and how long ago it was last active, and switches b
   expect(screen.getByRole('button', { name: 'Actions for bracket.step' })).toBeTruthy();
 });
 
-it('lists rows under a Name, Kind, Size, Updated and Created header: each its picture and name, its kind and size, then both ages with no verb, its pin and ⋯ at its end', async () => {
+it('lists rows under a Name, Type, Last viewed and Last edited header: each its picture and name, its type, then both ages with no verb, its pin and ⋯ at its end', async () => {
   const hour = 3600, now = Date.now() / 1000;
   render(<ModelLibrary library={library([
-    model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour, created: now - 3 * 86400, size: 89_000 }),
-    model('arm.xbf', { opened: null, updated: now - 2 * hour, created: null, size: 2_048 }),
+    model('plate.step', { opened: now - 5 * hour, updated: now - 30 * hour }),
+    model('arm.xbf', { opened: null, updated: now - 2 * hour }),
+    model('ghost.step', { opened: null, updated: null }),
   ])} layout="list" onLayoutChange={() => {}} />);
   await screen.findByRole('button', { name: 'Open plate.step' });
   const list = screen.getByRole('list', { name: 'Files' });
   // The header row is the columns' labels, for the eye: each row names itself.
   const header = list.previousElementSibling!;
-  expect([header.getAttribute('aria-hidden'), [...header.children].map(cell => cell.textContent)]).toEqual(['true', ['Name', 'Kind', 'Size', 'Updated', 'Created']]);
+  expect([header.getAttribute('aria-hidden'), [...header.children].map(cell => cell.textContent)]).toEqual(['true', ['Name', 'Type', 'Last viewed', 'Last edited']]);
   const cells = (name: string) => {
     const row = screen.getByRole('button', { name: `Open ${name}` });
     return [Boolean(row.querySelector('[data-library-name] > [data-library-picture]')), row.querySelector('[data-library-label]')?.textContent,
       ...[...row.querySelectorAll('[data-column]')].map(cell => [cell.getAttribute('data-column'), cell.textContent])];
   };
-  expect(cells('plate.step')).toEqual([true, 'plate.step', ['kind', 'STEP'], ['size', '87 KB'], ['updated', '1d ago'], ['created', '3d ago']]);
-  // An xbf is the engine's own document saved as a file: a model, XBF where its parts are not known. One the library
-  // does not know yet (a folder's) has a dash for Created.
-  expect(cells('arm.xbf')).toEqual([true, 'arm.xbf', ['kind', 'XBF'], ['size', '2 KB'], ['updated', '2h ago'], ['created', '—']]);
-  // A row's picture has no badge: its Kind says it. Its pin and ⋯ follow its button, at its end.
+  expect(cells('plate.step')).toEqual([true, 'plate.step', ['type', 'STEP'], ['viewed', '5h ago'], ['edited', '1d ago']]);
+  // An xbf is the engine's own document saved as a file: a model, XBF where its parts are not known. A file no page has
+  // opened has a dash for Last viewed, and a time that is not known is a dash too.
+  expect(cells('arm.xbf')).toEqual([true, 'arm.xbf', ['type', 'XBF'], ['viewed', '—'], ['edited', '2h ago']]);
+  expect(cells('ghost.step')).toEqual([true, 'ghost.step', ['type', 'STEP'], ['viewed', '—'], ['edited', '—']]);
+  // No Where, Size, Updated or Created column anywhere.
+  expect([...document.querySelectorAll('[data-column]')].map(cell => cell.getAttribute('data-column'))).not.toEqual(expect.arrayContaining(['where', 'size', 'created', 'kind']));
+  // A row's picture has no badge: its Type says it. Its pin and ⋯ follow its button, at its end.
   expect(list.querySelector('[data-library-format]')).toBeNull();
   const row = screen.getByRole('button', { name: 'Open plate.step' }).closest('li')!;
   expect(within(row).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Open plate.step', 'Star', 'Actions for plate.step']);
@@ -297,101 +302,49 @@ it('gives each card one menu: Open, Copy path, Copy link and Reveal where the ho
   expect(items(await menu('bracket.step'))).toEqual(['Open', 'Star']);
 });
 
-it('gives a card no glyph, and narrows the place to one kind with a tab: All first, then each kind it holds, with no count', async () => {
+it('gives a card no glyph, and has no kind tabs: every document of a place is listed, whatever its kind', async () => {
   const source = library([model('bracket.step'), model('arm.xbf'), model('plate.dxf'),
     model('blinky.kicad_pcb'), model('arm.stl')]);
   const names = () => within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem').map(item => within(item).getAllByRole('button')[0].getAttribute('aria-label'));
-  // Each tab by its accessible name, its word alone.
-  const chips = () => within(screen.getByRole('group', { name: 'Show' })).getAllByRole('button')
-    .map(chip => [chip.querySelector(':scope > span > span:not([aria-hidden])')?.textContent, chip.getAttribute('aria-pressed')]);
   render(<ModelLibrary library={source} onSortChange={() => {}} />);
   const arm = await screen.findByRole('button', { name: 'Open arm.xbf' });
   // The picture and its badge say what a card is: no glyph beside its name.
   const caption = (card: HTMLElement) => card.querySelector('[data-library-label]')!.parentElement!;
   expect([caption(arm).querySelector('svg'), caption(screen.getByRole('button', { name: 'Open bracket.step' })).querySelector('svg')]).toEqual([null, null]);
-  // A row of pills at the left of the toolbar, the row under the title: a model and the files exported from it are 3D
-  // models alike.
-  const row = screen.getByRole('group', { name: 'Show' });
-  expect([row.parentElement?.hasAttribute('data-library-toolbar'), row.parentElement?.previousElementSibling?.hasAttribute('data-library-head'), row.previousElementSibling])
-    .toEqual([true, true, null]);
-  expect(chips()).toEqual([['All', 'true'], ['3D models', 'false'], ['Drawings', 'false'], ['Boards', 'false']]);
-  // No count, as Figma's and Drive's tabs have none: each named by its word alone.
-  expect(within(row).getAllByRole('button').map(chip => [chip.querySelector('[data-pill-count]'), chip.hasAttribute('aria-label'), chip.className.includes('h-control')]))
-    .toEqual([[null, false, true], [null, false, true], [null, false, true], [null, false, true]]);
-  fireEvent.click(screen.getByRole('button', { name: '3D models' }));
-  expect(names()).toEqual(['Open bracket.step', 'Open arm.xbf', 'Open arm.stl']);
-  expect(chips().map(([, pressed]) => pressed)).toEqual(['false', 'true', 'false', 'false']);
-  fireEvent.click(screen.getByRole('button', { name: 'Boards' }));
-  expect(names()).toEqual(['Open blinky.kicad_pcb']);
-  // A search and the tab narrow together.
-  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'arm' } });
-  expect(screen.getByRole('main').querySelector('[data-library-state]')?.textContent).toBe('No matches.');
-  fireEvent.click(screen.getByRole('button', { name: '3D models' }));
-  expect(names()).toEqual(['Open arm.xbf', 'Open arm.stl']);
-  fireEvent.click(screen.getByRole('button', { name: 'All' }));
-  expect(names()).toEqual(['Open arm.xbf', 'Open arm.stl']);
-  cleanup();
-  // With one kind alone there is nothing to tell apart: no chips. A model's .xbf and its STEP are one kind.
-  render(<ModelLibrary library={library([model('bracket.step'), model('arm.xbf')])} />);
-  await screen.findByRole('button', { name: 'Open bracket.step' });
-  expect(screen.queryByRole('group', { name: 'Show' })).toBeNull();
+  // Nothing narrows the place by kind: no group of tabs, no "3D models" or "All" button, five cards of five kinds.
+  expect([screen.queryByRole('group', { name: 'Show' }), document.querySelector('[data-library-kinds]'), ...['All', '3D models', 'Drawings', 'Boards', 'Robots'].map(name => screen.queryByRole('button', { name }))])
+    .toEqual([null, null, null, null, null, null, null]);
+  expect(names().sort()).toEqual(['Open arm.stl', 'Open arm.xbf', 'Open blinky.kicad_pcb', 'Open bracket.step', 'Open plate.dxf']);
 });
 
-it('offers a place\'s own kinds, and shows all of a place that lacks the kind chosen in another', async () => {
-  const p1 = project('p1', 'tag'), p2 = project('p2', 'gear'), p3 = project('p3', 'lone');
-  const source = library([], hosted([p1, p2, p3], [file(p1, 'tag.step'), file(p1, 'tag.dxf'), file(p1, 'tag.urdf'),
-    file(p2, 'gear.step'), file(p2, 'gear.kicad_sch'), file(p3, 'part_0.stl'), file(p3, 'part_1.stl')]));
-  const chips = () => [...document.querySelectorAll('[data-library-kinds] button')].map(chip => chip.getAttribute('data-kind'));
-  const view = render(<ModelLibrary library={source} place={{ view: 'project', project: 'p1' }} />);
-  await screen.findByRole('button', { name: 'Open tag.step' });
-  expect(chips()).toEqual(['all', 'models', 'drawings', 'robots']);
-  fireEvent.click(screen.getByRole('button', { name: 'Robots' }));
-  expect(opens()).toEqual(['Open tag.urdf']);
-  // The choice is the page's own, as the place is: a place without robots shows all of its own.
-  view.rerender(<ModelLibrary library={source} place={{ view: 'project', project: 'p2' }} />);
-  await screen.findByRole('button', { name: 'Open gear.step' });
-  expect(chips()).toEqual(['all', 'models', 'schematics']);
-  expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
-  expect(opens()).toEqual(['Open gear.step', 'Open gear.kicad_sch']);
-  // One of one kind: no chips.
-  view.rerender(<ModelLibrary library={source} place={{ view: 'project', project: 'p3' }} />);
-  await screen.findByRole('button', { name: 'Open part_0.stl' });
-  expect(chips()).toEqual([]);
-  // Back where robots are, the choice holds.
+it('has no kind tabs in Recents, Starred, a project\'s page or a search, nor any kind in the address', async () => {
+  const p1 = project('p1', 'tag');
+  const mixed = [model('a.step', { pinned: true }), model('b.dxf', { pinned: true }), model('c.urdf', { pinned: true })];
+  const source = library(mixed, hosted([p1], [file(p1, 'tag.step'), file(p1, 'tag.dxf'), file(p1, 'tag.urdf')]));
+  const none = () => [document.querySelector('[data-library-kinds]'), screen.queryByRole('group', { name: 'Show' }), screen.queryByRole('button', { name: 'Robots' })];
+  const view = render(<ModelLibrary library={source} place={{ view: 'recents' }} />);
+  await screen.findByRole('button', { name: 'Open a.step' });
+  expect(none()).toEqual([null, null, null]);
+  view.rerender(<ModelLibrary library={source} place={{ view: 'pinned' }} />);
+  await screen.findByRole('button', { name: 'Open c.urdf' });
+  expect(none()).toEqual([null, null, null]);
   view.rerender(<ModelLibrary library={source} place={{ view: 'project', project: 'p1' }} />);
   await screen.findByRole('button', { name: 'Open tag.urdf' });
-  expect(opens()).toEqual(['Open tag.urdf']);
+  expect(none()).toEqual([null, null, null]);
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'tag' } });
+  await screen.findByRole('button', { name: 'Open tag.dxf' });
+  expect(none()).toEqual([null, null, null]);
 });
 
-it('knows every document type and every extension the viewer opens as a kind, by the row\'s type first and its file\'s extension else', () => {
-  // Every type the registry has, as a row names it, and each of its files' extensions; and a glTF, which opens as a GLB.
-  const types = DOCUMENT_TYPE_REGISTRY.documentTypes;
-  const missing = [
-    ...types.filter((type: { wire: string }) => !documentKind(model('x', { documentKind: type.wire, path: '/w/x' }))).map((type: { wire: string }) => type.wire),
-    ...[...types.flatMap((type: { extensions: string[] }) => type.extensions), '.gltf'].filter(extension => !documentKind(model(`x${extension}`))),
-  ];
-  expect(missing).toEqual([]);
-  expect(DOCUMENT_KINDS).toEqual(['models', 'drawings', 'boards', 'schematics', 'robots']);
-  expect(['a.STEP', 'a.stp', 'a.3mf', 'a.xbf', 'a.glb', 'a.dxf', 'a.kicad_pcb', 'a.kicad_sch', 'a.urdf', 'a.srdf'].map(name => documentKind(model(name))))
-    .toEqual(['models', 'models', 'models', 'models', 'models', 'drawings', 'boards', 'schematics', 'robots', 'robots']);
-  // A row's type wins over its name; a file the viewer does not open is no kind (All alone lists it).
-  expect(documentKind(model('board', { documentKind: 'kicad_pcb' }))).toBe('boards');
-  expect(documentKind(model('notes.txt'))).toBeNull();
-  expect(kindChips([model('a.step'), model('notes.txt')])).toEqual([]);
-  expect(kindChips([model('a.step'), model('b.dxf'), model('notes.txt')])).toEqual(['all', 'models', 'drawings']);
-});
-
-
-it('takes an .xbf the server lists (kind model, record file) as a model: a Part or an Assembly among the 3D models, before the other formats', async () => {
+it('takes an .xbf the server lists (kind model, record file) as a model: a Part or an Assembly, by its parts', async () => {
   // As the server lists them: a document's kind, and its record's (`libraryRow` hands the library the record's as `kind`).
   const listed = (name: string, extra: Record<string, unknown>) => libraryRow({ ...model(name), ...extra }) as LibraryModel;
-  const saved = listed('rig.xbf', { id: 'id-rig', kind: 'model', record: 'file', parts: 3, size: 4_096 });
+  const saved = listed('rig.xbf', { id: 'id-rig', kind: 'model', record: 'file', parts: 3 });
   const single = listed('pin.xbf', { id: 'id-pin', kind: 'model', record: 'file', parts: 1 });
   const step = listed('rig.step', { kind: 'step', record: 'file', parts: 3 });
-  expect([saved, step].map(item => [item.documentKind, documentKind(item)])).toEqual([['model', 'models'], ['step', 'models']]);
+  expect([saved, step].map(item => item.documentKind)).toEqual(['model', 'step']);
   const labels = { xbf: 'XBF', part: 'Part', assembly: 'Assembly' };
   expect([saved, single, step].map(item => formatLabel(item, labels))).toEqual(['Assembly', 'Part', 'STEP']);
-  expect(sortDocuments([step, single, saved], 'kind', item => formatLabel(item, labels)).map(item => item.name)).toEqual(['rig.xbf', 'pin.xbf', 'rig.step']);
 });
 
 
@@ -454,20 +407,9 @@ it('reads its list again every couple of seconds while the home is up, keeping t
   } finally { vi.useRealTimers(); }
 });
 
-it("counts what a person does on the home by name: a kind chosen, a search begun, a card opened", async () => {
+it("counts what a person does on the home by name: a search begun, a card opened", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
   const source = library([model('juno.xbf', { updated: 10 }), model('wheel.xbf', { updated: 5 }), model('bracket.dxf')]);
-  // A kind chosen by its tab, each by its name; the one already on is no use.
-  const choose = async (...chips: string[]) => {
-    const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
-    await screen.findByRole('button', { name: 'Open juno.xbf' });
-    for (const chip of chips) fireEvent.click(screen.getByRole('button', { name: chip }));
-    view.unmount();
-    cleanup();
-  };
-  await choose('Drawings', 'Drawings', '3D models', 'All', 'All');
-  expect(reported(reports)).toEqual({ home_kind_drawings: 1, home_kind_models: 1, home_kind_all: 1 });
-  reports.length = 0;
   const view = render(<ControlUsageProvider report={counts => reports.push(counts)}><ModelLibrary library={source} /></ControlUsageProvider>);
   await screen.findByRole('button', { name: 'Open juno.xbf' });
   const search = screen.getByRole('searchbox', { name: 'Search models' });
@@ -542,21 +484,18 @@ it('calls a model a Part or an Assembly by its parts, XBF where they are not kno
   const badge = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).closest('.cad-library-card')!.querySelector('[data-library-format]')?.textContent;
   expect(names.map(badge)).toEqual(said);
   cleanup();
-  // In the list, its Kind.
+  // In the list, its Type.
   render(<ModelLibrary library={library(documents)} layout="list" onLayoutChange={() => {}} />);
   await screen.findByRole('button', { name: 'Open hinge.xbf' });
-  expect(names.map(name => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column="kind"]')?.textContent)).toEqual(said);
-  // Sorted by Kind, the models stay first, each by what it is called.
-  const labels = { xbf: 'XBF', part: 'Part', assembly: 'Assembly' };
-  expect(sortDocuments(documents, 'kind', item => formatLabel(item, labels)).map(item => item.name))
-    .toEqual(['rig.xbf', 'hinge.xbf', 'empty.xbf', 'unread.xbf', 'pair.step', 'plate.stl']);
+  expect(names.map(name => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column="type"]')?.textContent)).toEqual(said);
+  expect(documents.map(item => formatLabel(item, { xbf: 'XBF', part: 'Part', assembly: 'Assembly' }))).toEqual(said);
 });
 
-// A card's line is the age alone, a file's as a model's: a file's size, the server's, is the list's column.
-it("says a card's age alone, a file's size being the list's", async () => {
+// A card's line is the age alone, a file's as a model's: both times are the list's columns.
+it("says a card's age alone, the list saying both times", async () => {
   const now = Date.now() / 1000;
-  render(<ModelLibrary library={library([model('plate.step', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 1_700_000 }),
-    model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 900 }), model('arm.xbf', { opened: null, updated: now - 2 * 3600 })])} />);
+  render(<ModelLibrary library={library([model('plate.step', { opened: now - 5 * 3600, updated: now - 30 * 3600 }),
+    model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600 }), model('arm.xbf', { opened: null, updated: now - 2 * 3600 })])} />);
   const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('[data-library-status]')!.textContent;
   expect([await status('plate.step'), await status('tiny.stl'), await status('arm.xbf')]).toEqual(['Viewed 5h ago', 'Viewed 5h ago', 'Edited 2h ago']);
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Recents');
@@ -695,10 +634,10 @@ it("a project's page lists its folders first, then its files, and its heading le
   // A file of the folder has its star and its menu.
   expect(within(screen.getByRole('button', { name: 'Open lid.step' }).closest('li')!).getByRole('button', { name: 'Star' })).toBeTruthy();
   expect(items(await menu('lid.step'))).toEqual(['Open', 'Star']);
-  // In a list a folder is a row, its glyph where a picture is and a dash in each column, first.
+  // In a list a folder is a row, its glyph where a picture is and its Type "Folder" and a dash in each time, first.
   view.rerender(page('housing/v3', 'list'));
   const row = within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem')[0];
-  expect([row.textContent, [...row.querySelectorAll('[data-column]')].map(cell => cell.textContent)]).toEqual(['drawings————', ['—', '—', '—', '—']]);
+  expect([row.textContent, [...row.querySelectorAll('[data-column]')].map(cell => cell.textContent)]).toEqual(['drawingsFolder——', ['Folder', '—', '—']]);
 });
 
 // A project's top page leads with Recent: the library's rows of the project below its top folder, newest first, as
@@ -706,7 +645,8 @@ it("a project's page lists its folders first, then its files, and its heading le
 it("a project's top page leads with its files opened or built below the top, newest first, then the listing under All files; never below the top, never in a search", async () => {
   const tag = project('p1', 'heart-tag'), gear = project('p2', 'gear');
   const now = Date.now() / 1000;
-  const opened = (of: LibraryProject, below: string, hours: number) => ({ ...file(of, below), opened: now - hours * 3600 });
+  // Opened lately and never changed since, so the order is by the opening alone and not by when the fixtures were built.
+  const opened = (of: LibraryProject, below: string, hours: number) => ({ ...file(of, below), opened: now - hours * 3600, updated: null });
   const rows = [opened(tag, 'housing/v3/housing.xbf', 3), opened(tag, 'top.step', 1), opened(tag, 'exports/housing.step', 7), opened(tag, 'dxf/plate.dxf', 2),
     ...['a', 'b', 'c'].map((name, index) => opened(tag, `dxf/old/${name}.dxf`, 20 + index)), opened(gear, 'sub/gear.step', 0.5), model('loose.step', { opened: now })];
   const host = hosted([tag, gear], [file(tag, 'top.step'), file(tag, 'top.dxf'), file(tag, 'housing/v3/housing.xbf'), file(tag, 'exports/housing.step'), file(tag, 'dxf/plate.dxf')]);
@@ -717,17 +657,15 @@ it("a project's top page leads with its files opened or built below the top, new
   const main = screen.getByRole('main');
   expect([...main.querySelectorAll('h1, h2')].map(heading => [heading.tagName, heading.textContent])).toEqual([['H1', 'heart-tag'], ['H2', 'Recent'], ['H2', 'All files']]);
   // The project's files below its top, by last activity, newest first; at most five rows in the list; none of its top
-  // folder (they are the listing's), none of another project and none of no project. Each says its folder below the top.
-  const named = (list: HTMLElement) => within(list).getAllByRole('listitem').map(item => [item.querySelector('[data-library-label]')?.textContent, item.querySelector('[data-column="where"]')?.textContent]);
-  expect(named(recent)).toEqual([['plate.dxf', 'dxf'], ['housing.xbf', 'housing/v3'], ['housing.step', 'exports'], ['a.dxf', 'dxf/old'], ['b.dxf', 'dxf/old']]);
+  // folder (they are the listing's), none of another project and none of no project.
+  const named = (list: HTMLElement) => within(list).getAllByRole('listitem').map(item => [item.querySelector('[data-library-label]')?.textContent]);
+  expect(named(recent)).toEqual([['plate.dxf'], ['housing.xbf'], ['housing.step'], ['a.dxf'], ['b.dxf']]);
+  // Under a header of its own, the listing's columns: no Where.
+  expect([...recent.previousElementSibling!.querySelectorAll(':scope > span')].map(cell => cell.textContent)).toEqual(['Name', 'Type', 'Last viewed', 'Last edited']);
   expect(within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem').map(item => item.querySelector('[data-library-label]')?.textContent))
     .toEqual(['housing', 'exports', 'dxf', 'top.step', 'top.dxf']);
   // Read from the library alone: the host was asked for the folder on screen and nothing else.
   expect(host.folder.mock.calls.map(([, options]) => options)).toEqual(host.folder.mock.calls.map(() => ({ path: '' })));
-  // The kinds' tab narrows it as it narrows the listing.
-  fireEvent.click(screen.getByRole('button', { name: 'Drawings' }));
-  expect(named(screen.getByRole('list', { name: 'Recent' })).map(([name]) => name)).toEqual(['plate.dxf', 'a.dxf', 'b.dxf', 'c.dxf']);
-  fireEvent.click(screen.getByRole('button', { name: 'All' }));
   // A search replaces it: the search's results, with no Recent and no labels.
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'hous' } });
   await waitFor(() => expect(host.folder).toHaveBeenLastCalledWith('p1', { path: '', q: 'hous' }));
@@ -757,7 +695,7 @@ it("lists every file of a folder, the documents first; a press on one that is no
   // A submenu's list scrolls in the chrome's scroll region, which measures itself.
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   const tag = project('p1', 'heart-tag');
-  const other = (below: string) => file(tag, below, { documentKind: null, thumbnail: null, size: 2048 });
+  const other = (below: string) => file(tag, below, { documentKind: null, thumbnail: null });
   const files = [file(tag, 'arm.xbf', { documentKind: 'model' }), other('datasheet.pdf'), other('build.py'), other('Makefile'), other('run.sh'), other('locked.pdf'), file(tag, 'lid.step', { documentKind: 'step' })];
   const asked: string[] = [], opened: unknown[] = [], done: string[] = [];
   // Open in's answer for each, as a CAD host gives it: one target, the file; `default` there only as false.
@@ -804,8 +742,8 @@ it("lists every file of a folder, the documents first; a press on one that is no
       expect([entryOf('build.py').querySelector('[data-library-picture], [data-library-format], [data-library-status]'), Boolean(entryOf('build.py').querySelector('[data-glyph="file"] svg'))])
         .toEqual([null, true]);
     } else {
-      // In the list, rows after the documents', each Kind its extension as its name writes it, upper case; a dash with none.
-      expect(['datasheet.pdf', 'build.py', 'Makefile'].map(name => entryOf(name).querySelector('[data-column="kind"]')?.textContent)).toEqual(['PDF', 'PY', '—']);
+      // In the list, rows after the documents', each Type its extension as its name writes it, upper case; a dash with none.
+      expect(['datasheet.pdf', 'build.py', 'Makefile'].map(name => entryOf(name).querySelector('[data-column="type"]')?.textContent)).toEqual(['PDF', 'PY', '—']);
     }
     // Nothing is asked of the host until a press. Then the file is opened: by the OS's own handler where it is offered...
     expect(asked).toEqual([]);
@@ -918,8 +856,8 @@ it("groups a search's results as a folder's page is, the documents' cards then t
 
 it("groups a search's rows in the list the documents' first, then the other files', each in the Sort's order, and no cell is blank or says Standalone", async () => {
   const tag = project('p1', 'heart-tag');
-  const loose = (below: string) => file(tag, below, { documentKind: null, thumbnail: null, size: null, updated: null, created: null });
-  const host = hosted([tag], [loose('a-build.py'), file(tag, 'z-build.step', { documentKind: 'step', created: null }), file(tag, 'b-build.step', { documentKind: 'step' }), loose('c-build.pdf')]);
+  const loose = (below: string) => file(tag, below, { documentKind: null, thumbnail: null, updated: null });
+  const host = hosted([tag], [loose('a-build.py'), file(tag, 'z-build.step', { documentKind: 'step', updated: null }), file(tag, 'b-build.step', { documentKind: 'step' }), loose('c-build.pdf')]);
   const fileActions = { platform: 'linux' as const, perform: { 'copy-path': () => {} }, apps: async () => ({ targets: [] }) as never, openApp: async () => {} };
   render(<ModelLibrary library={library([], host)} fileActions={fileActions} layout="list" sort="name" onSortChange={() => {}} place={{ view: 'project', project: 'p1' }} />);
   await screen.findByRole('button', { name: 'Open a-build.py' });
@@ -930,8 +868,8 @@ it("groups a search's rows in the list the documents' first, then the other file
   const blank = rows.flatMap(row => [...row.querySelectorAll('[data-column]')].filter(cell => !(cell.textContent ?? '').trim()));
   expect(blank).toEqual([]);
   expect(screen.queryByText('Standalone')).toBeNull();
-  const created = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column=created]')?.textContent;
-  expect([created('z-build.step'), created('a-build.py')]).toEqual(['—', '—']);
+  const edited = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column=edited]')?.textContent;
+  expect([edited('z-build.step'), edited('a-build.py')]).toEqual(['—', '—']);
 });
 
 it('a file that is no document does what its host can: shown in the file manager where the host opens no apps, and no control at all where it can do neither', async () => {
@@ -962,7 +900,7 @@ it('a file that is no document does what its host can: shown in the file manager
   view.unmount();
 });
 
-it("a search on a project's page asks the host and lists what is below, flat, each saying where it is; Recents' list says each one's project", async () => {
+it("a search on a project's page asks the host and lists what is below, flat; every list has the same four columns", async () => {
   const tag = project('p1', 'heart-tag');
   const host = hosted([tag], [file(tag, 'housing/v3/housing.xbf'), file(tag, 'housing/v3/drawings/housing-plan.dxf'), file(tag, 'housing/lid.step'), file(tag, 'top.step')]);
   const source = library([model('loose.step'), { ...file(tag, 'top.step'), opened: 5 }], host);
@@ -970,29 +908,32 @@ it("a search on a project's page asks the host and lists what is below, flat, ea
   const view = render(home({ view: 'project', project: 'p1', path: 'housing' }));
   await screen.findByRole('button', { name: 'Open lid.step' });
   const header = () => [...screen.getByRole('list', { name: 'Files' }).previousElementSibling!.children].map(cell => cell.textContent);
-  const where = (name: string) => screen.getByRole('button', { name: `Open ${name}` }).querySelector('[data-column=where]')?.textContent;
-  // A folder's listing: every row is in it, so there is no Where.
-  expect([header(), opens()]).toEqual([['Name', 'Kind', 'Size', 'Updated', 'Created'], ['Open v3', 'Open lid.step']]);
+  const columns = ['Name', 'Type', 'Last viewed', 'Last edited'];
+  // A folder's listing, a search and Recents: one header, with no Where or Project.
+  expect([header(), opens()]).toEqual([columns, ['Open v3', 'Open lid.step']]);
   // Words typed: once typing rests, the host is asked for everything below the folder on screen that holds them.
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'hous' } });
   await waitFor(() => expect(host.folder).toHaveBeenLastCalledWith('p1', { path: 'housing', q: 'hous' }));
   await waitFor(() => expect(opens()).toEqual(['Open housing.xbf', 'Open housing-plan.dxf']));
-  expect(header()).toEqual(['Name', 'Where', 'Kind', 'Size', 'Updated', 'Created']);
-  expect([where('housing.xbf'), where('housing-plan.dxf')]).toEqual(['v3', 'v3/drawings']);
+  expect(header()).toEqual(columns);
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: 'nothing' } });
   expect(await screen.findByText('No matches.')).toBeTruthy();
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search models' }), { target: { value: '' } });
   view.rerender(home({ view: 'recents' }));
-  expect(header()).toEqual(['Name', 'Project', 'Kind', 'Size', 'Updated', 'Created']);
-  // A document in no project has no project to say: the list's dash.
-  expect([where('top.step'), where('loose.step')]).toEqual(['heart-tag', '—']);
+  expect(header()).toEqual(columns);
   expect(below('/a/b/c.py', '/a/b/')).toBe('c.py');
   expect([below('/a/b', '/a/b'), below('C:\\work\\x\\y.py', 'C:/work'), below('/elsewhere/y.py', '/a/b')]).toEqual(['', 'x/y.py', '/elsewhere/y.py']);
 });
 
+it("narrows a project's page by the path below the project's folder: its own name matches nothing", () => {
+  const rows = [model('a.step', { path: '/w/gearbox/a.step' }), model('gearbox.xbf', { path: '/w/gearbox/sub/gearbox.xbf' })];
+  expect(filterModels(rows, 'gearbox').length).toBe(2);
+  expect(filterModels(rows, 'gearbox', '/w/gearbox').map(item => item.name)).toEqual(['gearbox.xbf']);
+});
+
 it("says a card's last activity alone, as Figma's cards do: no project before it in Recents or Starred", async () => {
   const tag = project('p1', 'heart-tag');
-  const source = library([{ ...file(tag, 'src/arm.xbf'), opened: 5, pinned: true }, model('loose.step', { size: 2048, pinned: true })], hosted([tag]));
+  const source = library([{ ...file(tag, 'src/arm.xbf'), opened: 5, pinned: true }, model('loose.step', { pinned: true })], hosted([tag]));
   const home = (at: Parameters<typeof ModelLibrary>[0]['place']) => <ModelLibrary library={source} place={at} />;
   const view = render(home({ view: 'recents' }));
   await waitFor(() => expect(place('project:p1')).toBeTruthy());
@@ -1002,38 +943,40 @@ it("says a card's last activity alone, as Figma's cards do: no project before it
   expect([second('arm.xbf'), second('loose.step')]).toEqual(['Edited 16h ago', 'Edited 16h ago']);
 });
 
-it("sorts the place on screen by last activity, by name or by kind, the host keeping the choice", async () => {
+it("sorts the place on screen by last activity, by name, by last viewed or by last edited, the host keeping the choice", async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
-  const documents = [model('b10.step', { updated: 30 }), model('b9.step', { updated: 40, opened: null }), model('arm.xbf', { updated: 10 }),
-    model('Axle.dxf', { updated: 20, pinned: true })];
+  const documents = [model('b10.step', { opened: 100, updated: 30 }), model('b9.step', { updated: 40, opened: null }), model('arm.xbf', { opened: 50, updated: 10 }),
+    model('Axle.dxf', { opened: 70, updated: 20, pinned: true })];
   const sorts: string[] = [];
-  const home = (sort?: 'activity' | 'name' | 'kind') => <ControlUsageProvider report={counts => reports.push(counts)}>
+  const home = (sort?: 'activity' | 'name' | 'viewed' | 'edited') => <ControlUsageProvider report={counts => reports.push(counts)}>
     <ModelLibrary library={library(documents)} sort={sort} onSortChange={next => sorts.push(next)} /></ControlUsageProvider>;
   const view = render(home());
   await screen.findByRole('button', { name: 'Open arm.xbf' });
-  // Last activity, newest first: a starred document is not first (Starred is a place of its own).
-  expect(opens()).toEqual(['Open b9.step', 'Open b10.step', 'Open Axle.dxf', 'Open arm.xbf']);
+  // Last activity, the later of viewed and edited, newest first: a starred document is not first (Starred is a place of its own).
+  expect(opens()).toEqual(['Open b10.step', 'Open Axle.dxf', 'Open arm.xbf', 'Open b9.step']);
   // One control: its glyph, the sort's name and a chevron, with no label beside it; named whole for assistive technology.
   const trigger = screen.getByRole('button', { name: 'Sort by Last activity' });
   expect([trigger.textContent, trigger.previousElementSibling, [...trigger.querySelectorAll('svg')].map(svg => svg.getAttribute('class')?.match(/lucide-[\w-]+/)?.[0]),
     trigger.getAttribute('data-variant')]).toEqual(['Last activity', null, ['lucide-arrow-down-up', 'lucide-chevron-down'], 'ghost']);
   await act(async () => { fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
   const open = await screen.findByRole('menu');
+  // Only orders of what the list shows.
   expect(within(open).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
-    .toEqual([['Last activity', 'true'], ['Name', 'false'], ['Kind', 'false']]);
+    .toEqual([['Last activity', 'true'], ['Name', 'false'], ['Last viewed', 'false'], ['Last edited', 'false']]);
   await act(async () => { fireEvent.click(within(open).getByRole('menuitemradio', { name: 'Name' })); });
   expect(sorts).toEqual(['name']);
   // By name, as a person counts: 9 before 10, whatever the case.
   view.rerender(home('name'));
   expect(opens()).toEqual(['Open arm.xbf', 'Open Axle.dxf', 'Open b9.step', 'Open b10.step']);
   expect(screen.getByRole('button', { name: 'Sort by Name' }).textContent).toBe('Name');
-  // By kind: the 3D models (the models, the xbf files, first), then the drawings, each kind
-  // by format, then by name.
-  view.rerender(home('kind'));
-  expect(opens()).toEqual(['Open arm.xbf', 'Open b9.step', 'Open b10.step', 'Open Axle.dxf']);
-  expect(sortDocuments([model('z.step'), model('a.stl'), model('m.dxf'), model('n.urdf'), model('q.kicad_sch'), model('p.kicad_pcb'), model('a.3mf'),
-    model('notes.txt'), model('b.xbf'), model('a.xbf')], 'kind')
-    .map(item => item.name)).toEqual(['a.xbf', 'b.xbf', 'a.3mf', 'z.step', 'a.stl', 'm.dxf', 'p.kicad_pcb', 'q.kicad_sch', 'n.urdf', 'notes.txt']);
+  // By when a page last opened it, newest first, a file none opened last; by when it last changed.
+  view.rerender(home('viewed'));
+  expect(opens()).toEqual(['Open b10.step', 'Open Axle.dxf', 'Open arm.xbf', 'Open b9.step']);
+  view.rerender(home('edited'));
+  expect(opens()).toEqual(['Open b9.step', 'Open b10.step', 'Open Axle.dxf', 'Open arm.xbf']);
+  expect(screen.getByRole('button', { name: 'Sort by Last edited' }).textContent).toBe('Last edited');
+  // Where a time is not known the file comes last, the host's order where two tie.
+  expect(sortDocuments([model('n.step', { opened: null }), model('o.step', { opened: 5 }), model('m.step', { opened: null })], 'viewed').map(item => item.name)).toEqual(['o.step', 'n.step', 'm.step']);
   view.unmount();
   expect(reported(reports)).toEqual({ home_sort_name: 1 });
   cleanup();
@@ -1299,9 +1242,9 @@ it("rings the document just left, brings it into view, and goes back to it from 
   expect(ringed()).toEqual(['Open part_1.stl']);
   await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
   expect([scrolled.mock.contexts[0], scrolled.mock.calls[0]]).toEqual([document.querySelector('[data-from]'), [{ block: 'nearest' }]]);
-  // The way back stands at the title row's right end, with its key.
+  // The way back stands at the title row's right end, before Sort and the layout, with its key.
   const button = screen.getByRole('button', { name: 'Back to part_1.stl' });
-  expect([button.closest('[data-library-head]') !== null, button === button.parentElement?.lastElementChild, button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')])
+  expect([button.closest('[data-library-head]') !== null, button.nextElementSibling?.hasAttribute('data-library-toolbar'), button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')])
     .toEqual([true, true, 'Esc', 'Escape']);
   fireEvent.click(button);
   expect(back).toHaveBeenCalledTimes(1);

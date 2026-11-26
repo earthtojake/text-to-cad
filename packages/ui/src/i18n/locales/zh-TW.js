@@ -370,9 +370,10 @@ export default {
 
 
   "home.sort.name": "名稱",
+  "home.sort.viewed": "上次檢視",
+  "home.sort.edited": "上次編輯",
 
 
-  "home.sort.kind": "類型",
 
 
   "home.openNewTab": "在新分頁中開啟",
@@ -384,10 +385,8 @@ export default {
   "home.backTo": "返回 {name}",
 
 
-  "home.columnWhere": "位置",
 
 
-  "home.columnProject": "專案",
 
 
   "home.emptyTitle": "這裡還沒有內容",
@@ -419,18 +418,11 @@ export default {
   "home.menuOpen": "開啟",
   "home.star": "加星號",
   "home.unstar": "取消星號",
-  "home.kindsAria": "顯示",
-  "home.kind.all": "全部",
-  "home.kind.models": "3D 模型",
-  "home.kind.drawings": "圖面",
-  "home.kind.boards": "電路板",
-  "home.kind.schematics": "電路圖",
-  "home.kind.robots": "機器人",
   "home.columnName": "名稱",
-  "home.columnKind": "類型",
-  "home.columnSize": "大小",
-  "home.columnUpdated": "更新",
-  "home.columnCreated": "建立",
+  "home.columnType": "類型",
+  "home.columnViewed": "上次檢視",
+  "home.columnEdited": "上次編輯",
+  "home.folderType": "資料夾",
   "home.openingAria": "正在開啟 {name}",
   "home.ageNow": "剛剛",
   "home.ageEdited": "{age}編輯",

@@ -569,7 +569,7 @@ Recents), the sidebar's toggle (said by the home before its first paint, so noth
 the host hands a `history`, then the home's own controls —
 **Home** where a file shows its name, the search and
 Import at the right (`ModelLibrary` portals them into the navbar's slots, `file-viewer/navbarSlots.js`) — and the
-host's actions, outermost. The home's Sort and layout control stand in its place's heading row, its kinds' chips under it,
+host's actions, outermost. The home's Sort and layout control stand at the right of its place's one heading row,
 and its links are the app menu's. Left: the text-to-cad
 logo (the "C" mark, 16px, over the home and over a document alike),
 the way home where the host has a home (a link where the home has an address, a button otherwise, its hint "Home")

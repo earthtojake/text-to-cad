@@ -4,7 +4,6 @@ import { ArrowDownUp, ChevronDown, Clock, Ellipsis, Folder, FolderOpen, LayoutGr
 import { Badge } from "../primitives/badge.jsx";
 import { Button } from "../primitives/button.jsx";
 import { VALUE_DROPDOWN_LIST_CLASS } from "../primitives/value-dropdown.jsx";
-import { Pill, PillGroup } from "../primitives/pill.jsx";
 import { SegmentedControl } from "../primitives/segmented-control.jsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
   DropdownMenuSubTrigger, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
@@ -65,8 +64,6 @@ export interface LibraryModel {
   thumbnail: string | null;
   /** When the picture was taken, in seconds; null without one. */
   pictured: number | null;
-  /** The file's size on disk, in bytes. */
-  size?: number | null;
   /**
    * How many part occurrences its document holds, where the host knows it for the file as it is now; null or absent
    * where it does not. A model's badge reads it: one is a Part, more an Assembly.
@@ -76,7 +73,7 @@ export interface LibraryModel {
   project?: string | null;
   /**
    * Its document's type, where the host names it: `cad.registry`'s spelling (`model`, `step`, `3mf`, `kicad_pcb`...).
-   * The home's kinds read it (`documentKind`); a row without it is known by its file's extension. Null: the host says
+   * A row without it is known by its file's extension. Null: the host says
    * the file is no document (`isDocument`): it has no page, picture or pin, and is opened in an app of the computer's.
    */
   documentKind?: string | null;
@@ -147,7 +144,7 @@ const isModel = (item: LibraryModel) => String(item.documentKind ?? "").toLowerC
  */
 export interface ModelLabels { xbf: string; part: string; assembly: string }
 /**
- * What a card's badge and a row's Kind say: a model's `labels` (`ModelLabels`), else a file's format ("STEP", "KiCad
+ * What a card's badge and a row's Type say: a model's `labels` (`ModelLabels`), else a file's format ("STEP", "KiCad
  * PCB"); a file that is no document, its extension as its name writes it, upper case ("PDF", "PY"), and nothing with none.
  */
 export function formatLabel(item: LibraryModel, labels: ModelLabels): string {
@@ -157,32 +154,6 @@ export function formatLabel(item: LibraryModel, labels: ModelLabels): string {
   }
   const extension = extensionOf(item.path);
   return FORMATS[extension] ?? extension.toUpperCase();
-}
-
-/**
- * What a document is, as a person names it: the home's kinds, each a chip, in this order. Not how it was made: a model
- * built from code and the STEP, STL or GLB exported from it are all 3D models.
- */
-export const DOCUMENT_KINDS = ["models", "drawings", "boards", "schematics", "robots"] as const;
-export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
-// Each document type (`cad.registry`: its `wire` spelling, which a row's `documentKind` is) and each extension the
-// viewer opens, by its kind. A type the registry adds lands here, or `ModelLibrary.test.tsx` says which is missing.
-const KINDS: Readonly<Record<string, DocumentKind>> = {
-  model: "models", xbf: "models", step: "models", stp: "models", stl: "models", "3mf": "models", glb: "models", gltf: "models",
-  dxf: "drawings", kicad_pcb: "boards", kicad_sch: "schematics", urdf: "robots", srdf: "robots",
-};
-/** A document's kind: by its type where the row names it, else by its file's extension; null for neither. */
-export function documentKind(item: LibraryModel): DocumentKind | null {
-  return KINDS[String(item.documentKind ?? "").toLowerCase()] ?? KINDS[extensionOf(item.path)] ?? null;
-}
-/** A size on disk as the Home reads it: bytes, then KB and MB (powers of 1024), in the page's language's digits; "" for none. */
-export function sizeLabel(bytes: number | null | undefined, locale?: string): string {
-  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return "";
-  const number = (value: number, digits: number) => new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
-  if (bytes < 1024) return `${number(bytes, 0)} B`;
-  if (bytes < 1024 ** 2) return `${number(Math.round(bytes / 1024), 0)} KB`;
-  if (bytes < 1024 ** 3) return `${number(bytes / 1024 ** 2, 1)} MB`;
-  return `${number(bytes / 1024 ** 3, 1)} GB`;
 }
 
 /** A host's library of documents: read, changed and opened through the host. */
@@ -237,20 +208,19 @@ const folderOf = (place: HomeLocation) => (place.view === "project" ? place.path
 /** Whether two places are one: the same place, and on a project's page the same folder. */
 export const samePlace = (a: HomeLocation, b: HomeLocation) => placeKey(a) === placeKey(b) && folderOf(a) === folderOf(b);
 
-const NO_LABELS: ModelLabels = Object.freeze({ xbf: "", part: "", assembly: "" });
 /**
- * A place's documents in the order the person chose: by last activity (when each was last opened or changed), newest
- * first; by name; or by kind, in the kinds' order (`DOCUMENT_KINDS`, one of none last), then the models (`isModel`),
- * then by format (`format`: a model's Part, Assembly or XBF, a file's format), then by name. The host's order where
- * two tie. A starred document is not first: Starred is a place of its own.
+ * A place's documents in the order the person chose, each by what the list shows: by last activity (the later of when a
+ * page last opened it and when it last changed, which is what a card's line says), newest first; by name; by when a page
+ * last opened it, newest first; or by when it last changed, newest first. A file with no such time comes last. The
+ * host's order where two tie. A starred document is not first: Starred is a place of its own.
  */
-export function sortDocuments<Model extends LibraryModel>(documents: readonly Model[], sort: LibrarySort,
-  format: (item: Model) => string = item => formatLabel(item, NO_LABELS), locale?: string): Model[] {
+export function sortDocuments<Model extends LibraryModel>(documents: readonly Model[], sort: LibrarySort, locale?: string): Model[] {
   const names = new Intl.Collator(locale, { numeric: true, sensitivity: "base" });
-  const rank = (item: Model) => { const kind = documentKind(item); return kind ? DOCUMENT_KINDS.indexOf(kind) : DOCUMENT_KINDS.length; };
+  const time = (value: number | null | undefined) => typeof value === "number" && Number.isFinite(value) ? value : 0;
   const by = (a: Model, b: Model) => sort === "name" ? names.compare(a.name, b.name)
-    : sort === "kind" ? rank(a) - rank(b) || Number(isModel(b)) - Number(isModel(a)) || names.compare(format(a), format(b)) || names.compare(a.name, b.name)
-      : (lastActivity(b) ?? 0) - (lastActivity(a) ?? 0);
+    : sort === "viewed" ? time(b.opened) - time(a.opened)
+      : sort === "edited" ? time(b.updated) - time(a.updated)
+        : time(lastActivity(b)) - time(lastActivity(a));
   return documents.map((item, index) => ({ item, index })).sort((a, b) => by(a.item, b.item) || a.index - b.index).map(({ item }) => item);
 }
 
@@ -273,7 +243,7 @@ const strictlyBelow = (path: string, root: string): string | null => {
  * last activity, newest first. Read from the library alone, never from a folder.
  */
 export function recentBelow<Model extends LibraryModel>(items: readonly Model[], project: Pick<LibraryProject, "id" | "root">, locale?: string): Model[] {
-  return sortDocuments(items.filter(item => item.project === project.id && strictlyBelow(item.folder ?? "", project.root)), "activity", undefined, locale);
+  return sortDocuments(items.filter(item => item.project === project.id && strictlyBelow(item.folder ?? "", project.root)), "activity", locale);
 }
 
 /**
@@ -295,36 +265,16 @@ function useColumns(element: HTMLElement | null): number {
   return count;
 }
 
-/** Whether every word of `query` is in its name or its path. */
-const matches = (item: LibraryModel, words: readonly string[]) => {
-  const text = `${item.name}\n${item.path}`.toLowerCase();
+/** Whether every word of `query` is in its name or its path (below `root` where one is given: the project's folder is no part of what was typed). */
+const matches = (item: LibraryModel, words: readonly string[], root?: string) => {
+  const text = `${item.name}\n${root ? below(item.path, root) : item.path}`.toLowerCase();
   return words.every(word => text.includes(word));
 };
 const wordsOf = (query: string) => query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
-export function filterModels<Model extends LibraryModel>(items: readonly Model[], query: string): Model[] {
+export function filterModels<Model extends LibraryModel>(items: readonly Model[], query: string, root?: string): Model[] {
   const words = wordsOf(query);
-  return items.filter(item => matches(item, words));
-}
-
-/** What the kinds' chips show: every document, or one kind. */
-export type LibraryKind = "all" | DocumentKind;
-const ofKind = (item: LibraryModel, kind: LibraryKind) => kind === "all" || documentKind(item) === kind;
-
-/** The documents a search and a kind leave, in the library's order: every model is a card of its own. */
-export function shownModels<Model extends LibraryModel>(items: readonly Model[], query: string, kind: LibraryKind = "all"): Model[] {
-  const words = wordsOf(query);
-  return items.filter(item => ofKind(item, kind) && matches(item, words));
-}
-
-/**
- * The kinds' tabs over a place's documents (`items`): All, then each kind the place holds, in the kinds' order, with
- * no count, as Figma's and Drive's tabs have none. None where the place holds one kind or none: there is nothing to
- * tell apart.
- */
-export function kindChips(items: readonly LibraryModel[]): LibraryKind[] {
-  const held = DOCUMENT_KINDS.filter(kind => items.some(item => documentKind(item) === kind));
-  return held.length < 2 ? [] : ["all", ...held];
+  return items.filter(item => matches(item, words, root));
 }
 
 const message = (failure: unknown) => failure instanceof Error ? failure.message : String(failure);
@@ -333,7 +283,7 @@ const LIST_MS = 2_000;
 /** How long typing rests before a project's page asks its host to search below the folder on screen. */
 const SEARCH_WAIT_MS = 150;
 /** The orders a place's documents can be in, as Sort's menu lists them. */
-const SORTS: readonly LibrarySort[] = ["activity", "name", "kind"];
+const SORTS: readonly LibrarySort[] = ["activity", "name", "viewed", "edited"];
 /** The most rows a project's top page's Recent shows in the list; in the grid, its one row holds what fits across. */
 const RECENT_ROWS = 5;
 
@@ -371,28 +321,24 @@ function Picture<Model extends LibraryModel>({ item, load, opening = false, badg
   </span>;
 }
 
-// The list: a header of muted labels the control tall (`TreeRowHeading`'s line) over rows the control + 16 tall (the
-// search's row, as tall as its picture needs), each its picture and name, then its facts in columns of fixed widths,
-// 16px apart. A row's fill hangs 8px past the place's line, as a panel's row does past the inset, so the header's
-// labels, the pictures and the folders' glyphs stand on the line; its two actions float over its right end, in the room
-// its padding keeps. A narrower place drops Created, then Where, then Kind, then Size.
+// The list: a header of muted labels the control tall over rows the control + 16 tall (the search's row, as tall as its
+// picture needs), each its picture and name, then what a card says in columns of fixed widths, 16px apart: its type (the
+// card's badge), when a page last opened it and when it last changed. A row's fill hangs 8px past the place's line, so
+// the header's labels, the pictures and the folders' glyphs stand on the line; its two actions float over its right end,
+// in the room its padding keeps. A narrower place drops Type, then Last viewed.
 const COLUMNS_CLASS = `flex min-w-0 items-center gap-4`;
 const NAME_COLUMN_CLASS = "flex min-w-0 flex-[3_1_0] items-center gap-2";
 const COLUMN_CLASS: Readonly<Record<string, string>> = {
-  where: "min-w-0 flex-[2_1_0] truncate @max-[680px]:hidden", kind: "w-20 flex-none truncate @max-[560px]:hidden", size: "w-18 flex-none truncate @max-[440px]:hidden",
-  updated: "w-26 flex-none truncate", created: "w-26 flex-none truncate @max-[820px]:hidden",
+  type: "w-24 flex-none truncate @max-[560px]:hidden", viewed: "w-28 flex-none truncate @max-[440px]:hidden", edited: "w-28 flex-none truncate",
 };
+const COLUMN_NAMES = ["type", "viewed", "edited"] as const;
 
-/**
- * The list's header row: Name, then where each is (a search on a project's page: Where; Recents and Pinned: Project;
- * `where`), Kind, Size, Updated, Created, over the columns its rows draw (a label each, for the eye: a row names itself).
- */
-function Columns({ where = null }: { where?: string | null }) {
+/** The list's header row: Name, Type, Last viewed, Last edited, over the columns its rows draw (a label each, for the eye: a row names itself). */
+function Columns() {
   const { t } = useI18n();
   return <div className={cn(COLUMNS_CLASS, "h-control pr-[calc(var(--cad-icon-button)*2+8px)] text-muted-foreground select-none")} aria-hidden="true" data-library-columns="">
     <span className={cn(NAME_COLUMN_CLASS, "truncate")}>{t("home.columnName")}</span>
-    {where ? <span className={COLUMN_CLASS.where} data-column="where">{where}</span> : null}
-    {(["kind", "size", "updated", "created"] as const).map(column => <span key={column} className={COLUMN_CLASS[column]} data-column={column}>
+    {COLUMN_NAMES.map(column => <span key={column} className={COLUMN_CLASS[column]} data-column={column}>
       {t(`home.column${column[0].toUpperCase()}${column.slice(1)}`)}</span>)}
   </div>;
 }
@@ -530,7 +476,7 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * home: the place's title says where the person is, and the logo is the way home. The
  * page is on the page's colour (`--background`), full width. It is drawn as Figma's and Drive's file browsers are:
  * three sizes (a title, one body size told apart by weight and colour, and a chip's step), places with no counts,
- * tabs with no counts, a card's line its activity alone, and no list of "files in no folder".
+ * a card's line its activity alone, and no list of "files in no folder".
  *
  * At its left, a sidebar of places (`LibrarySidebar.jsx`), which is the viewer's panel over this page: pinned it pushes
  * the place, collapsed it leaves nothing but a peek from its toggle, a phone's is a sheet, its width the person's by its
@@ -542,13 +488,13 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * muted). Its rows are the panel's (`primitives/tree-row.jsx`), with no count, the one on screen marked (`aria-current`),
  * Up and Down moving between them; each is a link where the host gives places an address (`navigation.hrefOf`).
  *
- * The main area shows the place on screen, under two rows. The first is its title, the page's `h1`: the place's
+ * The main area shows the place on screen, under one row. At its left is the title, the page's `h1`: the place's
  * name; on a project's page, the folder glyph and the folder's path, the project's name first and each part a way
  * back up to it (the last, the folder on screen, the title), and its ⋯ (Open in new tab, Copy path, Reveal, then
- * Remove from CAD, which forgets the project and nothing on disk); at its right end the way back. The second, wherever
- * the place lists anything, holds the kinds' tabs (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots,
- * each the place holds, where it holds more than one) at its left, and Sort (Last activity, Name, Kind: one ghost
- * button and its menu) and grid or list (one segmented control) at its right.
+ * Remove from CAD, which forgets the project and nothing on disk). At its right end, the way back, then, wherever the
+ * place lists anything, Sort (Last activity, Name, Last viewed, Last edited: one ghost button and its menu) and grid or
+ * list (one segmented control), centred on the title. The title is the first to truncate; where the row is narrow Sort
+ * is its glyph alone. There is no filter by kind.
  *
  * A project's page is one folder of it (`library.folder`, read again every `LIST_MS`): its subfolders first, each its
  * glyph and its name and a way into it, then every file directly in it, the documents, then the files no page opens
@@ -559,8 +505,7 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * across, or five rows of the list; the listing follows, labelled All files. Recents and Starred are the library's
  * rows. Each document is
  * a card (a picture badged with its format -- for an `.xbf` file "Part" or "Assembly", by its `parts`, "XBF" (its
- * format) where that is not known -- over the name and its last activity with its verb; no glyph, place or size,
- * which the list has) or a row (Name, Where or Project, Kind: its format, Size, Updated, Created). A card's picture is
+ * format) where that is not known -- over the name and its last activity with its verb; no glyph) or a row (Name, Type: its format as the badge says it, a folder's "Folder"; Last viewed; Last edited). A card's picture is
  * the one its row names, else its format's tile: the home draws none. A card's or a row's main press is a link where
  * the host gives the document an address (it is named by its `id`; a row with none by its `path`), a button
  * otherwise. Each has a star and one ⋯ menu (`FileMenu`): Open, Open in new tab (or Open in browser:
@@ -568,11 +513,10 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * and Reveal where the host can, then Star or Unstar. Nothing on the home deletes a file or forgets one.
  *
  * The search narrows the place on screen: Recents and Starred by the rows in hand; a project's page asks the host for
- * every file below the folder on screen (`library.folder` with `q`), the one place its levels are flattened, each
- * row saying where it is below that folder.
+ * every file below the folder on screen (`library.folder` with `q`), the one place its levels are flattened.
  *
  * The place is padded by the panel's inset (16px) on every side, at every width and on a phone: its heading, its
- * tabs' words, its folders' glyphs and its cards stand on that one line.
+ * folders' glyphs and its cards stand on that one line.
  *
  * `from` (the document the navbar's project name was pressed over) rings that document's card in the brand's colour,
  * brought into view, and puts "Back to <name>" at the title row's right end; Escape, while no menu, dialog or field has
@@ -768,7 +712,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const change = (action: "pin" | "unpin", item: Model) => current.current.change(action, item)
     .then(next => { setItems(next); askFolder.current(); }, fail);
   const all = items ?? [];
-  const [kind, setKind] = useState<LibraryKind>("all");
   // Home's navbar (`file-viewer/navbarSlots.js`): the search and Import go to its right end; where there is no navbar
   // they stand in a bar of the page's own.
   const slots = useNavbarSlots();
@@ -796,19 +739,16 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const searching = place.view === "project" && Boolean(words);
   const folders = listing && !searching ? listing.folders : [];
   const inPlace = place.view === "project" ? listing?.documents ?? [] : place.view === "pinned" ? pinned : all;
-  const ordered = sortDocuments(inPlace, sort, format, locale);
-  // The kinds' chips: the place's kinds, counted under the search. A kind chosen in another place that this one does
-  // not hold shows all of it.
-  const chips = kindChips(inPlace);
-  const shownKind = chips.includes(kind) ? kind : "all";
-  const matching = shownModels(ordered, query, shownKind);
+  const ordered = sortDocuments(inPlace, sort, locale);
+  // On a project's page by the path below its folder, as the host's answer is, so the listing narrowed meanwhile is the answer's.
+  const matching = filterModels(ordered, query, shownProject?.root);
   // A project's top page leads with what was opened or built below its top folder (`recentBelow`), as Drive's Home leads
   // with its Suggested files and Box's All Files with its Recents: one row of the grid, as many cards as fit across
   // (`useColumns`), or five rows of the list, then the listing under "All files". Never on a folder below the top, and
-  // never in a search, which replaces it; the kinds' tab narrows it as it narrows the listing.
+  // never in a search, which replaces it.
   const [recentGrid, setRecentGrid] = useState<HTMLUListElement | null>(null);
   const fitAcross = useColumns(recentGrid);
-  const recent = place.view === "project" && !folderPath && !searching && shownProject ? shownModels(recentBelow(all, shownProject, locale), "", shownKind) : [];
+  const recent = place.view === "project" && !folderPath && !searching && shownProject ? recentBelow(all, shownProject, locale) : [];
   const recentShown = recent.slice(0, layout === "list" ? RECENT_ROWS : fitAcross);
   const [recentLabel, allLabel] = [useId(), useId()];
   const now = Date.now();
@@ -916,14 +856,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </DropdownMenuContent>
     </DropdownMenu> : null;
   const age = (seconds: number | null) => ageLabel(seconds, now, t, locale);
-  // Where a document is, the list's column where it is not plain: in a search on a project's page, its folder below
-  // the folder on screen; in Recents and Starred, where projects are listed, its project's name (a dash for none).
-  const across = (place.view === "recents" || place.view === "pinned") && known.size > 0;
-  const where = (item: Model) => searching && shownProject ? below(item.folder ?? "", folderOnScreen)
-    : across ? known.get(item.project ?? "")?.name ?? "—" : "";
-  const whereColumn = searching ? t("home.columnWhere") : across ? t("home.columnProject") : null;
   // A card's line: its last activity with its verb, Edited or Viewed, whichever came last, and nothing before it, as
-  // Figma's cards say "Edited 2 hours ago" alone. Where it is and its size are the list's columns.
+  // Figma's cards say "Edited 2 hours ago" alone. The list says both its times.
   const status = (item: Model) => item.missing ? t("home.fileUnavailable") : activityLabel(item, now, t, locale);
   // A row's name: its picture (the search's row picture, its spinner over it while it is being opened), then its name in
   // the foreground at regular weight: a list's emphasis is colour.
@@ -931,15 +865,13 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <Picture item={item} load={load} opening={opening === item.path} row />
     <span className="truncate text-foreground" data-library-label="">{item.name}</span>
   </span>;
-  // A row's columns, muted: where it is, its kind and size, then its two times with no verb: when it last changed, and when the library first knew it.
+  // A row's columns, muted, what a card says: its type (the card's badge), when a page last opened it and when it last
+  // changed, with no verb; a dash for what is not known. A folder's type is "Folder".
   const cell = (column: string, value: ReactNode) => <span key={column} className={cn(COLUMN_CLASS[column], "text-muted-foreground")} data-column={column}>{value === "" || value == null ? "—" : value}</span>;
-  // `at`: where it is, its column's cell (a Recent row's folder below the project's top, where the listing has none).
-  const columns = (item: Model, at: string | null = whereColumn ? where(item) : null) => <>
-    {at === null ? null : cell("where", at)}
-    {cell("kind", format(item) || "—")}
-    {cell("size", sizeLabel(item.size, locale) || "—")}
-    {cell("updated", item.missing ? t("home.fileUnavailable") : age(item.updated))}
-    {cell("created", age(item.created))}
+  const columns = (item: Model) => <>
+    {cell("type", format(item))}
+    {cell("viewed", age(item.opened))}
+    {cell("edited", item.missing ? t("home.fileUnavailable") : age(item.updated))}
   </>;
   // A file's entry, a card or a row (`row`): its main press, then its pin and ⋯. A document's press is a link where the
   // host gives it an address. A file that is no document has no page: its press is a button that opens it in an app
@@ -1002,8 +934,9 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
           <span className={ROW_PICTURE_CLASS} data-library-folder-picture=""><Folder className="size-glyph" strokeWidth={TREE_GLYPH_STROKE} aria-hidden="true" /></span>
           <span className="truncate text-foreground" data-library-label="">{folder.name}</span>
         </span>
-        {whereColumn ? cell("where", "") : null}
-        {["kind", "size", "updated", "created"].map(column => cell(column, "—"))}
+        {cell("type", t("home.folderType"))}
+        {cell("viewed", "")}
+        {cell("edited", "")}
       </PressTarget>
     </li>;
   };
@@ -1022,7 +955,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // its files). A search's results are grouped alike.
   const listRow = (item: Model) => entry(item, true, <>{name(item)}{columns(item)}</>);
   const documents = (list: readonly Model[], others: readonly Model[]) => layout === "list"
-    ? <div className="cad-library-table" data-where={whereColumn ? "" : undefined}><Columns where={whereColumn} /><ul className={LIST_CLASS} aria-label={t("home.filesAria")}>
+    ? <div className="cad-library-table"><Columns /><ul className={LIST_CLASS} aria-label={t("home.filesAria")}>
       {folders.map(folderRow)}
       {list.map(listRow)}
       {others.map(listRow)}</ul></div>
@@ -1033,11 +966,9 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {others.length ? <ul className={GRID_CLASS} aria-label={t("home.otherFilesAria")} data-library-other-files="">{others.map(fileTile)}</ul> : null}
     </>;
   // A project's top page's Recent (`recentShown`): one row of cards in the cards' columns, or rows of the list under a
-  // header of their own with Where, each its folder below the project's top.
-  const recentWhere = (item: Model) => (shownProject ? strictlyBelow(item.folder, shownProject.root) : null) ?? "";
+  // header of their own, the same columns.
   const recentList = layout === "list"
-    ? <div className="cad-library-table" data-where=""><Columns where={t("home.columnWhere")} /><ul className={LIST_CLASS} aria-labelledby={recentLabel}>
-      {recentShown.map(item => entry(item, true, <>{name(item)}{columns(item, recentWhere(item))}</>))}</ul></div>
+    ? <div className="cad-library-table"><Columns /><ul className={LIST_CLASS} aria-labelledby={recentLabel}>{recentShown.map(listRow)}</ul></div>
     : <ul ref={setRecentGrid} className={GRID_CLASS} aria-labelledby={recentLabel}>{recentShown.map(card)}</ul>;
   // Import, the host's chooser of a file or a folder: the scale's outline button, neutral as every control of the row is
   // (never a filled primary). Where one chooser takes either (`importAny`: a Mac's, as VS Code's "Open…" is there) it
@@ -1065,25 +996,20 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     note: projects === null ? (projectsFailed ? t("home.projectsFailed") : null) : projects.length ? null : t("home.projectsEmpty"),
     hrefOf: hrefOf ? (target: HomeLocation) => hrefOf({ home: target }) : null,
   };
-  // The kinds: a row of pills (`primitives/pill.jsx`) at the left of the toolbar, All then each kind the place holds,
-  // with no count (Figma's and Drive's tabs have none); one on at a time, each named by its word alone.
-  const kindRow: ReactNode = chips.length ? <PillGroup label={t("home.kindsAria")} data-library-kinds="">
-    {chips.map(chip => <Pill key={chip} pressed={chip === shownKind} data-kind={chip}
-      onClick={() => { if (chip !== shownKind) usage.used(`home_kind_${chip}`); setKind(chip); }}>{t(`home.kind.${chip}`)}</Pill>)}
-  </PillGroup> : null;
   // Sort: one control, the scale's ghost button (`Button size="control"`): its sort glyph, muted, the sort's name in the
   // foreground and a dropdown's chevron, muted, padded alike from its edges to its first and last ink (the control's
   // padding), on the hover and open fill of every ghost control. No label beside it, whose box the button's fill ran
   // into: the glyph says what it is, and its accessible name says it whole ("Sort by Last activity"). Its menu is a value
-  // dropdown's list (`VALUE_DROPDOWN_LIST_CLASS`): the three sorts, the chosen one ticked.
+  // dropdown's list (`VALUE_DROPDOWN_LIST_CLASS`): the four sorts, the chosen one ticked. Where the place is narrow
+  // (a phone's) it is the glyph alone: the name and the chevron give way, the accessible name and the menu stay.
   const sortName = t(`home.sort.${sort}`);
   const sortMenu: ReactNode = onSortChange ? <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
-      <Button variant="ghost" size="control" className="min-w-0 focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent"
+      <Button variant="ghost" size="control" className="min-w-0 shrink-0 focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent"
         aria-label={t("home.sortByAria", { sort: sortName })} data-library-sort="">
         <ArrowDownUp className="size-glyph text-muted-foreground" aria-hidden="true" />
-        <span className="min-w-0 truncate text-foreground">{sortName}</span>
-        <ChevronDown className="size-3 text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 truncate text-foreground @max-[480px]:hidden">{sortName}</span>
+        <ChevronDown className="size-3 text-muted-foreground @max-[480px]:hidden" aria-hidden="true" />
       </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" collisionPadding={8} aria-label={t("home.sortAria")} className={VALUE_DROPDOWN_LIST_CLASS}>
@@ -1119,8 +1045,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // at medium weight (the heading step's own weight is semibold), as Figma's file browser titles a place: the place's
   // name; on a project's page, the folder's path, every part at the title's size, as Drive's and Dropbox's paths are:
   // each part but the last a way back up to its folder, regular and muted, the first to give way (down to its first
-  // letters), the slashes regular and muted, the last the folder on screen, medium in the foreground.
-  const TITLE_CLASS = "m-0 min-w-0 truncate text-heading font-medium text-foreground";
+  // letters, the last keeping six characters of its own), the slashes regular and muted, the last the folder on screen, medium in the foreground.
+  const TITLE_CLASS = "m-0 min-w-[6ch] truncate text-heading font-medium text-foreground";
   const title = crumbs.length > 1 ? <div className="flex min-w-0 flex-initial items-baseline justify-end gap-1 overflow-hidden" data-library-crumbs="">
     {crumbs.slice(0, -1).map(crumb => <Fragment key={crumb.path}>
       <PressTarget className="max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate rounded-control text-heading font-normal text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset"
@@ -1179,7 +1105,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
                       <div className="grid min-w-0 gap-4">{listed}</div>
                     </section>
                   </> : listed;
-  // Whether the place lists anything, or will: its toolbar (the kinds' tabs, Sort and the layout) stands then, and over
+  // Whether the place lists anything, or will: its Sort and layout stand in the head then, and over
   // a search on a project's page that finds nothing, never over a line that says the place has nothing to list.
   const lists = items === null || awaited ? true
     : place.view === "project" && !shownProject ? false
@@ -1199,20 +1125,17 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
           apart; its rows hang past that line as the panel's do (`PANEL_ROW_VARIABLES`). */}
       <main className="@container grid min-w-0 flex-1 auto-rows-max grid-cols-1 content-start gap-4 overflow-y-auto p-(--panel-inset) pb-[calc(var(--cad-host-bottom-inset,0px)+var(--panel-inset))]"
         aria-label={t("home.modelsAria")} style={PANEL_ROW_VARIABLES as React.CSSProperties} data-library-content="">
-        {/* Two rows, as Figma's file browser heads a place, every control the scale's. Row 1, the control tall: the place's
-            title (a project's folder's path, with its glyph and its ⋯), and the way back at its right end. Row 2, the
-            control tall, 16px under it wherever the place lists anything: the kinds' tabs at the left, Sort and the
-            layout at the right, as Figma's filters and view stand on its tabs' row. The content starts 16px under it. */}
+        {/* One row, the control tall, as Figma's file browser heads a place, every control the scale's: the place's title (a
+            project's folder's path, with its glyph and its ⋯) at the left, the title the first to truncate; at the right,
+            where the place lists anything, the way back, Sort and the layout, centred on the title. The content starts
+            16px under it. */}
         <div className="flex min-h-control min-w-0 items-center gap-2" data-library-head="">
           {shownProject ? <Folder className="size-glyph flex-none text-muted-foreground" aria-hidden="true" /> : null}
           {title}
           {shownProject ? projectMenu(shownProject) : null}
           {backControl}
+          {lists ? <div className={cn("flex flex-none items-center gap-2", !backControl && "ml-auto")} data-library-toolbar="">{sortMenu}{layoutSwitch}</div> : null}
         </div>
-        {lists ? <div className="flex min-h-control min-w-0 flex-wrap items-center gap-x-4 gap-y-2" data-library-toolbar="">
-          {kindRow}
-          <div className="ml-auto flex items-center gap-2">{sortMenu}{layoutSwitch}</div>
-        </div> : null}
         {error ? <p className="m-0 text-destructive" role="alert" data-library-error="">{error}</p> : null}
         {note && note.at === here ? <p className="m-0 text-foreground" role="status" data-library-note="">{note.text}</p> : null}
         {body}

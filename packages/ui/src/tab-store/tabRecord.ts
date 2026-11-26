@@ -32,8 +32,8 @@ export type Appearance = 'system' | 'light' | 'dark';
 export type ViewportBackground = 'light' | 'dark';
 /** How the home lays out its models: a grid of cards, or a list of rows. */
 export type LibraryLayout = 'grid' | 'list';
-/** How the home orders the documents of the place on screen: by last activity (the default), by name, or by kind. */
-export type LibrarySort = 'activity' | 'name' | 'kind';
+/** How the home orders the documents of the place on screen: by last activity (the default), by name, by when a page last opened a document, or by when it last changed. */
+export type LibrarySort = 'activity' | 'name' | 'viewed' | 'edited';
 /**
  * The home's sidebar as the person left it (`library/LibrarySidebar.jsx`), kept as a file's panel is in its view
  * (`file-viewer/filePanel.js`), the home in the file's place: `open`, their choice (opened, `true`, or closed, `false`),
@@ -62,7 +62,7 @@ export interface TabRecord {
 const plainObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const APPEARANCES: readonly Appearance[] = ['system', 'light', 'dark'];
 const LIBRARY_LAYOUTS: readonly LibraryLayout[] = ['grid', 'list'];
-const LIBRARY_SORTS: readonly LibrarySort[] = ['activity', 'name', 'kind'];
+const LIBRARY_SORTS: readonly LibrarySort[] = ['activity', 'name', 'viewed', 'edited'];
 /** The widest a kept panel width is read as, whatever was stored (`filePanel.js`'s bound; the panel draws within its own). */
 const PANEL_WIDTH_MAX = 4000;
 export function normalizeAppearance(value: unknown): Appearance {

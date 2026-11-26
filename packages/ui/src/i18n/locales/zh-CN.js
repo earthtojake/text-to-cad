@@ -370,9 +370,10 @@ export default {
 
 
   "home.sort.name": "名称",
+  "home.sort.viewed": "上次查看",
+  "home.sort.edited": "上次编辑",
 
 
-  "home.sort.kind": "类型",
 
 
   "home.openNewTab": "在新标签页中打开",
@@ -384,10 +385,8 @@ export default {
   "home.backTo": "返回 {name}",
 
 
-  "home.columnWhere": "位置",
 
 
-  "home.columnProject": "项目",
 
 
   "home.emptyTitle": "这里还没有内容",
@@ -419,18 +418,11 @@ export default {
   "home.menuOpen": "打开",
   "home.star": "加星标",
   "home.unstar": "取消星标",
-  "home.kindsAria": "显示",
-  "home.kind.all": "全部",
-  "home.kind.models": "3D 模型",
-  "home.kind.drawings": "图纸",
-  "home.kind.boards": "电路板",
-  "home.kind.schematics": "原理图",
-  "home.kind.robots": "机器人",
   "home.columnName": "名称",
-  "home.columnKind": "类型",
-  "home.columnSize": "大小",
-  "home.columnUpdated": "更新",
-  "home.columnCreated": "创建",
+  "home.columnType": "类型",
+  "home.columnViewed": "上次查看",
+  "home.columnEdited": "上次编辑",
+  "home.folderType": "文件夹",
   "home.openingAria": "正在打开 {name}",
   "home.ageNow": "刚刚",
   "home.ageEdited": "{age}编辑",

@@ -34,7 +34,7 @@ const row = (path: string, index: number, extra: Partial<LibraryModel> = {}): Li
   const name = path.split("/").pop()!;
   return { path, id: `id-${name}`, name, folder: path.slice(0, path.lastIndexOf("/")), documentKind: KINDS[name.split(".").pop()!] ?? null,
     pinned: false, missing: false, opened: NOW - (index + 1) * HOUR, updated: NOW - (index + 3) * HOUR, created: NOW - 60 * HOUR,
-    thumbnail: null, pictured: null, size: 4096 * (index + 1), project: path.startsWith(`${ROOT}/`) ? "gearbox" : null, ...extra };
+    thumbnail: null, pictured: null, project: path.startsWith(`${ROOT}/`) ? "gearbox" : null, ...extra };
 };
 // gearbox's files, by their path below its root; a file no page opened has no opened or created time.
 const TREE: LibraryModel[] = [
@@ -123,7 +123,7 @@ const keptPanel = (() => { try { return JSON.parse(params.get("panel") ?? "null"
 function Home() {
   const [place, setPlace] = useState(start);
   const [layout, setLayout] = useState<"grid" | "list">(params.get("layout") === "list" ? "list" : "grid");
-  const [sort, setSort] = useState<"activity" | "name" | "kind">("activity");
+  const [sort, setSort] = useState<"activity" | "name" | "viewed" | "edited">("activity");
   const from = params.get("from");
   showPlace = setPlace;
   return <ModelLibrary library={library} fileActions={fileActions} layout={layout} onLayoutChange={setLayout} sort={sort} onSortChange={setSort}

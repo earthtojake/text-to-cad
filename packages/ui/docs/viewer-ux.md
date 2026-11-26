@@ -208,25 +208,28 @@ chrome that floats over the picture. The home is the navbar over the library: it
   - It ends in the panel's foot, as a document's panel does: the app's links and Settings
     ([The panel's foot](#the-panels-foot)).
 - **The place** fills the rest, on the page's colour, padded by the panel's inset (16px) on all four sides, at every
-  width and on a phone, its blocks (the title's row, the toolbar, the folders, the cards, a line) 16px apart. Why: the
+  width and on a phone, its blocks (the head, the folders, the cards, a line) 16px apart. Why: the
   navbar's logo, the sidebar's rows and the place then stand on one 16px line, and a box padded alike across and down
   reads as meant; the 24px gutters and 20px top it had were on no scale.
-- **Its head is two rows**, as Figma's file browser heads a place, each the control tall:
-  - **The title's row**: the place's title, the page's `h1`, a step over the body at medium weight
+- **Its head is one row**, the control tall, as Figma's file browser heads a place:
+  - **At its left**, the place's title, the page's `h1`, a step over the body at medium weight
     ([the type scale](design-system.md#the-type-scale)): "Recents", "Starred", a project's name or its path; on a
-    project's page its ⋯ after it; at the row's right end "Back to <name>" where there is one. Why: the title says
-    where the person is, the one larger text on the page, as Figma's "Recents" is; the way back is a way out of the
-    place, apart from what is in it.
-  - **The toolbar**, 16px under it: the kinds' tabs at the left, and Sort and grid or list at the right, as Figma's
-    filters and view stand on its tabs' row. It is there wherever the place lists anything (and while it is read, and
-    over a search that finds nothing); with one kind or none it holds Sort and the layout alone; with nothing to list
-    (an empty folder, nothing starred, the welcome) it is not there, as there is nothing to narrow, order or lay out.
-    The content starts 16px under it.
-  - **Sort** is one control: a ghost button, its sort glyph, the sort's name and a chevron, its menu the three orders
-    with the chosen one ticked: Last activity (the default); Name; Kind (by the tabs' kinds in their order, then the
-    models, the `.xbf` files, then format, a model's Part, Assembly or XBF among them, then name). No "Sort" label
-    stands beside it: as a label flush against the button, the button's fill ran into it. Sort and the layout are the
-    tab's ([Settings memory](#settings-memory)).
+    project's page its ⋯ after it. Why: the title says where the person is, the one larger text on the page, as
+    Figma's "Recents" is.
+  - **At its right**, "Back to <name>" where there is one, then Sort, then grid or list, each centred vertically on
+    the title (their centres within a pixel of its). Sort and the layout are there wherever the place lists anything
+    (and while it is read, and over a search that finds nothing); with nothing to list (an empty folder, nothing
+    starred, the welcome) they are not, as there is nothing to order or lay out. The content starts 16px under the
+    row.
+  - **One row at every width.** On a phone the row does not wrap: the title (or the path) is the first to truncate,
+    and where the controls still do not fit Sort shows its glyph alone, keeping its accessible name ("Sort by Last
+    activity") and its menu.
+  - **Sort** is one control: a ghost button, its sort glyph, the sort's name and a chevron, its menu the four orders
+    with the chosen one ticked, each an order of a column the list shows: Last activity (the default: the later of
+    when a page last opened the file and when it last changed, which is what a card's line says); Name; Last viewed;
+    Last edited. A file with no such time comes last. No "Sort" label stands beside it: as a label flush against the
+    button, the button's fill ran into it. Sort and the layout are the tab's ([Settings memory](#settings-memory)); a
+    kept order that no longer exists (Kind) reads as Last activity.
 - **A project's title is the folder's path**: its folder glyph, then the project's name and each folder down to the
   one on screen (`gearbox / housing / v3`), every part at the title's size, as Drive's and Dropbox's paths are: each
   part but the last a link back up to its folder, regular and muted, the slashes regular and muted, and the last the
@@ -236,15 +239,6 @@ chrome that floats over the picture. The home is the navbar over the library: it
   the row gives way from its start: the parts above, down to their first letters, then the folder's own name, so the
   folder on screen is the last to go. Why: it is the way a file browser says where you are, and the one way back up,
   with no Back button of its own.
-- **The kinds**, a row of tabs at the toolbar's left: All, then 3D models, Drawings, Boards, Schematics and
-  Robots, each only where the place holds one, always in that order, each its word alone with no count, as Figma's
-  and Drive's tabs have none (each is named by its word: "3D models"). One is on at a time (All at first); a search
-  and the tab narrow together. There is no row where the place holds one kind or none, and a kind chosen in another
-  place that this one lacks shows all of it. The choice is the page's own, as the search is. An XBF, a STEP, an STL, a 3MF and a GLB are 3D
-  models; a DXF a drawing; a KiCad board and schematic a board and a schematic; a URDF or an SRDF a
-  robot (`DOCUMENT_KINDS`: by the row's document type, else its file's extension). Why: a person calls a STEP, an STL
-  or a GLB a model too; "a model" against "a file on disk" would be the implementation showing. A model's `.xbf` and
-  the files exported from it stay cards of their own.
 - **A document is its file, one card.** Every row is a file: a model's document is its `.xbf` (every model has one:
   `<name>.xbf` beside its script, or the path `@model("arm.xbf")` gives it; a shape's handed over too), and its id is
   that file's: one file, one row, one card, in Recents, Starred, a folder's page and the search, named by
@@ -263,7 +257,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
     cards' own: a card's box, corners and column, a card's 12px inset round one line inside a card's border (46px tall), its name a card's
     name in size and weight, its glyph where a card's name starts; the folders are a grid of their own, 16px over the
     cards (Drive's folders over its files). In the list it is a row of the list, its glyph on the picture tile where a
-    file's picture stands, and a dash in each column. It has no picture, count, star or menu: it is a way into the
+    file's picture stands, its Type "Folder" and a dash for each time. It has no picture, count, star or menu: it is a way into the
     folder, a real link where the host gives places an address. Why a tile of the cards' family: a folder and a file
     on one page are read as one set, so they share a box, a column and a name's type; the sidebar's row drawn among
     cards read as a different surface, its folders a line of small labels beside large cards.
@@ -273,7 +267,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
     (medium, truncating), and its ⋯ at its right end, centred in a square as tall as the tile's inside, there as a
     card's actions are (under the pointer, in focus, always where nothing hovers). In the list it is a row after the
     documents' rows: the plain tile with its kind's glyph, its name, its extension as its name writes it for its Kind,
-    upper case (`PDF`, `PY`, `F3D`; a dash with no extension), its size and when it was edited. A search's results are
+    upper case (`PDF`, `PY`, `F3D`; a dash with no extension), then when it was last viewed and last edited. A search's results are
     grouped just so: the documents' cards or rows first, then these files as the same tiles (16px under the cards) or
     rows, each group in the Sort's order; it is never a card with an empty picture. Nothing about it is dimmed:
     it is a file of the folder. Why a tile: a file the viewer cannot picture has nothing to show in a picture's space,
@@ -288,19 +282,18 @@ chrome that floats over the picture. The home is the navbar over the library: it
     manager; with no app and no handler, those two alone. It has no star and no Open in new tab, being in no library;
     `[` and `]` and the search of documents pass it by. A host that opens no apps shows it in its file manager on a
     press, and where it can do neither the tile is no control at all.
-  - **No blank cell in the list.** A cell whose value is not known reads a dash ("—", as a folder's row does in every
-    column): Where, Project, Kind, Size, Updated and Created alike, on a document's row and on another file's.
+  - **No blank cell in the list.** A cell whose value is not known reads a dash ("—", as a folder's row does for each
+    time): Type, Last viewed and Last edited alike, on a document's row and on another file's.
     Why: an empty cell reads as a fault or a column still loading; a dash says there is nothing to show.
-  - The kinds' tabs narrow the documents; Sort orders the documents, and then the other files, each group in its
-    order; the folders stand first in the folder's own order.
+  - Sort orders the documents, and then the other files, each group in its order; the folders stand first in the
+    folder's own order. Nothing narrows them by kind.
 - **A project's top page leads with its recent files.** At a project's top (its own folder, not one below it), where
   files of the project below the top were opened by someone or built by a run, a block labelled "Recent" comes first,
   then the listing under "All files". It holds the library's rows of the project whose folder is below its top (the
   list Recents shows; no folder is read for it), by last activity, newest first: in the grid one row of the cards' grid,
   as many cards as fit across at the width on screen (five at 1440px beside the sidebar), the rest left out, and a
-  resize changes how many; in the list at most five rows, under a header of their own with Where, each its folder
-  below the top. The kinds' tab narrows it as it narrows the listing, and a search replaces it with the search's
-  results. Each label is the body's size at medium weight in the foreground, 8px over what it labels, and All files
+  resize changes how many; in the list at most five rows, under a header of their own, the listing's columns. A
+  search replaces it with the search's results. Each label is the body's size at medium weight in the foreground, 8px over what it labels, and All files
   stands 16px under the Recent row. With no such files there is no block and no label: the page is the folder. Why: in
   a project the files worked on are rarely in its top folder, and Google Drive, Dropbox, Box, Figma, Fusion and
   Onshape put recent or suggested files at the home or the root (Drive's Suggested row on its Home, Box's Recents on
@@ -320,8 +313,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   - **A row** is the search's: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall, then its
     name and its facts in one size, the name in the foreground and the facts muted, under a header of muted labels the
     control tall with no rule under it. Its fill hangs 8px past the place's line, so the header's labels and the pictures,
-    a folder's tile among them, stand on the line; its star and ⋯ float over its right end. A narrower place drops Created
-    (under 820px), then Where (680), Kind (560) and Size (440). Why that tall: a row with a picture is as tall as its
+    a folder's tile among them, stand on the line; its star and ⋯ float over its right end. A narrower place drops Type
+    (under 560px), then Last viewed (440). Why that tall: a row with a picture is as tall as its
     picture needs, the same in the search; a list's emphasis is colour, never a second size.
   - An `.xbf` file is badged "Part" when its document holds one part and
   "Assembly" when it holds more (the row's `parts`: its parts' occurrences, as `cad model inspect` counts them and the
@@ -334,11 +327,12 @@ chrome that floats over the picture. The home is the navbar over the library: it
     file with none shows its kind's glyph on the plain tile. The home draws no picture of its own. Why: a picture drawn out of sight
     reads a file nobody opened, on a timer, and a folder of a thousand files is a thousand reads.
   - A card's line is its last activity alone ("Edited now", "Viewed 7h ago"), as Figma's cards say "Edited 2 hours
-    ago". A card has no glyph, place or size. Why: the picture and its badge say what it is, and where it is and its
-    size are for the list, where each is a column to read down. A list's columns are Name, then where it is as a column
-    (Project in Recents and Starred, a dash for a document in no project; Where in a project's search; a folder's own
-    listing has none, every row being in it), Kind (its format, as the badge: "Part", "Assembly", "STEP", "KiCad
-    PCB"), Size, Updated and Created.
+    ago". A card has no glyph, place or size. Why: the picture and its badge say what it is. The list shows what a
+    card shows, as columns to read down, and nothing more: **Name** (its picture or glyph, and its name), **Type** (the
+    card's badge: "Part", "Assembly", "STEP", "KiCad PCB", a file's extension; a folder's row says "Folder"), **Last
+    viewed** (when a page last opened the file, the age the card's "Viewed …" says, with no verb) and **Last edited**
+    (the file's modified time, the card's "Edited …"), then the star and ⋯. The same four columns in a folder's page,
+    a project's top Recent, Recents, Starred and a search. A value that is not known is a dash.
   - Each has a star and a ⋯ (Open, Open in new tab, Open in ▸, Copy path, Copy link, Reveal, then Star or Unstar),
     shown on hover or focus and always on touch; a starred document keeps its star, filled in the foreground. The star
     says "Star" or "Unstar" in its hint and its name. Open in is the navbar's: the apps the host lists for the
@@ -364,7 +358,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   controls, its name the first to give way.
 - **Search** narrows the place on screen. Recents and Starred narrow the rows in hand. A folder's page asks
   the host, once typing rests, for every file anywhere below the folder on screen whose path below it holds every
-  word, and lists them flat, with no folders, each saying where it is below that folder. Why: a search is the one place
+  word, and lists them flat, with no folders. Why: a search is the one place
   a person wants every level at once, and it is the one place they are flattened.
 - **After a folder is imported** (Import's Folder, a folder in its one chooser, or the "+") the home goes to that
   project's page, at the folder chosen where it is inside the project, with a line saying what came of it (made,
@@ -1051,9 +1045,17 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   opened needs no pruning by hand: the item was one more line in every card's menu.
 - **A place of the documents in no project (Standalone).** Drive has no place of files in no folder: such a document is
   in Recents, Starred when starred, and the search.
-- **Counts in the sidebar and on the kinds' tabs.** Figma's and Drive's have none: a count is a number nobody acts on.
+- **Counts in the sidebar.** Figma's and Drive's have none: a count is a number nobody acts on.
 - **Where a card is, before its activity, and a project's folder from `~` beside its name.** A card's line is its
-  activity, as Figma's is; where a file is, is the list's column and Copy path's.
+  activity, as Figma's is; where a file is, is Copy path's.
+- **Kind tabs (All, 3D models, Drawings, Boards, Robots) over a place.** The owner asked "what is the utility of the
+  doc type filters? It feels unnecessary": a place is short enough to scan, the search narrows it, and a second row of
+  filters pushed the content down. The head is one row, with Sort and the layout at its right.
+- **Where, Size, Created and Updated columns in the list, and Sort by size, created or kind.** The owner asked "what
+  is the purpose of 'Where'? I would strip this down to its minimum in terms of what is actually useful, same info as
+  what is in the card": the list shows a card's own facts (name, type, last viewed, last edited), and Sort orders only
+  what the list shows. Where a file is is Copy path's; its size and the day the library first knew it are nobody's
+  question on a home.
 - **"Home" in the navbar over the home, and the place's name at the navbar's size.** The logo is the way home and the
   place's title says where the person is: a name after the toggle said it twice, and a title the body's size read as
   no title. Figma's file browser titles a place one step over its body.
