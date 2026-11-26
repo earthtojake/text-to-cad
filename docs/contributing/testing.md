@@ -259,8 +259,7 @@ its pull request. The tier holds:
   the automatic one gets the release ready with nothing restarted, then the server restarts on it at its
   next start, by the viewer's button, by a typed `cad update` (PyPI reachable or not) or once it has been
   ready a day (a real minute with no command, a page asking all along), and never by itself with automatic
-  updates off or a feed that no longer names it (the hour with nothing asked is not rehearsed: it cannot
-  pass in seconds); back by itself from a release whose server does not start, typed or at a start, and
+  updates off or a feed that no longer names it; back by itself from a release whose server does not start, typed or at a start, and
   then held back; a ready release damaged before its restart built again; untouched by one that cannot be
   built or does not run, while `cad` is called every 50 ms and while its files are held open, after a
   person's own reinstall, after its worker was stopped midway, and from the shipped 0.11.17's update in

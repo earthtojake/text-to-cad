@@ -821,7 +821,7 @@ class ScheduleTest(Case):
         while self.clock[0] < until:
             for version in servers:
                 with mock.patch.object(cad_server, "__version__", version):
-                    if auto_update.tend(working=False, ran=False, quiet_for=0.0, idle_for=0.0):
+                    if auto_update.tend(working=False, ran=False, quiet_for=0.0):
                         found = auto_update.last()
                         begun.append((version, found["wanted"], (found["at"] - self.START) / auto_update.HOUR,
                                       found["tries"]))
@@ -1129,20 +1129,19 @@ class WhenTest(Case):
         with mock.patch.object(auto_update, "due", return_value=auto_update.Due("0.2.0", "0.2.0")) as due, \
                 mock.patch.object(auto_update, "trigger", return_value=made) as trigger, \
                 mock.patch.object(auto_update, "restart", return_value=resumed) as restart:
-            self.assertIsNone(auto_update.tend(working=True, ran=False, quiet_for=1e9, idle_for=1e9),
+            self.assertIsNone(auto_update.tend(working=True, ran=False, quiet_for=1e9),
                               "never while work is in flight")
             self.assertEqual((due.call_count, restart.call_count), (0, 0))
-            self.assertIs(auto_update.tend(working=False, ran=True, quiet_for=auto_update.IDLE_SECONDS - 1,
-                                           idle_for=5.0), resumed, "a command a moment ago: no update due is begun")
-            self.assertEqual((due.call_count, restart.call_args.kwargs),
-                             (0, {"quiet_for": auto_update.IDLE_SECONDS - 1, "idle_for": 5.0}))
-            self.assertIs(auto_update.tend(working=False, ran=False, quiet_for=0.0, idle_for=0.0), made,
+            self.assertIs(auto_update.tend(working=False, ran=True, quiet_for=auto_update.IDLE_SECONDS - 1),
+                          resumed, "a command a moment ago: no update due is begun")
+            self.assertEqual((due.call_count, restart.call_args.kwargs), (0, {"quiet_for": auto_update.IDLE_SECONDS - 1}))
+            self.assertIs(auto_update.tend(working=False, ran=False, quiet_for=0.0), made,
                           "nothing has run: at once")
-            self.assertIs(auto_update.tend(working=False, ran=True, quiet_for=auto_update.IDLE_SECONDS, idle_for=0.0),
+            self.assertIs(auto_update.tend(working=False, ran=True, quiet_for=auto_update.IDLE_SECONDS),
                           made)
             self.assertEqual(restart.call_count, 1, "an update due comes first")
             due.return_value = None
-            self.assertIs(auto_update.tend(working=False, ran=False, quiet_for=0.0, idle_for=0.0), resumed)
+            self.assertIs(auto_update.tend(working=False, ran=False, quiet_for=0.0), resumed)
         self.assertEqual(trigger.call_args_list, [mock.call("0.2.0", wanted="0.2.0", switch=False)] * 2,
                          "each an automatic update that gets its release ready alone")
 
@@ -2255,8 +2254,8 @@ class ButtonTest(Case):
 
 class ReadyTest(Case):
     """The server's own update gets its release ready and switches nothing (``"switch": false``, outcome ``ready``);
-    the switch follows by itself as the server starts, once nothing has been asked of it for an hour, or a day on at a
-    minute with no command (``restart``), or at a person's ask, whatever the moment (``_claim``). On a clock of the
+    the switch follows by itself as the server starts, or a day on at a minute with no command (``restart``), or at a
+    person's ask, whatever the moment (``_claim``). On a clock of the
     test's own; the worker stands in (``Popen``) and its record is written as it writes one."""
 
     T0 = 1_000_000.0
@@ -2288,7 +2287,7 @@ class ReadyTest(Case):
         its worker as it ends one (``auto_update_helper.settle``): ``ready``, the release in the store."""
         for name in (auto_update.RECORD, auto_update.TRIED):
             (self.state / name).unlink(missing_ok=True)
-        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0, idle_for=0.0)
+        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0)
         self.assertEqual((begun["release"], begun["switch"], begun["phase"]), (release, False, "building"))
         self.assertNotIn("switch", json.loads(self.popen.call_args.args[0][-1]), "the worker reads it from the record")
         folder = self.stored(release)
@@ -2327,7 +2326,7 @@ class ReadyTest(Case):
         self.assertIsNone(auto_update.due(), "only its switch is left")
         self.known = {"latest": "0.2.1", "lines": {"0": "0.2.1"}}
         self.assertEqual(auto_update.due(), auto_update.Due("0.2.1", "0.2.1"))
-        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0, idle_for=0.0)
+        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0)
         self.assertEqual((begun["release"], begun["switch"], self.told()["target"]), ("0.2.1", False, "0.2.1"),
                          "got ready alone too")
         self.assertEqual(auto_update.kept(), [], "the release that was ready is the worker's to tidy now")
@@ -2344,18 +2343,16 @@ class ReadyTest(Case):
                                                                                  "lines": {"0": "0.2.1"}})),
                 ("the feed calls for none", mock.patch.object(self, "known", {"latest": "0.1.0",
                                                                               "lines": {"0": "0.1.0"}}))):
-            for moment in ({"starting": True}, {"idle_for": auto_update.ALONE_SECONDS},
-                           {"quiet_for": auto_update.IDLE_SECONDS}):
+            for moment in ({"starting": True}, {"quiet_for": auto_update.IDLE_SECONDS}):
                 with self.subTest(case=case, moment=moment), patch:
-                    self.assertIsNone(auto_update.restart(**{"quiet_for": 0.0, "idle_for": 0.0, **moment}))
+                    self.assertIsNone(auto_update.restart(**{"quiet_for": 0.0, **moment}))
         self.popen.assert_not_called()
         self.assertEqual(auto_update.last(), found, "left ready, for a person")
 
-    def test_restart_by_itself_as_the_server_starts_after_an_hour_alone_or_a_day_on_at_a_quiet_minute(self) -> None:
+    def test_restart_by_itself_as_the_server_starts_or_a_day_on_at_a_quiet_minute(self) -> None:
         for case, moment, since, allowed in (
                 ("the server starting", {"starting": True}, 0.0, True),
-                ("an hour with nothing asked", {"idle_for": auto_update.ALONE_SECONDS}, 0.0, True),
-                ("a page asked something a moment ago", {"idle_for": auto_update.ALONE_SECONDS - 1}, 0.0, False),
+                ("long with nothing run, not yet a day", {"quiet_for": auto_update.DAY}, 0.0, False),
                 ("a day ready, a minute with no command", {"quiet_for": auto_update.IDLE_SECONDS}, auto_update.DAY,
                  True),
                 ("a day ready, a command a moment ago", {"quiet_for": auto_update.IDLE_SECONDS - 1}, auto_update.DAY,
@@ -2366,7 +2363,7 @@ class ReadyTest(Case):
                 self.clock[0] = self.T0
                 found = self.made()
                 self.clock[0] = found["ended"] + since
-                begun = auto_update.restart(**{"quiet_for": 0.0, "idle_for": 0.0, **moment})
+                begun = auto_update.restart(**{"quiet_for": 0.0, **moment})
                 if not allowed:
                     self.assertIsNone(begun)
                     self.assertEqual(auto_update.last(), found)
@@ -2389,7 +2386,7 @@ class ReadyTest(Case):
         auto_update._keep(self.state / auto_update.TRIED, book)
         self.clock[0] += 60  # its next try an hour away by the schedule
         self.assertIsNotNone(auto_update.next_try("0.2.0", auto_update.tries(), self.clock[0]))
-        begun = auto_update.restart(quiet_for=0.0, idle_for=0.0, starting=True)
+        begun = auto_update.restart(quiet_for=0.0, starting=True)
         self.assertEqual((begun["at"], begun["tries"]), (self.clock[0], found["tries"]))
         after = auto_update.tries()
         self.assertEqual((after["recent"], after["seen"]), (book["recent"], self.clock[0]),
@@ -2428,7 +2425,7 @@ class ReadyTest(Case):
         self.assertEqual(auto_update.last()["phase"], "switching")
 
     def test_a_person_who_asks_during_the_silent_build_gets_the_whole_update(self) -> None:
-        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0, idle_for=0.0)
+        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0)
         self.assertIsNone(auto_update.trigger("0.2.0", wanted="0.2.0"), "the server's own joins nothing")
         self.assertEqual(auto_update.last(), begun, "and changes nothing")
         joined = auto_update.begin("0.2.0")
@@ -2438,7 +2435,7 @@ class ReadyTest(Case):
         self.assertEqual(auto_update.begin("0.2.0"), joined, "joined again as it is")
 
     def test_the_button_shows_a_release_ready_and_nothing_of_a_silent_build(self) -> None:
-        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0, idle_for=0.0)
+        begun = auto_update.tend(working=False, ran=False, quiet_for=0.0)
         self.assertEqual(auto_update.button(now=self.clock[0] + 5),
                          {"version": "0.1.0", "latest": "0.2.0", "state": "idle"}, "offered as it was")
         auto_update.begin("0.2.0")
@@ -2792,8 +2789,8 @@ class DoctorTest(Case):
         ready = "cad 0.2.0 is installed beside the cad that runs"
         with self.feed("0.2.0", {"0": "0.2.0"}):
             self.assertEqual(doctor._attempt(), (doctor.INFO, f"{ready}, and cad restarts on it as the server next "
-                                                              "starts, once the server has been left alone for an "
-                                                              "hour, or now with `cad update`"))
+                                                              "starts or, a day on, once nothing has run for a "
+                                                              "minute; now with `cad update`"))
             auto_update.change(False)
             self.assertEqual(doctor._attempt(), (doctor.INFO, f"{ready}: automatic updates are off, so cad restarts "
                                                               "on it with `cad update` or the viewer's update button"))

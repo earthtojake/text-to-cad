@@ -1956,8 +1956,7 @@ class Daemon:
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
         is due (``updates.refresh``), and cad's own update looked after where nothing is in flight (``auto_update.tend``,
-        told how long since the last command ended, ``worked``, and since anything at all was asked, ``last``, a page's
-        requests too): a release that is due got ready beside this one, nothing restarted; or this server drained and
+        told how long since the last command ended, ``worked``): a release that is due got ready beside this one, nothing restarted; or this server drained and
         the next release's started where one is ready and the moment is right (``auto_update.restart``);
         then, BRIDGE-ONLY, the install
         command run once where it is owed for a computer a shipped updater brought (``install_script.Carrier``), and
@@ -1985,12 +1984,12 @@ class Daemon:
         updates.refresh()
         now = time.monotonic()
         working, ran, quiet_for = self.working(), self.worked != self.began, now - self.worked
-        begun = auto_update.tend(working=working, ran=ran, quiet_for=quiet_for, idle_for=now - self.last)
+        begun = auto_update.tend(working=working, ran=ran, quiet_for=quiet_for)
         if begun:
             named = ("the newest release" if begun.get("release") == auto_update.LATEST
                      else f"cad {begun.get('release')}")
-            print(f"cad: installing {named} beside this cad: this server restarts on it as it next starts, once "
-                  "nothing has been asked of it for an hour, or with `cad update`" if begun.get("switch") is False else
+            print(f"cad: installing {named} beside this cad: this server restarts on it as it next starts, a day "
+                  "on, or with `cad update`" if begun.get("switch") is False else
                   f"cad: restarting this server on {named}, which is installed beside this cad, once nothing is in "
                   "flight", file=sys.stderr, flush=True)
             return
@@ -2414,7 +2413,7 @@ def _restarted() -> dict[str, Any] | None:
     try:
         from cad_server._internal import auto_update
 
-        return auto_update.restart(quiet_for=0.0, idle_for=0.0, starting=True)
+        return auto_update.restart(quiet_for=0.0, starting=True)
     except Exception:  # noqa: BLE001 - see above
         return None
 

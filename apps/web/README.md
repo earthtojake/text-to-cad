@@ -374,8 +374,7 @@ new issue titled "Issue: ", labelled `bug`, filled in from the card. A failed up
 model survives can be dismissed, leaving the previous version to inspect.
 
 The page checks its session's `identityToken` every five seconds while it is seen, and at once when it is focused or
-shown again; a hidden page asks nothing, as the server restarts onto an update that is ready only once nothing has
-asked it anything for a while (`host/useViewerAutoReload.js`). Under Vite it reloads when the
+shown again; a hidden page asks nothing, as it has nothing to show (`host/useViewerAutoReload.js`). Under Vite it reloads when the
 served client changes. A page the engine serves never reloads into another identity
 on its port: every engine has a new token, so a later engine refuses the page, and
 another identity answering there is a process the page cannot authenticate. That

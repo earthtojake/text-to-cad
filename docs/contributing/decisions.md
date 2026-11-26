@@ -352,9 +352,8 @@ ready: built beside the release that runs and run once there, in the first minut
 the background; nothing that runs is touched and nothing restarts. Then the server restarts onto it.
 By itself it does that only where nobody would notice: as the server next starts (the start becomes
 the switch, and no server of the release before serves anything; not a start in the foreground or one
-that names its port, which are the person's own); once nothing at all has been asked of the server
-for an hour, a viewer page's requests included; or, once the release has been ready for a day, in the
-first minute with no command, as every automatic update did before. Until then the update button is
+that names its port, which are the person's own), or, once the release has been ready for a day, in
+the first minute with no command, as every automatic update did before. Until then the update button is
 a restart icon, and a click restarts now, as a typed `cad update` does. A person's update
 is never left halfway: one asked for while the release is being got ready goes on to the restart, and
 one asked for with a release ready has only the restart left, whether PyPI answers or not. A release
@@ -369,25 +368,23 @@ arrow that says "Restart to update", and one click restarts. Nothing opens, by i
 **Why.** The restart is the one part of an update a person can feel: a page they are looking at loses
 its server, says so, and reloads. A minute with no command says nothing about a person looking at a
 model, since looking runs no command. Waiting costs nothing in safety: the release before runs on,
-whole, and the way back at the switch is the same. The three moments are the ones with nobody there:
-no server yet, nobody asking, or a day gone by; the day is there so a page always shown, or a
-computer always busy, is never left behind for good. The button is what the apps people use every
-day show: a quiet mark, always in the same corner, that an update is there (Discord's arrow, Slack's
+whole, and the way back at the switch is the same. A start is the moment with nobody there: no server
+yet, so no page has one to lose. The day is there so a page always shown, or a computer always busy,
+is never left behind for good. A third moment, once nothing at all had been asked of the server for an
+hour, was built first and taken out on the owner's word: it held only where every page stayed quiet
+while hidden, and an open CAD app view, which asks once a second, kept it from ever coming. The button
+is what the apps people use every day show: a quiet mark, always in the same corner, that an update is there (Discord's arrow, Slack's
 badge, Spotify's dot). Two shapes were built first and taken out on the owner's word: a wide button
 that read "Restart to update", which shouted from the navbar, and a prompt that asked Later or
 Restart on every click, a second step for every update. The icon says which click it is, and its tooltip
 says so before the click: the arrow installs and restarts, the restart arrow restarts. Anything that
 opens by itself over a model someone is looking at interrupts them, so nothing does.
 
-**What it costs.** On a computer that is never left alone a release runs up to a day later than
+**What it costs.** Where the server does not start again, a release runs up to a day later than
 before. For that time a second copy of cad's packages is in the store. A page that is shown a day
 after the release got ready still loses its server once. A click on the button restarts with no
 further question: what is in flight ends first, and the page reloads.
-A page must ask the server nothing while it is hidden, or the server never counts as left alone: every
-timer of the viewer's that asks the server stops while its page is hidden. The CAD app's views are the
-exception: each asks once a second, seen or not, which is how an agent reaches them, so while one is
-open the server is never left alone, and there the restart waits for the button, the server's next
-start or the day. A `cad server start` that becomes the switch answers a second or two later than one
+A `cad server start` that becomes the switch answers a second or two later than one
 that does not (2.9 s against 1.7 s on a Windows test machine, 1.1 s against 1.0 s on Linux). The
 record of the last attempt has one more outcome, `ready`, which is not counted:
 the update is counted when its restart ends.

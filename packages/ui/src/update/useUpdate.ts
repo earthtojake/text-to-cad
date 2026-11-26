@@ -104,7 +104,7 @@ const refusalOf = (error: unknown): UpdateFailure => {
  * description (`initial`, so the button draws with the page; none: read once), read again whenever the
  * person comes back to the page (its window focused, or the page shown again) and once a minute while the page
  * is seen and follows no update (`UPDATE_READ_MS`), so a release made ready meanwhile shows by itself; never while
- * the page is hidden, whose asking would keep the server from ever counting as left alone. `update()` is the click: the server
+ * the page is hidden, which has nothing to show. `update()` is the click: the server
  * begins a person's update (`start`), and the page asks where it is (`read`) until it ends -- building, then
  * switching, then, the server gone while it restarts, still asking -- and once another start of the server answers
  * (`instance`), the server restarted: `restarting`, and the host's `onRestarted` (a page reloads into

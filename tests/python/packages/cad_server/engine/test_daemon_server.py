@@ -979,9 +979,9 @@ class TendTest(unittest.TestCase):
         self.assertEqual(tended.call_args.kwargs["ran"], False, "nothing has run since the server started")
         self.assertEqual(engine.handover.tend.call_args.args[0], version(), "the bridge's, named by this release")
 
-    def test_the_tending_tells_the_update_since_when_anything_was_asked_and_says_what_it_began(self) -> None:
-        """``idle_for``: since anything at all was asked of the server (``last``, a page's requests too), beside
-        ``quiet_for``, since the last command (``worked``); and one line for what the update began."""
+    def test_the_tending_tells_the_update_since_the_last_command_and_says_what_it_began(self) -> None:
+        """``quiet_for``: since the last command (``worked``), whatever a page asked since (``last``); and one line for
+        what the update began."""
         import io
         from contextlib import redirect_stderr
 
@@ -996,7 +996,7 @@ class TendTest(unittest.TestCase):
         engine.working.return_value = False
         for begun, said in (({"release": "0.2.0", "switch": False, "phase": "building"},
                              "cad: installing cad 0.2.0 beside this cad: this server restarts on it as it next starts, "
-                             "once nothing has been asked of it for an hour, or with `cad update`\n"),
+                             "a day on, or with `cad update`\n"),
                             ({"release": "0.2.0", "phase": "switching"},
                              "cad: restarting this server on cad 0.2.0, which is installed beside this cad, once "
                              "nothing is in flight\n")):
@@ -1006,10 +1006,8 @@ class TendTest(unittest.TestCase):
                     redirect_stderr(io.StringIO()) as err:
                 daemon.Daemon.tend(engine)
             told = tended.call_args.kwargs
-            self.assertEqual((told["working"], told["ran"]), (False, True))
-            self.assertAlmostEqual(told["quiet_for"], 600.0, delta=30.0)
-            self.assertAlmostEqual(told["idle_for"], 30.0, delta=30.0)
-            self.assertLess(told["idle_for"], told["quiet_for"], "a page asked since the last command")
+            self.assertEqual((sorted(told), told["working"], told["ran"]), (["quiet_for", "ran", "working"], False, True))
+            self.assertAlmostEqual(told["quiet_for"], 600.0, delta=30.0, msg="a page that asked since is no command")
             self.assertEqual(err.getvalue(), said)
         engine.handover.tend.assert_not_called()
 

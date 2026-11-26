@@ -12,9 +12,8 @@ const INSTALLED_CADENCE = Object.freeze({ watchMs: VIEWER_INSTALL_POLL_MS, reloa
  *
  * Asks whenever the server says who it is (`serverInfo.identityToken`): every five seconds while the page is
  * seen, and at once when the person comes back to it (the window focused, or the page shown again: a tab
- * brought back fires no focus). A hidden page asks nothing, and its ticks stop until it is shown: the server
- * counts a page's requests as use, and restarts onto an update that is ready only once it is left alone. The
- * decision lives in `viewerAutoReload.js`; this is the timer, the fetch and the reload.
+ * brought back fires no focus). A hidden page asks nothing, and its ticks stop until it is shown: it has
+ * nothing to show. The decision lives in `viewerAutoReload.js`; this is the timer, the fetch and the reload.
  *
  * @param {{identityToken?: string}|null} serverInfo
  * @param {{ fetchServerInfo: () => Promise<{ ok: boolean, identityToken?: string }>, follow?: boolean,

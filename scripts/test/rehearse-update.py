@@ -52,8 +52,7 @@ restart onto it comes later, by one of the ways a route takes: the server's next
 (``restarted_at_start``: ``cad server start`` says the release that was ready is running, and no server of the release
 before answers the door in between, as a client looking every 50 ms sees it), the button (``restarted_by_button``:
 ``POST /api/v1/local/update`` ``{}``), a typed ``cad update`` (``typed_restart``: the restart alone said), with PyPI
-reachable or not, or the day (``self-ready-day``). The hour with nothing asked of the server is not rehearsed: it
-cannot pass in seconds, and the server's own clock is not set back (the unit tests hold its arithmetic).
+reachable or not, or the day (``self-ready-day``).
 
 - ``self-update``: with ``cad plugin update auto on``, the feed names the next release and an hour passes; the running
   server, idle, gets it ready at its first try; then a person clicks the viewer's button (202, the button ``working``

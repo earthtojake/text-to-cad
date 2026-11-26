@@ -335,8 +335,8 @@ def _attempt() -> tuple:
             said += (": automatic updates are off, so cad restarts on it with `cad update` or the viewer's update "
                      "button")
         else:
-            said += (", and cad restarts on it as the server next starts, once the server has been left alone for "
-                     "an hour, or now with `cad update`")
+            said += (", and cad restarts on it as the server next starts or, a day on, once nothing has run for a "
+                     "minute; now with `cad update`")
         return INFO, said + where
     if last is not None:
         mine = last.get("from") == cad_server.__version__

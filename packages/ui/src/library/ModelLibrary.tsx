@@ -233,7 +233,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     setItems(previous => previous && JSON.stringify(previous) === JSON.stringify(next) ? previous : next)), []);
   // Read on mount, again every couple of seconds while the home is up and seen (a model rebuilt meanwhile
   // is updated later than its picture, and is pictured again), and when the page is shown. A hidden home asks
-  // nothing: the server counts a page's requests as use, and restarts onto an update only once it is left alone.
+  // nothing: it has nothing to show.
   useEffect(() => {
     void refresh().catch(failure => { setItems([]); setError(message(failure)); });
     const again = () => { if (document.visibilityState !== "hidden") void refresh().catch(() => {}); };

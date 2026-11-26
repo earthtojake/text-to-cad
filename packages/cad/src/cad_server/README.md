@@ -252,9 +252,8 @@ is ready (`auto_update.ready`) where the last record says so, it began from the 
 still a stored release; the tidying keeps it. The switch to it begins by itself, where automatic updates are on, the
 check is on and the feed as last read still calls for that release (`auto_update.restart`): as the server starts
 (`daemon.main`, before it serves anything: that start stands aside, and its starter waits for the next release's
-server; never for `--foreground`, nor a start that names its port, `--port`), once nothing at all has been asked of
-the server for an hour (`ALONE_SECONDS`, a page's requests too: `Daemon.last`; a hidden page asks nothing), or, the
-release ready a day, at the first minute with no command. A person's ask (`cad update`, the button) switches to it
+server; never for `--foreground`, nor a start that names its port, `--port`), or, the release ready a day, at the
+first minute with no command. A person's ask (`cad update`, the button) switches to it
 at once, even where PyPI cannot be reached, and one made during the silent build makes that attempt theirs
 (`"switch": true, "asked": true`, in the step that joins it). The switch resumes the attempt: a new record at
 `switching`, its tries the ready one's, held by no schedule and counted among none of the day's attempts. A newer

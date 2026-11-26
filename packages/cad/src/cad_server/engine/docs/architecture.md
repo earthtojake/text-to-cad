@@ -146,8 +146,7 @@ is looking at: as the server tends itself once no command has run for a minute (
 the version feed as last read names a newer release of its major, the worker builds the release and stops there
 (`ready`, nothing switched); the switch follows, where the feed still calls for that release, as the server next
 starts (the start is the switch, begun before it serves anything, and stands aside for it: `daemon.main`, never in the
-foreground nor on a port the start names), once nothing at all has been asked of the server for an hour (a page's
-requests count: `Daemon.last`), or, the release ready a day, at the first minute with no command
+foreground nor on a port the start names), or, the release ready a day, at the first minute with no command
 (`auto_update.restart`); at once on `cad update` or the viewer's button. Meanwhile a command that finds no server
 waits for the next (`client.SWITCHING`), and a server of the release being left starts none in its place
 (`daemon.main`, `auto_update.leaving`); a `cad server start` that fails asks for the update before it gives up; a
