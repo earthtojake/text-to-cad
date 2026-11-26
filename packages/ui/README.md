@@ -369,7 +369,7 @@ or a board's Preview). The navbar is there in every host; only Preview, which dr
 are without it. With no
 file a view shows the host's home under the same navbar (the logo, which goes to Recents, its sidebar's toggle,
 Back and Forward where the host keeps the view's history, and the host's
-actions, and the home's own Home, search and Import: a file, or a folder opened as a project): a
+actions, and the home's own search and Import, a file or a folder opened as a project; the place's title, not the navbar, says where the person is): a
 sidebar of places (Recents, Starred, each project, over the panel's foot), which is the viewer's panel
 over the home (pinned, collapsed, peeking, a phone's sheet), and the place on screen (a project's: one folder of it,
 its subfolders then its files, under the folder's path), its

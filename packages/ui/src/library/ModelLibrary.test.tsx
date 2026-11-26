@@ -42,30 +42,38 @@ async function menu(name: string) {
 }
 const items = (open: HTMLElement) => within(open).getAllByRole('menuitem').map(item => item.textContent);
 
-it('starts with its bar (Home at the left, the search at the right), its places at the left, and the place on screen under its heading row, with no wordmark or links (the app menu\'s)', async () => {
+it('starts with its bar (the search at the right, no name of its own), its places at the left, and the place on screen under its title, with no wordmark or links (the app menu\'s)', async () => {
   render(<ModelLibrary library={library([])} onLayoutChange={() => {}} onSortChange={() => {}} />);
   await screen.findByText('Nothing here yet');
-  // With no navbar over it, the page's own bar: Home, the page's heading, and the search.
+  // With no navbar over it, the page's own bar: the search, and no heading: the place's title says where the person is.
   const bar = document.querySelector('[data-library-bar]')!;
-  expect(bar.querySelector('h1')?.textContent).toBe('Home');
+  expect(bar.querySelector('h1, h2')).toBeNull();
   expect([...bar.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Search models']);
   // The search keeps its placeholder; every control is the scale's control (28px), its icons 16px.
   expect(screen.getByRole('searchbox', { name: 'Search models' }).getAttribute('placeholder')).toBe('Search');
   expect(screen.getByRole('searchbox', { name: 'Search models' }).className).toContain('h-control');
-  // The place on screen: its name, the page's one larger text, then Sort and the grid/list segmented control at the row's right.
+  // The place on screen: its title, the page's one heading of the first level, in a row of its own. With nothing to
+  // list there is no row of tabs, Sort and layout: nothing to narrow, order or lay out.
   const main = screen.getByRole('main', { name: 'CAD models' });
-  const row = main.firstElementChild!;
-  expect(row.querySelector('h2')?.textContent).toBe('Recents');
-  expect([...row.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Sort by Last activity', 'Grid', 'List']);
-  // Grid and List are one segmented control: two control-tall toggles on one track.
-  expect(screen.getByRole('group', { name: 'Layout' }).hasAttribute('data-segmented-control')).toBe(true);
-  expect(['Grid', 'List'].map(name => screen.getByRole('button', { name }).className.includes('h-control'))).toEqual([true, true]);
+  const head = main.firstElementChild!;
+  expect([head.hasAttribute('data-library-head'), head.querySelector('h1')?.textContent, screen.getAllByRole('heading', { level: 1 }).length]).toEqual([true, 'Recents', 1]);
+  expect([main.querySelector('[data-library-toolbar]'), screen.queryByRole('group', { name: 'Layout' })]).toEqual([null, null]);
   // No count; the one picture is the welcome's C mark.
   expect(main.querySelector('[data-pill-count]')).toBeNull();
   expect([...main.querySelectorAll('img')].map(image => Boolean(image.closest('[data-library-empty]')))).toEqual([true]);
   // Its one navigation is its places; a host with no addresses has no link anywhere.
   expect(screen.getAllByRole('navigation').map(node => node.getAttribute('aria-label'))).toEqual(['Places']);
   expect(screen.queryByRole('link')).toBeNull();
+  cleanup();
+  // A place that lists something: under its title, a second row, Sort and the grid/list segmented control at its right.
+  render(<ModelLibrary library={library([model('a.step')])} onLayoutChange={() => {}} onSortChange={() => {}} />);
+  await screen.findByRole('button', { name: 'Open a.step' });
+  const toolbar = screen.getByRole('main').querySelector('[data-library-toolbar]')!;
+  expect([toolbar.previousElementSibling?.hasAttribute('data-library-head'), [...toolbar.querySelectorAll('input, button')].map(node => node.getAttribute('aria-label'))])
+    .toEqual([true, ['Sort by Last activity', 'Grid', 'List']]);
+  // Grid and List are one segmented control: two control-tall toggles on one track.
+  expect(screen.getByRole('group', { name: 'Layout' }).hasAttribute('data-segmented-control')).toBe(true);
+  expect(['Grid', 'List'].map(name => screen.getByRole('button', { name }).className.includes('h-control'))).toEqual([true, true]);
 });
 
 it('ends its bar in Import where the host has a chooser -- a file, or a folder opened as a project -- counted, and none where it has not', async () => {
@@ -93,13 +101,13 @@ it('ends its bar in Import where the host has a chooser -- a file, or a folder o
 
 it('opens and stars through the host, and with nothing yet says how a file gets here', async () => {
   render(<ModelLibrary library={library([])} onLayoutChange={() => {}} />);
-  // The toolbar keeps its search and layout switch with nothing to list yet; the page welcomes: the
+  // The bar keeps its search with nothing to list yet, and the place no layout switch; the page welcomes: the
   // title, one line, and no Import where the host has no chooser.
   expect(await screen.findByRole('heading', { name: 'Nothing here yet' })).toBeTruthy();
   expect(screen.getByText('Import a file or a folder, or ask your agent to build a model.')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Import file' })).toBeNull();
   expect(screen.getByRole('searchbox', { name: 'Search models' })).toBeTruthy();
-  expect(screen.getByRole('group', { name: 'Layout' })).toBeTruthy();
+  expect(screen.queryByRole('group', { name: 'Layout' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Import', exact: true })).toBeNull();
   cleanup();
 
@@ -249,9 +257,11 @@ it('gives a card no glyph, and narrows the place to one kind with a tab: All fir
   // The picture and its badge say what a card is: no glyph beside its name.
   const caption = (card: HTMLElement) => card.querySelector('[data-library-label]')!.parentElement!;
   expect([caption(arm).querySelector('svg'), caption(screen.getByRole('button', { name: 'Open bracket.step' })).querySelector('svg')]).toEqual([null, null]);
-  // A row of pills of its own, under the heading row: a model and the files exported from it are 3D models alike.
+  // A row of pills at the left of the toolbar, the row under the title: a model and the files exported from it are 3D
+  // models alike.
   const row = screen.getByRole('group', { name: 'Show' });
-  expect([row.previousElementSibling?.hasAttribute('data-library-toolbar'), row.closest('[data-library-toolbar]')]).toEqual([true, null]);
+  expect([row.parentElement?.hasAttribute('data-library-toolbar'), row.parentElement?.previousElementSibling?.hasAttribute('data-library-head'), row.previousElementSibling])
+    .toEqual([true, true, null]);
   expect(chips()).toEqual([['All', 'true'], ['3D models', 'false'], ['Drawings', 'false'], ['Boards', 'false']]);
   // No count, as Figma's and Drive's tabs have none: each named by its word alone.
   expect(within(row).getAllByRole('button').map(chip => [chip.querySelector('[data-pill-count]'), chip.hasAttribute('aria-label'), chip.className.includes('h-control')]))
@@ -497,7 +507,7 @@ it("says a card's age alone, a file's size being the list's", async () => {
     model('tiny.stl', { opened: now - 5 * 3600, updated: now - 30 * 3600, size: 900 }), model('arm.xbf', { opened: null, updated: now - 2 * 3600 })])} />);
   const status = async (name: string) => (await screen.findByRole('button', { name: `Open ${name}` })).querySelector('[data-library-status]')!.textContent;
   expect([await status('plate.step'), await status('tiny.stl'), await status('arm.xbf')]).toEqual(['Viewed 5h ago', 'Viewed 5h ago', 'Edited 2h ago']);
-  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Recents');
 });
 
 // A project as the host lists it.
@@ -559,7 +569,7 @@ it('lists its places in a sidebar with no counts: Recents, Starred, then each pr
   expect(opens()).toEqual(['Open opened.stl', 'Open loose.step', 'Open other.stl']);
   // A press shows the place: its name is the heading, its row the marked one, and the host hears of it.
   await act(async () => { fireEvent.click(place('pinned')); });
-  expect([screen.getByRole('main').querySelector('h2')?.textContent, place('pinned').getAttribute('aria-current'), place('recents').getAttribute('aria-current')])
+  expect([screen.getByRole('main').querySelector('h1')?.textContent, place('pinned').getAttribute('aria-current'), place('recents').getAttribute('aria-current')])
     .toEqual(['Starred', 'page', null]);
   expect(opens()).toEqual(['Open opened.stl', 'Open other.stl']);
   await act(async () => { fireEvent.click(place('project:p1')); });
@@ -588,7 +598,7 @@ it("shows the place the host names, and tells the host its name as the person re
   // Until the projects are read, the project's page waits where its documents will be.
   expect(screen.getByRole('list', { name: 'Files' }).getAttribute('aria-busy')).toBe('true');
   await screen.findByRole('button', { name: 'Open part_0.stl' });
-  expect([place('project:p1').getAttribute('aria-current'), screen.getByRole('main').querySelector('h2')?.textContent]).toEqual(['page', 'heart-tag']);
+  expect([place('project:p1').getAttribute('aria-current'), screen.getByRole('main').querySelector('h1')?.textContent]).toEqual(['page', 'heart-tag']);
   view.rerender(home({ view: 'pinned' }));
   // Nothing starred: its page says how a file gets there.
   expect(place('pinned').textContent).toBe('Starred');
@@ -610,7 +620,7 @@ it("a project's page lists its folders first, then its files, and its heading le
   await screen.findByRole('button', { name: 'Open top.step' });
   const heading = () => screen.getByRole('main').firstElementChild!;
   // Its name and its folder glyph, and no folder path beside it (its ⋯'s Copy path says where it is).
-  expect([heading().querySelector('h2')?.textContent, heading().textContent, Boolean(heading().querySelector('svg.lucide-folder'))])
+  expect([heading().querySelector('h1')?.textContent, heading().textContent, Boolean(heading().querySelector('svg.lucide-folder'))])
     .toEqual(['heart-tag', 'heart-tag', true]);
   // Its folders first, in the host's order, then the files directly in it: nothing below is flattened here.
   expect(opens()).toEqual(['Open housing', 'Open dxf', 'Open top.step']);
@@ -626,7 +636,7 @@ it("a project's page lists its folders first, then its files, and its heading le
   await screen.findByRole('button', { name: 'Open lid.step' });
   expect(opens()).toEqual(['Open drawings', 'Open housing.xbf', 'Open lid.step']);
   const crumbs = [...heading().querySelectorAll('[data-library-crumb]')].map(crumb => crumb.textContent);
-  expect([crumbs, heading().querySelector('h2')?.textContent]).toEqual([['heart-tag', 'housing'], 'v3']);
+  expect([crumbs, heading().querySelector('h1')?.textContent]).toEqual([['heart-tag', 'housing'], 'v3']);
   places.length = 0;
   for (const crumb of ['heart-tag', 'housing']) await act(async () => { fireEvent.click(within(heading() as HTMLElement).getByRole('button', { name: crumb })); });
   expect(places).toEqual([{ view: 'project', project: 'p1' }, { view: 'project', project: 'p1', path: 'housing' }]);
@@ -833,8 +843,10 @@ it("sorts the place on screen by last activity, by name or by kind, the host kee
   await screen.findByRole('button', { name: 'Open arm.xbf' });
   // Last activity, newest first: a starred document is not first (Starred is a place of its own).
   expect(opens()).toEqual(['Open b9.step', 'Open b10.step', 'Open Axle.dxf', 'Open arm.xbf']);
+  // One control: its glyph, the sort's name and a chevron, with no label beside it; named whole for assistive technology.
   const trigger = screen.getByRole('button', { name: 'Sort by Last activity' });
-  expect([trigger.textContent, trigger.previousElementSibling?.textContent]).toEqual(['Last activity', 'Sort']);
+  expect([trigger.textContent, trigger.previousElementSibling, [...trigger.querySelectorAll('svg')].map(svg => svg.getAttribute('class')?.match(/lucide-[\w-]+/)?.[0]),
+    trigger.getAttribute('data-variant')]).toEqual(['Last activity', null, ['lucide-arrow-down-up', 'lucide-chevron-down'], 'ghost']);
   await act(async () => { fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
   const open = await screen.findByRole('menu');
   expect(within(open).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
@@ -931,7 +943,7 @@ it("goes to the page of the project Import's Folder opened, from the sidebar's +
   expect(screen.getByRole('list', { name: 'Files' }).getAttribute('aria-busy')).toBe('true');
   await act(async () => { arrive(); document.dispatchEvent(new Event('visibilitychange')); });
   await screen.findByRole('button', { name: 'Open part_0.stl' });
-  expect([screen.getByRole('main').querySelector('h2')?.textContent, place('project:p2').getAttribute('aria-current')]).toEqual(['gear', 'page']);
+  expect([screen.getByRole('main').querySelector('h1')?.textContent, place('project:p2').getAttribute('aria-current')]).toEqual(['gear', 'page']);
   await choose();
   // A folder inside a project: the project's page, at that folder.
   expect(await screen.findByText('STEP is inside gear, which is already a project.')).toBeTruthy();
@@ -962,7 +974,7 @@ it('says what each place lacks: an empty project, one whose folder is gone, one 
   expect(opens()).toEqual([]);
   view.rerender(home({ view: 'project', project: 'removed' }));
   expect(screen.getByText('This project is no longer in CAD. Open its folder again to bring it back.')).toBeTruthy();
-  expect(screen.getByRole('main').querySelector('h2')?.textContent).toBe('Project');
+  expect(screen.getByRole('main').querySelector('h1')?.textContent).toBe('Project');
   cleanup();
   // The projects cannot be read: said where they would be, and on a project's page; the documents are still listed.
   const failing = library([model('loose.step')], { projects: async () => { throw new Error('offline'); } });
@@ -1117,9 +1129,10 @@ it("rings the document just left, brings it into view, and goes back to it from 
   expect(ringed()).toEqual(['Open part_1.stl']);
   await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1));
   expect([scrolled.mock.contexts[0], scrolled.mock.calls[0]]).toEqual([document.querySelector('[data-from]'), [{ block: 'nearest' }]]);
-  // The way back stands in the heading row, with its key.
+  // The way back stands at the title row's right end, with its key.
   const button = screen.getByRole('button', { name: 'Back to part_1.stl' });
-  expect([button.closest('[data-library-toolbar]') !== null, button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')]).toEqual([true, 'Esc', 'Escape']);
+  expect([button.closest('[data-library-head]') !== null, button === button.parentElement?.lastElementChild, button.querySelector('kbd')?.textContent, button.getAttribute('aria-keyshortcuts')])
+    .toEqual([true, true, 'Esc', 'Escape']);
   fireEvent.click(button);
   expect(back).toHaveBeenCalledTimes(1);
   // Escape goes back too...
@@ -1266,7 +1279,7 @@ it('peeks the collapsed sidebar as a card over the place while a mouse rests on 
     rest();
     fireEvent.pointerEnter(home.sidebar()!, mouse);
     fireEvent.click(home.sidebar()!.querySelector<HTMLElement>('[data-place="pinned"]')!);
-    expect([where(home)[0], screen.getByRole('main').querySelector('h2')?.textContent]).toEqual(['peek', 'Starred']);
+    expect([where(home)[0], screen.getByRole('main').querySelector('h1')?.textContent]).toEqual(['peek', 'Starred']);
     fireEvent.pointerDown(screen.getByRole('main'));
     wait(PANEL_PEEK_EXIT_FALLBACK_MS);
     expect([where(home)[0], kept]).toEqual(['gone', []]);
@@ -1380,7 +1393,7 @@ it("on a phone the sidebar is the panel's sheet under the navbar: closed until i
     // A place chosen is shown, and the sheet gives the page back.
     fireEvent.click(sheet()!.querySelector<HTMLElement>('[data-place="project:p1"]')!);
     await waitFor(() => expect(sheet()).toBeNull());
-    expect([places, screen.getByRole('main').querySelector('h2')?.textContent, home.toggle().getAttribute('aria-expanded')]).toEqual([[{ view: 'project', project: 'p1' }], 'heart-tag', 'false']);
+    expect([places, screen.getByRole('main').querySelector('h1')?.textContent, home.toggle().getAttribute('aria-expanded')]).toEqual([[{ view: 'project', project: 'p1' }], 'heart-tag', 'false']);
     // Its key opens and shuts it; Escape shuts it. Never kept.
     fireEvent.keyDown(document.body, { key: '\\', code: 'Backslash', ctrlKey: true });
     await waitFor(() => expect(sheet()).not.toBeNull());

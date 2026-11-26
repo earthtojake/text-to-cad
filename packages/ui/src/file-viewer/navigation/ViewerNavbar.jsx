@@ -322,8 +322,9 @@ function PanelToggleButton({ toggle }) {
  *   project; in none, Import its folder as a project.
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
- * @param {{ left(element: HTMLElement | null): void, right(element: HTMLElement | null): void } | null} [props.homeSlots]
- *   Over the home: where its controls go (`../navbarSlots.js`), two slots on the row.
+ * @param {{ right(element: HTMLElement | null): void } | null} [props.homeSlots]
+ *   Over the home: where its controls go (`../navbarSlots.js`), a slot at the row's right end. The home's place says
+ *   where the person is in its own title, so the row holds no name of the home's.
  * @param {{ left?: { open: boolean, label: string, shortcut?: string, toggle(): void, hover?: object | null } | null } | null} [props.panels]
  *   The panel's toggle, where the page has a panel (`../panelToggles.js`): a file's view's, and the home's sidebar's.
  * @param {((element: HTMLElement | null) => void) | null} [props.viewSlot] Over a file: where its view puts its view settings
@@ -361,9 +362,9 @@ export function ViewerNavbar({ onHome: goHome, homeHref = null, menu = null, his
     <header ref={header} className={cn(NAVBAR_ROW_CLASS, "relative border-border bg-sidebar text-foreground", className)} data-viewer-navbar=""
       style={homing ? HOME_ROW_STYLE : undefined}>
       {leadNav}
-      {/* Over the home: its heading after the logo and the toggle, the search and Import at the column's right. */}
-      {homing ? <div className="flex min-w-0 flex-1 items-center justify-between gap-2" data-navbar-home="">
-        <div ref={homeSlots.left} className="flex min-w-0 items-center" data-navbar-home-left="" />
+      {/* Over the home: the search and Import at the row's right. No "Home" after the logo and the toggle: the place's
+          title says where the person is, and the logo is the way home. */}
+      {homing ? <div className="flex min-w-0 flex-1 items-center justify-end gap-2" data-navbar-home="">
         <div ref={homeSlots.right} className="flex shrink-0 items-center gap-2" data-navbar-home-right="" />
       </div> : null}
       <div ref={trail} className={cn(NAVBAR_CONTROLS_CLASS, homing && "empty:hidden")}>

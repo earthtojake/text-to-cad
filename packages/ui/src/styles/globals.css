@@ -59,14 +59,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* The view's one panel (`PanelSurface.jsx`, `FlatPanel.jsx`: docked, peeking or a phone's page), the home's sidebar
- * (the same surface, `library/LibrarySidebar.jsx`) and the settings
+/* The view's one panel (`PanelSurface.jsx`, `FlatPanel.jsx`: docked, peeking or a phone's page) and the settings
  * cards (`SettingsCard.jsx`: Display, Preview's Settings) are surfaces with ONE text size:
  * every step of the scale drawn in one is the panel's, so a heading, a label, a row, a field and a
  * muted detail are told apart by colour and weight, never by size, whatever class a list inside it
  * names. A Quick Edit chip's card (`ItemDetail.jsx`'s `data-detail-card`, the one place a pick is read in
  * detail) is the same size, so a pick reads as the panel does. A menu, dropdown or hint portalled out of
- * any of them keeps the chrome's scale. */
+ * any of them keeps the chrome's scale. The home's sidebar is the same surface (`library/LibrarySidebar.jsx`,
+ * `data-library-sidebar`) but not the same size: it is a page's navigation, drawn in the home's body size as
+ * Figma's and Drive's sidebars are in theirs. */
 /* The view's panel's ONE horizontal line, Figma's panel inset: every piece of its content (a tab's name, the title,
  * the search's text, a tree's first glyph, a label, a field, a dropdown, a switch, a slider's track, a heading, an
  * empty state) starts this far in from the panel's left edge and ends this far in from its right, on a desktop and
@@ -78,7 +79,7 @@
   --panel-inset: 16px;
 }
 
-:is([data-panel-surface], [data-detail-card]) {
+:is([data-panel-surface]:not([data-library-sidebar]), [data-detail-card]) {
   --cad-text-tiny: var(--cad-text-panel);
   --cad-text-xs: var(--cad-text-panel);
   --cad-text-ui: var(--cad-text-panel);
@@ -204,9 +205,10 @@
 /* The host's home (`library/`, `docs/viewer-ux.md`, "The home"): the navbar over a sidebar of places (the viewer's
  * panel over this page) and the place on screen, on the page's colour. It is drawn with the scale's tokens and the
  * shared primitives where it is written (`library/ModelLibrary.tsx`): the panel's inset for its gutters, the spacing
- * scale between its blocks, `text-ui` with the one heading and the ages' `text-tiny`, a card's box for a folder among
- * the cards, the system's chip for a format. What is left here is what a class cannot say where it stands: a card's marks under
- * the pointer and the keyboard, and the navbar's search and Import giving way in a narrow navbar. */
+ * scale between its blocks, three sizes (the title's `text-heading` at medium weight, the body's `text-ui`, a chip's
+ * own step), a card's box for a folder among the cards, the system's chip for a format. What is left here is what a
+ * class cannot say where it stands: a card's marks under the pointer and the keyboard, and the navbar's search and
+ * Import giving way in a narrow navbar. */
 /* A card, or a folder's tile among the cards, under the pointer: its edge the foreground at 20%, a field's hover
    outline. In keyboard focus, or being opened:
    the brand's edge and a 1px ring. The document just left (`data-from`): ringed 2px in the brand, under the pointer too. */

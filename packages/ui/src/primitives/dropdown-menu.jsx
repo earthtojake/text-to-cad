@@ -157,12 +157,14 @@ function DropdownMenuCheckboxItem({
   );
 }
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioGroup>} props */
 function DropdownMenuRadioGroup({
   ...props
 }) {
   return <DropdownMenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
 }
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>} props */
 function DropdownMenuRadioItem({
   className,
   children,

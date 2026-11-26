@@ -53,24 +53,29 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
   for (const file of SCROLL_REGIONS) assert.match(readFileSync(join(root, file), "utf8"), /<ScrollArea\b/, `${file} scrolls in a ScrollArea`);
 });
 
-// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"), taken as every other
-// surface takes it, from the scale's utilities where the text is written: `text-ui` on the page, `text-heading` for its
-// welcome's title alone (the place's name and a project's path are the navbar's size, `text-ui`) and `text-tiny` for its small metadata
-// (a card's line, the formats). No other step, and no size in its stylesheet rules, which hold only a card's marks and
-// the navbar's search. What each text is drawn at, on a desktop and a phone, is the browser spec's
-// (`library/ModelLibrary.browser.test.mjs`). Its sidebar is the panel's own surface, which sets the panel's one size.
-test("the Home's type is the scale's: text-ui, the one heading step and the ages' text-tiny, with no size of its stylesheet's own", () => {
+// The Home (`library/`) is three sizes of the chrome's type scale (`docs/design-system.md`, "The type scale"), as Figma's
+// file browser is: the title (`text-heading`, always with a weight of its own, as its token's semibold is not the
+// title's), the body (`text-ui`) for everything else, and a card's format at the chip's own step, which the chip
+// primitive sets (`primitives/badge.jsx`). No `text-tiny` and no other step is written in the Home's files, and no size
+// in its stylesheet rules, which hold only a card's marks and the navbar's search. Its sidebar is the panel's surface,
+// left out of the panel's one size by the rule that sets it. What each text is drawn at, on a desktop and a phone, is
+// the browser spec's (`library/ModelLibrary.browser.test.mjs`).
+test("the Home's type is three sizes: the title's heading step at a weight of its own, the body's text-ui and the chip's step, with no size of its stylesheet's own", () => {
   // Its rules, without the comments that stand before them.
   const css = readFileSync(join(root, "styles/globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   const sized = [...css.matchAll(/([^{}]*\.cad-(?:library|home)[^{}]*)\{([^}]*)\}/g)].filter(([, , body]) => /font(?:-size|-weight)?:|line-height:/.test(body))
     .map(([, selector]) => selector.trim());
   assert.deepEqual(sized, [], "no Home rule sets a font");
   for (const file of ["library/ModelLibrary.tsx", "library/LibraryPlaces.jsx", "library/LibrarySidebar.jsx"]) {
-    const steps = new Set([...readFileSync(join(root, file), "utf8").matchAll(/(?<![\w-])text-(tiny|xs|ui|sm|base|lg|xl|heading)(?![\w-])/g)].map(([name]) => name));
-    for (const step of steps) assert.ok(["text-ui", "text-tiny", "text-heading"].includes(step), `${file}: ${step} is not a step of the Home's`);
+    const text = readFileSync(join(root, file), "utf8");
+    const steps = new Set([...text.matchAll(/(?<![\w-])text-(tiny|xs|ui|sm|base|lg|xl|heading)(?![\w-])/g)].map(([name]) => name));
+    for (const step of steps) assert.ok(["text-ui", "text-heading"].includes(step), `${file}: ${step} is not a step of the Home's`);
+    for (const [found] of text.matchAll(/"[^"]*(?<![\w-])text-heading(?![\w-])[^"]*"/g)) assert.match(found, /\bfont-(?:medium|normal)\b/, `${file}: ${found} sets no weight of its own`);
   }
   const page = readFileSync(join(root, "library/ModelLibrary.tsx"), "utf8");
   assert.match(page, /className="cad-library flex size-full flex-col bg-background text-ui"/);
+  // Its sidebar keeps the body's size: the panel's one size is every panel's surface's but the Home's sidebar's.
+  assert.match(css, /:is\(\[data-panel-surface\]:not\(\[data-library-sidebar\]\), \[data-detail-card\]\) \{\s*--cad-text-tiny: var\(--cad-text-panel\);/);
   // The place on screen is the page: it alone scrolls with the platform's scrollbar.
   assert.match(page, /<main className="@container [^"]*\boverflow-y-auto\b/);
   assert.equal(page.match(/\boverflow(?:-[xy])?-(?:auto|scroll)\b/g).length, 1);

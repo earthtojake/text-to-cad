@@ -404,8 +404,8 @@ No snapshot is written while drawing or typing, and no image is rendered.
 ### The home
 
 The bare URL is the home: the projects and the library every CAD view shares (`@cad/ui/library`),
-and nothing else, one place at a time ([the home](../../packages/ui/docs/viewer-ux.md#the-home)). The navbar holds
-"Home", the search and, where the server's computer has a chooser (`pick` in its info), **Import**: File…, which opens
+and nothing else, one place at a time ([the home](../../packages/ui/docs/viewer-ux.md#the-home)). The navbar holds,
+at its right, the search and, where the server's computer has a chooser (`pick` in its info), **Import**: File…, which opens
 the desktop's own chooser (`POST /api/v1/local/pick`, `cad_server._internal.picker`) and shows the file picked, and
 Folder…, which opens it for a folder and opens that folder as a project (`POST /api/v1/projects`), whose page is
 shown with a line saying what came of it ("heart-tag is now a project. Nothing was written to the folder.", or that
@@ -434,10 +434,11 @@ folder on screen a link back up, and its ⋯ (Open in new tab, Copy
 path, Reveal, Remove from CAD, which forgets the project, changes nothing on disk and goes to Recents). The search on
 a project's page asks the server for every file below the folder on screen that holds the
 words (`?path=&q=`, once typing rests) and lists them flat, each saying where it is below that folder; elsewhere it
-narrows the rows in hand. Every heading row ends in Sort and grid or list, one segmented control; the kinds' chips
-under it (All, then 3D models, Drawings, Boards, Schematics and Robots, each the place holds, with no count: an
-`.xbf` and the STEP, STL or GLB exported from it are all 3D models); then the documents, all of them. The grid's tiles
-are framed cards, at least 232px wide and 16px apart: the picture its row names (the light viewport's, 3:2 on the
+narrows the rows in hand. The place's title is the page's one heading (the navbar names no place); under it, wherever
+the place lists anything, a toolbar: the kinds' tabs at its left (All, then 3D models, Drawings, Boards, Schematics and
+Robots, each the place holds, with no count: an `.xbf` and the STEP, STL or GLB exported from it are all 3D models),
+Sort (one ghost button and its menu) and grid or list (one segmented control) at its right; then the documents, all
+of them. The grid's tiles are framed cards, at least 200px wide and 16px apart: the picture its row names (the light viewport's, 3:2 on the
 model area's light gradient in both themes; a file with none, its kind's glyph on the plain tile), its format's chip
 at its top-left (for an `.xbf`
 file, the engine's own document saved as a file, so a model though still a file in everything else, "Part" when its

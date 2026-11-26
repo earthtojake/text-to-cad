@@ -58,26 +58,37 @@ holds.
 
 | Step | Desktop | Phone | Used for |
 | --- | --- | --- | --- |
-| `text-tiny` | 11/16 | 13/18 | tooltips, key hints, small metadata (the zoom's percentage, the app menu's version, the Home's ages) |
+| `text-tiny` | 11/16 | 13/18 | tooltips, key hints, small metadata (the zoom's percentage, the app menu's version) |
 | `text-xs` | 12/16 | 14/20 | Quick Edit's bar and chips, sub-toolbars, the update status, every menu, list and context menu, toasts |
 | `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs and the search, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
-| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the Home's welcome title, the CAD app's notice |
+| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the Home's title (at medium weight, 500, set where it is drawn), the CAD app's notice |
 | `--cad-text-panel` | 12/16 | 14/20 | every step inside the panel and the settings cards |
 
 - **No other size**: no 10px step, no `text-[Npx]`, no font size in a stylesheet but the scale's variables.
-- **One size per surface.** Inside the panel (a file's, and the Home's sidebar, which is the same surface: `[data-panel-surface]`), the settings cards and a
-  pick's card (`[data-detail-card]`), every step is the panel's size and text is told apart by colour and weight. A menu portalled
-  out of them keeps the chrome's scale. Why: nothing there jumps in size, and a pick reads alike in panel and card.
+- **One size per surface.** Inside the panel (a file's: `[data-panel-surface]`), the settings cards and a pick's card
+  (`[data-detail-card]`), every step is the panel's size and text is told apart by colour and weight. A menu portalled
+  out of them keeps the chrome's scale. Why: nothing there jumps in size, and a pick reads alike in panel and card. The
+  Home's sidebar is the panel's surface but not its size (`[data-library-sidebar]`, left out of the rule): it is a
+  page's navigation, at the Home's body size, as Figma's and Drive's sidebars are at theirs.
 - **A menu item** is its `text-xs` line in 6px of vertical padding, at least the row tall, set by the primitives alone.
 - **Weight.** Text is regular. Medium (500) marks a title: the open tab, a card's title and section headings, a chip,
-  the name on a Home's card, the Home's place on screen. Semibold (600) is the heading step's and a dialog title's. A list's emphasis is colour,
+  the name on a Home's card or tile, the Home's title and section labels. Semibold (600) is the heading step's own
+  and a dialog title's; the Home's title sets medium on the heading step, as Figma's file browser's title is medium. A list's emphasis is colour,
   never bold (a name in the Home's list is regular, in the foreground beside its muted facts); a search's match is
   `--brand-text` at medium weight. Numbers that change or line up are tabular.
-- **The Home is `text-ui`**, with two other steps and no more: `text-heading` for its welcome's title alone, and
-  `text-tiny` for small metadata (a card's line, the formats, a key). The place's name and a project's path are the
-  navbar's size, the place on screen at medium weight: a path is one size wherever it is drawn, the navbar's
-  `project / document` and the Home's `gearbox / housing / v3` alike.
-  A card's format is a chip, at the chip's own step. Why: one size a surface, told apart by colour and weight.
+- **The Home is three sizes**, as Figma's file browser is: one body size for its sidebar, its tabs, a file's name and
+  its "Edited 1 month ago" line, told apart by weight and colour, and one title a step up at medium weight.
+  - **Title**: `text-heading` at medium weight (15/20 500; 17/22 500 on a phone), the page's title alone and its `h1`:
+    "Recents", "Starred", a project's name, or a project's path, every part at the title's size (as Drive's and
+    Dropbox's paths are), the parts above the folder on screen and the slashes regular and muted, the folder on screen
+    medium in the foreground.
+  - **Body**: `text-ui` (13/20; 15/20 on a phone) for everything else: the sidebar's rows and its "Projects" heading,
+    the kinds' tabs, Sort, a card's or a tile's name (medium) and a card's line (regular, muted), the list's header
+    (muted) and cells, the welcome's title (medium) and lines, every line and note.
+  - **Chip**: the chip's own step (12/16 medium) for a card's format, and nothing else.
+  No `text-tiny` (a key cap drawn by `Kbd` keeps its own step). Why: a second small size beside the body read as a
+  different surface, and a title that is the body's size read as no title; one body size and one title is what a file
+  browser needs.
 - **The picture's own text** keeps its own sizes, never under 10px: the cube's letters and face names 10px, a
   measurement's label and the snap chip 10px semibold, a drawn text mark 16, 20 or 28px. Why: it is the picture's.
 - **Greyscale antialiasing** covers the page while a viewer is on it. Why: subpixel antialiasing draws light text on
@@ -103,8 +114,8 @@ vertical step.
 - **A card's inset is 12px on all four sides**: the panel inset less the card's 4px gap, so its content stands where
   the docked panel's does.
 - **The Home's place** is padded by the panel inset on all four sides, on a desktop and a phone, and its blocks are
-  16px apart; the kinds' chips stand 8px under the heading row. Its rows hang past that line as the panel's do. Why: the
-  logo, the sidebar and the place share one line, and no width has gutters of its own.
+  16px apart: its title's row, the toolbar's row 16px under it, and the content 16px under that. Its rows hang past that
+  line as the panel's do. Why: the logo, the sidebar and the place share one line, and no width has gutters of its own.
 - **Over the view**, the strip and the tool stack stand 8px in (`CHROME_INSET_PX`), the corner's zoom 12px
   (`CORNER_INSET_PX`), a card or a peek 4px (`PANEL_PEEK_GAP_PX`). The navbar has 8px of side padding.
 
@@ -301,6 +312,7 @@ quiet button reads as a button and nothing more, and the one filled button is th
 | A tab's actions | `PANEL_ACTION_CLASS` | the control tall, 8px in, regular weight; Reset ghost, Save `default` while it can save |
 | A status screen's action | `StatusAction` | outline, the control tall, `text-ui` at regular weight, never a filled primary |
 | The scale's text button: the Home's Import and its welcome's two | `Button variant="outline" size="control"` | the control tall, `--cad-pad` in at each side, `text-ui` at regular weight, its icon the glyph token 8px before its words; Import's chevron a dropdown's (12px at 60%) |
+| The Home's Sort | `Button variant="ghost" size="control"`, opening a `DropdownMenu` | one control, as Figma's sort is: the control tall, `--cad-pad` from its edges to its first and last ink, a sort glyph (lucide's `ArrowDownUp`, the glyph token, muted), the sort's name in the foreground, then a 12px chevron muted at full strength; the accent fill under the pointer and while open, as every ghost control. No label beside it: a muted "Sort" flush against the trigger was hit by the trigger's fill. Its name is "Sort by Last activity" |
 | The Home's way back to the document just left | `Button variant="outline" size="control"` | the same button, as tall as the row's other controls, its name the first to truncate; its key ("Esc") a `Kbd` after it, left out where nothing hovers. Why not the small button: it stood 24px tall in `text-xs` in a row of 28px controls in `text-ui`, a second size on one surface |
 | Quick Edit's actions | `Button`, `size-control` | square and icon only, 4px apart; the rightmost `default`, the others `secondary` |
 | A small icon button (a card's X) | `size-icon-button` | a 12px muted glyph; the foreground and `bg-accent` under the pointer |
@@ -314,9 +326,11 @@ quiet button reads as a button and nothing more, and the one filled button is th
 
 ### Dropdowns
 
-`ValueDropdown` is the one way to pick one value from a list: panel rows, the settings cards, a board's Layer display,
-the Home's Sort. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
-popup, one keyboard and one touch rule, so a fix lands in every picker.
+`ValueDropdown` is the one way to pick one value from a list beside its label: panel rows, the settings cards, a board's
+Layer display. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
+popup, one keyboard and one touch rule, so a fix lands in every picker. A value picked from a control of its own, with
+no label (the Home's Sort), is a ghost button opening a `DropdownMenu`, its list the value dropdown's
+(`VALUE_DROPDOWN_LIST_CLASS`) and its items radio items.
 
 - **The trigger** shows the chosen option's icon (where the options have icons), its label in the foreground and a
   12px chevron at 60%. It is bordered as a field (`border-input`, `shadow-xs`), the control tall, at least 6rem wide
@@ -326,8 +340,8 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
   (the menu's gap).
 - **Half the row.** A dropdown takes half its row and its label the rest
   (`grid-cols-[minmax(max-content,1fr)_minmax(50%,max-content)]`), growing past half only where its value needs it. A
-  colour field, and a dropdown set to fit (`ghost`: the Home's Sort, a muted `FieldLabel` then the trigger with no field
-  drawn round it; a picker on a toolbar tile), are as wide as their content. Why: one as wide as its value reads ragged, and one wider than half for no reason crowds its label.
+  colour field and a picker on a toolbar tile are as wide as their content. Why: one as wide as its value reads ragged,
+  and one wider than half for no reason crowds its label.
 - **In a settings card every dropdown is one width**: half the content (132px in a desktop's 288px card, 148px in a
   phone's 320px one) or the card's widest
   option (`fixedWidth`, so the width never changes with the choice), 24px tall (36 on a phone), 6px in, 14px icons.
@@ -594,7 +608,7 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 
 | Test | What it holds |
 | --- | --- |
-| `designSystem.test.js` | the type tokens at both scales, no 10px step, no `text-[Npx]` and no stylesheet font size; no window breakpoint in chrome; every chrome scroll region a `ScrollArea`; menus at `text-xs` on the row, 6px in and 6px off their trigger, tooltips at `text-tiny`; the Home's three steps and no font in its stylesheet rules, its place on the panel's inset; the navbar's row; rows padded by the row primitive alone; only `SliderField` and the scrubber import the slider |
+| `designSystem.test.js` | the type tokens at both scales, no 10px step, no `text-[Npx]` and no stylesheet font size; no window breakpoint in chrome; every chrome scroll region a `ScrollArea`; menus at `text-xs` on the row, 6px in and 6px off their trigger, tooltips at `text-tiny`; the Home's three sizes (the title's step at a weight of its own, the body's, no `text-tiny`), its sidebar out of the panel's one size and no font in its stylesheet rules, its place on the panel's inset; the navbar's row; rows padded by the row primitive alone; only `SliderField` and the scrubber import the slider |
 | `lib/scale.test.js` | `scale.js` equals the stylesheet's tokens, at both scales |
 | `styles/canvas.test.js` | core's written-out colours equal the tokens, and every view's canvas is `--canvas` |
 | `kit/look/sceneColors.test.js` | no view hard-codes a selection, hover or box blue |
@@ -607,7 +621,7 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |
 | … "a toolbar button under the pointer is seen…", "Preview's bar takes the backdrop's ink…" | hover fills and ink read on their surface |
 | … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's top, gaps and 12px inset, its 288px width, its dropdowns one width, nothing cut |
-| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home; the place's heading and its 16px inset on every side; the layout's segmented control (its track and faces) and the kinds' chips 8px under the heading row, wrapping on a narrow page; a menu 6px off its trigger and 6px in; a card and a place as real links; the ring round the document just left, in view; as drawn, on a desktop and a phone: every text's step and weight, a card's corners, inset, 3:2 picture and chip, 16px between cards, a folder as a 28px row on the line, the list's header and its control + 16 rows, a place's one muted line; a file that is no document as a button that opens in an app, with Open in in its ⋯; a phone's 36px controls, chips and options |
+| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home and no "Home" in the navbar; the place's title (its h1) in a row the control tall, the toolbar 16px under it and the content 16px under that, on the 16px inset on every side; the layout's segmented control (its track and faces) and the kinds' tabs, with no counts, at the toolbar's left, wrapping on a narrow page; Sort as one ghost control, its glyph and chevron 8px from its edges, its chevron muted at full strength, its hover and open fill; a menu 6px off its trigger and 6px in; a card and a place as real links; the ring round the document just left, in view; as drawn, on a desktop and a phone: the three sizes (title 15/20 and 17/22 medium, body 13/20 and 15/20, the chip's step) and nothing else, a card's corners, inset, 3:2 picture and chip, 16px between cards, a folder as a tile of the cards' family, the list's header and its control + 16 rows, a place's one muted line; a file that is no document as a button that opens in an app, with Open in in its ⋯; a phone's 36px controls, chips and options |
 | `primitives/segmented-control.test.tsx` | the segmented control's pressed state, its one Tab stop and its keys, and its measures from the scale's tokens |
 | `scripts/test/check-ui-strings.mjs`, `i18n/i18n.test.mjs` | no English literal in the chrome; the locales mirror `en.js` |
 | `tests/python/global/test_document_links.py` | every relative link and `#anchor` in these docs lands on a heading |

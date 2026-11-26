@@ -234,7 +234,7 @@ test('the logo stands in one place on every page: over the home, over a document
       toggle: toggle ? toggle.getBoundingClientRect().left - bar.left : null };
   });
   const seen = {};
-  const pages = [['home', 'home', () => pane.locator('[data-viewer-navbar] [data-navbar-home] h1')], ['panel', 'panel.harness', () => pane.locator('[data-viewer-navbar] [data-navbar-panel="left"]')],
+  const pages = [['home', 'home', () => pane.locator('[data-viewer-navbar] [data-navbar-home] input')], ['panel', 'panel.harness', () => pane.locator('[data-viewer-navbar] [data-navbar-panel="left"]')],
     ['none', 'nothing.unopenable', () => pane.getByText('Could not open that file')]];
   for (const [name, address, ready] of pages) {
     await page.goto(`${origin}/?file=${address}&home=1`);

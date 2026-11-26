@@ -75,7 +75,6 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const framed = useRef<string | null>(null);
   const frameSaid = useCallback(() => { framed.current = key; }, [key]);
   // Home's controls' places in the navbar (`navbarSlots.js`), once the navbar has drawn them.
-  const [homeLeft, setHomeLeft] = useState<HTMLElement | null>(null);
   const [homeRight, setHomeRight] = useState<HTMLElement | null>(null);
   // The navbar's view slot, where the view on screen puts its view settings (`navbarSlots.js`).
   const [viewSlot, setViewSlot] = useState<HTMLElement | null>(null);
@@ -338,8 +337,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // (`compact`: a small inline view), and not while the renderer's Preview is up, which draws its own
   // bar in its place.
   const navbar = (Boolean(path) || home) && !appearance.compact && previewing !== key;
-  const homeSlotRefs = useMemo(() => ({ left: setHomeLeft, right: setHomeRight }), []);
-  const homeSlots = useMemo(() => (navbar && !path && home ? { left: homeLeft, right: homeRight } : null), [navbar, path, home, homeLeft, homeRight]);
+  const homeSlotRefs = useMemo(() => ({ right: setHomeRight }), []);
+  const homeSlots = useMemo(() => (navbar && !path && home ? { right: homeRight } : null), [navbar, path, home, homeRight]);
   return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><AppMenuContext.Provider value={homeMenu}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
       ? <ViewerNavbar onHome={goHome} homeHref={homeHref} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name || arrivingName} project={projectCrumb} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}

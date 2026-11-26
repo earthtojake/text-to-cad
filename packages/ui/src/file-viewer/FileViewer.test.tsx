@@ -237,7 +237,7 @@ it('draws the view\'s panel toggle in the navbar right after the logo: the same 
   await waitFor(() => expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull());
 });
 
-it('draws the home\'s own controls in its navbar on the grid\'s column: the logo, then Home, at the left, the search and Import at the right; the filter and the layout in a row over the grid', async () => {
+it('draws the home\'s own controls at its navbar\'s right end: the search and Import, and no name of the home\'s after the logo; the layout in a row of the place\'s own', async () => {
   const user = userEvent.setup();
   const models = [{ path: '/work/a.step', name: 'a.step', folder: '/work', opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null },
     { path: 'model-1', name: 'bracket', folder: null, opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null, kind: 'model' }];
@@ -251,21 +251,23 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
     presentation: { home: <ModelLibrary library={library as any} onLayoutChange={() => {}} /> } } as any);
   await screen.findByText('a.step');
   const home = navbar()!.querySelector<HTMLElement>('[data-navbar-home]')!;
-  const left = home.querySelector('[data-navbar-home-left]')!, right = home.querySelector('[data-navbar-home-right]')!;
-  expect([left.querySelector('h1')!.textContent, right.querySelector('input')!.getAttribute('aria-label'), within(right as HTMLElement).getByRole('button', { name: 'Import' }) !== null])
-    .toEqual(['Home', 'Search models', true]);
+  const right = home.querySelector('[data-navbar-home-right]')!;
+  // Nothing names the home in the navbar: the place's title does, and the logo is the way home.
+  expect([home.querySelector('[data-navbar-home-left]'), navbar()!.querySelector('h1'), right.querySelector('input')!.getAttribute('aria-label'),
+    within(right as HTMLElement).getByRole('button', { name: 'Import' }) !== null]).toEqual([null, null, 'Search models', true]);
   // The row over the home is the row over a file: its own padding, the logo first, never padded onto a centred column
   // (the home under it is full width, its sidebar at the window's edge).
   expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['', '']);
   const lead = navbar()!.querySelector('nav')!;
-  expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
+  expect([lead.nextElementSibling === home, home.firstElementChild === right]).toEqual([true, true]);
   // The logo first, then the sidebar's toggle, and no ⋯ on the home; the app menu is the sidebar's Settings.
   expect([lead.lastElementChild!.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded'), lead.firstElementChild!.getAttribute('data-navbar-logo'),
     navbar()!.querySelector('[data-testid="file-actions"]'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['true', 'home', null, null]);
-  // The page's own row: Sort and the layout control at its right, no heading, no search; one kind of document, so no chips.
+  // The page's own rows: its title, the page's one h1; under it Sort and the layout control at its right, no search; one
+  // kind of document, so no tabs.
   const row = document.querySelector<HTMLElement>('[data-library-toolbar]')!;
-  expect([row.getAttribute('data-library-toolbar'), row.querySelector('h1'), row.querySelector('input'), document.querySelector('[data-library-kinds]'),
-    within(row).getByRole('group', { name: 'Layout' }) !== null]).toEqual(['filters', null, null, null, true]);
+  expect([row.previousElementSibling?.querySelector('h1')?.textContent, row.querySelector('h1'), row.querySelector('input'), document.querySelector('[data-library-kinds]'),
+    within(row).getByRole('group', { name: 'Layout' }) !== null]).toEqual(['Recents', null, null, null, true]);
   // Under 700px of navbar the search is its icon until pressed, then the field with the keyboard in it.
   const css = readFileSync(`${process.cwd()}/src/styles/globals.css`, 'utf8');
   expect(css).toMatch(/@container cad-navbar \(max-width: 699px\) \{[^@]*\.cad-home-search:not\(\[data-open\]\) \.cad-library-search \{ display: none; \}/);

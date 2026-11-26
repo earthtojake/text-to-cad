@@ -1,13 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Clock, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Search, Star } from "lucide-react";
+import { ArrowDownUp, ChevronDown, Clock, Ellipsis, Folder, FolderOpen, LayoutGrid, List, Search, Star } from "lucide-react";
 import { Badge } from "../primitives/badge.jsx";
 import { Button } from "../primitives/button.jsx";
-import { ValueDropdown } from "../primitives/value-dropdown.jsx";
+import { VALUE_DROPDOWN_LIST_CLASS } from "../primitives/value-dropdown.jsx";
 import { Pill, PillGroup } from "../primitives/pill.jsx";
 import { SegmentedControl } from "../primitives/segmented-control.jsx";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
-import { FieldLabel } from "../primitives/field-label.jsx";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent,
+  DropdownMenuSubTrigger, DropdownMenuTrigger } from "../primitives/dropdown-menu.jsx";
 import { Input } from "../primitives/input.jsx";
 import { Kbd } from "../primitives/kbd.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
@@ -288,6 +288,8 @@ const message = (failure: unknown) => failure instanceof Error ? failure.message
 const LIST_MS = 2_000;
 /** How long typing rests before a project's page asks its host to search below the folder on screen. */
 const SEARCH_WAIT_MS = 150;
+/** The orders a place's documents can be in, as Sort's menu lists them. */
+const SORTS: readonly LibrarySort[] = ["activity", "name", "kind"];
 
 // A card's or a row's picture (`thumbnails.ts`'s one picture), read once it is on screen: the one its row names, else its
 // kind's glyph. A card's is its full width and carries its format's badge (`badge`: the system's chip, 8px in from the
@@ -382,7 +384,7 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
     : <ul className={cn(GRID_CLASS, "motion-safe:animate-pulse")} aria-label={t("home.filesAria")} aria-busy="true" data-loading="">{status}{[0, 1, 2, 3].map(index =>
       <li key={index} className={CARD_CLASS} aria-hidden="true"><span className={CARD_OPEN_CLASS}>
         <span className={cn(PICTURE_CLASS, "w-full border-b border-border")} />
-        <span className={CAPTION_CLASS}>{bar("h-(--cad-leading-ui)", "w-3/5")}{bar("h-(--cad-leading-tiny)", "w-1/3")}</span>
+        <span className={CAPTION_CLASS}>{bar("h-(--cad-leading-ui)", "w-3/5")}{bar("h-(--cad-leading-ui)", "w-1/3")}</span>
       </span></li>)}</ul>;
 }
 
@@ -468,10 +470,12 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
 
 /**
  * The host's home: every document the viewer knows, one place at a time, to open again. The viewer's navbar is over it
- * (the logo, the sidebar's toggle, the host's update and Full size, as over a file), holding "Home", the search and, where the
- * host has a chooser, Import (its File and its Folder); with no navbar they stand in a bar of the page's own. The page
- * is on the page's colour (`--background`), full width. It is drawn as Figma's and Drive's file browsers are: places
- * with no counts, tabs with no counts, a card's line its activity alone, and no list of "files in no folder".
+ * (the logo, the sidebar's toggle, the host's update and Full size, as over a file), holding at its right end the
+ * search and, where the host has a chooser, Import (its File and its Folder); with no navbar they stand in a bar of the
+ * page's own. Neither names the home: the place's title says where the person is, and the logo is the way home. The
+ * page is on the page's colour (`--background`), full width. It is drawn as Figma's and Drive's file browsers are:
+ * three sizes (a title, one body size told apart by weight and colour, and a chip's step), places with no counts,
+ * tabs with no counts, a card's line its activity alone, and no list of "files in no folder".
  *
  * At its left, a sidebar of places (`LibrarySidebar.jsx`), which is the viewer's panel over this page: pinned it pushes
  * the place, collapsed it leaves nothing but a peek from its toggle, a phone's is a sheet, its width the person's by its
@@ -483,12 +487,13 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * muted). Its rows are the panel's (`primitives/tree-row.jsx`), with no count, the one on screen marked (`aria-current`),
  * Up and Down moving between them; each is a link where the host gives places an address (`navigation.hrefOf`).
  *
- * The main area shows the place on screen. Its heading row: the place's name; on a project's page, the folder glyph
- * and the folder's path, the project's name first and each part a way back up to it (the last, the folder on screen,
- * the heading), and its ⋯ (Open in new tab, Copy path, Reveal, then Remove from CAD, which forgets the project and
- * nothing on disk); then Sort (Last activity, Name, Kind) and grid or list, one segmented control. Under it the kinds'
- * tabs (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots, each the place holds), where it holds more
- * than one.
+ * The main area shows the place on screen, under two rows. The first is its title, the page's `h1`: the place's
+ * name; on a project's page, the folder glyph and the folder's path, the project's name first and each part a way
+ * back up to it (the last, the folder on screen, the title), and its ⋯ (Open in new tab, Copy path, Reveal, then
+ * Remove from CAD, which forgets the project and nothing on disk); at its right end the way back. The second, wherever
+ * the place lists anything, holds the kinds' tabs (`kindChips`: All, 3D models, Drawings, Boards, Schematics, Robots,
+ * each the place holds, where it holds more than one) at its left, and Sort (Last activity, Name, Kind: one ghost
+ * button and its menu) and grid or list (one segmented control) at its right.
  *
  * A project's page is one folder of it (`library.folder`, read again every `LIST_MS`): its subfolders first, each its
  * glyph and its name and a way into it, then every file directly in it, the documents and the files no page opens
@@ -511,8 +516,8 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * tabs' words, its folders' glyphs and its cards stand on that one line.
  *
  * `from` (the document the navbar's project name was pressed over) rings that document's card in the brand's colour,
- * brought into view, and puts "Back to <name>" in the heading row; Escape, while no menu, dialog or field has the
- * keyboard, goes back too (`onBack`).
+ * brought into view, and puts "Back to <name>" at the title row's right end; Escape, while no menu, dialog or field has
+ * the keyboard, goes back too (`onBack`).
  *
  * Nothing waits unseen. While the list is read, placeholder cards (or rows) stand where the documents will be, and
  * placeholder rows where the projects will be. A document being opened shows a spinner over its picture, and the
@@ -692,8 +697,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     .then(next => { setItems(next); askFolder.current(); }, fail);
   const all = items ?? [];
   const [kind, setKind] = useState<LibraryKind>("all");
-  // Home's navbar (`file-viewer/navbarSlots.js`): its heading, the search and Import go there; where there is no
-  // navbar they stand in a bar of the page's own.
+  // Home's navbar (`file-viewer/navbarSlots.js`): the search and Import go to its right end; where there is no navbar
+  // they stand in a bar of the page's own.
   const slots = useNavbarSlots();
   // A narrow navbar (under 700px: `styles/globals.css`) shows the search as its icon until it is pressed.
   const [searchOpen, setSearchOpen] = useState(false);
@@ -913,7 +918,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         {/* The caption: the name, a card's title, over its one line. No glyph: the picture and its badge say what it is. */}
         <span className={CAPTION_CLASS}>
           <span className="truncate font-medium text-foreground" data-library-label="">{item.name}</span>
-          <span className="truncate text-tiny text-muted-foreground" data-library-status="">{status(item)}</span>
+          <span className="truncate text-muted-foreground" data-library-status="">{status(item)}</span>
         </span>
       </>))}</ul> : null}
     </>;
@@ -940,20 +945,37 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     note: projects === null ? (projectsFailed ? t("home.projectsFailed") : null) : projects.length ? null : t("home.projectsEmpty"),
     hrefOf: hrefOf ? (target: HomeLocation) => hrefOf({ home: target }) : null,
   };
-  // The page's heading: "Home", in the navbar where there is one, drawn as a file's name is there.
-  const heading = <h1 className="m-0 flex h-control min-w-0 items-center whitespace-nowrap text-ui font-normal text-foreground" data-library-heading={slots ? "navbar" : "page"}>{t("home.title")}</h1>;
-  // The kinds: a row of pills (`primitives/pill.jsx`) under the heading row, All then each kind the place holds, with no
-  // count (Figma's and Drive's tabs have none); one on at a time, each named by its word alone.
+  // The kinds: a row of pills (`primitives/pill.jsx`) at the left of the toolbar, All then each kind the place holds,
+  // with no count (Figma's and Drive's tabs have none); one on at a time, each named by its word alone.
   const kindRow: ReactNode = chips.length ? <PillGroup label={t("home.kindsAria")} data-library-kinds="">
     {chips.map(chip => <Pill key={chip} pressed={chip === shownKind} data-kind={chip}
       onClick={() => { if (chip !== shownKind) usage.used(`home_kind_${chip}`); setKind(chip); }}>{t(`home.kind.${chip}`)}</Pill>)}
   </PillGroup> : null;
-  // Sort: a muted label and the one value dropdown (`primitives/value-dropdown.jsx`), set to fit beside it.
-  const sortMenu: ReactNode = onSortChange ? <span className="flex min-w-0 items-center"><FieldLabel className="flex-none">{t("home.sortAria")}</FieldLabel>
-    <ValueDropdown value={sort} label={t("home.sortAria")} align="end" ghost
-      options={(["activity", "name", "kind"] as const).map(value => ({ value, label: t(`home.sort.${value}`) }))}
-      onChange={value => { usage.used(`home_sort_${value as LibrarySort}`); onSortChange(value as LibrarySort); }}
-      triggerProps={{ "aria-label": t("home.sortByAria", { sort: t(`home.sort.${sort}`) }) }} /></span> : null;
+  // Sort: one control, the scale's ghost button (`Button size="control"`): its sort glyph, muted, the sort's name in the
+  // foreground and a dropdown's chevron, muted, padded alike from its edges to its first and last ink (the control's
+  // padding), on the hover and open fill of every ghost control. No label beside it, whose box the button's fill ran
+  // into: the glyph says what it is, and its accessible name says it whole ("Sort by Last activity"). Its menu is a value
+  // dropdown's list (`VALUE_DROPDOWN_LIST_CLASS`): the three sorts, the chosen one ticked.
+  const sortName = t(`home.sort.${sort}`);
+  const sortMenu: ReactNode = onSortChange ? <DropdownMenu modal={false}>
+    <DropdownMenuTrigger asChild>
+      <Button variant="ghost" size="control" className="min-w-0 focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent"
+        aria-label={t("home.sortByAria", { sort: sortName })} data-library-sort="">
+        <ArrowDownUp className="size-glyph text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 truncate text-foreground">{sortName}</span>
+        <ChevronDown className="size-3 text-muted-foreground" aria-hidden="true" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" collisionPadding={8} aria-label={t("home.sortAria")} className={VALUE_DROPDOWN_LIST_CLASS}>
+      <DropdownMenuRadioGroup value={sort} onValueChange={next => {
+        if (next === sort) return;
+        usage.used(`home_sort_${next as LibrarySort}`);
+        onSortChange(next as LibrarySort);
+      }}>
+        {SORTS.map(value => <DropdownMenuRadioItem key={value} value={value}><span className="min-w-0 truncate">{t(`home.sort.${value}`)}</span></DropdownMenuRadioItem>)}
+      </DropdownMenuRadioGroup>
+    </DropdownMenuContent>
+  </DropdownMenu> : null;
   // The search: in a narrow navbar its icon alone until it is pressed (it opens with the keyboard in it), and it goes
   // back to its icon when it is left empty. A field the control tall, its glyph a control's padding in.
   const search = <div className="cad-home-search flex items-center" data-open={searchOpen || query ? "" : undefined}>
@@ -969,40 +991,43 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const layoutSwitch = onLayoutChange ? <SegmentedControl label={t("home.layout")} value={layout}
     options={[{ value: "grid", label: t("home.grid"), Icon: LayoutGrid }, { value: "list", label: t("home.list"), Icon: List }]}
     onChange={value => { usage.used(`home_layout_${value as LibraryLayout}`); onLayoutChange(value as LibraryLayout); }} /> : null;
-  // The way back to the document just left: the scale's outline button, its name the first to give way, and the key
-  // that does the same after it (left out where nothing hovers: a finger has no Escape).
-  const backControl = back && from ? <Button variant="outline" size="control" className="min-w-0 shrink" aria-keyshortcuts="Escape" onClick={back} data-library-back="">
+  // The way back to the document just left: the scale's outline button at the title row's right end, its name the first
+  // to give way, and the key that does the same after it (left out where nothing hovers: a finger has no Escape).
+  const backControl = back && from ? <Button variant="outline" size="control" className="ml-auto min-w-0 shrink" aria-keyshortcuts="Escape" onClick={back} data-library-back="">
     <span className="truncate">{t("home.backTo", { name: from.name })}</span><Kbd className="[@media(hover:none)]:hidden" aria-hidden="true">{ESCAPE_KEY}</Kbd></Button> : null;
-  // The place's name, at the navbar's size and a title's weight (a path is one size wherever it is drawn: the navbar's
-  // `project / document` and this one); on a project's page, the folder's path: each part but the last a way back up to
-  // its folder, muted and the first to give way (down to its first letters), the last the folder on screen.
-  const TITLE_CLASS = "m-0 min-w-0 truncate text-ui font-medium text-foreground";
+  // The page's title, its `h1` (the navbar names no place: the logo is the way home), the one text a step over the body,
+  // at medium weight (the heading step's own weight is semibold), as Figma's file browser titles a place: the place's
+  // name; on a project's page, the folder's path, every part at the title's size, as Drive's and Dropbox's paths are:
+  // each part but the last a way back up to its folder, regular and muted, the first to give way (down to its first
+  // letters), the slashes regular and muted, the last the folder on screen, medium in the foreground.
+  const TITLE_CLASS = "m-0 min-w-0 truncate text-heading font-medium text-foreground";
   const title = crumbs.length > 1 ? <div className="flex min-w-0 flex-initial items-baseline justify-end gap-1 overflow-hidden" data-library-crumbs="">
     {crumbs.slice(0, -1).map(crumb => <Fragment key={crumb.path}>
-      <PressTarget className="max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate rounded-control text-ui text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset"
+      <PressTarget className="max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate rounded-control text-heading font-normal text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset"
         href={hrefOf?.({ home: projectFolder(shownProject?.id ?? "", crumb.path) }) ?? null} data-library-crumb=""
         onPress={() => visit(place.view === "project" ? projectFolder(place.project, crumb.path) : place)}>{crumb.name}</PressTarget>
-      <span className="flex-none text-ui font-normal text-muted-foreground" aria-hidden="true">/</span>
+      <span className="flex-none text-heading font-normal text-muted-foreground" aria-hidden="true">/</span>
     </Fragment>)}
-    <h2 className={cn(TITLE_CLASS, "flex-initial")} data-library-title="">{shownAs}</h2>
-  </div> : <h2 className={TITLE_CLASS} data-library-title="">{placeName}</h2>;
+    <h1 className={cn(TITLE_CLASS, "flex-initial")} data-library-title="">{shownAs}</h1>
+  </div> : <h1 className={TITLE_CLASS} data-library-title="">{placeName}</h1>;
   // Nothing at all yet: no project, no document.
   const empty = !all.length && !(projects ?? []).length;
   // The place with nothing to list says why, in a line.
   const nothing = place.view === "project" ? t("home.projectEmpty") : place.view === "pinned" ? t("home.starredEmpty") : t("home.recentsEmpty");
-  // Nothing at all yet: the C mark, two controls tall, the welcome's title in the heading step, one muted line 4px
-  // under it, then 16px apart the two ways in and the formats the viewer opens; a column centred in the place.
+  // Nothing at all yet: the C mark, two controls tall, the welcome's title (the body's size at medium weight: the title's
+  // size is the page's title's alone), one muted line 4px under it, then 16px apart the two ways in and the formats the
+  // viewer opens, muted; a column centred in the place.
   const welcome = <div className="flex flex-col items-center gap-4 p-4 text-center" data-library-empty="">
     <img src={logo} alt="" draggable={false} className="block size-[calc(var(--cad-control)*2)] select-none" />
     <div className="flex flex-col gap-1">
-      <h2 className="m-0 text-heading text-foreground">{t("home.emptyTitle")}</h2>
+      <h2 className="m-0 font-medium text-foreground">{t("home.emptyTitle")}</h2>
       <p className="m-0 text-muted-foreground">{t("home.emptyBody")}</p>
     </div>
     {importFile || importFolder ? <div className="flex flex-wrap justify-center gap-2">
       {importFile ? <Button variant="outline" size="control" onClick={importFile}><FolderOpen aria-hidden="true" />{t("home.importFileButton")}</Button> : null}
       {importFolder ? <Button variant="outline" size="control" onClick={importFolder}><Folder aria-hidden="true" />{t("home.importFolderButton")}</Button> : null}
     </div> : null}
-    <p className="m-0 text-tiny text-muted-foreground" aria-hidden="true">{WELCOME_FORMATS}</p>
+    <p className="m-0 text-muted-foreground" aria-hidden="true">{WELCOME_FORMATS}</p>
   </div>;
   // A place with nothing to list, or nothing that matches, says so in one muted line, where its first row would stand.
   const line = (state: string, text: string, status = false) => <p className="m-0 text-muted-foreground" role={status ? "status" : undefined} data-library-state={state}>{text}</p>;
@@ -1019,34 +1044,40 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
                     {documents(matching)}
                     {listing?.truncated ? <p className="m-0 text-muted-foreground" data-library-truncated="">{t("home.projectTruncated")}</p> : null}
                   </>;
+  // Whether the place lists anything, or will: its toolbar (the kinds' tabs, Sort and the layout) stands then, and over
+  // a search on a project's page that finds nothing, never over a line that says the place has nothing to list.
+  const lists = items === null || awaited ? true
+    : place.view === "project" && !shownProject ? false
+      : shownProject?.missing ? false
+        : reading ? true
+          : place.view === "project" && !listing && folderRead?.failed ? false
+            : empty && place.view === "recents" ? false
+              : inPlace.length > 0 || folders.length > 0 || searching;
   return <div className="cad-library flex size-full flex-col bg-background text-ui" data-library-layout={layout} data-library-place={here}>
-    {/* Home's own controls: in the navbar where there is one (`slots`), else in a bar of the page's own, the navbar's row
-        on the panel's inset. */}
-    {slots ? <>
-      {slots.left ? createPortal(heading, slots.left) : null}
-      {slots.right ? createPortal(<>{search}{importMenu}</>, slots.right) : null}
-    </> : <div className={cn(NAVBAR_ROW_CLASS, "justify-between border-border bg-sidebar px-(--panel-inset)")} data-library-bar="">{heading}<div className="flex items-center gap-2">{search}{importMenu}</div></div>}
+    {/* Home's own controls: in the navbar's right end where there is a navbar (`slots`), else in a bar of the page's own,
+        the navbar's row on the panel's inset. Neither names the place: its title does. */}
+    {slots ? slots.right ? createPortal(<>{search}{importMenu}</>, slots.right) : null
+      : <div className={cn(NAVBAR_ROW_CLASS, "justify-end border-border bg-sidebar px-(--panel-inset)")} data-library-bar=""><div className="flex items-center gap-2">{search}{importMenu}</div></div>}
     <LibraryFrame places={places} panel={panel} onPanelChange={onPanelChange}>
       {/* A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits. Padded by the
           panel's inset on every side (more below, clear of a host's composer floating over the bottom), its blocks 16px
           apart; its rows hang past that line as the panel's do (`PANEL_ROW_VARIABLES`). */}
       <main className="@container grid min-w-0 flex-1 auto-rows-max grid-cols-1 content-start gap-4 overflow-y-auto p-(--panel-inset) pb-[calc(var(--cad-host-bottom-inset,0px)+var(--panel-inset))]"
         aria-label={t("home.modelsAria")} style={PANEL_ROW_VARIABLES as React.CSSProperties} data-library-content="">
-        {/* The place's heading row, every control the scale's: its name (a project's folder's path, with its glyph and its
-            ⋯) and the way back at the left; Sort and the layout at the right. It keeps its shape from place to place. 8px
-            under it, the kinds' tabs, where the place holds more than one kind. */}
-        <div className="grid grid-cols-1 gap-2">
-          <div className="flex min-h-control flex-wrap items-center justify-between gap-x-4 gap-y-2" data-library-toolbar="filters">
-            <div className="flex min-w-0 flex-auto items-center gap-2">
-              {shownProject ? <Folder className="size-glyph flex-none text-muted-foreground" aria-hidden="true" /> : null}
-              {title}
-              {shownProject ? projectMenu(shownProject) : null}
-              {backControl}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">{sortMenu}{layoutSwitch}</div>
-          </div>
-          {kindRow}
+        {/* Two rows, as Figma's file browser heads a place, every control the scale's. Row 1, the control tall: the place's
+            title (a project's folder's path, with its glyph and its ⋯), and the way back at its right end. Row 2, the
+            control tall, 16px under it wherever the place lists anything: the kinds' tabs at the left, Sort and the
+            layout at the right, as Figma's filters and view stand on its tabs' row. The content starts 16px under it. */}
+        <div className="flex min-h-control min-w-0 items-center gap-2" data-library-head="">
+          {shownProject ? <Folder className="size-glyph flex-none text-muted-foreground" aria-hidden="true" /> : null}
+          {title}
+          {shownProject ? projectMenu(shownProject) : null}
+          {backControl}
         </div>
+        {lists ? <div className="flex min-h-control min-w-0 flex-wrap items-center gap-x-4 gap-y-2" data-library-toolbar="">
+          {kindRow}
+          <div className="ml-auto flex items-center gap-2">{sortMenu}{layoutSwitch}</div>
+        </div> : null}
         {error ? <p className="m-0 text-destructive" role="alert" data-library-error="">{error}</p> : null}
         {note && note.at === here ? <p className="m-0 text-foreground" role="status" data-library-note="">{note.text}</p> : null}
         {body}

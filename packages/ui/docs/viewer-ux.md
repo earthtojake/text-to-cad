@@ -175,8 +175,9 @@ chrome that floats over the picture. The home is the navbar over the library: it
 
 #### The home
 
-- The same navbar: the logo (which goes to Recents), the sidebar's toggle, then "Home", and at the right the search
-  and Import (where the host has a chooser: File…, Folder…). No ⋯. The search narrows the place on screen.
+- The same navbar: the logo (which goes to Recents), the sidebar's toggle, and at the right the search and Import (where
+  the host has a chooser: File…, Folder…). No ⋯, and no "Home" after the toggle: the place's title says where the
+  person is, and the logo is the way home, so a name there said it twice. The search narrows the place on screen.
 - **One place at a time** (`library/ModelLibrary.tsx`, the `.cad-library` rules): Recents (the default: every document
   opened lately, across projects), Starred, or one folder of a project. Why: each is a question a person asks ("what
   was I on?", "what is in this folder?"), and one list answers one question. A document in no project is found in
@@ -186,7 +187,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   that panel over another page (`library/LibrarySidebar.jsx`, on `file-viewer/panelFrame.jsx` and `PanelSurface.jsx`):
   pinned it pushes the place, collapsed it leaves nothing, it peeks from its toggle, ⌘\ shows and hides it, its grip
   sets its width, and on a phone it is a sheet ([The panel](#the-panel)). Its rows are the panel's rows on the panel's
-  16px inset. Why: one sidebar to learn, not two that look alike and differ.
+  16px inset, in the home's body size, not the panel's step: it is a page's navigation, as Figma's and Drive's
+  sidebars are their body size. Why: one sidebar to learn, not two that look alike and differ.
   - Recents; Starred (lucide's star); "Projects", with a "+" that is Import's Folder (where the host has a chooser),
     over one row a project (its folder glyph and name, the latest activity first; one whose folder is gone muted). No
     row has a count, as Figma's and Drive's sidebars have none: a count is a number nobody acts on, and a project's
@@ -199,22 +201,35 @@ chrome that floats over the picture. The home is the navbar over the library: it
   - It ends in the panel's foot, as a document's panel does: the app's links and Settings
     ([The panel's foot](#the-panels-foot)).
 - **The place** fills the rest, on the page's colour, padded by the panel's inset (16px) on all four sides, at every
-  width and on a phone, its blocks (the heading, the folders, the cards, a line) 16px apart. Why: the navbar's logo, the
-  sidebar's rows and the place then stand on one 16px line, and a box padded alike across and down reads as meant; the
-  24px gutters and 20px top it had were on no scale. Its heading row: the place's name, at the navbar's size in medium weight (a larger heading under the navbar read as a
-  second title bar, and a path is one size wherever it is drawn); at
-  the right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then the models, the
-  `.xbf` files, then format (a model's Part, Assembly or XBF among them), then name) and grid or list, one segmented
-  control. Sort and the layout are the tab's ([Settings memory](#settings-memory)).
-- **A project's heading is the folder's path**: its folder glyph, then the project's name and each folder down to the
-  one on screen (`gearbox / housing / v3`), each part but the last a link back up to its folder, muted, and the last the
-  heading, all in the heading's step; then its ⋯: Open in new tab (this folder), Copy path, Reveal (this folder), then
+  width and on a phone, its blocks (the title's row, the toolbar, the folders, the cards, a line) 16px apart. Why: the
+  navbar's logo, the sidebar's rows and the place then stand on one 16px line, and a box padded alike across and down
+  reads as meant; the 24px gutters and 20px top it had were on no scale.
+- **Its head is two rows**, as Figma's file browser heads a place, each the control tall:
+  - **The title's row**: the place's title, the page's `h1`, a step over the body at medium weight
+    ([the type scale](design-system.md#the-type-scale)): "Recents", "Starred", a project's name or its path; on a
+    project's page its ⋯ after it; at the row's right end "Back to <name>" where there is one. Why: the title says
+    where the person is, the one larger text on the page, as Figma's "Recents" is; the way back is a way out of the
+    place, apart from what is in it.
+  - **The toolbar**, 16px under it: the kinds' tabs at the left, and Sort and grid or list at the right, as Figma's
+    filters and view stand on its tabs' row. It is there wherever the place lists anything (and while it is read, and
+    over a search that finds nothing); with one kind or none it holds Sort and the layout alone; with nothing to list
+    (an empty folder, nothing starred, the welcome) it is not there, as there is nothing to narrow, order or lay out.
+    The content starts 16px under it.
+  - **Sort** is one control: a ghost button, its sort glyph, the sort's name and a chevron, its menu the three orders
+    with the chosen one ticked: Last activity (the default); Name; Kind (by the tabs' kinds in their order, then the
+    models, the `.xbf` files, then format, a model's Part, Assembly or XBF among them, then name). No "Sort" label
+    stands beside it: as a label flush against the button, the button's fill ran into it. Sort and the layout are the
+    tab's ([Settings memory](#settings-memory)).
+- **A project's title is the folder's path**: its folder glyph, then the project's name and each folder down to the
+  one on screen (`gearbox / housing / v3`), every part at the title's size, as Drive's and Dropbox's paths are: each
+  part but the last a link back up to its folder, regular and muted, the slashes regular and muted, and the last the
+  folder on screen, medium in the foreground; then its ⋯: Open in new tab (this folder), Copy path, Reveal (this folder), then
   Remove from CAD (the project), which says nothing on disk changed and goes to Recents. Nothing beside the name says
   where the folder is on disk: Copy path and Reveal do, as Figma's and Drive's titles say none. A path too long for
   the row gives way from its start: the parts above, down to their first letters, then the folder's own name, so the
   folder on screen is the last to go. Why: it is the way a file browser says where you are, and the one way back up,
   with no Back button of its own.
-- **The kinds**, a row of tabs of its own 8px under the heading row: All, then 3D models, Drawings, Boards, Schematics and
+- **The kinds**, a row of tabs at the toolbar's left: All, then 3D models, Drawings, Boards, Schematics and
   Robots, each only where the place holds one, always in that order, each its word alone with no count, as Figma's
   and Drive's tabs have none (each is named by its word: "3D models"). One is on at a time (All at first); a search
   and the tab narrow together. There is no row where the place holds one kind or none, and a kind chosen in another
@@ -310,7 +325,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
   the project's root.
 - **Coming from a document.** The navbar's project name, pressed over a document, shows that project's page at the
   folder the document is in, with the document remembered: its card or row ringed in the brand's colour and brought
-  into view, and "Back to <name>", with an Esc hint, in the heading row. Escape returns to the document while no menu,
+  into view, and "Back to <name>", with an Esc hint, at the title row's right end. Escape returns to the document while no menu,
   dialog or field has the keyboard. It lasts until another document is opened or the person goes to another place.
   From the sidebar a project opens at its top. Why: the document's folder is where the documents beside it are, and
   the way back should cost nothing. "Back to <name>" is the scale's outline button, as tall as the row's other
@@ -328,8 +343,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
   file when the host listed only part of it. What came of an Import's Folder or a Remove from CAD, and an action that
   failed, are a line there too, the failure in the destructive colour: no box, no tint. With nothing at all yet,
   Recents shows the C mark (two controls tall, with no stage under it: it is a mark, not a picture), "Nothing here
-  yet" in the heading's step, one muted line, Import file and Import folder, and the formats the viewer opens, 16px
-  apart in a column centred in the place.
+  yet" in the body's size at medium weight (the title's size is the page's title's alone), one muted line, Import file
+  and Import folder, and the formats the viewer opens, muted, 16px apart in a column centred in the place.
 - **On a phone and in a narrow home** nothing of the place's own changes: the same 16px inset, one card across on a
   phone, as many as fit elsewhere; Import is its icon in a navbar under 480px. The sidebar is collapsed there until the
   person opens it (the panel's rule, from 872px down), and a phone's is the sheet. The width is the home's, never the
@@ -1004,3 +1019,10 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
 - **Counts in the sidebar and on the kinds' tabs.** Figma's and Drive's have none: a count is a number nobody acts on.
 - **Where a card is, before its activity, and a project's folder from `~` beside its name.** A card's line is its
   activity, as Figma's is; where a file is, is the list's column and Copy path's.
+- **"Home" in the navbar over the home, and the place's name at the navbar's size.** The logo is the way home and the
+  place's title says where the person is: a name after the toggle said it twice, and a title the body's size read as
+  no title. Figma's file browser titles a place one step over its body.
+- **A "Sort" label beside a dropdown.** The dropdown's fill ran into the label; Sort is one control, its glyph saying
+  what it is, as Figma's is.
+- **A second small size for a card's line, the formats or the sidebar.** Figma's file browser is one body size told
+  apart by weight and colour; the sidebar is a page's navigation, at the page's body size.

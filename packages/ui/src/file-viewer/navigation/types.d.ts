@@ -109,8 +109,8 @@ export const ViewerNavbar: ComponentType<{
    * control right after the logo, the same neutral button open or shut (`aria-expanded` says which).
    */
   panels?: import("../panelToggles.js").PanelToggles | null;
-  /** Over the home: the two places its controls go (its heading; the search and Import), on the grid's column (`../navbarSlots.js`). */
-  homeSlots?: { left(element: HTMLElement | null): void; right(element: HTMLElement | null): void } | null;
+  /** Over the home: where its controls go (the search and Import), at the row's right end (`../navbarSlots.js`). */
+  homeSlots?: { right(element: HTMLElement | null): void } | null;
   viewSlot?: ((element: HTMLElement | null) => void) | null;
   className?: string;
 }>;

@@ -152,7 +152,7 @@ test("the person's settings and the host's links go to the file viewer for the a
   expect(props().appSettings).toBe(appSettings);
   expect(props().host.links).toEqual(expect.objectContaining({ version: '0.7.4' }));
   const home = render(props().presentation!.home as ReactElement);
-  await home.findByRole('heading', { name: 'Home' });
+  await home.findByRole('heading', { level: 1, name: 'Recents' });
   expect(home.queryByRole('link')).toBeNull();
 });
 

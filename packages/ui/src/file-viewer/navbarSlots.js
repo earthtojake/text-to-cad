@@ -1,13 +1,14 @@
 import { createContext, useContext } from "react";
 
-// Home's navbar (`navigation/ViewerNavbar.jsx`) holds Home's own controls — "Home" at its left, the
-// search and Import at its right — in two slots the navbar draws on the grid's column; the home (`library/ModelLibrary.tsx`)
-// portals its controls into them. The slots are elements, null until the navbar has drawn them; outside a file viewer
-// there are none, and the home draws its controls in its own row.
+// Home's navbar (`navigation/ViewerNavbar.jsx`) holds Home's own controls -- the search and Import -- in a slot the
+// navbar draws at its right end; the home (`library/ModelLibrary.tsx`) portals its controls into it. Nothing of the
+// home's stands after the logo and the toggle: the place's own title says where the person is. The slot is an element,
+// null until the navbar has drawn it; outside a file viewer there is none, and the home draws its controls in its own
+// row.
 //
 // Importing this module has no environmental effects.
 
-/** @typedef {{ left: HTMLElement | null, right: HTMLElement | null }} NavbarSlots */
+/** @typedef {{ right: HTMLElement | null }} NavbarSlots */
 
 /** @type {import("react").Context<NavbarSlots | null>} */
 export const NavbarSlotsContext = createContext(/** @type {NavbarSlots | null} */ (null));
