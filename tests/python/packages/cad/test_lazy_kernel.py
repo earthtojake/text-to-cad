@@ -128,21 +128,15 @@ class PthTest(unittest.TestCase):
     def test_the_installed_library_runs_the_pth_editable_or_not(self) -> None:
         """setup.py ships it in an editable wheel too, so a checkout's development
         environment (``uv sync``, CI's included) defers the kernel as a user's install does."""
-        found = subprocess.run([sys.executable, "-c", "import build123d, sys; print('OCP' in sys.modules); "
-                                "print(getattr(sys.modules.get('_cad_release'), '__file__', None))"],
+        found = subprocess.run([sys.executable, "-c", "import build123d, sys; print('OCP' in sys.modules)"],
                                capture_output=True, text=True, cwd=tempfile.gettempdir(),
                                env={name: value for name, value in os.environ.items() if name != "PYTHONPATH"})
         self.assertEqual(found.returncode, 0, found.stderr)
-        loaded, release = found.stdout.splitlines()
-        self.assertEqual(loaded, "False", found.stderr or f"no {PTH}: uv sync --reinstall-package cad")
-        # Its first import, too, from the checkout's own source: the line stops at the first import that fails.
-        self.assertTrue(os.path.samefile(release, PACKAGE / "src" / "_cad_release.py"), release)
+        self.assertEqual(found.stdout.strip(), "False", found.stderr or f"no {PTH}: uv sync --reinstall-package cad")
 
     def test_the_pth_is_one_import_line(self) -> None:
-        """One line, so the interpreter runs it as one: ``_cad_release`` first, which may put another release in
-        the place of this one, then the finder, from whichever release that left."""
-        self.assertEqual((PACKAGE / PTH).read_text(encoding="utf-8"),
-                         "import _cad_release; import cad._internal.lazy_kernel\n")
+        """One line, so the interpreter runs it as one: the finder."""
+        self.assertEqual((PACKAGE / PTH).read_text(encoding="utf-8"), "import cad._internal.lazy_kernel\n")
 
     def test_import_build123d_leaves_the_kernel_untouched(self) -> None:
         self.assertEqual(self.run_python("import build123d as bd; import sys; print('OCP' in sys.modules)"), "False")

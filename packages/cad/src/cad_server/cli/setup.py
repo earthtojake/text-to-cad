@@ -436,14 +436,14 @@ def follow(told: Callable[[str], None]) -> bool:
 def move(name: str, told: Callable[[str], None]) -> bool:
     """Step 5 (see the module), from this server of release ``name`` that is no global install: whether the hand-over
     began. The global cad is the one ``auto_update.installed_tool`` finds (uv's tool first, then pipx's), at the release
-    its processes run (``store.active``), handed over to by cad's update worker run by that environment's own
+    it holds (``auto_update.installed``), handed over to by cad's update worker run by that environment's own
     interpreter (``auto_update.helper_command``): it finds the release there already, drains this server and starts
     its own. Never older: a global cad older than this release stays where it is, and this server runs on."""
     from cad.engine.places import detached, state_dir
-    from cad_server._internal import auto_update, store
+    from cad_server._internal import auto_update
 
     environment = auto_update.installed_tool()
-    release = store.active(environment) if environment is not None else None
+    release = auto_update.installed(environment) if environment is not None else None
     found = auto_update.global_install(str(environment)) if environment is not None and release else None
     if environment is None or found is None:
         told("no global cad was found: this server runs on")
@@ -468,8 +468,11 @@ def move(name: str, told: Callable[[str], None]) -> bool:
 
 
 def _start(command: list[str], **options) -> None:
-    """The worker started (a seam for a test, which records it instead)."""
-    subprocess.Popen(command, **options)
+    """The worker started, on Windows outside any app package (``places.outside_package``; a seam for a test, which
+    records it instead)."""
+    from cad.engine.places import outside_package
+
+    outside_package(command, **options)
 
 
 def _brought() -> bool:

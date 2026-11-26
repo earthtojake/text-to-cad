@@ -558,16 +558,12 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             **{f"packages/cad/src/cad_server/{path}": packages | jobs_on("installer") for path in (
                 "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
                 "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
-                "_internal/store.py", "_internal/selftest.py", "engine/daemon.py",
+                "engine/daemon.py",
                 # ...and what the install command hands the apps to: `cad plugin install`, its table and its run.
                 "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/apps.py", "plugin/run.py",
                 # ...and what a command says while the update switches releases.
                 "cli/update.py", "cli/server.py", "_internal/cli_errors.py")},
             "packages/cad/src/cad/engine/client.py": packages | jobs_on("installer"),
-            # ...and what an installed cad reads as its Python starts, by which an update takes effect.
-            "packages/cad/src/_cad_release.py": packages | jobs_on("installer"),
-            "packages/cad/cad.pth": packages | jobs_on("installer"),
-            "packages/cad/cad.start": packages | jobs_on("installer"),
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),

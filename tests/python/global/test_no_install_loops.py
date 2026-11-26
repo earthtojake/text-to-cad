@@ -31,7 +31,7 @@ HOSTED = ("texttocad.dev", "install.sh", "install.ps1", "install_script.run", "I
 # and whether the bridge owes its own run -- never the command it runs (``installer``) nor a way to start it.
 INSTALL_SCRIPT_NAMES = {"INSTALLER_ENV", "BY_CAD_ENV", "read", "OWED"}
 # What of ``auto_update`` begins or carries out cad's own update: none of it is the plugin's to call.
-UPDATING = {"trigger", "begin", "asked", "helper_command", "_start", "_begin_due", "tend"}
+UPDATING = {"trigger", "begin", "asked", "helper_command", "_start", "restart"}
 
 
 def _tree(path: Path) -> ast.AST:

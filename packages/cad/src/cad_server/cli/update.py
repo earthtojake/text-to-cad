@@ -12,13 +12,11 @@ starts no server: an update typed with none running leaves none running. In a sh
 (``client._sandboxed``) it does not try, and says so in the one line ``client.SANDBOXED``. It never starts a server
 first to update through it.
 
-Then it waits for the update to end, saying each step once on stderr as the attempt's record names it (its ``phase``:
-the release installed beside this one, then the server restarted on it; where cad's own update had the release ready
-already, the restart alone, which needs no answer from PyPI), and says how it ended (a failure: why, what
-to do and where its log is, ``ended``), as the server that
-answers afterwards tells it (``{"op": "update", "begin": false}``), else as the attempt's record in the state folder
-does; ``WAIT_SECONDS`` at most. Nothing of this cad changes under it meanwhile: the update builds the release in a
-folder of its own and switches to it by a pointer, which this process, started before, never reads again.
+Then it waits for the update to end, saying once on stderr that cad is updating (``step``), and says how it ended (a
+failure: why, what to do and where its log is, ``ended``), as the server that answers afterwards tells it (``{"op":
+"update", "begin": false}``), else as the attempt's record in the state folder does; ``WAIT_SECONDS`` at most. uv
+upgrades cad in place meanwhile; this process, which imported what it needs before, is left running by the update on
+Windows (it sends its ``pid``: ``auto_update.spared``).
 
 A cad that is no global install does not update itself, and is refused. ``cad update auto [status|on|off]`` shows or
 changes whether cad updates itself (``cad_server.cli.auto_update``).
@@ -27,6 +25,7 @@ changes whether cad updates itself (``cad_server.cli.auto_update``).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from collections.abc import Callable, Sequence
@@ -52,11 +51,10 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
                             description=(
         "cad installs every newer release of its major version by itself, and never a new major version. "
         "`cad update` updates cad now to the newest release of its major version, even with "
-        "automatic updates off: cad asks PyPI, installs it beside the cad that runs, and switches to it (where cad "
-        "has it installed and ready already, it only switches, even without PyPI). A cad server that was running "
-        "restarts on it at once, stopping what is in flight; with none running, none is started. By itself, cad installs a new "
-        "release beside the cad that runs as soon as it is out, and restarts the server on it as the server next "
-        "starts. `cad update auto` shows or changes whether cad updates itself."))
+        "automatic updates off: cad asks PyPI, and uv upgrades cad in place. A cad server that was running restarts "
+        "on it at once, stopping what is in flight; with none running, none is started. By itself, cad updates as "
+        "the server next starts once a newer release is out. `cad update auto` shows or changes whether cad updates "
+        "itself."))
     commands = parser.add_subparsers(dest="command", metavar="{auto}")
     auto_update.arguments(commands.add_parser("auto", prog=f"{prog} auto",
                                               help="show or change whether cad updates itself: status, on, off",
@@ -78,7 +76,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if auto_update.global_install() is None:  # this command's own cad
         return write(Failure(NOT_A_TOOL), prog=prog, as_json=False)
     try:  # never starts one
-        answer = client.request({"op": "update"}, timeout=ASK_SECONDS)
+        answer = client.request({"op": "update", "pid": os.getpid()}, timeout=ASK_SECONDS)
     except client.NotRunning:
         if client._sandboxed():  # noqa: SLF001 - nor can it update cad
             return write(classify(client.NotRunning(client.SANDBOXED)), prog=prog, as_json=False)
@@ -175,26 +173,15 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
 
 
 def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) -> None:
-    """The step the attempt underway is at (its ``phase``), said once on stderr: the release installed beside this one
-    (``building``), then the switch to it, with the server restarted (``switching``). An attempt that begins at its
-    switch -- a release that was ready, only its restart left -- names the release there, with no line before it; and
-    where that release no longer runs and is built again, its switch is said again after. ``told_of``: the steps
-    said."""
-    phase = attempt.get("phase")
-    if phase in told_of or phase not in ("building", "switching"):
+    """The update underway, once its record says it is switching (its ``phase``), said once on stderr (``told_of``: what
+    was said), naming the release it is for."""
+    if "switching" in told_of or attempt.get("phase") != "switching":
         return
     target = attempt.get("release")
     named = "the newest release" if target in (None, "latest") else f"cad {target}"
-    if phase == "building":
-        told_of.discard("switching")
-        line = f"cad: installing {named} beside cad {was}"
-    elif "building" in told_of:
-        line = "cad: restarting the cad server on it" if server else "cad: switching to it"
-    else:
-        line = (f"cad: restarting the cad server on {named}, installed beside cad {was}" if server
-                else f"cad: switching to {named}, installed beside cad {was}")
-    told_of.add(phase)
-    print(line, file=sys.stderr, flush=True)
+    told_of.add("switching")
+    print(f"cad: updating cad {was} to {named}" + (", then restarting the cad server" if server else ""),
+          file=sys.stderr, flush=True)
 
 
 def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,

@@ -961,8 +961,8 @@ class SweepTest(unittest.TestCase):
 
 class TendTest(unittest.TestCase):
     def test_every_server_reads_the_version_feed_and_looks_after_the_hand_over_as_it_tends_itself(self) -> None:
-        # The "newer version" line is said from the feed the server reads (``updates.refresh``), whoever runs it; and
-        # cad's own update is asked at every tending, told nothing of what is in flight (``auto_update.tend``).
+        # The "newer version" line is said from the feed the server reads (``updates.refresh``), whoever runs it; cad's
+        # own update is never a tending's (``auto_update.restart`` is the server's start's, and a person's ask).
         from cad.engine.previous import version
         from cad_server import updates
         from cad_server._internal import auto_update
@@ -972,23 +972,19 @@ class TendTest(unittest.TestCase):
         engine.stopping.is_set.return_value = False
         engine.working.return_value = False
         with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"), \
-                mock.patch.object(auto_update, "tend", return_value=None) as tended:
+                mock.patch.object(auto_update, "restart") as restart, mock.patch.object(auto_update, "trigger") as trigger:
             daemon.Daemon.tend(engine)
         refresh.assert_called_once_with()
-        tended.assert_called_once_with()
+        restart.assert_not_called(), trigger.assert_not_called()
         self.assertEqual(engine.handover.tend.call_args.args[0], version(), "the bridge's, named by this release")
         self.assertIs(engine.bridge.tend.call_args.kwargs["quiet"], True, "nothing has run since the server started")
         engine.caught_up.assert_called_once_with()
 
-    def test_a_busy_server_still_gets_an_update_ready_and_looks_after_what_follows_one(self) -> None:
-        """Work in flight and a command a moment ago, as an agent at work keeps a server: cad's own update is asked
-        all the same (``auto_update.tend``), and what follows an update is looked after (``caught_up``); only the
-        bridge's part waits for a quiet moment (``setup.QUIET_SECONDS``)."""
-        import io
-        from contextlib import redirect_stderr
-
+    def test_a_busy_server_looks_after_what_follows_an_update_and_the_bridge_waits(self) -> None:
+        """Work in flight and a command a moment ago, as an agent at work keeps a server: the feed is read and what
+        follows an update is looked after (``caught_up``) all the same; only the bridge's part waits for a quiet
+        moment (``setup.QUIET_SECONDS``)."""
         from cad_server import updates
-        from cad_server._internal import auto_update
         from cad_server.cli import setup
         from cad_server.engine import daemon
 
@@ -999,14 +995,9 @@ class TendTest(unittest.TestCase):
                                    last=now)
                 engine.stopping.is_set.return_value = False
                 engine.working.return_value = working
-                begun = {"release": "0.2.0", "switch": False, "phase": "building"}
-                with mock.patch.object(updates, "refresh"), mock.patch.object(daemon, "_send_counts"), \
-                        mock.patch.object(auto_update, "tend", return_value=begun) as tended, \
-                        redirect_stderr(io.StringIO()) as err:
+                with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"):
                     daemon.Daemon.tend(engine)
-                tended.assert_called_once_with()
-                self.assertEqual(err.getvalue(), "cad: installing cad 0.2.0 beside this cad: this server restarts on "
-                                                 "it as it next starts, or with `cad update`\n")
+                refresh.assert_called_once_with()
                 engine.caught_up.assert_called_once_with()
                 engine.handover.tend.assert_called_once()
                 self.assertIs(engine.bridge.tend.call_args.kwargs["quiet"], False, "the bridge waits")
@@ -1014,22 +1005,19 @@ class TendTest(unittest.TestCase):
                            began=now - 7200.0, last=now)
         engine.stopping.is_set.return_value = False
         engine.working.return_value = False
-        with mock.patch.object(updates, "refresh"), mock.patch.object(daemon, "_send_counts"), \
-                mock.patch.object(auto_update, "tend", return_value=None):
+        with mock.patch.object(updates, "refresh"), mock.patch.object(daemon, "_send_counts"):
             daemon.Daemon.tend(engine)
         self.assertIs(engine.bridge.tend.call_args.kwargs["quiet"], True, "a page's asking since is no command")
 
     def test_a_server_that_stops_looks_after_nothing_of_the_update(self) -> None:
         from cad_server import updates
-        from cad_server._internal import auto_update
         from cad_server.engine import daemon
 
         engine = mock.Mock(address=None, door=None, draining=True)
         engine.stopping.is_set.return_value = False
-        with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"), \
-                mock.patch.object(auto_update, "tend") as tended:
+        with mock.patch.object(updates, "refresh") as refresh, mock.patch.object(daemon, "_send_counts"):
             daemon.Daemon.tend(engine)
-        self.assertEqual((refresh.call_count, tended.call_count, engine.caught_up.call_count), (0, 0, 0))
+        self.assertEqual((refresh.call_count, engine.caught_up.call_count), (0, 0))
 
 
 class DrainTest(unittest.TestCase):

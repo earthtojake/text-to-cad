@@ -576,7 +576,8 @@ UPDATE_ENDED = frozenset({"timeout", "no_program", "in_use", "denied", "disk_ful
                           "python", "platform", "config_exclude", "config_index", "config_tls", "broken",
                           "start_failed", "helper_start", "packaged", "unknown", "none"})
 UPDATE_CAUSES = {"current": UPDATE_ENDED | {"already"}, "failed": UPDATE_ENDED, "restored": UPDATE_ENDED,
-                 "lost": frozenset({"lost", "helper_crash"}), "blocked": frozenset({"no_installer", "no_switch"})}
+                 "lost": frozenset({"lost", "helper_crash"}),
+                 "blocked": frozenset({"no_installer", "no_switch", "pinned"})}
 UPDATE_INSTALLERS = frozenset({"uv", "pipx"})
 # The install command's run for the cad an update installed: none ran for it, it ended well or failed, or it was still
 # underway when a new attempt took the record's place (``auto_update.report``).

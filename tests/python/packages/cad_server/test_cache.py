@@ -101,81 +101,26 @@ class CacheTest(unittest.TestCase):
                                             f"(installations/current)\nkept {running}: a process runs from it\n"
                                             "nothing removed\n", ""))
 
-    def stored(self, release: str, size: int = 4096) -> Path:
-        """A release cad's update keeps in its store (``store.folder``), with a file of ``size`` bytes."""
-        from cad_server._internal import store
+    def test_prune_also_removes_on_windows_what_cad_s_update_moved_aside_but_never_while_one_is_underway(self):
+        """Each ``cad.exe`` the update moved aside in uv's bin folder and could not remove then (``auto_update.tidy``),
+        said; nothing while an update is underway."""
+        from cad_server._internal import auto_update
 
-        folder = store.folder(release)
-        (folder / "cad").mkdir(parents=True)
-        (folder / "cad" / "data").write_bytes(b"r" * size)
-        (folder / store.MARKER).write_text(json.dumps({"store": 1, "release": release, "python": store.tag(),
-                                                       "built": 0.0}), encoding="utf-8")
-        return folder
-
-    def test_prune_also_tidies_the_store_of_cad_s_update_and_says_what_a_process_runs(self) -> None:
-        """The store is in the state folder, not the cache: ``prune`` tidies it as cad's update does
-        (``store.clean``), each release removed said with the room that freed; one a process runs is kept and said,
-        one a pointer names kept for what it is; and nothing while an update is underway."""
-        from cad_server._internal import auto_update, store
-
-        old, running, named = self.stored("0.0.1", 2 * MB), self.stored("0.0.2", MB), self.stored("0.0.3")
-        building = store.root() / f"{store.BUILDING}1-dead"
-        building.mkdir()
-        os.utime(building, (0, 0))
-        # A pointer as a release before this one wrote it, naming the release it ran before: that one is kept no more.
-        auto_update._keep(store.root() / "pointer-00000000.json", {"pointer": 1, "path": str(named),
-                                                                   "previous": str(old)})
         theirs = self.environment("theirs00", OTHER, MB)
-        # As a process that runs the release holds it (``store``, "In use"): its marker open, which on Windows
-        # refuses the folder's rename, and elsewhere under the marker's shared lock.
-        held = open(running / store.MARKER, "rb")  # noqa: SIM115 - held until the test lets go of it
-        self.addCleanup(held.close)
-        if os.name != "nt":
-            import fcntl
-
-            fcntl.flock(held, fcntl.LOCK_SH)
+        moved = str(self.root / "bin" / ".cad-12.exe.old")
         record = self.state / auto_update.RECORD
         auto_update._keep(record, {"release": "0.0.4", "from": version(), "at": time.time(), "beat": time.time(),
-                                   "outcome": "underway", "phase": "building"})
-        code, out, err = _run("prune")
-        self.assertEqual((code, err), (0, ""))
-        self.assertEqual(out.splitlines(), [f"removed {theirs} (an environment of cad {OTHER})",
-                                            "1 removed, 1.0 MB freed; cad's update is underway, so the releases it "
-                                            "keeps are left as they are"])
-        self.assertTrue(all(path.exists() for path in (old, running, named, building)), "the store left alone")
-        record.unlink()
-        code, out, err = _run("prune")
-        self.assertEqual((code, err), (0, ""))
-        self.assertEqual(out.splitlines(), [f"removed {building} (a build of cad's update that did not end)",
-                                            f"removed {old} (cad 0.0.1, kept by cad's update)",
-                                            f"kept {running}: a process runs it",
-                                            "2 removed, 2.0 MB freed"])
-        self.assertFalse(old.exists() or building.exists())
-        self.assertTrue(running.exists() and named.exists(), "a process runs one, a pointer names the other")
-        held.close()
-        self.assertEqual(_run("prune")[1].splitlines(), [f"removed {running} (cad 0.0.2, kept by cad's update)",
-                                                         "1 removed, 1.0 MB freed"])
-        self.assertTrue(named.exists())
+                                   "outcome": "underway", "phase": "switching"})
+        with mock.patch.object(auto_update, "tidy", return_value=[moved]) as tidy:
+            code, out, err = _run("prune")
+            self.assertEqual((code, err), (0, ""))
+            self.assertEqual(out.splitlines(), [f"removed {theirs} (an environment of cad {OTHER})",
+                                                "1 removed, 1.0 MB freed"])
+            tidy.assert_not_called()
+            record.unlink()
+            self.assertEqual(_run("prune")[1].splitlines(),
+                             [f"removed {moved} (a cad command cad's update moved aside)", "1 removed, 0 B freed"])
         self.assertEqual(_run("clean")[1], "nothing removed\n", "clean is the cache's alone")
-
-    def test_prune_keeps_the_release_cad_s_update_has_ready(self) -> None:
-        """Built, run once and pointed at by nothing until cad restarts on it (``auto_update.kept``): never tidied
-        away while its record is the last attempt's."""
-        import cad_server
-        from cad_server._internal import auto_update, store
-
-        ready, other = self.stored("0.0.5"), self.stored("0.0.6")
-        (ready / store.MARKER).write_text(json.dumps({"store": 1, "release": "0.0.5", "python": store.tag(),
-                                                      "for": store.built_for(), "built": 0.0}), encoding="utf-8")
-        auto_update._keep(self.state / auto_update.RECORD, {
-            "release": "0.0.5", "wanted": "0.0.5", "from": cad_server.__version__, "at": 1.0, "tries": 1,
-            "outcome": "ready", "switch": False, "ended": 2.0})
-        code, out, err = _run("prune")
-        self.assertEqual((code, err), (0, ""))
-        self.assertEqual(out.splitlines()[:-1], [f"removed {other} (cad 0.0.6, kept by cad's update)"],
-                         "the release ready kept, and not said as one a process runs")
-        self.assertTrue(ready.exists())
-        self.assertFalse(other.exists())
 
     def test_clean_is_refused_while_a_server_runs_and_removes_all_of_the_cache_after(self) -> None:
         from cad.engine import client
@@ -209,7 +154,7 @@ class CacheTest(unittest.TestCase):
         import threading
         import types
 
-        from cad_server._internal import auto_update, store
+        from cad_server._internal import auto_update
         from cad_server.engine import daemon
         from cad_server.engine.daemon import Daemon
 
@@ -221,7 +166,7 @@ class CacheTest(unittest.TestCase):
                                          catching=types.SimpleNamespace(tend=lambda told: None))
         clock, underway = [10_000.0], [None]
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(store, "clean"), mock.patch.object(auto_update, "report"), \
+        with mock.patch.object(auto_update, "tidy"), mock.patch.object(auto_update, "report"), \
                 mock.patch.object(daemon.time, "monotonic", side_effect=lambda: clock[0]), \
                 mock.patch.object(auto_update, "underway", side_effect=lambda: underway[0]), \
                 mock.patch.object(releases, "running", side_effect=lambda path, **_: Path(path) in busy), \

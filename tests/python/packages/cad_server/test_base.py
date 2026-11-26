@@ -92,11 +92,8 @@ class BaseTest(unittest.TestCase):
         venv, pip = fake.steps
         self.assertEqual(venv, ["uv", "venv", "--no-project", "--python", self.installation.executable, str(env)],
                          "on the installation's own Python")
-        overrides = env / base.OVERRIDES
         self.assertEqual(pip, ["uv", "pip", "install", "--python", str(base.interpreter(env)), "--link-mode",
-                               "hardlink", f"cad[build123d]=={RELEASE}", "--overrides", str(overrides), "--offline"])
-        self.assertEqual(overrides.read_text(encoding="utf-8"), 'uv ; sys_platform == "never"\n',
-                         "the uv package left out: nothing run in the base uses it")
+                               "hardlink", f"cad[build123d]=={RELEASE}", "--offline"])
         self.assertEqual(self.said, [f"making the CAD kernel environment, once: cad[build123d] {RELEASE} on Python "
                                      f"3.14.2, in {env}"])
         # Its marker names the installation it belongs to: a process there reaches that engine.
@@ -104,25 +101,6 @@ class BaseTest(unittest.TestCase):
         self.assertEqual((home["executable"], home["prefix"], home["root"]),
                          (self.installation.executable, self.installation.prefix, self.installation.root))
         self.assertIsNone(places.home(str(self.core)), "an environment no marker names is its own installation")
-
-    def test_a_base_made_before_with_the_uv_package_in_it_is_used_as_it_is(self) -> None:
-        """A base an earlier release made holds the ``uv`` package (``LEFT_OUT`` was not left out then): its key is
-        the same, its marker complete, so it is found and used, nothing made again."""
-        fake = Fake()
-        with self.made(fake):
-            found = base.ensure(self.installation, told=self.said.append)
-        env = Path(found.prefix)
-        (env / base.OVERRIDES).unlink()
-        held = env / "lib" / "site-packages" / "uv"
-        held.mkdir(parents=True)
-        binary = env / ("Scripts/uv.exe" if os.name == "nt" else "bin/uv")  # the platform's scripts folder
-        binary.parent.mkdir(parents=True, exist_ok=True)
-        binary.write_text("", encoding="utf-8")
-        fake.steps.clear()
-        with self.made(fake):
-            again = base.ensure(self.installation, told=self.said.append)
-        self.assertEqual((again, fake.steps), (found, []), "found and used, nothing asked of uv")
-        self.assertTrue(held.is_dir() and binary.is_file(), "left as it is")
 
     def test_the_network_is_asked_only_for_what_uvs_cache_lacks_and_said_first(self) -> None:
         fake = Fake((2, "error: Network connectivity is disabled, but the requested data wasn't found in the cache"))
@@ -403,18 +381,6 @@ class BaseTest(unittest.TestCase):
                 found = base.Installation(**{**base.dataclasses.asdict(self.installation), "source": source})
                 self.assertEqual(found.requirement(), requirement)
 
-
-    def test_a_release_cad_s_update_keeps_installs_from_the_index_as_the_installed_one_does(self) -> None:
-        """A stored release lies outside its environment, as a checkout does, and is no source tree: the kernel's
-        environment takes that release from the index, by its number."""
-        environment = self.root / "tools" / "cad"
-        stored = self.root / "state" / "store" / "1.0.1-cp314-win_amd64" / "cad_server"
-        checkout = self.root / "checkout" / "packages" / "cad"
-        for folder in (environment, stored, checkout / "src" / "cad_server"):
-            folder.mkdir(parents=True)
-        (checkout / "pyproject.toml").write_text("", encoding="utf-8")
-        self.assertIsNone(base._source(stored, str(environment), "cad"))
-        self.assertEqual(base._source(checkout / "src" / "cad_server", str(environment), "cad"), str(checkout))
 
 
 class RunTest(unittest.TestCase):

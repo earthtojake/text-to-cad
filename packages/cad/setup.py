@@ -1,9 +1,7 @@
 """cad builds from pyproject.toml; this adds two files to the wheel's root.
 
-``cad.pth`` is what cad does as an interpreter starts, in the environment it is installed into, in this
-order: ``_cad_release`` puts the release cad's update keeps beside the installed one on the import path
-in its place, where there is one (``src/_cad_release.py``); then ``import build123d`` is made lazy
-(``cad/_internal/lazy_kernel.py``), by whichever release that left. The interpreter runs a ``.pth``
+``cad.pth`` is what cad does as an interpreter starts, in the environment it is installed into: ``import
+build123d`` is made lazy (``cad/_internal/lazy_kernel.py``). The interpreter runs a ``.pth``
 file's import line at start only from a site-packages directory, so the file must sit at the wheel's
 root, which an installer unpacks into site-packages. setuptools' ``data-files`` cannot put it there -- a wheel's
 data scheme installs under the environment's prefix -- so ``build_py`` copies it beside the

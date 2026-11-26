@@ -18,7 +18,7 @@ from unittest import mock
 
 import cad_server
 from cad_server import updates
-from cad_server._internal import auto_update, store
+from cad_server._internal import auto_update
 
 RECEIPT = '[tool]\nrequirements = [{ name = "cad" }]\nentrypoints = [{ name = "cad" }]\n'
 
@@ -54,8 +54,6 @@ class UpdateRouteTest(unittest.TestCase):
                       mock.patch.object(cad_server, "__version__", "0.1.0"),
                       mock.patch.object(updates, "checking", return_value=True),
                       mock.patch.object(auto_update, "find_uv", return_value=str(uv)),
-                      mock.patch.object(auto_update, "carried_uv", return_value=None),
-                      mock.patch.object(store, "switches", return_value=True),
                       mock.patch.object(updates, "feed", return_value={"latest": "0.2.0", "lines": {"0": "0.2.0"}})):
             patch.start()
             self.addCleanup(patch.stop)
@@ -152,17 +150,16 @@ class UpdateRouteTest(unittest.TestCase):
         self.assertEqual((status, answer["error"]), (409, auto_update.NOT_THE_TOOL))
         with mock.patch.object(updates, "checking", return_value=False):
             self.assertEqual(self.ask("POST", "/api/v1/local/update", {})[1]["error"], auto_update.CHECK_OFF)
-        with mock.patch.object(auto_update, "find_uv", return_value=None), \
-                mock.patch.object(auto_update, "carried_uv", return_value=None):
+        with mock.patch.object(auto_update, "find_uv", return_value=None):
             status, answer = self.ask("POST", "/api/v1/local/update", {})
         self.assertEqual((status, answer["cause"], answer["said"], answer["hint"]),
                          (409, "no_installer", "uv cannot be found, so no update can begin",
                           "install uv (https://docs.astral.sh/uv/), then `cad update`"))
-        with mock.patch.object(store, "switches", return_value=False):
+        with mock.patch.object(auto_update, "pinned", return_value=True):
             status, answer = self.ask("POST", "/api/v1/local/update", {})
         self.assertEqual((status, answer["cause"], answer["said"], answer["hint"]),
-                         (409, "no_switch", auto_update.in_words("no_switch"),
-                          auto_update.advice("no_switch", answer["installer"])))
+                         (409, "pinned", auto_update.in_words("pinned"),
+                          "to have cad update itself again, install it unpinned: `uv tool install --force cad`"))
         self.assertEqual(self.asked, [], "nothing asked of the engine")
         self.server.update = None
         self.assertEqual(self.ask("POST", "/api/v1/local/update", {})[0], 409, "no engine under the page")

@@ -84,7 +84,8 @@ def classify(error: BaseException) -> Failure:
     """The failure an exception is, by its class: a ``Failure`` as it is; an interrupt ``canceled``; no
     server running (``cad.engine.client.NotRunning``) ``not_running``, and one of another release
     (``OtherRelease``) ``other_release``, each with the command that starts this release's (``next``) -- but a
-    newer server that cad's own update started while this command ran (``store.active`` names its release) is said so,
+    newer server that cad's own update started while this command ran (``auto_update.installed`` names its release) is
+    said so,
     and that running the command again is the way on (``_updated``); the
     engine out of reach otherwise (``ConnectionError``) ``engine_unavailable``; a document the engine does not
     hold (``cad.engine.serve.NotHeld``), and a file a snapshot's flag names that is not there
@@ -113,13 +114,13 @@ def classify(error: BaseException) -> Failure:
 
 def _updated(error: BaseException) -> bool:
     """Whether the server an ``OtherRelease`` met is newer than the command and is what this environment runs now
-    (``store.active``): cad's own update switched releases while the command, of the release before, ran."""
+    (``auto_update.installed``): cad's own update switched releases while the command, of the release before, ran."""
     try:
         from cad.engine.client import newer
-        from cad_server._internal import store
+        from cad_server._internal import auto_update
 
         theirs = getattr(error, "theirs", None)
-        return newer(theirs, getattr(error, "mine", None)) and store.active() == theirs
+        return newer(theirs, getattr(error, "mine", None)) and auto_update.installed() == theirs
     except Exception:  # noqa: BLE001 - said as any other release's server is
         return False
 

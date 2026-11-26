@@ -84,7 +84,7 @@ def _start(args: argparse.Namespace, prog: str) -> int:
         except Exception:
             target = auto_update.after_failed_start()
             if target is not None:
-                print(f"cad: updating cad to {target}: it is installed beside this cad, then its server is started",
+                print(f"cad: updating cad to {target}, then starting its server",
                       file=sys.stderr, flush=True)
             raise
         for line in private_folders():  # Windows: uv's folder in an app's private copy, named, never deleted

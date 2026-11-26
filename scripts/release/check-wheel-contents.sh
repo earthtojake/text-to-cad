@@ -47,13 +47,11 @@ REQUIRED=(
   "cad/__init__.py"
   # The library's earlier import name, an alias of it.
   "cadgen/__init__.py"
-  # What every interpreter of the environment runs as it starts, from the .pth at the root of site-packages: the
-  # release it runs (the module at the root beside it, which reads the pointer to a release cad's update keeps), then
+  # What every interpreter of the environment runs as it starts, from the .pth at the root of site-packages:
   # `import build123d` made lazy (the finder).
   "cad.pth"
-  # The same two steps for Python 3.15 and later, which ignore the .pth file's import lines where this is beside it.
+  # The same step for Python 3.15 and later, which ignore the .pth file's import lines where this is beside it.
   "cad.start"
-  "_cad_release.py"
   "cad/_internal/lazy_kernel.py"
   # The document types and their registry, and the robot checks' library: a packaging regression
   # here would ship a server whose `cad urdf validate` cannot import.
@@ -101,9 +99,6 @@ REQUIRED=(
   "cad_server/_internal/auto_update.py"
   "cad_server/_internal/auto_update_helper.py"
   "cad_server/cli/auto_update.py"
-  # The releases the update keeps beside the installed one, and the check a release runs of itself before it counts.
-  "cad_server/_internal/store.py"
-  "cad_server/_internal/selftest.py"
   # The install command as the bridge's install mode runs it, once (`install_script`); and `cad plugin`, its command:
   # `cad plugin install`, which the server of a newer cad runs where `cad plugin update auto` is on (`plugin_catch_up`,
   # the rule it runs by), and which the install command hands the agent apps to.
@@ -275,7 +270,7 @@ check_alias cad-server cad_server "" "cad=cad_server.cli:main"
 check_alias cad-mcp cad_mcp "" "cad-mcp=cad_mcp.shim:main"
 check_alias cadgen cadgen "build123d kernel" ""
 # cad's last: the runtime checks below read its wheel and listing.
-check cad cad "cad|cadgen|cad_server|cad_mcp|cad\.pth|cad\.start|_cad_release\.py" "${REQUIRED[@]}"
+check cad cad "cad|cadgen|cad_server|cad_mcp|cad\.pth|cad\.start" "${REQUIRED[@]}"
 
 # The server's runtime. A nested-glob failure usually loses MANY files at once rather than one, so
 # report the count too: it distinguishes "one file moved" from "package-data is not matching".

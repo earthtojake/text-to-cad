@@ -19,11 +19,10 @@ is forced, and ``Failed`` carries uv's last line. Bounded: a uv that hangs is st
 make one install: uv locks its tool folder, the others wait, then find cad installed and say so (exit status 0).
 
 **Never down** (``_refuse_higher``): ``cad<N`` moves a tool of a higher major down to this major, with exit status 0,
-so the install never runs where uv's tool ``cad`` already holds a release of a higher major -- the newest it holds
-(``store.held``: the stored release its pointer names, which its processes run, and each ``cad-<release>.dist-info``
-in its environment, read by name), so it is seen where its launcher is missing and ``auto_update.installed_tool``
-finds none, and from a Python other than the tool's own -- nor where uv cannot say where its tools are (``uv tool
-dir``): ``Failed``, and nothing moved or run. A tool folder with no release to read (half made) is no reason to
+so the install never runs where uv's tool ``cad`` already holds a release of a higher major -- the newest
+``cad-<release>.dist-info`` in its environment, read by name (``auto_update.installed``), so it is seen where its
+launcher is missing and ``auto_update.installed_tool`` finds none, and from a Python other than the tool's own -- nor
+where uv cannot say where its tools are (``uv tool dir``): ``Failed``, and nothing moved or run. A tool folder with no release to read (half made) is no reason to
 refuse: uv repairs it.
 
 BRIDGE-ONLY, the one exception: the ``cad`` command 0.10.0 to 0.11.11 wrote in uv's bin folder (``old_launcher``),
@@ -33,8 +32,8 @@ harmless, for the install command to delete), and put back where uv did not, unl
 else is moved: another program's ``cad`` still makes uv refuse. This is how a computer of those releases gets cad
 installed globally, by this bridge (``cli.setup``) or by an app's server line.
 
-uv is found as cad's own update finds it (``auto_update.find_uv``: on Windows never a batch file, which would read the
-``<`` of ``cad<N`` as a redirection), else the one cad's own ``uv`` dependency carries (``auto_update.carried_uv``).
+uv is the person's, found as everywhere in cad (``base.find_uv``: on Windows never a batch file, which would read the
+``<`` of ``cad<N`` as a redirection).
 Imports the standard library alone at module scope.
 """
 
@@ -63,14 +62,10 @@ class Failed(Exception):
 
 
 def find() -> str | None:
-    """uv, as cad's own update finds it (never a batch file on Windows: ``auto_update.find_uv``), else the one cad's
-    ``uv`` dependency carries (``auto_update.carried_uv``); None where neither is."""
-    from cad_server._internal.auto_update import carried_uv, find_uv
+    """The person's uv (``auto_update.find_uv``), or None."""
+    from cad_server._internal.auto_update import find_uv
 
-    try:
-        return find_uv() or carried_uv()
-    except Exception:  # noqa: BLE001 - no uv at all
-        return None
+    return find_uv()
 
 
 def _run(command: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
@@ -137,15 +132,15 @@ def _tools(uv: str) -> Path | None:
 
 
 def _held(uv: str) -> tuple[int, ...] | None:
-    """The newest release uv's tool ``cad`` holds (``store.held``: found with no launcher, a receipt or a ``cad`` that
-    runs), as numbers, or None where it holds none (no tool, or one half made). ``Failed`` where uv cannot say where its
-    tools are."""
-    from cad_server._internal import store
+    """The newest release uv's tool ``cad`` holds (``auto_update.installed``: found with no launcher, a receipt or a
+    ``cad`` that runs), as numbers, or None where it holds none (no tool, or one half made). ``Failed`` where uv cannot
+    say where its tools are."""
+    from cad_server._internal import auto_update
 
     folder = _tools(uv)
     if folder is None:
         raise Failed("uv could not say where its tools are, so cad was left as it is")
-    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", store.held(folder / "cad") or "")
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", auto_update.installed(folder / "cad") or "")
     return tuple(int(part) for part in match.groups()) if match else None
 
 

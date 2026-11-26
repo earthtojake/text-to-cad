@@ -285,7 +285,7 @@ const UPDATE_ENDED = new Set(['timeout', 'no_program', 'in_use', 'denied', 'disk
   'no_release', 'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'broken', 'start_failed',
   'helper_start', 'packaged', 'unknown', 'none']);
 const UPDATE_CAUSES = { current: new Set([...UPDATE_ENDED, 'already']), failed: UPDATE_ENDED, restored: UPDATE_ENDED,
-  lost: new Set(['lost', 'helper_crash']), blocked: new Set(['no_installer', 'no_switch']) };
+  lost: new Set(['lost', 'helper_crash']), blocked: new Set(['no_installer', 'no_switch', 'pinned']) };
 // One run of the plugin's install in the agent apps, schema 12's (`cad_server/analytics.py`): who began it -- a person
 // who typed the command, the install command handing over, or cad's server; how it ended -- well, every app found
 // failed, its deadline stopped it before it was done (a run the server began has one), or another run held the lock

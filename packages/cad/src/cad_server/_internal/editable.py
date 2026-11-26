@@ -68,8 +68,8 @@ def _source_tree() -> bool:
     package = Path(__file__).resolve().parents[1]  # cad_server/
     if package.parent.name == "src" and (package.parents[1] / "pyproject.toml").is_file():
         return True
-    if package.parent.name in ("site-packages", "dist-packages") or (package.parent / "cad-store.json").is_file():
-        return False  # installed packages, an environment's own or a release cad's update keeps (``store.MARKER``)
+    if package.parent.name in ("site-packages", "dist-packages"):
+        return False
     return editable_source() is not None
 
 

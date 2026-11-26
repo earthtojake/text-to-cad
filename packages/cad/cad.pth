@@ -1,1 +1,1 @@
-import _cad_release; import cad._internal.lazy_kernel
+import cad._internal.lazy_kernel
