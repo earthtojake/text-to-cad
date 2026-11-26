@@ -61,7 +61,7 @@ holds.
 | `text-tiny` | 11/16 | 13/18 | tooltips, key hints, small metadata (the zoom's percentage, the app menu's version, the Home's ages) |
 | `text-xs` | 12/16 | 14/20 | Quick Edit's bar and chips, sub-toolbars, the update status, every menu, list and context menu, toasts |
 | `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs and the search, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
-| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the name of the Home's place on screen, its welcome title, the CAD app's notice |
+| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the Home's welcome title, the CAD app's notice |
 | `--cad-text-panel` | 12/16 | 14/20 | every step inside the panel and the settings cards |
 
 - **No other size**: no 10px step, no `text-[Npx]`, no font size in a stylesheet but the scale's variables.
@@ -70,11 +70,13 @@ holds.
   out of them keeps the chrome's scale. Why: nothing there jumps in size, and a pick reads alike in panel and card.
 - **A menu item** is its `text-xs` line in 6px of vertical padding, at least the row tall, set by the primitives alone.
 - **Weight.** Text is regular. Medium (500) marks a title: the open tab, a card's title and section headings, a chip,
-  the name on a Home's card. Semibold (600) is the heading step's and a dialog title's. A list's emphasis is colour,
+  the name on a Home's card, the Home's place on screen. Semibold (600) is the heading step's and a dialog title's. A list's emphasis is colour,
   never bold (a name in the Home's list is regular, in the foreground beside its muted facts); a search's match is
   `--brand-text` at medium weight. Numbers that change or line up are tabular.
-- **The Home is `text-ui`**, with two other steps and no more: `text-heading` for its one heading (the place's name, a
-  project's path's parts, the welcome's title) and `text-tiny` for small metadata (a card's line, the formats, a key).
+- **The Home is `text-ui`**, with two other steps and no more: `text-heading` for its welcome's title alone, and
+  `text-tiny` for small metadata (a card's line, the formats, a key). The place's name and a project's path are the
+  navbar's size, the place on screen at medium weight: a path is one size wherever it is drawn, the navbar's
+  `project / document` and the Home's `gearbox / housing / v3` alike.
   A card's format is a chip, at the chip's own step. Why: one size a surface, told apart by colour and weight.
 - **The picture's own text** keeps its own sizes, never under 10px: the cube's letters and face names 10px, a
   measurement's label and the snap chip 10px semibold, a drawn text mark 16, 20 or 28px. Why: it is the picture's.

@@ -55,7 +55,7 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
 
 // The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"), taken as every other
 // surface takes it, from the scale's utilities where the text is written: `text-ui` on the page, `text-heading` for its
-// one heading (the place's name, a project's path's parts, the welcome's title) and `text-tiny` for its small metadata
+// welcome's title alone (the place's name and a project's path are the navbar's size, `text-ui`) and `text-tiny` for its small metadata
 // (a card's line, the formats). No other step, and no size in its stylesheet rules, which hold only a card's marks and
 // the navbar's search. What each text is drawn at, on a desktop and a phone, is the browser spec's
 // (`library/ModelLibrary.browser.test.mjs`). Its sidebar is the panel's own surface, which sets the panel's one size.

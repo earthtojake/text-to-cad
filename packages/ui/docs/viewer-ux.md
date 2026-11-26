@@ -199,7 +199,8 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **The place** fills the rest, on the page's colour, padded by the panel's inset (16px) on all four sides, at every
   width and on a phone, its blocks (the heading, the folders, the cards, a line) 16px apart. Why: the navbar's logo, the
   sidebar's rows and the place then stand on one 16px line, and a box padded alike across and down reads as meant; the
-  24px gutters and 20px top it had were on no scale. Its heading row: the place's name, the page's one larger text; at
+  24px gutters and 20px top it had were on no scale. Its heading row: the place's name, at the navbar's size in medium weight (a larger heading under the navbar read as a
+  second title bar, and a path is one size wherever it is drawn); at
   the right Sort (Last activity, the default; Name; Kind: by the chips' kinds in their order, then the models, the
   `.xbf` files, then format (a model's Part, Assembly or XBF among them), then name) and grid or list, one segmented
   control. Sort and the layout are the tab's ([Settings memory](#settings-memory)).

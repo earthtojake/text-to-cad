@@ -998,15 +998,16 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // that does the same after it (left out where nothing hovers: a finger has no Escape).
   const backControl = back && from ? <Button variant="outline" size="control" className="min-w-0 shrink" aria-keyshortcuts="Escape" onClick={back} data-library-back="">
     <span className="truncate">{t("home.backTo", { name: from.name })}</span><Kbd className="[@media(hover:none)]:hidden" aria-hidden="true">{ESCAPE_KEY}</Kbd></Button> : null;
-  // The place's name, the page's one heading; on a project's page, the folder's path: each part but the last a way back
-  // up to its folder, muted and the first to give way (down to its first letters), the last the folder on screen.
-  const TITLE_CLASS = "m-0 min-w-0 truncate text-heading text-foreground";
+  // The place's name, at the navbar's size and a title's weight (a path is one size wherever it is drawn: the navbar's
+  // `project / document` and this one); on a project's page, the folder's path: each part but the last a way back up to
+  // its folder, muted and the first to give way (down to its first letters), the last the folder on screen.
+  const TITLE_CLASS = "m-0 min-w-0 truncate text-ui font-medium text-foreground";
   const title = crumbs.length > 1 ? <div className="flex min-w-0 flex-initial items-baseline justify-end gap-1 overflow-hidden" data-library-crumbs="">
     {crumbs.slice(0, -1).map(crumb => <Fragment key={crumb.path}>
-      <PressTarget className="max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate rounded-control text-heading text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset"
+      <PressTarget className="max-w-[16em] min-w-[2ch] flex-[0_1000_auto] truncate rounded-control text-ui text-muted-foreground no-underline outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 focus-visible:ring-inset"
         href={hrefOf?.({ home: projectFolder(shownProject?.id ?? "", crumb.path) }) ?? null} data-library-crumb=""
         onPress={() => visit(place.view === "project" ? projectFolder(place.project, crumb.path) : place)}>{crumb.name}</PressTarget>
-      <span className="flex-none text-heading font-normal text-muted-foreground" aria-hidden="true">/</span>
+      <span className="flex-none text-ui font-normal text-muted-foreground" aria-hidden="true">/</span>
     </Fragment>)}
     <h2 className={cn(TITLE_CLASS, "flex-initial")} data-library-title="">{shownAs}</h2>
   </div> : <h2 className={TITLE_CLASS} data-library-title="">{placeName}</h2>;

@@ -79,7 +79,7 @@ test("a wide home has its places in a 232px sidebar on the panel's surface, full
     // The place: its name the page's one larger text, on the panel's inset (16px) from the sidebar and under the navbar;
     // Sort and the layout at the row's right end, every control the scale's 28px.
     const title = page.locator("[data-library-title]");
-    assert.deepEqual([await title.textContent(), ...(await style(title, "fontSize", "lineHeight", "fontWeight"))], ["Recents", "15px", "20px", "600"]);
+    assert.deepEqual([await title.textContent(), ...(await style(title, "fontSize", "lineHeight", "fontWeight"))], ["Recents", "13px", "20px", "500"]);
     const toolbar = await box(page.locator("[data-library-toolbar]"));
     assert.deepEqual([toolbar.x, toolbar.y, toolbar.right], [232 + 16, navbar.bottom + 16, 1440 - 16]);
     for (const name of ["Sort by Last activity", "Grid", "List"]) assert.equal((await box(page.getByRole("button", { name }))).height, 28, name);
@@ -533,10 +533,11 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
     // Its format is the system's chip: the chip tall, 8px in, a row's corners, 8px in from the picture's corner.
     const badge = cards.first().locator("[data-library-format]");
     assert.deepEqual([(await box(badge)).height, (await box(badge)).x - picture.x, (await box(badge)).y - picture.y, ...(await px(badge, "paddingLeft", "borderTopLeftRadius"))], [20, 8, 8, "8px", "8px"]);
-    // The type: the one heading, text-ui with a card's name at medium weight, the age text-tiny, the chip's own step.
+    // The type: text-ui throughout, the place's name and a card's at medium weight (the navbar's size), the age
+    // text-tiny, the chip's own step.
     assert.deepEqual([await type(page.locator("[data-library-title]")), await type(page.locator("[data-library-path]")), await type(cards.first().locator("[data-library-label]")),
       await type(cards.first().locator("[data-library-status]")), await type(badge), await type(page.locator("[data-field-label]")), await type(page.locator("[data-navbar-home-left] h1"))],
-    ["15px 20px 600", "13px 20px 400", "13px 20px 500", "11px 16px 400", "12px 16px 500", "13px 20px 400", "13px 20px 400"]);
+    ["13px 20px 500", "13px 20px 400", "13px 20px 500", "11px 16px 400", "12px 16px 500", "13px 20px 400", "13px 20px 400"]);
     // The list: a header of muted labels the control tall, on the line, then rows the control + 16 tall with a row's
     // corners, each picture the control + 4 tall at 3:2 on the line; names and facts one size, told apart by colour.
     await page.getByRole("button", { name: "List" }).click();
@@ -555,7 +556,7 @@ test("the place is padded by the panel's inset on every side, its blocks 16px ap
   try {
     const { page } = deep;
     assert.deepEqual([await page.locator("[data-library-crumb]").allTextContents(), await page.locator("[data-library-title]").textContent(), await page.locator("[data-library-path]").count()], [["gearbox", "housing"], "v3", 0]);
-    assert.deepEqual([await type(page.locator("[data-library-crumb]")), (await style(page.locator("[data-library-crumb]").first(), "color"))[0]], ["15px 20px 600", await token(page, "--muted-foreground")]);
+    assert.deepEqual([await type(page.locator("[data-library-crumb]")), (await style(page.locator("[data-library-crumb]").first(), "color"))[0]], ["13px 20px 400", await token(page, "--muted-foreground")]);
     // The way back: the scale's button, the control tall and 8px in at each side, its key a tiny hint in a hairline box.
     const back = page.getByRole("button", { name: "Back to lid.step" });
     assert.deepEqual([(await box(back)).height, await type(back), ...(await px(back, "paddingLeft", "paddingRight")), await type(back.locator("kbd")), (await style(back.locator("kbd"), "borderTopWidth"))[0]],
@@ -578,7 +579,7 @@ test("at a phone's scale the home's rows, texts and gutters are the phone's: 46p
     assert.deepEqual(await px(page.locator("[data-library-content]"), "paddingTop", "paddingLeft", "paddingRight"), ["16px", "16px", "16px"]);
     const card = page.locator(".cad-library-card").first();
     assert.deepEqual([(await box(page.locator("[data-library-folders] > li").first())).height, await type(page.locator("[data-library-title]")), await type(card.locator("[data-library-label]")),
-      await type(card.locator("[data-library-status]")), (await box(card.locator("[data-library-format]"))).height], [46, "17px 22px 600", "15px 20px 500", "13px 18px 400", 28]);
+      await type(card.locator("[data-library-status]")), (await box(card.locator("[data-library-format]"))).height], [46, "15px 20px 500", "15px 20px 500", "13px 18px 400", 28]);
     await page.getByRole("button", { name: "List" }).click();
     const row = page.locator(".cad-library-row").filter({ has: page.locator("[data-library-picture]") }).first();
     await row.waitFor();
