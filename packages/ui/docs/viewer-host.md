@@ -468,7 +468,7 @@ command, and every renderer declines `select` in words.
 `thumbnail({ width, height })` is a library card's picture: it waits for the view
 to settle — the renderer's own live state saying the whole file is loaded and
 drawn, never a timer — then draws the model framed whole from the default
-direction at the card's aspect, on its own (no floor, grid or axes, whatever the
+direction at the card's own 3:2 (`THUMBNAIL_SIZE`, 480 × 320), on its own (no floor, grid or axes, whatever the
 person turned on) and on transparency, so it suits either scheme, off to the side of the view, so
 the person's camera, panels and window never show in it and nothing on screen
 changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
@@ -480,7 +480,7 @@ keeps one per revision of a file per mounted view (a model rebuilt while it is
 open is pictured again once its new revision is drawn), and only for the file the
 view still shows. A model's document is pictured as a file is, by its id: its catalog
 row's revision is the build the engine holds, so a rebuild is a new revision.
-That is the only picture the viewer takes: the home draws none. A card shows the picture its row names (`thumbnail`,
+A picture kept at the old 4:3 still draws: a card fits it whole in its 3:2 box (`object-contain`, bars either side) until the file is pictured again. That is the only picture the viewer takes: the home draws none. A card shows the picture its row names (`thumbnail`,
 the file as it now is), else its format's tile, so the home never reads a file nobody opened.
 `readState().display` and `setDisplaySettings(patch)` use the same sparse display
 schema as snapshots: `mode` selects `solid`, `shaded`, `parts`, `xray`, `hidden-line`,

@@ -2,10 +2,10 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { LiveRegistry } from "../host/liveRegistry.js";
 
 /**
- * A library card's picture, in pixels: the card's own 4:3, at twice the size a card is drawn at on
+ * A library card's picture, in pixels: the card's own 3:2, at twice the size a card is drawn at on
  * a wide screen, so it stays sharp on a dense one and small enough for the library to keep.
  */
-export const THUMBNAIL_SIZE = Object.freeze({ width: 480, height: 360 });
+export const THUMBNAIL_SIZE = Object.freeze({ width: 480, height: 320 });
 
 /**
  * A document's picture as the chrome draws it, wherever it does (a home's card, a row of its list, a row of the search):

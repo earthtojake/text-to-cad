@@ -319,7 +319,7 @@ chrome that floats over the picture. The home is the navbar over the library: it
     puts four or five across beside the sidebar on a laptop's page, a card about 200 to 250px wide, and one on a phone.
     232 made cards near 290px wide on a laptop, larger than a file's picture needs.
   - **A document's picture is 3:2 wherever it is drawn** (a card's, a row's, the search's), on the light viewport's
-    gradient in both themes. Why: one picture, one shape; a card's, a row's and the search's had three.
+    gradient in both themes, and taken at 3:2 (480 × 320), so a card shows it whole; one taken earlier at 4:3 is fitted whole in the box. Why: one picture, one shape; a card's, a row's and the search's had three.
   - **A row** is the search's: the control + 16 tall (44px; a phone's 52), its picture the control + 4 tall, then its
     name and its facts in one size, the name in the foreground and the facts muted, under a header of muted labels the
     control tall with no rule under it. Its fill hangs 8px past the place's line, so the header's labels and the pictures,

@@ -20,7 +20,8 @@ import type { ViewerCommands as CadCommands } from '@cad/ui/renderers/workspace'
 // The module the built renderers publish their export view through (the viewer's ExportControls
 // provides it): the same built file, so this harness's provider is the one they reach.
 import { ExportContext } from '../../../dist/export/context.js';
-import { ModelLibrary } from '@cad/ui/library';
+import { ModelLibrary, useModelThumbnail } from '@cad/ui/library';
+import { createLiveRegistry } from '@cad/ui/host';
 // `?file=home`: no file, the host's home (the library), as the web viewer's is, for a look at the home page.
 const showHome = new URLSearchParams(location.search).get('file') === 'home';
 const HOME_MODELS = ['bracket.step', 'hinge.step', 'blinky.kicad_pcb', 'layered.dxf', 'arm.urdf', 'pair.glb'].map((name, index) => ({
@@ -116,25 +117,34 @@ function workspace(id: string, store: TabStore) {
       return { status: 'added', partIds: context.parts.map(part => part.id) };
     } }
   };
-  let controller: LiveViewController | null = null;
-  const live = { bind(next: LiveViewController) { controller = next; return () => { controller = null; }; } };
+  const registry = createLiveRegistry<LiveViewController>();
+  const live = registry.binding;
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences: store.settings, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
   const renderers = [createBoardRenderer(services), createSchematicRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createXbfRenderer(services), createHarnessRenderer(services)];
-  return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
+  return { client, source, host, renderers, commands, capture, selectReference, registry, get controller() { return registry.current(); } };
 }
 const a = workspace('one', tabStore), b = workspace('two', otherTabStore);
 // Each client's catalog is read before a renderer mounts, as a host's first read of it is.
 await Promise.all([a.client.refresh(), b.client.refresh()]);
+// `?pictures=1`: the pane keeps a picture of its file as the library does (`useModelThumbnail`), each handed to a
+// list the spec reads (`cadHarness.pictures`).
+const keepPictures = new URLSearchParams(location.search).get('pictures') === '1';
+const pictures: Blob[] = [];
+function Pictures() {
+  useModelThumbnail(a.registry, keepPictures ? file : null, 'harness', async png => { pictures.push(png); });
+  return null;
+}
 function App() {
   // Two panes, two viewers, two tabs: each viewer keeps its own record, settings and file view.
   const { state, onStateChange } = useTabViewerState(tabStore);
   const { state: otherState, onStateChange: onOtherStateChange } = useTabViewerState(otherTabStore);
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
-  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
+  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, pictures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
   return <div className="dark" style={{ display: 'flex', width: '1200px', height: '720px' }}>
+    <Pictures />
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} presentation={homePresentation} /></ExportContext.Provider>}
     </section>

@@ -56,13 +56,13 @@ describe('the shell live binding', () => {
     let settle!: () => void;
     const thumbnail = vi.fn(async () => new Blob(['card'], { type: 'image/png' }));
     const view = harness({ declined, ready: () => new Promise<void>(resolve => { settle = resolve; }) }, { thumbnail });
-    const picture = view.controller.thumbnail({ width: 480, height: 360 });
+    const picture = view.controller.thumbnail({ width: 480, height: 320 });
     await Promise.resolve();
     expect(thumbnail).not.toHaveBeenCalled();
     settle();
     expect(await (await picture).text()).toBe('card');
-    expect(thumbnail).toHaveBeenCalledWith({ width: 480, height: 360 });
+    expect(thumbnail).toHaveBeenCalledWith({ width: 480, height: 320 });
     view.detach();
-    await expect(view.controller.thumbnail({ width: 480, height: 360 })).rejects.toThrow('Show the model tab');
+    await expect(view.controller.thumbnail({ width: 480, height: 320 })).rejects.toThrow('Show the model tab');
   });
 });
