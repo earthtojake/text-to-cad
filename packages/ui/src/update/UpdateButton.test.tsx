@@ -15,8 +15,6 @@ import type { UpdateCalls, UpdateReply, UpdateState } from './index.js';
 
 const behind = (state: Partial<UpdateState> = {}): UpdateState => ({ version: '0.9.0', latest: '0.9.1', state: 'idle', ...state });
 const reply = (update: UpdateState | null, instance = 'first', release = '0.9.0'): UpdateReply => ({ release, instance, cadUpdate: update });
-// A release installed beside this one, only the server's restart left: nothing newer need be offered.
-const ready = (state: Partial<UpdateState> = {}): UpdateState => behind({ latest: null, state: 'ready', ready: '0.9.1', ...state });
 const LOG = '/home/ada/.local/state/cad/auto-update.log';
 const failed = (cause: string, at = 100, more: Partial<UpdateState> = {}) => reply(behind({ state: 'failed', cause,
   said: `the server's words for ${cause}`, at, log: LOG, ...more }));
@@ -24,7 +22,7 @@ const failed = (cause: string, at = 100, more: Partial<UpdateState> = {}) => rep
 function calls({ read, start, dismiss }: Partial<UpdateCalls> = {}) {
   return {
     read: vi.fn<UpdateCalls['read']>(read ?? (async () => reply(behind()))),
-    start: vi.fn<UpdateCalls['start']>(start ?? (async () => reply(behind({ state: 'working', phase: 'building' })))),
+    start: vi.fn<UpdateCalls['start']>(start ?? (async () => reply(behind({ state: 'working' })))),
     dismiss: vi.fn<UpdateCalls['dismiss']>(dismiss ?? (async () => reply(behind()))),
   };
 }
@@ -65,11 +63,10 @@ const show = (props: Parameters<typeof Host>[0]) => render(<I18nProvider locale=
 const rightHand = () => [...document.querySelector('[data-viewer-navbar]')!.lastElementChild!.querySelectorAll('button')]
   .map(node => node.getAttribute('aria-label'));
 const cards = () => screen.queryAllByRole('alert');
-/** A click on the button: its name says which it is, the download icon's or the restart icon's. */
+/** A click on the button, by its name. */
 async function confirm(name = 'Update to 0.9.1') {
   await act(async () => { fireEvent.click(screen.getByRole('button', { name })); });
 }
-const RESTART = 'Restart to update to 0.9.1';
 /** Which lucide icon a button draws: lucide marks each svg with its name. */
 const icon = (button: HTMLElement) => [...button.querySelector('svg')!.classList].find(name => /^lucide-(?!icon)/.test(name));
 
@@ -111,20 +108,20 @@ it('is a blue icon, and nothing else, while the install is behind; nothing where
   expect(screen.queryByRole('button', { name: /^Update/ })).toBeNull();
 });
 
-it('a click updates: a ring that fills a stage at a time (building, switching), the server gone while it restarts, then a spinner and the host reloads', async () => {
-  const answers: Array<UpdateReply | Error> = [reply(behind({ state: 'working', phase: 'building', at: 5, asked: true })),
-    reply(behind({ state: 'working', phase: 'switching', at: 5, asked: true })), new TypeError('Failed to fetch'),
+it('a click updates: a ring that fills a stage at a time (asked, underway), the server gone while it restarts, then a spinner and the host reloads', async () => {
+  const answers: Array<UpdateReply | Error> = [reply(behind({ state: 'working', at: 5, asked: true })), new TypeError('Failed to fetch'),
     reply(behind({ latest: null, version: '0.9.1' }), 'second', '0.9.1')];
-  const server = calls({ read: async () => { const next = answers.shift() ?? reply(behind()); if (next instanceof Error) throw next; return next; } });
+  const server = calls({ start: async () => { await new Promise(resolve => setTimeout(resolve, 10)); return reply(behind({ state: 'working', at: 5, asked: true })); },
+    read: async () => { const next = answers.shift() ?? reply(behind()); if (next instanceof Error) throw next; return next; } });
   const onRestarted = vi.fn();
   show({ server, onRestarted });
   await confirm();
   expect(server.start).toHaveBeenCalledOnce();
-  expect(screen.getByRole('progressbar', { name: 'Updating to 0.9.1' }).getAttribute('aria-valuenow')).toBe('0');
+  expect(screen.getByRole('progressbar', { name: 'Updating to 0.9.1' }).getAttribute('aria-valuenow')).toBe('0');  // asked
+  await advance(10);
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');  // underway
   await advance(UPDATE_POLL_MS);
-  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('0');  // building
-  await advance(UPDATE_POLL_MS);
-  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');  // switching
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
   await advance(UPDATE_POLL_MS);
   expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('2');  // the server gone: restarting
   await advance(UPDATE_POLL_MS);
@@ -136,23 +133,6 @@ it('a click updates: a ring that fills a stage at a time (building, switching), 
   expect(server.read.mock.calls.length).toBe(asked);
 });
 
-it('a server that sends no phase (an older one) is followed as a working update was before: the second stage', async () => {
-  const answers: Array<UpdateReply | Error> = [reply(behind({ state: 'working', at: 5, asked: true })), new TypeError('Failed to fetch'),
-    reply(behind({ latest: null, version: '0.9.1' }), 'second', '0.9.1')];
-  const server = calls({ start: async () => reply(behind({ state: 'working', at: 5, asked: true })),
-    read: async () => { const next = answers.shift() ?? reply(behind()); if (next instanceof Error) throw next; return next; } });
-  const onRestarted = vi.fn();
-  show({ server, onRestarted });
-  await confirm();
-  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
-  await advance(UPDATE_POLL_MS);
-  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');
-  await advance(UPDATE_POLL_MS);
-  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('2');
-  await advance(UPDATE_POLL_MS);
-  expect(onRestarted).toHaveBeenCalledOnce();
-});
-
 it('an automatic update the page finds underway shows its progress and is followed the same way', async () => {
   const server = calls({ read: async () => reply(behind({ state: 'working', at: 5 })) });
   show({ server, initial: reply(behind({ state: 'working', at: 5 })) });
@@ -162,98 +142,57 @@ it('an automatic update the page finds underway shows its progress and is follow
   expect(server.start).not.toHaveBeenCalled();
 });
 
-it('two looks of one button: the download icon while a release is out, the restart icon while one is installed and ready, even with nothing newer offered', async () => {
-  for (const [initial, label, tip, look, mark] of [
-    [reply(behind()), 'Update to 0.9.1', 'Update', '', 'lucide-download'],
-    [failed('network'), 'Update to 0.9.1', 'Update', '', 'lucide-download'],
-    [reply(ready()), RESTART, 'Restart to update', 'ready', 'lucide-rotate-ccw'],
-  ] as const) {
+it('one look: the download icon whenever a release is out, a failure too, its hint "Update"', async () => {
+  for (const initial of [reply(behind()), failed('network')]) {
     show({ server: calls(), initial });
-    const button = screen.getByRole('button', { name: label });
-    expect([icon(button), button.getAttribute('data-update'), button.textContent]).toEqual([mark, look, '']);
+    const button = screen.getByRole('button', { name: 'Update to 0.9.1' });
+    expect([icon(button), button.getAttribute('data-update'), button.textContent]).toEqual(['lucide-download', '', '']);
     expect(button.className).toContain('size-6');
     expect(button.className).toContain('bg-brand');
     // Its hint, under a resting pointer.
     await act(async () => { fireEvent.pointerMove(button, { pointerType: 'mouse' }); });
     await advance(450);
-    expect(screen.queryAllByRole('tooltip').map(node => node.textContent)).toContain(tip);
+    expect(screen.queryAllByRole('tooltip').map(node => node.textContent)).toContain('Update');
     cleanup();
   }
 });
 
-it('a click acts at once and opens nothing: the restart icon\'s, or the download icon\'s; while an update installs or the server restarts there is no button', async () => {
+it('a click acts at once and opens nothing; while an update installs or the server restarts there is no button', async () => {
   const onUpdate = vi.fn();
   const draw = (state: UpdateState, phase: Parameters<typeof UpdateButton>[0]['phase']) => <I18nProvider locale="en">
     <UpdateButton state={state} phase={phase} onUpdate={onUpdate} /></I18nProvider>;
-  const view = render(draw(ready(), { phase: 'idle' }));
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: RESTART })); });
-  expect(onUpdate).toHaveBeenCalledOnce();
-  view.rerender(draw(behind(), { phase: 'idle' }));
+  const view = render(draw(behind(), { phase: 'idle' }));
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Update to 0.9.1' })); });
-  expect(onUpdate).toHaveBeenCalledTimes(2);
+  expect(onUpdate).toHaveBeenCalledOnce();
   expect([screen.queryByRole('dialog'), screen.queryByRole('menu')]).toEqual([null, null]);
   for (const phase of [{ phase: 'working', done: 0, total: 3 }, { phase: 'restarting' }] as const) {
-    view.rerender(draw(ready(), phase));
+    view.rerender(draw(behind(), phase));
     expect(screen.queryByRole('button')).toBeNull();
   }
 });
 
-it('a click on a ready release shows the spinner at once and asks once; the server switching and gone keep it, until the new release answers', async () => {
-  let answer: (value: UpdateReply) => void = () => {};
-  // The server's answers while it switches need not name the release: the spinner still does.
-  const answers: Array<UpdateReply | Error> = [reply(behind({ latest: null, state: 'working', phase: 'switching', at: 5, asked: true })), new TypeError('Failed to fetch'),
-    reply(behind({ latest: null, version: '0.9.1' }), 'second', '0.9.1')];
-  const server = calls({ start: () => new Promise<UpdateReply>(resolve => { answer = resolve; }),
-    read: async () => { const next = answers.shift() ?? reply(behind()); if (next instanceof Error) throw next; return next; } });
-  const onRestarted = vi.fn();
-  show({ server, initial: reply(ready()), onRestarted });
-  await confirm(RESTART);
-  // Before the server has answered: nothing left to install, so no ring.
-  expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
-  expect(server.start).toHaveBeenCalledOnce();
-  await act(async () => { answer(reply(behind({ latest: null, state: 'working', phase: 'switching', at: 5, asked: true }))); });
-  for (let step = 0; step < 2; step += 1) {
-    await advance(UPDATE_POLL_MS);
-    expect(screen.queryByRole('progressbar')).toBeNull();
-    expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
-  }
-  await advance(UPDATE_POLL_MS);
-  expect(onRestarted).toHaveBeenCalledOnce();
-  expect(server.start).toHaveBeenCalledOnce();
-});
-
-it('a click on a ready release whose server builds a newer one after all shows the ring', async () => {
-  const server = calls({ start: async () => reply(behind({ state: 'working', phase: 'switching', at: 5, asked: true })),
-    read: async () => reply(behind({ latest: '0.9.2', state: 'working', phase: 'building', at: 6, asked: true })) });
-  show({ server, initial: reply(ready()) });
-  await confirm(RESTART);
-  expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();
-  await advance(UPDATE_POLL_MS);
-  expect(screen.getByRole('progressbar', { name: 'Updating to 0.9.2' }).getAttribute('aria-valuenow')).toBe('0');
-});
-
-it('a refused click on a ready release goes back to the button and says why', async () => {
-  const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'cad cannot switch', cause: 'no_switch', installer: 'uv' } } });
-  show({ server: calls({ start: async () => { throw refusal; } }), initial: reply(ready()) });
-  await confirm(RESTART);
+it('a refused click goes back to the button and says why', async () => {
+  const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'cad is pinned', cause: 'pinned', installer: 'uv' } } });
+  show({ server: calls({ start: async () => { throw refusal; } }) });
+  await confirm();
   expect(screen.queryByRole('status')).toBeNull();
-  expect(screen.getByRole('button', { name: RESTART }).getAttribute('data-update')).toBe('ready');
+  expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();
   const [card] = cards();
   expect(within(card).getByRole('heading').textContent).toBe('Couldn’t update to 0.9.1');
-  expect(card.textContent).toContain('This install of cad can’t switch to a newer release by itself');
+  expect(card.textContent).toContain('cad is pinned to its release, so it doesn’t update itself: install it unpinned with `uv tool install --force cad`');
   expect(within(card).getByRole('button', { name: 'Try again' })).toBeTruthy();
 });
 
 it('a page that is seen reads the server again once a minute, and as it is shown again; a hidden one asks nothing', async () => {
-  const answers = [reply(behind())];
-  const server = calls({ read: async () => answers.shift() ?? reply(ready()) });
+  const answers = [reply(behind({ latest: null }))];
+  const server = calls({ read: async () => answers.shift() ?? reply(behind()) });
   show({ server, initial: null });
   await advance(0);
   expect(server.read).toHaveBeenCalledOnce();  // nothing read before: read as the page starts
-  expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Update to 0.9.1' })).toBeNull();
   await advance(UPDATE_READ_MS);
   expect(server.read).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole('button', { name: RESTART })).toBeTruthy();  // made ready meanwhile, shown by itself
+  expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();  // out meanwhile, shown by itself
   seen(false, { tell: true });
   await advance(3 * UPDATE_READ_MS);
   expect(server.read).toHaveBeenCalledTimes(2);
@@ -276,7 +215,7 @@ it('a page following an update asks where it is, and nothing besides', async () 
 });
 
 it('a failed update is the viewer\'s alert over the home: its title, why and what to do, Try again, and Details with cad update and the log', async () => {
-  const server = calls({ start: async () => reply(behind({ state: 'working', phase: 'building' })) });
+  const server = calls({ start: async () => reply(behind({ state: 'working' })) });
   show({ server, initial: failed('in_use') });
   const [card] = cards();
   // The card every error is said in, centred over the home: the red icon, the title, the words, and an X.
@@ -296,7 +235,7 @@ it('a failed update is the viewer\'s alert over the home: its title, why and wha
   await act(async () => { fireEvent.click(within(card).getByRole('button', { name: 'Try again' })); });
   expect(server.start).toHaveBeenCalledOnce();
   expect(cards()).toEqual([]);  // a new attempt: the failure gone
-  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('0');
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('1');  // the server's answer: underway
 });
 
 it('Report Issue is offered for cad\'s own causes alone, never for one that is the person\'s to fix', async () => {
@@ -417,7 +356,7 @@ it('the reinstall sentences name the command of whoever installed cad, from the 
 it('every language\'s reinstall sentences take the command as a value, never spelling one', () => {
   for (const locale of ['en', 'ja', 'ko', 'zh-CN', 'zh-TW']) {
     const source = readFileSync(`src/i18n/locales/${locale}.js`, 'utf8');
-    for (const cause of ['python', 'no_installer', 'no_switch']) {
+    for (const cause of ['python', 'no_installer', 'no_switch', 'broken', 'pinned']) {
       const line = source.split('\n').find(row => row.includes(`"update.cause.${cause}"`))!;
       expect(line, `${locale} ${cause}`).toContain('`{command}`');
       expect(line, `${locale} ${cause}`).not.toMatch(/uv tool install|pipx install/);
@@ -437,7 +376,7 @@ it('the server restarted on the release before (the update failed): the page goe
   expect(screen.getByRole('status', { name: 'Restarting with 0.9.1' })).toBeTruthy();  // its end not written yet
   await advance(UPDATE_POLL_MS);
   expect(onRestarted).not.toHaveBeenCalled();
-  expect(cards()[0].textContent).toContain('The new release’s server didn’t start, so cad went back to the release you had.');
+  expect(cards()[0].textContent).toContain('The new release didn’t start, so cad went back to the release you had.');
 });
 
 it('a page loaded after the restart it followed: the spinner while the end is written, then that it is updated, once', async () => {

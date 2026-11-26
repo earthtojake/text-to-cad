@@ -8,7 +8,7 @@ export const UPDATE_COMMAND = "cad update";
 /** The causes the page says in words of its own (`update.cause.<word>`); any other is said by the server's words. */
 export const UPDATE_CAUSES = ["timeout", "no_program", "in_use", "denied", "disk_full", "network", "offline", "no_release", "python",
   "platform", "config_exclude", "config_index", "config_tls", "broken", "start_failed", "helper_start", "helper_crash",
-  "lost", "no_installer", "no_switch", "packaged", "unknown"] as const;
+  "lost", "no_installer", "no_switch", "packaged", "pinned", "unknown"] as const;
 
 /**
  * The causes that are cad's own fault, which Report Issue is offered for: an update whose helper could not start,

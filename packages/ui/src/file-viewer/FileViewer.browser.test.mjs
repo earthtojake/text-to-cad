@@ -143,9 +143,9 @@ test("the update button is the navbar's top-right corner, over a file and over t
       await page.evaluate((path) => window.harness.open(path), where === "home" ? null : "/work/notes.txt");
       if (where === "home") await navbar.locator("[data-navbar-home-right]").getByRole("button", { name: "Open", exact: true }).waitFor();
       else await waitPayload("root-a notes");
-      for (const [state, tip, after] of [["behind", "Update", "working"], ["ready", "Restart to update", "restarting"]]) {
+      for (const [state, tip] of [["behind", "Update"]]) {
         await page.evaluate((next) => window.harness.update(next), state);
-        await navbar.locator(state === "ready" ? '[data-update="ready"]' : '[data-update=""]').waitFor();
+        await navbar.locator('[data-update=""]').waitFor();
         await settle();
         const [row, at, pad, rights] = [await box(navbar), await box(button), await navbar.evaluate((node) => parseFloat(getComputedStyle(node).paddingRight)),
           await navbar.evaluate((node) => [...node.querySelectorAll("button")].map((control) => control.getBoundingClientRect().right))];
@@ -176,8 +176,8 @@ test("the update button is the navbar's top-right corner, over a file and over t
         await page.mouse.move(1, 790);
         await hint.waitFor({ state: "detached" });
       }
-      // A click acts at once: the restart's spinner, or the ring.
-      for (const [state, after] of [["ready", "restarting"], ["behind", "working"]]) {
+      // A click acts at once: the ring.
+      for (const [state, after] of [["behind", "working"]]) {
         await page.evaluate((next) => window.harness.update(next), state);
         await button.click();
         await navbar.locator(`[data-update="${after}"]`).waitFor();

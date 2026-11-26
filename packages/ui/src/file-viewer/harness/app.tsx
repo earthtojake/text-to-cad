@@ -94,17 +94,16 @@ export function App() {
   // (`"pinned"`, as it is), or measured (`"measured"`, a viewer that forgot to pin it), or none.
   const [picture, setPicture] = useState<"none" | "pinned" | "measured">("none");
   const [pictureState, setPictureState] = useState<FileViewerState>({});
-  // The host's update button, as a host hands it: none, offered (its click shows the ring), or a release ready (its
-  // click shows the restart's spinner), as `useUpdate` does; and an update that failed, as the viewer's alert
-  // (`CadViewer`'s `alert`), on screen or put away.
-  const [update, setUpdate] = useState<"none" | "behind" | "ready" | "working" | "restarting" | "failed" | "put away">("none");
+  // The host's update button, as a host hands it: none, offered (its click shows the ring), the server restarting
+  // (the spinner), as `useUpdate` does; and an update that failed, as the viewer's alert (`CadViewer`'s `alert`), on
+  // screen or put away.
+  const [update, setUpdate] = useState<"none" | "behind" | "working" | "restarting" | "failed" | "put away">("none");
   Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, renders, cleanupWrites, state, open: setFile,
     setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture, update: setUpdate } });
-  const updateButton = update === "none" ? null : <UpdateButton state={update === "ready" || update === "restarting"
-    ? { version: "0.9.0", latest: null, state: "ready", ready: "0.9.1" }
-    : { version: "0.9.0", latest: "0.9.1", state: update === "failed" || update === "put away" ? "failed" : "idle" }}
+  const updateButton = update === "none" ? null : <UpdateButton
+    state={{ version: "0.9.0", latest: "0.9.1", state: update === "failed" || update === "put away" ? "failed" : "idle" }}
     phase={update === "restarting" ? { phase: "restarting" } : update === "working" ? { phase: "working", done: 0, total: 3 } : { phase: "idle" }}
-    onUpdate={() => { events.push("update"); if (update === "ready") setUpdate("restarting"); else if (update === "behind") setUpdate("working"); }} />;
+    onUpdate={() => { events.push("update"); if (update === "behind") setUpdate("working"); }} />;
   const updateFailed = update === "failed" || update === "put away" ? hostAlertSlot({
     alert: updateAlert({ cause: "in_use", at: 1, log: "/state/auto-update.log" }, "0.9.1", english), dismissed: update === "put away",
     onDismiss: () => { events.push("dismiss"); setUpdate("put away"); }, onReopen: () => { events.push("reopen"); setUpdate("failed"); },

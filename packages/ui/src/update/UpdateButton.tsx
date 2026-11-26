@@ -1,4 +1,4 @@
-import { Download, RotateCcw } from "lucide-react";
+import { Download } from "lucide-react";
 import { Button } from "../primitives/button.jsx";
 import { Spinner } from "../primitives/spinner.js";
 import { TooltipHint } from "../primitives/tooltip.jsx";
@@ -16,9 +16,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
  * updates (`useUpdate`): the icon becomes a ring that fills a stage at a time as the release installs (each
  * step eased), then a spinner while the server restarts, and the page reloads itself into the new release
  * (the host's to do). The tooltip says "Update", then the percent of the stages done, then that the server
- * restarts. A release already installed beside this one, with only the server's restart left (`ready`, whatever
- * `latest` says), is the same button with a restart icon, its tooltip "Restart to update": a click restarts the
- * server onto it, the spinner at once, as nothing is left to install. Either click acts at once; nothing opens.
+ * restarts. The click acts at once; nothing opens.
  * An update that failed -- the button's own, a typed one, or cad's automatic one -- is the viewer's alert
  * (`updateAlert`); the button stays as it is offered, and a click tries again.
  */
@@ -28,11 +26,10 @@ export function UpdateButton({ state, phase, onUpdate }: {
   onUpdate(): void;
 }) {
   const { t } = useI18n();
-  const ready = state?.state === "ready" ? state.ready ?? "" : "";
-  const version = ready || (state?.latest ?? "");
+  const version = state?.latest ?? "";
   const brand = "bg-brand text-white hover:bg-brand-icon dark:text-primary-foreground dark:hover:bg-brand/75";
   if (phase.phase === "restarting") {
-    const restarting = t("update.restarting", { version: phase.version || version });
+    const restarting = t("update.restarting", { version });
     return <TooltipHint content={restarting}>
       <span className="inline-flex size-6 shrink-0 items-center justify-center" data-update="restarting">
         <Spinner className="size-4" aria-label={restarting} />
@@ -56,12 +53,10 @@ export function UpdateButton({ state, phase, onUpdate }: {
     </TooltipHint>;
   }
   if (!version) return null;
-  const [Icon, tip, name] = ready ? [RotateCcw, t("update.restartLabel"), t("update.restartToAria", { version })]
-    : [Download, t("update.label"), t("update.toAria", { version })];
-  return <TooltipHint content={tip}>
-    <Button variant="default" size="icon-xs" aria-label={name} data-update={ready ? "ready" : ""}
+  return <TooltipHint content={t("update.label")}>
+    <Button variant="default" size="icon-xs" aria-label={t("update.toAria", { version })} data-update=""
       className={`size-6 shrink-0 ${brand}`} onClick={onUpdate}>
-      <Icon className="size-3.5" aria-hidden="true" />
+      <Download className="size-3.5" aria-hidden="true" />
     </Button>
   </TooltipHint>;
 }

@@ -331,7 +331,7 @@ test('the update button: from the server\'s description, a click begins the upda
   globalThis.fetch = async (url, init = {}) => {
     if (url === '/api/v1/local/update') {
       posted.push([JSON.parse(init.body), init.headers?.['x-cad-viewer']]);
-      return new Response(JSON.stringify({ release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'working', phase: 'building' } }),
+      return new Response(JSON.stringify({ release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'working' } }),
         { status: 202, headers: { 'content-type': 'application/json' } });
     }
     if (isCatalog(url, init) && catalog === 'stopped') throw new TypeError('Failed to fetch');

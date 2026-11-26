@@ -510,7 +510,7 @@ it('the update button: from the launch, outermost in the navbar; a click through
   vi.stubGlobal('__cadShell', { reload });
   let reads = 0;
   server.answers['/api/v1/local/update'] = () => new Status(202, { release: version, instance: 'first',
-    cadUpdate: { version, latest: '99.0.0', state: 'working', phase: 'building' } });
+    cadUpdate: { version, latest: '99.0.0', state: 'working' } });
   server.answers['/api/v1/server'] = () => {
     reads += 1;
     if (reads === 1) return { release: version, instance: 'first', cadUpdate: { version, latest: '99.0.0', state: 'working', at: 5, asked: true } };

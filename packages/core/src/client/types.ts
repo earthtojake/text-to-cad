@@ -68,8 +68,6 @@ export interface CadUpdateState {
   version: string;
   latest: string | null;
   state: 'idle' | 'working' | 'failed';
-  /** While `working`: `building` (the release installs beside this one), then `switching` (the server restarts onto it); none from an older server. */
-  phase?: 'building' | 'switching';
   at?: number;
   asked?: boolean;
   cause?: string;
