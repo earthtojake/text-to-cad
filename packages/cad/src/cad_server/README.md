@@ -248,6 +248,12 @@ command says each that applies on stderr after its own output, at most once a da
 state folder, written before it is said), on the rules of the stayed-behind line; `cad doctor` lists each; and
 `GET /api/v1/server`'s `cadNotices` hands them to the viewer. With none, nothing says anything.
 
+**In the MCP channel** (`mcp/server.py`'s `attention`), for an agent that never sees cad's stderr: the stayed-behind
+line (at once where the update failed or cannot begin; where automatic updates are off, that the release is out and to
+ask before `cad update`) and each notice, under `cad needs attention:`, in the initialize answer's `instructions` and
+once a session on the first result of an agent's tool. From the feed as last read and the records; nothing when all is
+well.
+
 **The update button** (`auto_update.button`, `GET /api/v1/server`'s `cadUpdate`; `POST /api/v1/local/update`).
 Where cad can update itself (a uv global install), whatever the switch says, the viewer and the CAD app show it while
 the feed names a newer release of this cad's major: one state, Update (a click updates in place and restarts), working
