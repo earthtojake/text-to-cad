@@ -18,7 +18,7 @@ const { chromium } = createRequire(path.join(REPO, "packages/core/package.json")
 const { PNG } = createRequire(path.join(REPO, "apps/web/package.json"))("pngjs");
 
 function parseArgs(argv) {
-  const args = { url: "", dir: "", out: "", only: "", share: "", shareAgain: "", plate: "", prompt: "" };
+  const args = { url: "", dir: "", out: "", only: "", share: "", shareAgain: "", shareBoard: "", shareSchematic: "", plate: "", prompt: "" };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === "--url") args.url = argv[++i] || "";
@@ -26,6 +26,8 @@ function parseArgs(argv) {
     // What `cad share` printed, sharing the model and then sharing it again unchanged.
     else if (flag === "--share") args.share = argv[++i] || "";
     else if (flag === "--share-again") args.shareAgain = argv[++i] || "";
+    else if (flag === "--share-board") args.shareBoard = argv[++i] || "";
+    else if (flag === "--share-schematic") args.shareSchematic = argv[++i] || "";
     // The share fixture's model, by its document id, for the prompt gate on the engine's page; and the file the
     // prompt gate writes the prompt it copied to, for the share gate to compare the shared page's with.
     else if (flag === "--plate") args.plate = argv[++i] || "";
@@ -968,6 +970,64 @@ async function shareGate() {
     // The service's policy is all the page needs.
     for (const violation of violations) console.log(`  share: content security policy: ${JSON.stringify(violation)}`);
     if (violations.length) failures.push(`share: ${violations.length} content security policy violations`);
+    if (errors.length) failures.push(`share: ${errors.join(" | ")}`);
+  } finally {
+    await context.close();
+  }
+  if (args.shareBoard || args.shareSchematic) await kicadShares();
+}
+
+// The board's view settings, the navbar's Display: its card's Mode is 2D or 3D.
+const DISPLAY = "[data-navbar-view-controls] [data-display-settings]";
+
+async function kicadShares() {
+  // A KiCad board and schematic shared as the model is (`--share-board`, `--share-schematic`: what `cad share --json`
+  // printed), opened from the share service with no engine: the board drawn on its canvas, and in 3D its LED standing
+  // on the STEP its project holds -- a bundle of its own in the board's, read by the model's id -- and its resistor,
+  // whose model is nowhere, a block; the schematic's root sheet, then the sheet the Hierarchy shows, read on its own.
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  const asked = [];
+  context.on("request", (request) => asked.push(new URL(request.url()).pathname));
+  const errors = [];
+  try {
+    for (const [what, file] of [["board", args.shareBoard], ["schematic", args.shareSchematic]]) {
+      if (!file) continue;
+      const shared = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (shared.ok !== true || typeof shared.view !== "string") {
+        failures.push(`share: --share-${what} names no share the command made: ${file}`);
+        continue;
+      }
+      const page = await context.newPage();
+      page.setDefaultTimeout(120_000);
+      page.on("pageerror", (error) => errors.push(`${what}: ${error.message || error}`));
+      page.on("console", (message) => { if (message.type() === "error") errors.push(`${what}: console: ${message.text()}`); });
+      await page.goto(shared.view, { waitUntil: "domcontentloaded" });
+      if (what === "board") {
+        await page.locator('[data-board-surface] [aria-busy="false"][data-board-settled="true"]').first().waitFor();
+        const card = page.locator("[data-display-settings-card]");
+        await page.locator(DISPLAY).click();
+        await card.locator('[data-settings-select="dimension"]').click();
+        await page.getByRole("menu").locator('[data-board-dimension-option="3d"]').click();
+        await card.getByRole("button", { name: "Close display settings", exact: true }).click();
+        // The LED's model read from the share, baked and placed: one body, one model; the resistor's, a block.
+        await page.locator('[data-board-3d][data-board-bodies="1"][data-board-models="1"][data-board-blocks="1"]').waitFor();
+      } else {
+        await page.locator('[data-schematic-sheet="/"]').waitFor();
+        await page.locator('[data-schematic-surface] [aria-busy="false"][data-board-settled="true"]').first().waitFor();
+        await page.locator("[data-flat-panel]").getByRole("tab", { name: "Hierarchy", exact: true }).click();
+        await page.locator('[data-schematic-sheet-row="/Load/"] button').first().click();
+        await page.locator('[data-schematic-sheet="/Load/"]').waitFor();
+        await page.locator('[data-schematic-surface] [aria-busy="false"][data-board-settled="true"]').first().waitFor();
+      }
+      if (await page.title() !== shared.document.name) failures.push(`share: the shared ${what} is titled ${JSON.stringify(await page.title())}, not its file's name`);
+      if (diagnosticDir) {
+        fs.mkdirSync(diagnosticDir, { recursive: true });
+        await page.screenshot({ path: path.join(diagnosticDir, `diagnostic-share-${what}.png`), timeout: 3000 }).catch(() => {});
+      }
+      await page.close();
+    }
+    // What needs an engine is never asked: nothing under /api/.
+    for (const pathname of asked) if (pathname.startsWith("/api/")) failures.push(`share: a KiCad share's page asked for ${pathname}, which needs an engine`);
     if (errors.length) failures.push(`share: ${errors.join(" | ")}`);
   } finally {
     await context.close();

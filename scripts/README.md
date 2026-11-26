@@ -175,7 +175,9 @@ where those files ship, so these scripts are what produces them.
   script that built it and its `.xbf` forked byte for byte as another computer would, viewed under the
   service's content security policy with a face's facts and read-only parameters, a copied prompt the engine
   page's for the same model but for its address (the prompt gate copies that one, its snapshot inline), an
-  unknown id said to be gone, deleted from its delete link): exactly what `test.yml` runs.
+  unknown id said to be gone, deleted from its delete link; then a KiCad board and schematic shared the same way,
+  the board drawn as saved, opened in 3D on its model's body, the schematic's second sheet shown from the
+  Hierarchy): exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that

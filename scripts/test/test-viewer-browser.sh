@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One self-contained browser gate for the viewer's format and camera
-# contracts, and for a model shared by `cad share` and opened, with no engine
-# running, from the share service. It runs exactly what CI runs. The project, the
+# contracts, and for a model, a KiCad board and a schematic shared by `cad share`
+# and opened, with no engine running, from the share service. It runs exactly what CI runs. The project, the
 # engine daemon, the Viewer, the share service and the browser are all owned by
 # this process.
 set -euo pipefail
@@ -61,6 +61,8 @@ export CAD_STATE_DIR="$project/state"
 # The engine that builds the fixtures and serves the STEP and .xbf ones to the page: this
 # test's own daemon, one part meshed at a time, stopped on the way out.
 export CAD_ENGINE_DIR="$project/engine" CAD_ENGINE_MESH=inline CAD_CACHE_DIR="$project/no-0.7-store"
+# A board is drawn as saved, as the package suites draw one: the gates fetch no KiCad (its refill is the KiCad suite's).
+export CAD_KICAD_REFILL=0
 export CAD_VIEWER_DIST="$RUNTIME"
 share_pidfile="$project/share.pid"
 cleanup() {
@@ -313,6 +315,38 @@ if [ -z "$only_gate" ] || [ "$only_gate" = share ]; then
     exit 1
   fi
   share_args=(--share "$project/share.json" --share-again "$project/share-again.json")
+  # A KiCad board and schematic, the KiCad suite's test files, in a dot-directory a project's page skips: the board's
+  # LED stands on a STEP of its project's, its resistor on one it names and has not; the schematic draws a second
+  # sheet. Each is shared as the model is, by `cad share` while the engine runs.
+  if ! PYTHONPATH="$REPO_ROOT:$PYTHONPATH" "$PYTHON" - "$project/.kicad" >"$log" 2>&1 <<'KICAD'
+import sys
+from pathlib import Path
+
+from build123d import Box, export_step
+from tests.python.support.kicad_board import BOARD, MODELS
+from tests.python.support.kicad_schematic import write_schematic
+
+folder = Path(sys.argv[1])
+(folder / "blinky" / "models").mkdir(parents=True)
+missing = '(model "${KIPRJMOD}/models/missing.step" (offset (xyz 0 0 0)) (scale (xyz 1 1 1)) (rotate (xyz 0 0 0)))'
+(folder / "blinky" / "blinky.kicad_pcb").write_text(BOARD.replace(MODELS["R1"], missing), encoding="utf-8")
+export_step(Box(1.6, 0.8, 0.6), str(folder / "blinky" / "models" / "led.step"))
+write_schematic(folder / "divider")
+KICAD
+  then
+    echo "FAIL: the KiCad share fixtures did not write" >&2
+    sed 's/^/    /' "$log" >&2
+    exit 1
+  fi
+  for kicad in board:.kicad/blinky/blinky.kicad_pcb schematic:.kicad/divider/divider.kicad_sch; do
+    if ! (cd "$project" && CAD_SHARE_URL="$share_origin" "$PYTHON" -m cad_server.cli share "${kicad#*:}" --json) \
+         >"$project/share-${kicad%%:*}.json" 2>"$log"; then
+      echo "FAIL: cad share did not share the fixture's KiCad ${kicad%%:*}" >&2
+      sed 's/^/    /' "$project/share-${kicad%%:*}.json" "$log" >&2
+      exit 1
+    fi
+  done
+  share_args+=(--share-board "$project/share-board.json" --share-schematic "$project/share-schematic.json")
 fi
 
 (cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"
