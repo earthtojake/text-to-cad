@@ -311,6 +311,9 @@ class Proxy:
         self.tell = None  # what sends the host a notification (``protocol.Connection.notify``), once serving
         self.offered = False  # whether the tools the server offers were logged (once: ``_declared``'s pair)
         self.unlisted = set()  # the list-changed notifications owed once the start is done
+        self.release = None  # the release of the server whose session is open (its initialize's ``serverInfo``)
+        self.app_only = set()  # the tools the server lists for its views alone, whose results no agent reads
+        self.attended = False  # whether an agent's call was answered with ``older``'s line, once
 
     def _ready(self, wait):
         """Whether this transport's start of the server is done (``Holder.started``), waited for ``wait`` seconds at
@@ -332,8 +335,10 @@ class Proxy:
         answer = self._answer(status, data)
         headers = {name.lower(): value for name, value in reply_headers.items()}
         session = (headers["mcp-session-id"], answer["result"]["protocolVersion"])
+        server = answer["result"].get("serverInfo")
         with self.lock:
             self.session, self.protocol = session
+            self.release = server.get("version") if isinstance(server, dict) else None
         return answer["result"], session
 
     def _reopen(self, stale):
@@ -401,8 +406,12 @@ class Proxy:
                 LOG.info("the %s server is still starting: the session opens at the app's next request", client.COMMAND)
                 return _greeting(params)
             try:
-                return self._open(context.request_id, params,
-                                  timeout=max(1.0, ANSWER_SECONDS - (time.monotonic() - arrived)))[0]
+                result = self._open(context.request_id, params,
+                                    timeout=max(1.0, ANSWER_SECONDS - (time.monotonic() - arrived)))[0]
+                line = older(self.release)
+                if line is not None:
+                    result["instructions"] = "\n\n".join(filter(None, (result.get("instructions"), line)))
+                return result
             except (client.Unanswered, TimeoutError):
                 LOG.info("the %s server did not answer in time: the session opens at the app's next request",
                          client.COMMAND)
@@ -419,6 +428,15 @@ class Proxy:
             self.offered = True
             names = [tool.get("name") for tool in result.get("tools", []) if isinstance(tool, dict)]
             LOG.info("the server offers this app %s", ", ".join(map(str, names)) if names else "no tools")
+        if method == "tools/list":
+            self.app_only = {tool.get("name") for tool in result.get("tools", [])
+                             if isinstance(tool, dict) and "model" not in _visibility(tool)}
+        if method == "tools/call" and not self.attended and params.get("name") not in self.app_only:
+            # Once a session, for hosts that pass a tool's result to the agent and not the instructions.
+            self.attended = True
+            line = older(self.release)
+            if line is not None and isinstance(result.get("content"), list):
+                result["content"].append({"type": "text", "text": line})
         # A text host's cad_show: the page the server names is opened here, never by the server, and the
         # server told whether it opened before the host is answered.
         return deliver(result, self.opener, self._tell) if method == "tools/call" else result
@@ -482,6 +500,22 @@ class Proxy:
                 self.call("DELETE", "/mcp", headers={"Mcp-Session-Id": ident}, timeout=CLOSE_SECONDS)
             except OSError:
                 pass
+
+
+def older(release):
+    """The line an agent is told where the server that answers, of release ``release``, is older than this transport
+    (an agent app's plugin line runs this release, the one its skills were written for, and joins the installed cad's
+    server, whatever its release: ``start_server``): the skills' own rule, ``cad update``. None otherwise."""
+    if not client.newer(version(), release):
+        return None
+    return f"{client.COMMAND} {release} is older than {version()}: run `{client.COMMAND} update`"
+
+
+def _visibility(tool):
+    """Who a listed tool is for (MCP Apps' ``_meta.ui.visibility``): the model and the app where it says nothing."""
+    ui = tool.get("_meta", {}).get("ui") if isinstance(tool.get("_meta"), dict) else None
+    seen = ui.get("visibility") if isinstance(ui, dict) else None
+    return seen if isinstance(seen, list) else ["model", "app"]
 
 
 def _declared(params, launched):
