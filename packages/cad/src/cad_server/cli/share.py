@@ -5,7 +5,9 @@ made it, with no sign-in, for 7 days after its last share (``cad_server.sharing`
   share's link the file this computer's copy of it is; each turned at once into the file's canonical path, which the
   share is of. A model is shared by its ``.xbf``: what goes is its view, the ``.xbf`` itself and the files of the build
   closure it holds -- its script, the modules of its project the build imported and the files it read
-  (``sharing.model_sources``) --; a file document's view and the file itself (``sharing.file_sources``). The running
+  (``sharing.model_sources``) --; a file document's view and the file itself, with a robot description's mesh files
+  and a KiCad board's or schematic's project -- its project file, its local libraries, a board's 3D models, a
+  schematic's sheets (``sharing.file_sources``). The running
   server writes the view bundle into the file's folder in cad's cache, over the one it wrote there last, from what it
   answers the file's page. This process uploads the files the share lacks, in packs, and commits the share
   (``sharing.send``) -- never the server, so an agent app's sandbox sees the connection and its network rules apply. A
@@ -17,7 +19,7 @@ made it, with no sign-in, for 7 days after its last share (``cad_server.sharing`
   travelled, and a line for what was left out. The same file shared again from this computer is the same share: the
   link stays, the 7 days start again, and only what changed travels; a file that moved is another file, with a link
   of its own. Where the service refuses its names (403), or its record is past its expiry or is not one this cad reads
-  (``cad-share/1``'s), it is a new share. A KiCad board or schematic and a folder are refused: they have no bundle.
+  (``cad-share/1``'s), it is a new share. A folder is refused: it has no bundle.
 - The first share on a computer needs the person's yes: without ``--yes`` it is refused, in lines an agent can
   pass on (what goes -- the code and the files that made it, which anyone with the link can download, and the view --,
   where, who can open it, for how long, how to delete it), naming the same command with ``--yes``, which records the
@@ -52,15 +54,20 @@ DESCRIPTION = (
     "link's .zip, which `cad fork` writes into a folder), with no sign-in, until 7 days after its last share. FILE is "
     "a CAD file the viewer opens, or a document id; a model is shared by its .xbf. What goes is the file, the files "
     "that made it -- a model's script, the modules of its project that it imports and the files it reads, as its .xbf "
-    "records them (run it again after an edit); a robot description's mesh files -- and its view: its shapes as "
-    "meshes with their names, measurements and joints. Never an installed library. Sharing it again keeps the link "
+    "records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's "
+    "project file, local libraries, 3D models and sheets -- and its view: its shapes as meshes with their names, "
+    "measurements and joints, a board's layers and its parts' 3D models, a schematic's sheets. Never an installed "
+    "library. Sharing it again keeps the link "
     "and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether "
     "sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a "
     "share.")
 KINDS = {"model": "a model", "step": "a STEP", "stl": "an STL", "glb": "a GLB", "threemf": "a 3MF", "3mf": "a 3MF",
-         "dxf": "a DXF", "urdf": "a URDF", "srdf": "an SRDF"}
+         "dxf": "a DXF", "urdf": "a URDF", "srdf": "an SRDF", "kicad_pcb": "a KiCad board",
+         "kicad_sch": "a KiCad schematic"}
 MESHES = frozenset({"stl", "glb", "threemf", "3mf"})
-UNBUNDLED = {"kicad_pcb": "a KiCad board", "kicad_sch": "a KiCad schematic"}
+# What of a KiCad project a share of a board or a schematic holds beside the file itself.
+PROJECT = {"kicad_pcb": "its project file, local libraries and 3D models",
+           "kicad_sch": "its sheets, project file and local symbol libraries"}
 # How long a share waits for another ``cad share`` of the same file to end before it is refused.
 LOCK_SECONDS = 60.0
 
@@ -72,8 +79,8 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
                             usage=f"%(prog)s [-h] FILE|ID [--yes] [--json]\n       {prog} status|on|off [--json]\n"
                                   f"       {prog} delete FILE|ID|LINK [--yes] [--json]")
     parser.add_argument("target", metavar="FILE|ID",
-                        help="a CAD file the viewer opens (a model's .xbf; a KiCad board or schematic and a folder "
-                             "have no bundle to share), or a document id; or status, on, off or delete")
+                        help="a CAD file the viewer opens (a model's .xbf; a folder has no bundle to share), or a "
+                             "document id; or status, on, off or delete")
     parser.add_argument("link", nargs="?", metavar="FILE|ID|LINK",
                         help="after delete: the file this computer shared, or a share's delete link")
     parser.add_argument("-y", "--yes", action="store_true",
@@ -125,7 +132,7 @@ def _target(target: str) -> tuple[str, str]:
     (``engine.cli.linked``), a document id the file the engine names by it (``_located``), else a path read from this
     folder. Refused by the failure contract, as ``cad viewer`` refuses a FILE, where it is no file a share is of: a
     model's script (its ``.xbf`` is, which running it writes), a path that is not there, a folder, a file of no
-    document type, a KiCad board or schematic (no view bundle yet)."""
+    document type."""
     import shlex
 
     from cad.engine.ids import canonical, is_id
@@ -147,9 +154,6 @@ def _target(target: str) -> tuple[str, str]:
     found = type_of(path)
     if found is None or not os.path.isfile(path):
         raise Failure(f"no CAD file at {path}", "wrong_type")
-    if found.id in UNBUNDLED:
-        raise Failure(f"{target} is {UNBUNDLED[found.id]}, which has no view bundle yet, so it cannot be shared",
-                      "wrong_type")
     return canonical(path), found.id
 
 
@@ -177,13 +181,16 @@ def _goes(kind: str, sources: Any) -> str:
         code = count - 1  # the .xbf is one of them
         files = (f"the model's .xbf, its code and the files it reads ({count} files)" if code else
                  "the model's .xbf")
+    elif kind in PROJECT and count > 1:
+        files = f"the file itself and {PROJECT[kind]} ({count} files)"
     elif count > 1:
         files = f"the file itself with {count - 1} file{'s' if count != 2 else ''} it draws from beside it"
     else:
         files = "the file itself"
     view = ("its shapes as meshes, with their names, measurements and joints" if kind in ("model", "step") else
             "its drawing" if kind == "dxf" else "its links, joints and meshes" if kind in ("urdf", "srdf") else
-            "the mesh as the viewer draws it")
+            "its layers as KiCad draws them, and its parts' 3D models" if kind == "kicad_pcb" else
+            "its sheets as KiCad draws them" if kind == "kicad_sch" else "the mesh as the viewer draws it")
     return f"{files}, which anyone with the link can download, and its view: {view}"
 
 
@@ -458,7 +465,8 @@ def _refused(refusal: Any) -> Any:
 
 def _what(kind: str, paths: list[str], sources: Any) -> dict[str, Any]:
     """What the share holds, in words (``what``): the files that made it (``sources``), and its view, from its
-    files' paths, with its parts (``parts``: a robot's mesh files; None for a mesh's or a drawing's view)."""
+    files' paths, with its parts (``parts``: a robot's mesh files, a board's 3D models; None for a mesh's, a drawing's
+    or a schematic's view)."""
     parts = sorted({path.split("/")[1] for path in paths if path.startswith("parts/") and path.count("/") >= 2})
     meshes = [path for path in paths if path.startswith("meshes/") or (path.startswith("parts/")
                                                                        and path.count("/") == 1)]
@@ -466,6 +474,8 @@ def _what(kind: str, paths: list[str], sources: Any) -> dict[str, Any]:
     if kind == "model":
         code = count - 1  # the .xbf is one of them
         files = f"its .xbf and the {code} file{'s' if code != 1 else ''} that made it" if code else "its .xbf"
+    elif kind in PROJECT and count > 1:
+        files = f"the file itself with {count - 1} file{'s' if count != 2 else ''} of its project"
     elif count > 1:
         files = f"the file itself with {count - 1} file{'s' if count != 2 else ''} it draws from"
     else:
@@ -474,6 +484,14 @@ def _what(kind: str, paths: list[str], sources: Any) -> dict[str, Any]:
         view, counted = "its view", None
     elif kind == "dxf":
         view, counted = "its view (its drawing, as the viewer draws it)", None
+    elif kind == "kicad_pcb":
+        models = [path for path in paths if path.startswith("documents/") and path.count("/") == 2
+                  and path.endswith("/manifest.json")]
+        view = f"its view (its layers, with {len(models)} 3D model{'s' if len(models) != 1 else ''})"
+        counted = len(models)
+    elif kind == "kicad_sch":
+        sheets = [path for path in paths if path.startswith("sheets/")]
+        view, counted = f"its view ({len(sheets)} sheet{'s' if len(sheets) != 1 else ''})", None
     elif kind in ("urdf", "srdf"):
         view = f"its view (its links and joints, with {len(meshes)} mesh file{'s' if len(meshes) != 1 else ''})"
         counted = len(meshes)

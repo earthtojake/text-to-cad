@@ -154,6 +154,70 @@ test("a mesh file's bytes, a robot's meshes and a drawing are read through the s
   }
 });
 
+// A KiCad board's bundle as its writer lays one out: its plot and its 3D models table, the table naming two models by
+// their document ids -- the STEP above, a bundle of its own at documents/<id>/ whose files the board's manifest lists too,
+// and one the engine would not open, which the bundle holds none of -- and one missing from the computer it was shared
+// from; and a schematic's, each sheet a page and the hierarchy's index once.
+const BOARD = '5b1a2f2c-2b65-5151-8299-282973f2a9fc';
+const UNREAD = '9d0e2f2c-2b65-5151-8299-282973f2a9fc';
+const PLOT = { schemaVersion: 2, kind: 'board', sheets: [{ id: 'board', layers: [] }], board: { parts: [] }, pours: { refilled: true } };
+const MODELS = { models: {
+  '${KIPRJMOD}/models/led.step': { file: 'led.step', document: ID, api: `/api/v1/documents/step/${ID}`, stamp: '1-7' },
+  '${KIPRJMOD}/models/broken.step': { file: 'broken.step', document: UNREAD, api: `/api/v1/documents/step/${UNREAD}`, stamp: '2-9' },
+  '${KIPRJMOD}/models/gone.step': { file: 'gone.step', missing: 'not-found' } } };
+const nested = (prefix, files) => Object.fromEntries(Object.entries(files).map(([path, bytes]) => [`${prefix}${path}`, bytes]));
+const BOARD_FILES = { 'plot.json': encode(PLOT), 'models.json': encode(MODELS), ...nested(`documents/${viewBundleSegment(ID)}/`, STEP_BUNDLE) };
+const BOARD_BUNDLE = { ...BOARD_FILES, 'manifest.json': manifestOf(BOARD_FILES, { id: BOARD, kind: 'kicad_pcb', name: 'blinky.kicad_pcb', version: 'b1' }) };
+const INDEX = { root: 'divider.kicad_sch', sheets: [{ path: '/', name: '/' }, { path: '/Load/', name: 'Load' }], parts: [], nets: [] };
+const PAGES = Object.fromEntries(['/', '/Load/'].map(sheet => [sheet,
+  { schemaVersion: 2, kind: 'schematic', generator: 'eeschema', sheets: [{ path: sheet, layers: [] }], warnings: [] }]));
+const SCHEMATIC_FILES = { 'schematic.json': encode(INDEX),
+  ...Object.fromEntries(Object.entries(PAGES).map(([sheet, page]) => [`sheets/${viewBundleSegment(sheet)}.json`, encode(page)])) };
+const SCHEMATIC_BUNDLE = { ...SCHEMATIC_FILES,
+  'manifest.json': manifestOf(SCHEMATIC_FILES, { id: BOARD, kind: 'kicad_sch', name: 'divider.kicad_sch', version: 's1' }) };
+
+test("a board's plot and 3D models table are its bundle's, and each model a bundle of its own read by its id", async () => {
+  for (const { source, asked } of [countedSource(BOARD_BUNDLE), { source: viewBundleMemorySource(BOARD_BUNDLE), asked: null }]) {
+    const client = await openViewBundle(source);
+    assert.equal(client.file, '/blinky.kicad_pcb');
+    assert.equal((await client.resolveEntry('/blinky.kicad_pcb')).kind, 'kicad_pcb');
+    assert.deepEqual(await client.plotPayload(client.file), PLOT);
+    assert.deepEqual(await client.boardModels(client.file), MODELS.models);
+    // A model the table names, by its document id, as the board's 3D view opens one: an engine document whose
+    // structure and parts, at the tessellation it names, are the bundle of its own.
+    const served = await client.engineDocument(ID);
+    assert.equal(served.final, true);
+    const where = xbfDocumentSource(served.url);
+    assert.equal(where.doc, ID);
+    assert.deepEqual(await bytesOf(await served.fetch(`${where.url}/structure`)), STEP_BUNDLE['structure.json']);
+    for (const [key, path] of [[PLATE, 'parts/step-f8f4-0~3A1~3A2'], [PEG, `parts/${PEG}`]]) {
+      const part = await served.fetch(`${where.url}/parts/${encodeURIComponent(key)}?tessellation=${TESSELLATION}`);
+      assert.deepEqual(await bytesOf(part), STEP_BUNDLE[`${path}/${TESSELLATION}.xbm`], key);
+    }
+    // Its files are read through the board's: each one listed there, under the model's folder.
+    if (asked) assert.ok(asked.some(({ path }) => path === `documents/${viewBundleSegment(ID)}/structure.json`), JSON.stringify(asked));
+    // One the bundle holds none of is no file of it: the board's view stands its part as a block.
+    await assert.rejects(client.engineDocument(UNREAD), error => error.code === 'cad-file-missing');
+    await assert.rejects(client.engineDocument(client.file), /no engine document/);
+    client.dispose();
+  }
+});
+
+test("a schematic's plot is read a sheet at a time, the hierarchy's index put back unless it is left out", async () => {
+  for (const source of [countedSource(SCHEMATIC_BUNDLE).source, viewBundleMemorySource(SCHEMATIC_BUNDLE)]) {
+    const client = await openViewBundle(source);
+    assert.equal(client.file, '/divider.kicad_sch');
+    // As the schematic's page reads it: the sheet on screen with the index first, each other sheet without it.
+    assert.deepEqual(await client.plotPayload(client.file, { sheet: '/Load/' }), { ...PAGES['/Load/'], schematic: INDEX });
+    assert.deepEqual(await client.plotPayload(client.file, { sheet: '/', index: false }), PAGES['/']);
+    // A sheet the hierarchy has not is refused, as the engine's page refuses it.
+    await assert.rejects(client.plotPayload(client.file, { sheet: '/Power/' }), error => error.status === 400 && /no sheet \/Power\//.test(error.message));
+    await assert.rejects(client.plotPayload(client.file), /a sheet at a time/);
+    assert.deepEqual(await client.boardModels(client.file), {});
+    client.dispose();
+  }
+});
+
 // The engine's structure of a model whose two plates share a part key and differ in their names, a peg whose names
 // are the left plate's, and a pin with none, with the model's mechanism.
 const PLATE_NAMES = { faceNames: { 1: 'f:left.top', 2: 'f:left.side' }, edgeNames: { 1: 'e:left.rim' }, vertexNames: {} };
@@ -246,8 +310,8 @@ test('what is no bundle this viewer reads, or a file not as its manifest says, i
   await assert.rejects(openViewBundle(viewBundleMemorySource({ 'manifest.json': encode('{') })), /not JSON/);
   await assert.rejects(openViewBundle(viewBundleMemorySource({ 'manifest.json': encode({ format: 'view-bundle/2', document: {}, files: {} }) })),
     /format is "view-bundle\/2"; this viewer reads view-bundle\/1/);
-  await assert.rejects(openViewBundle(viewBundleMemorySource({ 'manifest.json': manifestOf({}, { id: ID, kind: 'kicad_pcb', name: 'b.kicad_pcb', version: '1' }) })),
-    /no view bundle of a kicad_pcb/);
+  await assert.rejects(openViewBundle(viewBundleMemorySource({ 'manifest.json': manifestOf({}, { id: ID, kind: 'pdf', name: 'b.pdf', version: '1' }) })),
+    /no view bundle of a pdf/);
   // A file whose size is not what the manifest says: a bundle read while it was written over, said as such.
   const client = await openViewBundle(viewBundleMemorySource({ ...STEP_BUNDLE, 'structure.json': encode('{}') }));
   const served = await client.engineDocument('/pair.step');

@@ -15,8 +15,8 @@ its document's id the same share, the same after the engine restarts; a 403, a r
 expired record each make a new share; one ``cad share`` of a file at a time; a delete works from the record and from
 a link, and removes what the share kept in the cache; what travelled in words and in ``--json``; no secret in any
 request's address, error or file but the record, and the view link only in the output and the record; a connection
-refused, or refused by something that is not the service, said in one line; a KiCad board, a folder and a script
-refused. A model, shared by its ``.xbf``: the ``.xbf`` itself and the files of the closure it holds, its script, its
+refused, or refused by something that is not the service, said in one line; a folder and a script refused (a KiCad
+board's and a schematic's shares are ``test_share_kicad.py``'s, against the share service itself). A model, shared by its ``.xbf``: the ``.xbf`` itself and the files of the closure it holds, its script, its
 modules and what it read, under its project's root, the rest left out and said; a model edited and not run again
 refused, naming the run of its script; one whose module is gone refused; a re-share after a run sending the module
 and the ``.xbf`` that changed; a file document's file itself (its bytes once, the view's too) and a URDF's mesh files
@@ -506,7 +506,6 @@ class ShareTest(unittest.TestCase):
         patch.start()
         cls.addClassCleanup(patch.stop)
         (cls.base / "other.stl").write_bytes(STL.replace("tetra", "other").encode())
-        (cls.base / "board.kicad_pcb").write_text("(kicad_pcb (version 20240108))\n", encoding="utf-8")
         (cls.base / "parts").mkdir()
         cls.state = Path(cls.given["CAD_STATE_DIR"])
         cls.cache = Path(cls.given["CAD_CACHE_DIR"])
@@ -1184,10 +1183,9 @@ class ShareTest(unittest.TestCase):
         self.assertIn("the share service refused a pack (413): too_large; at most 10 bytes", done.stderr)
         self.assertFalse((self.state / "shares.json").exists())
 
-    def test_a_kicad_board_a_folder_and_a_script_are_refused(self) -> None:
+    def test_a_folder_and_a_script_are_refused(self) -> None:
         (self.base / "plate.py").write_text(PLATE, encoding="utf-8")
-        for target, said, reason in (("board.kicad_pcb", "a KiCad board, which has no view bundle yet", "wrong_type"),
-                                     ("parts", "is a folder, which has no view bundle", "wrong_type"),
+        for target, said, reason in (("parts", "is a folder, which has no view bundle", "wrong_type"),
                                      ("nothere.stl", "no such file: nothere.stl", "not_found"),
                                      ("plate.py", "plate.py is a model's script, not a CAD file: share the model's "
                                                   ".xbf, which running it writes (`cad run plate.py`)", "wrong_type")):
@@ -1902,6 +1900,21 @@ class ForkTest(unittest.TestCase):
         self.assertEqual(sharing.shared_file(self.base, robot[1:], None), "arm.urdf")
         self.assertEqual(sharing.shared_file(self.base, ["tetra.stl"], None), "tetra.stl")
         self.assertIsNone(sharing.shared_file(self.base, ["a.stl", "b.stl"], None))
+        # Of a KiCad project: the one board among its files; of a schematic's sheets, the root of their hierarchy, the
+        # one beside a project file of its name, else the one no other draws as a sheet (KiCad's Sheetfile).
+        board = ["blinky.kicad_pcb", "blinky.kicad_pro", "lib/blinky.pretty/R.kicad_mod", "models/led.step"]
+        self.assertEqual(sharing.shared_file(self.base, board, None), "blinky.kicad_pcb")
+        sheet = '(kicad_sch (sheet (property "Sheetfile" "{}")))'
+        sheets = _write(self.base / "sheets", {"top.kicad_sch": sheet.format("sub/power.kicad_sch"),
+                                                "sub/power.kicad_sch": sheet.format("../io.kicad_sch"),
+                                                "io.kicad_sch": "(kicad_sch)", "lone.kicad_sch": "(kicad_sch)"})
+        self.assertEqual(sharing.shared_file(sheets, ["io.kicad_sch", "sub/power.kicad_sch", "top.kicad_sch"], None),
+                         "top.kicad_sch")
+        self.assertIsNone(sharing.shared_file(sheets, ["io.kicad_sch", "lone.kicad_sch", "top.kicad_sch",
+                                                       "sub/power.kicad_sch"], None))
+        _write(sheets, {"lone.kicad_pro": "{}"})
+        self.assertEqual(sharing.shared_file(sheets, ["io.kicad_sch", "lone.kicad_pro", "lone.kicad_sch",
+                                                      "sub/power.kicad_sch", "top.kicad_sch"], None), "lone.kicad_sch")
 
     def test_what_this_computer_cannot_say_of_its_libraries_is_said_not_compared(self) -> None:
         from cad_server.cli import fork as command

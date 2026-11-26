@@ -249,7 +249,10 @@ answers the catalog (the one document: a model by its id, a file by `/<name>`), 
 (its API URL under `http://view-bundle.invalid`, answered by a fetch of its own that maps each route
 to its file: one element's facts and a part's groups out of the part's one `elements.json`; served
 `final`, so nothing waits on a next version), a drawing, a robot and the resources their loaders
-read. The structure it answers is the engine's: where the bundle keeps the mechanism in
+read, and a KiCad board's plot and 3D models table (each model the table names by its document id a bundle of its
+own, `documents/<id>/`, which `engineDocument(id)` opens as any) and a schematic's plot a sheet at a time (the
+hierarchy's index, held once in `schematic.json`, put back unless `index: false`). The structure it answers is the
+engine's: where the bundle keeps the mechanism in
 `kinematics.json` alone and each prototype's element names in a file named by their content
 (`names/<sha256>.json`, which the prototype names as `names`), both are put back, each names file
 read once and all of them at once; a structure that holds both itself is answered as its bytes.

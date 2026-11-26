@@ -38,7 +38,8 @@ from typing import Any
 DEFAULT_PROG = "cad fork"
 DESCRIPTION = (
     "Write the files of a shared file into a folder: a model's .xbf, its script, the modules of its project and the "
-    "files it reads, at their paths there; a file document's file. LINK is the share's link (https://cad.fun/<id>), "
+    "files it reads, at their paths there; a file document's file and what it draws from (a robot's meshes, a KiCad "
+    "project's files). LINK is the share's link (https://cad.fun/<id>), "
     "its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs "
     "from this computer's cad and libraries, then the commands that show it and build it, for the person to run. It "
     "keeps a record of the fork, so the share's link names the shared file here wherever cad takes a document. A "

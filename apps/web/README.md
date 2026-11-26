@@ -171,8 +171,8 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 ## A shared view bundle
 
 A share service keeps a view bundle sealed, as a manifest and the packs its files lie in, with the files that
-made it in the same packs (a model's `.xbf`, its code and the files its build read; a file document's file), which
-it serves
+made it in the same packs (a model's `.xbf`, its code and the files its build read; a file document's file and what
+it draws from, a robot's meshes or a KiCad project's files), which it serves
 as a zip (`/<id>.zip`, what `cad fork` downloads), and serves this same built client, its `index.html` at `/<id>`
 and its files beside it (the build's asset URLs are relative, so `./assets/…` resolves to `/assets/…` from
 `/<id>`). `main.tsx` chooses the share mode first, at start-up, from the address alone (`readShareAddress`,

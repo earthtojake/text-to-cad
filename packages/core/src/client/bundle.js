@@ -22,7 +22,11 @@
 //   `final`: there is no engine to wait on for a next version;
 // - a drawing's (`drawing`), a robot's (`robot`) and a mesh file's bytes, through the service's
 //   resources, which read bundle paths (a mesh file's `source.<ext>`, a robot's `parts/<digest>.glb`
-//   and `meshes/<sha256>.<format>`, as its structure names them).
+//   and `meshes/<sha256>.<format>`, as its structure names them);
+// - a KiCad board's plot and 3D models table (`plotPayload`, `boardModels`: `plot.json`, `models.json`), and each
+//   model the table names by a document id, a bundle of its own at `documents/<id>/`, read as an engine document by
+//   that id (`engineDocument`), as the board's page reads it; a schematic's plot a sheet at a time
+//   (`sheets/<path>.json`), the hierarchy's index (`schematic.json`) put back where the page asks for it.
 //
 // Whatever needs an engine is no method here, so the viewer leaves out what calls it: saving or
 // previewing a model's parameters, exports, a version to wait on, the library, the projects, the
@@ -44,8 +48,10 @@ export const VIEW_BUNDLE_ORIGIN = 'http://view-bundle.invalid';
 
 // The documents a bundle holds that a page reads as the engine's own (structure, parts, tables, look).
 const ENGINE_KINDS = new Set(['model', 'xbf', 'step']);
-// Every kind a manifest may name (the API's), and the renderer's: KiCad's have no bundle yet.
-const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srdf']);
+// Every kind a manifest may name (the API's), and the renderer's.
+const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srdf', 'kicad_pcb', 'kicad_sch']);
+// Where a board's bundle holds each 3D model's, by the model's document id.
+const MODELS = 'documents/';
 // A part's elements, as the API's routes name them, and as a table keys them.
 const ELEMENT_ROUTES = new Set(['faces', 'edges', 'vertices']);
 // What a prototype's names file holds, in the order the engine's structure gives them.
@@ -327,6 +333,25 @@ export function createViewBundleClient(source, manifest) {
   };
   const resources = scopeCadResources(provider, lifetime.signal);
 
+  // ---- a board's 3D models: each a bundle of its own, at `documents/<id>/`, by its document id ---------------
+  const models = new Map();
+  /**
+   * The bundle of the 3D model a board's table names by its document id `id`, read through this one (its files are
+   * listed in this manifest too): opened once; null where this bundle holds none.
+   */
+  function modelBundle(id) {
+    if (typeof id !== 'string' || !id) return null;
+    let held = models.get(id);
+    if (held) return held;
+    let prefix;
+    try { prefix = `${MODELS}${viewBundleSegment(id)}/`; } catch { return null; }
+    if (!Object.hasOwn(files, `${prefix}${VIEW_BUNDLE_MANIFEST}`)) return null;
+    held = openViewBundle({ read: (path, options) => read(`${prefix}${path}`, options) });
+    models.set(id, held);
+    held.catch(() => { if (models.get(id) === held) models.delete(id); });
+    return held;
+  }
+
   const catalog = Object.freeze({ entries: [entry], revision: document.version });
   const snapshot = Object.freeze({ entries: Object.freeze([entry]), revision: 1, hydrated: true, refreshing: false, error: '',
     engineGone: false, engineRefused: false, catalogRevision: document.version });
@@ -348,7 +373,13 @@ export function createViewBundleClient(source, manifest) {
     refresh: async () => catalog,
     async resolveEntry(path) { return own(path, entry); },
     entryOf: path => (names(path) ? entry : null),
-    async engineDocument(file) {
+    async engineDocument(file, options = {}) {
+      // A 3D model a board's table names, by its document id: the bundle of its own this one holds.
+      const model = names(file) ? null : modelBundle(file);
+      if (model) {
+        if (disposed) throw abortError();
+        return (await model).engineDocument(file, options);
+      }
       await own(file, null);
       if (!ENGINE_KINDS.has(document.kind)) throw new Error(`A view bundle of a ${document.kind} is no engine document.`);
       // Read as the document written down, which is what an .xbf is: whatever kind the manifest names, the
@@ -363,6 +394,24 @@ export function createViewBundleClient(source, manifest) {
     async robot(file, { signal } = {}) {
       await own(file, null);
       return readJson('structure.json', { signal });
+    },
+    async plotPayload(file, { signal, sheet, index } = {}) {
+      await own(file, null);
+      if (document.kind === 'kicad_pcb') return readJson('plot.json', { signal });
+      if (document.kind !== 'kicad_sch') throw new Error(`A view bundle of a ${document.kind} holds no plot.`);
+      // A schematic a sheet at a time, as its page reads one: the hierarchy's index, held once, put back unless the
+      // page leaves it out.
+      if (typeof sheet !== 'string' || !sheet) throw new Error('A view bundle holds a schematic a sheet at a time: name the sheet.');
+      const page = `sheets/${viewBundleSegment(sheet)}.json`;
+      if (!Object.hasOwn(files, page)) throw Object.assign(new Error(`This schematic has no sheet ${sheet}.`), { status: 400 });
+      const plot = await readJson(page, { signal });
+      return index === false ? plot : { ...plot, schematic: await readJson('schematic.json', { signal }) };
+    },
+    async boardModels(file, { signal } = {}) {
+      await own(file, null);
+      if (!Object.hasOwn(files, 'models.json')) return {};
+      const reply = await readJson('models.json', { signal });
+      return reply?.models && typeof reply.models === 'object' ? reply.models : {};
     },
     createRenderSession() {
       if (disposed) throw new Error('This view bundle has been closed.');
@@ -384,6 +433,8 @@ export function createViewBundleClient(source, manifest) {
       disposed = true;
       lifetime.abort();
       for (const session of [...sessions]) session.dispose();
+      for (const model of models.values()) model.then(client => client.dispose(), () => {});
+      models.clear();
       tables.clear();
       source.dispose?.();
     },

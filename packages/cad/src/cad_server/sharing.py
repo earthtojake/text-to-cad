@@ -18,7 +18,9 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   holds -- its script, every module of the project its build imported and every file it read, at their paths under
   the files' root (``root_of``), none of them changed since the ``.xbf`` was written or the model last ran, nor gone
   -- and the ``.xbf`` itself, at its path there; and a file document's (``file_sources``): the file itself, and a
-  robot description's mesh files beside it. Never an installed library (``made`` names each by its version);
+  robot description's mesh files beside it; a KiCad board's or schematic's project (``kicad_sources``): its project
+  file, its project's own libraries, a board's 3D model files and rules, a schematic's sheets, at their paths under the
+  files' root as a model's are. Never an installed library (``made`` names each by its version; KiCad's are KiCad's);
 - **the packs** (``Packer``): each file the share lacks as one gzip member (RFC 1952: mtime 0, no name), back to
   back, the view's files first, a pack closed at ``PACK_BYTES`` and a member that does not fit the room left going
   on into the next, so a file of any size travels; a pack is named by the lowercase hex SHA-256 of its bytes; two
@@ -572,10 +574,157 @@ def _described(path: str, kind: str) -> list[str]:
     return found
 
 
+# A KiCad project's library tables, beside its project file: a board's footprint and symbol libraries, a
+# schematic's symbol libraries.
+_LIBRARY_TABLES = {"kicad_pcb": ("fp-lib-table", "sym-lib-table"), "kicad_sch": ("sym-lib-table",)}
+# ${NAME} or $(NAME), KiCad's two spellings of a variable.
+_VARIABLE = re.compile(r"\$\{([^}]*)\}|\$\(([^)]*)\)")
+_DRIVE_RELATIVE = re.compile(r"^[A-Za-z]:(?!/)")
+_VRML = (".wrl", ".wrz")
+
+
+def _placed(name: str, folder: str, variables: dict[str, str]) -> tuple[str, bool] | None:
+    """Where a place a KiCad project names (a library's URI, a 3D model's name) is on this computer, and whether the
+    name was relative: ``${KIPRJMOD}`` is the project's ``folder``, a variable the project defines its value (its
+    ``.kicad_pro``'s ``text_variables``), a relative place is under ``folder``. None for a name that holds any other
+    variable -- a library of KiCad's (``${KICAD9_3DMODEL_DIR}``) or one the person's own settings name, an installed
+    library a fork has of its own -- and for a network share, a device or a drive-relative name, which nothing here
+    looks at (on Windows, looking connects to the share's server)."""
+    unknown = False
+
+    def value(match: re.Match) -> str:
+        nonlocal unknown
+        named = match.group(1) or match.group(2) or ""
+        if named == "KIPRJMOD":
+            return folder
+        if named in variables:
+            return variables[named]
+        unknown = True
+        return match.group(0)
+
+    place = _VARIABLE.sub(value, name.strip()).replace("\\", "/")
+    if unknown or not place or "\0" in place or place.startswith("//") or _DRIVE_RELATIVE.match(place):
+        return None
+    relative = not os.path.isabs(place)
+    return os.path.realpath(os.path.join(folder, place) if relative else place), relative
+
+
+def _library_files(table: Path, folder: str) -> list[str]:
+    """The files of the libraries a KiCad library table lists (``fp-lib-table``, ``sym-lib-table``), each URI where
+    the project at ``folder`` has it (``_placed``): a library folder's files (a ``.pretty``'s footprints), a library
+    file (a ``.kicad_sym``; a legacy ``.lib`` with the ``.dcm`` beside it); a library gone, its place. A library of
+    KiCad's or of the person's own settings is none."""
+    from cad.engine.formats.kicad import sexpr
+
+    try:
+        tree = sexpr.parse(table.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return []
+    found: list[str] = []
+    for library in sexpr.find_all(tree, "lib"):
+        uri = sexpr.value(library, "uri")
+        placed = _placed(str(uri), folder, {}) if uri else None
+        if placed is None:
+            continue
+        place = placed[0]
+        if os.path.isdir(place):
+            found += sorted(os.path.join(place, name) for name in os.listdir(place)
+                            if not name.startswith(".") and os.path.isfile(os.path.join(place, name)))
+        else:
+            found.append(place)
+            if place.lower().endswith(".lib") and os.path.isfile(place[:-4] + ".dcm"):
+                found.append(place[:-4] + ".dcm")
+    return found
+
+
+def _model_files(board: str) -> list[str]:
+    """The 3D model files a board's footprints name in its project (``models3d.model_names``): each name that is a
+    place of the project (``_placed``), the file it names, and for a VRML name the STEP beside it, which the viewer
+    draws. A name in a library of KiCad's is the library's, as is a relative name the board's folder lacks (KiCad
+    looks for it in its 3D library too), and so is a file inside a 3D library (``models3d.library_roots``); a model
+    embedded in the board is the board's. A name of the project's whose file is gone is its place."""
+    from cad.engine.formats.kicad.models3d import _project_variables, library_roots, model_names
+
+    try:
+        text = Path(board).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    folder, variables = os.path.dirname(board), _project_variables(Path(board))
+    libraries = [os.path.normcase(library) for library in library_roots()]
+    found: list[str] = []
+    for name in model_names(text):
+        placed = None if name.strip().lower().startswith("kicad-embed://") else _placed(name, folder, variables)
+        if placed is None:
+            continue
+        place, relative = placed
+        if any(_inside(place, library) for library in libraries):
+            continue
+        stem, suffix = os.path.splitext(place)
+        beside = [stem + ending for ending in (".step", ".stp", ".STEP", ".STP")] if suffix.lower() in _VRML else []
+        there = [each for each in [place, *beside] if os.path.isfile(each)]
+        if there or not relative:
+            found += there or [place]
+    return found
+
+
+def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
+    """The files a fork of a KiCad board or schematic needs to open it and work on it (``kind``: ``kicad_pcb`` or
+    ``kicad_sch``), each at its path under the files' root (``root_of``, from the file's folder): the file itself;
+    of a board, its project file (``<board>.kicad_pro``) and custom rules (``.kicad_dru``) beside it, its project's
+    footprint and symbol libraries (``fp-lib-table``, ``sym-lib-table`` and the libraries they list in it:
+    ``_library_files``) and the 3D model files its footprints name in it (``_model_files``); of a schematic, every
+    sheet of the hierarchy it is drawn in (``schematic.read_schematic_index``: its project's, from the root sheet), the
+    root's project file and its project's symbol libraries. A file outside the root, and one gone from the disk, is
+    left out, each said (``left_out``); a library of KiCad's is installed, as a model's libraries are, and goes in no
+    share."""
+    from cad.engine.formats.kicad.schematic import read_schematic_index, root_of as root_sheet
+
+    real = os.path.realpath(path)
+    named = [real]
+    if kind == "kicad_sch":
+        project_sheet = root_sheet(real)
+        try:
+            named += [os.path.realpath(sheet) for sheet in read_schematic_index(real)[0].trees]
+        except (OSError, ValueError):  # no readable schematic: its view bundle says why
+            pass
+        project, beside = project_sheet.with_suffix(".kicad_pro"), []
+    else:
+        project, beside = Path(real).with_suffix(".kicad_pro"), [Path(real).with_suffix(".kicad_dru")]
+    folder = str(project.parent)
+    named += [str(file) for file in (project, *beside) if file.is_file()]
+    for table in _LIBRARY_TABLES[kind]:
+        listed = Path(folder) / table
+        if listed.is_file():
+            named += [str(listed), *_library_files(listed, folder)]
+    if kind == "kicad_pcb":
+        named += _model_files(real)
+    candidates = list({os.path.normcase(each): each for each in named}.values())
+    root = root_of(real, [each for each in candidates if os.path.isfile(each)], home)
+    found: list[File] = []
+    left: list[tuple[str, str]] = []
+    for each in candidates:
+        taken = _taken(each, root) if _inside(each, root) else None
+        if not os.path.isfile(each):
+            left.append((each, "gone"))
+        elif not _inside(each, root):
+            left.append((each, "outside"))
+        elif taken is None:
+            left.append((each, "name"))
+        else:
+            sha256, size = _digest_of(Path(each))
+            found.append(File(taken, sha256, size, Path(each)))
+    own = _taken(real, root)
+    return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left), file=real,
+                   shared=own if any(file.path == own for file in found) else None)
+
+
 def file_sources(path: str, kind: str) -> Sources:
     """The files that made a file document (``kind``: its type's id): the file itself, at its own name; a URDF's mesh
     files too, and an SRDF's URDF with that one's (``_described``), each at its path under the file's folder. One
-    outside that folder is left out, as is one gone from the disk, each said (``left_out``)."""
+    outside that folder is left out, as is one gone from the disk, each said (``left_out``). A KiCad board's or
+    schematic's are its project's (``kicad_sources``)."""
+    if kind in _LIBRARY_TABLES:
+        return kicad_sources(path, kind)
     real = os.path.realpath(path)
     root = os.path.dirname(real)
     found: list[File] = []
@@ -1114,7 +1263,9 @@ def shared_file(folder: Path | str, paths: list[str], entry: str | None) -> str 
     model's ``.xbf`` -- of a share whose ``entry`` is a script, the ``.xbf`` there whose build closure names that script
     (``previous.of``: its path relative to the ``.xbf``'s folder), and of several, the one no other of them read --; of
     one that names none, the one SRDF at its folder's top (drawn with its URDF), else the one URDF there, else the one
-    file it holds. None where none of those names one. Nothing is run: a closure is text an ``.xbf`` holds."""
+    KiCad board among them, else the root of the hierarchy a schematic's sheets draw (``_root_sheet``), else the one
+    file it holds. None where none of those names one. Nothing is run: a closure is text an ``.xbf`` holds, a sheet
+    names its sheets in its text."""
     from cad.engine import previous
     from cad.registry import type_of
 
@@ -1142,7 +1293,42 @@ def shared_file(folder: Path | str, paths: list[str], entry: str | None) -> str 
         found = [path for path in top if getattr(type_of(path), "id", None) == kind]
         if len(found) == 1:
             return found[0]
+    boards = [path for path in paths if getattr(type_of(path), "id", None) == "kicad_pcb"]
+    if len(boards) == 1:
+        return boards[0]
+    sheet = _root_sheet(Path(folder), [path for path in paths if getattr(type_of(path), "id", None) == "kicad_sch"])
+    if sheet is not None:
+        return sheet
     return paths[0] if len(paths) == 1 else None
+
+
+# A sheet a schematic draws, by the file its sheet symbol names (KiCad's ``Sheetfile``, once ``Sheet file``).
+_SHEET_FILE = re.compile(r'\(\s*property\s+"Sheet ?file"\s+"((?:[^"\\]|\\.)*)"')
+
+
+def _root_sheet(folder: Path, sheets: list[str]) -> str | None:
+    """Of the ``sheets`` a fork wrote into ``folder`` (``/`` separated), the root of the hierarchy they draw: the
+    one beside a project file of its name (``<project>.kicad_sch``, which KiCad opens the project at), else the one
+    no other of them draws as a sheet. None where none is one alone. A share of a schematic holds every sheet of its
+    hierarchy, which its root draws, whichever of them was shared: the same pages."""
+    from cad.engine.formats.kicad import sexpr
+
+    if not sheets:
+        return None
+    projects = [path for path in sheets if (folder / f"{posixpath.splitext(path)[0]}.kicad_pro").is_file()]
+    if len(projects) == 1:
+        return projects[0]
+    drawn: set[str] = set()
+    for path in sheets:
+        try:
+            text = Path(folder, *path.split("/")).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for match in _SHEET_FILE.finditer(text):
+            named = sexpr.unescape(match.group(1)).replace("\\", "/")
+            drawn.add(posixpath.normpath(posixpath.join(posixpath.dirname(path), named)))
+    roots = [path for path in sheets if path not in drawn]
+    return roots[0] if len(roots) == 1 else None
 
 
 def fork_record(origin: str, ident: str, folder: Path | str, file: str | None) -> dict[str, Any]:

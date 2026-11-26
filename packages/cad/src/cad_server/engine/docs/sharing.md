@@ -30,9 +30,9 @@ file, and shares to a link of its own.
 
 - **What.** Its files (**The files that made it**, below) and its view: a model's or a STEP's parts as meshes,
   with their names, measurements and joints; an STL's, a GLB's or a 3MF's mesh; a DXF's drawing as the viewer draws
-  it; a URDF's or an SRDF's links, joints and mesh files. The picture a page kept (`thumbnail.png`) is left out of the
-  view: it may be of an earlier version. A KiCad board or schematic, which has no bundle yet, a folder and a script
-  are refused in one line each.
+  it; a URDF's or an SRDF's links, joints and mesh files; a KiCad board's layers as KiCad draws them, its pours
+  KiCad's refill, and its parts' 3D models; a KiCad schematic's sheets. The picture a page kept (`thumbnail.png`) is
+  left out of the view: it may be of an earlier version. A folder and a script are refused in one line each.
 - **Where.** The share service, `https://cad.fun`, which keeps everything of a share encrypted (AES-256-GCM)
   under a key it derives from the share's id, and keeps neither the id nor the key. The id is the link's: whoever
   has the view link can open the model, and download its files from the files' link, `<view link>.zip`.
@@ -47,10 +47,11 @@ file, and shares to a link of its own.
   before stay until they expire or are deleted.
 
 The first share on a computer is refused without `--yes`, in lines an agent passes on to the person (what goes --
-for a model its `.xbf`, its code and the files it reads, with how many, for a file document the file itself, which
-anyone with the link can download, and its view --, where, who can open it, for how long, how to delete it), naming
-the same command with `--yes` (`confirmation_required`, exit 2, with `next`). `--yes` keeps the agreement, and later
-shares need none. Sharing turned off is refused even with `--yes` (`declined`, exit 1).
+for a model its `.xbf`, its code and the files it reads, with how many, for a file document the file itself and
+the files it draws from (a KiCad project's, with how many), which anyone with the link can download, and its view
+--, where, who can open it, for how long, how to delete it), naming the same command with `--yes`
+(`confirmation_required`, exit 2, with `next`). `--yes` keeps the agreement, and later shares need none. Sharing
+turned off is refused even with `--yes` (`declined`, exit 1).
 
 ## The files that made it
 
@@ -80,6 +81,20 @@ the `.xbf`'s folder:
 **A file document**: the file itself, at its own name; a URDF's mesh files too (each `<mesh filename>` of its visuals
 and collisions, resolved as the viewer resolves one), and an SRDF's URDF with that one's, each at its path under the
 file's folder: one outside it is left out, and said.
+
+**A KiCad board or schematic**: the file itself and what a fork needs to open it and work on it, each at its path under
+the files' root, which is found as a model's is (the deepest folder that holds them, from the file's, capped at a
+checkout's root and the home folder):
+
+- of a board, its project file (`<board>.kicad_pro`) and its custom rules (`.kicad_dru`) beside it, its project's
+  footprint and symbol libraries -- `fp-lib-table` and `sym-lib-table` and each library they list there (a
+  `.pretty`'s footprints, a `.kicad_sym`) -- and the 3D model files its footprints name in the project (`${KIPRJMOD}`'s,
+  a variable the project defines, a path), a VRML name with the STEP beside it, which the view draws;
+- of a schematic, every sheet of the hierarchy it is drawn in (from its project's root sheet, which a sheet shared
+  on its own is drawn from too), the root's project file and its project's symbol libraries;
+- never a library of KiCad's (`${KICAD9_FOOTPRINT_DIR}`, `${KICAD9_3DMODEL_DIR}`, a variable the project does not
+  define, a model KiCad's 3D library holds): an installed library, which a fork's KiCad has;
+- a file outside the root, and one the project names that is gone, left out and said, as a model's are.
 
 Never: a file the build did not read (a README beside the script, another script, tests, `.env`), or an installed
 library (named by its version in `made`).
@@ -119,7 +134,9 @@ more: "This shared model has expired or was deleted." (`not_found`).
 
 It finds the file the share is of among them (`sharing.shared_file`): of a model, whose share names its script
 (`Cad-Share-Entry`), the `.xbf` whose build closure names that script from its own folder (of several, the one no
-other of them read); of a file document, the one SRDF at the folder's top, else the one URDF, else its one file. It
+other of them read); of a file document, the one SRDF at the folder's top, else the one URDF, else the one KiCad
+board, else the root of a schematic's hierarchy (the sheet beside a project file of its name, else the one no other
+of its sheets draws: whichever of them was shared, it draws the same pages), else its one file. It
 says what it wrote, that file, the script, and where what built it (`Cad-Share-Made`) differs from this computer:
 this release, the CAD kernel environment's libraries and Python (not compared where that environment is not made
 yet), the system and the architecture. It runs nothing, and adds no project and no file to the library: the next

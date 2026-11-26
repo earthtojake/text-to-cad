@@ -2,7 +2,8 @@
 
 `cad.fun`: where a shared model lives. A share is two things under one id: its **view**, the
 document's view bundle, which a browser draws, and **the files that made it**: a model's `.xbf`, its
-script, the modules its build imported and the files it read, or a file document's file. `cad share` uploads
+script, the modules its build imported and the files it read, or a file document's file with what it draws
+from (a robot description's meshes; a KiCad board's or schematic's project). `cad share` uploads
 the files of both that its share does not hold yet, in packs, then commits a manifest that says
 where each file lies, so a share costs what changed. Anyone with the link (`https://cad.fun/<id>`)
 opens it in the hosted viewer, with no sign-in, and downloads the files that made it as a zip

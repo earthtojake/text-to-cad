@@ -6,10 +6,15 @@ holds apart, its mechanism and its prototypes' element names, which its reader p
 names are a file named by its bytes, a part's table holds exactly what asking for each element answers of its
 geometry, a document's part files are asked at once, a bundle written again after an edit rewrites the
 changed part's files and no other part's, a writing that fails leaves the folder as it was, and no file of a
-bundle names a folder of the computer it was made on. A model (its ``.xbf``), a STEP, an STL, a DXF and a URDF each
-have one; an export takes no ``.view`` destination.
+bundle names a folder of the computer it was made on. A model (its ``.xbf``), a STEP, an STL, a DXF, a URDF, a KiCad
+board (its plot, its 3D models table, and each STEP the table names a bundle of its own, as the board's page reads it)
+and a KiCad schematic (each sheet a page, the hierarchy's index once, which its reader puts back) each have one; an
+export takes no ``.view`` destination.
 
-The models are written into a fresh temporary folder and built there; nothing reads the sample corpus.
+The models are written into a fresh temporary folder and built there, the board and the schematic are the KiCad
+suite's test files (``tests/python/support``), with a STEP the model's run wrote for a 3D model of the board's project
+and one of a 3D library's; nothing reads the sample corpus. No KiCad runs: the board is drawn as saved, as it is
+where its refill is off.
 """
 
 from __future__ import annotations
@@ -32,6 +37,8 @@ from unittest import mock
 from urllib.parse import quote
 
 from tests.python.support import engine_daemon
+from tests.python.support.kicad_board import write_board
+from tests.python.support.kicad_schematic import write_schematic
 from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the packages' sources, as PYTHONPATH names them
@@ -135,9 +142,12 @@ class ViewBundleTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.base = Path(os.path.realpath(tempfile.mkdtemp(prefix="view-bundle-")))
         cls.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
-        cls.saved = {name: os.environ.get(name) for name in ("CAD_ENGINE_DIR", "CAD_ENGINE_MESH")}
-        # The daemon this test starts is its own: its own engine folder, one part meshed at a time.
-        os.environ.update({"CAD_ENGINE_DIR": str(cls.state), "CAD_ENGINE_MESH": "inline"})
+        cls.saved = {name: os.environ.get(name) for name in ("CAD_ENGINE_DIR", "CAD_ENGINE_MESH", "CAD_KICAD_3DMODELS")}
+        # The daemon this test starts is its own: its own engine folder, one part meshed at a time, and a 3D library
+        # of its own, where the board's resistor's model is found (``models3d``).
+        library = cls.base / "3dmodels"
+        os.environ.update({"CAD_ENGINE_DIR": str(cls.state), "CAD_ENGINE_MESH": "inline",
+                           "CAD_KICAD_3DMODELS": str(library)})
         cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC)}, cls.addClassCleanup)
         (cls.base / "models.py").write_text(textwrap.dedent(MODEL), encoding="utf-8")
         cls.run_script("models.py")
@@ -156,6 +166,15 @@ class ViewBundleTest(unittest.TestCase):
         (cls.base / "robot" / "meshes").mkdir(parents=True)
         shutil.copyfile(cls.out / "pair.stl", cls.base / "robot" / "meshes" / "head.stl")
         (cls.base / "robot" / "arm.urdf").write_text(ROBOT.replace("NAME", "plinth"), encoding="utf-8")
+        # A board whose LED stands on a model of its project's (``${KIPRJMOD}/models/led.step``) and its resistor on
+        # one of the 3D library's; and a schematic of two sheets.
+        (cls.base / "board").mkdir()
+        board = write_board(cls.base / "board")
+        for model in (cls.base / "board" / "models" / "led.step",
+                      library / "Resistor_SMD.3dshapes" / "R_0603_1608Metric.step"):
+            model.parent.mkdir(parents=True)
+            shutil.copyfile(cls.base / "pair.step", model)
+        schematic = write_schematic(cls.base / "divider")
         launched = request({"op": "viewer", "api_only": True, "start": str(cls.base)})
         assert launched and "failed" not in launched, launched
         cls.port, cls.token = launched["port"], launched["token"]
@@ -163,7 +182,7 @@ class ViewBundleTest(unittest.TestCase):
         # worker holds.
         cls.sources = {"model": cls.base / "XBF" / "pair.xbf", "step": cls.base / "pair.step",
                        "stl": cls.out / "pair.stl", "dxf": cls.base / "plate.dxf",
-                       "urdf": cls.base / "robot" / "arm.urdf"}
+                       "urdf": cls.base / "robot" / "arm.urdf", "board": board, "schematic": schematic}
         cls.rows = {name: api.bundle(source, cls.out / name) for name, source in cls.sources.items()}
 
     @classmethod
@@ -273,6 +292,37 @@ class ViewBundleTest(unittest.TestCase):
         self.assertEqual([len(robot), len([path for path in robot if path.startswith("parts/") and path.endswith(".glb")])],
                          [4, 1])
 
+    def engine_answers(self, folder: Path, api: str, name: str, portable: dict) -> None:
+        """The bundle of an engine document in ``folder`` held to its answers at ``api``: its structure ``portable``
+        (the answer but for what it says of this computer), and every other file the live answer byte for byte."""
+        structure = json.loads(self.live(api + "/structure"))
+        # It holds two things apart, each once, which its reader puts back: the mechanism, the same object as
+        # kinematics.json, and each prototype's element names, in a file of their own.
+        bundled = json.loads((folder / "structure.json").read_bytes())
+        self.assertEqual((folder / "structure.json").read_bytes(), json.dumps(bundled, separators=(",", ":")).encode())
+        self.assertEqual(put_back(folder), portable)
+        self.assertNotIn("kinematics", bundled)
+        self.assertEqual([prototype for prototype in bundled["prototypes"] if set(NAMES) & set(prototype)], [])
+        self.assertEqual("kinematics.json" in self.files(folder), "kinematics" in structure)
+        if "kinematics" in structure:
+            self.assertEqual((folder / "kinematics.json").read_bytes(), self.live(api + "/kinematics"))
+        if name == "model":  # the model's mechanism, which its xbf holds too
+            self.assertIn("kinematics", structure)
+        # Every part is meshed before the structure is read: it names each part's unmeshed faces.
+        self.assertTrue(all("unmeshed" in prototype for prototype in structure["prototypes"]))
+        tessellation = structure["tessellation"]
+        for key in {prototype["key"] for prototype in structure["prototypes"]}:
+            part, held = f"{api}/parts/{quote(key, safe='')}", folder / "parts" / self.segment(key)
+            buffer = (held / f"{tessellation}.xbm").read_bytes()
+            self.assertEqual(buffer[:4], b"XBM2")
+            self.assertEqual(buffer, self.live(f"{part}?tessellation={quote(tessellation)}"))
+            self.assertEqual((held / "elements.json").read_bytes(), self.live(part + "/elements"))
+        self.assertEqual((folder / "measure.json").read_bytes(), self.live(api + "/measure"))
+        self.assertEqual((folder / "look.json").read_bytes(), self.live("/api/v1/look"))
+        self.assertEqual((folder / "look" / "environment.hdr").read_bytes(), self.live("/api/v1/look/environment"))
+        # No page kept a picture of it.
+        self.assertNotIn("thumbnail.png", self.files(folder))
+
     def test_each_bundled_answer_is_the_live_answer(self) -> None:
         for name in ("model", "step"):
             with self.subTest(source=name):
@@ -290,38 +340,65 @@ class ViewBundleTest(unittest.TestCase):
                     self.assertNotIn("closure", structure)
                     self.assertEqual(Path(structure["path"]), self.sources[name])
                     portable = {**structure, "path": self.sources[name].name}
-                # And it holds two things apart, each once, which its reader puts back: the mechanism, the
-                # same object as kinematics.json, and each prototype's element names, in a file of their own.
-                bundled = json.loads((folder / "structure.json").read_bytes())
-                self.assertEqual((folder / "structure.json").read_bytes(), json.dumps(bundled, separators=(",", ":")).encode())
-                self.assertEqual(put_back(folder), portable)
-                self.assertNotIn("kinematics", bundled)
-                self.assertEqual([prototype for prototype in bundled["prototypes"] if set(NAMES) & set(prototype)], [])
-                self.assertEqual("kinematics.json" in self.files(folder), "kinematics" in structure)
-                if "kinematics" in structure:
-                    self.assertEqual((folder / "kinematics.json").read_bytes(), self.live(api + "/kinematics"))
-                if name == "model":  # the model's mechanism, which its xbf holds too
-                    self.assertIn("kinematics", structure)
-                # Every part is meshed before the structure is read: it names each part's unmeshed faces.
-                self.assertTrue(all("unmeshed" in prototype for prototype in structure["prototypes"]))
-                tessellation = structure["tessellation"]
-                for key in {prototype["key"] for prototype in structure["prototypes"]}:
-                    part, held = f"{api}/parts/{quote(key, safe='')}", folder / "parts" / self.segment(key)
-                    buffer = (held / f"{tessellation}.xbm").read_bytes()
-                    self.assertEqual(buffer[:4], b"XBM2")
-                    self.assertEqual(buffer, self.live(f"{part}?tessellation={quote(tessellation)}"))
-                    self.assertEqual((held / "elements.json").read_bytes(), self.live(part + "/elements"))
-                self.assertEqual((folder / "measure.json").read_bytes(), self.live(api + "/measure"))
-                self.assertEqual((folder / "look.json").read_bytes(), self.live("/api/v1/look"))
-                self.assertEqual((folder / "look" / "environment.hdr").read_bytes(), self.live("/api/v1/look/environment"))
-                # No page kept a picture of it.
-                self.assertNotIn("thumbnail.png", self.files(folder))
+                self.engine_answers(folder, api, name, portable)
         source = self.live(self.api("stl") + "/source")
         self.assertEqual((self.out / "stl" / "source.stl").read_bytes(), source)
         self.assertEqual(source, self.sources["stl"].read_bytes())
         drawing = self.live(self.api("dxf") + "/drawing")
         self.assertEqual(json.loads(drawing)["schemaVersion"] > 0, True, drawing[:200])
         self.assertEqual((self.out / "dxf" / "drawing.json").read_bytes(), drawing)
+
+    def test_a_boards_bundle_is_its_plot_its_models_table_and_each_model_a_bundle_of_its_own(self) -> None:
+        folder, api = self.out / "board", self.api("board")
+        # The board's plot and its 3D models table, each the live answer byte for byte: no KiCad here, so the
+        # board as saved, which the plot says.
+        plot = self.live(api + "/plot")
+        self.assertEqual((folder / "plot.json").read_bytes(), plot)
+        self.assertEqual((json.loads(plot)["kind"], json.loads(plot)["pours"]["refilled"]), ("board", False))
+        table = self.live(api + "/models")
+        self.assertEqual((folder / "models.json").read_bytes(), table)
+        # Each model the table names by a document id -- the LED's, its project's, and the resistor's, the 3D
+        # library's -- a bundle of its own at documents/<id>/: what a page reads of that STEP, by the same rules.
+        found = {row["document"]: row for row in json.loads(table)["models"].values() if "document" in row}
+        self.assertEqual(sorted(row["file"] for row in found.values()), ["R_0603_1608Metric.step", "led.step"])
+        listed = self.manifest(folder)["files"]
+        self.assertEqual({path.split("/")[1] for path in listed if path.startswith("documents/")},
+                         {self.segment(ident) for ident in found})
+        for ident, row in found.items():
+            with self.subTest(model=row["file"]):
+                inner = folder / "documents" / self.segment(ident)
+                manifest = self.manifest(inner)
+                structure = json.loads(self.live(row["api"] + "/structure"))
+                self.assertEqual(manifest["document"],
+                                 {"id": ident, "kind": "step", "name": row["file"], "version": structure["version"]})
+                # Its files are the board's too, below its folder, each as its own manifest lists it.
+                self.assertEqual({f"documents/{self.segment(ident)}/{path}": entry for path, entry in manifest["files"].items()},
+                                 {path: entry for path, entry in listed.items()
+                                  if path.startswith(f"documents/{self.segment(ident)}/") and not path.endswith("/manifest.json")})
+                self.assertIn(f"documents/{self.segment(ident)}/manifest.json", listed)
+                self.engine_answers(inner, row["api"], "step", {**structure, "path": row["file"]})
+        # Written again unchanged, nothing is written, the models' content-named files kept as they were.
+        from cad.engine import api as engine
+
+        again = engine.bundle(self.sources["board"], folder)
+        self.assertEqual((again["written"], again["removed"]), ([], []))
+
+    def test_a_schematics_bundle_is_each_sheet_a_page_and_the_hierarchys_index_once(self) -> None:
+        folder, api = self.out / "schematic", self.api("schematic")
+        index = json.loads(self.live(api + "/plot?sheet=%2F"))["schematic"]
+        sheets = [sheet["path"] for sheet in index["sheets"]]
+        self.assertEqual(sheets, ["/", "/Load/"])
+        self.assertEqual(self.files(folder), {"manifest.json", "schematic.json",
+                                              *(f"sheets/{self.segment(sheet)}.json" for sheet in sheets)})
+        self.assertEqual(json.loads((folder / "schematic.json").read_bytes()), index)
+        for sheet in sheets:
+            with self.subTest(sheet=sheet):
+                # Each sheet's page as a page reads it after the first, without the index, byte for byte; read with
+                # the index, as a page reads its first sheet, the same page with the index put back.
+                page = (folder / "sheets" / f"{self.segment(sheet)}.json").read_bytes()
+                self.assertEqual(page, self.live(f"{api}/plot?sheet={quote(sheet, safe='')}&index=0"))
+                self.assertEqual(json.loads(self.live(f"{api}/plot?sheet={quote(sheet, safe='')}")),
+                                 {**json.loads(page), "schematic": index})
 
     def test_a_prototypes_names_are_a_file_named_by_its_bytes(self) -> None:
         for name in ("model", "step"):

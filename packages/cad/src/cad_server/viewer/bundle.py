@@ -16,7 +16,10 @@ out of it, and its prototypes' element names, each prototype's in a file named b
 What a page asks for on demand, a bundle holds whole: each part's ``elements`` table (every face's,
 edge's and vertex's facts and its groups), made once per part. A document's part files are asked at once
 (``take_all``): the engine makes each table in a process of its pool, so a first bundle's tables are made
-on every core it has.
+on every core it has. A KiCad board's page reads its plot and its 3D models table, then each STEP the table
+names as an engine document by its id: each is a bundle of its own inside the board's (``documents/<id>/``,
+``nested``), its manifest beside its files, which the board's lists too. A schematic's page reads a sheet at a
+time, the first with the hierarchy's index: each sheet's page is held without it, and the index once.
 
 Every answer is gathered into a folder made beside the bundle's (``atomic_replace.staging``) before the
 bundle's own is touched, so a writing that fails -- the engine's refusal, a document that keeps changing --
@@ -137,19 +140,45 @@ def _named(path: object) -> bool:
 class _Bundle:
     """One writing of a bundle: this application asked, each answer put at its path in the staging folder
     (``stage``), and what the bundle then holds (``files``: each file's ``bytes``, ``sha256`` and content
-    ``type``), moved into its folder at the end (``land``)."""
+    ``type``), moved into its folder at the end (``land``). A bundle of its own inside it (a board's 3D model's:
+    ``nested``) is staged and kept with it, its paths below ``prefix``, and listed in a manifest of its own
+    (``adopt``)."""
 
-    def __init__(self, app, folder: Path, stage: Path, previous: dict, release: str, roots: list[str]) -> None:
-        self.app, self.folder, self.stage, self.release = app, folder, stage, release
-        # What an earlier writing by this release left, by path: a content-named file among them is kept.
+    def __init__(self, app, folder: Path, stage: Path, previous: dict, release: str, roots: list[str],
+                 prefix: str = "") -> None:
+        self.app, self.folder, self.stage, self.release, self.prefix = app, folder, stage, release, prefix
+        # What an earlier writing by this release left, by its path in the bundle: a content-named file among them
+        # is kept.
         made = previous.get("made") if isinstance(previous.get("made"), dict) else {}
         same = previous.get("format") == FORMAT and made.get("release") == release
         self.kept = {path: entry for path, entry in (previous.get("files") or {}).items()
                      if _named(path) and isinstance(entry, dict)} if same else {}
+        # This bundle's files, by their paths in it (below ``prefix``); ``staged``, the bundle's paths written.
         self.files: dict[str, dict] = {}
         self.staged: list[str] = []
         # The folders of this computer the document comes from: no JSON a bundle holds names one.
         self.roots = [root for root in roots if root and len(Path(root).parts) > 1]
+
+    def nested(self, prefix: str, roots: list[str]) -> _Bundle:
+        """A bundle of its own at ``prefix`` in this one (``documents/<id>/``), whose document comes from ``roots`` too:
+        its files staged with this one's and kept by the same rules, by their paths in it."""
+        inner = _Bundle(self.app, self.folder, self.stage, {}, self.release, [*self.roots, *roots], self.prefix + prefix)
+        inner.kept, inner.staged = self.kept, self.staged
+        return inner
+
+    def adopt(self, prefix: str, inner: _Bundle, document: dict) -> None:
+        """The bundle ``inner`` (``nested`` at ``prefix``) listed in its own manifest, of ``document``, at
+        ``<prefix>manifest.json``, and its files and that manifest in this one's."""
+        for path, entry in inner.files.items():
+            self.files[prefix + path] = entry
+        self.put(prefix + MANIFEST, inner.manifest(document), _JSON)
+
+    def manifest(self, document: dict) -> bytes:
+        """The manifest of ``document``'s bundle as this writing holds it: every file by its path, sorted."""
+        files = {path: self.files[path] for path in sorted(self.files)}
+        manifest = {"format": FORMAT, "document": document, "made": {"tool": "cad", "release": self.release},
+                    "files": files}
+        return (json.dumps(manifest, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
 
     # --- asking this application ------------------------------------------------------------
 
@@ -192,23 +221,24 @@ class _Bundle:
     def holds(self, path: str) -> bool:
         """Whether the folder holds ``path`` already as an earlier writing by this release left it (its
         manifest's digest is the file's): a content-named file, kept and asked of no one."""
-        entry = self.kept.get(path)
-        if entry is None or _file_digest(self.folder / path) != (entry.get("sha256"), entry.get("bytes")):
+        entry = self.kept.get(self.prefix + path)
+        if entry is None or _file_digest(self.folder / (self.prefix + path)) != (entry.get("sha256"), entry.get("bytes")):
             return False
         self.files[path] = {"bytes": entry["bytes"], "sha256": entry["sha256"], "type": entry.get("type") or ""}
         return True
 
     def _staged(self, path: str) -> Path:
-        target = self.stage / path
+        full = self.prefix + path
+        target = self.stage / full
         target.parent.mkdir(parents=True, exist_ok=True)
-        if path not in self.staged:
-            self.staged.append(path)
+        if full not in self.staged:
+            self.staged.append(full)
         return target
 
     def put(self, path: str, body: bytes, kind: str) -> None:
         """``body`` as the bundle's ``path``."""
         if kind.startswith(_JSON):
-            self._portable(path, body)
+            self._portable(self.prefix + path, body)
         self._staged(path).write_bytes(body)
         self.files[path] = {"bytes": len(body), "sha256": _digest(body), "type": kind}
 
@@ -270,10 +300,8 @@ class _Bundle:
         "removed"}`` (``files`` and ``bytes`` count the manifest too). A new bundle is the staging folder
         renamed, whole. Over an earlier one, each file whose bytes differ is moved in, the manifest last,
         then the files the earlier manifest named and this one does not are removed."""
-        files = {path: self.files[path] for path in sorted(self.files)}
-        manifest = {"format": FORMAT, "document": document, "made": {"tool": "cad", "release": self.release},
-                    "files": files}
-        body = (json.dumps(manifest, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
+        files = self.files
+        body = self.manifest(document)
         self._portable(MANIFEST, body)
         (self.stage / MANIFEST).write_bytes(body)
         done = {"document": document, "files": len(files) + 1,  # and the manifest
@@ -438,21 +466,79 @@ def _robot(bundle: _Bundle, envelope: dict) -> str:
     return str(envelope["version"])
 
 
-_READS = {"document": _engine_document, "mesh": _mesh_file, "drawing": _drawing, "robot": _robot}
+def _board(bundle: _Bundle, envelope: dict) -> str:
+    """A KiCad board's: its plot (the board as geometry per layer, its pours KiCad's refill where KiCad could
+    refill them, made off the request as its page waits for it), its 3D models table, and each STEP the table
+    names by a document id, a bundle of its own at ``documents/<id>/`` (``_model``), which its page reads the model
+    from by that id."""
+    api = envelope["api"]
+    bundle.take("plot.json", f"{api}/plot", waiting="plotting")
+    kind, body = bundle.get(f"{api}/models")
+    table = json.loads(body).get("models")
+    rows = table.values() if isinstance(table, dict) else ()
+    for ident in dict.fromkeys(str(row["document"]) for row in rows if isinstance(row, dict) and row.get("document")):
+        _model(bundle, ident)
+    bundle.put("models.json", body, kind)
+    return str(envelope["version"])
+
+
+def _model(bundle: _Bundle, ident: str) -> None:
+    """The STEP a board's 3D models table names by the document id ``ident``, opened by that id as its page opens
+    it (``engineDocument``), as a bundle of its own at ``documents/<id>/``: what a page reads of a STEP, by the same
+    rules (``_engine_document``), its manifest beside them. One the engine will not open is left out, and a page
+    stands its part as a block, as it does where the engine refuses the model."""
+    try:
+        envelope = _open(bundle, ident=ident)
+    except ExportRefused:
+        return
+    located = (envelope.get("source") or {}).get("path")
+    prefix = f"documents/{_segment(ident)}/"
+    inner = bundle.nested(prefix, [os.path.dirname(located)] if isinstance(located, str) and located else [])
+    version = _engine_document(inner, envelope)
+    bundle.adopt(prefix, inner, {"id": envelope["id"], "kind": envelope["kind"], "name": envelope["name"],
+                                 "version": version})
+
+
+def _schematic(bundle: _Bundle, envelope: dict) -> str:
+    """A KiCad schematic's: each sheet of its hierarchy a page, as its page reads one after the first, without the
+    hierarchy's index (``sheets/<path>.json``), and that index once (``schematic.json``: the ``schematic`` of a
+    plot read with it, which every sheet's holds alike), which a reader puts back where a page asks for it."""
+    api = envelope["api"]
+    root = f"{api}/plot?sheet={quote('/', safe='')}"
+    kind, first = bundle.get(root)
+    index = json.loads(first).get("schematic")
+    if not isinstance(index, dict) or not isinstance(index.get("sheets"), list):
+        raise RuntimeError(f"{api}/plot answered no index of the hierarchy: this is a bug in cad")
+    for sheet in dict.fromkeys(str(row["path"]) for row in index["sheets"]):
+        bundle.take(f"sheets/{_segment(sheet)}.json", f"{api}/plot?sheet={quote(sheet, safe='')}&index=0")
+    bundle.put("schematic.json", json.dumps(index, separators=(",", ":"), ensure_ascii=False).encode("utf-8"), kind)
+    # A sheet rewritten while the pages were read changes the hierarchy's first page or its index.
+    if bundle.get(root)[1] != first:
+        raise _Changed()
+    return str(envelope["version"])
+
+
+def _plot(bundle: _Bundle, envelope: dict) -> str:
+    """A KiCad board's or schematic's: what its page reads of its plot (``_board``, ``_schematic``)."""
+    return (_board if envelope["kind"] == "kicad_pcb" else _schematic)(bundle, envelope)
+
+
+_READS = {"document": _engine_document, "mesh": _mesh_file, "drawing": _drawing, "robot": _robot, "plot": _plot}
 _VIEWS = {entry.wire: entry.view for entry in DOCUMENT_TYPES.values()}
 
 
-def _open(bundle: _Bundle, path: str) -> dict:
-    """The document a page opens (``POST /api/v1/documents``: a file by its path), asked again while the engine
-    reads it: its envelope."""
-    opening = json.dumps({"path": path}).encode()
+def _open(bundle: _Bundle, path: str | None = None, *, ident: str | None = None) -> dict:
+    """The document a page opens (``POST /api/v1/documents``: a file by its path, or one the engine knows by its
+    ``ident``), asked again while the engine reads it: its envelope."""
+    opening = json.dumps({"path": path} if ident is None else {"id": ident}).encode()
     while True:
         status, _kind, body = bundle.ask("POST", "/api/v1/documents", opening)
         if status != 202:
             break
         time.sleep(min(max(float(json.loads(body).get("retryMs") or 0) / 1000.0, 0.0), RETRY_SECONDS))
     if status != 201:
-        raise ExportRefused(f"no view bundle of {Path(path).name}: {json.loads(body).get('error') or status}")
+        named = Path(path).name if ident is None else ident
+        raise ExportRefused(f"no view bundle of {named}: {json.loads(body).get('error') or status}")
     return json.loads(bundle.get(f"/api/v1/documents/{json.loads(body)['id']}")[1])
 
 
