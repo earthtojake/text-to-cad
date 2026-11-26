@@ -121,7 +121,11 @@ included. A computer that 0.11.12 to 0.11.17 updated keeps the range their updat
 ([Before the first release of a higher major](releases.md#before-the-first-release-of-a-higher-major)). Besides what uv
 installed, the store keeps the release that runs and one waiting for its restart, each linked from uv's
 cache where the file system links; every tidying of the store (each update's end, each server start and then
-hourly, `cad cache prune`) removes the rest, and a release a process still runs once nothing does. The way back at a
+hourly, `cad cache prune`) removes the rest, and a release a process still runs once nothing does. The
+cache's environments go the same way: the server's tidying removes those made for another release, as
+`cad cache prune` does, never one a process runs from, so with releases shipping several times a day
+the cache holds this release's (about 1 GB each on paper, a full copy where the cache and uv's cache
+are on different file systems), not one per release since cad was installed. The way back at a
 switch needs no release kept for it: nothing tidies while an update is underway, so the release before is
 whole until the switch has ended, and going back is writing the pointer read before it. `uv tool uninstall cad` leaves
 the store in the state folder ([Removing](../install.md#removing)). A release needs the installed

@@ -17,8 +17,9 @@ records, Recents and settings in the state folder, and anything else in the fold
 - ``clean``: all of the cache, and what ``prune`` removes of it; refused while a server runs, which runs from it.
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
-kept, and said (``releases.running``; in the store, ``store.remove``). Nothing else of cad deletes a past release's
-folders or environments but cad's update and its server's start, which tidy the store as ``prune`` does.
+kept, and said (``base.unused``; in the store, ``store.remove``). Nothing else of cad deletes a past release's
+folders or environments but cad's update and its server, at its start and then hourly, which tidy the store as
+``prune`` does, and remove the environments made for another release by the same rules, quietly (``base.tidy``).
 """
 
 from __future__ import annotations
@@ -79,44 +80,17 @@ def prunable() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
     for another release, and the release folders of 0.11.11 and earlier but ``installations/current``'s; a folder a
     process runs from kept."""
     from cad.engine.places import current
-    from cad.engine.previous import version
     from cad_server._internal import base, releases
 
-    found: list[tuple[Path, str]] = []
+    found = base.others()
     kept: list[tuple[Path, str]] = []
-    for env in _folders(base.folder()):
-        release = _release(env)
-        if release is not None and release != version():
-            found.append((env, f"an environment of cad {release}"))
     record = current()
     for old in _folders(releases.root()):
         if record is not None and _inside(record["prefix"], old):
             kept.append((old, "the release 0.11.11 and earlier start (installations/current)"))
         else:
             found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier"))
-    return _running(found, kept)
-
-
-def _release(env: Path) -> str | None:
-    """The release the environment at ``env`` was made for, as its marker names it; None where none does."""
-    from cad_server._internal import base
-
-    marker = base.marked(env)
-    inputs = marker.get("inputs") if marker is not None else None
-    release = inputs.get("release") if isinstance(inputs, dict) else None
-    return release if isinstance(release, str) else None
-
-
-def _running(found: list[tuple[Path, str]], kept: list[tuple[Path, str]]):
-    from cad_server._internal.releases import running
-
-    going = []
-    for path, what in found:
-        if running(path, asking=os.getpid()):
-            kept.append((path, "a process runs from it"))
-        else:
-            going.append((path, what))
-    return going, kept
+    return base.unused(found, kept)
 
 
 def freed(paths: Iterable[Path]) -> int:
@@ -232,9 +206,9 @@ def _clean() -> int:
                          "first\n")
         return 1
     root, envs = folder(), base.folder()
-    found = [(env, f"an environment of cad {_release(env) or 'no release it names'}") for env in _folders(envs)]
+    found = [(env, f"an environment of cad {base.release_of(env) or 'no release it names'}") for env in _folders(envs)]
     found += [(root / name, f"cad's {name}") for name in OWN if name != base.BASE and os.path.lexists(root / name)]
-    going, kept = _running(found, [])
+    going, kept = base.unused(found, [])
     pruned, also = prunable()  # its release folders of 0.11.11 and earlier: the environments are all above
 
     def outside(entries: list[tuple[Path, str]]) -> list[tuple[Path, str]]:

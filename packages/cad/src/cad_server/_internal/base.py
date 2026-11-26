@@ -65,7 +65,8 @@ from cad.engine import places
 
 __all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "PASSING", "RETRY", "RETRY_SECONDS", "Environment",
            "Installation", "MARKER", "Making", "Recipe", "Refused", "Remembered", "SCHEMA", "TOLD", "complete", "ensure",
-           "failure", "find_uv", "folder", "halt", "interpreter", "kernel", "kernel_python", "make", "marked", "where"]
+           "failure", "find_uv", "folder", "halt", "interpreter", "kernel", "kernel_python", "make", "marked", "others",
+           "release_of", "tidy", "unused", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
 # process in the base reads its installation from (``places.home``).
@@ -293,6 +294,63 @@ def marked(env: Path) -> dict[str, Any] | None:
     if isinstance(marker, dict) and marker.get("schema") == SCHEMA and marker.get("key") == env.name:
         return marker
     return None
+
+
+def release_of(env: Path) -> str | None:
+    """The release the environment at ``env`` was made for, as its marker names it (``marked``: its ``inputs``); None
+    where none does -- one being made, whose marker is written last, among them."""
+    marker = marked(env)
+    inputs = marker.get("inputs") if marker is not None else None
+    release = inputs.get("release") if isinstance(inputs, dict) else None
+    return release if isinstance(release, str) else None
+
+
+def others() -> list[tuple[Path, str]]:
+    """The environments in ``folder`` made for another release than this one (``release_of``: the base and ``cad
+    run``'s alike), each with what it is in words: what ``cad cache prune`` removes of them, and what the store's
+    tidying removes by itself (``tidy``). Never this release's, whatever set of integrations it holds."""
+    from cad.engine.previous import version
+
+    try:
+        found = sorted(Path(entry.path) for entry in os.scandir(folder()) if entry.is_dir(follow_symlinks=False))
+    except OSError:
+        return []
+    mine = version()
+    return [(env, f"an environment of cad {release}") for env in found
+            if (release := release_of(env)) is not None and release != mine]
+
+
+def unused(found: list[tuple[Path, str]], kept: list[tuple[Path, str]]):
+    """``found`` parted into what may go and what stays, ``kept`` added to: a folder a process runs from stays, with
+    why (``releases.running``, this process and those that started it aside). ``(going, kept)``."""
+    from cad_server._internal.releases import running
+
+    going = []
+    for path, what in found:
+        if running(path, asking=os.getpid()):
+            kept.append((path, "a process runs from it"))
+        else:
+            going.append((path, what))
+    return going, kept
+
+
+def tidy() -> list[Path]:
+    """The environments of other releases (``others``) removed by themselves, as ``cad cache prune`` removes them
+    (``unused``: never one a process runs from), quietly: what the store's tidying does beside the store
+    (``cad_server.engine.daemon.Daemon.caught_up``, never while cad's update is underway). One that cannot be
+    removed stays, for the next tidying. The removed; never raises."""
+    removed = []
+    try:
+        going, _kept = unused(others(), [])
+        for env, what in going:
+            try:
+                _remove(env, what)
+            except Refused:
+                continue
+            removed.append(env)
+    except Exception:  # noqa: BLE001 - a tidying never fails what asked for it
+        pass
+    return removed
 
 
 def _found(env: Path, marker: dict[str, Any]) -> Environment:

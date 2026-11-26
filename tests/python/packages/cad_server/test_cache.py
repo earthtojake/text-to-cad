@@ -202,6 +202,55 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(out.endswith(" freed\n"), out)
         self.assertTrue(all(path.exists() for path in kept), "data and another program's folder stay")
 
+    def test_the_server_s_tidying_removes_other_releases_environments_by_itself_as_prune_does(self) -> None:
+        """At the server's start and at its hourly tidying (``Daemon.caught_up``), quietly: an environment of another
+        release goes; one a process runs from stays, and goes at the next tidying once it is free; this release's stay,
+        whatever integrations they hold, and one with no release named; nothing goes while an update is underway."""
+        import threading
+        import types
+
+        from cad_server._internal import auto_update, store
+        from cad_server.engine import daemon
+        from cad_server.engine.daemon import Daemon
+
+        mine, integrations = self.environment("mine0000", version()), self.environment("mine0001", version())
+        theirs, held = self.environment("theirs00", OTHER), self.environment("theirs01", "0.11.8")
+        unmarked = self.environment("unmarked", None)
+        busy = {held}
+        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=float("-inf"),
+                                         catching=types.SimpleNamespace(tend=lambda told: None))
+        clock, underway = [10_000.0], [None]
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(store, "clean"), mock.patch.object(auto_update, "report"), \
+                mock.patch.object(daemon.time, "monotonic", side_effect=lambda: clock[0]), \
+                mock.patch.object(auto_update, "underway", side_effect=lambda: underway[0]), \
+                mock.patch.object(releases, "running", side_effect=lambda path, **_: Path(path) in busy), \
+                redirect_stdout(out), redirect_stderr(err):
+            Daemon.caught_up(stand_in, starting=True)
+            self.assertFalse(theirs.exists(), "another release's environment, gone at the start")
+            self.assertTrue(all(path.exists() for path in (mine, integrations, unmarked, held)))
+            busy.clear()
+            later = self.environment("theirs02", OTHER)
+            clock[0] += daemon.TIDY_SECONDS - 1
+            Daemon.caught_up(stand_in)
+            self.assertTrue(held.exists() and later.exists(), "nothing within the hour")
+            clock[0] += 1
+            underway[0] = {"outcome": "underway"}
+            Daemon.caught_up(stand_in)
+            self.assertTrue(held.exists() and later.exists(), "nothing while an update is underway")
+            underway[0] = None
+            Daemon.caught_up(stand_in)
+        self.assertFalse(held.exists() or later.exists(), "an hour on: the one a process ran from too, now free")
+        self.assertTrue(all(path.exists() for path in (mine, integrations, unmarked)), "this release's stay")
+        self.assertEqual((out.getvalue(), err.getvalue()), ("", ""), "quiet")
+
+    def test_the_tidying_never_raises(self) -> None:
+        self.environment("theirs00", OTHER)
+        with mock.patch.object(base, "_remove", side_effect=base.Refused("held")):
+            self.assertEqual(base.tidy(), [])
+        with mock.patch.object(base, "others", side_effect=OSError("unreadable")):
+            self.assertEqual(base.tidy(), [])
+
     def test_what_a_removal_frees_counts_no_file_another_link_keeps(self) -> None:
         env = self.environment("theirs00", OTHER, 8192)
         outside = self.root / "uv-cache" / "file"

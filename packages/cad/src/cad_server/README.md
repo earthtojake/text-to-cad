@@ -113,7 +113,8 @@ cad_server/
   removes what this release cannot use (environments made for other releases, the release folders 0.11.11 and
   earlier left, and the stored releases nothing runs or points at but the one cad's update has ready, which it
   leaves alone while an update is underway), `clean` removes all of the cache, refused while the server runs.
-  Only these, cad's update and the server's start delete a past release's files.
+  Only these, cad's update and the server (at its start and then hourly) delete a past release's files; the
+  server removes the environments made for other releases by `prune`'s rules, quietly (`base.tidy`).
 - **`cad update`**: cad, and only cad, updated now to the newest release of its major version on PyPI, by the
   server that runs, or by the command itself where none runs (below), even with automatic updates off; where a
   release of a higher major is out, one more line names it and where the migration guides are: nothing crosses
@@ -211,7 +212,9 @@ that runs it shares. The tidying (`store.clean`) keeps what a pointer names, and
 nothing (once ten minutes old), builds that died (an hour old) and every other release no process runs but the
 one that is ready (`auto_update.kept`, below): the one an update switched away from too, as the way back needs
 only the pointer it read. The worker tidies as it ends; a server as it starts and then at most once an hour, however
-busy it is, and `cad cache prune`, where no attempt is underway. The worker runs the release it switches away from where that was
+busy it is, and `cad cache prune`, where no attempt is underway. A server's tidying also removes the cache's
+environments made for another release, as `prune` does (`base.tidy`: never one a process runs from, never this
+release's, whatever integrations it holds); the worker's does not, since it runs the release it switched away from. The worker runs the release it switches away from where that was
 a stored one, so that one goes at a later tidying: within the hour, by the server the switch started.
 
 **When** (`due`). The server reads the version feed (`updates.py`, at most once an hour, in the background):

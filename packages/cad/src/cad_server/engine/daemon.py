@@ -1930,8 +1930,9 @@ class Daemon:
         """What follows cad's own update, at the server's start and at every tending (``tend``), whatever is in flight
         -- each part minds only its own: the store tidied where no attempt is underway (``store.clean``: releases
         nothing runs or points at but the one that is ready, ``auto_update.kept``, a pointer that means nothing; a
-        release a process runs is never removed), at the start (``starting``) and then at most once each
-        ``TIDY_SECONDS`` -- so the release a switch left, which the switch's own worker still ran as it tidied, goes
+        release a process runs is never removed), and with it the cache's environments made for another release, as
+        ``cad cache prune`` removes them, quietly (``base.tidy``: never one a process runs from, never this
+        release's), at the start (``starting``) and then at most once each ``TIDY_SECONDS`` -- so the release a switch left, which the switch's own worker still ran as it tidied, goes
         within that time of the switch, not only at the server's next start; the install command run
         once where cad is newer than the release it is up to date for and the person's switch says so
         (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its lock),
@@ -1941,12 +1942,13 @@ class Daemon:
             return
         told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
         try:
-            from cad_server._internal import auto_update, store
+            from cad_server._internal import auto_update, base, store
 
             now = time.monotonic()
             if (starting or now - self.tidied >= TIDY_SECONDS) and auto_update.underway() is None:
                 self.tidied = now
                 store.clean(keep=auto_update.kept())
+                base.tidy()
             self.catching.tend(told)
             auto_update.report()
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for what follows an update
