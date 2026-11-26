@@ -52,11 +52,11 @@ cad_server/
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the data folder
   sharing.py             # `cad share`'s and `cad fork`'s client of the share service: a share's names and links,
-                         #   the files that made a document, the cad-share/2 packs of the files a share lacks, the
-                         #   service's API (urllib, in the command's own process), a share's zip written into a
-                         #   folder, a share's link as the name of this computer's copy of it, and what is kept:
-                         #   the agreement, the setting, the shares' and forks' records, and each shared
-                         #   document's folder in the cache
+                         #   a shared file's files (a model's .xbf and its closure's), the cad-share/2 packs of the
+                         #   files a share lacks, the service's API (urllib, in the command's own process), a
+                         #   share's zip written into a folder, a share's link as the name of this computer's copy
+                         #   of it, and what is kept: the agreement, the setting, the shares' and forks' records,
+                         #   and what a share keeps in its file's folder of the cache
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
   updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
@@ -154,21 +154,22 @@ cad_server/
   release), as 0.11.12 and 0.11.13 read it too. `cad plugin` is the one command that reaches `plugin/`, and that package the
   one place in cad that names an agent app, a plugin or a skill.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
-- **`cad share TARGET [--yes]`**: a document (an id the engine holds, or a file the viewer opens) shared for anyone
-  with its link to open in the hosted viewer and to download the files that made it (a model's script, modules and
-  the files it read, from its build closure, as its last run read them; a file's file), for 7 days after its last
-  share: the server writes its view bundle into the document's folder in the cache, over the one it wrote there
-  last, and the command uploads the files the share lacks itself, so an agent app's sandbox sees the connection, and
-  sharing it again sends only what changed. The first share on a computer is refused without `--yes`, the person's
-  yes, in lines that say what goes, where, who can open it, for how long and how to delete it. **`cad share
-  status|on|off`**: whether sharing is on and agreed, and this computer's live shares; `off` refuses every share
-  until `on`. **`cad share delete TARGET|LINK`**: a share deleted, asked first. The agreement, the setting, the
-  records and the cache's folders are written by the server that runs, as `cad update auto`'s switch is, else by the
-  command (the engine's **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command itself
-  into a folder, every entry kept inside it, and a record of the fork kept; it runs nothing, and prints the command
-  that builds it. Of a share this computer made, it downloads nothing and says where its files are. A share's link
-  names this computer's copy of it where `cad <type> snapshot` and `cad <type> inspect` take a document: the document
-  it shared, else the model built from its fork's folder.
+- **`cad share FILE|ID [--yes]`**: one file (a CAD file the viewer opens, or a document id, each turned into the
+  file's canonical path; a model by its `.xbf`, a script refused) shared for anyone with its link to open in the
+  hosted viewer and to download its files (a model's `.xbf` and the script, modules and files it read, from the build
+  closure the `.xbf` holds, none changed since it was made; a file's file), for 7 days after its last share: the
+  server writes its view bundle into the file's folder in the cache, over the one it wrote there last, and the command
+  uploads the files the share lacks itself, so an agent app's sandbox sees the connection, and sharing it again sends
+  only what changed. The first share on a computer is refused without `--yes`, the person's yes, in lines that say
+  what goes, where, who can open it, for how long and how to delete it. **`cad share status|on|off`**: whether
+  sharing is on and agreed, and this computer's live shares; `off` refuses every share until `on`. **`cad share
+  delete FILE|ID|LINK`**: a share deleted, asked first. The agreement, the setting, the records and the cache's
+  folders are written by the server that runs, as `cad update auto`'s switch is, else by the command (the engine's
+  **Sharing**). **`cad fork LINK [FOLDER]`**: a share's files downloaded by the command itself into a folder, every
+  entry kept inside it, a model's `.xbf` among them, and a record of the fork kept; it runs nothing and adds nothing
+  to the library, and prints the commands that show it and build it. Of a share this computer made, it downloads
+  nothing and says where its files are. A share's link names this computer's copy of it wherever cad takes a
+  document: the file it shared, else its fork's copy.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which

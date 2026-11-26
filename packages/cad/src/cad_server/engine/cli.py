@@ -15,8 +15,8 @@ ordinary Python scripts call decorated models explicitly.
 SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad step``, ``cad stl``, ...), or, for
 ``cad model``, a model's document id (``ids``), the id ``cad run SCRIPT.py`` prints for it, or the ``.xbf`` file
 a model is saved as (``cad_server.cli.document_types``). A script is never a source: no verb imports or builds
-one. Where ``snapshot`` and ``inspect`` take a document -- SRC, DOC, a packet's input, a ref's FILE -- a share's
-link names this computer's copy of it (``linked``: ``sharing.local``).
+one. Wherever a verb takes a document -- SRC, DOC, a packet's input, a ref's FILE -- a share's link names this
+computer's copy of it (``linked``: ``sharing.local``).
 
 The ``cad`` command runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
 ``python -m cad_server.engine VERB ...``, takes the same verbs as subcommands (``main``). A verb's failure
@@ -79,7 +79,7 @@ def _bundled_alone(document_type: str | None) -> bool:
 def _export_arguments(export: argparse.ArgumentParser, document_type: str | None = None) -> None:
     export.add_argument("source", metavar="SRC", help=_source_help(
         document_type, "an .xbf, a .step, a document id (a model's, which cad run SCRIPT.py prints), or a mesh "
-                       "file (.glb, .stl, .3mf), which exports to the other two mesh kinds"))
+                       "file (.glb, .stl, .3mf), which exports to the other two mesh kinds") + _LINKED)
     if _bundled_alone(document_type):
         export.add_argument("destinations", nargs="+", metavar="DST",
                             help="a folder ending .view: its view bundle, what its page reads, made ahead so a "
@@ -155,9 +155,9 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
                                                "parameters and declared files), then its build closure")
 
 
-# Where snapshot and inspect take a document, a share's link names this computer's copy of it (``linked``).
-_LINKED = ("; or a share's link (https://cad.fun/<id>): this computer's copy of it, the document it shared or the "
-           "model built from the folder cad fork wrote it into")
+# Wherever a verb takes a document, a share's link names this computer's copy of it (``linked``).
+_LINKED = ("; or a share's link (https://cad.fun/<id>): this computer's copy of it, the file it shared or the copy "
+           "in the folder cad fork wrote it into")
 
 
 def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> argparse.ArgumentParser:

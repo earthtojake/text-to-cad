@@ -40,7 +40,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from cad.engine.atomic_replace import replace_atomic, same_bytes, staging
-from cad.engine.export import VIEW, ExportRefused
+from cad.engine.export import ExportRefused
 from cad.registry import DOCUMENT_TYPES
 
 from . import url_norm
@@ -354,10 +354,10 @@ def _engine_document(bundle: _Bundle, envelope: dict) -> str:
     if bundle.get(f"{api}/structure")[1] != first:
         raise _Changed()
     # The two things a structure says of the computer it was answered on, which a bundle never holds: where
-    # a file is (in a bundle, the file's name alone; a model's ``path`` is its id), and a model's build
-    # closure, which names the code that built it -- its script and modules by path, their names, its inputs.
-    if envelope["kind"] != "model":
-        structure["path"] = envelope["name"]
+    # a file is (in a bundle, the file's name alone; a model's ``path`` is its id, as a live worker answers it,
+    # whether a worker holds it or its ``.xbf`` is read), and a model's build closure, which names the code that
+    # built it -- its script and modules by path, their names, its inputs.
+    structure["path"] = envelope["id"] if envelope["kind"] == "model" else envelope["name"]
     structure.pop("closure", None)
     # The mechanism is held once: ``kinematics.json`` is the structure's own, which a reader puts back.
     if mechanism is not None and json.loads(mechanism) != structure.pop("kinematics"):
@@ -467,8 +467,6 @@ def write(app, source: dict, folder, *, release: str) -> dict:
     fails, saying so. Whatever fails, the folder is left as it was: its files are moved in only once every
     answer is in hand."""
     folder = Path(folder)
-    if folder.suffix.lower() != VIEW:
-        raise ExportRefused(f"{folder.name}: a view bundle is a folder whose name ends in {VIEW}")
     previous = _previous(folder)
     roots = [os.path.dirname(source["path"])] if "path" in source else []
     opener = _Bundle(app, folder, folder, {}, release, roots)

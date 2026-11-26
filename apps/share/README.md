@@ -1,8 +1,8 @@
 # Share
 
 `cad.fun`: where a shared model lives. A share is two things under one id: its **view**, the
-document's view bundle, which a browser draws, and **the files that made it**: a model's script, the
-modules its build imported and the files it read, or a file document's file. `cad share` uploads
+document's view bundle, which a browser draws, and **the files that made it**: a model's `.xbf`, its
+script, the modules its build imported and the files it read, or a file document's file. `cad share` uploads
 the files of both that its share does not hold yet, in packs, then commits a manifest that says
 where each file lies, so a share costs what changed. Anyone with the link (`https://cad.fun/<id>`)
 opens it in the hosted viewer, with no sign-in, and downloads the files that made it as a zip
@@ -133,13 +133,15 @@ Another method on a route is `405` with `Allow`; any other `/v1` path is `404`.
     "manifest.json": { "sha256": "<64 hex>", "bytes": 1234, "at": [["<pack id>", 0, 456]] }
   },
   "files": {
-    "juno.py": { "sha256": "<64 hex>", "bytes": 5120, "at": [["<pack id>", 456, 1800]] }
+    "juno.py": { "sha256": "<64 hex>", "bytes": 5120, "at": [["<pack id>", 456, 1800]] },
+    "juno.xbf": { "sha256": "<64 hex>", "bytes": 98304, "at": [["<pack id>", 2256, 61410]] }
   }
 }
 ```
 
 `view` is every file of the bundle by its path, and `files` every file that made it by its path
-from the files' root (the command decides which; the service takes them as given). In both,
+from the files' root, a model's `.xbf` among them (the command decides which; the service takes them
+as given). In both,
 `sha256` and `bytes` are the file's own bytes, uncompressed, and `at` the ranges of packs,
 `[pack id, offset, length]` into a pack's bytes before sealing, whose bytes, joined in order, are
 the file's gzip member; two entries of the same content may name the same ranges. `name` is the

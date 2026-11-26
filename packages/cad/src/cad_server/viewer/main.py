@@ -1,8 +1,9 @@
 """Open the running server's viewer page: the home, or each file named (no server running: its one line, which
 says to run ``cad server start``).
 
-The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a
-document id the engine holds) is registered and printed as its page, ``/<id>``. A folder is opened as a
+The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, a
+document id the engine holds, or a share's link, this computer's copy of it) is registered and printed as its page,
+``/<id>``. A folder is opened as a
 project, shown a folder at a time on the home, whose page is printed. Nothing is written to the folder."""
 # A FILE that is not there, or that the viewer does not open -- a model's script among them -- is the
 # command line's (the ``cad`` command's failure contract, ``cad_server._internal.cli_errors``): refused
@@ -63,10 +64,13 @@ def unopened(name, start):
 
 
 def _files_opened(parsed):
-    """The check of a launch's FILEs before the engine is asked (``unopened``), each read from this folder."""
+    """The check of a launch's FILEs before the engine is asked (``unopened``), each read from this folder; a share's
+    link is this computer's copy of it from then on, and refused where it has none (``engine.cli.linked``)."""
     from cad.engine.ids import is_id
     from cad_server._internal.cli_errors import Failure
+    from cad_server.engine.cli import linked
 
+    parsed.files = [linked(name) for name in parsed.files]
     for name in parsed.files:
         refused = None if is_id(name) else unopened(name, os.getcwd())
         if refused is not None:

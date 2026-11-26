@@ -695,6 +695,31 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
                     row.get("robot")) for row in done["files"]]
 
 
+def bundle(path: Any, folder: Any) -> dict[str, Any]:
+    """The view bundle of the CAD file at ``path`` -- what its page reads, written down (the engine's **View
+    bundle**) -- into ``folder``, by the running server, which writes it from the answers it gives that page, over
+    the bundle the folder holds: what was done (``{"path", "document", "files", "bytes", "written", "removed"}``).
+    ``cad share``'s step: only a server writes one. A model's ``.xbf`` is the model a live worker holds, else the
+    file, the same document."""
+    from cad.engine.export import ExportRefused
+    from cad.registry import type_of
+
+    found = Path(os.fspath(path)).resolve()
+    if type_of(found) is None:
+        raise ExportRefused(f"{found.name} is no CAD file: a view bundle is written of a file the viewer opens")
+    if not found.is_file():
+        raise ExportRefused(f"no document {found}")
+    message = {"op": "bundle", "source": {"path": str(found)}, "destinations": [str(Path(os.fspath(folder)).resolve())]}
+    try:
+        (done,) = _ask(message)["done"]["files"]
+    except EngineError as error:
+        if str(error).startswith("unknown request"):  # a server of a release before the bundle
+            raise Outdated("the CAD server running writes no view bundle: it is older than this library. Update cad "
+                           "and run it again") from None
+        raise
+    return done
+
+
 def _bundled(source: Any, folders: list[Path], daemon: bool, options: dict[str, Any]) -> list[Written]:
     """An export whose destinations are view bundles (``export.VIEW``): each folder written by the server
     that answers the document's page, from the answers it gives that page (the engine's **View bundle**) --

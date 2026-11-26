@@ -1,4 +1,4 @@
-"""``cad fork LINK [FOLDER]`` -- the files that made a shared document, written into a folder of this computer's
+"""``cad fork LINK [FOLDER]`` -- the files of a shared file, written into a folder of this computer's
 (``cad_server.sharing``; the engine's **Sharing**).
 
 LINK is a share's view link (``<origin>/<id>``), its files' link (``<origin>/<id>.zip``), or its id alone, of the share
@@ -7,17 +7,19 @@ service ``CAD_SHARE_URL`` names (``https://cad.fun`` by default). This process d
 apply; the server is never asked. Its files go into FOLDER (``./<its name>`` by default: the folder the zip holds),
 which is refused where it is there and holds anything, and every entry is refused that would land outside it (an
 absolute path, a ``..``, a drive, a link: ``sharing.zip_entries``); they are written beside it first and moved in once
-all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). It keeps a record of the fork
-(``sharing.fork_record``: the link, the folder, the script or the file, the share's name), asked of the running
-server as ``cad share`` keeps its records, so that the share's link names these files here where cad takes a document
-to draw or inspect (``sharing.copy_of``). It says what it wrote, the script that builds it, and where what built it
-(``Cad-Share-Made``) differs from this computer's cad and libraries, which a build here records (``_here``). It runs
-nothing: the next step it prints is ``cad run FOLDER/<script>`` (a file's, ``cad viewer FOLDER/<file>``), since
-someone else's code is the person's to run. ``--json`` answers in one object.
+all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). A model's ``.xbf`` is among them, so the
+model is there at once, read as any ``.xbf`` is, with nothing run. It keeps a record of the fork (``sharing.fork_record``:
+the link, the folder and the shared file in it, ``sharing.shared_file``), asked of the running server as ``cad share``
+keeps its records, so that the share's link names that file here wherever cad takes a document (``sharing.copy_of``).
+It says what it wrote, the file it is of and the script that builds it, and where what built it (``Cad-Share-Made``)
+differs from this computer's cad and libraries, which a build here records (``_here``). It runs nothing, and adds no
+project and no file to the library: the next steps it prints are ``cad viewer FOLDER/<file>``, which shows it as it
+was shared, and, of a model, ``cad run FOLDER/<script>``, which builds it here, since someone else's code is the
+person's to run. ``--json`` answers in one object.
 
-A share this computer made (``sharing.made_here``: a live record of that origin and id, whose files are still where
-it was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where its files
-are -- their root and the script among them, or a file document's file -- which is where to work on them (``_local``).
+A share this computer made (``sharing.made_here``: a live record of that origin and id, whose file is still where it
+was shared from) is downloaded by no one: the command writes nothing, FOLDER included, and says where its files are --
+the file, and a model's root and the script among its files -- which is where to work on them (``_local``).
 """
 
 from __future__ import annotations
@@ -35,12 +37,13 @@ from typing import Any
 
 DEFAULT_PROG = "cad fork"
 DESCRIPTION = (
-    "Write the files that made a shared document into a folder: a model's script, the modules of its project and the "
+    "Write the files of a shared file into a folder: a model's .xbf, its script, the modules of its project and the "
     "files it reads, at their paths there; a file document's file. LINK is the share's link (https://cad.fun/<id>), "
     "its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs "
-    "from this computer's cad and libraries, then the command that builds it, for the person to run. It keeps a record "
-    "of the fork, so the share's link names these files where cad snapshot and inspect take a document. A share this "
-    "computer made is not downloaded: it says where its files are, to work on them there, and writes nothing.")
+    "from this computer's cad and libraries, then the commands that show it and build it, for the person to run. It "
+    "keeps a record of the fork, so the share's link names the shared file here wherever cad takes a document. A "
+    "share this computer made is not downloaded: it says where its files are, to work on them there, and writes "
+    "nothing.")
 # How long this computer's CAD kernel environment may take to say its libraries.
 VERSIONS_SECONDS = 60.0
 # What a build records of its libraries and its Python, asked of the CAD kernel environment's own Python.
@@ -146,9 +149,9 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
             raise Failure(f"could not write the share's files into {shown}: {error.strerror or error}") from None
     paths = [path for path, _size in written]
     entry = said["entry"] if said["entry"] in paths else None
-    viewed = _viewed(paths) if entry is None else None
+    shared = sharing.shared_file(folder, paths, entry)
     try:
-        sharing.keep(fork=sharing.fork_record(origin, ident, folder, entry, viewed, top))
+        sharing.keep(fork=sharing.fork_record(origin, ident, folder, shared))
     except OSError as error:
         print(f"{prog}: warning: this computer could not keep a record of the fork ({error}), so the share's link "
               "names no copy of it here: name its files by their paths", file=sys.stderr, flush=True)
@@ -156,18 +159,19 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     differs = [{"name": name, "made": value, "here": here[name]} for name, value in (made or {}).items()
                if name in here and here[name] is not None and here[name] != value]
     unknown = [name for name in (made or {}) if name in here and here[name] is None]
-    step = ([_command("run", os.path.join(shown, *entry.split("/")))] if entry is not None else
-            [_command("viewer", os.path.join(shown, *viewed.split("/")))] if viewed is not None else [])
+    step = ([_command("viewer", os.path.join(shown, *shared.split("/")))] if shared is not None else []) \
+        + ([_command("run", os.path.join(shown, *entry.split("/")))] if entry is not None else [])
     size = sum(count for _path, count in written)
     if as_json:
         print(json.dumps({"ok": True, "local": False, "folder": os.path.abspath(folder), "name": top,
-                          "files": {"count": len(written), "bytes": size, "paths": paths}, "entry": entry,
-                          "made": made, "here": here, "differs": differs, "next": step}, separators=(",", ":")),
-              flush=True)
+                          "files": {"count": len(written), "bytes": size, "paths": paths}, "file": shared,
+                          "entry": entry, "made": made, "here": here, "differs": differs, "next": step},
+                         separators=(",", ":")), flush=True)
         return 0
     from cad_server.cli.share import _size
 
     print(f"Forked {top} into {shown}: {len(written)} file{'s' if len(written) != 1 else ''}, {_size(size)}"
+          + (f"; it is {shared}" if shared is not None else "")
           + (f"; its script is {entry}" if entry is not None else ""), flush=True)
     if made is not None:
         if differs:
@@ -179,43 +183,33 @@ def _fork(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
         if unknown:
             print(f"Made with {', '.join(name + ' ' + made[name] for name in unknown)}: this computer's CAD kernel "
                   "environment is made with its first build, so those were not compared")
-    if step:
-        print(f"Nothing was run: the code is someone else's, the person's to read and run. Next: {step[0]}"
-              if entry is not None else f"Next: {step[0]}", flush=True)
+    if entry is not None:
+        shows = f"{step[0]} shows it as it was shared; " if shared is not None else ""
+        print(f"Nothing was run: the code is someone else's, the person's to read and run. Next: {shows}"
+              f"{step[-1]} builds it here", flush=True)
+    elif step:
+        print(f"Next: {step[0]}", flush=True)
     return 0
 
 
 def _local(record: dict[str, Any], given: str | None, *, as_json: bool) -> int:
-    """A share this computer made, its files where it was shared from (``sharing.made_here``'s ``record``): where
-    they are -- their root and the script among them, or a file document's file -- and that nothing was downloaded
-    or written, FOLDER (``given``) neither. The next step is the one that builds or shows it there: these files are
-    this computer's own."""
-    files = record["files"]
-    root, entry, own = files["root"], files.get("entry"), files.get("file")
+    """A share this computer made, its file where it was shared from (``sharing.made_here``'s ``record``): where its
+    files are -- the file, and a model's root and the script among them -- and that nothing was downloaded or written,
+    FOLDER (``given``) neither. The next step is the one that builds or shows it there: these files are this
+    computer's own."""
+    files = record.get("files") or {}
+    root, entry, own = files.get("root"), files.get("entry"), record["document"]["path"]
     name = record["document"]["name"]
-    script = os.path.join(root, *entry.split("/")) if entry is not None else None
+    script = os.path.join(root, *entry.split("/")) if isinstance(root, str) and isinstance(entry, str) else None
     step = [_command("run", script)] if script is not None else [_command("viewer", own)]
     if as_json:
-        print(json.dumps({"ok": True, "local": True, "name": name, "root": root, "entry": entry, "file": own,
+        print(json.dumps({"ok": True, "local": True, "name": name, "file": own, "root": root, "entry": entry,
                           "ignored": given, "next": step}, separators=(",", ":")), flush=True)
         return 0
-    where = f"its files are in {root}, its script {script}" if script is not None else f"its file is {own}"
+    where = f"it is {own}" + (f", its files in {root}, its script {script}" if script is not None else "")
     print(f"{name} was shared from this computer: {where}. Nothing was downloaded"
           + (f", and {given} was not written" if given is not None else "") + "; work there.", flush=True)
     return 0
-
-
-def _viewed(paths: list[str]) -> str | None:
-    """The file a fork of a file document shows: the one SRDF at its folder's top (drawn with its URDF), else the
-    one URDF there, else the one file it holds; None where none of those names one."""
-    from cad.registry import type_of
-
-    top = [path for path in paths if "/" not in path]
-    for kind in ("srdf", "urdf"):
-        found = [path for path in top if getattr(type_of(path), "id", None) == kind]
-        if len(found) == 1:
-            return found[0]
-    return paths[0] if len(paths) == 1 else None
 
 
 def _command(verb: str, path: str) -> str:
