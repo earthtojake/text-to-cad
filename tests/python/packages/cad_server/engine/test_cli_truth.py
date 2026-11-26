@@ -194,7 +194,7 @@ class VerbsTest(unittest.TestCase):
 
         def inspect(*options: str):
             return self.run_("-c", "from cad_server.cli import main; raise SystemExit(main())",
-                             "xbf", "inspect", str(xbf), *options)
+                             "inspect", str(xbf), *options)
 
         closure = inspect("--query", "closure", "--json")
         self.assertEqual(closure.returncode, 0, closure.stderr or closure.stdout)
