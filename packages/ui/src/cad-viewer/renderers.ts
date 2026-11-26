@@ -7,7 +7,7 @@ import { createMeshRenderer } from '../renderers/mesh/index.js';
 import { createRobotRenderer } from '../renderers/robot/index.js';
 import { createSchematicRenderer } from '../renderers/schematic/index.js';
 import type { CadPreferenceSource } from '../renderers/workspace/index.js';
-import { createModelRenderer } from '../renderers/xbf/index.js';
+import { createXbfRenderer } from '../renderers/xbf/index.js';
 
 /**
  * The CAD renderers over one client, reading the tab's preferences, bound to one live registry. A STEP
@@ -21,6 +21,6 @@ export function cadRenderers(client: CadWorkspaceService, preferences: CadPrefer
     createGlbRenderer({ client, preferences, live }),
     createMeshRenderer({ client, preferences, live }),
     createRobotRenderer({ client, preferences, live }),
-    createModelRenderer({ client, preferences, live }),
+    createXbfRenderer({ client, preferences, live }),
   ];
 }

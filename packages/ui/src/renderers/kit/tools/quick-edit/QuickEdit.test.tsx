@@ -451,7 +451,7 @@ it.each([
     const there = await quickEdit(shared, sharedFile, LINK, action);
     // The engine page's names the file three times, and only there: its `File:`, its reference's file, its packet's `input`.
     expect(here.split(address).length - 1).toBe(3);
-    expect(here).toContain(`File: ${address}\nReferences:\n${address}#bracket/f:bracket.extrude1.2\nSnapshot JSON (\`cad ${localFile.kind === 'cad-model' ? 'model' : 'step'} snapshot --job\`):`);
+    expect(here).toContain(`File: ${address}\nReferences:\n${address}#bracket/f:bracket.extrude1.2\nSnapshot JSON (\`cad ${localFile.kind === 'cad-model' ? 'xbf' : 'step'} snapshot --job\`):`);
     expect(here).toContain(`{"input":${JSON.stringify(address)},`);
     const addressed = here.replace(`File: ${address}\n`, `File: ${LINK}\n`).replace(`\n${address}#`, `\n${LINK}#`)
       .replace(`{"input":${JSON.stringify(address)},`, `{"input":${JSON.stringify(LINK)},`);

@@ -70,8 +70,9 @@ export interface CadRecent {
   id: string;
   /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`); null for a file that is no document. */
   api?: string | null;
-  /** The document's kind (`model` for an `.xbf`, `step`, `stl`, ...); a released server's `xbf` is an `.xbf` too
-   * (`documentKind`, `lib/fileFormats.js`). Null: a folder's file that is no document. */
+  /** The document's kind (`xbf` -- a model's document, held by the engine or its `.xbf` opened from disk --, `step`,
+   * `stl`, ...); an earlier server's `model` is an `xbf` too (`documentKind`, `lib/fileFormats.js`). Null: a folder's
+   * file that is no document. */
   documentKind?: string | null;
   /** The file, absolute: Recents' by its canonical path, a folder's as reached in it, `/`-separated. */
   path: string;
@@ -199,7 +200,7 @@ export interface CadEngineDocument {
   final?: boolean;
 }
 /**
- * What a save of a model's parameters answers (`POST /api/v1/documents/model/<id>/parameters`): each
+ * What a save of a model's parameters answers (`POST /api/v1/documents/xbf/<id>/parameters`): each
  * value the engine wrote into the script (one equal to the script's is not written, and not listed),
  * with the script's absolute path and the line it is on, and the models it built again.
  */
@@ -209,7 +210,7 @@ export interface CadParametersSaved {
   rebuilt: string[];
 }
 /**
- * What a preview of a model's parameters answers (`POST /api/v1/documents/model/<id>/preview`): the model
+ * What a preview of a model's parameters answers (`POST /api/v1/documents/xbf/<id>/preview`): the model
  * built at those values for this page alone, nothing written -- its own id and the URL its structure and
  * parts are read at (a document's routes), its version, the document version it was built against
  * (`basis`), the values it differs from the document by, the build's seconds and how its memo went. `preview:
@@ -317,7 +318,7 @@ export interface CadWorkspaceService {
   /** Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one. */
   engineHolds?(file: string, options?: CadRequestOptions): Promise<boolean>;
   /**
-   * `POST /api/v1/documents/model/<id>/parameters`: new values for a model's declared parameters, by
+   * `POST /api/v1/documents/xbf/<id>/parameters`: new values for a model's declared parameters, by
    * name, each a finite number. The engine rewrites them in the model's script and builds it again,
    * and answers once that build has ended; a refusal rejects with a `CadParametersRefusal`. The one
    * call of a view that changes a design. A host that cannot make it leaves it out, and its views
@@ -325,7 +326,7 @@ export interface CadWorkspaceService {
    */
   setModelParameters?(id: string, values: Record<string, number>, options?: CadRequestOptions): Promise<CadParametersSaved>;
   /**
-   * `POST /api/v1/documents/model/<id>/preview`: the model at other values of its declared parameters, for
+   * `POST /api/v1/documents/xbf/<id>/preview`: the model at other values of its declared parameters, for
    * this page alone (`page`, the page's own token): the engine builds it in the model's worker and writes
    * nothing; the page reads the preview's structure and parts as a document's. `{}` lets the page's previews
    * go. A host that cannot make it leaves it out, and its views show a value only once it is saved.

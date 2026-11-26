@@ -109,7 +109,7 @@ its tabs outside Codex, or no tools.
 log is the engine's (`cad server` in a terminal shows it; a started engine writes it to its log file).
 
 No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
-agent runs in its shell (`cad model export <id> <file>`, `cad model inspect <id>`, `cad model snapshot
+agent runs in its shell (`cad xbf export <id> <file>`, `cad xbf inspect <id>`, `cad xbf snapshot
 <id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
 at initialize, an app offered no tools among them. The three tools
 0.11.10 removed (`cad_export`, `cad_snapshot`, `cad_inspect`) are never listed, but a call by one of those
@@ -348,9 +348,9 @@ the launch's `_meta` first (`host/capability.ts`).
   server travels this way, as the web page asks its own: the models -- a STEP's
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
   that serves them (`/api/v1/documents/<kind>/<id>/...`), a model's Parameters
-  Save among them (`POST /api/v1/documents/model/<id>/parameters`, one call held
+  Save among them (`POST /api/v1/documents/xbf/<id>/parameters`, one call held
   until the rebuild it starts has ended) and the preview of its drafts
-  (`POST /api/v1/documents/model/<id>/preview`, then the preview's reads) -- the
+  (`POST /api/v1/documents/xbf/<id>/preview`, then the preview's reads) -- the
   library and its pictures, Reveal, the person's analytics
   answer and language. One route is the server's own, not the
   viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows

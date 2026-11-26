@@ -2,8 +2,8 @@ import { DOCUMENT_TYPE_REGISTRY } from "./documentTypes.generated.js";
 
 // The document types, from the library's registry (`cad.registry`, generated into
 // `documentTypes.generated.js`): each type's format is its `wire` spelling, the one the server's
-// API names it by (the id, but `3mf` for `threemf`). An earlier id (`aliases`: `xbf`, a model's
-// file) names the type it is now (`documentKind`).
+// API names it by (the id, but `3mf` for `threemf`). An alias (`aliases`: `model`, the word for writing an `.xbf`,
+// which an earlier server said for a model it held) names the type it is (`documentKind`).
 const TYPES = Object.freeze(Object.fromEntries(
   DOCUMENT_TYPE_REGISTRY.documentTypes.map((type) => [type.id, type])
 ));
@@ -19,9 +19,9 @@ export const RENDER_FORMAT = Object.freeze({
   DXF: TYPES.dxf.wire,
   URDF: TYPES.urdf.wire,
   SRDF: TYPES.srdf.wire,
-  // A model's document (`cad.engine`), held by the engine or its `.xbf` opened from disk: served by the
-  // engine, drawn by its own renderer.
-  MODEL: TYPES.model.wire,
+  // The engine's own document, a model's (`cad.engine`), held by the engine or its `.xbf` opened from disk:
+  // served by the engine, drawn by its own renderer.
+  XBF: TYPES.xbf.wire,
   KICAD_PCB: TYPES.kicad_pcb.wire,
   // A KiCad schematic, drawn from its files as a board is, a sheet at a time (`packages/ui/src/renderers/schematic`).
   KICAD_SCH: TYPES.kicad_sch.wire
@@ -31,7 +31,7 @@ export const MESH_RENDER_FORMATS = Object.freeze(
   DOCUMENT_TYPE_REGISTRY.documentTypes.filter((type) => type.view === "mesh").map((type) => type.wire)
 );
 
-// A file's format by its extension: every type's extensions but a model's (its `.xbf`), which the
+// A file's format by its extension: every type's extensions but an xbf's, which the
 // engine serves as a document and no client reads by its extension; and `.gltf`, read as a GLB.
 const FORMAT_BY_EXTENSION = Object.freeze(Object.fromEntries([
   ...DOCUMENT_TYPE_REGISTRY.documentTypes
@@ -51,8 +51,8 @@ export function normalizeFormat(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-// A document's kind as it is now: an earlier one (`xbf`, which a released server or page may say) the kind it
-// names (`model`), any other as given.
+// A document's kind as it is: an alias (`model`, which an earlier server or page may say) the kind it names
+// (`xbf`), any other as given.
 export function documentKind(value) {
   const normalized = normalizeFormat(value);
   return KIND_ALIASES[normalized] || normalized;

@@ -105,7 +105,7 @@ of the document of that id: a file registered (by a launch or a row), in the lib
 else a model the engine holds (`file` is its id, `name` its function, `sourcePath` null: it has no file to
 browse); else a 404 whose `error` is the engine's words for why (`no document <id> is held`) and whose `hint` says
 what to do. A script is never a row. An
-envelope says what the document is: `id`, `kind` (`model` for a model the engine holds and for its `.xbf`
+envelope says what the document is: `id`, `kind` (`xbf` for a model the engine holds and for its `.xbf`
 opened from disk, else a file's by its extension: `step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `kicad_pcb`, `kicad_sch`), `name`, `version`, `state` (a model's,
 the engine's: `live`, `held`, `building`, `failed`; a file's `live`), `source` (a model's script and
 function, a file's path), `producers`, `api` (where its kind's reads are,

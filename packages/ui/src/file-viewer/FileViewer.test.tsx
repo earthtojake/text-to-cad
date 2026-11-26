@@ -948,17 +948,17 @@ it('takes the keyboard as its file is shown, so a tool key works with no press f
   field.remove();
 });
 
-it('hands a renderer the view the tab saved under an id it had before (its alias): the model renderer opens one saved as xbf', async () => {
-  const shows = defineFileRenderer({ id: 'model', aliases: ['xbf'], priority: 1, matches: () => true, prepare: async () => ({ data: null }),
+it('hands a renderer the view the tab saved under an id it had before (its alias): a renderer renamed opens one saved under its old id', async () => {
+  const shows = defineFileRenderer({ id: 'xbf', aliases: ['old'], priority: 1, matches: () => true, prepare: async () => ({ data: null }),
     load: async () => ({ default: ({ state }: { state?: unknown }) => <p>{`state ${JSON.stringify((state as { zoom?: number } | undefined)?.zoom ?? null)}`}</p> }) });
   const saved = (id: string, zoom: number) => ({ [JSON.stringify([FILE, id])]: { zoom } });
-  const view = render(<FileViewer file={FILE} host={host as any} renderers={[shows]} state={{ renderers: saved('xbf', 2) }} onStateChange={() => {}} />);
+  const view = render(<FileViewer file={FILE} host={host as any} renderers={[shows]} state={{ renderers: saved('old', 2) }} onStateChange={() => {}} />);
   expect((await screen.findByText(/^state /)).textContent).toBe('state 2');
   view.unmount();
   // Its own id's view, where both are, is its own.
-  render(<FileViewer file={FILE} host={host as any} renderers={[shows]} state={{ renderers: { ...saved('xbf', 2), ...saved('model', 3) } }} onStateChange={() => {}} />);
+  render(<FileViewer file={FILE} host={host as any} renderers={[shows]} state={{ renderers: { ...saved('old', 2), ...saved('xbf', 3) } }} onStateChange={() => {}} />);
   expect((await screen.findByText(/^state /)).textContent).toBe('state 3');
   // An alias is an id: no other renderer may take it.
-  expect(() => validateRenderers([shows, defineFileRenderer({ id: 'xbf', priority: 2, matches: () => false, prepare: async () => ({ data: null }),
-    load: async () => ({ default: () => null }) })])).toThrow('Duplicate or empty file renderer ID: "xbf".');
+  expect(() => validateRenderers([shows, defineFileRenderer({ id: 'old', priority: 2, matches: () => false, prepare: async () => ({ data: null }),
+    load: async () => ({ default: () => null }) })])).toThrow('Duplicate or empty file renderer ID: "old".');
 });

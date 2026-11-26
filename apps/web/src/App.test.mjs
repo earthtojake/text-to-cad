@@ -293,7 +293,7 @@ test('a document\'s page has its name from its first frame where the boot learne
   const fetchBefore = globalThis.fetch;
   // The model's envelope, answered when the test says.
   let answer = () => {};
-  const envelope = { id: MODEL, kind: 'model', entry: { id: MODEL, file: MODEL, sourcePath: null, name: 'qdd_actuator' }, revision: '' };
+  const envelope = { id: MODEL, kind: 'xbf', entry: { id: MODEL, file: MODEL, sourcePath: null, name: 'qdd_actuator' }, revision: '' };
   globalThis.fetch = async (url, init = {}) => {
     if (url === `/api/v1/documents/${MODEL}`) await new Promise(resolve => { answer = resolve; });
     const reply = url === `/api/v1/documents/${MODEL}` ? envelope : url === '/api/v1/settings' ? { language: { locale: null } } : { documents: [] };
@@ -415,7 +415,7 @@ test("a share's page hands the viewer what its prompts name the model by, and no
   for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   window.matchMedia = matchMedia;
   // A view bundle's service, as far as its host reads it: its one document.
-  const client = { manifest: { document: { id: '1024a2f2-2b65-5151-8299-282973f2a9fc', kind: 'model', name: 'bracket', version: 'v1' } },
+  const client = { manifest: { document: { id: '1024a2f2-2b65-5151-8299-282973f2a9fc', kind: 'xbf', name: 'bracket', version: 'v1' } },
     file: '1024a2f2-2b65-5151-8299-282973f2a9fc' };
   const subject = sharePromptSubject(id);
   const root = createRoot(window.document.getElementById('root'));

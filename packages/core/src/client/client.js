@@ -535,7 +535,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       }
     },
     async setModelParameters(id, values, { signal } = {}) {
-      // New values for a model's declared parameters (`POST /api/v1/documents/model/<id>/parameters`):
+      // New values for a model's declared parameters (`POST /api/v1/documents/xbf/<id>/parameters`):
       // the ENGINE rewrites those numbers in the model's script, where its last run recorded them, and
       // builds it again; the page then reads the rebuilt document as it reads any new version. The
       // request names the model by its id and the parameters by name, each value a number: never a
@@ -547,15 +547,15 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       if (!named.length || !named.every(([, value]) => typeof value === 'number' && Number.isFinite(value))) {
         throw new TypeError('A parameter takes a finite number.');
       }
-      return parameterRequest(`${API}/documents/model/${encodeURIComponent(id)}/parameters`,
+      return parameterRequest(`${API}/documents/xbf/${encodeURIComponent(id)}/parameters`,
         { values: Object.fromEntries(named) }, signal, 'parameters');
     },
     async previewModelParameters(id, values, { page, signal } = {}) {
       // A model at other values of its declared parameters, for this page alone
-      // (`POST /api/v1/documents/model/<id>/preview`): the ENGINE builds it in the model's worker and holds
+      // (`POST /api/v1/documents/xbf/<id>/preview`): the ENGINE builds it in the model's worker and holds
       // it for the page that asked, writing nothing -- not the script, not the document. Answered once that
       // build has ended with the preview's own id, whose structure and parts the page reads as it reads a
-      // document's (`/api/v1/documents/model/<preview id>/...`, `previewUrl`); `preview: null` for values that
+      // document's (`/api/v1/documents/xbf/<preview id>/...`, `previewUrl`); `preview: null` for values that
       // are the document's (the page's previews let go: `{}` is Reset); `superseded: true` for a request a
       // newer one of the same document replaced before it built. `page` is the page's own token, which keeps
       // its previews from another page's. Refused as `setModelParameters` is, by the same codes.
@@ -565,11 +565,11 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       if (!named || !named.every(([, value]) => typeof value === 'number' && Number.isFinite(value))) {
         throw new TypeError('A parameter takes a finite number.');
       }
-      const answer = await parameterRequest(`${API}/documents/model/${encodeURIComponent(id)}/preview`,
+      const answer = await parameterRequest(`${API}/documents/xbf/${encodeURIComponent(id)}/preview`,
         { values: Object.fromEntries(named), page }, signal, 'parameters-preview');
       const held = answer?.preview;
       return held && typeof held.id === 'string'
-        ? { ...answer, preview: { ...held, url: viewerOriginUrl(origin, `${API}/documents/model/${encodeURIComponent(held.id)}`) } }
+        ? { ...answer, preview: { ...held, url: viewerOriginUrl(origin, `${API}/documents/xbf/${encodeURIComponent(held.id)}`) } }
         : answer;
     },
     async engineHolds(file, { signal } = {}) {

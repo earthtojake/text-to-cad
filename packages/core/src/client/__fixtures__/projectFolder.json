@@ -7,7 +7,7 @@
   {"name": "fixtures", "path": "housing/v3/fixtures"}
  ],
  "documents": [
-  {"id": "0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31", "kind": "model", "record": "file", "api": "/api/v1/documents/model/0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31",
+  {"id": "0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31", "kind": "xbf", "record": "file", "api": "/api/v1/documents/xbf/0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31",
    "path": "/home/me/work/gearbox/housing/v3/housing.xbf", "name": "housing.xbf",
    "folder": "/home/me/work/gearbox/housing/v3", "namespace": "/home/me/work/gearbox/housing/v3",
    "opened": 1764000100.0, "updated": 1764000050.0, "created": 1764000000.0,

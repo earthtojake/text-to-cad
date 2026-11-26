@@ -11,7 +11,7 @@ import { chromium } from 'playwright';
 // filleted plate and two instances of one peg), served as the engine's API serves it under each
 // pane's origin (`cad_server/viewer/http_app.py`): `GET /api/v1/documents?path=` its envelope, `POST
 // /api/v1/documents` where the page reads the document, and its kind's reads under
-// `/api/v1/documents/model/bracket` -- the structure, a buffer per part -- with the version a page waits
+// `/api/v1/documents/xbf/bracket` -- the structure, a buffer per part -- with the version a page waits
 // on, and the look (`look.json`) with an environment image of one texel.
 const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const STRUCTURE = readFileSync(join(FIXTURES, 'bracket', 'structure.json'));
@@ -20,7 +20,7 @@ const LOOK = readFileSync(join(FIXTURES, 'look.json'));
 // 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128), as `xbf.test.js` serves it.
 const ENVIRONMENT = Buffer.concat([Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), Buffer.from([255, 255, 255, 128])]);
 const FILE = 'bracket.xbf';
-const DOC = '/api/v1/documents/model/bracket';
+const DOC = '/api/v1/documents/xbf/bracket';
 
 /**
  * The page a spec opens, and so the viewer: it fills the page. Small, because a software renderer
@@ -68,7 +68,7 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
     if (at >= 0) {
       const rest = path.slice(at);
       // The file's envelope, by its absolute path under the `/models` the harness opens a bare `?file=` in.
-      const envelope = { id: 'bracket', kind: 'model', api: DOC, held: true, revision: VERSION,
+      const envelope = { id: 'bracket', kind: 'xbf', api: DOC, held: true, revision: VERSION,
         entry: { file: `/models/${FILE}`, kind: 'xbf', hash: VERSION, bytes: STRUCTURE.length } };
       if (rest === '/api/v1/documents' && request.method === 'GET') {
         json(response, { documents: url.searchParams.get('path') === `/models/${FILE}` ? [envelope] : [] });
@@ -80,7 +80,7 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
         request.on('end', () => {
           if (JSON.parse(body || '{}').path !== `/models/${FILE}`) { notFound(response); return; }
           response.statusCode = 201;
-          json(response, { id: 'bracket', kind: 'model', api: DOC });
+          json(response, { id: 'bracket', kind: 'xbf', api: DOC });
         });
         return;
       }

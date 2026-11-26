@@ -169,7 +169,7 @@ test("a project's folder is asked by its path and its words, and its rows are th
   assert.deepEqual([folder.project, folder.path, folder.folders, folder.truncated], [listing.project, 'housing/v3', listing.folders, false]);
   // A row as the library reads it: the record's kind as `kind`, the document's as `documentKind`; the rest as answered.
   assert.deepEqual(folder.documents, listing.documents.map((row) => ({ ...row, kind: 'file', documentKind: row.kind })));
-  assert.deepEqual(folder.documents.map((row) => [row.documentKind, row.opened, row.thumbnail]), [['model', 1764000100.0, '1764000100500'], ['step', null, null]]);
+  assert.deepEqual(folder.documents.map((row) => [row.documentKind, row.opened, row.thumbnail]), [['xbf', 1764000100.0, '1764000100500'], ['step', null, null]]);
   const found = await client.projectFolder(id, { path: 'housing', q: '  plan ' });
   assert.deepEqual([found.folders, found.documents.map((row) => row.path)], [[], search.documents.map((row) => row.path)]);
   // The root, with nothing typed: neither is sent.
@@ -588,7 +588,7 @@ test("a model's row carries the script that builds it and whether it is on disk 
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   let present = true;
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => (String(url).includes(id)
-    ? json({ id, kind: 'model', source: { type: 'script', path: '/m/parts.py', function: 'cube', present }, entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
+    ? json({ id, kind: 'xbf', source: { type: 'script', path: '/m/parts.py', function: 'cube', present }, entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
     : json({ documents: [{ id: 'f', kind: 'step', source: { type: 'file', path: '/m/a.step', present: true }, entry: { id: 'f', file: '/m/a.step' }, revision: 'r2' }] })) });
   const model = await client.resolveEntry(id);
   assert.deepEqual([model.script, model.sourcePresent], ['/m/parts.py', true]);
@@ -604,7 +604,7 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   let held = true;
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => (held
-    ? json({ id, kind: 'model', entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
+    ? json({ id, kind: 'xbf', entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
     : missing(`no document ${id} is held`)) });
   assert.equal((await client.resolveEntry(id)).id, id);
   held = false;  // `cad delete`
@@ -628,7 +628,7 @@ test("a model's parameters are saved by one guarded POST of names and numbers, a
   } });
   t.after(() => client.dispose());
   assert.deepEqual(await client.setModelParameters(id, { wall: 2.5, holes: 8 }), saved);
-  assert.deepEqual(calls, [[`/api/v1/documents/model/${id}/parameters`, 'POST', '1', 'application/json', { values: { wall: 2.5, holes: 8 } }]]);
+  assert.deepEqual(calls, [[`/api/v1/documents/xbf/${id}/parameters`, 'POST', '1', 'application/json', { values: { wall: 2.5, holes: 8 } }]]);
   // A refusal is the engine's own sentence, with its code, its hint and (a parameter that cannot be written) its reason.
   refusal = { error: 'bracket.py changed since it last ran', hint: 'run the script first', code: 'script_changed' };
   const changed = await client.setModelParameters(id, { wall: 3 }).catch(error => error);
@@ -659,8 +659,8 @@ test("a model's preview is one guarded POST of names, numbers and the page's tok
   } });
   t.after(() => client.dispose());
   const shown = await client.previewModelParameters(id, { wall: 3 }, { page: 'page-1' });
-  assert.deepEqual(calls, [[`/api/v1/documents/model/${id}/preview`, 'POST', '1', { values: { wall: 3 }, page: 'page-1' }]]);
-  assert.equal(shown.preview.url, `http://one.test/api/v1/documents/model/${encodeURIComponent(held)}`, 'read as a document is');
+  assert.deepEqual(calls, [[`/api/v1/documents/xbf/${id}/preview`, 'POST', '1', { values: { wall: 3 }, page: 'page-1' }]]);
+  assert.equal(shown.preview.url, `http://one.test/api/v1/documents/xbf/${encodeURIComponent(held)}`, 'read as a document is');
   assert.equal(shown.preview.version, '0123456789abcdef');
   // The document's own values (`{}` too: Reset) let the page's previews go; a request a newer one replaced is said so.
   answer = { id, preview: null };

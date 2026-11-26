@@ -233,7 +233,7 @@ test("a structure whose mechanism and names the bundle keeps apart is answered a
 test('a model is named by its id, and its parameters are read as a file document\'s', async () => {
   const files = { 'structure.json': FILES['structure.json'] };
   const client = await openViewBundle(viewBundleMemorySource({ ...files,
-    'manifest.json': manifestOf(files, { id: ID, kind: 'model', name: 'pair', version: 'v1' }) }));
+    'manifest.json': manifestOf(files, { id: ID, kind: 'xbf', name: 'pair', version: 'v1' }) }));
   assert.equal(client.file, ID);
   assert.deepEqual(await client.resolveEntry(ID), { id: ID, file: ID, name: 'pair', sourcePath: null, kind: 'xbf', sourceFormat: 'model',
     url: '', hash: 'model:v1', bytes: 0 });

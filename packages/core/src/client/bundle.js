@@ -43,7 +43,7 @@ export const VIEW_BUNDLE_MANIFEST = 'manifest.json';
 export const VIEW_BUNDLE_ORIGIN = 'http://view-bundle.invalid';
 
 // The documents a bundle holds that a page reads as the engine's own (structure, parts, tables, look).
-const ENGINE_KINDS = new Set(['model', 'xbf', 'step']);
+const ENGINE_KINDS = new Set(['xbf', 'step']);
 // Every kind a manifest may name (the API's), and the renderer's: KiCad's have no bundle yet.
 const KINDS = new Set([...ENGINE_KINDS, 'stl', 'glb', '3mf', 'dxf', 'urdf', 'srdf']);
 // A part's elements, as the API's routes name them, and as a table keys them.
@@ -148,7 +148,7 @@ function entryOf(manifest) {
   const { id, kind, name, version } = manifest.document;
   // A model has no file: it is named by its id, as a page names it. A file is named by its own name, which
   // is what the bundle keeps of where it was.
-  if (kind === 'model') return { id, file: id, name, sourcePath: null, kind: 'xbf', sourceFormat: 'model', url: '', hash: `model:${version}`, bytes: 0 };
+  if (kind === 'xbf') return { id, file: id, name, sourcePath: null, kind: 'xbf', sourceFormat: 'model', url: '', hash: `model:${version}`, bytes: 0 };
   const source = Object.keys(manifest.files).find(path => /^source\.[^/]+$/.test(path));
   return { id, file: `/${name}`, name, kind, hash: version,
     ...(source ? { url: source, bytes: manifest.files[source].bytes } : {}) };

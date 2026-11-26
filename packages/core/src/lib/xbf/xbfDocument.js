@@ -18,7 +18,7 @@
 import { fetchXbfLook } from "./xbfLook.js";
 import { readXbmPart, xbmUnmeshedFaces } from "./xbm.js";
 
-// `<base>/api/v1/documents/<kind>/<id>`: a document of one of the engine's kinds (`model`, `xbf`, `step`).
+// `<base>/api/v1/documents/<kind>/<id>`: a document of one of the engine's kinds (`xbf`, `step`).
 const DOC_PATH = /^((.*)\/api\/v1\/documents\/([a-z0-9]+)\/([^/?#]+))\/?$/;
 // A part's elements, as the API's routes name them.
 const ELEMENTS = Object.freeze({ face: "faces", edge: "edges", vertex: "vertices" });

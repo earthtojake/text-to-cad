@@ -431,7 +431,7 @@ test("a snapshot draws the job's annotation where it was drawn, whatever the exp
 test("a Quick Edit's packet draws in a snapshot as the page shortened it: its stroke, and its area by its outline", async () => {
   // The ink as the page's packet carries it (`snapshotPacket`): no ids, no defaults, touches as selectors, an area
   // its outline alone.
-  const packet = snapshotPacket({ input: "98427829-14ec-563f-a02d-9372a85cecef", type: "model",
+  const packet = snapshotPacket({ input: "98427829-14ec-563f-a02d-9372a85cecef", type: "xbf",
     views: [{ label: "view 1", camera: { position: [20, -100, 10], target: [20, -10, 10], up: [0, 0, 1], orthographicHalfHeight: 30 }, width: 64, height: 450 }],
     annotation: { units: "mm", marks: [
       { id: "ink-1", kind: "stroke", points: [30, -10, 10, 35, -5, 10, 40, 0, 10], color: "#ff2d55", width: 3, opacity: 1, closed: false, view: "view 1",

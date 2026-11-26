@@ -13,7 +13,7 @@ const marks = packet => packet.annotation.marks;
 
 test('a job per view: its camera and what it shows, a 3D view framed as it was, its picture by its label and size, never a path', () => {
   const posed = view('view 1', { kinematics: { arm: 1 }, jointValues: { elbow: 0.5 }, animation: { clip: 'wave', time: 1.25 }, selection: { hide: ['link:v1'] } });
-  const packet = snapshotPacket({ input: '98427829-14ec-563f-a02d-9372a85cecef', type: 'model', views: [posed, view('current view', { animation: null })] });
+  const packet = snapshotPacket({ input: '98427829-14ec-563f-a02d-9372a85cecef', type: 'xbf', views: [posed, view('current view', { animation: null })] });
   assert.deepEqual(Object.keys(packet), ['input', 'jobs']);
   assert.equal(packet.input, '98427829-14ec-563f-a02d-9372a85cecef');
   assert.deepEqual(Object.keys(packet.jobs[0]), ['camera', 'display', 'kinematics', 'jointValues', 'animation', 'selection', 'output', 'outputs']);
@@ -166,8 +166,8 @@ test("the same views and ink give the same packet whatever the file's address, a
     stroke({ touches: [{ part: 'i3', ref: `98427829-14ec-563f-a02d-9372a85cecef#"Jake's bracket"/f:base.make_box1.6` }] }),
   ] };
   const views = [view('view 1', { display: { mode: 'solid', grid: false, hidden: ["98427829-14ec-563f-a02d-9372a85cecef#\"O'Brien's arm\""] } })];
-  const local = snapshotPacket({ input: '98427829-14ec-563f-a02d-9372a85cecef', type: 'model', views, annotation });
-  const shared = snapshotPacket({ input: 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-', type: 'model', views, annotation });
+  const local = snapshotPacket({ input: '98427829-14ec-563f-a02d-9372a85cecef', type: 'xbf', views, annotation });
+  const shared = snapshotPacket({ input: 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-', type: 'xbf', views, annotation });
   assert.deepEqual({ ...local, input: shared.input }, shared);
   const text = snapshotPacketText(local);
   assert.equal(/['\u2018-\u201b]/.test(text), false);

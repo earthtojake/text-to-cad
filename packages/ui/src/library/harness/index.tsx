@@ -29,7 +29,7 @@ const params = new URLSearchParams(location.search);
 const state = params.get("state");
 const HOUR = 3600, NOW = Date.now() / 1000;
 const ROOT = "/home/me/work/gearbox";
-const KINDS: Record<string, string> = { xbf: "model", step: "step", dxf: "dxf", stl: "stl", glb: "glb", urdf: "urdf" };
+const KINDS: Record<string, string> = { xbf: "xbf", step: "step", dxf: "dxf", stl: "stl", glb: "glb", urdf: "urdf" };
 const row = (path: string, index: number, extra: Partial<LibraryModel> = {}): LibraryModel => {
   const name = path.split("/").pop()!;
   return { path, id: `id-${name}`, name, folder: path.slice(0, path.lastIndexOf("/")), documentKind: KINDS[name.split(".").pop()!] ?? null,

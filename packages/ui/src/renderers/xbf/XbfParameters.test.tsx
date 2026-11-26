@@ -28,7 +28,7 @@ const structureOf = ({ wall = 2, holes = 6 } = {}) => ({ parameters: [
   { name: 'pitch', value: 30, kind: 'float', min: null, max: null, step: null, unit: 'deg', writable: false, reason: 'shared', source: 'lib/spec.py' },
   { name: 'gap', value: 0.5, kind: 'float', min: 0, max: 1, step: null, unit: null, writable: false, reason: 'expression', source: 'bracket.py' },
 ] });
-const modelDocument = (structure: object) => ({ source: { kind: 'model', doc: ID }, structure });
+const modelDocument = (structure: object) => ({ source: { kind: 'xbf', doc: ID }, structure });
 const resource = { kind: 'cad-model', path: ID } as const;
 const face = { resource, target: { kind: 'cad-selector', selectors: ['base/f:base.extrude1.2'] } } as const;
 
