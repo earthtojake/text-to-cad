@@ -21,8 +21,8 @@ plugin install``, which carries the one table of them. It does these things alon
    removed it) leaves one, and every later uv run on the tool fails on it, this command's reinstall too, so this
    is what repairs a computer left so;
 3. brings a ``cad`` that was here already, and starts, up to date, only where a person ran this (``update``): that
-   tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's update switches the server only once
-   nothing is in flight, and the command waits for it). It stays inside cad's major version, as ``cad update`` does:
+   tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's update builds the release, then
+   restarts the server on it at once, and the command waits for it). It stays inside cad's major version, as ``cad update`` does:
    cad's own update never crosses a major. What it prints is captured, never shown: one line says the update
    begins, and one line what came of it, over the first in a terminal (after it on a pipe or in a file). Its exit
    status says little (0 where it updated and where nothing is newer, non-zero where the update may still be

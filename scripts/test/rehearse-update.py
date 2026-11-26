@@ -1007,7 +1007,7 @@ def typed_restart(box: Box, was: str, target: str, ready: dict, *, also: tuple[s
     naming a higher major, say) on stdout, exit 0; the update a person's, at the try that got the release ready. The
     record."""
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
-    step = f"cad: restarting the cad server on cad {target}, installed beside cad {was}, once nothing is running"
+    step = f"cad: restarting the cad server on cad {target}, installed beside cad {was}"
     if (done.returncode, done.stdout.strip().splitlines(), done.stderr.strip().splitlines()) != (
             0, [f"cad {was} updated to {target}", *also], [step]):
         raise Failed(f"{box.label}: cad update with {target} ready exited {done.returncode}:\n{done.stdout}\n"
@@ -1230,7 +1230,7 @@ def typed_update(box: Box, was: str, target: str, *, server: bool = True) -> dic
     is not said. The record, ``installed`` and typed."""
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     steps = [f"cad: installing cad {target} beside cad {was}",
-             "cad: restarting the cad server on it, once nothing is running" if server else "cad: switching to it"]
+             "cad: restarting the cad server on it" if server else "cad: switching to it"]
     said = done.stderr.strip().splitlines()
     if (done.returncode, done.stdout.strip()) != (0, f"cad {was} updated to {target}") \
             or said not in (steps, steps[:1]):

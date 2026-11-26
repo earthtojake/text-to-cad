@@ -118,7 +118,7 @@ is decided with it ([Before the first release of a higher major](#before-the-fir
 - **cad updates itself, inside its major.** A global install (uv's or pipx's) does, unless `cad
   update auto off`. Where the feed names a newer release of its major and nothing has run for a
   minute, its server starts a worker that installs exactly that release with `uv pip install
-  --target` into a folder of its own in cad's state folder, runs it once, drains the server, writes
+  --target` into a folder of its own in cad's state folder, runs it once, stops the server at once, writes
   the pointer that names that folder, and starts the new release's server, or puts the pointer back.
   Nothing uv made changes: `uv tool upgrade cad` is the person's own. A typed `cad update` does the
   same at once, asking PyPI instead, and names a higher major. Nothing installs an older release.

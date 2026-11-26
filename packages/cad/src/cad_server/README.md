@@ -274,9 +274,11 @@ cad_server._internal.auto_update_helper` by the environment's interpreter, so it
    `_internal/selftest.py`, says `cad <release>` last); judged (not older, and of the same major; the same
    release is `current`); named (`store.publish`). Nothing that runs is touched: uv stopped at
    its 15 minutes leaves no release. An attempt that only gets its release ready ends here, `ready`.
-2. **Switch** (`switching`, kept first). The pointer read, for the way back. A server that answers is drained:
-   asked to stop once nothing is in flight, and waited for five seconds at most (`client.drain`), after which
-   the next start replaces it. The pointer written (`store.point`), then `cad server start` where a server ran
+2. **Switch** (`switching`, kept first). The pointer read, for the way back. A server that answers is stopped at
+   once, as `cad server stop` stops it (`client.sweep`: the port it serves pages on noted first), and waited for
+   until it is gone (60 s at most, after which the next start replaces it): a restart asked for stops the work in
+   flight, and a `cad` command it cuts short meets the next release's server and says cad updated itself while it
+   ran (`client._cut_short`). The pointer written (`store.point`), then `cad server start` where a server ran
    or one is wanted, which must leave a server of the release, else `cad --version`, which must name it. A `cad`
    command that finds no server meanwhile, or an older one, waits for the next (`client.SWITCHING`, 30 s), and a
    server of the release being left starts none in the next one's place (`auto_update.leaving`): its starter
@@ -359,8 +361,8 @@ schedule says (it spends no automatic try, and counts among the day's four), or 
 process's too. Where PyPI cannot be reached it builds
 all the same, or, where a release is ready and PyPI names it or none, only switches to it. It waits for the end, up
 to 30 minutes, saying each step once on stderr (`cad: installing cad X beside cad Y`, then `cad: restarting the cad
-server on it, once nothing is running`, or `cad: switching to it` with no server; for a release that was ready,
-`cad: restarting the cad server on cad X, installed beside cad Y, once nothing is running` alone). It never runs
+server on it`, or `cad: switching to it` with no server; for a release that was ready, `cad: restarting the cad
+server on cad X, installed beside cad Y` alone). It never runs
 `cad plugin`. Where no server runs, the command judges and begins the update itself, and its worker starts no
 server: an update typed with none running leaves none running. In a shell whose
 sandbox cannot start a server, it says so and updates nothing.

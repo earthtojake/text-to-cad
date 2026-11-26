@@ -358,9 +358,9 @@ the person's own). Until then the update button is a restart icon, and a click r
 typed `cad update` does. A person's update is never left halfway, and always ends on the newest: one asked for while the
 release is being got ready goes on to the restart, and where PyPI names a newer release than the one
 being got ready, that one ends first and the newer is installed, then switched to; one asked for with
-the newest ready has only the restart left, and so has one where PyPI does not answer. At the restart, what is in flight gets five seconds to end (a restart asked for stops the work; a
-command cut short says cad updated itself while it ran), and then
-the server stops all the same. A release the feed has stopped naming since it got ready is never
+the newest ready has only the restart left, and so has one where PyPI does not answer. At the restart the server stops at once, as `cad server stop`
+stops it: a restart asked for stops the work in flight, and a command cut short says cad updated
+itself while it ran. A release the feed has stopped naming since it got ready is never
 switched to by itself. With automatic updates off nothing is got ready, and a release that was ready
 waits for the person.
 
@@ -391,7 +391,7 @@ opens by itself over a model someone is looking at interrupts them, so nothing d
 the release it runs for as long as that lasts: the button shows the restart, and after three days the
 stayed-behind line and `cad doctor` say so. For that time a second copy of cad's packages is in the
 store. A click on the button restarts with no
-further question: what is in flight gets five seconds, and the page reloads.
+further question: what is in flight stops, and the page reloads.
 A `cad server start` that becomes the switch answers a second or two later than one
 that does not (2.9 s against 1.7 s on a Windows test machine, 1.1 s against 1.0 s on Linux). The
 record of the last attempt has one more outcome, `ready`, which is not counted:

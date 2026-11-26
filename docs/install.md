@@ -379,7 +379,9 @@ cad updates itself to every new release of its major version (the first number: 
 its server runs, it looks for a new release about once an hour and installs it beside the cad that
 runs as soon as it finds one, whatever the server is doing, without restarting anything: the viewer's
 update button then becomes a restart icon ("Restart to update"), and a click restarts. Otherwise cad
-restarts its server on the new release as the server next starts. To update it now:
+restarts its server on the new release as the server next starts. A restart stops what the server is
+doing at once, as `cad server stop` does; a command it cuts short says cad updated itself while it
+ran, and runs again as it was. To update it now:
 
 ```bash
 cad update

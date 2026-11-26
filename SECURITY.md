@@ -218,7 +218,7 @@ names a release only once it has been on PyPI for an hour, and we can hold a rel
 from it. When the feed names a release of cad's major newer than cad's and nothing has
 run for a minute, cad downloads exactly that release from PyPI into a folder of its own in
 cad's state folder (`uv pip install --target`, with the uv cad carries), runs it once to
-check it, stops its server once nothing is in flight, writes the pointer, a file beside it
+check it, stops its server at once, writes the pointer, a file beside it
 naming the release every `cad` then runs, and starts the server again; where that server
 does not start, the pointer is put back. It never installs an older release, nor changes
 the installed cad's files. A typed `cad update` asks PyPI which release of its major is

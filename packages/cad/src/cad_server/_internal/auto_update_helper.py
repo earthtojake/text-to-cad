@@ -23,9 +23,10 @@ In order (``update``):
    (the record's ``asked``), on to the switch.
 3. **Switch** (``phase``: ``switching``, kept before anything stops; while it lasts a server of the release being
    left starts none in the next one's place, ``auto_update.leaving``). The pointer read as it is, for the way back.
-   Where a server answers, it is asked to stop once nothing is in flight, and waited for (``client.drain``,
-   ``DRAIN_SECONDS``); one still there after them is replaced by the new release's start all the same, its work cut
-   short. Then the environment pointed at the release (``store.point``) and the release run: ``cad server start`` where
+   Where a server answers, it is stopped at once, as ``cad server stop`` stops it, the port it serves pages on noted
+   first for the next server, and waited for until it is gone (``client.sweep``, ``STOP_SECONDS``): a restart asked
+   for stops the work in flight, and a command it cuts short says cad updated itself while it ran. One still there
+   after that is replaced by the new release's start all the same. Then the environment pointed at the release (``store.point``) and the release run: ``cad server start`` where
    a server ran or ``start`` asks for one, which must end 0 with a server whose greeting names the release; else ``cad
    --version``, which must say it.
 4. **Way back** (``phase``: ``restoring``, kept once the pointer is back, so a start of the release before stands by
@@ -68,10 +69,10 @@ WINDOWS = os.name == "nt"
 NO_WINDOW = 0x08000000 if WINDOWS else 0  # CREATE_NO_WINDOW: no console flashes for uv or cad
 # How often the worker marks its attempt as still underway (``Beat``): well inside ``auto_update.LOST_SECONDS``.
 BEAT_SECONDS = 60
-# How long a server is given to end what is in flight before the switch goes on without it: a moment, so a command
-# about to end ends, and a restart asked for stops the rest of the work (cut short, its command says cad updated
-# itself while it ran).
-DRAIN_SECONDS = 5.0
+# How long a server stopped at the switch is waited for until it is gone, as ``cad server stop`` waits (``client.sweep``'s
+# own bound). It is stopped at once: what is in flight is cut short, and its command says cad updated itself while it
+# ran.
+STOP_SECONDS = 60.0
 # How long ``cad server start`` and ``cad --version`` may take, and a question to the server.
 RUN_SECONDS, ASK_SECONDS = 120.0, 30.0
 
@@ -223,18 +224,20 @@ def answering():
     return connection.release, status.get("prefix") if isinstance(status, dict) else None
 
 
-def drain(server, log):
-    """The server that answers stopped once nothing is in flight, waited for ``DRAIN_SECONDS`` at most, and that
-    written to the log; one still there is replaced by the next start, its work cut short."""
+def stop(server, log):
+    """The server that answers stopped at once (``{"op": "stop"}``, as ``cad server stop`` stops it: ``client.sweep``,
+    which notes the port it serves pages on first, for the next server), and waited for until it is gone,
+    ``STOP_SECONDS`` at most; that written to the log. One still there is replaced by the next start."""
     from cad.engine import client
 
     began = time.monotonic()
     try:
-        gone = client.drain(DRAIN_SECONDS)
+        client.sweep(stop=True, seconds=STOP_SECONDS)
+        gone = True
     except ConnectionError as error:
         gone = False
-        log.write(f"the server could not be asked to stop: {error}")
-    log.write(f"the cad server {server[0] or ''} asked to stop once nothing is in flight: "
+        log.write(f"the server could not be stopped: {error}")
+    log.write(f"the cad server {server[0] or ''} stopped: "
               + (f"gone after {time.monotonic() - began:.1f} s" if gone else
                  "still there, and the next start replaces it"))
 
@@ -268,7 +271,7 @@ def switch(told, run, path, built, log, mark=lambda phase: None):
     kept = store.pointer()
     server = answering()
     if server is not None:
-        drain(server, log)
+        stop(server, log)
     wanted = server is not None or told.get("start") is True
     unwritten = None  # the pointer's own failure: nothing was switched
     try:
@@ -316,7 +319,7 @@ def clear(before, log):
 
 def replace(told, run, held, log, mark=lambda phase: None):
     """Where the environment runs release ``held`` already: a server of an older release, or one of ``held`` from
-    another environment (a copy the bridge hands over from), drained and replaced by this environment's (the record's
+    another environment (a copy the bridge hands over from), stopped and replaced by this environment's (the record's
     phase ``switching`` kept first, ``mark``, so a command that finds no server meanwhile waits for the next); else,
     where none answers and ``start`` asks for one, one started. The record's word for the server."""
     from cad.engine.client import newer
@@ -331,7 +334,7 @@ def replace(told, run, held, log, mark=lambda phase: None):
         return {"start": False}
     mark("switching")
     if server is not None:
-        drain(server, log)
+        stop(server, log)
     ok, said = runs(told, run, held, True)
     return started(True, ok, said)
 

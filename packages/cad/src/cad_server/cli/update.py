@@ -35,8 +35,7 @@ from typing import Any
 DEFAULT_PROG = "cad update"
 # How long the server may take to judge it: PyPI asked now (5 s at most) and the rest.
 ASK_SECONDS = 30.0
-# How long the command waits for the update to end, and how often it looks: past the longest build and the server's
-# drain.
+# How long the command waits for the update to end, and how often it looks: past the longest build and the switch.
 WAIT_SECONDS = 1800.0
 LOOK_SECONDS = 0.5
 NOT_A_TOOL = ("refused: this cad is not a global install, so it does not update itself: update it the way it was "
@@ -55,7 +54,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
         "`cad update` updates cad now to the newest release of its major version, even with "
         "automatic updates off: cad asks PyPI, installs it beside the cad that runs, and switches to it (where cad "
         "has it installed and ready already, it only switches, even without PyPI). A cad server that was running "
-        "restarts on it once nothing is running; with none running, none is started. By itself, cad installs a new "
+        "restarts on it at once, stopping what is in flight; with none running, none is started. By itself, cad installs a new "
         "release beside the cad that runs as soon as it is out, and restarts the server on it as the server next "
         "starts. `cad update auto` shows or changes whether cad updates itself."))
     commands = parser.add_subparsers(dest="command", metavar="{auto}")
@@ -190,10 +189,10 @@ def step(attempt: dict[str, Any], was: str, told_of: set[str], *, server: bool) 
         told_of.discard("switching")
         line = f"cad: installing {named} beside cad {was}"
     elif "building" in told_of:
-        line = "cad: restarting the cad server on it, once nothing is running" if server else "cad: switching to it"
+        line = "cad: restarting the cad server on it" if server else "cad: switching to it"
     else:
-        line = (f"cad: restarting the cad server on {named}, installed beside cad {was}, once nothing is running"
-                if server else f"cad: switching to {named}, installed beside cad {was}")
+        line = (f"cad: restarting the cad server on {named}, installed beside cad {was}" if server
+                else f"cad: switching to {named}, installed beside cad {was}")
     told_of.add(phase)
     print(line, file=sys.stderr, flush=True)
 

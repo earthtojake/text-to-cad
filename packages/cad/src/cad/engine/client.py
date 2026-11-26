@@ -4,7 +4,8 @@
 switching releases just then (``SWITCHING``): the server it starts is waited for. A start never replaces a server of
 its own release or a newer one, whenever it finds it: it joins it (forward only), and while cad's own update switches
 away from its release it launches none of its own (``LEAVING``): the next server is the update's to start. cad's own
-update stops the server once nothing is in flight (``drain``)."""
+update stops the server at once, as ``cad server stop`` does (``sweep``), and a request it cuts short in a ``cad``
+command meets the next release's server as one of another release (``_cut_short``)."""
 
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from cad.engine.door import DOOR_PROTOCOL, GREETING_SECONDS, HELLO_LIMIT, Connec
 from cad.engine.previous import version
 from cad.engine.said import COMMAND, SERVER
 
-__all__ = ["drain", "hold", "make_way", "request", "start", "sweep"]
+__all__ = ["hold", "make_way", "request", "start", "sweep"]
 
 # The module the server runs as: the daemon with its application host installed. Named, never imported: the
 # library's engine imports nothing of the server's (``start`` runs it in this process's own environment).
@@ -547,23 +548,50 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
         # never the port file read again, which a server stopping meanwhile has removed and one starting rewritten
         message = {"token": connection.token, **message}
     with connection:
-        connection.writer.write((json.dumps(message) + "\n").encode())
-        connection.writer.flush()
-        for line in connection.reader:
-            answer = json.loads(line)
-            if answer.get("stream") == "making":  # an environment the request waits on, made meanwhile: said here
-                print(f"cad: {answer.get('log', '')}", file=sys.stderr, flush=True)
-                continue
-            if "log" in answer:
-                on_log(answer)
-                continue
-            if set(answer) == {"progress"}:
-                if on_progress is not None:
-                    on_progress(answer["progress"])
-                continue
-            _notice(answer.pop("notice", None))
-            return answer
+        try:
+            connection.writer.write((json.dumps(message) + "\n").encode())
+            connection.writer.flush()
+            for line in connection.reader:
+                answer = json.loads(line)
+                if answer.get("stream") == "making":  # an environment the request waits on, made meanwhile: said here
+                    print(f"cad: {answer.get('log', '')}", file=sys.stderr, flush=True)
+                    continue
+                if "log" in answer:
+                    on_log(answer)
+                    continue
+                if set(answer) == {"progress"}:
+                    if on_progress is not None:
+                        on_progress(answer["progress"])
+                    continue
+                _notice(answer.pop("notice", None))
+                return answer
+        except ConnectionError:
+            _cut_short()
+            raise
+    _cut_short()
     raise ConnectionError("the engine server closed the connection")
+
+
+def _cut_short() -> None:
+    """A request its server closed unanswered, in a command held to its release (``RELEASE``), while cad's own update
+    switches releases (``SWITCHING``): the switch stopped that server at once, its work cut short. The next server is
+    waited for, ``SWITCH_SECONDS`` at most, as a command that finds none then waits (``_switched``), and where one
+    newer than the command answers, the command meets it as it would any server of another release
+    (``OtherRelease``): cad updated itself while it ran. Else nothing, and the closed connection is said as it is."""
+    if RELEASE is None or not _switching():
+        return
+    deadline = time.monotonic() + SWITCH_SECONDS
+    while True:
+        switching = _switching()
+        found = _connect()
+        theirs = found.release if found is not None else None
+        if found is not None:
+            found.close()
+        if theirs is not None and newer(theirs, RELEASE):
+            raise OtherRelease.met(theirs, RELEASE)
+        if not switching or time.monotonic() >= deadline:
+            return
+        time.sleep(0.1)
 
 
 def _notice(notice: str | None) -> None:
@@ -582,7 +610,7 @@ def _notice(notice: str | None) -> None:
 def _note_pages(address: Path) -> None:
     """Where the server at ``address`` serves pages, noted before it is told to stop (``places.pages_path``), for the
     server that comes next to serve them there at once (``daemon.resumed``): a page open in a browser then reconnects
-    by itself, whichever way its server was replaced -- cad's own update and the bridge's hand-over (``drain``, then
+    by itself, whichever way its server was replaced -- cad's own update and the bridge's hand-over (``sweep``, then
     ``cad server start``), a start that replaces an older server (``make_way``). Asked as no command
     (``internal``), of a server of any release (0.11.10's ``status`` says it too), ``PAGES_SECONDS`` at most; nothing
     noted where it serves no pages or does not say, and nothing here ever fails the stop."""
@@ -643,28 +671,6 @@ def sweep(*, stop: bool, seconds: float = 60.0, leave: str | None = None) -> dic
             continue
         found["removed"] += _remove_dead(endpoint)
     return found
-
-
-def drain(seconds: float) -> bool:
-    """The server of this engine folder asked to stop once nothing is in flight (``{"op": "stop", "drain": true}``:
-    its door closes once it is idle) and waited for until gone, ``seconds`` at most, the port it serves pages on noted
-    first for the next server (``_note_pages``), as ``sweep`` does: how cad's own update switches releases. Whether none
-    answers now. ``ConnectionError`` where the engine's folder is refused (``_connect``)."""
-    for endpoint in places.endpoints():
-        if not _answering(endpoint.address):
-            continue
-        _note_pages(endpoint.address)
-        connection = _connect(endpoint.address)
-        if connection is None:
-            continue  # gone meanwhile
-        try:
-            _exchange(connection, {"op": "stop", "drain": True})
-        except ConnectionError:
-            pass  # it closed the connection unanswered: stopping already
-        if not wait_gone(seconds, endpoint=endpoint):
-            return False
-        _remove_dead(endpoint)
-    return True
 
 
 def _remove_dead(endpoint: places.Endpoint) -> list[str]:

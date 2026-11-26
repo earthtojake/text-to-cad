@@ -1206,7 +1206,7 @@ class WorkerTest(unittest.TestCase):
         self.build = (0, "Installed 40 packages in 1.2s\n")  # uv's exit status and words
         self.verifies = "0.2.0"  # the release the build says it is, or None: it does not run
         self.starts = {"0.1.0": True, "0.2.0": True}  # whether a release's server starts
-        self.gone = True  # whether a server asked to drain goes within the bound
+        self.gone = True  # whether a server stopped goes within the bound
         self.ran: list[list[str]] = []
         self.calls: list[tuple] = []
         self.phases: list[str] = []
@@ -1216,7 +1216,7 @@ class WorkerTest(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
         for patch in (mock.patch.object(helper, "answering", side_effect=self._answering),
-                      mock.patch.object(client, "drain", side_effect=self._drain),
+                      mock.patch.object(client, "sweep", side_effect=self._sweep),
                       mock.patch.object(helper, "UV_SYSTEM", ()), mock.patch.dict(os.environ)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -1287,11 +1287,19 @@ class WorkerTest(unittest.TestCase):
     def _answering(self):
         return None if self.serving is None else (self.serving, "/elsewhere" if self.elsewhere else sys.prefix)
 
-    def _drain(self, seconds):
-        self.calls.append(("drain", seconds))
-        if self.gone:
-            self.serving = None
-        return self.gone
+    def _sweep(self, *, stop, seconds=60.0, leave=None):
+        """``client.sweep`` as the switch asks it (``auto_update_helper.stop``): the server stopped at once."""
+        self.calls.append(("stop", seconds))
+        if not self.gone:
+            raise ConnectionError("the engine server at door did not exit")
+        self.serving = None
+        return {"stopped": ["door"], "running": [], "removed": []}
+
+    def the_switch_s_or(self, other):
+        """A stand-in for ``client.sweep`` that is ``_sweep`` for the switch's own stop (``STOP_SECONDS``) and
+        ``other`` for any other."""
+        return lambda **asked: (self._sweep(**asked) if asked.get("seconds") == helper.STOP_SECONDS
+                                else other(**asked))
 
     def cad(self, command, timeout):
         self.ran.append(list(command))
@@ -1319,10 +1327,10 @@ class WorkerTest(unittest.TestCase):
 
     # --- the tests -------------------------------------------------------------------------------------------------
 
-    def test_built_beside_then_the_server_drained_and_the_release_switched_to(self) -> None:
+    def test_built_beside_then_the_server_stopped_at_once_and_the_release_switched_to(self) -> None:
         found = self.update()
         self.assertEqual(self.commands(), ["uv build", "-I -S", "server start"])
-        self.assertEqual(self.calls, [("publish", "0.2.0"), ("drain", helper.DRAIN_SECONDS),
+        self.assertEqual(self.calls, [("publish", "0.2.0"), ("stop", helper.STOP_SECONDS),
                                       ("point", "0.2.0-cp314"), ("clean", ["0.2.0-cp314"])])
         self.assertEqual(self.phases, ["building", "switching"], "kept as uv builds, then before anything stopped")
         self.assertEqual(found, {"release": "0.2.0", "outcome": "installed", "from": "0.1.0", "at": 1.0, "tries": 1,
@@ -1332,7 +1340,7 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(self.ran[0][-1], "cad==0.2.0", "the release asked for, by name")
         log = Path(self.told["log"]).read_text(encoding="utf-8")
         for said in ("cad's update, begun", "cad==0.2.0 built by uv", "$ uv pip install", "exit 0 after",
-                     "| Installed 40 packages", "$ cad server start", "asked to stop once nothing is in flight: gone",
+                     "| Installed 40 packages", "$ cad server start", "stopped: gone",
                      "ended ", ": installed"):
             self.assertIn(said, log)
         # From a stored release: the tidying keeps the one switched to alone (``test_store.SwitchTidyTest``).
@@ -1444,7 +1452,7 @@ class WorkerTest(unittest.TestCase):
         self.starts["0.2.0"] = False
         found = self.update()
         self.assertEqual(self.commands(), ["uv build", "-I -S", "server start", "server start"])
-        self.assertEqual(self.calls, [("publish", "0.2.0"), ("drain", helper.DRAIN_SECONDS),
+        self.assertEqual(self.calls, [("publish", "0.2.0"), ("stop", helper.STOP_SECONDS),
                                       ("point", "0.2.0-cp314"), ("restore", None), ("clean", [])],
                          "the pointer written back exactly as it was read: none")
         self.assertEqual((found["outcome"], found["cause"], found["restored"], found["started"]),
@@ -1485,7 +1493,7 @@ class WorkerTest(unittest.TestCase):
             self.serving = None
             return {"stopped": ["door"], "running": [], "removed": []}
 
-        with mock.patch.object(client, "sweep", side_effect=sweep):
+        with mock.patch.object(client, "sweep", side_effect=self.the_switch_s_or(sweep)):
             found = helper.update(self.told, run=late, mark=self.phases.append)
         self.assertLess(self.calls.index(("restore", None)), self.calls.index(("sweep", True, None)),
                         "the pointer put back first, then the server of the release that failed stopped at once")
@@ -1493,15 +1501,18 @@ class WorkerTest(unittest.TestCase):
                          ("failed", "start_failed", True, "0.1.0", None))
         self.assertIn("the cad server 0.2.0 that answered after the switch failed was stopped",
                       Path(self.told["log"]).read_text(encoding="utf-8"))
-        # The server of the release before, still there after the drain's bound: never stopped, and joined.
+        # The server of the release before, still there after the stop's bound: never stopped again, and joined.
         self.calls.clear()
         self.pointer, self.serving, self.gone = None, "0.1.0", False
-        with mock.patch.object(client, "sweep", side_effect=AssertionError("never stopped")):
+        with mock.patch.object(client, "sweep", side_effect=self.the_switch_s_or(AssertionError("never stopped"))):
             found = self.update()
         self.assertEqual((found["restored"], self.serving), (True, "0.1.0"))
         # A stop that fails never stops the way back.
         self.pointer, self.serving, self.gone = None, "0.1.0", True
-        with mock.patch.object(client, "sweep", side_effect=ConnectionError("did not exit")):
+        def fails(**_asked):
+            raise ConnectionError("did not exit")
+
+        with mock.patch.object(client, "sweep", side_effect=self.the_switch_s_or(fails)):
             found = helper.update(self.told, run=late, mark=self.phases.append)
         self.assertEqual((found["outcome"], found["cause"]), ("failed", "start_failed"))
         self.assertIn("could not be stopped: ConnectionError: did not exit",
@@ -1515,7 +1526,7 @@ class WorkerTest(unittest.TestCase):
                          ("failed", "denied", True, "started the cad server (cad 0.1.0)"))
         self.assertEqual(found["detail"],
                          "the pointer could not be written: PermissionError: [Errno 13] Permission denied")
-        self.assertEqual((self.serving, self.pointer), ("0.1.0", None), "the server it drained runs again")
+        self.assertEqual((self.serving, self.pointer), ("0.1.0", None), "the server it stopped runs again")
         counted = auto_update.event(found)
         self.assertEqual((counted["outcome"], counted["reason"], counted["cause"]), ("restored", "upgrade", "denied"))
         self.serving = None
@@ -1530,7 +1541,7 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(self.commands(), ["uv build", "-I -S", "--version"])
         self.assertEqual((found["outcome"], found["start"]), ("installed", False))
         self.assertNotIn("started", found)
-        self.assertNotIn(("drain", helper.DRAIN_SECONDS), self.calls, "none to drain")
+        self.assertNotIn(("stop", helper.STOP_SECONDS), self.calls, "none to stop")
         self.assertIsNone(self.serving, "none started")
         self.pointer = None
         self.starts["0.2.0"] = False
@@ -1543,7 +1554,7 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(self.update(start=True)["started"], "started the cad server (cad 0.2.0)",
                          "`start`: a server wanted though none ran")
 
-    def test_a_server_still_busy_after_the_drain_s_bound_is_replaced_all_the_same(self) -> None:
+    def test_a_server_still_there_after_the_stop_s_bound_is_replaced_all_the_same(self) -> None:
         self.gone = False
         found = self.update()
         self.assertEqual(found["outcome"], "installed")
@@ -1557,7 +1568,7 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual((found["outcome"], found["release"], found["detail"], found["started"]),
                          ("current", "0.2.0", "cad 0.2.0 is installed", "started the cad server (cad 0.2.0)"))
         self.assertEqual(self.commands(), ["server start"], "nothing built")
-        self.assertEqual(self.calls, [("drain", helper.DRAIN_SECONDS), ("clean", [])])
+        self.assertEqual(self.calls, [("stop", helper.STOP_SECONDS), ("clean", [])])
         self.assertEqual(self.phases, ["switching"], "kept before the server stops: a command meanwhile waits")
         self.assertEqual(auto_update.event(found)["cause"], "already")
         for serving, elsewhere, replaced in (("0.2.0", False, False), ("0.2.0", True, True), (None, False, True)):
@@ -2463,8 +2474,8 @@ class ServerUpdateTest(Case):
     attempt underway joined; what the command asks while it waits."""
 
     def test_begun_at_once_whatever_is_in_flight_and_an_attempt_underway_joined(self) -> None:
-        """A typed update begins at once: the release is built beside the one that runs, and only the switch waits
-        for what is in flight (the worker's drain)."""
+        """A typed update begins at once: the release is built beside the one that runs, then the switch
+        stops this server at once, whatever is in flight (the worker's ``stop``)."""
         from cad_server.engine.daemon import Daemon
 
         fake = types.SimpleNamespace(working=lambda: True)
@@ -2481,7 +2492,7 @@ class ServerUpdateTest(Case):
                                  {**judged, "updating": newest or "latest", "since": 5.0})
             asked.assert_called_once_with()
             begin.assert_called_once_with(newest)
-            self.assertIn("this server restarts on it once nothing is in flight", err.getvalue())
+            self.assertIn("this server restarts on it, stopping what is in flight", err.getvalue())
         self.assertEqual(ask({"op": "update", "begin": False})["waiting"], None, "none waits to begin")
         with mock.patch.object(auto_update, "asked", return_value={"ok": True, "updating": "0.2.0", "from": "0.1.0"}), \
                 mock.patch.object(auto_update, "begin", return_value=None):
@@ -2686,14 +2697,14 @@ class UpdateCommandTest(Case):
         answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
         resumed = {"release": "0.2.0", "at": 5.0, "outcome": "underway", "phase": "switching"}
         installed = {**resumed, "outcome": "installed", "started": "started"}
-        restarting = "cad: restarting the cad server on cad 0.2.0, installed beside cad 0.1.0, once nothing is running\n"
+        restarting = "cad: restarting the cad server on cad 0.2.0, installed beside cad 0.1.0\n"
         self.assertEqual(self.typed(answer, looks=[("0.1.0", resumed, None, True), ("0.2.0", installed, None, True)])[:3],
                          (0, "cad 0.1.0 updated to 0.2.0\n", restarting))
         looks = [("0.1.0", resumed, None, True), ("0.1.0", {**resumed, "phase": "building"}, None, True),
                  ("0.1.0", resumed, None, True), ("0.2.0", installed, None, True)]
         self.assertEqual(self.typed(answer, looks=looks)[2],
                          restarting + "cad: installing cad 0.2.0 beside cad 0.1.0\n"
-                                      "cad: restarting the cad server on it, once nothing is running\n")
+                                      "cad: restarting the cad server on it\n")
         looks = [(None, resumed, None, False), (None, {**installed, "start": False}, None, False)]
         self.assertEqual(self.typed({**answer, "here": True}, looks=looks)[:3],
                          (0, "cad 0.1.0 updated to 0.2.0\n", "cad: switching to cad 0.2.0, installed beside cad 0.1.0\n"),
@@ -3965,7 +3976,7 @@ class SwitchingTest(Case):
         self.assertFalse(auto_update.switching())
 
     def test_a_server_of_the_release_being_left_starts_none_while_the_update_switches(self) -> None:
-        """``leaving``: between the server the update drained and the next release's, a start of the release being
+        """``leaving``: between the server the update stopped and the next release's, a start of the release being
         left would take the next one's place, and be taken for the server the update waits to see gone."""
         from cad_server.engine import daemon
 
@@ -4144,47 +4155,91 @@ class SwitchingTest(Case):
                 self.assertEqual((str(failure), failure.next), (client._other(theirs, "0.1.0"), (client.START,)))
 
 
-class DrainTest(unittest.TestCase):
-    """``client.drain``: the server asked to stop once nothing is in flight, its pages' port noted first, and waited
-    for within a bound; whether it went."""
+class CutShortTest(unittest.TestCase):
+    """A request its server closed unanswered while cad's own update switches releases (``client._cut_short``): in a
+    ``cad`` command, the next release's server is waited for and met as one of another release, which the command
+    says as cad having updated itself while it ran; else the closed connection is said as it is."""
 
-    def test_asked_to_stop_once_idle_and_waited_for(self) -> None:
-        endpoint = types.SimpleNamespace(address=Path("/e/door"), lock=Path("/e/lock"))
-        for gone in (True, False):
-            with self.subTest(gone=gone), mock.patch.object(client.places, "endpoints", return_value=[endpoint]), \
-                    mock.patch.object(client, "_answering", return_value=True), \
-                    mock.patch.object(client, "_note_pages") as noted, \
-                    mock.patch.object(client, "_connect", return_value=mock.Mock()), \
-                    mock.patch.object(client, "_exchange", return_value={"ok": True, "draining": True}) as asked, \
-                    mock.patch.object(client, "wait_gone", return_value=gone) as waited, \
-                    mock.patch.object(client, "_remove_dead") as removed:
-                self.assertIs(client.drain(7.0), gone)
-                noted.assert_called_once_with(endpoint.address)
-                self.assertEqual(asked.call_args.args[1], {"op": "stop", "drain": True})
-                self.assertEqual(waited.call_args.args[0], 7.0)
-                self.assertEqual(removed.called, gone)
-        with mock.patch.object(client.places, "endpoints", return_value=[endpoint]), \
-                mock.patch.object(client, "_answering", return_value=False), \
-                mock.patch.object(client, "_exchange") as asked:
-            self.assertTrue(client.drain(7.0), "none running: nothing to wait for")
-        asked.assert_not_called()
+    def setUp(self) -> None:
+        for patch in (mock.patch.object(client, "RELEASE", "0.1.0"), mock.patch.object(client, "SWITCH_SECONDS", 5.0),
+                      mock.patch.object(client.time, "sleep")):
+            patch.start()
+            self.addCleanup(patch.stop)
 
-    def test_a_real_server_drains_and_goes(self) -> None:
+    def closed(self) -> mock.Mock:
+        connection = mock.MagicMock()
+        connection.__enter__.return_value = connection
+        connection.reader = iter([])  # closed: nothing more to read
+        return connection
+
+    def test_a_request_the_switch_cut_short_meets_the_next_release_s_server(self) -> None:
+        answers = iter([None, None, mock.Mock(release="0.2.0")])  # gone, then the next release's
+        with mock.patch.object(client, "SWITCHING", lambda: True), \
+                mock.patch.object(client, "_connect", side_effect=lambda *_a, **_k: next(answers)), \
+                self.assertRaises(client.OtherRelease) as met:
+            client._exchange(self.closed(), {"op": "status"})
+        self.assertEqual((met.exception.theirs, met.exception.mine), ("0.2.0", "0.1.0"))
+        from cad_server._internal.cli_errors import classify
+
+        with mock.patch.object(store, "active", return_value="0.2.0"):
+            self.assertEqual(str(classify(met.exception)),
+                             "cad updated itself to 0.2.0 while this command ran: run it again")
+
+    def test_a_reset_connection_is_cut_short_too(self) -> None:
+        connection = self.closed()
+        connection.writer.write.side_effect = ConnectionResetError("reset")
+        with mock.patch.object(client, "SWITCHING", lambda: True), \
+                mock.patch.object(client, "_connect", return_value=mock.Mock(release="0.2.0")), \
+                self.assertRaises(client.OtherRelease):
+            client._exchange(connection, {"op": "status"})
+
+    def test_said_as_it_is_with_no_switch_no_release_held_or_no_newer_server(self) -> None:
+        cases = ((lambda: False, "0.1.0", mock.Mock(release="0.2.0")),  # no switch underway
+                 (lambda: True, None, mock.Mock(release="0.2.0")),  # no command: no release held
+                 (None, "0.1.0", mock.Mock(release="0.2.0")))  # nothing says
+        for switching, release, found in cases:
+            with self.subTest(release=release), mock.patch.object(client, "SWITCHING", switching), \
+                    mock.patch.object(client, "RELEASE", release), \
+                    mock.patch.object(client, "_connect", return_value=found) as connect, \
+                    self.assertRaisesRegex(ConnectionError, "^the engine server closed the connection$"):
+                client._exchange(self.closed(), {"op": "status"})
+            connect.assert_not_called()
+        # The switch went back, or ended with the release before still serving: nothing newer answers.
+        ends = iter([True, True, False])
+        with mock.patch.object(client, "SWITCHING", lambda: next(ends)), \
+                mock.patch.object(client, "_connect", return_value=mock.Mock(release="0.1.0")), \
+                self.assertRaises(ConnectionError) as said:
+            client._exchange(self.closed(), {"op": "status"})
+        self.assertNotIsInstance(said.exception, client.OtherRelease)
+
+
+class TheServerStopsTest(unittest.TestCase):
+    """The stop a switch asks (``client.sweep``, as ``cad server stop``), and the drain 0.11.11 and earlier ask
+    (``{"op": "stop", "drain": true}``), which a server of this release still honours: a real server goes."""
+
+    def test_a_real_server_stops_at_once_or_drains_as_asked_and_goes(self) -> None:
         from tests.python.support import engine_daemon
 
-        tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None))
-        self.addCleanup(shutil.rmtree, engine, ignore_errors=True)
-        env = {**os.environ, "CAD_UPDATE_CHECK": "0", "CAD_STATE_DIR": str(tmp / "state"),
-               "CAD_CACHE_DIR": str(tmp / "cache"), "CAD_ENGINE_DIR": str(engine)}
-        with mock.patch.dict(os.environ, env):
-            engine_daemon.start(env, self.addCleanup)
-            found = client._connect()
-            self.assertIsNotNone(found)
-            found.close()
-            self.assertTrue(client.drain(60.0))
-            self.assertIsNone(client._connect())
+        for drain in (False, True):
+            with self.subTest(drain=drain):
+                tmp = Path(tempfile.mkdtemp())
+                self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+                engine = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None))
+                self.addCleanup(shutil.rmtree, engine, ignore_errors=True)
+                env = {**os.environ, "CAD_UPDATE_CHECK": "0", "CAD_STATE_DIR": str(tmp / "state"),
+                       "CAD_CACHE_DIR": str(tmp / "cache"), "CAD_ENGINE_DIR": str(engine)}
+                with mock.patch.dict(os.environ, env):
+                    engine_daemon.start(env, self.addCleanup)
+                    found = client._connect()
+                    self.assertIsNotNone(found)
+                    if drain:
+                        self.assertEqual(client._exchange(found, {"op": "stop", "drain": True}),
+                                         {"ok": True, "draining": True})
+                        self.assertTrue(client.wait_gone(60.0))
+                    else:
+                        found.close()
+                        self.assertEqual(len(client.sweep(stop=True, seconds=60.0)["stopped"]), 1)
+                    self.assertIsNone(client._connect())
 
 
 def _end(pid: int) -> None:

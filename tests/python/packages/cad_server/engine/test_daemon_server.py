@@ -1034,9 +1034,9 @@ class TendTest(unittest.TestCase):
 
 class DrainTest(unittest.TestCase):
     def test_the_switch_s_drain_waits_for_what_is_in_flight_then_stops(self) -> None:
-        """An update's drain (``Daemon.drain``): what is in flight gets to finish -- the door closed once it is idle --,
-        then the switch's ``then`` and the stop. Its bound is the update worker's (``auto_update_helper.DRAIN_SECONDS``,
-        after which the next start replaces the server all the same)."""
+        """The drain the switch of 0.11.11 and earlier asks for (``Daemon.drain``, ``{"op": "stop", "drain": true}``):
+        what is in flight gets to finish -- the door closed once it is idle --, then the switch's ``then`` and the stop.
+        cad's own update now stops a server at once."""
         import threading
         import types
 

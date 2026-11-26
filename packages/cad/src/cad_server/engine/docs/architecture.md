@@ -139,7 +139,7 @@ A global install of cad (`uv tool install cad`; `cad_server._internal.auto_updat
 newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad update`:
 `Daemon.update`, begun at once, whatever the switch says; never across a major). A detached
 worker (`auto_update_helper`, by the environment's own interpreter) builds the release in a folder of its own in the
-state folder (`cad_server._internal.store`) beside the server, drains the server, points the environment at that
+state folder (`cad_server._internal.store`) beside the server, stops the server at once, points the environment at that
 folder (the pointer, which `_cad_release` reads as each interpreter starts) and starts the new release's server, or
 goes back where it does not start. By itself that is two sittings, neither of which waits on how busy or idle the
 server is (anything that keeps talking to it would hold such a wait off for ever): at the server's next tending,
@@ -147,7 +147,8 @@ whatever is in flight, where the version feed as last read names a newer release
 release and stops there (`ready`, nothing switched, nothing restarted); the switch follows, where the feed still calls
 for that release, as the server next starts (the start is the switch, begun before it serves anything, and stands
 aside for it: `daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`), or at
-once on `cad update` or the viewer's button. Only the switch's drain minds what is in flight, five seconds at most. Meanwhile a command that finds no server
+once on `cad update` or the viewer's button. The switch stops the server at once, as `cad server stop` does, whatever is
+in flight; a command it cuts short says cad updated itself while it ran (`client._cut_short`). Meanwhile a command that finds no server
 waits for the next (`client.SWITCHING`), and a server of the release being left starts none in its place
 (`daemon.main`, `auto_update.leaving`); a `cad server start` that fails asks for the update before it gives up; a
 start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With `cad plugin
@@ -192,7 +193,7 @@ A named port another process holds is refused in one line naming the holder (`da
 `cad server` binds at its start, so the command fails at once with that line on stderr and exits
 1, no engine left. An engine a client starts binds on the first request that serves, but for one that replaces
 a server that served pages: a client that stops a server (`client.sweep`: `cad server stop`, the bridge's move
-before it starts the next, and a start that replaces an older server; cad's own update's drain, `client.drain`) first asks it where
+before it starts the next, a start that replaces an older server, and cad's own update's switch) first asks it where
 it serves pages, any release's server alike, and notes the port (`places.pages_path`); the next server to start takes
 the note and serves pages there at once with the user's token (`daemon.resumed`, `Daemon.resume`), so a page open in a
 browser reconnects with nobody doing anything. A port named (`--port`, `CAD_ENGINE_PORT`) comes first; where the port noted is taken,
