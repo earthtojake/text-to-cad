@@ -26,15 +26,12 @@ TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "kicad_p
 # The verbs: what is done to a document, one to one with the command's (``cad export``), and a shape's save.
 VERBS = ("export", "inspect", "snapshot", "dfm", "fea", "save")
 ROOT = ("__version__", "CadDeprecationWarning", *VERBS, *TYPES)
-# A namespace's name a verb shares: the helper taking the tool's own objects (``cad.build123d.dfm(shape)``), beside the
-# verb taking a document (``cad.dfm(path)``), as the signature rule puts each.
-VERB_TWINS = {"dfm"}
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
     "cad.build123d": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
                       "posed", "animation", "memo", "paint", "GeometryError", "GeometryIssue", "ClosestPoints",
                       "MassProperties", "closest_points", "overlap_volume", "is_sound", "topology_errors",
-                      "boundary_edges", "self_intersections", "mass_properties", "dfm", "cnc",
+                      "boundary_edges", "self_intersections", "mass_properties", "cnc",
                       "sheet_metal", "molding", "printing", "unfold", "frame", "leaves", "body", "limits", "mass",
                       "point_mass", "free", "link", "materials"),
 }
@@ -183,7 +180,7 @@ class RootExports(unittest.TestCase):
                    "body": declarations, "limits": declarations, "mass": declarations, "point_mass": declarations,
                    "free": declarations, "link": declarations,
                    **{name: _geometry for name in _geometry.__all__},
-                   **{name: _dfm_check for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},
+                   **{name: _dfm_check for name in ("cnc", "sheet_metal", "molding", "printing")},
                    "unfold": _dfm_sheet}
         for namespace, names in NAMESPACES.items():
             module = importlib.import_module(namespace)
@@ -194,8 +191,9 @@ class RootExports(unittest.TestCase):
                         self.assertIs(getattr(module, name), importlib.import_module(f"{namespace}.{name}"))
                     else:
                         self.assertIs(getattr(module, name), getattr(defined[name], name))
-                    if name not in VERB_TWINS:
-                        self.assertNotIn(name, cad.__all__, f"{name} is {namespace}'s, not the root's")
+                    # A name is a type's, an integration's or a verb's, never two (law 26): ``cad.dfm`` checks a live
+                    # shape too, and ``cad.build123d.dfm`` is its earlier spelling.
+                    self.assertNotIn(name, cad.__all__, f"{name} is {namespace}'s, not the root's")
 
     def test_the_blender_namespace_loads_no_bpy_and_a_script_without_it_is_told_the_extra(self):
         """``cad.blender`` is its declared names, loaded on first use: importing it imports no bpy. Where bpy is

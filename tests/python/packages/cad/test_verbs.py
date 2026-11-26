@@ -27,6 +27,17 @@ def _fresh(document_type: str, name: str) -> None:
     getattr(cad, document_type).__dict__.pop(name, None)
 
 
+class _Shape:
+    """A stand-in for build123d's ``Shape``, told apart as the library tells one (by its class's name and module):
+    nothing of the kernel is loaded."""
+
+
+_Shape.__name__ = _Shape.__qualname__ = "Shape"
+_Shape.__module__ = "build123d.topology.shape_core"
+# A live shape a script holds, as ``cad.dfm`` tells one: a Part, whose ancestry is build123d's Shape.
+LIVE = type("Part", (_Shape,), {"__module__": "build123d.topology.composite"})()
+
+
 class Said:
     """What the deprecations said meanwhile: each warning's message and the file it named."""
 
@@ -234,6 +245,48 @@ class AShape(unittest.TestCase):
         self.assertEqual(["cad.xbf(shape, ...) is deprecated; use cad.save(shape, 'part.xbf')",
                           "cad.step(shape, ...) is deprecated; use cad.export(shape, 'part.step')"],
                          _deprecations(caught))
+
+    def test_dfm_checks_a_live_shape_in_this_process_as_the_integration_s_check_did(self) -> None:
+        """``cad.dfm(shape, ...)``: the build123d integration's check of a live shape, in the caller's process, given
+        the same options and flags; nothing of the engine asked. Anything else that is no file nor handle is refused,
+        naming a shape among what the verb takes."""
+        from cad.build123d import _dfm_check
+
+        with mock.patch.object(_dfm_check, "dfm", return_value="checked") as checked, \
+                mock.patch.object(api, "check", side_effect=AssertionError("asked the engine")):
+            self.assertEqual("checked", cad.dfm(LIVE, process="molding", pull="z", candidates=True, strict=True))
+            self.assertEqual("checked", cad.dfm(LIVE))
+        self.assertEqual([mock.call(LIVE, process="molding", pull="z", candidates=True, strict=True), mock.call(LIVE)],
+                         checked.call_args_list)
+        with self.assertRaises(TypeError) as refused:
+            cad.dfm(self.SHAPE)
+        self.assertEqual("cad.dfm takes a model's handle, or a .xbf, .step, .stp, .stl, .glb, .3mf or .dxf file, or a "
+                         "build123d shape, not object", str(refused.exception))
+        with self.assertRaisesRegex(TypeError, r"not Part; a shape is saved as a model by cad.save\(shape, "
+                                               r"'part.xbf'\)"):
+            cad.inspect(LIVE)
+
+    def test_the_integration_s_check_is_the_verb_s_earlier_spelling_and_says_so_once(self) -> None:
+        """``cad.build123d.dfm``: kept out of its namespace's names, one object at every lookup, running what it ran
+        (``_dfm_check.dfm``) and saying once, at the line that called it, that ``cad.dfm`` does it now; nothing where
+        the switch is off."""
+        import cad.build123d
+        from cad.build123d import _dfm_check
+
+        self.assertNotIn("dfm", cad.build123d.__all__)
+        alias = cad.build123d.dfm
+        self.assertIs(alias, cad.build123d.dfm)
+        self.assertEqual(("dfm", "cad.build123d"), (alias.__name__, alias.__module__))
+        with mock.patch.object(_dfm_check, "dfm", return_value="checked") as checked, Said(self) as caught:
+            self.assertEqual("checked", alias(LIVE, process="cnc", tools=[3, 6]))
+            alias(LIVE)
+        self.assertEqual([mock.call(LIVE, process="cnc", tools=[3, 6]), mock.call(LIVE)], checked.call_args_list)
+        self.assertEqual(["cad.build123d.dfm is deprecated; use cad.dfm"], _deprecations(caught))
+        self.assertEqual(Path(__file__).name, Path(caught[0].filename).name, "the line that spelled it")
+        with mock.patch.object(_dfm_check, "dfm"), mock.patch.object(aliases, "SPELLINGS_WARN", False), \
+                Said(self) as caught:
+            alias(LIVE)
+        self.assertEqual([], _deprecations(caught))
 
     def test_the_decorators_and_the_readers_say_nothing(self) -> None:
         with Said(self) as caught:

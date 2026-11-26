@@ -19,8 +19,10 @@ measured on their B-rep, exactly, by the build123d integration (``cad.build123d.
 finding at a ref ``cad inspect`` resolves (``plate/face 7``) -- through the engine, in one of its checks
 processes (``_held``, ``cad.engine.api.check``), a file by this caller only where no engine can be reached;
 an STL, a 3MF and a GLB by the trimesh integration (``cad.trimesh._check``), by this caller, each finding at
-``x, y, z``. What a caller measures itself it measures in a process of its own that it holds to a check's
-limits (``_watched``), the engine's: no check runs unwatched. The report is the result's ``measurements``,
+``x, y, z``. What a caller measures itself of a file it measures in a process of its own that it holds to a
+check's limits (``_watched``), the engine's: no file's check runs unwatched. A live build123d shape is measured in the
+process that holds it (``cad.dfm(shape)``: ``cad.build123d._dfm_check.dfm``), as it holds it. The report is the
+result's ``measurements``,
 facts alone. The verdicts are the process's rules (``dfm.<process>.RULES``): general
 practice, no shop's -- every rule a limit on one measured figure with the published guide that states it, a
 failing one a finding whose code is the rule's id and whose hint says what to change; the record of every

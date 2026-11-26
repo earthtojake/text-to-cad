@@ -77,9 +77,10 @@ A spelling 0.11 had runs nothing now: it answers in one line with the one that d
 ## The library (tier 2)
 
 The verbs are the library's too, one to one with the command's, each taking a file, the handle a model's
-call returns, or for `export` a shape: `cad.export(source, destination)`, `cad.inspect(source, ...)`
-(`interference=True`, `ranges=True`), `cad.snapshot(source, out)`, `cad.dfm(source, ...)`,
-`cad.fea(source, ...)`, and `cad.save(shape, "plate.xbf")`, a shape a program holds saved as a model.
+call returns, or for `export` and `dfm` a shape: `cad.export(source, destination)`, `cad.inspect(source, ...)`
+(`interference=True`, `ranges=True`), `cad.snapshot(source, out)`, `cad.dfm(source, ...)` (a live build123d shape
+checked in the script's own process, as `cad.build123d.dfm` checked it), `cad.fea(source, ...)`, and
+`cad.save(shape, "plate.xbf")`, a shape a program holds saved as a model.
 KiCad's checks are `cad.kicad.drc(board)` and `cad.kicad.erc(schematic)`. A source with no destination is
 refused in one line, as is a `.xbf` given to `cad.export` with a shape (`cad.save`'s) and any other file given
 to `cad.save` (`cad.export`'s). A model's file is its `.xbf`, and the document type is `xbf`.
@@ -95,6 +96,7 @@ Each spelling of 0.11 still works, says once a process that it is deprecated and
 | `cad.inspect(source, ranges=True)` | `cad.xbf.ranges(...)`, `cad.step.ranges(...)` |
 | `cad.inspect("robot.urdf")`, `cad.inspect("robot.srdf", urdf=...)` | `cad.urdf.validate(...)`, `cad.srdf.validate(...)` |
 | `cad.dfm(source, process="cnc", ...)` | `cad.<type>.dfm(...)` |
+| `cad.dfm(shape, process="cnc", ...)`, a live build123d shape | `cad.build123d.dfm(shape, ...)` |
 | `cad.fea(source, study=..., out=...)` | `cad.xbf.solve(...)`, `cad.step.solve(...)` |
 | `cad.kicad.drc(board)`, `cad.kicad.erc(schematic)` | `cad.kicad_pcb.drc(...)`, `cad.kicad_sch.erc(...)` |
 | `cad.export(board, "fab/gerbers", to="gerbers")` | `cad.kicad_pcb.export(board, to="gerbers", out="fab/gerbers")`, a schematic's the same |

@@ -3,8 +3,9 @@ with the ``cad`` command's (``cad export SRC DST``, ``cad inspect FILE``, ...), 
 holds saved as a model's document, its ``.xbf``.
 
 Each takes any source -- a file, its type by its suffix (``cad.registry.type_of``); the handle a model's call
-returns, an ``xbf``'s (and its document id, as the engine names it); and, for ``export``, a shape -- and does what that type does for it
-(``cad.registry.VERBS``, ``operation_for``): a source whose type lacks the verb is refused in one line naming the
+returns, an ``xbf``'s (and its document id, as the engine names it); and, for ``export`` and ``dfm``, a shape a
+program holds, which has no type, written or checked in that program's process -- and does what that type does for
+it (``cad.registry.VERBS``, ``operation_for``): a source whose type lacks the verb is refused in one line naming the
 types that have it, before anything runs. ``cad.inspect`` is a robot description's conformance check too, and with
 ``interference=True`` or ``ranges=True`` a B-rep's interference check or its joint stops (``cad.registry.MODES``).
 
@@ -119,8 +120,10 @@ def _typed(source: Any, verb: str, mode: str | None = None) -> tuple[str, str]:
 
     document_type = source_type(source, verb)
     if document_type is None:
+        if verb == "dfm":
+            raise TypeError(f"cad.dfm takes {_takes(verb)}, or a build123d shape, not {_named(source)}")
         raise TypeError(f"cad.{verb} takes {_takes(verb, mode)}, not {_named(source)}"
-                        + ("; a shape is written to a file by cad.export(shape, 'part.xbf')" if verb != "export" else ""))
+                        + ("; a shape is saved as a model by cad.save(shape, 'part.xbf')" if verb != "export" else ""))
     name = operation_for(verb, document_type, mode)
     if name is None:
         raise _lacks(verb, document_type, source, mode)
@@ -485,7 +488,21 @@ def dfm(source: Any, **options: Any) -> Any:
     declared one where none is given); a mesh (STL, 3MF, GLB) for ``printing``; a DXF as a sheet's cut file. The
     options are the process's (``material``, ``axes``, ``tools``, ``thickness``, ``technology``, ...: the type's own
     signature, its type's manufacturing check's), and ``strict`` fails a warning too. A ``CheckResult`` whose ``status`` is
-    ``ok``, ``failed`` or ``not_checked``. A KiCad file's checks are KiCad's: ``cad.kicad.drc``, ``cad.kicad.erc``."""
+    ``ok``, ``failed`` or ``not_checked``. A KiCad file's checks are KiCad's: ``cad.kicad.drc``, ``cad.kicad.erc``.
+
+    ``source`` may be a live build123d shape a script holds too (a part, or an assembly's every part), checked
+    exactly in this process with the build123d integration, nothing exported and no engine asked: the same options
+    by the same names (``tools=[3, 6]``, ``pull="z"``), ``candidates`` (molding's pulls or printing's orientations
+    ranked instead) and ``strict``, and the same ``CheckResult``, its findings at refs of the document the engine
+    would make of the shape (``plate/face 7``); with no ``process``, the one its parts declare
+    (``part.material = metals.aluminum(process=machined())``)."""
+    if source_type(source, "dfm") is None:
+        from cad.build123d._producers import is_shape
+
+        if is_shape(source):
+            from cad.build123d._dfm_check import dfm as measured
+
+            return measured(source, **options)
     document_type, name = _typed(source, "dfm")
     return operation(document_type, name)(source, **options)
 

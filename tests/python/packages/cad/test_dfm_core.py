@@ -1623,18 +1623,18 @@ class OccurrencesTest(unittest.TestCase):
 
 class SeveralSolidsTest(unittest.TestCase):
     def test_several_solids_in_one_part_are_said_alike_in_every_process(self) -> None:
-        import cad.build123d as cb
+        import cad
 
         apart = bd.Compound([bd.Box(10, 10, 10), bd.Pos(30, 0, 0) * bd.Box(10, 10, 10)])
         through = bd.Compound([bd.Box(10, 10, 10), bd.Pos(5, 0, 0) * bd.Box(10, 10, 10)])
         for process in manufacturing.PROCESSES:
             with self.subTest(process=process):
-                found = {f.code: f for f in cb.dfm(apart, process=process).findings}
+                found = {f.code: f for f in cad.dfm(apart, process=process).findings}
                 self.assertEqual(found["several_solids"].severity, "warning")
                 self.assertIn("is 2 solids in one part", found["several_solids"].message)
                 self.assertNotIn("not_sound", found)
                 # solids that share volume are no part: an error in every process
-                result = cb.dfm(through, process=process)
+                result = cad.dfm(through, process=process)
                 unsound = next(f for f in result.findings if f.code == "not_sound")
                 self.assertEqual((result.status, unsound.severity), ("failed", "error"))
                 if process != "printing":  # printing's own solid family says it, by its boolean check
@@ -1643,12 +1643,12 @@ class SeveralSolidsTest(unittest.TestCase):
     def test_the_pairs_compared_are_bounded_and_the_rest_is_said(self) -> None:
         from unittest import mock
 
-        import cad.build123d as cb
+        import cad
         from cad.build123d import _dfm_check
 
         through = bd.Compound([bd.Box(10, 10, 10), bd.Pos(5, 0, 0) * bd.Box(10, 10, 10)])
         with mock.patch.object(_dfm_check, "_PAIRS", 0):
-            found = {f.code: f for f in cb.dfm(through, process="cnc").findings}
+            found = {f.code: f for f in cad.dfm(through, process="cnc").findings}
         self.assertNotIn("not_sound", found)
         self.assertIn("1 pair(s)", found["solids_not_compared"].message)
 
@@ -1758,24 +1758,36 @@ class PythonCallTest(unittest.TestCase):
         self.assertTrue(all("strict" in inspect.signature(getattr(cad, kind).dfm).parameters
                             for kind in ("step", "stl", "dxf")))
 
-    def test_a_live_shape_is_checked_by_one_function_and_what_is_no_shape_is_refused_by_name(self) -> None:
+    def test_a_live_shape_is_checked_by_cad_dfm_here_and_what_is_no_shape_is_refused_by_name(self) -> None:
+        """``cad.dfm(shape)``: the build123d integration's check of a live shape, in this process, the engine asked
+        nothing, as ``cad.build123d.dfm``, its earlier spelling, checked it; what is no shape, file or handle is
+        refused by name, as an option of another process or of no kind is."""
+        import warnings
+        from unittest import mock
+
+        import cad
         import cad.build123d as cb
         from cad._internal.refused import ArgumentRefused
+        from cad.engine import api
 
         block = bd.Box(40, 30, 15)
         block.label = "block"
-        result = cb.dfm(block, process="cnc", tools=[3, 6], material="aluminium 6061")
+        with mock.patch.object(api, "check", side_effect=AssertionError("the engine was asked")):
+            result = cad.dfm(block, process="cnc", tools=[3, 6], material="aluminium 6061")
         self.assertEqual((result.status, result.measurements["process"]), ("ok", "cnc"))
         self.assertEqual(result.summary, cb.cnc(block, tools="3,6", material="aluminum").summary)
-        for shape, said in ((None, "shape is a build123d shape.*not None"), ("block.step", "not a str")):
-            with self.assertRaisesRegex(ArgumentRefused, said):
-                cb.dfm(shape, process="cnc")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", cad.CadDeprecationWarning)
+            old = cb.dfm(block, process="cnc", tools=[3, 6], material="aluminium 6061")
+        self.assertEqual(result.summary, old.summary)
+        with self.assertRaisesRegex(TypeError, "or a build123d shape, not NoneType"):
+            cad.dfm(None, process="cnc")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'units'"):
-            cb.dfm(block, process="cnc", units="in")
+            cad.dfm(block, process="cnc", units="in")
         with self.assertRaisesRegex(ArgumentRefused, "^pull is not cnc's"):
-            cb.dfm(block, process="cnc", pull="z")
+            cad.dfm(block, process="cnc", pull="z")
         with self.assertRaisesRegex(ArgumentRefused, "^strict is true or false"):
-            cb.dfm(block, process="cnc", strict="yes")
+            cad.dfm(block, process="cnc", strict="yes")
 
 
 if __name__ == "__main__":

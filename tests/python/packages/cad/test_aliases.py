@@ -41,6 +41,8 @@ MODULES = {
     "cad.srdf_source": "cad.srdf._source", "cad.srdf_validation": "cad.srdf._validation",
     "cad.model": "cad.xbf",
 }
+# An integration's function a verb does now: what it runs, and the verb its warning names.
+VERBS = {"cad.build123d": {"dfm": ("cad.build123d._dfm_check.dfm", "cad.dfm")}}
 
 
 def _new(path: str):
@@ -52,6 +54,7 @@ class TheAliases(unittest.TestCase):
     def test_the_table_is_pinned(self) -> None:
         self.assertEqual(NAMES, aliases.NAME_ALIASES)
         self.assertEqual(MODULES, aliases.MODULE_ALIASES)
+        self.assertEqual(VERBS, aliases.VERB_ALIASES)
         self.assertTrue(issubclass(cad.CadDeprecationWarning, FutureWarning))
 
     def test_each_alias_is_the_object_its_new_path_names_and_is_in_no_all(self) -> None:

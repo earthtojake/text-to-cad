@@ -24,11 +24,11 @@ and the helpers a model calls with build123d objects:
   result types;
 * ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where
   it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;
-* the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):
-  ``dfm(shape, process=...)`` -- what ``cad.dfm`` runs on a STEP's or a model's
-  B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``) -- with ``cnc``,
-  ``sheet_metal``, ``molding`` and ``printing`` its four processes by name;
-  and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance;
+* the manufacturing check of exact geometry that ``cad.dfm`` runs of a STEP's, a model's or a live shape's B-rep
+  (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``), a ``CheckResult`` with its findings at
+  refs (``plate/face 7``): ``cnc``, ``sheet_metal``, ``molding`` and ``printing``, a live shape's check by one
+  process each (``cad.dfm(shape, process=...)`` by any); and ``unfold(shape, k_factor=)``, a bent sheet's flat
+  pattern, its bends unrolled by their bend allowance;
 * ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,
   moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.
 
@@ -61,7 +61,7 @@ _NAMES = {
         "GeometryError", "GeometryIssue", "ClosestPoints", "MassProperties", "closest_points", "overlap_volume",
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
     "leaves": "cad.build123d._leaves",
-    **{name: "cad.build123d._dfm_check" for name in ("dfm", "cnc", "sheet_metal", "molding", "printing")},
+    **{name: "cad.build123d._dfm_check" for name in ("cnc", "sheet_metal", "molding", "printing")},
     "unfold": "cad.build123d._dfm_sheet",
 }
 
@@ -92,7 +92,7 @@ def __dir__() -> list[str]:
 
 if TYPE_CHECKING:
     from cad.build123d import materials
-    from cad.build123d._dfm_check import cnc, dfm, molding, printing, sheet_metal
+    from cad.build123d._dfm_check import cnc, molding, printing, sheet_metal
     from cad.build123d._dfm_sheet import unfold
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,
                                          boundary_edges, closest_points, is_sound, mass_properties, overlap_volume,

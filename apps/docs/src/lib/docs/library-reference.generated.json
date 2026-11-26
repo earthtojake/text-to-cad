@@ -286,196 +286,190 @@
      "doc": 40
     },
     {
-     "name": "dfm",
-     "kind": "function",
-     "signature": "(shape: Any, *, process: str | None = None, candidates: bool = False, strict: bool = False, **options: Any) -> Any",
-     "doc": 41
-    },
-    {
      "name": "frame",
      "kind": "function",
      "signature": "(part: Any, name: str, location: Any) -> Any",
-     "doc": 42
+     "doc": 41
     },
     {
      "name": "free",
      "kind": "function",
      "signature": "(shape: Any) -> Any",
-     "doc": 43
+     "doc": 42
     },
     {
      "name": "gear_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 44
+     "doc": 43
     },
     {
      "name": "is_sound",
      "kind": "function",
      "signature": "(shape: Shape) -> bool",
-     "doc": 45
+     "doc": 44
     },
     {
      "name": "leaves",
      "kind": "function",
      "signature": "(tree: Any, *, paths: bool = False) -> list[Any]",
-     "doc": 46
+     "doc": 45
     },
     {
      "name": "limits",
      "kind": "function",
      "signature": "(assembly: Any, joint: str, *, effort: float | None = None, velocity: float | None = None) -> Any",
-     "doc": 47
+     "doc": 46
     },
     {
      "name": "link",
      "kind": "function",
      "signature": "(shape: Any, name: str) -> Any",
-     "doc": 48
+     "doc": 47
     },
     {
      "name": "mass",
      "kind": "function",
      "signature": "(shape: Any, grams: float) -> Any",
-     "doc": 49
+     "doc": 48
     },
     {
      "name": "mass_properties",
      "kind": "function",
      "signature": "(bodies: Iterable[tuple[Solid, float]]) -> MassProperties",
-     "doc": 50
+     "doc": 49
     },
     {
      "name": "materials",
      "kind": "module",
      "module": "cad.build123d.materials",
-     "doc": 51,
+     "doc": 50,
      "members": [
       {
        "name": "soldermask",
        "kind": "function",
        "signature": "(color: Color = 'green', finish: Finish = 'glossy') -> FinishedMaterial",
-       "doc": 52
+       "doc": 51
       },
       {
        "name": "soldermask_green",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 53
+       "doc": 52
       },
       {
        "name": "soldermask_matte_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 54
+       "doc": 53
       },
       {
        "name": "fr4",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 55
+       "doc": 54
       },
       {
        "name": "silkscreen",
        "kind": "function",
        "signature": "(color: Color = 'white') -> FinishedMaterial",
-       "doc": 56
+       "doc": 55
       },
       {
        "name": "bare_copper",
        "kind": "function",
        "signature": "(oxidized: bool = False) -> FinishedMaterial",
-       "doc": 57
+       "doc": 56
       },
       {
        "name": "enig",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 58
+       "doc": 57
       },
       {
        "name": "hasl",
        "kind": "function",
        "signature": "(lead_free: bool = True) -> FinishedMaterial",
-       "doc": 59
+       "doc": 58
       },
       {
        "name": "solder",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 60
+       "doc": 59
       },
       {
        "name": "mold_compound",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 61
+       "doc": 60
       },
       {
        "name": "ceramic",
        "kind": "function",
        "signature": "(color: Color = 'white') -> FinishedMaterial",
-       "doc": 62
+       "doc": 61
       },
       {
        "name": "led_lens",
        "kind": "function",
        "signature": "(color: Color = 'clear', diffused: bool = False) -> FinishedMaterial",
-       "doc": 63
+       "doc": 62
       },
       {
        "name": "connector_housing",
        "kind": "function",
        "signature": "(color: Color = 'black') -> FinishedMaterial",
-       "doc": 64
+       "doc": 63
       },
       {
        "name": "anodized",
        "kind": "function",
        "signature": "(color: Color = 'clear', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 65
+       "doc": 64
       },
       {
        "name": "anodized_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 66
+       "doc": 65
       },
       {
        "name": "powder_coat",
        "kind": "function",
        "signature": "(color: Color = 'black', finish: Sheen = 'satin', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 67
+       "doc": 66
       },
       {
        "name": "powder_coat_black",
        "kind": "function",
        "signature": "() -> FinishedMaterial",
-       "doc": 68
+       "doc": 67
       },
       {
        "name": "bead_blasted",
        "kind": "function",
        "signature": "(substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 69
+       "doc": 68
       },
       {
        "name": "brushed",
        "kind": "function",
        "signature": "(substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 70
+       "doc": 69
       },
       {
        "name": "zinc_plated",
        "kind": "function",
        "signature": "(passivation: str = 'clear', substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 71
+       "doc": 70
       },
       {
        "name": "black_oxide",
        "kind": "function",
        "signature": "(oiled: bool = True, substrate: FinishedMaterial | None = None) -> FinishedMaterial",
-       "doc": 72
+       "doc": 71
       }
      ]
     },
@@ -483,98 +477,98 @@
      "name": "mechanism_state",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **values: Any) -> Any",
-     "doc": 73
+     "doc": 72
     },
     {
      "name": "memo",
      "kind": "function",
      "signature": "(function: Any = None, /, **options: Any) -> Any",
-     "doc": 74
+     "doc": 73
     },
     {
      "name": "molding",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, pull: Any = None, wall_limit: float | None = None, zero_tol: float | None = None, cavities: int | None = None, candidates: bool = False, strict: bool = False) -> Any",
-     "doc": 75
+     "doc": 74
     },
     {
      "name": "overlap_volume",
      "kind": "function",
      "signature": "(a: Solid | Compound, b: Solid | Compound) -> float",
-     "doc": 76
+     "doc": 75
     },
     {
      "name": "paint",
      "kind": "function",
      "signature": "(shape: Any, faces: Any, color: Any) -> Any",
-     "doc": 77
+     "doc": 76
     },
     {
      "name": "point_mass",
      "kind": "function",
      "signature": "(part: Any, grams: float, at: Any, *, name: str | None = None, inertia: tuple[float, float, float] | None = None) -> Any",
-     "doc": 78
+     "doc": 77
     },
     {
      "name": "posed",
      "kind": "function",
      "signature": "(assembly: Any, state: Any) -> Any",
-     "doc": 79
+     "doc": 78
     },
     {
      "name": "printing",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, technology: str | None = None, build_volume: Any = None, angle_limit: float | None = None, layer_height: float | None = None, nozzle: float | None = None, printer: Any = None, candidates: bool = False, strict: bool = False) -> Any",
-     "doc": 80
+     "doc": 79
     },
     {
      "name": "rack_and_pinion_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 81
+     "doc": 80
     },
     {
      "name": "screw_pair",
      "kind": "function",
      "signature": "(assembly: Any, name: str, **joints: Any) -> Any",
-     "doc": 82
+     "doc": 81
     },
     {
      "name": "self_intersections",
      "kind": "function",
      "signature": "(shape: Shape) -> tuple[GeometryIssue, ...]",
-     "doc": 83
+     "doc": 82
     },
     {
      "name": "sheet_metal",
      "kind": "function",
      "signature": "(shape: Any, *, material: str | None = None, thickness: float | None = None, k_factor: float | None = None, bend_radius: float | None = None, kerf: float | None = None, sheet_size: Any = None, strict: bool = False) -> Any",
-     "doc": 84
+     "doc": 83
     },
     {
      "name": "topology_errors",
      "kind": "function",
      "signature": "(shape: Shape) -> tuple[GeometryIssue, ...]",
-     "doc": 85
+     "doc": 84
     },
     {
      "name": "unfold",
      "kind": "function",
      "signature": "(shape: Any, *, thickness: float | None = None, k_factor: float | None = None, material: str | None = None, bend_lines: bool = False) -> Any",
-     "doc": 86
+     "doc": 85
     }
    ]
   },
   {
    "name": "kicad",
    "module": "cad.kicad",
-   "doc": 87,
+   "doc": 86,
    "members": [
     {
      "name": "Routed",
      "kind": "class",
      "signature": "(connections: tuple[Any, ...], tracks: int, vias: int, length: float, seconds: float, warnings: tuple[str, ...] = ())",
-     "doc": 88,
+     "doc": 87,
      "members": [
       {
        "name": "ok",
@@ -590,7 +584,7 @@
        "name": "human_lines",
        "kind": "method",
        "signature": "() -> list[str]",
-       "doc": 89
+       "doc": 88
       }
      ]
     },
@@ -598,121 +592,121 @@
      "name": "drc",
      "kind": "function",
      "signature": "(board: Path) -> CheckResult",
-     "doc": 90
+     "doc": 89
     },
     {
      "name": "erc",
      "kind": "function",
      "signature": "(schematic: Path) -> CheckResult",
-     "doc": 91
+     "doc": 90
     },
     {
      "name": "route",
      "kind": "function",
      "signature": "(board: Any, connections: Sequence[Any] | None = None, *, layers: Any = None, width: float | None = None, clearance: float | None = None, vias: int | None = None, via_cost: float | None = None) -> Routed",
-     "doc": 92
+     "doc": 91
     }
    ]
   },
   {
    "name": "trimesh",
    "module": "cad.trimesh",
-   "doc": 93,
+   "doc": 92,
    "members": [
     {
      "name": "orientations",
      "kind": "function",
      "signature": "(mesh: Any, *, units: str = 'mm', angle_limit: float = 45.0) -> dict[str, Any]",
-     "doc": 94
+     "doc": 93
     },
     {
      "name": "printing",
      "kind": "function",
      "signature": "(mesh: Any, *, units: str = 'mm', samples: int = 2000, angle_limit: float = 45.0) -> dict[str, Any]",
-     "doc": 95
+     "doc": 94
     }
    ]
   },
   {
    "name": "mujoco",
    "module": "cad.mujoco",
-   "doc": 96,
+   "doc": 95,
    "members": [
     {
      "name": "check",
      "kind": "function",
      "signature": "(path: Path, *, strict: bool = False, verbose: bool = False) -> CheckResult",
-     "doc": 97
+     "doc": 96
     },
     {
      "name": "collisions",
      "kind": "function",
      "signature": "(spec, part)",
-     "doc": 98
+     "doc": 97
     },
     {
      "name": "decompose",
      "kind": "function",
      "signature": "(spec, part, *, max_hulls=16, threshold=None)",
-     "doc": 99
+     "doc": 98
     },
     {
      "name": "fit",
      "kind": "function",
      "signature": "(spec, part, kind)",
-     "doc": 100
+     "doc": 99
     },
     {
      "name": "parts",
      "kind": "function",
      "signature": "(spec)",
-     "doc": 101
+     "doc": 100
     },
     {
      "name": "save",
      "kind": "function",
      "signature": "(spec, path)",
-     "doc": 102
+     "doc": 101
     },
     {
      "name": "spec",
      "kind": "function",
      "signature": "(thing, *, assets=None, tolerance=None, zero=None)",
-     "doc": 103
+     "doc": 102
     }
    ]
   },
   {
    "name": "coacd",
    "module": "cad.coacd",
-   "doc": 104
+   "doc": 103
   },
   {
    "name": "netgen",
    "module": "cad.netgen",
-   "doc": 105
+   "doc": 104
   },
   {
    "name": "calculix",
    "module": "cad.calculix",
-   "doc": 106
+   "doc": 105
   },
   {
    "name": "blender",
    "module": "cad.blender",
-   "doc": 107,
+   "doc": 106,
    "members": [
     {
      "name": "Clip",
      "kind": "class",
      "signature": "(name: str, kind: str, duration: float)",
-     "doc": 108
+     "doc": 107
     },
     {
      "name": "Model",
      "kind": "class",
      "signature": "(root: bpy.types.Object, roots: list, objects: dict, nodes: dict, clips: dict, box: tuple, fps: int, clip: str | None = None)",
-     "doc": 109,
+     "doc": 108,
      "members": [
       {
        "name": "center",
@@ -728,13 +722,13 @@
        "name": "play",
        "kind": "method",
        "signature": "(name: str | None) -> None",
-       "doc": 110
+       "doc": 109
       },
       {
        "name": "bounds",
        "kind": "method",
        "signature": "() -> tuple",
-       "doc": 111
+       "doc": 110
       }
      ]
     },
@@ -742,19 +736,19 @@
      "name": "load",
      "kind": "function",
      "signature": "(path: str | Path, clip: str | None = None, fps: int = 24) -> Model",
-     "doc": 112
+     "doc": 111
     }
    ]
   }
  ],
  "texts": [
-  "cad: CAD models as Python, built by its engine (``cad.engine``) into documents and the files they\ndeclare.\n\nThe root holds ``__version__``, ``CadDeprecationWarning``, the verbs and the document types. The verbs are what\nis done to a document, one to one with the ``cad`` command's (``cad export SRC DST``): ``export`` (a document,\na mesh, a KiCad file or a shape written to another format, its format by the destination's suffix), ``inspect``\n(what a document holds, a robot description's conformance; ``interference=True``, ``ranges=True``), ``snapshot``,\n``dfm`` and ``fea``, each taking a file or the handle a model's call returns; and ``save``,\na shape a program holds saved as a model's ``.xbf``. The document types are one object each (``cad.registry``):\n``xbf`` (the engine's own document, saved as its ``.xbf``, which a model built from code writes and the engine\nholds in its memory), ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and\n``kicad_sch``. A type is its decorator where it has one (``@xbf``, ``@step(\"arm.step\")``), its edit where its\nfiles are changed in place (``with kicad_pcb.edit(\"board.kicad_pcb\") as board:``) and its reader where it has\none (``step.read``, ``xbf.read``). Our helpers that take build123d's objects are\nthe build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's\n``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,\n``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); KiCad's own checks are the\nkicad integration's, ``cad.kicad`` (``drc``, ``erc``, and ``route``, copper inside a board's edit); those that call\nMuJoCo are the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on\nit, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); and those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a\nGLB in Blender's scene, for a render). Process control (``cad server``) is the ``cad`` command's alone. Every\nname loads on first use: ``import cad`` imports no CAD kernel, and ``import build123d`` binds a module the kernel\nloads into on its first attribute (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``,\n``cad.read_xbf``, ``cad.ap242``, ``cad.model``, a type's operations such as ``cad.xbf.export``, ...) are aliases\nof what they name now, each saying so once (``_internal/aliases.py``).",
+  "cad: CAD models as Python, built by its engine (``cad.engine``) into documents and the files they\ndeclare.\n\nThe root holds ``__version__``, ``CadDeprecationWarning``, the verbs and the document types. The verbs are what\nis done to a document, one to one with the ``cad`` command's (``cad export SRC DST``): ``export`` (a document,\na mesh, a KiCad file or a shape written to another format, its format by the destination's suffix), ``inspect``\n(what a document holds, a robot description's conformance; ``interference=True``, ``ranges=True``), ``snapshot``,\n``dfm`` and ``fea``, each taking a file or the handle a model's call returns (``export`` and ``dfm`` a shape a program\nholds too, written or checked in its own process); and ``save``, a shape a program holds saved as a model's\n``.xbf``. The document types are one object each (``cad.registry``):\n``xbf`` (the engine's own document, saved as its ``.xbf``, which a model built from code writes and the engine\nholds in its memory), ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and\n``kicad_sch``. A type is its decorator where it has one (``@xbf``, ``@step(\"arm.step\")``), its edit where its\nfiles are changed in place (``with kicad_pcb.edit(\"board.kicad_pcb\") as board:``) and its reader where it has\none (``step.read``, ``xbf.read``). Our helpers that take build123d's objects are\nthe build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's\n``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,\n``cad.trimesh`` (a mesh's 3D printing measurements: ``printing``, ``orientations``); KiCad's own checks are the\nkicad integration's, ``cad.kicad`` (``drc``, ``erc``, and ``route``, copper inside a board's edit); those that call\nMuJoCo are the mujoco integration's, ``cad.mujoco`` (a document as a ``mujoco.MjSpec``, a part's collision chosen on\nit, the spec saved, and a MuJoCo model checked by MuJoCo's own compiler: ``spec``, ``fit``, ``save``, ``check``); and those that take Blender's are the blender integration's, ``cad.blender`` (``load``: a\nGLB in Blender's scene, for a render). Process control (``cad server``) is the ``cad`` command's alone. Every\nname loads on first use: ``import cad`` imports no CAD kernel, and ``import build123d`` binds a module the kernel\nloads into on its first attribute (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``,\n``cad.read_xbf``, ``cad.ap242``, ``cad.model``, a type's operations such as ``cad.xbf.export``, ...) are aliases\nof what they name now, each saying so once (``_internal/aliases.py``).",
   "The release of the library this is, as its distribution's metadata says it.",
   "A spelling the library still answers, under the name it has now. A ``FutureWarning``, so Python\nshows it by default: the people who read it are a model's authors, not a library's developers.",
   "Write ``source`` to the one file ``destination``, its format by its suffix, as ``cad export SRC DST`` does.\n\n``source`` is a file (an ``.xbf``, a STEP, a mesh: ``.glb``, ``.stl``, ``.3mf``; a KiCad board or schematic), the\nhandle a model's call returns (the document the engine holds, never built), or a shape a program holds (a\nbuild123d shape). A document writes a ``.step``, ``.glb``, ``.stl``, ``.3mf``, ``.dxf`` (of a\nplanar one), ``.xml`` (an MJCF, its meshes in ``assets/`` beside it), ``.urdf`` (its meshes in ``meshes/``\nbeside it) or a copy of itself, an ``.xbf``, relative to the working folder; a mesh writes the other mesh kinds;\na KiCad file writes KiCad's outputs into the folder ``destination``, ``to`` naming which (a board's\n``gerbers``, ``drill``, ``pos``, ``bom``, ``step``, ``glb``, ``odb``, ``ipc2581``, ``pdf`` or ``dxf``; a\nschematic's ``pdf``, ``svg``, ``netlist`` or ``bom``). A shape writes a ``.step``, ``.glb``, ``.stl``, ``.3mf``\nor ``.dxf`` now, in this process, relative to the calling script's folder; its model's document, an ``.xbf``,\nis ``cad.save``'s.\n\n``tolerance`` (mm) and ``angle`` (degrees) mesh a document's or a shape's ``.glb``, ``.stl`` or ``.3mf`` finer;\n``zero`` takes a document's MJCF or URDF at a mechanism state. The engine's own options (``log``,\n``progress``, ``daemon``) pass on to it. Returns what was written: a document's or a mesh's rows\n(``cad.engine.api.Written``), a KiCad file's ``ExportResult``, a shape's file's path. A source with no\ndestination, and an option the source does not take, are refused by name.",
   "What ``source`` holds, as ``cad inspect FILE [REF]`` says it: a model's document (its handle), an\n``.xbf``, a STEP or a GLB through the engine (``query``: ``summary``, ``structure``, ``closure``, ``geometry``\nor ``build``; with ``ref``, what one element or part is and what made it); a KiCad board's or schematic's\ncontents (a schematic's ``ref`` too); a URDF's or an SRDF's conformance check, a ``CheckResult`` (``strict``,\n``packages`` for a URDF, ``urdf`` for an SRDF, ``verbose``).\n\n``interference=True``: a model's, an ``.xbf``'s or a STEP's interference check, which parts share volume\n(``poses``, ``fits``, ``min_volume``). ``ranges=True``: its joint stops, found from its geometry (``step``,\n``clearance``, ``joint``, ``verbose``). Each a ``CheckResult``. An option the source's inspection does not take is\nrefused by name, as is a source whose type has none, naming the types that have it.",
   "Draw ``source`` into ``out`` (a ``.png``) as the viewer draws it, as ``cad snapshot SRC OUT.png`` does: any\ndocument a viewer opens -- a model's handle, an ``.xbf``, a STEP, a mesh, a DXF, a URDF or an SRDF, a KiCad\nboard or schematic. ``job`` draws every picture a Quick Edit packet or a job names instead, each that names no\npath into ``folder``, ``source`` then drawn in place of each job's input. ``display``, ``camera``, ``grid``,\n``preview``, ``pose``, ``width``, ``height``, ``size_profile``, ``annotation`` and ``measurements`` are the\nviewer's, as ``cad.engine.api.snapshot`` takes them; its own options (``progress``, ``daemon``) pass on. A\n``Drawn``, or a list of them for a job.",
-  "Check a part can be made, as ``cad dfm FILE`` does: a model's handle, an ``.xbf`` or a STEP measured\nexactly, for ``process`` ``cnc``, ``sheet``, ``molding`` or ``printing`` (a model's or an ``.xbf``'s parts'\ndeclared one where none is given); a mesh (STL, 3MF, GLB) for ``printing``; a DXF as a sheet's cut file. The\noptions are the process's (``material``, ``axes``, ``tools``, ``thickness``, ``technology``, ...: the type's own\nsignature, its type's manufacturing check's), and ``strict`` fails a warning too. A ``CheckResult`` whose ``status`` is\n``ok``, ``failed`` or ``not_checked``. A KiCad file's checks are KiCad's: ``cad.kicad.drc``, ``cad.kicad.erc``.",
+  "Check a part can be made, as ``cad dfm FILE`` does: a model's handle, an ``.xbf`` or a STEP measured\nexactly, for ``process`` ``cnc``, ``sheet``, ``molding`` or ``printing`` (a model's or an ``.xbf``'s parts'\ndeclared one where none is given); a mesh (STL, 3MF, GLB) for ``printing``; a DXF as a sheet's cut file. The\noptions are the process's (``material``, ``axes``, ``tools``, ``thickness``, ``technology``, ...: the type's own\nsignature, its type's manufacturing check's), and ``strict`` fails a warning too. A ``CheckResult`` whose ``status`` is\n``ok``, ``failed`` or ``not_checked``. A KiCad file's checks are KiCad's: ``cad.kicad.drc``, ``cad.kicad.erc``.\n\n``source`` may be a live build123d shape a script holds too (a part, or an assembly's every part), checked\nexactly in this process with the build123d integration, nothing exported and no engine asked: the same options\nby the same names (``tools=[3, 6]``, ``pull=\"z\"``), ``candidates`` (molding's pulls or printing's orientations\nranked instead) and ``strict``, and the same ``CheckResult``, its findings at refs of the document the engine\nwould make of the shape (``plate/face 7``); with no ``process``, the one its parts declare\n(``part.material = metals.aluminum(process=machined())``).",
   "A linear static stress study of a part or a bonded assembly, as ``cad fea FILE`` does: a model's handle,\nan ``.xbf`` or a STEP. With no ``study``, its setup, writing nothing: the parts, the pairs that touch and a part's\nfaces by ref (``occurrence``); with ``study`` (a JSON file, inline JSON or a dict) and ``out`` (a folder), the\nsolve, meshed by netgen and solved by CalculiX, its results written into ``out`` (``deck``, ``verbose``). A\n``cad.results.FeaResult``.",
   "Save a shape a program holds as a model's document, its ``.xbf`` at ``path`` (relative to the calling\nscript's folder, or the working folder where there is none): handed to the engine, which names the model for\nthe file, records the calling script as its build closure, writes the ``.xbf`` (only where it differs or is\nmissing) and serves its page. ``animations``: its clips, ``animation()`` builders on the shape or a part of it.\nReturns the model's handle, which every verb takes. A file of another kind is ``cad.export``'s; a model's handle\nor a file is its document already (``cad.export(handle, \"copy.xbf\")`` writes a copy).",
   "``cad.xbf``: the XBF document type, the engine's own document, saved as a file, its ``.xbf``\n(``cad.registry``).\n\nA model is addressed by its ``.xbf``'s path or the handle its call returns. ``@xbf`` declares one\n(``@xbf(name=...)``), and ``@xbf(\"XBF/arm.xbf\")`` has each run save it as that ``.xbf``, relative to the script\n(bare: ``<name>.xbf`` beside it); its other files are the other types' decorators (``@step(\"arm.step\")``), and a\nshape a program holds is saved as one by ``cad.save(shape, \"plate.xbf\")``. ``xbf.read(\"vendor/motor.xbf\")``\nreads a saved model into a body as a build123d shape, keyed by the file's bytes; any other file is refused with\nthe reader that takes it (``step.read``, ``stl.read``). The verbs take a model as the ``cad`` command's do, by\nits handle or its ``.xbf``: ``cad.export(source, \"arm.glb\", tolerance=None, angle=None)``, ``cad.snapshot``,\n``cad.inspect`` (with ``interference=True`` or ``ranges=True`` too), ``cad.dfm(source, process=\"cnc\")`` (or\n``\"sheet\"``, ``\"molding\"``, ``\"printing\"``), which checks it for manufacturing on its exact geometry, measured\nby the engine with the build123d integration (``cad._internal.manufacturing``), and ``cad.fea(source,\nstudy=..., out=\"results/\")``, a stress study of it (``cad._internal.fea.operation``), which reads an ``.xbf``:\nthe file given, or one the engine writes of a held model in a temporary folder. A file is read as the file it\nis, never as the model the engine holds: its inspection says the file's state and closure, lists its\nparameters read-only and names no ``made_by``. Any other file is refused by name (``arm.step`` is\n``cad.step``'s). Its script declares its parameters with it at a module's top level, ``WALL =\nxbf.param(\"wall\", 2.0, min=1, max=5)`` (``cad.engine.parameters.param``, the standard library alone); a value\nchanges in the script, by an edit and a run or the CAD Viewer's Save.\nEverything loads on first use: ``import cad.xbf`` imports no CAD kernel (``cad._internal.document_type``).",
@@ -781,7 +775,7 @@
   "``cad.kicad_sch``: the KiCad schematic document type (``cad.registry``), a saved KiCad schematic.\n\nA ``.kicad_sch`` is an AUTHORED file, edited in KiCad, as text or in place by :func:`edit`, never a\ndocument a model makes: the type has no decorator. A schematic is a hierarchy: its project's root sheet\n(the ``<project>.kicad_sch`` beside the ``.kicad_pro``) and the sheets it places, each a file of its own.\nIts functions take paths and plain values, so they are the type's, not the ``kicad`` integration's (the\nsignature rule):\n\n* :func:`read` reads the whole hierarchy from the root, whichever of its sheets it is given,\n  with the standard library (:mod:`cad.engine.formats.kicad.schematic`), so a script run with ``cad\n  run`` imports it without the CAD kernel and without KiCad: its sheets, symbols and their pins,\n  wires, labels and the nets they make, and ``resolve(ref)`` for a reference in the board's grammar\n  (``#U3``, ``#U3.7``, ``#net:VBUS``) and the schematic's own (``#sheet:/Power/``, ``#wire:<uuid>``).\n* :func:`edit` opens the saved schematic in KiCad's IPC API for a ``with`` block, the ``kicad``\n  integration's (``cad.kicad._session``): its project's symbol libraries loaded, saved at the block's end\n  when it was changed and not at all when the block raises.\n\nThe schematic in one look, and what a reference names, is ``cad.inspect`` (``cad inspect SCHEMATIC [REF]``),\none sheet drawn flat ``cad.snapshot`` (``cad snapshot SCHEMATIC OUT.png --sheet /Power/``), KiCad's outputs of it\n(a pdf, svgs, the netlist, a BOM) ``cad.export(schematic, folder, to=...)``, and KiCad's electrical rules check\n``cad.kicad.erc`` (``cad kicad erc SCHEMATIC``): the last two run KiCad's own ``kicad-cli``, the ``kicad``\nintegration's (kicode, ``cad[kicad]``), as the board's do.",
   "The KiCad schematic at ``path`` (a ``.kicad_sch``: the root sheet or any sheet of its project's\nhierarchy) for references: every sheet from the project's root down, its symbols and its nets.\n\nEverything is in KiCad's frame: millimetres, y down, on each sheet's page. Reads the sheet files\nalone; runs nothing.",
   "The schematic at ``schematic`` (its project's root sheet, or any sheet) open in KiCad, for a ``with``\nblock: ``with kicad_sch.edit(\"design.kicad_sch\") as s:`` hands the block KiPy's open schematic (kicode's\n``kicode.schematic.Schematic``), through kicode's headless ``kicad-cli api-server``, its project's symbol\nlibraries (its own ``sym-lib-table``) loaded first; a placement from a library the project does not list\nis refused in one line naming it. At the block's end the schematic is saved when it was changed, so a\nblock that changes nothing leaves the file byte for byte; when the block raises, nothing is saved and the\nexception goes on. A schematic not there yet is made by KiCad, with its project, and saved. A\n``kicad_pcb.edit`` of the same project inside the block shares its KiCad. Needs the kicad extra\n(``cad[kicad]``; ``cad run`` gives a script that calls it the extra).",
-  "``cad.build123d``: the build123d integration -- our helpers that take build123d's objects.\n\nbuild123d (and the OCCT kernel under it, OCP) is the integration model code builds with. Its extra\nis ``cad[build123d]``; its code runs in the process that calls it. This namespace holds only what WE\ndefine for it, never build123d itself (``import build123d as bd`` stays build123d's): the producers\nthat make the document types from a build123d shape (``_producers``, registered in ``cad.registry``),\nand the helpers a model calls with build123d objects:\n\n* ``memo``: a function worth replaying on a later build (the engine's **Memo functions**);\n* ``paint(shape, faces, material)``: a material or colour on some faces;\n* what a part declares for a robot description, each a fact of the machine:\n  ``frame(part, name, location)``, a named frame in its own frame (a robot description's sites),\n  ``body(part, name=)``, a body of its own fixed to its link, ``limits(assembly, joint, effort=,\n  velocity=)``, a joint's drive limits, ``mass(shape, grams)``, what a part or an assembly weighs in\n  all, ``point_mass(part, grams, at, name=, inertia=)``, a lump its solids leave out, ``free(shape)``, a\n  base not bolted to the world, and ``link(shape, name)``, the name of the link its parts make;\n* the mechanism, as ISO 10303-242 (AP242) names its entities: ``mechanism_state``\n  (``mechanism_state_representation``), ``configuration_sequence``\n  (``interpolated_configuration_sequence``), ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``,\n  and ``posed(assembly, state)``, a copy of the assembly at a state;\n* ``animation(assembly, name, duration=)``: a glTF animation, baked into each GLB the model declares;\n* measurements of native geometry: ``closest_points``, ``overlap_volume``, ``is_sound``,\n  ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their\n  result types;\n* ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where\n  it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;\n* the manufacturing check of exact geometry, a ``CheckResult`` with its findings at refs (``plate/face 7``):\n  ``dfm(shape, process=...)`` -- what ``cad.dfm`` runs on a STEP's or a model's\n  B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``) -- with ``cnc``,\n  ``sheet_metal``, ``molding`` and ``printing`` its four processes by name;\n  and ``unfold(shape, k_factor=)``, a bent sheet's flat pattern, its bends unrolled by their bend allowance;\n* ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,\n  moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.\n\nEvery name loads on first use: ``import cad.build123d`` imports no CAD kernel.",
+  "``cad.build123d``: the build123d integration -- our helpers that take build123d's objects.\n\nbuild123d (and the OCCT kernel under it, OCP) is the integration model code builds with. Its extra\nis ``cad[build123d]``; its code runs in the process that calls it. This namespace holds only what WE\ndefine for it, never build123d itself (``import build123d as bd`` stays build123d's): the producers\nthat make the document types from a build123d shape (``_producers``, registered in ``cad.registry``),\nand the helpers a model calls with build123d objects:\n\n* ``memo``: a function worth replaying on a later build (the engine's **Memo functions**);\n* ``paint(shape, faces, material)``: a material or colour on some faces;\n* what a part declares for a robot description, each a fact of the machine:\n  ``frame(part, name, location)``, a named frame in its own frame (a robot description's sites),\n  ``body(part, name=)``, a body of its own fixed to its link, ``limits(assembly, joint, effort=,\n  velocity=)``, a joint's drive limits, ``mass(shape, grams)``, what a part or an assembly weighs in\n  all, ``point_mass(part, grams, at, name=, inertia=)``, a lump its solids leave out, ``free(shape)``, a\n  base not bolted to the world, and ``link(shape, name)``, the name of the link its parts make;\n* the mechanism, as ISO 10303-242 (AP242) names its entities: ``mechanism_state``\n  (``mechanism_state_representation``), ``configuration_sequence``\n  (``interpolated_configuration_sequence``), ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``,\n  and ``posed(assembly, state)``, a copy of the assembly at a state;\n* ``animation(assembly, name, duration=)``: a glTF animation, baked into each GLB the model declares;\n* measurements of native geometry: ``closest_points``, ``overlap_volume``, ``is_sound``,\n  ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their\n  result types;\n* ``leaves(tree)``: every leaf of a tree (``step.read``'s, ``xbf.read``'s, a model's ``.shape``) placed where\n  it stands, out of the tree, on the same B-rep: what ``located`` gives without copying the tree;\n* the manufacturing check of exact geometry that ``cad.dfm`` runs of a STEP's, a model's or a live shape's B-rep\n  (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``), a ``CheckResult`` with its findings at\n  refs (``plate/face 7``): ``cnc``, ``sheet_metal``, ``molding`` and ``printing``, a live shape's check by one\n  process each (``cad.dfm(shape, process=...)`` by any); and ``unfold(shape, k_factor=)``, a bent sheet's flat\n  pattern, its bends unrolled by their bend allowance;\n* ``materials``, a submodule: named looks for what bd_materials' catalogue lacks (solder mask, ENIG,\n  moulding compound, anodized, powder coat, ...), each a native ``bd_materials.FinishedMaterial``.\n\nEvery name loads on first use: ``import cad.build123d`` imports no CAD kernel.",
   "The kernel could not establish the requested geometric result.",
   "Name an animation of an assembly: a GLB's own choreography, ``duration`` seconds long,\nreturned as a builder of glTF channels; its calls chain::\n\n    show = animation(car, \"showcase\", duration=6)\n    show.channel(\"lid\", path=\"translation\", keys=[(0, (0, 0, 0)), (1, (0, 0, 40))])\n    show.rotation(\"wheel*\", axis=(0, 1, 0), turns=3, start=1, interpolation=\"LINEAR\")\n    show.translation(\"door\", by=(0, 300, 0), start=2, end=4)\n    show.explode(\"body/*\", radial=True, distance=40, end=2)       # helpers, compiled to channels\n    show.hide(\"roof\", at=3)                                       # a STEP scale channel to 0\n    show.pose(at={0: \"shut\", 5: {\"doors\": 1}})                    # the mechanism, by its FK\n\n``.channel(parts, path=, keys=, interpolation=)`` is glTF's channel (``path``\n``translation``, ``rotation`` or ``scale``; ``interpolation`` ``CUBICSPLINE``, ``LINEAR`` or\n``STEP``); ``.translation``, ``.rotation`` and ``.scale`` are channels from a start to an end.\nParts are named as a ref's owner names them (a label, ``hand/finger.2``), or by a glob\n(``wheel*``). A configuration sequence is the mechanism's and the document keeps it; an animation is the GLB's:\nnever written into the xbf, baked into every GLB the model declares when that GLB is written.\nReturns the builder.",
   "Keep ``part`` a body of its own, rigidly fixed to the link it would have merged into, named\n``name`` (the part's label where None): its mass, visuals, collision and frames go with it, not\ninto that link's. A part that is all of its link is a body already. A part's, not an\nassembly's. Returns ``part``.",
@@ -789,7 +783,6 @@
   "Minimum set distance and one minimizing pair, in the input frame.\n\nSolid interiors count: contact, overlap and containment have distance\nzero. Witnesses need not be on both boundaries or unique. This is not\npenetration depth. Pass faces/shells to ask about their boundaries.\n\nIts cost grows with both shapes' faces (OCCT's exact extrema): two\nsolids of thousands of faces each (a vendor STEP's printed parts) take\nseconds a pair, so a hundred pairs take minutes. Compounds are measured\nmember by member, a member whose bounding box is farther than the best\ndistance so far skipped. Over many pairs, rule out first those whose\n``bounding_box(optimal=False)`` envelopes do not meet, and measure from a\npoint (``bd.Vertex``) where a point answers the question.",
   "CNC machining's check of ``shape``: ``dfm(shape, process=\"cnc\", ...)``.",
   "Name a configuration sequence of an assembly's mechanism (AP242's\n``interpolated_configuration_sequence``), by joint label: waypoints ``[(t, pose), ...]``\n(``t`` in seconds from 0, ``pose`` a mechanism state's name or ``{joint: value}``, the rest\nas built), ``sweep={joint: (from, to)}`` with ``duration``, or a function ``t -> {joint:\nvalue}`` with ``duration``. ``ease`` is ``cubic`` (eased in and out at every waypoint:\nAP242's synchronous interpolation) or ``linear``. A sequence is a finite clip; a player\nrepeats it::\n\n    configuration_sequence(arm, \"cycle\", [(0, \"folded\"), (2, \"reach\"), (5, \"folded\")])\n    configuration_sequence(arm, \"wave\", [(0, {\"wrist\": -30}), (1, {\"wrist\": 30}), (2, {\"wrist\": -30})])\n    configuration_sequence(arm, \"nod\", lambda t: {\"elbow\": 45 + 20 * math.sin(t)}, duration=6)\n\nThe document keeps the definition, never frames (a function as its samples); a GLB\nexport bakes it into a clip of the same name, and STEP, STL and 3MF ignore it. It never\nmoves the build: the model is as its joints connect it. Returns ``assembly``.",
-  "The manufacturing check of a live build123d ``shape`` (a part, or an assembly's every part), as\n``cad.dfm`` checks a file: ``process`` is ``cnc``, ``sheet``, ``molding`` or ``printing`` -- with\nnone, the one the parts declare (``part.material = metals.aluminum(process=machined())``) -- and the\noptions are that process's, by the names ``cad.dfm`` takes (``tools=[3, 6]``, ``pull=\"z\"``,\n``technology=\"sla\"``); ``candidates`` ranks molding's pulls or printing's orientations instead, and\n``strict`` fails the check on a warning too. A ``CheckResult``: its ``status`` (``ok``, ``failed``,\n``not_checked``), its findings at refs (``plate/face 7``), each rule's verdict with its figure and its\nlimit, and its ``measurements``, the report. ``TypeError`` for an option no process takes.",
   "Name a frame on ``part``: ``location`` (a build123d ``Location`` -- ``Pos``, ``Rot`` -- or a\n``Plane``) in the part's own frame, the one its geometry is in before ``part.location``. A\nsecond frame of one name replaces the first. A frame is a part's, not an assembly's: put it\non the part it stands on. Returns ``part``.",
   "Say that ``shape``, a part or an assembly, is not bolted to the world: the link a robot\ndescription hangs from the world that holds a part at or below it floats (MJCF's ``<freejoint>``;\na URDF's root, which floats already). On the top assembly, the robot's base. Returns ``shape``.",
   "A gear train of ``assembly``'s mechanism, ``name``: revolute joints, by label, each turning\nby its ratio (degrees per unit of the coupling's value) and only through it -- written as\nAP242's ``gear_pair`` couplers, from the first-named joint to each other one. At value ``c``\neach joint stands at its as-built angle plus its ratio times ``c``: ``c = 0`` is as built, so\nit never moves the build. Its range is its joints' limits: the tightest interval in which each\nstays within its own. Its name poses wherever a joint's does: ``mechanism_state(..., drive=90)``,\na configuration sequence's waypoints and sweeps, and ``--pose``; its joints alone are not posed.\nA joint that is not revolute is refused when the document is made; a label names the joint\nin each placement of a sub-assembly placed several times. Returns ``assembly``.",

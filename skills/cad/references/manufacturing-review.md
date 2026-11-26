@@ -21,7 +21,7 @@ molding's draft turn with it): an occurrence turned another way has findings of 
 ref, and the totals count every occurrence.
 
 In a check script the same check is `cad.dfm(handle, ...)`, `cad.dfm(path, process=...)`
-or, on a live build123d shape, `cad.build123d.dfm(shape, process=...)`. The options go by name, numbers
+or, on a live build123d shape, `cad.dfm(shape, process=...)`. The options go by name, numbers
 as numbers (`tools=[3, 6]`, `strict=True`), and the result is data: `result.status`, `.findings`,
 `.measurements`.
 

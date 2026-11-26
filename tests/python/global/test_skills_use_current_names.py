@@ -1,6 +1,7 @@
 """Skills and the docs spell the library's names as they are now: no alias of the library's earlier
 spellings, among them a document type's operations (``xbf.export(...)``, ``kicad_pcb.drc(...)``: the verbs' now,
-``cad.export``, ``cad.kicad.drc``) and a file type's call given a shape (``xbf(shape, ...)``: ``cad.save``).
+``cad.export``, ``cad.kicad.drc``), a file type's call given a shape (``xbf(shape, ...)``: ``cad.save``) and an
+integration's function a verb does now (``cad.build123d.dfm(shape)``: ``cad.dfm``).
 
 An alias (``cad._internal.aliases``) is kept out of every document but the migration guide, and an agent
 reads the skills each session, so they cut over hard (law 14). The table is read from its source with
@@ -33,21 +34,22 @@ DOCS = [REPO_ROOT / "README.md", REPO_ROOT / "docs" / "install.md", REPO_ROOT / 
         *sorted((REPO_ROOT / "packages" / "cad" / "src" / "cad_server" / "engine" / "docs").glob("*.md"))]
 
 
-def _tables() -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+def _tables() -> tuple[dict[str, dict[str, str]], dict[str, str], dict[str, dict[str, tuple[str, str]]]]:
     found: dict[str, object] = {}
     for node in ast.parse(ALIASES.read_text(encoding="utf-8")).body:
         target = node.target if isinstance(node, ast.AnnAssign) else None
-        if isinstance(target, ast.Name) and target.id in ("NAME_ALIASES", "MODULE_ALIASES") and node.value is not None:
+        if isinstance(target, ast.Name) and target.id in ("NAME_ALIASES", "MODULE_ALIASES", "VERB_ALIASES") \
+                and node.value is not None:
             found[target.id] = ast.literal_eval(node.value)
-    return found["NAME_ALIASES"], found["MODULE_ALIASES"]  # type: ignore[return-value]
+    return found["NAME_ALIASES"], found["MODULE_ALIASES"], found["VERB_ALIASES"]  # type: ignore[return-value]
 
 
 def _patterns() -> list[tuple[str, re.Pattern[str]]]:
     """Each alias's spellings: its dotted path (``cad.read_step``, ``cad.ap242``); a name a ``from cad import``
     line lists; and, for a name no word of prose could be (``read_step``, ``ValidationResult``), the name alone."""
-    names, modules = _tables()
+    names, modules, verbs = _tables()
     found: list[tuple[str, re.Pattern[str]]] = []
-    for owner, table in names.items():
+    for owner, table in [*names.items(), *verbs.items()]:
         for name in table:
             old = f"{owner}.{name}"
             found.append((old, re.compile(rf"(?<![\w.]){re.escape(old)}\b")))
@@ -63,9 +65,11 @@ def _patterns() -> list[tuple[str, re.Pattern[str]]]:
 
 class SkillsUseCurrentNamesTest(unittest.TestCase):
     def test_the_alias_table_is_read(self) -> None:
-        names, modules = _tables()
+        names, modules, verbs = _tables()
         self.assertIn("read_step", names["cad"])
         self.assertIn("cad.ap242", modules)
+        self.assertIn("dfm", verbs["cad.build123d"])
+        self.assertTrue(any(pattern.search("from cad.build123d import dfm") for _old, pattern in _patterns()))
 
     def test_no_skill_document_spells_an_alias(self) -> None:
         patterns = _patterns()

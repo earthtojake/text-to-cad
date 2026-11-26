@@ -91,7 +91,8 @@ These words mean one thing each, in the code, the commands and every document.
   producer and no operation.
 - **Operation**: one of a closed set: what a document type does for a verb. The verbs are `export`, `inspect`,
   `snapshot`, `dfm` and `fea`, the same in the library (`cad.export`) and the command (`cad export`), each
-  running the operation its source's type has for it (`cad.registry.VERBS`): `inspect` is a robot
+  running the operation its source's type has for it (`cad.registry.VERBS`), or, given a shape a program holds,
+  which has no type, writing it (`export`) or checking it (`dfm`) in that program's process: `inspect` is a robot
   description's `validate` too, and with `interference` or `ranges` a B-rep's interference check or a
   mechanism's joint stops; `fea` is a B-rep's `solve`. Each type implements those that make sense for it. A
   tool's own check of its files is its integration's operation, not a type's (`drc`, `erc`, `check`).
@@ -666,19 +667,19 @@ A 3D document's `dfm` says whether a part can be made by a process, and what to 
 with `cad dfm SRC --process cnc|sheet|molding|printing` (a mesh -- STL, 3MF, GLB -- takes `printing`
 alone, its default: CNC, sheet and molding are judged on exact geometry, and a mesh asked for one is refused
 with the check to run instead, the STEP's or the model's), and a DXF's, `cad dfm part.dxf`, as a sheet's cut file
-(its one process, `sheet`, the default). The source is a file or a model's document the engine holds (the handle its
-call returns), so a check script measures the model it builds:
+(its one process, `sheet`, the default). The source is a file, a model's document the engine holds (the handle its
+call returns) or a live build123d shape a script holds, checked in that script's process, so a check script measures
+the model it builds:
 
 ```python
 import cad
-from cad.build123d import dfm
 from part import part                                          # a model
 
 cad.dfm(part(), process="cnc", material="aluminum", axes=3)    # corners, pockets, holes, walls, setups
 cad.dfm("bracket.step", process="sheet", material="5052", bend_radius=1.6)
 cad.dfm("cover.step", process="molding", pull="z", material="abs")   # draft, undercuts, ribs, clamp
 cad.dfm("housing.step", process="printing", technology="sla")         # walls, pins, trapped resin
-found = dfm(shape, process="cnc", tools=[3, 6])                # a live build123d shape, the same result
+found = cad.dfm(shape, process="cnc", tools=[3, 6])            # a live build123d shape, here: the same result
 if found.status != "ok":                                       # "ok", "failed" or "not_checked"
     for finding in found.findings:                             # a rule's verdict: its figure, limit and refs
         print(finding.code, finding.location, finding.value, finding.limit, finding.unit, finding.refs)
@@ -721,11 +722,12 @@ document): an option refused by name, a file of another type or not there, a doc
   cantilevers, clearances between parts, trapped volumes and their escape holes, build-volume fit, bed
   contact and warping, stair-stepping, support; `--candidates` ranks orientations.
 
-**Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
-`build123d` integration), each finding at a face ref that `cad inspect DOC REF` resolves
-(`plate/face 7`) -- in one of the engine's checks processes: a file read once, a model from the bytes the engine
-holds of it, the same check of an unchanged document answered from the result the engine kept; a mesh by the `trimesh` integration (`cad[trimesh]`), by its caller, each at `x, y, z` in
-millimetres.
+**Facts, then verdicts.** A STEP, an xbf, a model's document or a live build123d shape is measured exactly on its
+B-rep (the `build123d` integration), each finding at a face ref that `cad inspect DOC REF` resolves (`plate/face 7`;
+a shape's, of the document the engine would make of it): a document in one of the engine's checks processes (a file
+read once, a model from the bytes the engine holds of it, the same check of an unchanged document answered from the
+result the engine kept), a shape in the process that holds it; a mesh by the `trimesh` integration (`cad[trimesh]`),
+by its caller, each at `x, y, z` in millimetres.
 The measurements are facts and always reported (`measurements`). The verdicts are general: each process has
 one table of rules: general practice from published design guides, each rule citing its guide as the
 evidence, and cad's own floors where no guide states a limit, each labelled as its own -- no rule

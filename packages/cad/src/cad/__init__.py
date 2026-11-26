@@ -5,8 +5,9 @@ The root holds ``__version__``, ``CadDeprecationWarning``, the verbs and the doc
 is done to a document, one to one with the ``cad`` command's (``cad export SRC DST``): ``export`` (a document,
 a mesh, a KiCad file or a shape written to another format, its format by the destination's suffix), ``inspect``
 (what a document holds, a robot description's conformance; ``interference=True``, ``ranges=True``), ``snapshot``,
-``dfm`` and ``fea``, each taking a file or the handle a model's call returns; and ``save``,
-a shape a program holds saved as a model's ``.xbf``. The document types are one object each (``cad.registry``):
+``dfm`` and ``fea``, each taking a file or the handle a model's call returns (``export`` and ``dfm`` a shape a program
+holds too, written or checked in its own process); and ``save``, a shape a program holds saved as a model's
+``.xbf``. The document types are one object each (``cad.registry``):
 ``xbf`` (the engine's own document, saved as its ``.xbf``, which a model built from code writes and the engine
 holds in its memory), ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``srdf``, ``kicad_pcb`` and
 ``kicad_sch``. A type is its decorator where it has one (``@xbf``, ``@step("arm.step")``), its edit where its

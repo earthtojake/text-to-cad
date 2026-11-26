@@ -13,7 +13,9 @@ callable forms of the file types (``xbf(shape, "part.xbf")``, ``step(shape, "par
 each answers as the verb that does it now (``cad.export``, ``cad.dfm``, ``cad.kicad.drc``; ``OPERATION_VERBS``),
 built where its type is (``cad._internal.verbs``, ``cad._internal.document_type``), and says so once per name per
 process through ``spelled``, where ``SPELLINGS_WARN``, the one switch, is on and a program called it -- never the
-library, the server or the transport calling one of its own.
+library, the server or the transport calling one of its own. So does a function an integration had whose work a
+verb does now (``VERB_ALIASES``: ``cad.build123d.dfm(shape)`` is ``cad.dfm(shape)``), built here: it runs what it
+ran, as it ran it.
 
 A build's stderr is the model's log, and a model's own process imports its script first, so the
 warning reaches the person or the agent who ran it: in their terminal, before the worker's build. That
@@ -36,7 +38,7 @@ import warnings
 from typing import Any
 
 __all__ = ["ASSIGNED", "CadDeprecationWarning", "MODULE_ALIASES", "NAME_ALIASES", "OPERATION_VERBS", "SPELLINGS_WARN",
-           "current", "lookup", "spelled", "warn"]
+           "VERB_ALIASES", "current", "lookup", "spelled", "warn"]
 
 
 class CadDeprecationWarning(FutureWarning):
@@ -130,12 +132,21 @@ OPERATION_VERBS: dict[str, str] = {
     "erc": "cad.kicad.erc",
 }
 
+#: ``owner -> {old name: (the function it runs, the verb that does it now)}``: a function of an integration's whose
+#: work is a verb's now, answered by one that runs what it ran, as it ran it, and says once, where a program calls it,
+#: that it is deprecated (``spelled``): a live build123d shape's manufacturing check is ``cad.dfm``'s.
+VERB_ALIASES: dict[str, dict[str, tuple[str, str]]] = {
+    "cad.build123d": {"dfm": ("cad.build123d._dfm_check.dfm", "cad.dfm")},
+}
+
 # The library's, the server's and the transport's own modules: a spelling one of them calls is no program's.
 _OWN = ("cad", "cad_server", "cad_mcp")
 
 _WARNED: set[str] = set()
 # A module alias's module's own spec, kept while the import system stamps the alias's on it.
 _OWN_SPECS: dict[str, Any] = {}
+# Each of ``VERB_ALIASES``' functions, made once: one object, every lookup.
+_CALLED: dict[str, Any] = {}
 
 
 # The frames a warning never points at: the library's own and the import system's, so it names the
@@ -166,8 +177,9 @@ def warn(old: str, new: str) -> None:
 
 
 def spelled(old: str, new: str, *, depth: int = 2) -> None:
-    """Say that ``old`` -- a document type's operation (``cad.step.dfm``) or a file type's callable form
-    (``cad.xbf(shape, ...)``) -- is deprecated, naming ``new``, once per process (``warn``), where
+    """Say that ``old`` -- a document type's operation (``cad.step.dfm``), a file type's callable form
+    (``cad.xbf(shape, ...)``) or an integration's function a verb does now (``cad.build123d.dfm``) -- is deprecated,
+    naming ``new``, once per process (``warn``), where
     ``SPELLINGS_WARN`` is on and the frame ``depth`` above this one (the alias's caller) is a program's: never
     one of the library's, the server's or the transport's own modules (``_OWN``), which call their own."""
     if not SPELLINGS_WARN or old in _WARNED:
@@ -214,9 +226,29 @@ def current(dotted: str) -> str:
     return ".".join(parts)
 
 
+def _verb_alias(owner: str, name: str) -> Any:
+    """``owner.name`` of ``VERB_ALIASES``: the function it runs, saying once where a program calls it that it is
+    deprecated, naming the verb (``spelled``). Made once."""
+    old = f"{owner}.{name}"
+    found = _CALLED.get(old)
+    if found is None:
+        target, new = VERB_ALIASES[owner][name]
+
+        @functools.wraps(_resolve(target), assigned=ASSIGNED)
+        def alias(*args: Any, **kwargs: Any) -> Any:
+            spelled(old, new)
+            return _resolve(target)(*args, **kwargs)  # what it ran, as it is now
+
+        alias.__module__ = owner
+        found = _CALLED[old] = alias
+    return found
+
+
 def lookup(owner: str, name: str) -> Any:
-    """The object an old ``owner.name`` is an alias of, after its warning; ``AttributeError`` for a name
-    that is no alias."""
+    """The object an old ``owner.name`` is an alias of, after its warning (a ``VERB_ALIASES`` function's says it as
+    it is called); ``AttributeError`` for a name that is no alias."""
+    if name in VERB_ALIASES.get(owner, {}):
+        return _verb_alias(owner, name)
     target = NAME_ALIASES.get(owner, {}).get(name)
     if target is not None:
         warn(f"{owner}.{name}", target)

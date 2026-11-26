@@ -445,11 +445,11 @@ count a summary says.
   and turns every place back, or rests its verdicts on what no sample turns (molding's floors: a broad wall's
   own thickness, a wall's draft against its depth).
 
-The Python functions: `cad.<type>.dfm(path_or_id, process=..., ...)`; on a live shape
-`cad.build123d.dfm(shape, process=..., ...)` -- the same options, the same `CheckResult`, refs as the engine
-would name its document, with no process the one its parts declare (`cnc`, `sheet_metal`, `molding` and
-`printing` are its four processes by name) -- and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program holds
-`cad.trimesh.printing(mesh)`, `orientations` (the report as data).
+The Python functions: `cad.dfm(source, process=..., ...)`, of a file, a model's handle or a live build123d shape
+-- a shape in the process that holds it, with the same options, the same `CheckResult`, refs as the engine would
+name its document, with no process the one its parts declare (`cad.build123d`'s `cnc`, `sheet_metal`, `molding`
+and `printing` check one by a process each) -- and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program
+holds `cad.trimesh.printing(mesh)`, `orientations` (the report as data).
 
 ## CNC machining
 
