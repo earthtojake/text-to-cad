@@ -101,7 +101,7 @@ jobs:
 
       - name: Set up uv
         timeout-minutes: 5
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
 
       - name: Set up Node.js
         timeout-minutes: 5
