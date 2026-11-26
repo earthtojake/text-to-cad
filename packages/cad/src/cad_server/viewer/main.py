@@ -104,9 +104,15 @@ def parse_args(argv=None, *, prog=DEFAULT_PROG):
 
 
 def main(argv=None, *, prog=DEFAULT_PROG):
-    from cad.engine.client import request
+    from cad.engine.client import connect, request
     options = parse_args(argv, prog=prog)
     options['start'] = os.getcwd()
+    # The server first, as every command that needs one asks: none running, or one of another release, is the
+    # one line said, whether or not this computer has the viewer's client built.
+    try:
+        connect().close()
+    except OSError as error:
+        return _failed(options, prog, error)
     if not options['api_only']:
         options['dist'] = resolve_dist_dir(options['dist'])
         if not options['dist']:
