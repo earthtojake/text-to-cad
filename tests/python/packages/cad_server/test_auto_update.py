@@ -1700,6 +1700,56 @@ class WorkerTest(unittest.TestCase):
             found = helper.switch({**self.told, "spare": []}, run, helper.Log(None), system=FakeWindows({}))
         self.assertEqual(found["cause"], "in_use", found)
 
+    def test_on_windows_a_cad_that_showed_after_the_last_look_and_held_a_file_is_swept_and_upgraded_once_more(self):
+        """A ``cad`` Windows was still starting as the bin command was moved aside is among the processes only after
+        the sweep's last look: the installer meets a file in use, with no process left by the sweep and the release
+        before still whole. The sweep and the upgrade are run once more, and no more than once."""
+        folder = self.tmp / "bin"
+        folder.mkdir()
+        (self.prefix / "Scripts").mkdir()
+        (self.prefix / "Scripts" / "cad.exe").write_bytes(b"launcher")
+        (folder / "cad.exe").write_bytes(b"launcher")
+        late = {80: (1, str(self.prefix / "Scripts" / "cad.exe"))}
+        system = FakeWindows({})
+        upgrade, tried = self.cad, []
+        denied = "error: failed to remove file `Scripts/cad.exe`: Access is denied. (os error 5)"
+
+        def run(command, timeout):
+            if command == ["uv", "tool", "dir", "--bin"]:
+                return 0, f"{folder}\n"
+            if command[:3] == ["uv", "tool", "upgrade"]:
+                tried.append(sorted(system.table))
+                if len(tried) == 1:
+                    system.table.update(late)  # it shows now, holding the file
+                    return 2, denied
+            return upgrade(command, timeout)
+
+        log = self.tmp / "switch.log"
+        with mock.patch.object(helper, "WINDOWS", True), mock.patch.object(helper.os, "getpid", return_value=60):
+            found = helper.switch({**self.told, "spare": []}, run, helper.Log(log), system=system)
+        self.assertEqual((found["outcome"], found["release"]), ("installed", "0.2.0"), found)
+        self.assertEqual((tried, system.ended), ([[], []], [[80]]), "stopped at the second sweep, then upgraded")
+        self.assertIn("the upgrade is run once more", log.read_text(encoding="utf-8"))
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["cad.exe"])
+        # Refused again: no third run, and the failure is the installer's own word.
+        self.installed, self.serving = "0.1.0", "0.1.0"
+        tried.clear()
+
+        def refused(command, timeout):
+            if command[:3] == ["uv", "tool", "upgrade"]:
+                tried.append(1)
+                return 2, denied
+            return run(command, timeout)
+
+        with mock.patch.object(helper, "WINDOWS", True), mock.patch.object(helper.os, "getpid", return_value=60):
+            found = helper.switch({**self.told, "spare": []}, refused, helper.Log(None), system=FakeWindows({}))
+        self.assertEqual((found["outcome"], found["cause"], found["restored"], len(tried)), ("failed", "denied", True, 2))
+        # Elsewhere a refused file is no process's doing: one run.
+        self.installed, self.serving = "0.1.0", "0.1.0"
+        tried.clear()
+        found = helper.switch({**self.told, "spare": []}, refused, helper.Log(None), system=FakeWindows({}))
+        self.assertEqual((found["cause"], len(tried)), ("denied", 1))
+
     def test_where_the_win32_api_cannot_list_the_processes_powershell_does(self) -> None:
         """``listed``: PowerShell's ``Get-CimInstance Win32_Process`` read as the Toolhelp snapshot is, one process (an
         object, not a list) too; None where it fails or says no JSON. ``Windows.processes`` takes it where the snapshot

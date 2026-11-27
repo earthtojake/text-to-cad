@@ -40,7 +40,9 @@ repairs it where it fails anyway. In order (``update``):
    d. The installer's upgrade to the newest release (``installing``): the release it leaves is the one installed
       (``auto_update.installed``); ``from`` itself is ``current``. uv's own failure to write the bin ``cad.exe`` (a file
       in use) leaves the environment upgraded and whole, a newer release in it than ``from``: that is checked as an
-      upgrade, whatever uv's exit status.
+      upgrade, whatever uv's exit status. On Windows, where the installer met a file in use though the sweep left no
+      process, and ``from`` is still installed whole, c and d are done once more: a ``cad`` Windows was still
+      starting at the rename shows among the processes only after the sweep's last look.
    e. The moment the installer returns, its bin ``cad`` again where it left none (``command_back``: an upgrade uv
       fails after it took the tool's commands out leaves none, and pip writes none there): on Windows the environment's own ``cad.exe`` copied there, as pipx exposes it, else the one moved aside
       put back, and the one moved aside removed where it can be (else the server's next tidying does,
@@ -278,6 +280,13 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
         stop(server, log)
     wanted = server is not None or told.get("start") is True
     code, said, left = upgrade(told, run, installing(told), command, log, system)
+    if WINDOWS and code != 0 and not left and classify(code, said) in ("in_use", "denied") \
+            and auto_update.installed(prefix) == told["from"] and not unrecorded(prefix):
+        # A ``cad`` Windows was still starting as the bin command was moved aside is among the processes only after
+        # the sweep's last look, and held a file. The environment is whole: swept and upgraded once more.
+        log.write(f"{by(told)} met a file in use with no process of cad's environment left by the sweep, and cad "
+                  f"{told['from']} is whole: its processes are looked for and the upgrade is run once more")
+        code, said, left = upgrade(told, run, installing(told), command, log, system)
     got = auto_update.installed(prefix)
     if code != 0 and auto_update.newer(got, told["from"]) and not unrecorded(prefix):
         # The environment is upgraded and whole: what failed after it is the bin command, which is back (``upgrade``).
