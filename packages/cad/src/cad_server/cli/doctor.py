@@ -4,7 +4,7 @@ there, whether the CAD kernel environment is made (``cad_server._internal.base``
 environment ``cad run`` made for a program that a build ran in, if one was (``extras.last_with_kernel``) --, where each
 integration's operations run, whether the server runs and its release, and cad's own update
 (``cad_server._internal.auto_update``: the switches, whether this cad is a global install and by which installer, and
-whether an update can begin at all, ``blocked``; the newest release of this cad's major the version feed as last read
+whether an update can begin at all, ``blocked``; the newest release of this cad's major PyPI, as last read,
 names, and when it was last asked for, and, where it names a release of a higher major, the one line that says it is
 out and where the migration guides are (``auto_update.MAJOR_LINE``); the uv the update runs; and the last
 attempt: its outcome and uv's words, why in plain words where it did not install what it was for, a release held back,
@@ -197,7 +197,7 @@ def _update() -> tuple:
 
 
 def _newest() -> dict:
-    """What the version feed as last read says of releases (read, never fetched): the newest release of this cad's
+    """What PyPI, as last read, says of releases (read, never fetched): the newest release of this cad's
     major it names, and, under it, the one line that says a release of a higher major is out and how to get it."""
     try:
         import cad_server
@@ -208,13 +208,13 @@ def _newest() -> dict:
         known = updates.feed(fetch=False)
         numbers = auto.release(version)
         if known is None:
-            return _check("newest", INFO, "the version feed has not been read on this computer yet")
+            return _check("newest", INFO, "PyPI has not been read on this computer yet")
         if numbers is None:
-            return _check("newest", INFO, f"cad {known['latest']} is the newest release the version feed names"
+            return _check("newest", INFO, f"cad {known['latest']} is the newest release PyPI names"
                                           + _asked(updates.asked()))
         named = updates.newest_of_major(numbers[0], known)
-        said = (f"cad {named} is the newest {numbers[0]}.x release the version feed names" if named else
-                f"the version feed names no {numbers[0]}.x release; its newest is cad {known['latest']}")
+        said = (f"cad {named} is the newest {numbers[0]}.x release PyPI names" if named else
+                f"PyPI names no {numbers[0]}.x release; its newest is cad {known['latest']}")
         said += _asked(updates.asked())
         higher = auto.higher(known, version)
         return _check("newest", INFO, said, [auto.MAJOR_LINE.format(release=higher)] if higher else None)
@@ -223,7 +223,7 @@ def _newest() -> dict:
 
 
 def _notices() -> list[dict]:
-    """Each of the project's notices for this cad, as the version feed as last read carries it (``notices.applying``),
+    """Each of the project's notices for this cad, as last read (``notices.applying``),
     a line of its own, worth a look: its text, and its link in brackets where it has one. None where none is."""
     from cad_server import notices
 
@@ -231,7 +231,7 @@ def _notices() -> list[dict]:
 
 
 def _asked(at: float | None, now: float | None = None) -> str:
-    """How long ago the version feed was last asked for, in words, as the end of the newest line: `` (asked 3 hours
+    """How long ago PyPI was last asked, in words, as the end of the newest line: `` (asked 3 hours
     ago)``; nothing where it never was, or the clock was set back since."""
     import time
 

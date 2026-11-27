@@ -153,8 +153,9 @@ is decided with it ([Before the first release of a higher major](#before-the-fir
   does not update keeps its table while `latest` moves on. 0.11.12 and 0.11.13 carry no table: their
   `cad plugin update` downloads the hosted install command, which runs the newest release's `cad
   plugin install` from uv's cache.
-- **[The version feed](#the-version-feed) says when**: an hour after a release is on PyPI, unless
-  the project holds it back.
+- **PyPI says when**: a cad asks PyPI at most once an hour, so a release reaches it within the hour
+  it is on PyPI, unless the project yanks it there. 0.11.12 to 0.11.18 read
+  [the version feed](#the-version-feed) instead: an hour after, unless the project holds it back.
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may
   be older than cad, which the 30-day rule covers.
 - **Releases 0.10.0 to 0.11.11** are carried over once by their own updater
@@ -183,7 +184,8 @@ the agents running them reach for them, and nothing shipped later can change wha
    its `latest` alone, frozen, never naming 0.12.0 or later; `api.texttocad.dev/v1/releases`, its
    `latest` and its `lines`. Every release from 0.7.12 on reads one of them
    ([The version feed](#the-version-feed)), and 0.11.x installs by itself only a patch of its own
-   minor ([Decisions](decisions.md#old-releases-are-carried-through-the-newest-011)).
+   minor ([Decisions](decisions.md#old-releases-are-carried-through-the-newest-011)). And
+   `api.texttocad.dev/v1/notices` with its `notices`, which every later release reads.
 3. **`uv tool install cad`, with no flags, as the one line that installs cad.** Every skill's Setup
    block runs it, and the docs give it, so the newest `cad` on PyPI must install a working `cad`
    command on any Python from the floor up. `requires-python` takes no upper bound: with one, a
@@ -611,12 +613,19 @@ refuses.
 
 ## The version feed
 
-`api.texttocad.dev` (`apps/api`; its [README](../../apps/api/README.md) is the full account) serves
-the feed at two addresses, both from one read of PyPI:
+The releases after 0.11.18 read no feed: they ask PyPI itself (`pypi.org/pypi/cad/json`, at most once
+an hour, in the background, and once more for `cad update`) for the newest release that is not yanked,
+of each major, and install exactly that one; and they read the project's notices from
+`api.texttocad.dev/v1/notices`. So **a release is held back from them by yanking it on PyPI**, and
+nothing else: no hour's wait, no list of holds. Yank it within minutes of `Publish Release` where it
+must not spread.
+
+For the releases before them, `api.texttocad.dev` (`apps/api`; its [README](../../apps/api/README.md) is
+the full account) serves the feed at two addresses, both from one read of PyPI:
 
 - `/v1/releases` names `latest`, the newest release that has been on PyPI for at least an hour and is
-  not held back, and `lines`, the newest such release of each major version. Releases from 0.11.12
-  on read it (`cad_server/updates.py`, at most once an hour).
+  not held back, and `lines`, the newest such release of each major version. Releases 0.11.12 to
+  0.11.18 read it (at most once an hour).
 - `/v1/versions` names `latest` alone and, under the same rules, the newest such release below
   0.12.0. Releases 0.7.12 to 0.11.11 read it, and 0.10.0 to 0.11.11 install the release it names, so
   the newest 0.11.x carries them over.
@@ -626,19 +635,19 @@ What a release depends on:
 - **Nothing in a release touches the feed.** It reads the index of `cadgen`, the last of the four
   projects a release uploads, so a release it names is installable under every name. Its edge keeps
   an answer five minutes.
-- **It says when and what.** An automatic update installs exactly the release the feed names; only
-  where the feed names none of the installed major (its `latest` of a higher one) does it take PyPI's
-  newest of that major. The install command, `cad update`, the plugin's server line and the skills' `uv tool install cad`
+- **It says when.** 0.11.12 to 0.11.18 update when it names a newer release of their major, to
+  PyPI's newest of that major. The install command, `cad update`, the plugin's server line and the skills' `uv tool install cad`
   read no feed: they take PyPI's newest (`cad update`, which the install command runs on a cad that is
   there when a person ran it, and the server line: of the installed major).
-- **So a hold stops the automatic update, and nothing else.** Holding a release back (`CAD_HELD_RELEASES`, an environment
-  variable of the Vercel project, then `gh workflow run deploy-api.yml --ref main`:
-  [Holding a release](../../apps/api/README.md#holding-a-release)) stops the automatic update to it
-  on every computer that has not taken it (0.11.12 to 0.11.17, which install PyPI's newest of their
-  major, excepted); one that has keeps it. To pull a release from everyone, yank it on PyPI.
+- **So a hold slows 0.11.12 to 0.11.18, and nothing else.** Holding a release back
+  (`CAD_HELD_RELEASES`, an environment variable of the Vercel project, then `gh workflow run
+  deploy-api.yml --ref main`: [Holding a release](../../apps/api/README.md#holding-a-release)) keeps
+  the feed from naming it, but they install PyPI's newest of their major once the feed names any newer
+  one, and later releases read no feed. To pull a release from everyone, yank it on PyPI.
 - **A notice reaches the computers a release cannot.** Where an update keeps failing in a way no
   message of cad's foresaw, or a change of how cad installs leaves computers behind, post a notice
-  (`CAD_NOTICES`, an environment variable of the Vercel project, then the same redeploy:
+  (`CAD_NOTICES`, an environment variable of the Vercel project, served at `/v1/notices`, then the
+  same redeploy:
   [Posting a notice](../../apps/api/README.md#posting-a-notice)): one line of text, and a link on
   texttocad.dev or the repository, for every cad older than a release you name. cad says it after a
   command's output once a day, in `cad doctor` and in the viewer, until it is taken down; releases

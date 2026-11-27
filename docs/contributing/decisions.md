@@ -162,36 +162,43 @@ newer than the CAD kernel's builds, the kernel's environment is made on an older
 An upper bound on Python would make a resolver on a newer Python fall back to an old release with no
 `cad` command, so there is none. The `cad` name and that line are fixed for good.
 
-## The feed says when
+## PyPI says when
 
-**Decision.** The version feed, `api.texttocad.dev/v1/releases`, names the newest release, `latest`,
-once it has been on PyPI for an hour, and the newest such release of each major version, `lines`; we
-can hold a release back from it ([The version feed](releases.md#the-version-feed)). cad's automatic
-update begins when the feed names a newer release of its own major, and installs exactly that
-release. Everything else asks PyPI: `cad update`, which installs the newest release of its major
-PyPI holds that is not yanked, the install command (which installs cad where there is none and, run
-by a person, runs `cad update` on the one there), the skills' line and the CAD app's line.
+**Decision.** cad asks PyPI, at most once an hour in the background, which release is newest:
+`pypi.org/pypi/cad/json`, cad's own project, the newest `X.Y.Z` with a file that is not yanked, and the
+newest such of each major. Its automatic update begins, at the server's next start, where that names a
+newer release of its own major, and installs exactly that release (`cad==X`). `cad update` asks the
+same, at once. A release is held back by yanking it on PyPI. 0.11.12 to 0.11.18 read the version feed
+instead (`api.texttocad.dev/v1/releases`), and the releases before them its frozen address
+([The version feed](releases.md#the-version-feed)); both stay as they are.
 
-**Why.** The hour keeps automatic updates from spreading a release the moment it is out, and a hold
-stops them without a new release. The update installs the release by name, so what the feed does not name is
-not installed, whatever PyPI holds. Someone who asks for an
-update wants the newest now, not the feed's hour-old answer.
+**Why.** PyPI is what uv installs from, so one source says what is out, what is held (a yank) and what
+the worker installs; a feed of our own in front of it was a second place to keep right and a service
+every automatic update depended on. The feed's hour and its list of holds were a brake before an
+update could be undone; a yank does the same for every installer at once (uv, pipx, the install
+command, `uv tool install cad`), and needs no deploy. Its other guard, naming a release only once all
+four of its projects were on PyPI, is not needed either: the other three are empty aliases cad does
+not install, and a release that cannot be installed yet fails cleanly, since uv builds it in its cache
+before anything is touched. `cad`'s project also lists another owner's releases of 2020 (0.8 to
+1.1.2), every one of them yanked, so none is read.
 
-**What it costs.** A hold stops the automatic update on every computer that has not taken the
-release; one that has keeps it. A person who runs `cad update` or the install command gets PyPI's
-newest of their major at once, a release minutes old or held back included, as a fresh install does.
-To pull a bad release from everyone, yank it on PyPI. With no answer from the feed, no automatic
-update starts.
+**What it costs.** A release reaches computers within the hour it is on PyPI, with no hour in which
+to stop it before any does: a bad one is yanked as soon as it is seen, and one a computer took stays
+there until the next release (nothing moves back). Each computer asks PyPI about once an hour, a
+request of about 140 KB that PyPI's CDN serves. With no answer from PyPI, no automatic update starts,
+and what was read last stands.
 
 ## Notices reach what a release cannot
 
-**Decision.** The version feed can carry notices: one line of text, and a link where there is one, for
+**Decision.** The project can post notices: one line of text, and a link where there is one, for
 every cad older than a release the project names, posted and taken down in the API's settings without a
-release ([Posting a notice](../../apps/api/README.md#posting-a-notice)). cad says each after a command's
+release, at an address of their own, `api.texttocad.dev/v1/notices`, which cad reads beside PyPI at most
+once an hour ([Posting a notice](../../apps/api/README.md#posting-a-notice)). cad says each after a command's
 own output at most once a day, lists it in `cad doctor`, and the viewer shows it as a card the person
-dismisses. It is dormant: with none posted, the feed, every command, `cad doctor` and the viewer are as
-they were. A notice is text only, shown as text, its link only on texttocad.dev or the project's
-repository over https; cad checks it again by the feed's rules, and nothing in it is ever run.
+dismisses. It is dormant: with none posted, every command, `cad doctor` and the viewer are as they were,
+and the version feed of the releases before it never carries one. A notice is text only, shown as text,
+its link only on texttocad.dev or the project's repository over https; cad checks it again by the API's
+rules, and nothing in it is ever run.
 
 **Why.** An update cannot reach a cad whose update is broken, and a change of how cad installs can leave
 computers behind that no release can fetch. Only code already shipped can show words set later, so the
@@ -506,8 +513,8 @@ are.
 
 **Decision.** The old address of the version feed, `api.texttocad.dev/v1/versions`, which every
 release from 0.7.12 to 0.11.11 reads, is frozen: it names the newest release below 0.12.0, in the shape
-it always had (`latest` alone), under the feed's hour and holds. The releases from 0.11.12 on read
-their own address, `/v1/releases` ([The feed says when](#the-feed-says-when)). A computer on an old
+it always had (`latest` alone), under the feed's hour and holds. The releases 0.11.12 to 0.11.18 read
+their own address, `/v1/releases`, and later ones PyPI itself ([PyPI says when](#pypi-says-when)). A computer on an old
 release reaches the newest 0.11.x, whose bridge brings it onto the design that updates itself, and
 that cad goes on from there.
 

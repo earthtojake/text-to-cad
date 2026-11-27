@@ -28,9 +28,10 @@ a shipped release's own setup, a server's one run on a computer our setup reache
 update`` of 0.11.12 and 0.11.13 makes. ``cad plugin install``, which this
 build's server runs once where cad got newer, installs the plugin with cad's own code and runs no install command: on a
 route of cad updating itself the count stays 0, and the run is read from cad's record of it (``caught_up``). The feed
-keeps which address each cad read it at (``addresses``): this build's the new one, ``/v1/releases``, a shipped
-release's the old, ``/v1/versions``; a route where one read the other's fails, ``self-at-start`` checks this build read
-the new one and ``updater`` the shipped release the old.
+keeps which address each cad read it at (``addresses``): this build reads none of the feed's, but PyPI (the stand-in,
+``pypi``) and the notices (``/v1/notices``); a shipped release 0.11.12 or later ``/v1/releases``, an older one
+``/v1/versions``; a route where one read the other's fails, ``self-at-start`` checks this build read PyPI and the
+notices and ``updater`` the shipped release the old address.
 
 **cad updating itself** (a computer the install command set up, but where a route says otherwise: cad a uv tool, its
 automatic updates on). uv installed cad, and cad's update has the computer's own uv upgrade it where it is (``uv tool
@@ -308,6 +309,7 @@ class PyPI(rc.Loopback):
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server's name
                 found = self.path.split("?", 1)[0].rstrip("/") == "/pypi/cad/json" and not pypi.down
+                pypi.feed.reads.append(("pypi", self.headers.get("User-Agent") or ""))
                 releases = {version: [{"filename": f"cad-{version}-py3-none-any.whl", "packagetype": "bdist_wheel",
                                        "yanked": False, "yanked_reason": None}] for version in pypi.released}
                 body = json.dumps({"info": {"version": pypi.feed.latest},
@@ -817,7 +819,8 @@ def caught_up(box: Box, release: str) -> dict:
 
 
 def read_feed(box: Box, address: str, agent: str) -> None:
-    """The feed's ``address`` (``versions`` or ``releases``) read on this computer by ``agent`` (its ``User-Agent``)."""
+    """The feed's ``address`` (``versions``, ``releases``, ``notices``, or the stand-in PyPI, ``pypi``) read on this
+    computer by ``agent`` (its ``User-Agent``)."""
     if (address, agent) not in box.feed.reads:
         raise Failed(f"{box.label}: {agent} never read /{address} (the feed's reads: {sorted(set(box.feed.reads))})")
 
@@ -1134,7 +1137,10 @@ def self_at_start(box: Box) -> None:
     if started != STARTED.format(release=NEW):
         raise Failed(f"{box.label}: cad server start, the feed as last read naming nothing newer, said {started!r}")
     reads_the_feed(box, NEXT)
-    read_feed(box, "releases", "cad")
+    read_feed(box, "pypi", "cad")  # PyPI itself names the release, and the notices come from their own address
+    read_feed(box, "notices", "cad")
+    if ("releases", "cad") in box.feed.reads:
+        raise Failed(f"{box.label}: this build read the version feed of 0.11.12 to 0.11.18: {sorted(set(box.feed.reads))}")
     status, shown = button(box)
     if (status, shown.get("latest"), shown.get("state")) != (200, NEXT, "idle"):
         raise Failed(f"{box.label}: the update button with {NEXT} named: {status} {shown}")

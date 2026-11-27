@@ -193,9 +193,10 @@ off unless turned on (`cad plugin update auto`).
 **When** (`due`). cad updates at two moments alone, and nothing runs in the background: a person's ask (`cad update`,
 and the viewer's button, which is `cad update`'s), and the server's start, where the switch is on and the feed as last
 read names a newer release of this cad's major (`restart`, from `daemon.main`: the start becomes the update; never for
-`--foreground` or `--port`), or `cad server start` where the start failed. The server reads the version feed
-(`updates.py`, at most once an hour: `api.texttocad.dev/v1/releases`, `latest` and the newest of each major, kept in
-`releases.json`), and does nothing else with it. A server never restarted, whose person never asks, stays on its
+`--foreground` or `--port`), or `cad server start` where the start failed. The server reads PyPI (`updates.py`, at
+most once an hour, in the background: `pypi.org/pypi/cad/json`, the newest release that is not yanked and the newest of
+each major) and the project's notices (`api.texttocad.dev/v1/notices`), kept together in `releases.json`, and does
+nothing else with them. Holding a release back is yanking it on PyPI. A server never restarted, whose person never asks, stays on its
 release, the button showing the update. Not due where the environment holds that release already under this older
 server (`stale`: `cad server start` replaces the server), nor for a release whose last try ended `start_failed`
 (`given_up`; `cad update` still tries it), nor while an attempt is underway. One due that cannot begin (`blocked`:

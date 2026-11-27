@@ -1,5 +1,6 @@
-"""The project's notices (`cad_server/notices.py`): words the version feed carries for every cad older than a release,
-checked again here as the feed checks them (`updates.parse_notices`), kept with the feed as last read, and said by a
+"""The project's notices (`cad_server/notices.py`): words the project posts (`/v1/notices`) for every cad older than a
+release, read beside PyPI, checked again here as the service checks them (`updates.parse_notices`), kept with what
+was last read, and said by a
 `cad` command after its own output at most once a day each, by `cad doctor` and by the viewer's server
 (`GET /api/v1/server`'s `cadNotices`, its own test file). With none posted, nothing anywhere says anything. No test
 reaches the real feed: each feed is written to the state folder as a server keeps it, or handed in."""
@@ -28,6 +29,16 @@ LINE = "cad: cad now installs another way: run the install command again. (https
 FEED = {"latest": "0.1.0", "lines": {"0": "0.1.0"}}
 
 
+def stand_in(feed: dict):
+    """A ``get`` for ``updates.feed``: PyPI's JSON naming ``feed``'s ``latest``, the notices' address ``feed``'s
+    ``notices`` (``[]`` where it has none)."""
+    def get(url: str):
+        if url.endswith("/cad/json"):
+            return {"info": {"version": feed["latest"]}, "releases": {feed["latest"]: [{"filename": "cad.whl"}]}}
+        return {"notices": feed.get("notices", [])}
+    return get
+
+
 class Case(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp()).resolve()
@@ -52,14 +63,14 @@ class Case(unittest.TestCase):
 class ParseTest(Case):
     def test_a_feed_s_notices_are_kept_through_the_cache_and_a_feed_without_any_is_kept_as_before(self) -> None:
         answer = {**FEED, "notices": [NOTICE, PLAIN]}
-        self.assertEqual(updates.feed(get=lambda _url: answer, force=True, now=1_000_000.0), answer)
+        self.assertEqual(updates.feed(get=stand_in(answer), force=True, now=1_000_000.0), answer)
         kept = json.loads((self.state / updates.FILE).read_text(encoding="utf-8"))
         self.assertEqual(kept, {"checked": 1_000_000.0, "feed": answer})
         self.assertEqual(updates.feed(fetch=False), answer, "read back from the cache as it was kept")
         # A feed with no notices, or an empty list, is kept exactly as a feed was before notices existed.
         for none in ({}, {"notices": []}, {"notices": [{"id": "BAD"}]}):
             with self.subTest(none=none):
-                self.assertEqual(updates.feed(get=lambda _url: {**FEED, **none}, force=True, now=2_000_000.0), FEED)
+                self.assertEqual(updates.feed(get=stand_in({**FEED, **none}), force=True, now=2_000_000.0), FEED)
                 self.assertEqual((self.state / updates.FILE).read_text(encoding="utf-8"),
                                  json.dumps({"checked": 2_000_000.0, "feed": FEED}, sort_keys=True))
 

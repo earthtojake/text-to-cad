@@ -154,7 +154,7 @@ class UpdateRouteTest(unittest.TestCase):
             status, answer = self.ask("POST", "/api/v1/local/update", {})
         self.assertEqual((status, answer["cause"], answer["said"], answer["hint"]),
                          (409, "no_installer", "uv cannot be found, so no update can begin",
-                          "install uv (https://docs.astral.sh/uv/), then `cad update`"))
+                          f"install uv: `{auto_update.UV_INSTALL}`"))
         with mock.patch.object(auto_update, "pinned", return_value=True):
             status, answer = self.ask("POST", "/api/v1/local/update", {})
         self.assertEqual((status, answer["cause"], answer["said"], answer["hint"]),

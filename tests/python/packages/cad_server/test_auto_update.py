@@ -2093,7 +2093,7 @@ class CauseTest(unittest.TestCase):
                         self.assertTrue(line and "\n" not in line and "please" not in line.lower() and "!" not in line)
                         self.assertEqual(line.count("`") % 2, 0)
                         commands = re.findall(r"`([^`]+)`", line)
-                        self.assertLessEqual(set(commands), {"cad update", "pipx unpin cad",
+                        self.assertLessEqual(set(commands), {"cad update", "pipx unpin cad", auto_update.UV_INSTALL,
                                                              *auto_update.REINSTALL.values()}, line)
                         self.assertLessEqual(len(commands), 1, "one command to run, at most")
             said = {word: auto_update.advice(word) for word in helper.CAUSES}
@@ -2111,7 +2111,7 @@ class CauseTest(unittest.TestCase):
             self.assertEqual(said["start_failed"], "nothing to do: cad went back to the release before and takes the "
                                                    "next release when it is out; `cad update` tries this one again")
             for word in ("no_installer", "no_program"):
-                self.assertEqual(said[word], "install uv (https://docs.astral.sh/uv/), then `cad update`",
+                self.assertEqual(said[word], f"install uv: `{auto_update.UV_INSTALL}`",
                                  "cad is whole: only uv is missing")
             for installer, command in (("uv", "uv tool install --force cad"), ("pipx", "pipx install --force cad")):
                 self.assertEqual(auto_update.advice("no_switch", installer), f"install cad again: `{command}`")
@@ -2305,8 +2305,8 @@ class AskedTest(Case):
         with mock.patch.object(updates, "checking", return_value=False):
             self.assertEqual(self.asked("0.2.0"), {"failed": auto_update.CHECK_OFF})
         with mock.patch.object(auto_update, "find_uv", return_value=None):
-            self.assertEqual(self.asked("0.2.0"), {"failed": "uv cannot be found, so no update can begin: install uv "
-                                                             "(https://docs.astral.sh/uv/), then `cad update`"})
+            self.assertEqual(self.asked("0.2.0"), {"failed": "uv cannot be found, so no update can begin: install uv: "
+                                                             f"`{auto_update.UV_INSTALL}`"})
         with mock.patch.object(sys, "prefix", str(self.tmp)):
             self.assertEqual(self.asked("0.2.0"), {"failed": auto_update.NOT_THE_TOOL})
         with mock.patch.object(updates, "pypi", return_value={"latest": "0.3.0", "lines": {"0": "0.3.0"}}) as pypi:
@@ -2837,7 +2837,7 @@ class DoctorTest(Case):
         from cad_server.cli import doctor
 
         line = auto_update.MAJOR_LINE.format(release="1.2.0")
-        self.assertEqual(doctor._newest(), doctor._check("newest", doctor.INFO, "the version feed has not been read on "
+        self.assertEqual(doctor._newest(), doctor._check("newest", doctor.INFO, "PyPI has not been read on "
                                                                                "this computer yet"))
         self.assertEqual(self.cli(), (0, "update auto: on\n", ""), "nothing to say without a feed")
         known = {"checked": time.time(), "feed": {"latest": "1.2.0", "lines": {"0": "0.3.0", "1": "1.2.0"}}}
@@ -2845,7 +2845,7 @@ class DoctorTest(Case):
         (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
         with mock.patch.object(updates, "feed", wraps=updates.feed) as read:
             self.assertEqual(doctor._newest(), doctor._check(
-                "newest", doctor.INFO, "cad 0.3.0 is the newest 0.x release the version feed names (asked less than a "
+                "newest", doctor.INFO, "cad 0.3.0 is the newest 0.x release PyPI names (asked less than a "
                                        "minute ago)", [line]))
             self.assertEqual(self.cli(), (0, f"update auto: on\n{line}\n", ""))
             self.assertEqual(self.cli("off"), (0, "update auto: off\n", ""), "said by the status alone")
@@ -2854,11 +2854,11 @@ class DoctorTest(Case):
         known["feed"] = {"latest": "0.3.0", "lines": {"0": "0.3.0"}}
         (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
         self.assertEqual(doctor._newest(), doctor._check("newest", doctor.INFO,
-                                                         "cad 0.3.0 is the newest 0.x release the version feed names "
+                                                         "cad 0.3.0 is the newest 0.x release PyPI names "
                                                          "(asked less than a minute ago)"))
         known["feed"] = {"latest": "1.2.0"}  # none of this major named
         (self.state / updates.FILE).write_text(json.dumps(known), encoding="utf-8")
-        self.assertEqual(doctor._newest()["detail"], "the version feed names no 0.x release; its newest is cad 1.2.0 "
+        self.assertEqual(doctor._newest()["detail"], "PyPI names no 0.x release; its newest is cad 1.2.0 "
                                                      "(asked less than a minute ago)")
 
     def test_doctor_says_why_each_attempt_ended_as_it_did_and_where_its_log_is(self) -> None:
@@ -2944,7 +2944,7 @@ class DoctorTest(Case):
         with mock.patch.object(auto_update, "find_uv", return_value=None):
             self.assertEqual(doctor._attempt(), (doctor.INFO, "none"), "no update can begin: the update line's")
             self.assertEqual(doctor._update(), (doctor.WARNING, f"{said}; uv cannot be found, so no update can begin",
-                                                ["install uv (https://docs.astral.sh/uv/), then `cad update`"]))
+                                                [f"install uv: `{auto_update.UV_INSTALL}`"]))
             auto_update.change(False)
             self.assertEqual(doctor._update()[0], doctor.WARNING, "automatic updates off: cad update cannot either")
         self.assertEqual(doctor._attempt(), (doctor.INFO, "none"))
@@ -2999,7 +2999,7 @@ class DoctorTest(Case):
         self.assertEqual(fix(), [], "an attempt of another release is history")
         with mock.patch.object(auto_update, "find_uv", return_value=None):
             self.assertEqual([found["detail"] for found in fix()],
-                             ["install uv (https://docs.astral.sh/uv/), then `cad update`"])
+                             [f"install uv: `{auto_update.UV_INSTALL}`"])
         (self.state / auto_update.RECORD).unlink()
         # Behind for days by the rule of the line a command says: the record ``notice`` keeps, read, never written.
         (self.state / updates.FILE).write_text(json.dumps({"checked": time.time(), "feed": {
@@ -3900,7 +3900,7 @@ class NoticeTest(Case):
             for word, patch, line in (
                     ("no_installer", mock.patch.object(auto_update, "find_uv", return_value=None),
                      "cad: this cad is 0.1.0 and cannot update itself to 0.2.0 (uv cannot be found, so no update can "
-                     "begin): install uv (https://docs.astral.sh/uv/), then `cad update`"),
+                     f"begin): install uv: `{auto_update.UV_INSTALL}`"),
                     ("pinned", mock.patch.object(auto_update, "pinned", return_value=True),
                      f"cad: this cad is 0.1.0 and cannot update itself to 0.2.0 ({auto_update.in_words('pinned')}): "
                      "to have cad update itself again, install it unpinned: `uv tool install --force cad`")):

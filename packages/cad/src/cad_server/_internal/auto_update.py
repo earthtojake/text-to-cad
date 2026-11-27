@@ -30,10 +30,10 @@ which wins --; and ``plugin.auto_update``, whether the server runs ``cad plugin 
 the release the plugin is up to date for (``plugin_catch_up``), OFF where nothing is kept.
 
 **The check** (``due``): switch on, the check not turned off for this process (``updates.checking``), this cad a
-global install, no attempt underway, of whatever release (``underway``, ``believed``), and an update the version feed
-calls for (``choose``): the newest release of this cad's major its ``lines`` names, where it is newer; where it names
-none of this major, its ``latest`` where that is of this major and newer, or, where ``latest`` is of a higher major,
-the bounded build with no release named, so a feed without ``lines`` never strands a computer. That release
+global install, no attempt underway, of whatever release (``underway``, ``believed``), and an update PyPI, as last
+read (``updates.feed``), calls for (``choose``): the newest release of this cad's major its ``lines`` names, where it
+is newer; where it names none of this major, its ``latest`` where that is of this major and newer, or, where ``latest`` is of a higher major,
+the bounded build with no release named, so an answer without ``lines`` never strands a computer. That release
 (``wanted``) is due by the schedule (``next_try``): after its ``n``-th automatic try it waits ``min(2 ** (n - 1),
 WAIT_HOURS)`` hours, and no automatic attempt begins where ``DAILY`` began in the last day, of any release. The tries
 are kept by release (``tries``, ``TRIED``), so a newer release starts afresh and a server of another release never
@@ -1118,7 +1118,9 @@ SAID = {
 # The command that installs cad again, by who made the global install (``Global.installer``): what a reinstall line
 # names (``advice``), never another.
 REINSTALL = {"uv": "uv tool install --force cad", "pipx": "pipx install --force cad"}
-UV_DOCS = "https://docs.astral.sh/uv/"
+# uv's own install command, as cad's install command runs it: what a line names where no uv is found. cad installs no uv.
+UV_INSTALL = ('powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"' if os.name == "nt"
+              else "curl -LsSf https://astral.sh/uv/install.sh | sh")
 # What to do about each cause (``advice``), by kind: the update tries again by itself; it follows a setting of uv's,
 # which the person changes; nothing is to be done; uv is to be installed; cad is to be installed again.
 RETRIES = "cad tries again by itself; `cad update` tries now"
@@ -1140,7 +1142,7 @@ ADVICE = {
                      "`cad update` tries this one again"),
     "no_switch": "install cad again: `{reinstall}`",
     "packaged": "run `cad update` in a terminal (PowerShell opened from the Start menu)",
-    **dict.fromkeys(("no_installer", "no_program"), f"install uv ({UV_DOCS}), then `cad update`"),
+    **dict.fromkeys(("no_installer", "no_program"), f"install uv: `{UV_INSTALL}`"),
     "pinned": "to have cad update itself again, install it unpinned: `uv tool install --force cad`",
 }
 # Where pipx made the global install, what is said in other words than uv's (``in_words``, ``advice``).
@@ -1155,7 +1157,7 @@ PIPX_SAID = {
 }
 PIPX_ADVICE = {
     "denied": "give your user write access to cad's state folder ({state}) and pipx's environments, then " + RETRIES,
-    **dict.fromkeys(("no_installer", "no_program"), f"install pipx and uv ({UV_DOCS}), then `cad update`"),
+    **dict.fromkeys(("no_installer", "no_program"), f"install pipx, and uv: `{UV_INSTALL}`"),
     "pinned": "to have cad update itself again, unpin it: `pipx unpin cad`",
 }
 
@@ -1195,7 +1197,7 @@ def advice(word: str, installer: str | None = None) -> str:
 
 def waiting(known: Any = None, version: str | None = None,
             now: float | None = None) -> tuple[str, dict[str, Any], float | None] | None:
-    """The release the version feed as last read (``known``) calls for from release ``version`` (this one's), where it
+    """The release PyPI as last read (``known``) calls for from release ``version`` (this one's), where it
     has been tried by itself: ``(that release, its tries, when the next may begin by the schedule or None: at the next
     check)``; else None. A release held back (``given_up``: its tries' ``cause`` is ``start_failed``) has no next try
     by itself, whatever the schedule says: its reader says it is held back. ``cad update`` tries it now whatever the
@@ -1306,7 +1308,7 @@ def notice(now: float | None = None) -> str | None:
     command line's counterpart of the viewer's update button, for computers that never open the viewer. Only for a
     global install with automatic updates on (a person who turned them off chose the release they have, and an agent
     that read "run `cad update`" might run it against that choice) and the check not turned off for this process
-    (``updates.checking``); never where this cad is current by the version feed as last read (``choose``, never the
+    (``updates.checking``); never where this cad is current by PyPI as last read (``choose``, never the
     network), where an update is underway (``underway``) or the environment runs a newer release already (``stale``).
     Kept in ``NOTICE`` (written whole): ``from``, this release, ``behind``, the release of its major it is behind,
     ``since``, when a cad of this release was first seen behind, whatever newer release came out since, and ``said``.

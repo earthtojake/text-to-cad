@@ -212,11 +212,12 @@ the newest release, not that one.
 new releases of its own major version by itself unless you turn that off with `cad update
 auto off`, and only at two moments: as its server starts, or when you ask (`cad update`, the
 viewer's update button). A new major version never installs itself, and no command of cad's
-installs one. At most once an hour, and as its server starts, cad asks
-`api.texttocad.dev/v1/releases` which release is newest, of each major (releases before
-0.11.12 ask `api.texttocad.dev/v1/versions`, which names nothing from 0.12.0 on). The feed
-names a release only once it has been on PyPI for an hour, and we can hold a release back
-from it. When the feed names a release of cad's major newer than cad's, cad stops its server
+installs one. At most once an hour, in the background, cad asks PyPI (`pypi.org/pypi/cad/json`)
+which release is newest, of each major, leaving out every release we yanked there, and asks
+`api.texttocad.dev/v1/notices` for the project's notices, which are text it shows and never
+runs (releases 0.11.12 to 0.11.18 ask `api.texttocad.dev/v1/releases` instead, and releases
+before them `api.texttocad.dev/v1/versions`). When PyPI, as last read, names a release of cad's
+major newer than cad's, cad, at its server's next start or when you ask, stops its server
 at once and runs your own uv, with your uv's settings, on its own environment: `uv tool
 upgrade "cad==<that release>"`, which downloads exactly that release from the package index
 uv uses and replaces cad's files where they are, then checks that it runs and starts the

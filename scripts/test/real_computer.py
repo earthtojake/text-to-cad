@@ -154,9 +154,10 @@ class Loopback(http.server.ThreadingHTTPServer):
 class Feed(Loopback):
     """The version feed saying ``latest`` at both its addresses: the old one (any path ending ``versions``), ``latest``
     alone, as releases 0.10.0 to 0.11.11 read it, and the new one (any path ending ``releases``), with ``lines``:
-    ``lines`` as set (each major's newest release, by its number), else ``latest`` for its own major; anything else
-    (telemetry) is not found. ``asked``: how many times it was read; ``reads``: each read, its address (``versions``
-    or ``releases``) and the reader's ``User-Agent``."""
+    ``lines`` as set (each major's newest release, by its number), else ``latest`` for its own major, as 0.11.12 to
+    0.11.18 read it; and the notices (any path ending ``notices``), none, which later releases read beside PyPI;
+    anything else (telemetry) is not found. ``asked``: how many times it was read; ``reads``: each read, its address
+    (``versions``, ``releases`` or ``notices``) and the reader's ``User-Agent``."""
 
     def __init__(self, latest: str) -> None:
         self.latest = latest
@@ -168,13 +169,13 @@ class Feed(Loopback):
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server's name
                 path = self.path.split("?", 1)[0].rstrip("/")
-                address = next((name for name in ("versions", "releases") if path.endswith(name)), None)
+                address = next((name for name in ("versions", "releases", "notices") if path.endswith(name)), None)
                 if address is None:
                     self.answer(None)
                     return
                 feed.asked += 1
                 feed.reads.append((address, self.headers.get("User-Agent") or ""))
-                answer: dict = {"latest": feed.latest}
+                answer: dict = {"notices": []} if address == "notices" else {"latest": feed.latest}
                 if address == "releases":
                     answer["lines"] = (dict(feed.lines) if feed.lines is not None
                                        else {feed.latest.split(".", 1)[0]: feed.latest})

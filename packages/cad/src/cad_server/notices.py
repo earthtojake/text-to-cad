@@ -1,7 +1,8 @@
-"""The project's notices: a line of words, and a link where there is one, that the version feed carries for every cad
-older than a release (``updates.parse_notices``; posted without a release, apps/api's README, "Posting a notice"), for
-the computers a release cannot bring along. Read from the feed as last read (``updates.feed``, never fetched here), each
-checked again, and only where this cad reads the feed at all (``updates.checking``: never with ``CAD_UPDATE_CHECK=0``,
+"""The project's notices: a line of words, and a link where there is one, that the project posts for every cad older
+than a release (``/v1/notices``, read beside PyPI; checked again by ``updates.parse_notices``; posted without a
+release, apps/api's README, "Posting a notice"), for
+the computers a release cannot bring along. Read from what was last read (``updates.feed``, never fetched here), each
+checked again, and only where this cad reads them at all (``updates.checking``: never with ``CAD_UPDATE_CHECK=0``,
 in CI or for a development build, whose kept feed would never hear a notice taken down). Shown whatever automatic
 updates are set to: a notice is the project's word to everyone it is for.
 
