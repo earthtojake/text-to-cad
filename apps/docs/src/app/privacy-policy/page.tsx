@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 19, 2026">
+    <LegalPage title="Privacy Policy" updated="November 27, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
