@@ -98,8 +98,8 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   install``), healthy, pipx's pin as it was; then the person's ``pipx pin cad``: the start counts the update
   blocked once (``pinned``), ``cad update`` refuses naming ``pipx unpin cad``, the button answers 409.
 - ``install-repair``: the install command, the advised repair, over a cad that does not start, whose dist-info has no
-  ``RECORD``, with a process running from its environment: it removes the dist-info, on Windows stops that process
-  and waits for it, installs cad again with uv: healthy, uv's receipt as it was.
+  ``RECORD``, with a process running from its environment: on Windows it stops that process and waits for it, then
+  installs cad again whole with uv (``--force``), deleting nothing by hand: healthy, uv's receipt as it was.
 
 **The bridge** from a shipped release (``--old``, 0.11.11 by default; 0.11.0 to 0.11.11 and 0.10.0 to 0.10.4 have the
 updater), installed by its own ``cad setup`` through uvx, its server serving pages on the computer's port:
@@ -1873,8 +1873,8 @@ RUNS = "import sys\nprint('running', flush=True)\nsys.stdin.read()\n"
 
 def install_repair(box: Box) -> None:
     """The install command, the advised repair: cad that does not start, its dist-info left without its RECORD, and a
-    process running from its environment. It removes the dist-info, (on Windows) stops that process and waits for it,
-    and installs cad again with uv: cad healthy."""
+    process running from its environment. It (on Windows) stops that process and waits for it, and installs cad again
+    whole with uv (``uv tool install --force``, the one repair), deleting nothing by hand: cad healthy."""
     box.set_up("off")
     before = Tool(box)
     box.run([box.cad(), "server", "stop"])
@@ -1894,17 +1894,19 @@ def install_repair(box: Box) -> None:
         if running.poll() is None:
             running.stdin.close()
         running.wait(60)
-    lines = [f"Removed cad-{NEW}.dist-info from cad's environment", "does not start: installing it again with uv"]
+    lines = ["does not start: installing it again with uv"]
     if WINDOWS:
         lines.append("Stopped what ran from cad's environment, so uv can install it again: ")
     missing = [line for line in lines if line not in said]
+    if "Removed " in said:
+        raise Failed(f"{box.label}: the install command deleted something of cad's environment by hand:\n{said}")
     if missing or (WINDOWS and ended is None):
         raise Failed(f"{box.label}: the install command over a broken cad (to say {missing}; the process of the "
                      f"environment {'ended' if ended is not None else 'still running'}):\n{said}\n{box.said()}")
     in_place(box, before, NEW, server=False)
     say(f"        cad not starting, cad-{NEW}.dist-info without its RECORD, a process running from its environment: the "
-        f"install command removed the dist-info, {'stopped that process, ' if WINDOWS else ''}installed cad again: "
-        f"healthy, uv's receipt as it was")
+        f"install command {'stopped that process and ' if WINDOWS else ''}installed cad again whole (`uv tool install "
+        f"--force`), nothing deleted by hand: healthy, uv's receipt as it was")
 
 
 # --- the bridge ---------------------------------------------------------------------------------------------------

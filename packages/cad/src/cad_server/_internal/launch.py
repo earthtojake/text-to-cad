@@ -23,10 +23,8 @@ LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--fro
 COMMAND = "cad"
 
 
-def reinstall_command(version: str | None = None) -> str:
-    """``uv tool install --reinstall ... cad==<version>``: uv's own reinstall of the uv tool ``cad`` at ``version`` (by
-    default this one), which puts back what an installation lacks."""
-    if version is None:
-        from cad_server import __version__ as version
-    return " ".join(("uv", "tool", "install", "--reinstall", "--managed-python", "--python", PYTHON,
-                     f"{COMMAND}=={version}"))
+def reinstall_command() -> str:
+    """``uv tool install --force cad``: cad installed again whole, which puts back what an installation lacks. The one
+    repair, as cad's own update runs it and the skills' Setup line names it; it names no release, which would pin the
+    install and keep it from updating."""
+    return f"uv tool install --force {COMMAND}"

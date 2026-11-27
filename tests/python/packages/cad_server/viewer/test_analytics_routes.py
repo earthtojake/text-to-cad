@@ -214,14 +214,16 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertNotIn("updates", self.request("GET", "/api/v1/settings")[1])
         self.assertEqual(self.request("PUT", "/api/v1/settings", {"updates": {"automatic": False}})[0], 400)
 
-    def test_an_install_with_no_cad_app_build_names_this_version_s_install_command(self) -> None:
+    def test_an_install_with_no_cad_app_build_names_the_command_that_installs_cad_again(self) -> None:
         from cad_server._internal.launch import reinstall_command
         from cad_server.mcp import tunnel
+
+        self.assertEqual(reinstall_command(), "uv tool install --force cad")
 
         with mock.patch("cad_server.assets.cad_app_code", return_value=None):
             status, answer = self.request("GET", tunnel._APP_ROUTE)
         self.assertEqual((status, answer), (404, {"error": "this install has no CAD app build",
-                                                  "hint": f"install this version again: `{reinstall_command()}`"}))
+                                                  "hint": f"install cad again: `{reinstall_command()}`"}))
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.

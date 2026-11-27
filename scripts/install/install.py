@@ -11,17 +11,17 @@ plugin install``, which carries the one table of them. It does these things alon
 1. (``install.sh``, ``install.ps1``) makes sure uv is here;
 2. installs the ``cad`` command only where uv has no ``cad`` tool (``install_cad``): ``uv tool install
    --managed-python --python 3.14 cad``, PyPI's newest. One that does not start (a tool Windows left half-replaced)
-   is installed again, ``uv tool install --reinstall ...``, PyPI's newest. A ``cad`` pipx installed, where uv has none,
+   is installed again whole, ``uv tool install --force ...``, PyPI's newest: the one repair, which cad's own update
+   and the skills' Setup line run too. A ``cad`` pipx installed, where uv has none,
    is a global cad too (``pipx_cad``): installed again by pipx where it does not start (``repair_pipx``); uv installs
    no second cad. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
    provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line. On Windows a
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
    could not delete, a later run deletes (``tidy``). Where uv is about to install cad's environment again on Windows,
    every process that runs from it (or from uv's ``cad.exe``) is stopped first and waited for until it is gone
-   (``stop_environment``): uv cannot remove the environment's folders while one runs, and fails leaving cad broken. Before uv runs, a ``cad-*.dist-info`` of uv's cad that has no
-   ``RECORD`` is deleted (``repair``): an uninstall that stopped midway (on Windows, a file of the old cad held as uv
-   removed it) leaves one, and every later uv run on the tool fails on it, this command's reinstall too, so this
-   is what repairs a computer left so;
+   (``stop_environment``): uv cannot remove the environment's folders while one runs, and fails leaving cad broken.
+   Nothing inside the environment is deleted by hand: installing it again whole also repairs one an uninstall that
+   stopped midway left with a ``cad-*.dist-info`` that has no ``RECORD``, which every upgrade in place fails on;
 3. brings a ``cad`` that was here already, and starts, up to date, only where a person ran this (``update``): that
    tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's update builds the release, then
    restarts the server on it at once, and the command waits for it). What it prints is captured, never shown: one line says the update
@@ -896,21 +896,6 @@ def cad_env(here: Here, uv: str, tool: Optional[Tool]) -> Optional[Path]:
     return Path(lines[-1].strip()) / "cad" if lines else None
 
 
-def repair(env: Path) -> List[str]:
-    """Each ``cad-*.dist-info`` of the tool environment ``env`` that has no ``RECORD`` deleted, and only those (one with
-    its ``RECORD`` is an install uv can read): the names of those deleted."""
-    gone = []
-    for pattern in ("lib/python*/site-packages/cad-*.dist-info", "Lib/site-packages/cad-*.dist-info"):
-        for path in env.glob(pattern):
-            if path.is_dir() and not (path / "RECORD").exists():
-                try:
-                    _rmtree(path)
-                except OSError:
-                    continue
-                gone.append(path.name)
-    return gone
-
-
 def install_cad(here: Here) -> Cad:
     """Step 2 (see the module): the ``cad`` command, a uv tool at PyPI's newest release, only where uv has no ``cad``
     tool, or one whose command does not start (installed again); one that starts, at any release, is not installed
@@ -931,9 +916,6 @@ def install_cad(here: Here) -> Cad:
     tools = uv_tools(here, uv)
     tool = tools.get("cad")
     env = cad_env(here, uv, tool)
-    for name in repair(env) if env is not None else ():
-        print(f"Removed {name} from cad's environment: an install that stopped midway left it without its RECORD.",
-              flush=True)
     piped = pipx_cad(here, folder) if tool is None else None
     if piped is not None:
         ran = here.run([piped.commands["cad"], "--version"], timeout=60)
@@ -961,19 +943,15 @@ def install_cad(here: Here) -> Cad:
     # Windows: a cad.exe that runs (the typed `cad update` of 0.11.0-0.11.11 that ran this, say) is out of uv's way.
     aside = set_aside(folder, tool) if here.windows else []
     if env is not None and env.is_dir():
-        # Windows: uv installs the environment again only once nothing runs from it; then nothing is left without
-        # its RECORD that a process kept from being deleted.
+        # Windows: uv installs the environment again only once nothing runs from it.
         stopped, left = stop_environment(here, env, folder)
         if stopped:
             print(f"Stopped what ran from cad's environment, so uv can install it again: {', '.join(stopped)}"
                   + (f" (still there: {', '.join(map(str, left))})" if left else "") + ".", flush=True)
-            for name in repair(env):
-                print(f"Removed {name} from cad's environment: an install that stopped midway left it without its "
-                      "RECORD.", flush=True)
     if not again:
         print("Installing cad with uv. The first run downloads it, which takes a minute.", flush=True)
     try:
-        code = subprocess.call([uv, "tool", "install", *(["--reinstall"] if again else []), *UV_TOOL_ARGS, "cad"],
+        code = subprocess.call([uv, "tool", "install", *(["--force"] if again else []), *UV_TOOL_ARGS, "cad"],
                                env=here.environ, stdin=subprocess.DEVNULL)
     except OSError as error:
         code = 127
@@ -983,7 +961,7 @@ def install_cad(here: Here) -> Cad:
     if code:
         print(f"cad: failed (uv tool install exit status {code}; what uv said is above). Where this ran inside an app "
               "or an agent's sandbox, run it again in a terminal of your own.", flush=True)
-        left = uv_tools(here, uv).get("cad") if again else None  # a failed reinstall may leave the tool, or not
+        left = uv_tools(here, uv).get("cad") if again else None  # a failed install may leave the tool, or not
         return Cad(left.version if left else None, code)
     tool = uv_tools(here, uv).get("cad")
     on_path(here, uv, folder)

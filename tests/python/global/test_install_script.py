@@ -241,7 +241,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("cad 1.0.0 is installed but does not start: installing it again with uv.", done.stdout)
         self.assertNotIn("Installing cad with uv.", done.stdout)
-        self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
+        self.assertEqual(self.installs(), [["--force", *install.UV_TOOL_ARGS, "cad"]])
         self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": "5.0.0"})
         self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         found = json.loads(report.read_text(encoding="utf-8"))
@@ -258,38 +258,27 @@ class InstallScriptTests(AgentApps):
         found = json.loads(report.read_text(encoding="utf-8"))
         self.assertEqual((found["release"], found["setup"]), ("1.0.0", 1))
 
-    def test_a_dist_info_left_with_no_record_is_deleted_before_cad_is_installed_again(self) -> None:
+    def test_a_dist_info_left_with_no_record_is_repaired_by_installing_cad_again_whole_and_nothing_by_hand(self):
         """An uninstall that stopped midway (on Windows, a file of the old cad held as uv removed it) leaves cad's
-        ``dist-info`` with no ``RECORD``, and every later uv run on the tool fails on it, cad's own update and this
-        reinstall alike: it is deleted first, and only such a folder, so the install command repairs the computer."""
+        ``dist-info`` with no ``RECORD``, and every upgrade in place fails on it. The repair is the one cad's own
+        update runs: the environment installed again whole (``--force``). Nothing in it is deleted by hand, and a
+        cad that starts is left as it is."""
         self.tools(cad="1.0.0")
         site = self.root / "uv.tools" / "cad" / "lib" / "python3.14" / "site-packages"
         (site / "cad-1.0.0.dist-info" / "licenses").mkdir(parents=True)
-        (site / "cad-1.0.0.dist-info" / "licenses" / "LICENSE").write_text("MIT\n", encoding="utf-8")
-        whole = site / "numpy-2.0.0.dist-info"
-        whole.mkdir()
-        (whole / "RECORD").write_text("", encoding="utf-8")
         done = self.run_install(FAKE_PYPI="5.0.0", FAKE_FAIL="cad:--version")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        removed = "Removed cad-1.0.0.dist-info from cad's environment: an install that stopped midway left it without "
-        self.assertIn(removed, done.stdout)
-        self.assertLess(done.stdout.index(removed), done.stdout.index("installing it again with uv"), "before it")
-        self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
-        self.assertEqual(sorted(path.name for path in site.iterdir()), ["numpy-2.0.0.dist-info"])
-        # A cad that starts, but whose environment holds one: deleted too, before its own `cad update` runs uv.
-        (site / "cad-1.0.0.dist-info").mkdir()
+        self.assertNotIn("Removed", done.stdout)
+        self.assertIn("installing it again with uv", done.stdout)
+        self.assertEqual(self.installs(), [["--force", *install.UV_TOOL_ARGS, "cad"]])
+        self.assertTrue((site / "cad-1.0.0.dist-info").is_dir(), "uv's to remove, with the environment: the stand-in "
+                        "removes nothing")
+        # A cad that starts: nothing installed, nothing deleted; its own update repairs what it meets.
+        self.tools(cad="1.0.0")
         done = self.run_install(FAKE_PYPI="5.0.0")
-        self.assertIn(removed, done.stdout)
-        self.assertFalse((site / "cad-1.0.0.dist-info").exists())
-        # Windows' layout; a folder with its RECORD stays.
-        with tempfile.TemporaryDirectory(dir=self.root) as root:
-            env = Path(root)
-            for name, record in (("cad-0.1.0.dist-info", False), ("cad-0.2.0.dist-info", True)):
-                (env / "Lib" / "site-packages" / name).mkdir(parents=True)
-                if record:
-                    (env / "Lib" / "site-packages" / name / "RECORD").write_text("", encoding="utf-8")
-            self.assertEqual(install.repair(env), ["cad-0.1.0.dist-info"])
-            self.assertEqual([path.name for path in (env / "Lib" / "site-packages").iterdir()], ["cad-0.2.0.dist-info"])
+        self.assertEqual(self.installs(), [])
+        self.assertTrue((site / "cad-1.0.0.dist-info").is_dir())
+        self.assertFalse(hasattr(install, "repair"))
 
     def pipx_cad(self, version: str = "0.13.0", link: bool = True) -> dict:
         """cad as ``pipx install cad`` leaves it: pipx's environment of cad (its metadata, its own ``cad``, a stand-in)
@@ -556,8 +545,7 @@ class InstallScriptTests(AgentApps):
         """uv cannot install cad's environment again while any process runs from it (``failed to remove directory
         ...\\Scripts: Access is denied``, measured) and leaves cad broken: before it runs, every process whose program is
         inside the environment, or is uv's cad.exe or one set aside, is stopped and waited for, looked for again until
-        none is left; never this run nor what started it, nor anything else. Then what an install stopped midway left
-        without its RECORD goes, and uv installs."""
+        none is left; never this run nor what started it, nor anything else. Then uv installs it again whole."""
         here = install.Here(self.environ(UV=str(self.bin / "uv"), FAKE_FAIL="cad:--version"), platform="win32")
         self.tools(cad="1.0.0")
         env = self.root / "uv.tools" / "cad"
@@ -588,7 +576,6 @@ class InstallScriptTests(AgentApps):
                     table.pop(pid)
                 if len(self.ended) == 1:  # one more began meanwhile: found at the next look
                     table[120] = (1, str(env / "Scripts" / "cad.exe"))
-                    (site / "cad-1.0.0.dist-info").mkdir(parents=True)  # a file of it was held: it goes now
                 return []
 
         fake = Fake()
@@ -600,9 +587,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(fake.watched, [[104], []], "what one stopped started directly, waited for")
         self.assertEqual(sorted(table), sorted([me, 90, 91, 110, 111, 112]))
         self.assertIn("Stopped what ran from cad's environment, so uv can install it again: 100 (", said.getvalue())
-        self.assertIn("Removed cad-1.0.0.dist-info from cad's environment", said.getvalue())
-        self.assertFalse((site / "cad-1.0.0.dist-info").exists())
-        self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
+        self.assertEqual(self.installs(), [["--force", *install.UV_TOOL_ARGS, "cad"]])
         # A cad that starts is installed again by nothing, and nothing is stopped; nor elsewhere than on Windows.
         table[130] = (1, str(env / "Scripts" / "python.exe"))
         fake.ended.clear()
