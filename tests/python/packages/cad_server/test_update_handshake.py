@@ -93,6 +93,12 @@ def surface() -> dict:
         except Started:
             pass
     started = popen.call_args.args[0]
+    # This release's own starter also names itself (``--starter <pid>``, which cad's own update spares where the
+    # start becomes it): optional, and no part of the handshake. The frozen helpers start the daemon by the bare
+    # line, which it takes as ever (``test_the_daemon_starts_by_the_bare_line_the_frozen_helpers_run``).
+    if "--starter" in started:
+        at = started.index("--starter")
+        started = started[:at] + started[at + 2:]
 
     # The engine's answers the helper reads.
     engine = daemon.Daemon(cap=1)
@@ -149,6 +155,22 @@ class UpdateHandshakeTest(unittest.TestCase):
         golden["files"]["release_command"] = command
         self.assertEqual(found, golden, "the update's handshake between releases changed: see this module's "
                                         "docstring before changing update_handshake.json")
+
+
+    def test_the_daemon_starts_by_the_bare_line_the_frozen_helpers_run(self) -> None:
+        """``python -P -m cad_server._internal.engine_daemon`` with nothing after it, as the helpers of 0.10.0 to
+        0.11.11 start a release's engine: the daemon takes it, and the starter this release's own client names is
+        optional beside it."""
+        from cad_server.engine import daemon
+
+        golden = json.loads(GOLDEN.read_text(encoding="utf-8"))["daemon"]
+        self.assertEqual(golden["arguments"], ["-P", "-m", golden["module"]], "the bare line, frozen")
+        for argv in ([], ["--starter", "4242"]):
+            with self.subTest(argv=argv), mock.patch.object(daemon, "_restarted", return_value=None) as restarted, \
+                    mock.patch.object(daemon, "_leaving", return_value=False), \
+                    mock.patch.object(daemon, "lock", return_value=None):  # another daemon is up: it leaves, 0
+                self.assertEqual(daemon.main(argv), 0)
+            restarted.assert_called_once_with(4242 if argv else None)
 
 
 def setUpModule() -> None:
