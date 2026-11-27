@@ -227,7 +227,7 @@ class CacheTest(unittest.TestCase):
         # Read since it was written: a bundle written again keeps it as it is, and its access time says it was used.
         entry = {"sha256": bundle._digest(read.read_bytes()), "bytes": 8192}
         writer = bundle._Bundle(None, shared / "view", shared / "stage", {"format": bundle.FORMAT, "made": {
-            "release": "r"}, "files": {"parts/read/t.xbm": entry}}, "r", [])
+            "release": "r", "facts": bundle.FACTS_VERSION}, "files": {"parts/read/t.xbm": entry}}, "r", [])
         self.assertTrue(writer.holds("parts/read/t.xbm"))
         self.assertEqual(read.stat().st_mtime_ns, written, "a read changes no modification time")
         self.assertGreater(read.stat().st_atime, time.time() - 60, "a read is a use")

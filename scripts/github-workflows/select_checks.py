@@ -193,6 +193,9 @@ RULES: tuple[Rule, ...] = (
     Rule(("packages/ui/**",), select(flags=["web_ui", "web_client", "web_viewer", "mcp", "packaging"])),
     Rule(("apps/web/**",), select(flags=["web_client", "web_viewer", "packaging"])),
     Rule(("apps/mcp/**",), select(flags=["mcp", "packaging"])),
+    # The view core (a prototype): no job builds its module (OCCT compiled to WebAssembly, by hand), and the viewer's
+    # build carries it only where one is built.
+    Rule(("packages/viewcore/**",), NOTHING),
     Rule(("apps/api/**",), NOTHING),  # its tests need no install: static runs them on every change
     Rule(("apps/share/**",), NOTHING),  # likewise the share service's
     # ...but viewer-e2e's share gate opens a share from the Worker itself, through its local runner.
