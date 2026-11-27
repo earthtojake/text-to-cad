@@ -172,7 +172,7 @@ it('a click acts at once and opens nothing; while an update installs or the serv
 });
 
 it('a refused click goes back to the button and says why', async () => {
-  const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'cad is pinned', cause: 'pinned', installer: 'uv' } } });
+  const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'cad is pinned', cause: 'pinned' } } });
   show({ server: calls({ start: async () => { throw refusal; } }) });
   await confirm();
   expect(screen.queryByRole('status')).toBeNull();
@@ -316,7 +316,7 @@ it('the failure comes from the server: a page loaded afresh says it, and one tha
 
 it('a refusal no attempt began from says why, from the answer, and is put away on this page alone', async () => {
   const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: {
-    error: 'uv cannot be found, so no update can begin', cause: 'no_installer', installer: 'uv' } } });
+    error: 'uv cannot be found, so no update can begin', cause: 'no_installer' } } });
   const server = calls({ start: async () => { throw refusal; } });
   show({ server });
   await confirm();
@@ -328,29 +328,26 @@ it('a refusal no attempt began from says why, from the answer, and is put away o
   expect(cards()).toEqual([]);
 });
 
-it('the reinstall sentences name the command of whoever installed cad, from the server and from a refusal', async () => {
+it('the reinstall sentences name the one command that installs cad again, from the server and from a refusal', async () => {
   const t = (key: string, params?: Record<string, unknown>) => String((en as Record<string, string>)[key] ?? key)
     .replace(/\{(\w+)\}/g, (_, name) => String(params?.[name] ?? ''));
-  const uv = '`uv tool install --force cad`', pipx = '`pipx install --force cad`';
+  const uv = '`uv tool install --force cad`';
   for (const [cause, words] of [
     ['python', 'The release needs a newer Python than this cad runs on: install cad again with COMMAND in a terminal.'],
     ['no_installer', 'uv can’t be found, so cad can’t update itself: install cad again with COMMAND in a terminal.'],
     ['no_switch', 'This install of cad can’t switch to a newer release by itself: install cad again with COMMAND in a terminal.'],
   ]) {
-    expect(failureWords({ cause, installer: 'uv' }, t), cause).toBe(words.replace('COMMAND', uv));
-    expect(failureWords({ cause, installer: 'pipx' }, t), cause).toBe(words.replace('COMMAND', pipx));
     expect(failureWords({ cause }, t), cause).toBe(words.replace('COMMAND', uv));
   }
   // From the server's record of a failed attempt.
-  show({ server: calls(), initial: failed('no_switch', 100, { installer: 'pipx' }) });
-  expect(cards()[0].textContent).toContain(pipx);
-  expect(cards()[0].textContent).not.toContain('uv tool install');
+  show({ server: calls(), initial: failed('no_switch', 100) });
+  expect(cards()[0].textContent).toContain(uv);
   cleanup();
   // From the refusal's answer.
-  const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'x', cause: 'python', installer: 'pipx' } } });
+  const refusal = Object.assign(new Error('HTTP 409'), { failure: { payload: { error: 'x', cause: 'python' } } });
   show({ server: calls({ start: async () => { throw refusal; } }) });
   await confirm();
-  expect(cards()[0].textContent).toContain(pipx);
+  expect(cards()[0].textContent).toContain(uv);
 });
 
 it('every language\'s reinstall sentences take the command as a value, never spelling one', () => {

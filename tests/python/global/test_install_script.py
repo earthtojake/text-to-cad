@@ -296,31 +296,35 @@ class InstallScriptTests(AgentApps):
             (self.uv_bin / "cad").symlink_to(own)
         return {"FAKE_PIPX_VENVS": str(venvs), "FAKE_PIPX_BIN": str(self.uv_bin)}
 
-    def test_a_cad_pipx_installed_is_a_global_cad_as_uv_s_is_and_uv_installs_no_second(self) -> None:
+    def test_a_cad_pipx_installed_is_left_as_it_is_and_uv_installs_no_second(self) -> None:
         said = self.pipx_cad()
         self.programs("pipx")
         report = self.root / "report.json"
         done = self.run_install(CAD_INSTALL_REPORT=str(report), **said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual(self.installs(), [])
-        self.assertIn("cad 0.13.0 is installed already: it is left as it is, and updates itself.", done.stdout)
+        self.assertIn("cad 0.13.0 is installed already: it is left as it is, and `pipx upgrade cad` updates it.",
+                      done.stdout)
         self.assertNotIn("another program's", done.stdout)
         self.assertEqual(self.calls("pipx"), [["environment", "--value", "PIPX_LOCAL_VENVS"],
                                               ["environment", "--value", "PIPX_BIN_DIR"]])
         self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
                          {"release": "0.13.0", "setup": 0})
-        # A person's run brings it up to date by pipx's own cad, and reads pipx's record of it again.
-        done = self.run_install(FAKE_CAD_UPDATES="0.14.0", FAKE_UPDATE_EXIT="1", **said)
+        # A person's run: cad updates only what `uv tool install` made, so pipx's is not updated, and one line says
+        # the command that does.
+        pipx_s = "cad 0.13.0 was installed with pipx, so it does not update itself: `pipx upgrade cad` updates it.\n"
+        done = self.run_install(**said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
-        self.assertNotIn("cad was not updated", done.stdout)
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
+        self.assertIn(pipx_s, done.stdout)
+        self.assertNotIn("Updating cad", done.stdout)
         self.assertEqual(self.installs(), [])
         # pipx 1.0, which has no `pipx environment`, and no link in ~/.local/bin: its list says where its cad is.
         (self.uv_bin / "cad").unlink()
         done = self.run_install(FAKE_PIPX_1_0="1", **said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("Updating cad 0.14.0 to the newest release...\ncad 0.14.0 is the newest release\n", done.stdout)
+        self.assertIn(pipx_s, done.stdout)
         self.assertEqual((self.installs(), self.calls("pipx")[-1]), ([], ["list", "--json"]))
         # pipx not found: its link in ~/.local/bin says whose cad it is.
         (self.uv_bin / "cad").symlink_to(self.home / ".local" / "share" / "pipx" / "venvs" / "cad" / "bin" / "cad")
@@ -328,8 +332,8 @@ class InstallScriptTests(AgentApps):
         done = self.run_install(**said)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
-        self.assertIn("Updating cad 0.14.0 to the newest release...", done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
+        self.assertIn(pipx_s, done.stdout)
+        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         # uv's cad is there too: uv's is the one, and pipx is not asked.
         self.programs("pipx")
         (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")

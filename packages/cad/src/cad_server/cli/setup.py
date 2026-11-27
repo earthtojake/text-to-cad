@@ -22,7 +22,7 @@ takes the computer onto the one-cad design by itself:
    global cad is there already; then step 5. Where that moves nothing, it is tried again a day later, and at each
    start.
 5. Once a report said cad was installed, or step 4b ran, and nothing is in flight (``Tending``, ``move``):
-   ``installations/current`` and its record name the global cad's environment (a uv tool, or pipx's), and cad's update
+   ``installations/current`` and its record name the global cad's environment (a uv tool), and cad's update
    worker, run detached by that environment's interpreter (``auto_update_helper``), drains this server and starts the
    global cad's (``cad server start``). From then on it is a normal computer, whose server updates itself.
 6. Every server of a global install, as it starts (``follow``), points ``current`` and its record at its own
@@ -436,7 +436,7 @@ def follow(told: Callable[[str], None]) -> bool:
 
 def move(name: str, told: Callable[[str], None]) -> bool:
     """Step 5 (see the module), from this server of release ``name`` that is no global install: whether the hand-over
-    began. The global cad is the one ``auto_update.installed_tool`` finds (uv's tool first, then pipx's), at the release
+    began. The global cad is the one ``auto_update.installed_tool`` finds (uv's tool), at the release
     it holds (``auto_update.installed``), handed over to by cad's update worker run by that environment's own
     interpreter (``auto_update.helper_command``): it finds the release there already, drains this server and starts
     its own. Never older: a global cad older than this release stays where it is, and this server runs on."""

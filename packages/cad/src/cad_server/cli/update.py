@@ -15,7 +15,7 @@ first to update through it.
 Then it waits for the update to end, saying once on stderr that cad is updating (``step``), and says how it ended (a
 failure: why, what to do and where its log is, ``ended``), as the server that answers afterwards tells it (``{"op":
 "update", "begin": false}``), else as the attempt's record in the state folder does; ``WAIT_SECONDS`` at most. cad's
-installer (uv, pipx) upgrades cad in place meanwhile, by the worker of the release it updates to, run from uv's
+installer, uv, upgrades cad in place meanwhile, by the worker of the release it updates to, run from uv's
 cache; this process, which imported what it needs before, is left running by the update on Windows (it sends its
 ``pid``: ``auto_update.spared``). Where the update left no cad that runs and cad is being installed again whole, it
 says so once and goes on waiting for how that ends; but on Windows, where this very process runs from the environment
@@ -43,7 +43,8 @@ BEGIN_SECONDS = ASK_SECONDS + 900.0
 WAIT_SECONDS = 1800.0
 LOOK_SECONDS = 0.5
 NOT_A_TOOL = ("refused: this cad is not a global install, so it does not update itself: update it the way it was "
-              "installed (for pip, `pip install --upgrade cad`), or install it globally with `uv tool install cad`")
+              "installed (for pipx, `pipx upgrade cad`; for pip, `pip install --upgrade cad`), or install it globally "
+              "with `uv tool install cad`")
 # Where the update left no cad that runs and cad is being installed again whole (``auto_update_helper.reinstall``):
 # what is said of it as it begins, everywhere; and, on Windows, where the install waits for this process to leave
 # cad's environment (its own program is a file of it, which Windows lets no one remove while it runs), what the
@@ -62,7 +63,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser = command_parser(prog=prog, usage=f"%(prog)s [-h]\n       {prog} auto [{{status,on,off}}]",
                             description=(
         "cad installs every newer release by itself. `cad update` updates cad now to the newest release, even with "
-        "automatic updates off: cad asks PyPI, and the installer that made it (uv, pipx) upgrades cad in place. A cad "
+        "automatic updates off: cad asks PyPI, and uv, which installed it, upgrades cad in place. A cad "
         "server that was running restarts "
         "on it at once, stopping what is in flight; with none running, none is started. By itself, cad updates as "
         "the server next starts once a newer release is out. `cad update auto` shows or changes whether cad updates "
@@ -219,11 +220,7 @@ def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable
     newest = "the newest release" if target == "latest" else target
     word = auto_update.cause(attempt)
     if word is not None:
-        installer = attempt.get("installer")
-        if installer not in auto_update.INSTALLERS:
-            found = auto_update.global_install()
-            installer = found.installer if found is not None else None
-        why, what = auto_update.in_words(word, installer), auto_update.advice(word, installer)
+        why, what = auto_update.in_words(word), auto_update.advice(word)
         if word == "start_failed":  # the release before named: it is the one that runs
             why += f" (cad {was})"
             if attempt.get("restored") is False:

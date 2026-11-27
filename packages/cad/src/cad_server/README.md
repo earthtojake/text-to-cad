@@ -180,13 +180,12 @@ PowerShell pipeline is still wrong there, and that is PowerShell's to set.
 `_internal/auto_update.py` decides when, `_internal/auto_update_helper.py` carries it out. **The rule**: cad installs
 by itself the newest release there is, a new major version too: it names no release and bounds none, so what the
 person's installer takes for `cad` is what is installed, never a release yanked on PyPI (which is how one is held
-back). Only a global install updates itself, one uv made (`uv tool install cad`) or pipx (`pipx install cad`): it is updated
-where it is, by the person's own installer (`base.find_uv`: uv's default install place, then PATH, else a one-line
-error saying how to get uv; `find_pipx` for pipx, which needs uv too, for the kernel and the worker), with the
-person's settings and
-uv's receipt left as it is, a range a person or an earlier release wrote there included (pipx: `pipx runpip cad
-install`). One a person pinned (`uv tool install cad==X`, `pipx pin
-cad`) is left alone (cause `pinned`). Two switches in the person's settings:
+back). Only a global install updates itself, one uv made (`uv tool install cad`): it is updated
+where it is, by the person's own uv (`base.find_uv`: uv's default install place, then PATH, else a one-line
+error saying how to get uv), with the person's settings and
+uv's receipt left as it is, a range a person or an earlier release wrote there included. A cad pipx or pip
+installed is updated the way it was installed, and `cad update` says so. One a person pinned (`uv tool install
+cad==X`) is left alone (cause `pinned`). Two switches in the person's settings:
 `auto_update.on`, whether cad updates itself, on unless turned off (`cad update auto`); and `plugin.auto_update`,
 whether the server runs `cad plugin install` once where cad is newer than the release the plugin is up to date for,
 off unless turned on (`cad plugin update auto`).
@@ -233,18 +232,18 @@ was. In order:
    stop` stops it; a `cad` command it cuts short says cad updated itself while it ran. On Windows, uv's bin `cad.exe` is
    moved aside, then every other process of the environment stopped but those it spares, until none is left (by the
    Win32 API, else PowerShell's `Get-CimInstance Win32_Process`).
-   Then `uv tool upgrade cad` (pipx: `pipx runpip cad install --upgrade cad`): the newest release the installer
+   Then `uv tool upgrade cad`: the newest release uv
    takes; the moment it returns a bin `cad` is back.
 2. **Check**: `cad server start` where a server ran or one is wanted, which must leave a server of the release, else
    `cad --version` naming it.
 3. **Back**, where uv or the check failed: where uv failed and left the environment whole, the release it holds, as
    it is; where the release installed and did not run, the release before, by the same safe `uv tool upgrade
-   "cad==<before>"` (pipx: `pipx runpip cad install --upgrade`). Cause `start_failed` where the release did not start
+   "cad==<before>"`. Cause `start_failed` where the release did not start
    and the one before runs again; where uv was refused a file and a process of the environment could not be stopped,
    `cad_running`; the detail is uv's first error, never its rollback's after it.
 4. **Repair**, in one step, where no cad runs after that (or uv left a `*.dist-info` without its `RECORD`, which every
-   later uv run fails on): the installer makes the environment anew, as the install command does (`uv tool install
-   --force cad`, `pipx install --force cad`; never one release, which would pin it). The worker runs from uv's
+   later uv run fails on): uv makes the environment anew, as the install command does (`uv tool install
+   --force cad`; never one release, which would pin it). The worker runs from uv's
    cache, so nothing of it is in the way. That removes the environment, so the worker does it once nothing of it runs:
    the attempt `repairing` first, on which the processes the switch spared leave (`cad update` says so and ends),
    waited for, then every process of it stopped. Cause `broken` where that leaves no cad that runs either.
@@ -286,7 +285,7 @@ process is ended). A hard stop (`plugin_catch_up.HardStop`, a thread of its own)
 past its 15: counted as stopped, its record closed, exit 124, its lock freed. The server asks at
 each tending, whatever is in flight, from a minute after its start (`START_SECONDS`: the install command that
 just updated cad goes on to the plugin in that minute), never while a run holds the lock, so the rule holds
-however cad got newer: its own update, `cad update`, `uv tool upgrade cad` or `pipx upgrade cad`. The release is
+however cad got newer: its own update, `cad update` or `uv tool upgrade cad`. The release is
 kept in `install-command.json` in the data folder: written when `cad plugin install` ends with every app it
 found gone well, and when the switch is turned on (`cad plugin update auto on`, the hosted install command's last
 step; with `CAD_INSTALL_FAILED=1`, where the plugin's step went badly, none; turned on by hand, "from this

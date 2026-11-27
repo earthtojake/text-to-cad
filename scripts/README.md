@@ -323,8 +323,8 @@ where those files ship, so these scripts are what produces them.
 - `install.py` — the installer itself, the standard library alone, carrying no version and taking no
   options, and knowing no agent app: it gets the computer a cad that works and is current, then hands over to
   it. It installs cad as a uv tool, PyPI's newest, only where no cad is installed (one that does not start is
-  installed again; a cad installed with pipx is a global cad too, installed again with pipx where it does not
-  start), and puts cad's folder on the PATH with uv's own `uv tool update-shell` (unless `UV_NO_MODIFY_PATH`
+  installed again; a cad installed with pipx is left as the computer's cad, installed again with pipx where it
+  does not start, and never updated: cad updates only what `uv tool install` made), and puts cad's folder on the PATH with uv's own `uv tool update-shell` (unless `UV_NO_MODIFY_PATH`
   is set). Where a person ran it and cad was here already, that cad's own `cad update` brings it up to date,
   never failing the run, its output captured and said in one line (two on a pipe); where
   cad ran it (0.11.12 and 0.11.13 do, and the bridge from earlier releases), cad is left as it is. Then `<cad> plugin install` puts the plugin into each agent app

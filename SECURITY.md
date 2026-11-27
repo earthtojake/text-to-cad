@@ -222,9 +222,9 @@ own environment, which replaces cad's files where they are with the newest relea
 index uv uses holds, never one yanked there; then it checks that it runs and starts the server
 again. It names no release and sets no limit: what your uv would install for `cad` is what is
 installed. It never installs an older release, and leaves uv's record of the install as it is,
-so a range you gave uv there (`uv tool install "cad<1"`) still holds; a cad pipx installed is
-updated the same way by pipx (`pipx runpip cad install --upgrade cad`), and a cad you pinned
-to a release is left alone. A typed `cad update` does the same, at once. It is what you could run
+so a range you gave uv there (`uv tool install "cad<1"`) still holds; a cad you pinned
+to a release is left alone, and so is one pipx or pip installed, which you update the way you
+installed it. A typed `cad update` does the same, at once. It is what you could run
 yourself, so whoever can write cad's environment can change what `cad` runs, as always. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an
 install by hand) runs its own `cad plugin install` once, unattended: code of the cad

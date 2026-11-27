@@ -13,8 +13,9 @@ plugin install``, which carries the one table of them. It does these things alon
    --managed-python --python 3.14 cad``, PyPI's newest. One that does not start (a tool Windows left half-replaced)
    is installed again whole, ``uv tool install --force ...``, PyPI's newest: the one repair, which cad's own update
    and the skills' Setup line run too. A ``cad`` pipx installed, where uv has none,
-   is a global cad too (``pipx_cad``): installed again by pipx where it does not start (``repair_pipx``); uv installs
-   no second cad. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
+   is the computer's cad too (``pipx_cad``): installed again by pipx where it does not start (``repair_pipx``); uv
+   installs no second cad. cad updates only what ``uv tool install`` made, so step 3 leaves pipx's as it is and says
+   its own command, ``pipx upgrade cad``. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
    provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line. On Windows a
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
    could not delete, a later run deletes (``tidy``). Where uv is about to install cad's environment again on Windows,
@@ -785,11 +786,12 @@ def says(ran: Ran) -> Optional[str]:
     return found.group(1) if found else None
 
 
-def already(here: Here, release: str) -> None:
+def already(here: Here, release: str, pipx: bool = False) -> None:
     """The line for a cad that is here and starts, where cad ran this: it is left as it is. Where a person did, the
     update's own line says it (``update``), and none here."""
     if by_cad(here):
-        print(f"cad {release} is installed already: it is left as it is, and updates itself.", flush=True)
+        print(f"cad {release} is installed already: it is left as it is, and "
+              + ("`pipx upgrade cad` updates it." if pipx else "updates itself."), flush=True)
 
 
 def find_pipx(here: Here) -> Optional[str]:
@@ -921,7 +923,7 @@ def install_cad(here: Here) -> Cad:
         ran = here.run([piped.commands["cad"], "--version"], timeout=60)
         if ran.ok:
             release = says(ran) or piped.version
-            already(here, release)
+            already(here, release, pipx=True)
             return Cad(release, 0, piped.commands["cad"], there=True, pipx=True, env=piped.env)
         return repair_pipx(here, piped)
     problem, moved = make_room(here, folder, tools)
@@ -980,17 +982,20 @@ def over_line(stream: Any, line: str) -> bool:
 def update(here: Here, cad: Cad) -> None:
     """Step 3 (see the module): the cad that was here already brought up to date by its own ``cad update``,
     ``UPDATE_SECONDS`` at most, what it prints captured; then the release it runs read again, whatever the command's
-    exit status: as its ``cad --version`` says it (``says``), else from uv or pipx. Said in one line as it begins, then one line of what came of it, over the first where the
+    exit status: as its ``cad --version`` says it (``says``), else from uv. A cad pipx installed is not updated: one
+    line says its own command, ``pipx upgrade cad`` (cad updates only what ``uv tool install`` made). Said in one line as it begins, then one line of what came of it, over the first where the
     terminal allows (``over_line``): updated, the newest already, or not updated now, with cad's own most telling
     line (``Ran.last``) as the reason. Never a failure of the run."""
+    if cad.pipx:  # cad updates only what `uv tool install` made
+        print(f"cad {cad.release} was installed with pipx, so it does not update itself: `pipx upgrade cad` updates "
+              "it.", flush=True)
+        return
     first = f"Updating cad {cad.release} to the newest release..."
     over = over_line(sys.stdout, first)
     print(first, end="" if over else "\n", flush=True)
     ran = here.run([cad.command, "update"], timeout=UPDATE_SECONDS, apart=False)
     release = says(here.run([cad.command, "--version"], timeout=60))
-    if release is None and cad.pipx:
-        release = pipx_release(Path(cad.env))
-    elif release is None:
+    if release is None:
         uv = find_uv(here)
         tool = uv_tools(here, uv).get("cad") if uv else None
         release = tool.version if tool else None

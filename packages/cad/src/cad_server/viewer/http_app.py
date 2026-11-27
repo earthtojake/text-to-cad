@@ -1408,9 +1408,8 @@ class CadApp:
             raise ApiError(409, auto_update.CHECK_OFF, hint)
         blocked = auto_update.blocked(found)
         if blocked is not None:
-            said = auto_update.in_words(blocked, found.installer)
-            raise ApiError(409, said, auto_update.advice(blocked, found.installer), cause=blocked, said=said,
-                           installer=found.installer)
+            said = auto_update.in_words(blocked)
+            raise ApiError(409, said, auto_update.advice(blocked), cause=blocked, said=said)
         answer = ask(True)
         if "failed" in answer:
             raise ApiError(409, str(answer["failed"]), hint)

@@ -5,7 +5,7 @@ once.
 What cad knows of agent apps, plugins and skills lives in one place, ``cad_server.plugin``, reached only by the ``cad
 plugin`` command (``cad_server.cli.plugin``). This module names none of them: it knows that command, when the server
 runs it, the release it is up to date for, and the lock one run of it holds. The rule holds on every route by which cad
-gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrade cad`` or ``pipx upgrade cad`` by hand
+gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrade cad`` by hand
 -- because it is the server of the newer cad that asks, whatever brought it.
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the plugin is
@@ -396,7 +396,7 @@ class HardStop:
 
 
 def tool() -> Path | None:
-    """This cad's environment where it is a global install (``auto_update.global_install``: uv or pipx made it), else
+    """This cad's environment where it is a global install (``auto_update.global_install``: uv made it), else
     None. Only whether it is one: no uv need be found, as the update's must."""
     from cad_server._internal import auto_update
 

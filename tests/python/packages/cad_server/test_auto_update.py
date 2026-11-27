@@ -164,9 +164,9 @@ class Case(unittest.TestCase):
 
 
 class GlobalInstallTest(Case):
-    def test_a_global_install_is_one_uv_or_pipx_made_and_names_the_uv_it_builds_with(self) -> None:
+    def test_a_global_install_is_one_uv_made_and_names_the_uv_it_builds_with(self) -> None:
         found = auto_update.global_install()
-        self.assertEqual((found.installer, found.prefix), ("uv", self.tool))
+        self.assertEqual(found.prefix, self.tool)
         self.assertEqual(os.path.normcase(found.uv), os.path.normcase(str(self.uv)), "the person's")
         self.assertEqual(found.launcher, auto_update.tool_command(self.tool))
         with mock.patch.object(auto_update, "find_uv", return_value=None):
@@ -501,7 +501,7 @@ class FindUvTest(Case):
 
     def test_on_windows_a_batch_file_is_never_run_and_a_real_exe_on_path_is(self) -> None:
         """Windows runs a ``.cmd`` or ``.bat`` through cmd.exe, which reads the ``<`` and ``>`` of ``cad>=X,<N`` as
-        redirections: where uv or pipx is on PATH only as one, it is not found; a real ``.exe`` of the same name is."""
+        redirections: where uv is on PATH only as one, it is not found; a real ``.exe`` of the same name is."""
         from cad_server._internal import base
 
         folder = self.tmp / "shims"
@@ -511,21 +511,16 @@ class FindUvTest(Case):
         def which(name, path=None):  # Windows' own: PATHEXT's order, so a batch file where no .exe is there
             if name.endswith(".exe"):
                 return exes.get(name)
-            return {"uv": str(folder / "uv.cmd"), "pipx": str(folder / "pipx.bat")}.get(name)
+            return {"uv": str(folder / "uv.cmd")}.get(name)
 
         environ = {"PATH": str(folder), "USERPROFILE": str(self.tmp / "profile"), "HOME": "/nowhere"}
-        pipx = lambda: auto_update.find_pipx(environ, prefix=str(self.tool), python=str(self.tmp / "none"),  # noqa: E731
-                                             windows=True)
-        for name in ("uv.cmd", "pipx.bat", "uv.exe", "pipx.exe"):
+        for name in ("uv.cmd", "uv.exe"):
             (folder / name).write_text("", encoding="utf-8")
-        with mock.patch.object(auto_update.shutil, "which", side_effect=which), \
-                mock.patch.object(base.shutil, "which", side_effect=which):
+        with mock.patch.object(base.shutil, "which", side_effect=which):
             with self.assertRaises(base.Refused):
                 self.find(environ, windows=True)
-            self.assertIsNone(pipx())
-            exes.update({"uv.exe": str(folder / "uv.exe"), "pipx.exe": str(folder / "pipx.exe")})
+            exes.update({"uv.exe": str(folder / "uv.exe")})
             self.assertEqual(self.find(environ, windows=True), str(folder / "uv.exe"))
-            self.assertEqual(pipx(), [str(folder / "pipx.exe")])
             exes["uv.exe"] = str(folder / "uv.cmd")  # whatever names it, a batch file is never one
             with self.assertRaises(base.Refused):
                 self.find(environ, windows=True)
@@ -536,190 +531,26 @@ PIPX_METADATA = {"main_package": {"package": "cad", "package_or_url": "cad", "pa
 
 
 class PipxTest(Case):
-    """cad installed by ``pipx install cad``: a global install as uv's is, updated by pipx's own commands, pipx found as
-    the person's install found it, and found from outside it (``installed_tool``) where uv has none."""
+    """cad installed by ``pipx install cad`` is no global install: cad updates only what ``uv tool install`` made, and
+    says of any other how it is updated."""
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.pipx_home = self.tmp / "pipx"
-        self.env = self.pipx_home / "venvs" / "cad"  # pipx's environment of cad
-        self.env.mkdir(parents=True)
-        (self.env / "pipx_metadata.json").write_text(json.dumps(PIPX_METADATA), encoding="utf-8")
-        self.pipx = self.bin / ("pipx.exe" if os.name == "nt" else "pipx")
-        self.pipx.write_text("", encoding="utf-8")
-        self.pipx.chmod(0o755)
-        for patch in (mock.patch.object(sys, "prefix", str(self.env)),
-                      mock.patch.object(auto_update, "PIPX_SYSTEM", ())):  # never this machine's own pipx
-            patch.start()
-            self.addCleanup(patch.stop)
-        auto_update._has_pipx.cache_clear()
-        self.addCleanup(auto_update._has_pipx.cache_clear)
+    def test_a_cad_pipx_installed_does_not_update_itself_and_says_how_it_is_updated(self) -> None:
+        from cad_server.cli import doctor, update as typed
 
-    def test_a_cad_pipx_installed_is_a_global_install_that_updates_itself_by_pipx(self) -> None:
-        """pipx made it, and cad's own update updates it as uv's: at a start, by ``cad update`` and by the button, by
-        pipx's commands (the worker's: ``WorkerTest``); the command that installs it again is pipx's."""
-        found = auto_update.global_install()
-        self.assertEqual((found.installer, found.prefix, found.pipx), ("pipx", self.env, [str(self.pipx)]))
-        with self.feed("0.2.0"):
-            self.assertEqual(auto_update.due(), "0.2.0", "an automatic update")
-            self.assertEqual(auto_update.button(), {"version": "0.1.0", "latest": "0.2.0", "state": "idle"})
-            self.assertEqual(auto_update.asked(pypi=lambda: {"latest": "0.2.0"}),
-                             {"ok": True, "updating": "0.2.0", "from": "0.1.0"})
-            self.assertEqual(auto_update.behind_line("0.1.0", "0.2.0", time.time()),
-                             "cad: cad 0.2.0 is out and this is 0.1.0: `cad update` updates it")
-        self.assertIsNone(auto_update.blocked(found))
-        told = json.loads(auto_update.helper_command("0.2.0", now=5.0, version="0.1.0", record="r", install=found)[-1])
-        self.assertEqual((told["installer"], told["pipx"], told["uv"]), ("pipx", [str(self.pipx)], found.uv))
-        self.assertEqual(helper.reinstalling(told), [str(self.pipx), "install", "--force", "cad"], "unpinned")
-        self.assertEqual(self.cli(), (0, "update auto: on\n", ""))
-        self.assertEqual(self.cli("off"), (0, "update auto: off\n", ""))
-        self.assertEqual(self.cli("on"), (0, "update auto: on\n", ""), "on is a global install's to turn on")
-        (self.env / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
-        self.assertEqual(auto_update.global_install().installer, "uv", "uv's asked first")
-
-    def test_pipx_s_own_pin_is_kept_and_no_pipx_found_begins_none(self) -> None:
-        """A person's ``pipx pin cad`` (pipx's metadata ``pinned``), which ``pipx upgrade`` keeps to, holds cad's own
-        update too, and says how to unpin; a ``pipx install cad==X`` pins nothing, as ``pipx upgrade`` moves it on.
-        Where pipx is not found, or uv (the kernel's environments need it), none begins."""
-        metadata = self.env / "pipx_metadata.json"
-        main = PIPX_METADATA["main_package"]
-        metadata.write_text(json.dumps({"main_package": {**main, "package_or_url": "cad==0.1.0"}}), encoding="utf-8")
-        self.assertIsNone(auto_update.blocked(auto_update.global_install()))
-        metadata.write_text(json.dumps({"main_package": {**main, "pinned": True}}), encoding="utf-8")
-        found = auto_update.global_install()
-        self.assertEqual(auto_update.blocked(found), "pinned")
-        with self.feed("0.2.0"):
-            self.assertIsNone(auto_update.due())
-            self.assertEqual(auto_update.asked(pypi=lambda: {"latest": "0.2.0"}), {"failed": (
-                "cad is pinned to its release in pipx (a `pipx pin cad`), so it does not update: to have cad update "
-                "itself again, unpin it: `pipx unpin cad`")})
-        metadata.write_text(json.dumps(PIPX_METADATA), encoding="utf-8")
-        self.pipx.unlink()
-        with mock.patch.object(auto_update, "_has_pipx", return_value=False):  # nor this machine's `python -m pipx`
-            self.assertEqual((auto_update.global_install().pipx, auto_update.blocked(auto_update.global_install())),
-                             (None, "no_installer"))
-        self.assertEqual(auto_update.in_words("no_installer", "pipx"), "pipx or uv cannot be found, so no update can "
-                                                                        "begin")
-
-    def test_what_is_not_pipx_s_cad(self) -> None:
-        other = {"main_package": {**PIPX_METADATA["main_package"], "package": "other"}}
-        for case, text in (("another package", json.dumps(other)), ("unreadable", "not json {"),
-                           ("no main package", "{}"), ("none", None)):
-            with self.subTest(case=case):
-                if text is None:
-                    (self.env / "pipx_metadata.json").unlink()
-                else:
-                    (self.env / "pipx_metadata.json").write_text(text, encoding="utf-8")
-                self.assertIsNone(auto_update.global_install())
-        for folder in (self.pipx_home / "venvs" / "cad_2", self.tmp / "elsewhere" / "cad"):  # a --suffix; not pipx's
-            with self.subTest(folder=folder):
-                folder.mkdir(parents=True)
-                (folder / "pipx_metadata.json").write_text(json.dumps(PIPX_METADATA), encoding="utf-8")
-                self.assertIsNone(auto_update.pipx_tool(str(folder)))
-
-    def test_pipx_is_found_on_path_then_where_it_is_usually_installed_then_by_its_python(self) -> None:
-        home = self.tmp / "home"
-        found = lambda environ, **options: auto_update.find_pipx(  # noqa: E731
-            {"PATH": "", "HOME": str(home), **environ}, prefix=str(self.env), python=str(self.tmp / "nopython"),
-            windows=False, **options)
-        self.assertEqual([os.path.normcase(part) for part in auto_update.find_pipx(windows=os.name == "nt")],
-                         [os.path.normcase(str(self.pipx))], "on PATH")
-        for folder, environ in ((self.tmp / "own", {"PIPX_BIN_DIR": str(self.tmp / "own")}),
-                                (home / ".local" / "bin", {}), (home / "Library" / "Python" / "3.12" / "bin", {})):
-            with self.subTest(folder=folder):
-                folder.mkdir(parents=True, exist_ok=True)
-                (folder / "pipx").write_text("", encoding="utf-8")
-                self.assertEqual(found(environ), [str(folder / "pipx")])
-                (folder / "pipx").unlink()
-        for version in ("3.9", "3.13"):  # pip install --user pipx, on macOS: the newest Python's first
-            (home / "Library" / "Python" / version / "bin").mkdir(parents=True, exist_ok=True)
-            (home / "Library" / "Python" / version / "bin" / "pipx").write_text("", encoding="utf-8")
-        self.assertEqual(found({}), [str(home / "Library" / "Python" / "3.13" / "bin" / "pipx")])
-        __import__("shutil").rmtree(home / "Library")
-        (self.env / "bin").mkdir()
-        (self.env / "bin" / "pipx").write_text("", encoding="utf-8")  # inside cad's environment: never that one
-        self.assertIsNone(found({"PATH": str(self.env / "bin")}))
-        python = self.tmp / "python3"
-        python.write_text("", encoding="utf-8")
-        with mock.patch.object(auto_update, "_has_pipx", return_value=True) as has:
-            self.assertEqual(auto_update.find_pipx({"PATH": "", "HOME": str(home)}, prefix=str(self.env),
-                                                   python=str(python), windows=False),
-                             [str(python), "-P", "-m", "pipx"], "python -m pipx, by the Python that owns it")
-            has.assert_called_once_with(str(python))
-            self.assertIsNone(auto_update.find_pipx({"PATH": "", "HOME": str(home)}, prefix=str(self.tmp),
-                                                    python=str(python), windows=False), "never a Python inside cad's")
-        with mock.patch.object(auto_update, "_has_pipx", return_value=False):
-            self.assertIsNone(auto_update.find_pipx({"PATH": "", "HOME": str(home)}, prefix=str(self.env),
-                                                    python=str(python), windows=False))
-        import importlib.util
-
-        self.assertEqual(auto_update._has_pipx(sys.executable), importlib.util.find_spec("pipx") is not None)
-        self.assertFalse(auto_update._has_pipx(str(self.tmp / "no such python")))
-
-    def test_on_windows_pipx_exe_is_found_in_the_per_user_pythons_and_scoop(self) -> None:
-        profile, appdata, local = self.tmp / "profile", self.tmp / "roaming", self.tmp / "local"
-        environ = {"PATH": "", "USERPROFILE": str(profile), "APPDATA": str(appdata), "LOCALAPPDATA": str(local)}
-        for folder in (appdata / "Python" / "Python313" / "Scripts", local / "Programs" / "Python" / "Python314" / "Scripts",
-                       profile / "scoop" / "shims", profile / ".local" / "bin"):
-            with self.subTest(folder=folder):
-                folder.mkdir(parents=True)
-                (folder / "pipx.exe").write_text("", encoding="utf-8")
-                self.assertEqual(auto_update.find_pipx(environ, prefix=str(self.env), python=str(self.tmp / "none"),
-                                                       windows=True), [str(folder / "pipx.exe")])
-                (folder / "pipx.exe").unlink()
-
-    def test_installed_tool_finds_uv_s_cad_first_then_pipx_s(self) -> None:
-        uv_tools = self.tmp / "uv-tools"
-        uv_tools.mkdir()
-        own = auto_update.tool_command(self.env)
-        own.parent.mkdir(parents=True)
-        own.write_text("", encoding="utf-8")
-        answers = {("tool", "dir"): str(uv_tools), ("environment", "--value"): str(self.pipx_home / "venvs")}
-        asked: list[list[str]] = []
-
-        def said(command, _timeout):
-            asked.append(command)
-            return answers.get(tuple(command[1:3]))
-
-        with mock.patch.object(auto_update, "_said", side_effect=said):
-            self.assertEqual(auto_update.installed_tool("uv", pipx=["pipx"]), self.env, "uv has no cad: pipx's")
-            self.assertEqual(asked, [["uv", "tool", "dir"], ["pipx", "environment", "--value", "PIPX_LOCAL_VENVS"]])
-            with mock.patch.object(auto_update, "find_pipx", return_value=["/p/pipx"]):
-                self.assertEqual(auto_update.installed_tool("uv"), self.env, "pipx found as the update finds it")
-            self.assertEqual(asked[-1], ["/p/pipx", "environment", "--value", "PIPX_LOCAL_VENVS"])
-            with mock.patch.object(auto_update, "find_pipx", return_value=None):
-                self.assertIsNone(auto_update.installed_tool("uv"), "no pipx: none")
-            (uv_tools / "cad").mkdir()
-            (uv_tools / "cad" / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
-            auto_update.tool_command(uv_tools / "cad").parent.mkdir(parents=True)
-            auto_update.tool_command(uv_tools / "cad").write_text("", encoding="utf-8")
-            self.assertEqual(auto_update.installed_tool("uv", pipx=["pipx"]), uv_tools / "cad", "uv's wins")
-            (uv_tools / "cad" / "uv-receipt.toml").unlink()
-            own.unlink()
-            self.assertIsNone(auto_update.installed_tool("uv", pipx=["pipx"]), "pipx's with no cad command of its own")
-        with mock.patch.object(auto_update, "_said", side_effect=[OSError("no uv"), str(self.pipx_home / "venvs")]):
-            own.write_text("", encoding="utf-8")
-            self.assertEqual(auto_update.installed_tool("uv", pipx=["pipx"]), self.env, "uv cannot answer: pipx's")
-        # pipx 1.0 (Ubuntu 22.04's) has no `pipx environment`: its list names cad's command inside the environment.
-        listed = json.dumps({"venvs": {"cad": {"metadata": {"main_package": {"app_paths": [
-            {"__Path__": str(own), "__type__": "Path"}]}}}}})
-        with mock.patch.object(auto_update, "_said", side_effect=[None, None, listed]) as said_:
-            self.assertEqual(auto_update.installed_tool("uv", pipx=["pipx"]), self.env)
-        self.assertEqual(said_.call_args.args[0], ["pipx", "list", "--json"])
-        with mock.patch.object(auto_update, "_said", side_effect=[None, None, json.dumps({"venvs": {}})]):
-            self.assertIsNone(auto_update.installed_tool("uv", pipx=["pipx"]), "pipx 1.0 with no cad")
-
-    def test_doctor_names_pipx(self) -> None:
-        from cad_server.cli import doctor
-
-        line = doctor._installer()
-        self.assertEqual((line["name"], os.path.normcase(line["detail"])), ("uv", os.path.normcase(str(self.uv))))
-        self.assertEqual(doctor._update(), (doctor.INFO, "update auto on, plugin update auto off; a global install "
-                                                         f"by pipx ({self.env})"))
-        from cad_server._internal import base
-
-        with mock.patch.object(base, "find_uv", side_effect=base.Refused("uv is not found: install uv", "uv")):
-            self.assertEqual(doctor._installer()["detail"], "uv is not found: install uv")
+        env = self.tmp / "pipx" / "venvs" / "cad"  # pipx's environment of cad
+        env.mkdir(parents=True)
+        (env / "pipx_metadata.json").write_text(json.dumps(PIPX_METADATA), encoding="utf-8")
+        with mock.patch.object(sys, "prefix", str(env)), self.feed("0.2.0"), \
+                mock.patch.object(auto_update.subprocess, "Popen") as popen:
+            self.assertIsNone(auto_update.global_install())
+            self.assertIsNone(auto_update.button(), "no button")
+            self.assertFalse(auto_update.trigger("0.2.0"), "none begins")
+            popen.assert_not_called()
+            self.assertEqual(doctor._update()[1], "this cad is not a global install, so it never updates itself; "
+                                                  "plugin update auto off")
+        self.assertIn("for pipx, `pipx upgrade cad`", typed.NOT_A_TOOL)
+        with mock.patch.object(auto_update, "_said", return_value=str(self.tmp / "pipx" / "venvs")):
+            self.assertIsNone(auto_update.installed_tool("uv"), "found from elsewhere, pipx's is none either")
 
 
 class DueTest(Case):
@@ -830,8 +661,7 @@ class RecordTest(Case):
                 self.assertEqual(auto_update.tries(10_000.0)["tried"]["0.2.0"]["tries"], 1)
                 with self.feed("0.2.0", {"0": "0.2.0"}):
                     self.assertEqual(auto_update.due(now=10_000.0), "0.2.0")
-                said, kept = auto_update._claim(release="0.2.0", wanted="0.2.0", version="0.1.0", installer="uv",
-                                                automatic=True)
+                said, kept = auto_update._claim(release="0.2.0", wanted="0.2.0", version="0.1.0", automatic=True)
                 self.assertEqual((said, kept["tries"], auto_update.last()["tries"]), (auto_update.BEGUN, 2, 2))
 
     def test_tries_that_no_release_wrote_are_read_as_none_and_never_raise(self) -> None:
@@ -1189,7 +1019,7 @@ class WhenTest(Case):
 
 class HelperCommandTest(Case):
     def test_its_command_line(self) -> None:
-        found = auto_update.Global("uv", self.tool, "/u/uv")
+        found = auto_update.Global(self.tool, "/u/uv")
         line = auto_update.helper_command("0.2.0", now=5.0, version="0.1.0", record="/s/auto-update.json", install=found,
                                           log="/s/auto-update.log")
         # The Python of the environment uv runs it from, the worker as a module of it: the entry every later release
@@ -1199,14 +1029,13 @@ class HelperCommandTest(Case):
         self.assertEqual(json.loads(line[4]), {
             "record": "/s/auto-update.json", "log": "/s/auto-update.log", "from": "0.1.0", "at": 5.0, "tries": 1,
             "wanted": "0.2.0", "asked": False, "start": True, "target": "0.2.0",
-            "prefix": str(self.tool), "cad": str(auto_update.tool_command(self.tool)), "uv": "/u/uv", "pipx": None,
-            "installer": "uv", "spare": []})
+            "prefix": str(self.tool), "cad": str(auto_update.tool_command(self.tool)), "uv": "/u/uv", "spare": []})
         self.assertEqual(auto_update.tool_command(self.tool, windows=True), self.tool / "Scripts/cad.exe")
-        found = auto_update.Global("pipx", self.tool, "/u/uv")
         told = json.loads(auto_update.helper_command(None, now=5.0, version="0.1.0", record="r", install=found,
                                                      asked=True)[-1])
-        self.assertEqual((told["target"], told["wanted"], told["installer"]),
-                         (None, "latest", "pipx"), "no release named: counted as the newest, whatever it is")
+        self.assertEqual((told["target"], told["wanted"]), (None, "latest"),
+                         "no release named: counted as the newest, whatever it is")
+        self.assertFalse({"installer", "pipx"} & set(told), "uv alone installs cad: nothing names who")
         self.assertNotIn("requirement", told, "what is installed is the installer's newest, never named here")
         # Run by uv from the release in its cache, never from the installed tool (``--isolated``).
         self.assertEqual(auto_update.from_cache("/u/uv", "cad==0.2.0", "cad", "--version"),
@@ -1253,14 +1082,15 @@ class HelperCommandTest(Case):
                 popen.assert_not_called()
                 self.assertIsNone(auto_update.last(), "and nothing kept as underway")
 
-    def test_the_worker_and_the_record_are_told_the_installer_and_whether_it_was_typed_and_never_an_install(self):
+    def test_the_worker_and_the_record_are_told_whether_it_was_typed_and_never_an_install(self):
         auto_update.change_plugin(True)  # the switch on: the worker runs no install command whatever it says
         for automatic in (True, False):
             with self.subTest(automatic=automatic):
                 told = json.loads(self.triggered(automatic=automatic)[0][-1])
-                self.assertEqual((told["installer"], told["asked"]), ("uv", not automatic))
+                self.assertEqual(told["asked"], not automatic)
                 kept = auto_update.last()
-                self.assertEqual((kept["installer"], kept["asked"], kept["wanted"]), ("uv", not automatic, "0.2.0"))
+                self.assertEqual((kept["asked"], kept["wanted"]), (not automatic, "0.2.0"))
+                self.assertNotIn("installer", kept)
         (self.state / auto_update.RECORD).unlink()  # none underway, which `cad update` would join
         with mock.patch.object(auto_update.subprocess, "Popen") as popen:
             found = auto_update.begin("0.2.1")
@@ -1390,7 +1220,7 @@ class WorkerTest(unittest.TestCase):
         self.told = {"record": str(self.tmp / "auto-update.json"), "log": str(self.tmp / "auto-update.log"),
                      "from": "0.1.0", "at": 1.0, "tries": 1, "wanted": "0.2.0", "asked": False,
                      "start": True, "target": "0.2.0", "prefix": str(self.prefix),
-                     "cad": "cad", "uv": "uv", "installer": "uv", "spare": []}
+                     "cad": "cad", "uv": "uv", "spare": []}
         self.installed: str | None = "0.1.0"  # what the environment holds whole
         self.newest = "0.2.0"  # the newest release the installer takes: what its upgrade gets
         self.serving: str | None = "0.1.0"  # the release of the server that answers
@@ -1402,7 +1232,6 @@ class WorkerTest(unittest.TestCase):
         self.starts = {"0.1.0": True, "0.2.0": True}  # whether a release's server starts
         self.gone = True  # whether a server stopped goes within the bound
         self.ran: list[list[str]] = []
-        self.pipx: list[list[str]] = []  # pipx's commands, run as uv's (``cad``)
         self.calls: list[tuple] = []
         self.phases: list[str] = []
         for patch in (mock.patch.object(helper, "answering", side_effect=self._answering),
@@ -1433,14 +1262,8 @@ class WorkerTest(unittest.TestCase):
         return {"stopped": ["door"], "running": [], "removed": []}
 
     def cad(self, command, timeout):
-        if command[1:] in (["tool", "dir", "--bin"], ["environment", "--value", "PIPX_BIN_DIR"]):
+        if command[1:] == ["tool", "dir", "--bin"]:
             return (0, f"{self.bin}\n") if self.bin else (2, "error: no tool folder")
-        if command[:5] == ["pipx", "runpip", "cad", "install", "--upgrade"]:  # pipx's, as uv's would do it
-            self.pipx.append(list(command))
-            command = ["uv", "tool", "upgrade", command[-1]]
-        if command[:3] == ["pipx", "install", "--force"]:
-            self.pipx.append(list(command))
-            command = ["uv", "tool", "install", "--force", "cad"]
         self.ran.append(list(command))
         if command[:4] == ["uv", "tool", "install", "--force"]:  # the repair: the environment made anew, whole
             code, said = self.forced
@@ -1485,7 +1308,7 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual(self.calls, [("stop", "0.1.0")])
         self.assertEqual(found, {"release": "0.2.0", "outcome": "installed", "from": "0.1.0", "at": 1.0, "tries": 1,
                                  "ended": found["ended"], "detail": "cad 0.2.0 runs, upgraded in place by uv",
-                                 "started": "started the cad server (cad 0.2.0)", "installer": "uv", "wanted": "0.2.0",
+                                 "started": "started the cad server (cad 0.2.0)", "wanted": "0.2.0",
                                  "asked": False, "worker": cad_server.__version__})
         log = Path(self.told["log"]).read_text(encoding="utf-8")
         for said in ("cad's update, begun", "to 0.2.0, by uv", "$ uv tool upgrade cad", "exit 0 after",
@@ -1571,7 +1394,7 @@ class WorkerTest(unittest.TestCase):
         self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "broken", False))
         self.assertEqual(self.commands()[-1], "tool install --force --managed-python", "the last resort was tried")
         self.assertTrue(found["started"].startswith("not started: "))
-        self.assertEqual(auto_update.advice("broken", "uv"), "install cad again: `uv tool install --force cad`")
+        self.assertEqual(auto_update.advice("broken"), "install cad again: `uv tool install --force cad`")
         self.assertEqual(auto_update.event(found)["reason"], "put_back")
 
     def test_a_server_that_came_up_during_the_switch_is_stopped_before_the_new_one_starts(self) -> None:
@@ -1992,23 +1815,6 @@ class WorkerTest(unittest.TestCase):
         found = self.update(log=str(self.tmp / "no" / "such" / "folder" / "auto-update.log"))
         self.assertEqual(found["outcome"], "installed")
 
-    def test_a_pipx_install_is_upgraded_and_moved_back_by_pip_inside_pipx_s_environment(self) -> None:
-        """pipx's cad: the same steps, by pipx's commands: ``pipx runpip cad install --upgrade "cad==X"`` (pip inside
-        its environment, which leaves pipx's pin as it is), the way back the same command to the release before, its
-        repair ``pipx install --force cad``, its bin folder as pipx names it."""
-        pipx = {"installer": "pipx", "pipx": ["pipx"], "uv": None}
-        found = self.update(**pipx)
-        self.assertEqual(self.pipx, [["pipx", "runpip", "cad", "install", "--upgrade", "cad"]])
-        self.assertEqual((found["outcome"], found["detail"], found["installer"]),
-                         ("installed", "cad 0.2.0 runs, upgraded in place by pipx", "pipx"))
-        self.assertIn("to 0.2.0, by pipx", Path(self.told["log"]).read_text(encoding="utf-8"))
-        self.pipx.clear()
-        self.installed, self.starts["0.2.0"] = "0.1.0", False
-        found = self.update(**pipx)
-        self.assertEqual(self.pipx, [["pipx", "runpip", "cad", "install", "--upgrade", requirement]
-                                     for requirement in ("cad", "cad==0.1.0")], "the newest, then back by name")
-        self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "start_failed", True))
-
     def test_where_no_cad_runs_the_worker_installs_it_again_whole_once_nothing_of_it_runs(self) -> None:
         """The repair, the worker's own: the record's phase ``repairing`` first, on which the processes the switch
         spared leave the environment (``cad update`` says so and ends), waited for; then every process of it stopped,
@@ -2056,8 +1862,6 @@ class WorkerTest(unittest.TestCase):
         self.installed, self.newest = "0.1.0", "0.1.0"
         found = self.update()
         self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "in_use", True), found)
-        self.assertEqual(helper.reinstalling({**self.told, "installer": "pipx", "pipx": ["pipx"]}),
-                         ["pipx", "install", "--force", "cad"], "pipx's: unpinned")
 
 
 class FakeWindows:
@@ -2177,21 +1981,20 @@ class CauseTest(unittest.TestCase):
         self.assertEqual(auto_update.in_words("network"), "uv could not reach the package index")
         self.assertNotIn("`", auto_update.in_words("no_switch"), "the words say what is wrong; ``advice``, what to do")
 
-    def test_every_cause_has_one_line_that_says_what_to_do_by_who_made_the_install(self) -> None:
+    def test_every_cause_has_one_line_that_says_what_to_do(self) -> None:
         """``advice``: a line for every cause the record keeps, the same for ``cad doctor``, ``cad update`` and the line
-        a cad behind says; a reinstall names the installer's own command and no other; no line asks or exclaims."""
+        a cad behind says; a reinstall names the one command and no other; no line asks or exclaims."""
         retries = "cad tries again by itself; `cad update` tries now"
         with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ, {"CAD_STATE_DIR": folder}):
             for word in helper.CAUSES:
-                for installer in (*auto_update.INSTALLERS, None):
-                    with self.subTest(word=word, installer=installer):
-                        line = auto_update.advice(word, installer)
-                        self.assertTrue(line and "\n" not in line and "please" not in line.lower() and "!" not in line)
-                        self.assertEqual(line.count("`") % 2, 0)
-                        commands = re.findall(r"`([^`]+)`", line)
-                        self.assertLessEqual(set(commands), {"cad update", "pipx unpin cad", auto_update.UV_INSTALL,
-                                                             *auto_update.REINSTALL.values()}, line)
-                        self.assertLessEqual(len(commands), 1, "one command to run, at most")
+                with self.subTest(word=word):
+                    line = auto_update.advice(word)
+                    self.assertTrue(line and "\n" not in line and "please" not in line.lower() and "!" not in line)
+                    self.assertEqual(line.count("`") % 2, 0)
+                    commands = re.findall(r"`([^`]+)`", line)
+                    self.assertLessEqual(set(commands), {"cad update", auto_update.UV_INSTALL, auto_update.REINSTALL},
+                                         line)
+                    self.assertLessEqual(len(commands), 1, "one command to run, at most")
             said = {word: auto_update.advice(word) for word in helper.CAUSES}
             self.assertEqual({word for word, line in said.items() if line == retries},
                              {"network", "timeout", "no_release", "in_use", "unknown", "helper_start", "helper_crash",
@@ -2209,12 +2012,12 @@ class CauseTest(unittest.TestCase):
             for word in ("no_installer", "no_program"):
                 self.assertEqual(said[word], f"install uv: `{auto_update.UV_INSTALL}`",
                                  "cad is whole: only uv is missing")
-            for installer, command in (("uv", "uv tool install --force cad"), ("pipx", "pipx install --force cad")):
-                self.assertEqual(auto_update.advice("no_switch", installer), f"install cad again: `{command}`")
-                self.assertEqual(auto_update.advice("python", installer), "the release asks for a newer Python than "
-                                 f"this cad was installed on: install cad again: `{command}`")
-                self.assertEqual(auto_update.advice("packaged", installer), "run `cad update` in a terminal (PowerShell "
-                                 "opened from the Start menu)")
+            command = "uv tool install --force cad"
+            self.assertEqual(auto_update.advice("no_switch"), f"install cad again: `{command}`")
+            self.assertEqual(auto_update.advice("python"), "the release asks for a newer Python than "
+                             f"this cad was installed on: install cad again: `{command}`")
+            self.assertEqual(auto_update.advice("packaged"), "run `cad update` in a terminal (PowerShell "
+                             "opened from the Start menu)")
         with self.assertRaises(KeyError):
             auto_update.advice("half_made")
 
@@ -2490,7 +2293,7 @@ class ButtonTest(Case):
                     self.keep(outcome="failed", ended=now, cause=word, at=now)
                     self.assertEqual(auto_update.button(now=now + 5),
                                      {"version": "0.1.0", "latest": "0.2.0", "state": "failed", "at": now,
-                                      "asked": False, "cause": word, "said": said, "installer": "uv"})
+                                      "asked": False, "cause": word, "said": said})
             (self.state / auto_update.LOG).write_text("$ uv tool install --upgrade cad\n", encoding="utf-8")
             self.assertEqual(auto_update.button(now=now + 5)["log"], str(self.state / auto_update.LOG),
                              "the helper's log, where there is one")
@@ -2840,8 +2643,7 @@ class UpdateCommandTest(Case):
 
     def test_a_failure_says_its_cause_what_to_do_and_where_the_log_is_in_one_line(self) -> None:
         answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
-        failed = {"release": "0.2.0", "at": 5.0, "outcome": "failed", "detail": "error: uv's last line",
-                  "installer": "uv"}
+        failed = {"release": "0.2.0", "at": 5.0, "outcome": "failed", "detail": "error: uv's last line"}
         log = self.state / auto_update.LOG
         log.parent.mkdir(parents=True, exist_ok=True)
         log.write_text("cad's update, begun ...\n", encoding="utf-8")
@@ -2849,9 +2651,9 @@ class UpdateCommandTest(Case):
                 ({**failed, "cause": "network"},
                  "could not update cad 0.1.0 to 0.2.0, as uv could not reach the package index: cad tries again by "
                  f"itself; `cad update` tries now; its log: {log}"),
-                ({**failed, "cause": "no_switch", "installer": "pipx"},
+                ({**failed, "cause": "no_switch", "installer": "pipx"},  # a record 0.11.17 kept: the one command
                  f"could not update cad 0.1.0 to 0.2.0, as {auto_update.in_words('no_switch')}: install cad again: "
-                 f"`pipx install --force cad`; its log: {log}"),
+                 f"`uv tool install --force cad`; its log: {log}"),
                 ({**failed, "cause": "start_failed", "restored": True, "detail": "cad 0.2.0 did not start: x"},
                  "could not update cad 0.1.0 to 0.2.0, as the new release did not start, so the release "
                  "before runs again (cad 0.1.0): nothing to do: cad went back to the release before and takes the "
@@ -2986,7 +2788,7 @@ class DoctorTest(Case):
                  r"failed \(Caused by: .+ \(os error 32\)\): a file of cad's was in use by another program; cad "
                  r"0\.1\.0 runs again$"),
                 ({**base, "outcome": "failed", "detail": "uv said no", "cause": "network", "installer": "pipx"},
-                 doctor.WARNING, r"failed \(uv said no\): pipx could not reach the package index$"),
+                 doctor.WARNING, r"failed \(uv said no\): uv could not reach the package index$"),
                 ({**base, "outcome": "failed", "detail": "the update's worker could not start: OSError: x",
                   "cause": "helper_start"}, doctor.WARNING, r"failed \(.+\): the update's worker could not start$"),
                 ({**base, "outcome": "underway"}, doctor.INFO, "underway$"),
@@ -2999,8 +2801,8 @@ class DoctorTest(Case):
                 found = doctor._attempt()
                 self.assertEqual(found[0], status, found[1])
                 self.assertRegex(found[1], head.format(release=re.escape(record["release"])) + said)
-                # Under a warning, the one line that says what to do, by its cause and who made the install.
-                self.assertEqual(found[2:], ([auto_update.advice(auto_update.cause(record), "uv")],)
+                # Under a warning, the one line that says what to do, by its cause.
+                self.assertEqual(found[2:], ([auto_update.advice(auto_update.cause(record))],)
                                  if status == doctor.WARNING else ())
         log = self.state / auto_update.LOG
         log.write_text("cad's update, begun ...\n", encoding="utf-8")
@@ -3882,13 +3684,11 @@ class StartFailedRuleTest(Case):
                         "outcome": "failed", "cause": cause, "restored": True, "reported": True})
                     self.assertEqual(auto_update.due(now=now + 2 * auto_update.DAY), due)
                     self.assertEqual(auto_update.given_up("0.2.0", auto_update.tries(now)), due is None)
-            said, _kept = auto_update._claim(release="0.2.0", wanted="0.2.0", version="0.1.0", installer="uv",
-                                             automatic=True)
+            said, _kept = auto_update._claim(release="0.2.0", wanted="0.2.0", version="0.1.0", automatic=True)
             self.assertEqual(said, auto_update.BEGUN, "the last cause network: begun")
             auto_update._keep(self.state / auto_update.RECORD, {**auto_update.last(), "outcome": "failed",
                                                                 "cause": "start_failed", "reported": True})
-            self.assertEqual(auto_update._claim(release="0.2.0", wanted="0.2.0", version="0.1.0", installer="uv",
-                                                automatic=True), (auto_update.NOT_YET, {}),
+            self.assertEqual(auto_update._claim(release="0.2.0", wanted="0.2.0", version="0.1.0", automatic=True), (auto_update.NOT_YET, {}),
                              "asked again in the step that begins one")
             self.assertEqual(auto_update.begin("0.2.0")["outcome"], "underway", "`cad update` tries it")
         with self.feed("0.2.1", {"0": "0.2.1"}):

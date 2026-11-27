@@ -376,12 +376,14 @@ cad and the plugin update separately.
 ### cad
 
 cad updates itself to every new release, in place,
-with your own uv (or pipx, where pipx installed it; uv runs the new release to do it, so pipx needs uv too), as
+with your own uv, as
 its server next starts, or when you ask: the viewer's update button, which shows
 while a newer release is out, does it with one click. It does nothing in the background. An update stops
 the server at once, as `cad server stop` does; a command it cuts short says cad updated itself while it
 ran, and runs again as it was. Where an update leaves cad unable to run, cad installs itself again. A cad
-you pinned to a release (`uv tool install cad==X`, `pipx pin cad`) is left as it is. To update it now:
+you pinned to a release (`uv tool install cad==X`) is left as it is, and so is a cad something other
+than `uv tool install` put there: update that one the way you installed it (`pipx upgrade cad`,
+`pip install --upgrade cad`). To update it now:
 
 ```bash
 cad update
@@ -427,7 +429,7 @@ included, and leaves uv's record of cad as it is. An update by 0.11.17 or earlie
 The install command turns on the plugin's automatic updates as its last step: each time cad is
 newer than the release the plugin is up to date for, cad runs `cad plugin install` once, in the
 background, which puts the newest plugin in every agent app it finds. That holds however cad
-got newer: by itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens
+got newer: by itself, by `cad update`, or by `uv tool upgrade cad`. It happens
 the next time cad's server starts or looks after itself with nothing running. A run that fails (any
 app failing counts, though the others went well), or that is still running after 15 minutes and is stopped (a minute later for certain, whatever it is
 doing), is tried again an hour or more later: at most three runs for one release. To update the plugin now:

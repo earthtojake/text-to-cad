@@ -142,7 +142,7 @@ newer release (the start is the update, begun before it serves anything:
 `daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`). Nothing runs in the
 background: the server's tending only reads the feed. A detached worker (`auto_update_helper`, the release it updates
 to, run by uv from its cache and outside any Windows app package) stops the server at once, as `cad server stop`
-does, runs `uv tool upgrade cad` (pipx: `pipx runpip cad install`; on Windows after moving uv's `cad.exe` aside
+does, runs `uv tool upgrade cad` (on Windows after moving uv's `cad.exe` aside
 and stopping every process of the environment, since a process holds the files uv deletes one by one with no
 rollback), checks that the release runs and starts its server, and
 repairs the environment where it does not, installing it again whole where only that brings cad back. A command it

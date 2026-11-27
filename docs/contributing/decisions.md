@@ -89,9 +89,10 @@ person's own uv on the installed cad, in place: `uv tool upgrade cad`, with no r
 settings as the person has them, so what is installed is the newest release uv takes. uv's record of the install stays as the install made it. cad carries no uv
 of its own: one function finds the person's (uv's default install place, then PATH) and, where there is none,
 says in one line how to get it. cad's part is what makes that safe where processes run cad (below).
-A global install pipx made updates itself the same way, by pipx: `pipx runpip cad install --upgrade cad`, pip
-inside pipx's environment. One the person pinned (`uv tool install cad==X`, `pipx pin cad`) is left alone,
-and told how to unpin it.
+Only a cad `uv tool install` made updates itself. One pipx made does not (it did from 0.11.12 to 0.11.18: of the
+computers that updated in a month, 1 in about 3,800 was pipx's, for a second upgrade path, its own pin and bin
+folder rules, and a rehearsal route): `cad update` there says `pipx upgrade cad`. One the person pinned
+(`uv tool install cad==X`) is left alone, and told how to unpin it.
 
 **Why.** Installers update a tool where it is, and uv is the one the person chose. But uv deletes the old
 files one by one, in the order of the package's record, and stops at the first it cannot delete, with
@@ -108,8 +109,7 @@ stops every other process of the environment; runs uv, which downloads and prepa
 changes anything, so a failed download leaves cad as it was; puts `cad.exe` back; checks that the release
 runs; and, where it does not, goes back to the release before by the same safe upgrade. Where no cad
 runs after that, or uv left a package without its record, the repair is one step, the install command's own:
-the installer makes the environment anew, `uv tool install --force "cad<N>"` or `pipx install --force cad`: a
-range, never one release, which would pin it. The worker runs from uv's cache, so nothing of it is in the way,
+uv makes the environment anew, `uv tool install --force cad`: never one release, which would pin it. The worker runs from uv's cache, so nothing of it is in the way,
 and nothing is installed again in place. That removes the environment, so the worker
 waits for the processes it spared to leave and stops the rest first. Where uv cannot build the new release
 (offline, no such release), the attempt fails with uv's cause and nothing is touched. Inside a Windows
@@ -227,7 +227,7 @@ version alike (the owner's word, November 2026: holding a major back is not wort
 part of cad names a release to install or sets a bound: the automatic update, a typed `cad update`, the
 viewer's button, the repair (`uv tool install --force cad`), the CAD app's line where a computer has no
 cad, the install command and `cad plugin install` (the plugin from `latest`) all take the newest. A
-person who wants to stay on a release pins it (`uv tool install cad==X`, `pipx pin cad`), which cad
+person who wants to stay on a release pins it (`uv tool install cad==X`), which cad
 respects, or turns automatic updates off.
 
 **Why.** Holding a major needed a bound worked out from the release that runs, a release named to uv

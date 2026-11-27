@@ -78,7 +78,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   installed, current, failed, or failed and the release before put back; lost, its worker gone without saying how it
   ended; or blocked, none could begin, counted once for each release the feed called for), for a failure which step
   failed (``UPDATE_FAILURES``), where it did not install a newer cad why, in one word of cad's (``cause``:
-  ``UPDATE_CAUSES``), its ``tries``, the ``installer`` that made the global install (``uv``, ``pipx``), whether it
+  ``UPDATE_CAUSES``), its ``tries``, the ``installer`` that made the global install (``uv``; ``pipx`` from 0.11.12 to 0.11.18, which updated pipx's too), whether it
   was typed (``asked``), and for a newer cad installed how the install command's run for it ended (``plugin``:
   ``UPDATE_PLUGIN``; ``underway`` where a new attempt began before it ended);
 - ``install`` (``install``): one run of ``cad plugin install`` (by either name) that ended, counted by the
@@ -561,7 +561,7 @@ MAX_ATTEMPTS = 1000  # a hand-over's attempts, and an update's tries, past this 
 # (``blocked``: counted once for each release the feed calls for, ``tries`` 0); for a failure, which step -- the release
 # could not be built, did not run, or its server did not start (``upgrade``), it built a release it may not end on,
 # older than the one that ran or of another major (``older``), and for one not put back, putting back the release
-# before failed too (``put_back``) --; who made the global install (``uv``, ``pipx``); and, for a newer cad installed,
+# before failed too (``put_back``) --; who made the global install (``uv``; ``pipx`` for an attempt 0.11.12 to 0.11.18 kept); and, for a newer cad installed,
 # how the install command's run for it ended (``none``: none ran for it).
 UPDATE_OUTCOMES = frozenset({"installed", "current", "failed", "restored", "lost", "blocked"})
 UPDATE_FAILURES = {"failed": frozenset({"upgrade", "older", "put_back"}), "restored": frozenset({"upgrade", "older"})}

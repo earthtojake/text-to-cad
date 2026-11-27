@@ -208,7 +208,7 @@ class WhereCadRunsFromTests(unittest.TestCase):
                         mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd")),
                         mock.patch.object(sys, "prefix", str(self.prefix)),
                         mock.patch.object(auto_update, "global_install",
-                                          return_value=auto_update.Global("uv", self.prefix, "/bin/uv"))):
+                                          return_value=auto_update.Global(self.prefix, "/bin/uv"))):
             patcher.start()
             self.addCleanup(patcher.stop)
 

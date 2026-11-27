@@ -417,8 +417,8 @@ class Tool(Computer):
 
 @unittest.skipIf(os.name == "nt", "the stand-in uv is a POSIX script")
 class Handing(Tool):
-    """A server that runs from a shipped updater's folder, handing over: the helper it starts recorded, never run; no
-    pipx found but where a test gives one; uv's tools in the test's folder."""
+    """A server that runs from a shipped updater's folder, handing over: the helper it starts recorded, never run; uv's
+    tools in the test's folder."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -431,7 +431,6 @@ class Handing(Tool):
                                                    "UV_TOOL_DIR": str(self.root / "uv-tools")}),
                       mock.patch.object(setup, "_start", side_effect=lambda *a, **k: (
                           self.started.append(a), self.envs.append(k["env"]))),
-                      mock.patch.object(auto_update, "find_pipx", return_value=None),
                       mock.patch.object(auto_update, "uv_tool", side_effect=lambda prefix=None: Path(prefix)
                                         if prefix and Path(prefix, "uv-receipt.toml").exists() else None)):
             patch.start()
@@ -481,30 +480,6 @@ class Moving(Handing):
                          [f"the global cad 0.12.0 is older than this cad {Y}: this server runs on"])
         self.assertEqual(self.started, [])
         self.assertIsNone(installations.current_version())
-
-    def test_a_pipx_global_cad_is_handed_over_to_as_uv_s_is(self) -> None:
-        environment = self.root / "pipx" / "venvs" / "cad"
-        record = environment / "lib" / "python3.14" / "site-packages" / "cad-0.12.2.dist-info"
-        record.mkdir(parents=True)
-        for name in ("METADATA", "RECORD"):
-            (record / name).write_text("", encoding="utf-8")
-        (environment / "bin").mkdir()
-        for name in ("cad", "python"):
-            (environment / "bin" / name).write_text("", encoding="utf-8")
-        (environment / "pipx_metadata.json").write_text(json.dumps({"main_package": {"package": "cad"}}),
-                                                        encoding="utf-8")
-        install_script._write({**install_script._new("install", Y, 0.0), "attempts": 1, "outcome": "done",
-                               "state": "done", "installed": True})
-        with mock.patch.object(auto_update, "installed_tool", return_value=environment), \
-                mock.patch.object(auto_update, "find_pipx", return_value=["/opt/pipx"]):
-            self.assertEqual(self.tending(setup.Tending()), ["handing over to the global cad 0.12.2: this server "
-                                                             "stops, and that cad starts the next"])
-        [(command,)] = self.started
-        told = json.loads(command[-1])
-        self.assertEqual((told["cad"], told["target"], told["installer"], command[0]),
-                         (str(environment / "bin" / "cad"), "0.12.2", "pipx", str(environment / "bin" / "python")))
-        self.assertEqual(installations.current()["prefix"], str(environment))
-
 
 class Carrying(Handing):
     """Step 4b: a server that runs from a shipped updater's folder, where nothing is owed or install mode's attempt
@@ -668,14 +643,6 @@ class Following(Tool):
                     self.assertTrue(setup.follow(said.append))
                 self.assertEqual(installations.current_version(Folder(appdata)), Y if followed else named)
         self.assertEqual(said[0], f"the clients of 0.11.11 and earlier start this cad {Y} where none runs")
-
-    def test_a_server_of_pipx_s_cad_is_followed_too(self) -> None:
-        installations.point(OLD)
-        with mock.patch.object(auto_update, "uv_tool", return_value=None), \
-                mock.patch.object(auto_update, "pipx_tool", return_value=Path(self.this[2])), \
-                mock.patch.object(auto_update, "find_pipx", return_value=None):
-            self.assertTrue(setup.follow(lambda line: None))
-        self.assertEqual((installations.current_version(), self.record(Y)["prefix"]), (Y, self.this[2]))
 
 
 class Arriving(unittest.TestCase):

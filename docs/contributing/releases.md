@@ -125,8 +125,8 @@ major](#before-the-first-release-of-a-higher-major).
   the environment, since uv deletes the old files one by one with no rollback and a running process
   holds them. It checks that the new release runs and starts its server, goes back to the release
   before where it does not, and where no cad runs installs cad again whole (`uv tool install --force
-  cad`, `pipx install --force cad`). A typed `cad update` does the same at once. A pipx install updates
-  the same way by pipx (`pipx runpip cad install --upgrade cad`); one pinned to a release by hand is
+  cad`). A typed `cad update` does the same at once. Only a cad `uv tool install` made updates itself:
+  one pipx or pip installed is updated the way it was installed, and one pinned to a release by hand is
   left alone. Nothing installs an older release.
 - **Nothing names a release or holds a major back.** cad's update, its install of itself where a
   computer has none (the plugin's server line and the bridge: `tool_install`, `uv tool install cad`),

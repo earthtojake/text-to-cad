@@ -140,7 +140,7 @@ def _install() -> tuple:
     if installed is None:
         return INFO, str(Path(cad_server.__file__).resolve().parent)
     found = auto.global_install()
-    said = f"{sys.prefix} (cad {installed}{f', installed by {found.installer}' if found is not None else ''})"
+    said = f"{sys.prefix} (cad {installed}{', installed by uv' if found is not None else ''})"
     if installed == cad_server.__version__:
         return INFO, said
     return INFO, said, [f"this cad is {cad_server.__version__}, started before cad {installed} was installed: run it "
@@ -187,12 +187,11 @@ def _update() -> tuple:
         return INFO, f"this cad is not a global install, so it never updates itself; {plugin}"
     kept = auto.switches()
     earlier = " (turned off in an earlier release)" if kept.get("earlier") else ""
-    said = (f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by {found.installer} "
-            f"({found.prefix})")
+    said = f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by uv ({found.prefix})"
     stuck = auto.blocked(found)
     if stuck is None:
         return INFO, said
-    return WARNING, f"{said}; {auto.in_words(stuck, found.installer)}", [auto.advice(stuck, found.installer)]
+    return WARNING, f"{said}; {auto.in_words(stuck)}", [auto.advice(stuck)]
 
 
 def _newest() -> dict:
@@ -277,7 +276,7 @@ def _attempt() -> tuple:
         outcome, detail, word = last.get("outcome"), last.get("detail"), auto.cause(last)
         restored = {True: f"; cad {last.get('from')} runs again", False: f"; cad {last.get('from')} did not start again"}
         said = (f"{last.get('from')} to {last['release']} on {when}: {outcome}" + (f" ({detail})" if detail else "")
-                + (f": {auto.in_words(word, last.get('installer'))}" if word else "")
+                + (f": {auto.in_words(word)}" if word else "")
                 + restored.get(last.get("restored"), ""))
         warn = mine and (outcome == "failed" or word is not None)
         word = word if mine else None
@@ -296,11 +295,7 @@ def _attempt() -> tuple:
     said += where
     if not warn:
         return INFO, said
-    installer = last.get("installer")
-    if installer not in auto.INSTALLERS:
-        found = auto.global_install()
-        installer = found.installer if found is not None else None
-    return WARNING, said, [auto.advice(word, installer) if word is not None else auto.RETRIES]
+    return WARNING, said, [auto.advice(word) if word is not None else auto.RETRIES]
 
 
 def _fix(checks: list[dict]) -> list[dict]:

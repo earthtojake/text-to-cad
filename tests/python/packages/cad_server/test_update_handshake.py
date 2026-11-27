@@ -137,10 +137,9 @@ def surface() -> dict:
     from cad_server import updates
     from cad_server._internal import auto_update
 
-    install = auto_update.Global("uv", Path("ENV"), "UV")
+    install = auto_update.Global(Path("ENV"), "UV")
     line = auto_update.helper_command("9.9.9", now=1.0, version="0.0.1", record="RECORD", install=install, log="LOG")
-    _said, claimed = auto_update._claim(release="9.9.9", wanted="9.9.9", version="0.0.1", installer="uv",
-                                        automatic=True)
+    _said, claimed = auto_update._claim(release="9.9.9", wanted="9.9.9", version="0.0.1", automatic=True)
     for name in (auto_update.RECORD, auto_update.TRIED):
         (root / name).unlink(missing_ok=True)
     update = {
