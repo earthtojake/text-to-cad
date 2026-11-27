@@ -7,8 +7,8 @@ shipped releases from PyPI.
 This tree is published as releases no index holds (``<major>.<minor>.<9000+n>`` of ``VERSION`` and the next few, n
 from this process: ``real_computer.stamp``, newer than every release PyPI holds), written into a folder uv reads beside
 the index (``UV_FIND_LINKS``, ``CAD_UPDATE_FIND_LINKS``), and the version feed is a stand-in on loopback
-(``CAD_API_URL``), as is PyPI's JSON API that ``cad update`` asks
-(``CAD_PYPI_URL``), which names what the feed names. Every computer's server takes a port of its own
+(``CAD_API_URL``), as is PyPI's index page for cad that this build reads and ``cad update`` asks
+(``CAD_PYPI_URL``), which lists what the feed names. Every computer's server takes a port of its own
 (``CAD_ENGINE_DEFAULT_PORT``: the true default, 3245, on CI alone). This build's servers tend themselves every two
 seconds, not every half minute (``CAD_ENGINE_TEND_SECONDS``), and so wait two of those tendings, not a minute, after
 they start before the plugin first catches up; nothing else of their timing changes. Where a route needs time to pass
@@ -291,9 +291,9 @@ def installer_command(work: Path, counted: Path | None = None) -> str:
 
 
 class PyPI(rc.Loopback):
-    """PyPI's JSON API for cad (``CAD_PYPI_URL``): ``info.version`` what the feed names as newest, and ``releases``, each
-    release that is out (``released``, set by ``Box.out``) with a file that is not yanked, as PyPI lists them. While
-    ``down``, PyPI out of reach: every question answered 503, with nothing."""
+    """PyPI's index page for cad (``CAD_PYPI_URL``; PEP 691's JSON, which cad asks for by its type): ``files``, a wheel
+    of each release that is out (``released``, set by ``Box.out``), not yanked, as PyPI lists them. While ``down``,
+    PyPI out of reach: every question answered 503, with nothing."""
 
     def __init__(self, feed: rc.Feed) -> None:
         self.feed = feed
@@ -303,14 +303,15 @@ class PyPI(rc.Loopback):
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server's name
-                found = self.path.split("?", 1)[0].rstrip("/") == "/pypi/cad/json" and not pypi.down
+                found = self.path.split("?", 1)[0].rstrip("/") == "/pypi/cad" and not pypi.down \
+                    and "application/vnd.pypi.simple.v1+json" in (self.headers.get("Accept") or "")
                 pypi.feed.reads.append(("pypi", self.headers.get("User-Agent") or ""))
-                releases = {version: [{"filename": f"cad-{version}-py3-none-any.whl", "packagetype": "bdist_wheel",
-                                       "yanked": False, "yanked_reason": None}] for version in pypi.released}
-                body = json.dumps({"info": {"version": pypi.feed.latest},
-                                   "releases": releases}).encode() if found else b""
+                files = [{"filename": f"cad-{version}-py3-none-any.whl", "url": "", "hashes": {}, "yanked": False}
+                         for version in pypi.released]
+                body = json.dumps({"meta": {"api-version": "1.4"}, "name": "cad", "files": files}).encode() \
+                    if found else b""
                 self.send_response(200 if found else 503 if pypi.down else 404)
-                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Type", "application/vnd.pypi.simple.v1+json")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -968,8 +969,11 @@ def pages(box: Box, version: str) -> None:
     say(f"        an open page's port and token reach {version}'s server")
 
 
-# What a typed ``cad update`` says where its update left no cad that runs and the worker installs cad again whole: it
-# leaves the environment so the repair can remove it (``cad_server.cli.update.REPAIRING``), exit 1.
+# What a typed ``cad update`` says where its update left no cad that runs and the worker installs cad again whole:
+# once, on stderr, as that begins (``cad_server.cli.update.AGAIN``), and then how it ended, as of any update; on
+# Windows, where the command's own process holds the environment the repair removes, it says so and leaves instead
+# (``REPAIRING``), exit 1.
+AGAIN = "cad: the update left cad unable to run, so cad is being installed again"
 REPAIRING = "left cad unable to run, so cad is being installed again: run `cad --version` in a few minutes"
 
 
@@ -980,16 +984,19 @@ def typed_update(box: Box, was: str, target: str, *, server: bool | None = True,
     record names by the time the command looks; with ``server``, a server running, ``, then restarting the cad server``; None: either), and ``cad <was>
     updated to <target>`` (then ``also``) on stdout, exit 0. The step may go unsaid where the update was over before
     the command looked. ``repaired``: the update leaves no cad that runs and the worker installs it again whole, so the
-    command says so on stderr (``REPAIRING``) and exits 1; None: either. The record, ``installed`` and typed."""
+    command says so on stderr (``AGAIN``) and waits for its end; on Windows it says so and exits 1 (``REPAIRING``).
+    None: either that or no repair. The record, ``installed`` and typed."""
     began = time.time()
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     step = f"cad: updating cad {was} to {named or f'cad {target}'}"
     steps = ([[f"{step}, then restarting the cad server"]] if server in (True, None) else []) \
         + ([[step]] if server in (False, None) else [])
     said = done.stderr.strip().splitlines()
-    if repaired is not False and done.returncode == 1 and REPAIRING in done.stderr:
-        pass  # the repair's: the record says how it ended
-    elif repaired is True or (done.returncode, done.stdout.strip().splitlines()) != (
+    again = repaired is not False and AGAIN in said
+    said = [line for line in said if not again or line != AGAIN]
+    if repaired is not False and WINDOWS and done.returncode == 1 and REPAIRING in done.stderr:
+        pass  # the repair's, where the command must leave: the record says how it ended
+    elif (repaired is True and not again) or (done.returncode, done.stdout.strip().splitlines()) != (
             0, [f"cad {was} updated to {target}", *also]) or said not in (*steps, []):
         raise Failed(f"{box.label}: cad update exited {done.returncode}:\n{done.stdout}\n{done.stderr}\n{box.said()}")
     record = updated(box, target, after=began - 1)
@@ -1474,7 +1481,8 @@ def self_held(box: Box) -> None:
                      f"{log[-3000:]}")
     in_place(box, before, AFTER, repaired=True)
     say(f"        then cad-{NEXT}.dist-info without its RECORD: uv's upgrade to {AFTER} failed on it; `cad update` said cad "
-        f"is being installed again and left; the worker ran `uv tool install --force cad`: "
+        f"is being installed again and {'left' if WINDOWS else 'waited for it'}; the worker ran `uv tool install "
+        f"--force cad`: "
         f"{record['detail'][:160]!r}; healthy")
     pages(box, AFTER)
 
@@ -1698,11 +1706,18 @@ def self_hop(box: Box) -> None:
     box.is_tool(NEW)
     before = Tool(box)
     serves(box, before.env, NEW)
-    say(f"        {SHIPPED}'s own `cad update` upgraded uv's tool in place to {NEW}, whose server answers")
+    # The shipped release carried a uv of its own (the ``uv`` package, a dependency of 0.10.0 to 0.11.18); this tree
+    # uses the person's uv alone and depends on none, so uv's upgrade takes the carried one out of the environment.
+    carried = lambda: sorted(path.name for path in site_packages(before.env).glob("uv-*.dist-info"))  # noqa: E731
+    after_hop = carried()
+    say(f"        {SHIPPED}'s own `cad update` upgraded uv's tool in place to {NEW}, whose server answers; the uv it "
+        f"carried: {'still in the environment (' + ', '.join(after_hop) + ')' if after_hop else 'gone from the environment'}")
     box.out(NEXT)
     typed_update(box, NEW, NEXT)
     in_place(box, before, NEXT)
-    say(f"        then this tree's `cad update`: {NEW} -> {NEXT} in place")
+    if carried():
+        raise Failed(f"{box.label}: the environment still holds the uv an earlier release carried: {carried()}")
+    say(f"        then this tree's `cad update`: {NEW} -> {NEXT} in place; no uv of cad's own in the environment")
 
 
 def self_forced(box: Box) -> None:

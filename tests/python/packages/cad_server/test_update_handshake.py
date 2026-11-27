@@ -10,7 +10,17 @@ failure it only logs (B has no ``cad plugin``); B reads the ``current`` file, th
 release folders and the token those releases wrote. And across the update, what A's pages and a host's kept card
 shell read of B's engine over HTTP (``http``): the page a tab is at (``/<id>``), the CAD app's module a kept shell
 imports (``/app``), and ``GET /api/v1/server``'s ``release`` and ``instance``, which a page reloads on (A's pages
-read its ``notice`` and ``update`` with optional chaining: B sends neither). So all of it must stay as it is across
+read its ``notice`` and ``update`` with optional chaining: B sends neither).
+
+And cad's own update from this release on (``update``), where release A, installed, starts release B's worker and
+reads what it writes: A has the person's uv build the newest cad in its cache and say its release (``build``: the
+last line, ``cad X.Y.Z``), then run B's worker from there by one line (``entry``, on the Python A names), handing it
+one JSON argument (``told``); B writes the attempt's record, whose keys A's server, button and ``cad update`` read
+(``record``, as A claims it: B adds its own beside them), and its phases (``phases``), on which A's commands wait or
+leave. So every later release installs and runs on that Python in uv's cache, answers ``cad --version`` so, keeps
+that module taking those keys, and keeps writing those. A key may be added to either; none is removed or renamed.
+
+So all of it must stay as it is across
 releases, and this test fails when any of it changes: a change here is one made on purpose, for every release still
 installed, never one made in passing. Change the golden file with it, and say in the change why releases before it
 still update.
@@ -122,10 +132,30 @@ def surface() -> dict:
     installations.register("9.9.9", (str(console), str(python), str(folder)))
     installations.point("9.9.9")
     record = json.loads((root / installations.FOLDER / "9.9.9.json").read_text(encoding="utf-8"))
+
+    # cad's own update: what A runs of B and hands it, and the record's keys as A claims an attempt.
+    from cad_server import updates
+    from cad_server._internal import auto_update
+
+    install = auto_update.Global("uv", Path("ENV"), "UV")
+    line = auto_update.helper_command("9.9.9", now=1.0, version="0.0.1", record="RECORD", install=install, log="LOG")
+    _said, claimed = auto_update._claim(release="9.9.9", wanted="9.9.9", version="0.0.1", installer="uv",
+                                        automatic=True)
+    for name in (auto_update.RECORD, auto_update.TRIED):
+        (root / name).unlink(missing_ok=True)
+    update = {
+        "build": auto_update.from_cache("UV", auto_update.NEWEST, "cad", "--version"),
+        "entry": auto_update.from_cache("UV", "cad==9.9.9", *line[:-1]),
+        "told": sorted(json.loads(line[-1])),
+        "record": sorted(claimed),
+        "phases": ["repairing", "switching"],
+        "notices": updates.ADDRESS,  # under the service's base: what ``apps/api`` keeps answering for A
+    }
     return {
         "setup": {"command": "setup", "engine_update_flag": "--engine-update", "prepare_env": setup_cli.PREPARE_ENV,
                   "flags": _flags(setup_cli.build_parser())},
         "daemon": {"arguments": started[1:], "module": client.DAEMON_MODULE},
+        "update": update,
         "http": http_surface(),
         "ops": {"status": sorted(key for key in ("ok", "pid", "prefix", "serving", "installation", "version")
                                  if key in status[0]),

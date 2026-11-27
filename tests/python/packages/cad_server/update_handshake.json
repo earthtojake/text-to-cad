@@ -76,5 +76,69 @@
    "--help",
    "-h"
   ]
+ },
+ "update": {
+  "build": [
+   "UV",
+   "tool",
+   "run",
+   "--isolated",
+   "--managed-python",
+   "--python",
+   "3.14",
+   "--from",
+   "cad@latest",
+   "cad",
+   "--version"
+  ],
+  "entry": [
+   "UV",
+   "tool",
+   "run",
+   "--isolated",
+   "--managed-python",
+   "--python",
+   "3.14",
+   "--from",
+   "cad==9.9.9",
+   "python",
+   "-P",
+   "-m",
+   "cad_server._internal.auto_update_helper"
+  ],
+  "told": [
+   "asked",
+   "at",
+   "cad",
+   "from",
+   "installer",
+   "log",
+   "pipx",
+   "prefix",
+   "record",
+   "spare",
+   "start",
+   "target",
+   "tries",
+   "uv",
+   "wanted"
+  ],
+  "record": [
+   "asked",
+   "at",
+   "beat",
+   "from",
+   "installer",
+   "outcome",
+   "phase",
+   "release",
+   "tries",
+   "wanted"
+  ],
+  "phases": [
+   "repairing",
+   "switching"
+  ],
+  "notices": "/notices"
  }
 }

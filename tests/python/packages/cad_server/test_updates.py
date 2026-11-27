@@ -25,10 +25,12 @@ FEED = {"latest": "0.9.0"}
 
 
 def pypi_answer(*releases: str, yanked: tuple[str, ...] = ()) -> dict:
-    """PyPI's JSON for cad listing ``releases``, each with one file, yanked where it is in ``yanked``."""
-    return {"info": {"version": max(releases, key=lambda r: tuple(map(int, r.split("."))))},
-            "releases": {release: [{"filename": f"cad-{release}-py3-none-any.whl", "yanked": release in yanked}]
-                         for release in releases}}
+    """PyPI's index page for cad (PEP 691) listing ``releases``, each with a wheel and an sdist, yanked (with a
+    reason, as PyPI says it) where it is in ``yanked``."""
+    return {"meta": {"api-version": "1.4"}, "name": "cad", "versions": list(releases),
+            "files": [{"filename": name, "url": f"https://files.pythonhosted.org/{name}", "hashes": {},
+                       "yanked": "taken back" if release in yanked else False}
+                      for release in releases for name in (f"cad-{release}-py3-none-any.whl", f"cad-{release}.tar.gz")]}
 
 
 def stand_in(feed: dict | None, notices: list | None = None, asked: list | None = None):
@@ -37,7 +39,7 @@ def stand_in(feed: dict | None, notices: list | None = None, asked: list | None 
     def get(url: str):
         if asked is not None:
             asked.append(url)
-        if url.endswith("/cad/json"):
+        if url.endswith("/cad/"):
             return None if feed is None else pypi_answer(feed["latest"])
         said = (feed or {}).get("notices", []) if notices is None else notices
         return None if said is False else {"notices": said}
@@ -80,11 +82,11 @@ class UpdatesTest(unittest.TestCase):
     def test_pypi_and_the_notices_are_read_at_most_once_an_hour_and_kept_when_unreachable(self) -> None:
         asked: list[str] = []
         answers = [pypi_answer("0.9.0"), None, pypi_answer("0.9.0", "0.9.1")]
-        get = lambda url: asked.append(url) or (answers.pop(0) if url.endswith("/cad/json") else {"notices": []})  # noqa: E731
+        get = lambda url: asked.append(url) or (answers.pop(0) if url.endswith("/cad/") else {"notices": []})  # noqa: E731
         start = 1_000_000.0
         self.assertEqual(updates.feed(get=get, now=start), {"latest": "0.9.0"})
         # PyPI's own JSON and the notices: neither address of the version feed, which earlier releases read.
-        self.assertEqual(asked, ["https://pypi.org/pypi/cad/json", "https://api.texttocad.dev/v1/notices"])
+        self.assertEqual(asked, ["https://pypi.org/simple/cad/", "https://api.texttocad.dev/v1/notices"])
         updates.feed(get=get, now=start + updates.CHECK_SECONDS - 60)
         self.assertEqual(len(asked), 2)
         # Unreachable an hour later: what was last read stands, and is not asked again that hour.
@@ -98,7 +100,7 @@ class UpdatesTest(unittest.TestCase):
         releases last read and takes the notices; the notices out of reach keep theirs; neither read, nothing new."""
         notice = {"id": "moved", "below": "0.10.0", "text": "Words."}
         yanked = pypi_answer("0.9.0", "0.9.1", "1.0.0", yanked=("0.9.1", "1.0.0"))
-        get = lambda url: yanked if url.endswith("/cad/json") else {"notices": [notice]}  # noqa: E731
+        get = lambda url: yanked if url.endswith("/cad/") else {"notices": [notice]}  # noqa: E731
         self.assertEqual(updates.feed(get=get, now=1_000_000.0), {"latest": "0.9.0", "notices": [notice]})
         self.assertEqual(updates.feed(get=stand_in(None, notices=[]), force=True), {"latest": "0.9.0"},
                          "PyPI down: its release kept, notices taken")
@@ -112,43 +114,51 @@ class UpdatesTest(unittest.TestCase):
                           "notices alone, no release ever read: nothing kept")
         self.assertIsNone(updates.feed(get=stand_in(None, notices=False), force=True))
 
-    def test_cad_update_asks_pypi_for_the_newest_release_not_yanked_and_keeps_nothing(self) -> None:
+    def test_cad_update_asks_pypi_s_index_for_the_newest_release_not_yanked_and_keeps_nothing(self) -> None:
+        """PyPI's index page for cad (PEP 691), the page uv resolves from: each file by name, with ``yanked`` (false,
+        true, or the reason). A release is one with a file not yanked; a file that is no release's (a pre-release, a
+        version of four parts, another project's name) is none."""
         asked: list[str] = []
         answer = lambda found: lambda url: asked.append(url) or found  # noqa: E731
-        file = lambda yanked=False: {"filename": "cad.whl", "yanked": yanked, "yanked_reason": None}  # noqa: E731
-        releases = {"0.11.11": [file()], "0.12.0": [file(), file()], "0.12.1": [file(True), file()],  # one file left
-                    "0.12.2": [file(True)], "0.13.0rc1": [file()], "1.0": [file(True)], "1.1.2": [file(True)],
-                    "1.0.0": [file()], "2.0.0": [], "0.12.3": [{"filename": "cad.whl"}]}  # no `yanked`: not yanked
-        self.assertEqual(updates.pypi(get=answer({"info": {"version": "1.0.0"}, "releases": releases})),
-                         {"latest": "1.0.0"},
-                         "a release every file of which is yanked, or that has none, or a pre-release, is none")
-        self.assertEqual(asked, ["https://pypi.org/pypi/cad/json"])
-        self.assertEqual(updates.pypi(get=answer({"releases": {**releases, "1.0.0": [file(True)]}})),
-                         {"latest": "0.12.3"}, "the newest yanked: the newest that is not")
-        self.assertEqual(updates.pypi(get=answer({"info": {"version": "0.9.1"}})), {"latest": "0.9.1"},
-                         "no list of releases: PyPI's own newest, which leaves yanked ones out")
-        for found in (None, {}, {"info": None}, {"info": {"version": "0.9.2rc1"}}, {"info": {"version": 1}},
-                      {"info": {"version": "0.9.1"}, "releases": {"0.9.1": [file(True)]}}, {"releases": []}):
+        file = lambda name, yanked=False: {"filename": name, "yanked": yanked}  # noqa: E731
+        files = [file("cad-0.11.11-py3-none-any.whl"), file("cad-0.11.11.tar.gz"),
+                 file("cad-0.12.0-py3-none-any.whl"), file("cad-0.12.0.tar.gz", "the sdist alone taken back"),
+                 file("cad-0.12.1-py3-none-any.whl", True), file("cad-0.12.1.tar.gz", "a bad release"),  # all yanked
+                 file("cad-0.13.0rc1-py3-none-any.whl"), file("cad-0.9.9.1.tar.gz"),  # no plain X.Y.Z
+                 file("cad-1.1.2.tar.gz", "This project changed hands"), file("cad-1.0.zip", True),
+                 file("cadgen-9.9.9-py3-none-any.whl"), file("cad_server-9.9.9.tar.gz"), {"filename": 7}, "words",
+                 {"filename": "cad-0.12.3-cp314-cp314-win_amd64.whl"}]  # no `yanked`: not yanked
+        self.assertEqual(updates.pypi(get=answer({"meta": {"api-version": "1.4"}, "name": "cad", "files": files})),
+                         {"latest": "0.12.3"})
+        self.assertEqual(asked, ["https://pypi.org/simple/cad/"])
+        self.assertEqual(updates.pypi(get=answer({"files": [*files, file("cad-1.0.0.zip")]})), {"latest": "1.0.0"},
+                         "a new major version as any release")
+        self.assertEqual(updates.pypi(get=answer(pypi_answer("0.9.0", "0.9.1", yanked=("0.9.1",)))),
+                         {"latest": "0.9.0"}, "the newest yanked: the newest that is not")
+        for found in (None, {}, [], {"files": None}, {"files": []}, {"files": [file("cad-0.9.1.tar.gz", True)]},
+                      {"info": {"version": "0.9.1"}, "releases": {"0.9.1": [file("cad-0.9.1.tar.gz")]}}):
             with self.subTest(found=found):
                 self.assertIsNone(updates.pypi(get=answer(found)))
         self.environment({updates.PYPI_ENV: "http://127.0.0.1:9/pypi/"})
         updates.pypi(get=answer(None))
-        self.assertEqual(asked[-1], "http://127.0.0.1:9/pypi/cad/json", "a test's stand-in")
-        self.assertFalse((self.tmp / updates.FILE).exists(), "the feed's file untouched")
+        self.assertEqual(asked[-1], "http://127.0.0.1:9/pypi/cad/", "a test's stand-in")
+        self.assertFalse((self.tmp / updates.FILE).exists(), "the kept file untouched")
 
-    def test_pypi_is_read_from_a_stand_in_and_never_waited_on_past_its_bound(self) -> None:
+    def test_pypi_is_read_from_a_stand_in_as_the_index_s_json_and_never_waited_on_past_its_bound(self) -> None:
         import http.server
 
         quiet, hold = threading.Event(), threading.Event()
+        accepted: list[str | None] = []
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server's name
                 if self.path.startswith("/slow/"):
                     quiet.set()
                     hold.wait(30)
-                body = json.dumps({"info": {"version": "0.9.3"},
-                                   "releases": {"0.9.3": [{"filename": "cad.whl", "yanked": False}]}}).encode()
+                accepted.append(self.headers.get("Accept"))
+                body = json.dumps(pypi_answer("0.9.3")).encode()
                 self.send_response(200)
+                self.send_header("Content-Type", updates.INDEX_JSON)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -163,7 +173,8 @@ class UpdatesTest(unittest.TestCase):
         self.addCleanup(hold.set)  # first: the slow request let go
         self.environment({updates.PYPI_ENV: f"http://127.0.0.1:{server.server_port}/pypi"})
         self.assertEqual(updates.pypi(), {"latest": "0.9.3"})
-        self.assertIsNone(updates._get_within(f"http://127.0.0.1:{server.server_port}/slow/cad/json", 0.2))
+        self.assertEqual(accepted, ["application/vnd.pypi.simple.v1+json"], "asked for as the index's JSON (PEP 691)")
+        self.assertIsNone(updates._get_within(f"http://127.0.0.1:{server.server_port}/slow/cad/", 0.2))
         self.assertTrue(quiet.is_set(), "asked, and given up on")
 
     def test_the_feed_is_asked_for_as_cad(self) -> None:
@@ -192,8 +203,8 @@ class UpdatesTest(unittest.TestCase):
         # What 0.11.12 to 0.11.18 kept there, with each major's newest: read for its newest alone.
         self.just_read({"latest": "0.11.18", "lines": {"0": "0.11.18"}})
         self.assertEqual(updates.feed(fetch=False), {"latest": "0.11.18"})
-        self.assertEqual(updates.feed(get=lambda url: {"info": {"version": "0.11.19"}} if url.endswith("/cad/json")
-                                      else None, force=True), {"latest": "0.11.19"}, "PyPI naming its newest alone")
+        self.assertEqual(updates.feed(get=stand_in({"latest": "0.11.19"}, notices=False), force=True),
+                         {"latest": "0.11.19"}, "PyPI read, the notices out of reach")
 
     def test_the_feed_is_kept_where_no_earlier_release_reads_it(self) -> None:
         """Releases 0.10.0 to 0.11.11 keep their feed (``/v1/versions``'s) in ``versions.json`` in the same state
@@ -222,10 +233,10 @@ class UpdatesTest(unittest.TestCase):
         (self.tmp / updates.FILE).write_text(json.dumps({"checked": 0, "feed": FEED}), encoding="utf-8")
         reading, answer = threading.Event(), threading.Event()
 
-        def get(url: str, _seconds: float = 0) -> dict:
+        def get(url: str, *_how) -> dict:
             reading.set()
             answer.wait(30)
-            return pypi_answer("0.9.1") if url.endswith("/cad/json") else {"notices": []}
+            return pypi_answer("0.9.1") if url.endswith("/cad/") else {"notices": []}
 
         with mock.patch.object(updates, "_get", get), mock.patch.object(updates, "_get_within", get):
             thread = updates.refresh()

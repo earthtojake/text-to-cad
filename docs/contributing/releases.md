@@ -198,6 +198,25 @@ the agents running them reach for them, and nothing shipped later can change wha
    address answering (web links, and `git clone`, `fetch` and `push`) after a rename or a move to an
    organisation, until a repository is made at the old address again; whether a renamed branch
    redirects is not known, so the three branch names are held fixed.
+8. **cad's own update, as one release starts it and the next carries it out.** From the first release
+   that updates this way, the installed release has the person's uv build the newest cad in its cache
+   and say its release, then runs that release's worker from there:
+
+   ```text
+   uv tool run --isolated --managed-python --python 3.14 --from cad@latest cad --version
+   uv tool run --isolated --managed-python --python 3.14 --from "cad==<X>" python -P -m cad_server._internal.auto_update_helper <told>
+   ```
+
+   So every later release installs and runs on Python 3.14 from PyPI with those uv options, prints
+   `cad X.Y.Z` as the last line of `cad --version`, keeps that module taking the keys `told` carries,
+   and writes the attempt's record with the keys and phases an earlier release's server, button and
+   `cad update` read. A key may be added; none is removed or renamed. And `api.texttocad.dev/v1/notices`
+   keeps answering `{"notices": [...]}`. `tests/python/packages/cad_server/test_update_handshake.py`
+   holds all of it against `update_handshake.json`. This is what lets everything else about the
+   update change: the worker is always the newest release's, so a fault in how cad upgrades, goes
+   back or repairs is fixed by the next release on every computer, and only a fault in these two
+   lines is not. Where one ever is, a notice tells every older cad the one line that does not depend
+   on them: `uv tool install --force cad`.
 **Everything else follows one rule: a new release carries the old ones, and an old release never
 needs to know a new one.** A name, a place or a layout may change in any release, on the condition
 that the release that changes it brings along every computer an earlier one is on, by its own code or
@@ -601,7 +620,7 @@ refuses.
 
 ## The version feed
 
-The releases after 0.11.18 read no feed: they ask PyPI itself (`pypi.org/pypi/cad/json`, at most once
+The releases after 0.11.18 read no feed: they ask PyPI itself (its index page for cad, `pypi.org/simple/cad/`, at most once
 an hour, in the background, and once more for `cad update`) whether a newer release is out, have uv
 install the newest it finds, which is never a yanked one, and read the project's notices from
 `api.texttocad.dev/v1/notices`. So **a release is held back from them by yanking it on PyPI**, and

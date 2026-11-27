@@ -195,7 +195,7 @@ off unless turned on (`cad plugin update auto`).
 and the viewer's button, which is `cad update`'s), and the server's start, where the switch is on and the feed as last
 read names a newer release (`restart`, from `daemon.main`: the start becomes the update; never for
 `--foreground` or `--port`), or `cad server start` where the start failed. The server reads PyPI (`updates.py`, at
-most once an hour, in the background: `pypi.org/pypi/cad/json`, the newest release that is not yanked: the sign
+most once an hour, in the background: its index page for cad, `pypi.org/simple/cad/` as JSON, the newest release that is not yanked: the sign
 that there is something to take, never what is installed) and the project's notices (`api.texttocad.dev/v1/notices`), kept together in `releases.json`, and does
 nothing else with them. Holding a release back is yanking it on PyPI. A server never restarted, whose person never asks, stays on its
 release, the button showing the update. Not due where the environment holds that release already under this older

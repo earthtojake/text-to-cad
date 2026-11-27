@@ -139,8 +139,8 @@ one a process runs from.
 
 **Decision.** `uv tool install cad`, with no version, no range and no Python, is the one way we tell
 anyone to install cad, and it never changes. Every skill's Setup block runs it with `--force`, `uv
-tool install --force cad`, where `cad` is missing or older than 0.11.12, the first release installed
-this way
+tool install --force cad`, where `cad --version` fails (a cad an update left unable to run: the line is
+the update's own repair) or `cad` is missing or older than 0.11.12, the first release installed this way
 ([The shared blocks](writing-a-skill.md#the-shared-blocks), held by
 `tests/python/global/test_skill_requirements.py`). Where cad is older than the release a skill was
 written for, the block has the agent run `cad update` (the owner's word, November 2026: a plugin store
@@ -166,7 +166,8 @@ An upper bound on Python would make a resolver on a newer Python fall back to an
 ## PyPI says when, uv says what
 
 **Decision.** cad asks PyPI, at most once an hour in the background, which release is newest:
-`pypi.org/pypi/cad/json`, cad's own project, the newest `X.Y.Z` with a file that is not yanked. That
+its index page for cad (`pypi.org/simple/cad/` as JSON, PEP 691: the standard every index answers by, and the
+page uv itself resolves from), the newest `X.Y.Z` with a file that is not yanked. That
 answer is only the sign that there is something to take: it shows the update button, and makes the
 server's next start the update. What is installed is uv's to say, as the update begins: uv builds
 `cad@latest` in its cache, and the worker runs `uv tool upgrade cad`. `cad update` does the same, at
@@ -193,7 +194,7 @@ to stop it before any does: a bad one is yanked as soon as it is seen, and one a
 there until the next release (nothing moves back). cad's view of what is newest is pypi.org's, and
 uv's is the person's index: where they differ (a mirror that lags, a setting that hides new releases),
 the update begins, finds nothing newer and ends `current`, tried again by the schedule. Each computer
-asks PyPI about once an hour, a request of about 140 KB that PyPI's CDN serves. With no answer from
+asks PyPI about once an hour, a request of about 40 KB that PyPI's CDN serves. With no answer from
 PyPI, no automatic update starts, and what was read last stands.
 
 ## Notices reach what a release cannot

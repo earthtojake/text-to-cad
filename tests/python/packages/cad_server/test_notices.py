@@ -33,8 +33,8 @@ def stand_in(feed: dict):
     """A ``get`` for ``updates.feed``: PyPI's JSON naming ``feed``'s ``latest``, the notices' address ``feed``'s
     ``notices`` (``[]`` where it has none)."""
     def get(url: str):
-        if url.endswith("/cad/json"):
-            return {"info": {"version": feed["latest"]}, "releases": {feed["latest"]: [{"filename": "cad.whl"}]}}
+        if url.endswith("/cad/"):
+            return {"files": [{"filename": f"cad-{feed['latest']}-py3-none-any.whl", "yanked": False}]}
         return {"notices": feed.get("notices", [])}
     return get
 

@@ -2842,16 +2842,38 @@ class UpdateCommandTest(Case):
         self.assertEqual((code, said), (1, ["the update of cad 0.1.0 is still underway after 30 minutes: run "
                                             "`cad --version` later to see where it ended"]))
 
-    def test_an_install_again_whole_is_said_at_once_and_the_command_ends(self) -> None:
-        """The worker installs cad again whole (``repairing``): ``cad update`` says so and ends, so it holds nothing of
-        the environment the worker installs again (on Windows, the worker waits for this process to end)."""
-        answer = {"ok": True, "updating": "0.2.0", "from": "0.1.0", "since": 5.0}
+    def test_an_install_again_whole_is_said_once_and_waited_for_but_on_windows_the_command_ends(self) -> None:
+        """The worker installs cad again whole (``repairing``). ``cad update`` says so once and waits for how it ends,
+        which it then says as any update's end. On Windows it says so and ends instead: its own process runs from the
+        environment the worker installs again, and the worker waits for it to leave."""
+        from cad_server.cli import update as typed
+
         switching = {"release": "0.2.0", "at": 5.0, "outcome": "underway", "phase": "switching"}
-        looks = [(None, switching, None, False), (None, {**switching, "phase": "repairing"}, None, False)]
-        code, out, err = self.typed(answer, looks=looks)[:3]
-        self.assertEqual((code, out), (1, ""))
-        self.assertIn("cad update: the update of cad 0.1.0 left cad unable to run, so cad is being installed again: "
-                      "run `cad --version` in a few minutes to see where it ended", err)
+        repairing = {**switching, "phase": "repairing"}
+        again = "cad: the update left cad unable to run, so cad is being installed again"
+
+        def waited(looks, windows):
+            out, err, looked, said = io.StringIO(), io.StringIO(), iter(looks), []
+            with redirect_stdout(out), redirect_stderr(err):
+                code = typed.wait(lambda: next(looked), "0.1.0", 5.0, said=lambda words: said.append(words) or 1,
+                                  sleep=lambda _s: None, windows=windows)
+            return code, out.getvalue(), err.getvalue().splitlines(), said
+
+        installed = {"release": "0.2.0", "at": 5.0, "outcome": "installed", "started": "started"}
+        looks = [(None, switching, None, False), (None, repairing, None, False), (None, repairing, None, False),
+                 ("0.2.0", installed, None, True)]
+        self.assertEqual(waited(looks, windows=False),
+                         (0, "cad 0.1.0 updated to 0.2.0\n",
+                          ["cad: updating cad 0.1.0 to cad 0.2.0, then restarting the cad server", again], []),
+                         "said once, then the real end, exit 0")
+        broken = {"release": "0.2.0", "at": 5.0, "outcome": "failed", "cause": "broken", "restored": False}
+        code, out, err, said = waited([(None, repairing, None, False), (None, broken, None, False)], windows=False)
+        self.assertEqual((code, out, err), (1, "", [again]))
+        self.assertIn("install cad again: `uv tool install --force cad`", said[0])
+        code, out, err, said = waited([(None, switching, None, False), (None, repairing, None, False)], windows=True)
+        self.assertEqual((code, out, len(err)), (1, "", 1), "the step alone: the command ends before the install")
+        self.assertIn("the update of cad 0.1.0 left cad unable to run, so cad is being installed again: "
+                      "run `cad --version` in a few minutes to see where it ended", said[0])
 
 
 class DoctorTest(Case):

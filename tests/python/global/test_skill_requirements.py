@@ -4,13 +4,14 @@ same in each.
 The block names the cad the skills were written for once, as `cad==<VERSION>`, which the release stamps
 (scripts/release/sync-version.mjs); no command and no install line carries a version. 0.11.12 in its first sentence
 is fixed, not stamped: the first release installed globally by uv. It has the agent run `cad --version` before
-first use, and install cad by uv's one line, with `--force`, where it is missing or older than 0.11.12: `uv tool
+first use, and install cad by uv's one line, with `--force`, where that fails (a cad an update left unable to run:
+the line is the update's own repair) or cad is missing or older than 0.11.12: `uv tool
 install --force cad` installs the newest release whatever is there, where the plain line leaves a cad uv installed
 earlier as it is and stops at a `cad` file uv did not write (0.10.0 to 0.11.11 are a launcher, not a global
 install). cad updates itself, but
 not at once: where cad is older than the release the skill was written for (the plugin's store updated the skills
 first, cad's restart onto a new release waits, automatic updates are off, or cad's own update keeps failing), the
-block has the agent run `cad update`, which stays inside cad's major and says why where it fails. Where cad is a
+block has the agent run `cad update`, which says why where it fails. Where cad is a
 major or minor version newer than the skill and something
 fails, the agent tells the person to update the plugin, whose skills are then the older half (docs/install.md,
 "Updating"). No skill runs our install script: that is how a
@@ -37,8 +38,8 @@ SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
 # The owner's text, word for word (X is the release, stamped).
-SETUP = """Written for `cad=={X}`. Before first use in a chat, run `cad --version`. If `cad` is missing or older than
-0.11.12, run `uv tool install --force cad`. If it is older than the release this skill was written for, run
+SETUP = """Written for `cad=={X}`. Before first use in a chat, run `cad --version`. If it fails, or `cad` is missing or older
+than 0.11.12, run `uv tool install --force cad`. If it is older than the release this skill was written for, run
 `cad update`.
 
 If cad is a major or minor version newer than this skill, tell the person to update the text-to-cad plugin:

@@ -211,7 +211,7 @@ the newest release, not that one.
 new releases by itself, a new major version too, unless you turn that off with `cad update
 auto off`, and only at two moments: as its server starts, or when you ask (`cad update`, the
 viewer's update button). At most once an hour, in the background, cad asks PyPI
-(`pypi.org/pypi/cad/json`) which release is newest, leaving out every release we yanked there,
+(its index page for `cad`, `pypi.org/simple/cad/`, the page uv installs from) which release is newest, leaving out every release we yanked there,
 and asks `api.texttocad.dev/v1/notices` for the project's notices, which are text it shows and
 never runs (releases 0.11.12 to 0.11.18 ask `api.texttocad.dev/v1/releases` instead, and
 releases before them `api.texttocad.dev/v1/versions`). PyPI's answer only says that there is

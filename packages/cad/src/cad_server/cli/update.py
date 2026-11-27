@@ -18,7 +18,8 @@ failure: why, what to do and where its log is, ``ended``), as the server that an
 installer (uv, pipx) upgrades cad in place meanwhile, by the worker of the release it updates to, run from uv's
 cache; this process, which imported what it needs before, is left running by the update on Windows (it sends its
 ``pid``: ``auto_update.spared``). Where the update left no cad that runs and cad is being installed again whole, it
-says so and ends (``REPAIRING``): the worker waits for it to.
+says so once and goes on waiting for how that ends; but on Windows, where this very process runs from the environment
+the install removes and so holds it, it says so and ends (``REPAIRING``): the worker waits for it to.
 
 A cad that is no global install does not update itself, and is refused. ``cad update auto [status|on|off]`` shows or
 changes whether cad updates itself (``cad_server.cli.auto_update``).
@@ -43,8 +44,11 @@ WAIT_SECONDS = 1800.0
 LOOK_SECONDS = 0.5
 NOT_A_TOOL = ("refused: this cad is not a global install, so it does not update itself: update it the way it was "
               "installed (for pip, `pip install --upgrade cad`), or install it globally with `uv tool install cad`")
-# Where the update left no cad that runs and cad is being installed again whole (``auto_update_helper.reinstall``,
-# which waits for this process to leave cad's environment): the command ends, and the person looks later.
+# Where the update left no cad that runs and cad is being installed again whole (``auto_update_helper.reinstall``):
+# what is said of it as it begins, everywhere; and, on Windows, where the install waits for this process to leave
+# cad's environment (its own program is a file of it, which Windows lets no one remove while it runs), what the
+# command ends on: the person looks later.
+AGAIN = "cad: the update left cad unable to run, so cad is being installed again"
 REPAIRING = ("the update of cad {was} left cad unable to run, so cad is being installed again: run `cad --version` in "
              "a few minutes to see where it ended{log}")
 OLD_SERVER = ("the cad server running cannot update cad: run `cad server stop`, then `cad server start`, then "
@@ -143,11 +147,12 @@ def look(client: Any, auto_update: Any) -> tuple[str | None, Any, Any, bool]:
 def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, since: float, *,
          said: Callable[[str], int], seconds: float = WAIT_SECONDS, every: float = LOOK_SECONDS,
          clock: Callable[[], float] | None = None, sleep: Callable[[float], None] | None = None,
-         server: bool = True) -> int:
+         server: bool = True, windows: bool = os.name == "nt") -> int:
     """The update that began at ``since`` (by the server's clock: an attempt begun then or later serves it) waited for
     until its record says it ended, each step said once on stderr as it begins (``step``; ``server``: one was running,
-    and is restarted), and the end said in one line; or, where it is
-    being installed again whole, that (``REPAIRING``), at once: its exit status."""
+    and is restarted), and the end said in one line. Where cad is being installed again whole, that is said once
+    (``AGAIN``) and the wait goes on; on Windows (``windows``) the command ends at once instead (``REPAIRING``), since
+    it holds the environment. Its exit status."""
     clock, sleep = clock or time.monotonic, sleep or time.sleep
     deadline = clock() + seconds
     told_of: set[str] = set()
@@ -156,8 +161,12 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
         attempt = record if isinstance(record, dict) and isinstance(record.get("at"), (int, float)) \
             and record["at"] >= since else None
         if attempt is not None and attempt.get("outcome") == "underway":
-            if attempt.get("phase") == "repairing":  # the worker waits for this process to end (on Windows)
-                return said(REPAIRING.format(was=was, log=log_line()))
+            if attempt.get("phase") == "repairing":
+                if windows:  # the worker waits for this process to end
+                    return said(REPAIRING.format(was=was, log=log_line()))
+                if "repairing" not in told_of:
+                    told_of.add("repairing")
+                    print(AGAIN, file=sys.stderr, flush=True)
             step(attempt, was, told_of, server=server)
         if attempt is not None and attempt.get("outcome") not in (None, "underway"):
             return ended(attempt, was, running, said)

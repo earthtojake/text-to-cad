@@ -3,13 +3,13 @@ at once; and the project's notices.
 
 At most once an hour, a server reads, in the background (``refresh``), never waited on:
 
-- **PyPI** (``pypi``: ``GET https://pypi.org/pypi/cad/json``), cad's own project, read into one shape::
+- **PyPI** (``pypi``: ``GET https://pypi.org/simple/cad/`` as JSON), cad's own project, read into one shape::
 
       {"latest": "1.2.0"}
 
-  from PyPI's ``releases`` (every release, and each of its files with ``yanked``): the newest plain ``X.Y.Z`` with a
-  file that is not yanked; where PyPI's answer has no ``releases``, its ``info.version`` (which leaves yanked releases
-  out). It is the sign that a newer release is out, never what is installed: uv finds the newest itself as the update
+  It is PyPI's index, the standard every package index answers by (PEP 691) and the very page uv resolves ``cad``
+  from, so what cad reads and what uv installs are told by one document: each file of the project by name, with
+  ``yanked``. ``latest`` is the newest plain ``X.Y.Z`` that has a file not yanked. It is the sign that a newer release is out, never what is installed: uv finds the newest itself as the update
   begins (``auto_update.build``). A release is held back from every computer by yanking it on PyPI, and nothing else:
   no hour's wait, no list of held releases. The ``cad`` project also lists another owner's releases of 2020 (0.8 to
   1.1.2), every one of them yanked, so none is ever read.
@@ -227,28 +227,32 @@ def _read(path: Path, now: float, known: dict[str, Any] | None,
     return fresh
 
 
-PYPI = "https://pypi.org/pypi"
+PYPI = "https://pypi.org/simple"
 PYPI_ENV = "CAD_PYPI_URL"
-PYPI_MAX_BYTES = 16 * 1024 * 1024  # a project's JSON lists every file of every release: a few hundred KB
+PYPI_MAX_BYTES = 16 * 1024 * 1024  # the index page lists every file of every release: tens of KB
+# The index page as JSON (PEP 691), which PyPI answers by this type alone.
+INDEX_JSON = "application/vnd.pypi.simple.v1+json"
+# A file of the project by its name on the index: a wheel's or an sdist's, and its version.
+_FILE = re.compile(r"cad-([^-]+?)(?:-.+\.whl|\.tar\.gz|\.zip)")
 
 
 def pypi_url() -> str:
-    """PyPI's JSON API: ``CAD_PYPI_URL`` when it is http(s), else PyPI's own."""
+    """PyPI's index: ``CAD_PYPI_URL`` when it is http(s), else PyPI's own."""
     override = str(os.environ.get(PYPI_ENV) or "").strip().rstrip("/")
     return override if override.startswith(("https://", "http://")) else PYPI
 
 
-def _get_within(url: str, seconds: float) -> Any:
-    """The JSON at ``url``, all of it, read in ``seconds`` at most, by the caller waiting on a thread that reads it (a
-    socket's timeout bounds each read, not all of them); ``None`` when it could not be (offline, slow, refused, too
-    big, or not JSON)."""
+def _get_within(url: str, seconds: float, accept: str = "application/json") -> Any:
+    """The JSON at ``url`` (asked for as ``accept``), all of it, read in ``seconds`` at most, by the caller waiting on
+    a thread that reads it (a socket's timeout bounds each read, not all of them); ``None`` when it could not be
+    (offline, slow, refused, too big, or not JSON)."""
     found: list[Any] = []
 
     def read() -> None:
         try:
             import urllib.request
 
-            request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "cad"})
+            request = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "cad"})
             with urllib.request.urlopen(request, timeout=seconds) as response:  # noqa: S310 - http(s) only (`pypi_url`)
                 data = response.read(PYPI_MAX_BYTES + 1)
             if len(data) <= PYPI_MAX_BYTES:
@@ -263,20 +267,20 @@ def _get_within(url: str, seconds: float) -> Any:
 
 
 def pypi(*, get: Callable[[str], Any] | None = None) -> dict[str, Any] | None:
-    """cad's newest release on PyPI (``<CAD_PYPI_URL>/cad/json``), ``{"latest"}`` (see the module): the newest plain
-    ``X.Y.Z`` with a file that is not yanked. None where PyPI could not be asked or named no such release. Asked once,
-    ``TIMEOUT_SECONDS`` at most."""
-    found = (get or (lambda url: _get_within(url, TIMEOUT_SECONDS)))(f"{pypi_url()}/cad/json")
-    if not isinstance(found, dict):
+    """cad's newest release on PyPI's index (``<CAD_PYPI_URL>/cad/``), ``{"latest"}`` (see the module): the newest
+    plain ``X.Y.Z`` with a file that is not yanked (``yanked`` false or absent: true, or the reason, is a yank). None
+    where PyPI could not be asked or named no such release. Asked once, ``TIMEOUT_SECONDS`` at most."""
+    found = (get or (lambda url: _get_within(url, TIMEOUT_SECONDS, INDEX_JSON)))(f"{pypi_url()}/cad/")
+    files = found.get("files") if isinstance(found, dict) else None
+    if not isinstance(files, list):
         return None
-    given = found.get("releases")
-    if not isinstance(given, dict):  # no list of releases: PyPI's own newest, which leaves yanked ones out
-        info = found.get("info")
-        version = info.get("version") if isinstance(info, dict) else None
-        return {"latest": version} if parse_release(version) is not None else None
-    out = [numbers for version, files in given.items() if (numbers := parse_release(version)) is not None
-           and isinstance(files, list) and any(isinstance(file, dict) and file.get("yanked") in (None, False)
-                                               for file in files)]
+    out = []
+    for file in files:
+        name = file.get("filename") if isinstance(file, dict) else None
+        named = _FILE.fullmatch(name) if isinstance(name, str) else None
+        numbers = parse_release(named[1]) if named else None
+        if numbers is not None and not file.get("yanked"):
+            out.append(numbers)
     return {"latest": ".".join(map(str, max(out)))} if out else None
 
 
