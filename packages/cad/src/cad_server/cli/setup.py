@@ -61,7 +61,8 @@ written (and ``current`` pointed at it by a plain ``cad setup``), and nothing is
 globally (step 4b), and the store's next copy brings the rest. An old install script run there cannot be told from a
 typed ``cad update``, and gets cad alone too.
 
-Nothing here deletes anything of a past release: ``releases/`` stays until ``cad cache prune``. The module names
+Nothing here deletes anything of a past release: the folders in ``releases/`` stay until the global cad's server
+starts, which removes those nothing starts any more (``releases.tidy``; ``cad cache prune`` does the same). The module names
 ``cad_server._internal.engine_daemon`` and ``cad_server._internal.proxy`` stay too: shipped releases start them.
 
 Exit status of ``--engine-update``: 0 done; 1 failed (the updater stays on its own release).

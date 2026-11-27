@@ -1931,9 +1931,9 @@ class Daemon:
     def caught_up(self, *, starting: bool = False) -> None:
         """What follows cad's own update, at the server's start and at every tending (``tend``), whatever is in flight
         -- each part minds only its own: where no attempt is underway, on Windows each ``cad.exe`` an update moved
-        aside and could not remove then (``auto_update.tidy``), and the cache's environments made for another release,
-        as ``cad cache prune`` removes them, quietly (``base.tidy``: never one a process runs from, never this
-        release's), at the start (``starting``) and then at most once each ``TIDY_SECONDS``; at the start, what a
+        aside and could not remove then (``auto_update.tidy``), the cache's environments made for another release
+        and the release folders of 0.11.11 and earlier, as ``cad cache prune`` removes them, quietly (``base.tidy``,
+        ``releases.tidy``: never one a process runs from, never this release's), at the start (``starting``) and then at most once each ``TIDY_SECONDS``; at the start, what a
         start outside a Windows app package that crashed left in the state folder (``places.tidy_handoff``); the
         install command run once where cad is newer than the release it is up to date for and the person's switch
         says so (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its
@@ -1943,13 +1943,14 @@ class Daemon:
             return
         told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
         try:
-            from cad_server._internal import auto_update, base
+            from cad_server._internal import auto_update, base, releases
 
             now = time.monotonic()
             if (starting or now - self.tidied >= TIDY_SECONDS) and auto_update.underway() is None:
                 self.tidied = now
                 auto_update.tidy()
                 base.tidy()
+                releases.tidy()
             if starting:
                 _places.tidy_handoff()
             self.catching.tend(told)

@@ -109,7 +109,7 @@ updater), installed by its own ``cad setup`` through uvx, its server serving pag
   (cad a uv tool, both switches on) and hands over to the uv tool's server. The end: uv's ``cad`` in the bin folder in
   place of the shipped release's launcher, ``cad --version`` this build, the tool's server answering on the pages'
   port with their token, ``installations/current`` and its record naming the tool's environment, the hand-over
-  recorded done, both switches on, and the old release folders still there (nothing of a past release is deleted).
+  recorded done, both switches on, and the old release folders gone (the tool's server removes them as it starts).
   The install command ran once, and two tendings of the tool's server later still once.
 - ``automatic`` (0.11.x): the same, by the shipped release's automatic update (an hour passes for its feed).
 - ``updater-fallback``: ``updater`` where the install command fails and writes no report: install mode's attempt
@@ -1929,12 +1929,7 @@ def bridged(box: Box, old: str) -> None:
     switches = box.read("settings.json").get("auto_update") or {}
     if switches.get("on") is False:
         raise Failed(f"{box.label}: automatic updates off after the bridge: {switches}")
-    kept = [old_state / "releases" / old, old_state / "releases" / NEW]
-    if not all(path.is_dir() for path in kept):
-        raise Failed(f"{box.label}: a release folder is gone: {[str(path) for path in kept if not path.is_dir()]}")
-    left = box.from_folder(old_state / "releases")
-    if left:
-        raise Failed(f"{box.label}: processes still run from the release folders:\n" + "\n".join(left))
+    past_releases_gone(box, old_state, old)
     # The install command ran once (install mode), and the tool's server runs it no more: its switch is on.
     tendings(box, Path(tool["env"]), 2)
     if box.runs() != 1 or (box.read("settings.json").get("plugin") or {}).get("auto_update") is not True:
@@ -1942,7 +1937,7 @@ def bridged(box: Box, old: str) -> None:
                      f"{box.read('settings.json').get('plugin')}\n{box.said()}")
     say(f"        {old} -> {NEW}: uv's cad in {box.bin}, its server ({status.get('prefix')}), current {current}, "
         f"hand-over done (attempt {record.get('attempts')}), automatic updates on, releases/{old} and releases/{NEW} "
-        "kept; the install command ran once, and two tendings later still once")
+        "removed; the install command ran once, and two tendings later still once")
     pages(box, NEW)
 
 
@@ -1965,7 +1960,7 @@ def handed_over(box: Box) -> dict:
 def on_the_tool(box: Box, old: str) -> dict:
     """The end the bridge's own install reaches (``store-only``, ``updater-fallback``): uv's cad at this build, its
     server serving the pages' port with their token; ``current`` and its record naming the tool's environment; no
-    shipped launcher, and nothing it set aside, in the bin folder; both release folders kept, nothing running from them.
+    shipped launcher, and nothing it set aside, in the bin folder; both release folders gone, nothing running from them.
     The tool."""
     handed_over(box)
     box.tool_serves(NEW)
@@ -1977,13 +1972,25 @@ def on_the_tool(box: Box, old: str) -> dict:
     aside = leftovers(box)
     if aside:
         raise Failed(f"{box.label}: what the install set aside is still in {box.bin}: {aside}")
-    kept = [box.old_state / "releases" / old, box.old_state / "releases" / NEW]
-    if not all(path.is_dir() for path in kept):
-        raise Failed(f"{box.label}: a release folder is gone: {[str(path) for path in kept if not path.is_dir()]}")
-    left = box.from_folder(box.old_state / "releases")
+    past_releases_gone(box, box.old_state, old)
+    return tool
+
+
+def past_releases_gone(box: Box, old_state: Path, old: str) -> None:
+    """Nothing runs from the release folders of the layout of 0.11.11 and earlier, and the tool's server removed them
+    by itself as it started (``releases.tidy``): the shipped release's and the one its updater made for this build.
+    Where the shipped release keeps a state folder of its own (0.10.0 on Windows), its folders are none of this
+    build's, and stay."""
+    left = box.from_folder(old_state / "releases")
     if left:
         raise Failed(f"{box.label}: processes still run from the release folders:\n" + "\n".join(left))
-    return tool
+    folders = [old_state / "releases" / old, old_state / "releases" / NEW]
+    if old_state != box.state:
+        if not folders[0].is_dir():
+            raise Failed(f"{box.label}: {folders[0]}, in a state folder that is not this build's, is gone")
+        return
+    box.until(lambda: not any(path.exists() for path in folders),
+              f"the tool's server to remove the release folders {[str(path) for path in folders if path.exists()]}")
 
 
 def kept_launchers(box: Box) -> tuple[str, ...]:

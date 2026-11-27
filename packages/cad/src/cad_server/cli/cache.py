@@ -17,8 +17,9 @@ records, Recents and settings in the state folder, and anything else in the fold
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
 kept, and said (``base.unused``). Nothing else of cad deletes a past release's folders or environments but its
-server, at its start and then hourly, which removes the environments made for another release by the same rules, and
-the ``cad.exe`` files moved aside, quietly (``base.tidy``, ``auto_update.tidy``).
+server, at its start and then hourly, which removes by the same rules, quietly, what ``prune`` removes: the
+environments made for another release, the release folders of 0.11.11 and earlier, and the ``cad.exe`` files moved
+aside (``base.tidy``, ``releases.tidy``, ``auto_update.tidy``).
 """
 
 from __future__ import annotations
@@ -66,28 +67,14 @@ def _folders(parent: Path) -> list[Path]:
         return []
 
 
-def _inside(path: str, parent: Path) -> bool:
-    here = os.path.normcase(os.path.realpath(path))
-    return here == os.path.normcase(os.path.realpath(parent)) or here.startswith(
-        os.path.normcase(os.path.realpath(parent)).rstrip(os.sep) + os.sep)
-
-
 def prunable() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
     """What ``prune`` removes, each with what it is, and what it keeps of that, each with why: the environments made
-    for another release, and the release folders of 0.11.11 and earlier but ``installations/current``'s; a folder a
-    process runs from kept."""
-    from cad.engine.places import current
+    for another release, and the release folders of 0.11.11 and earlier but ``installations/current``'s
+    (``releases.past``); a folder a process runs from kept."""
     from cad_server._internal import base, releases
 
-    found = base.others()
-    kept: list[tuple[Path, str]] = []
-    record = current()
-    for old in _folders(releases.root()):
-        if record is not None and _inside(record["prefix"], old):
-            kept.append((old, "the release 0.11.11 and earlier start (installations/current)"))
-        else:
-            found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier"))
-    return base.unused(found, kept)
+    going, kept = releases.past()
+    return base.unused(base.others() + going, kept)
 
 
 def freed(paths: Iterable[Path]) -> int:
@@ -162,7 +149,7 @@ def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]], *, tidy
 def _clean() -> int:
     """All of the cache, and what ``prune`` removes, where no server runs (``client.connect``)."""
     from cad.engine import client
-    from cad_server._internal import base
+    from cad_server._internal import base, releases
 
     try:
         running = client.connect(start=False)
@@ -181,7 +168,7 @@ def _clean() -> int:
     pruned, also = prunable()  # its release folders of 0.11.11 and earlier: the environments are all above
 
     def outside(entries: list[tuple[Path, str]]) -> list[tuple[Path, str]]:
-        return [entry for entry in entries if not _inside(str(entry[0]), envs)]
+        return [entry for entry in entries if not releases.inside(entry[0], envs)]
 
     code = _remove(going + outside(pruned), kept + outside(also))
     with contextlib.suppress(OSError):

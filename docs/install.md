@@ -523,8 +523,8 @@ cad. What uv downloaded stays in uv's cache until you run `uv cache prune`. The 
 holds cad's settings, the documents' records and the update's record and log. The cache folder holds
 the CAD kernel environment of the release that runs, its files links into uv's cache where both are
 on one file system. cad removes by itself, as its server starts and then
-hourly, the environments made for other releases that no process runs from; `cad cache prune` does
-the same now.
+hourly, what no process runs from of the environments made for other releases and of the release
+folders cad 0.11.11 and earlier kept in the data folder; `cad cache prune` does the same now.
 
 ## What it needs
 

@@ -189,6 +189,41 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(all(path.exists() for path in (mine, integrations, unmarked)), "this release's stay")
         self.assertEqual((out.getvalue(), err.getvalue()), ("", ""), "quiet")
 
+    def test_the_server_s_tidying_removes_the_release_folders_of_0_11_11_and_earlier_by_itself(self) -> None:
+        """As ``cad cache prune`` removes them: the one ``installations/current`` names stays, and one a process runs
+        from, which goes at a later tidying; the folder that held them goes with the last. Never by a server that
+        itself runs from a release folder: the updater that brought it may yet go back to the release before."""
+        old, current, held = self.release(OTHER), self.release("0.11.10"), self.release("0.11.8")
+        installations.register("0.11.10", (str(releases.console(current)), str(base.interpreter(current)), str(current)))
+        installations.point("0.11.10")
+        kept = self.data()
+        busy = {held}
+        with mock.patch.object(releases, "running", side_effect=lambda path, **_: Path(path) in busy):
+            with mock.patch.object(releases.sys, "prefix", str(current)):
+                self.assertEqual(releases.tidy(), [], "a server that runs from a release folder removes none")
+            self.assertEqual(releases.tidy(), [old])
+            self.assertTrue(current.exists() and held.exists() and not old.exists())
+            busy.clear()
+            self.assertEqual(releases.tidy(), [held])
+            self.assertEqual(releases.tidy(), [])
+        self.assertTrue(current.exists(), "what the clients of 0.11.11 and earlier start")
+        # The computer moves to the global cad: ``current`` names an environment that is no release folder.
+        tool = self.root / "tools" / "cad"
+        for path in (base.interpreter(tool), releases.console(tool)):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("", encoding="utf-8")
+        installations.register(version(), (str(releases.console(tool)), str(base.interpreter(tool)), str(tool)))
+        installations.point(version())
+        with mock.patch.object(releases, "running", return_value=False):
+            self.assertEqual(releases.tidy(), [current])
+        self.assertFalse(releases.root().exists(), "the folder that held them, empty now")
+        self.assertTrue(all(path.exists() for path in kept), "data stays")
+        with mock.patch.object(base, "_remove", side_effect=base.Refused("held")):
+            self.release("0.11.9")
+            self.assertEqual(releases.tidy(), [])
+        with mock.patch.object(releases, "past", side_effect=OSError("unreadable")):
+            self.assertEqual(releases.tidy(), [])
+
     def test_the_tidying_never_raises(self) -> None:
         self.environment("theirs00", OTHER)
         with mock.patch.object(base, "_remove", side_effect=base.Refused("held")):

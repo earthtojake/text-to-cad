@@ -2,20 +2,22 @@
 
 ``<state>/releases/<version>`` is where 0.11.11 and earlier installed a release: its core in a virtual environment,
 made by uv, its marker (``cad-release.json``) written last. Those releases' updaters make one for the release they
-move to (an updater of 0.11.10 runs that folder's ``cad setup --engine-update``: ``cad_server.cli.setup``). Nothing of
-cad removes one by itself: ``cad cache prune`` does, when asked, but the one ``installations/current`` names and any a
-process runs from (``running``).
+move to (an updater of 0.11.10 runs that folder's ``cad setup --engine-update``: ``cad_server.cli.setup``). Once a
+computer is on the global cad, nothing starts from them again: that cad's server removes them by itself, at its start
+and then hourly (``tidy``), as ``cad cache prune`` does when asked -- but the one ``installations/current`` names and
+any a process runs from (``past``, ``running``).
 """
 
 from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
-from cad_server._internal import base  # noqa: F401 - a release folder's Python is ``base.interpreter``'s
+from cad_server._internal import base
 
-__all__ = ["FOLDER", "MARKER", "SCHEMA", "console", "processes", "root", "running"]
+__all__ = ["FOLDER", "MARKER", "SCHEMA", "console", "past", "processes", "root", "running", "tidy"]
 
 FOLDER = "releases"
 MARKER = "cad-release.json"
@@ -32,6 +34,62 @@ def root() -> Path:
 def console(env: Path) -> Path:
     """The ``cad`` command of the environment at ``env``."""
     return env / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad")
+
+
+def inside(path: str | Path, parent: Path) -> bool:
+    """Whether ``path`` is ``parent`` or in it, both resolved."""
+    here, there = os.path.normcase(os.path.realpath(path)), os.path.normcase(os.path.realpath(parent))
+    return here == there or here.startswith(there.rstrip(os.sep) + os.sep)
+
+
+def past() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
+    """The release folders in ``root`` (no link), by name, parted: those nothing starts any more, each with what it
+    is in words, and the one ``installations/current`` names, which the clients of 0.11.11 and earlier still start,
+    with why it stays. ``(going, kept)``; whether a process runs from one is ``base.unused``'s to say."""
+    from cad.engine.places import current
+
+    try:
+        found = sorted(Path(entry.path) for entry in os.scandir(root()) if entry.is_dir(follow_symlinks=False))
+    except OSError:
+        return [], []
+    record = current()
+    going: list[tuple[Path, str]] = []
+    kept: list[tuple[Path, str]] = []
+    for old in found:
+        if record is not None and inside(record["prefix"], old):
+            kept.append((old, "the release 0.11.11 and earlier start (installations/current)"))
+        else:
+            going.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier"))
+    return going, kept
+
+
+def tidy() -> list[Path]:
+    """The release folders nothing starts any more (``past``) removed by themselves, as ``cad cache prune`` removes
+    them (``base.unused``: never one a process runs from), quietly, then ``root`` itself once it is empty: what a
+    server does at its start and then hourly (``cad_server.engine.daemon.Daemon.caught_up``, never while cad's update
+    is underway). Never by a server that itself runs from a release folder -- this release as an updater of 0.11.11
+    or earlier brought it, before the computer moves to the global cad (``cad_server.cli.setup``): that updater may
+    yet go back to the release before. One that cannot be removed stays, for the next tidying. The removed; never
+    raises."""
+    removed: list[Path] = []
+    try:
+        if inside(sys.prefix, root()):
+            return removed
+        going, _kept = base.unused(past()[0], [])
+        for folder, what in going:
+            try:
+                base._remove(folder, what)
+            except base.Refused:
+                continue
+            removed.append(folder)
+        if removed:
+            try:
+                root().rmdir()  # empty now, or it stays
+            except OSError:
+                pass
+    except Exception:  # noqa: BLE001 - a tidying never fails what asked for it
+        pass
+    return removed
 
 
 def running(folder: Path | str, *, besides: int | None = None, asking: int | None = None) -> bool:
