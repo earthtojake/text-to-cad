@@ -320,7 +320,9 @@ def start(port: int | None = None) -> str:
     switches away from this release (``LEAVING``: the daemon launched stood aside for it, or this start became the
     update) it launches nothing and takes no exit of what it launched for a failure: a daemon launched then would run
     from files uv is replacing, and one that fails would fail this start a moment before the update starts its own.
-    It waits for the server the update starts, the next release's or, where its repair went back, this one's. What was done, in one line. ``ConnectionError`` in one line
+    It waits for the server the update starts, the next release's or, where its repair went back, this one's, as long
+    as the update switches (``START_SECONDS`` at a time, its build included while the daemon launched begins it). What
+    was done, in one line. ``ConnectionError`` in one line
     where it could not be: room not made (``make_way``), a server that did not start (its note,
     ``places.failure_path``), and one of an older release that a start at the same moment started
     (``OtherRelease``)."""
@@ -344,7 +346,12 @@ def start(port: int | None = None) -> str:
     stood_by = waited = False  # ever stood by for the update's switch; the daemon launched last left during one
     while (answered := _connect()) is None:
         if time.monotonic() > deadline:
-            raise ConnectionError("the engine server did not start")
+            if not _leaving():
+                raise ConnectionError("the engine server did not start")
+            # cad's own update is switching away from this release, its worker beating: uv's build of the next
+            # release, its upgrade and its server's start may outlast a start's wait on a slow computer. Waited for
+            # while it beats (``LEAVING``), a start's wait at a time.
+            stood_by, deadline = True, time.monotonic() + START_SECONDS
         time.sleep(0.02)
         code = process.poll()
         if code is not None and _leaving():

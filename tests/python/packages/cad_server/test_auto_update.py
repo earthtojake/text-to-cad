@@ -4118,6 +4118,15 @@ class SwitchingTest(Case):
         self.assertEqual((said, launched), (f"started the cad server (cad {mine})", 2))
         said, launched = self.start([None, "99.0.0"], leaving=[False], exits=[None])
         self.assertEqual((said, launched), (f"the cad server (cad 99.0.0, newer than this cad {mine}) is already running", 1))
+        # The daemon launched begins the update and runs on while uv builds the next release; the build, the upgrade
+        # and the next server's start outlast a start's wait (a slow computer, a cold cache): waited for while the
+        # update switches, and said as cad updating itself. With no switch, the same wait fails.
+        looks = int(2 * (client.START_SECONDS + 30))
+        said, launched = self.start([None] * looks + ["99.0.0"], leaving=[True], exits=[None])
+        self.assertEqual((said, launched), (f"started the cad server (cad 99.0.0): cad updated itself from {mine} as "
+                                            "the server started", 1))
+        said, launched = self.start([None] * looks + ["99.0.0"], leaving=[False], exits=[None])
+        self.assertEqual((str(said), launched), ("the engine server did not start", 1))
         # A hook that fails is no switch, and neither is none.
         def broken() -> bool:
             raise OSError("the state folder is refused")
