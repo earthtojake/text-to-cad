@@ -1610,7 +1610,11 @@ def build_fit(lo: np.ndarray, hi: np.ndarray, machine: dict[str, Any], points: n
         most = lie(points, np.array(machine["largest_mm"], dtype=float), sides)["fill_ratio"]
         largest = {"largest_volume_mm": [float(v) for v in machine["largest_mm"]],
                    "largest_fill_ratio": round(most, JUDGED), "fits_largest": bool(most <= 1.0)}
-    return {**largest, "volume_mm": [float(v) for v in volume], "volume_origin": machine["origin"],
+    said_volume = [float(v) for v in volume]
+    if bed_radius is not None:
+        # A fitted circle can carry noise from rounded preset points; keep that out of the report only.
+        said_volume[:2] = [round(2 * bed_radius, 3)] * 2
+    return {**largest, "volume_mm": said_volume, "volume_origin": machine["origin"],
             "bbox_mm": [round(float(v), 4) for v in box], "tight_box_mm": [round(v, 4) for v in lying["box_mm"]],
             "fill_ratio": round(lying["fill_ratio"], JUDGED), "fits": bool(lying["fill_ratio"] <= 1.0),
             "as_placed_fill_ratio": round(placed, 4), "upright": lying["upright"],
@@ -1728,11 +1732,10 @@ def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndar
         bbox = [round(float(v), 3) for v in box]
         if bed_radius is not None:
             fill = _round_fill(_outline(W[:, :2]), float(box[2]), bed_radius, float(volume[2]))
-            fits = fill <= 1.0 + FIT_EPS
         else:
-            xy = max(float(a) / float(b) for a, b in zip(sorted(bbox[:2]), sorted(volume[:2])))
-            fill = round(max(xy, bbox[2] / float(volume[2])), 4)
-            fits = fill <= 1.0 + 1e-9
+            xy = max(float(a) / float(b) for a, b in zip(sorted(box[:2]), sorted(volume[:2])))
+            fill = max(xy, float(box[2]) / float(volume[2]))
+        fits = fill <= 1.0 + FIT_EPS
         rows.append({"orientation": name, "rotation": np.round(R, 6).tolist(), "rotate": rot_text(R),
                      "support_volume_mm3": round(held["volume_mm3"], 2),
                      "support_contact_mm2": round(held["contact_area_mm2"], 2),

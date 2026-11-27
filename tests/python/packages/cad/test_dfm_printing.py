@@ -974,6 +974,24 @@ class PrinterFileTest(unittest.TestCase):
         resolved = manufacturing.options("stl", "printing", {"printer": self.preset(settings, "b.json")})
         self.assertEqual(resolved["nozzle"], 0.6)
 
+    def test_orientation_fit_uses_the_same_unrounded_height_for_both_beds(self) -> None:
+        import trimesh
+
+        machine = {"volume_mm": [300.0, 300.0, 100.0], "origin": "test"}
+        for height, fits in ((100, True), (100.00005, True), (100.001, False)):
+            mesh = trimesh.creation.box(extents=(20, 20, height))
+            for bed in (machine, {**machine, "bed_radius_mm": 150.0}):
+                with self.subTest(height=height, bed=bed):
+                    [row] = mo.orientation_rows(mesh.vertices, mesh.faces, {"drawn": np.eye(3)},
+                                                45.0, 1.0, machine=bed)
+                    self.assertEqual(row["fill_ratio"], 1.0)
+                    self.assertEqual(row["fits"], fits)
+
+    def test_round_bed_volume_does_not_report_inferred_diameter_noise(self) -> None:
+        machine = {"volume_mm": [299.9996, 299.9996, 400.0], "origin": "test", "bed_radius_mm": 149.9998}
+        fit = mo.build_fit(np.zeros(3), np.array([10.0, 10.0, 10.0]), machine)
+        self.assertEqual(fit["volume_mm"], [300.0, 300.0, 400.0])
+
     def test_round_bed_rejects_a_cube_that_fits_its_bounding_box(self) -> None:
         settings = {**self.SETTINGS, "printable_height": 200, "printable_area": [
             f"{20 + 100 * math.cos(math.radians(angle)):.4f}x{-30 + 100 * math.sin(math.radians(angle)):.4f}"

@@ -381,7 +381,8 @@ class KeptResultTest(unittest.TestCase):
         self.assertFalse(contract.measuring()["code"].endswith(_measuring.EDITED), "the code as this process loaded it")
         with mock.patch.dict(_measuring._TAKEN, clear=True), mock.patch.object(cad, "_LOADED_NS", 0):
             self.assertTrue(contract.measuring()["code"].endswith(_measuring.EDITED), "edited since it loaded")
-        self.assertEqual(set(contract.measure()["libraries"]), {"build123d", "OCP", "bd_materials", "numpy"})
+        self.assertEqual(set(contract.measure()["libraries"]), {"build123d", "OCP", "bd_materials", "numpy", "shapely"})
+        self.assertEqual(contract.measure()["libraries"]["shapely"], importlib.metadata.version("shapely"))
         with mock.patch.object(importlib.metadata, "version", side_effect=AssertionError("the long way")):
             self.assertEqual(_measuring._version("OCP", _measuring.MEASURING["OCP"], {"cadquery_ocp": "8.0.1"}),
                              "8.0.1", "cadquery-ocp as well as its -novtk, from the listings")
