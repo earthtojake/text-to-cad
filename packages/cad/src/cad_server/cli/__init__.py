@@ -16,7 +16,7 @@ waits for the next (``client.SWITCHING``). The server's own commands are not hel
 command's client launches no server while cad's own update switches away from its release (``client.LEAVING``).
 
 A command whose words a person reads says, once, what CAD sends by default (``_tell``), and, after its own output and
-at most once a day, that this cad has stayed behind a release of its major though it updates itself (``_behind``), and
+at most once a day, that this cad has stayed behind a release though it updates itself (``_behind``), and
 each of the project's notices for this cad (``_notices``, ``cad_server.notices``): each one line on stderr, never in a
 command's output.
 
@@ -68,7 +68,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # A page of the running server's; the launcher exits.
     "viewer": ("cad_server.cli.viewer", "open a viewer page on the running cad server"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
-    "update": ("cad_server.cli.update", "update cad now to the newest release of its major version; "
+    "update": ("cad_server.cli.update", "update cad now to the newest release; "
                                      "`update auto`: whether it does so itself"),
     "plugin": ("cad_server.cli.plugin", "the plugin in your agent apps: `install` puts it in or updates it; "
                                         "`update auto`: whether cad's updates update it too"),
@@ -434,8 +434,8 @@ def _output_gone() -> bool:
 
 
 def _behind() -> None:
-    """Say, at most once a day and after the command's own output, that this cad has stayed behind a release of its
-    own major though it updates itself (``auto_update.notice``): one line on stderr, the command line's counterpart of
+    """Say, at most once a day and after the command's own output, that this cad has stayed behind a release
+    though it updates itself (``auto_update.notice``): one line on stderr, the command line's counterpart of
     the viewer's update button. Never where the command's output has lost its reader (``main`` then stops quietly), and
     never a failure of the command it follows."""
     try:

@@ -75,7 +75,9 @@ class WindowsConsoleTest(unittest.TestCase):
             with mock.patch.object(subprocess, "Popen", side_effect=Started) as popen, self.assertRaises(Started):
                 client._spawn(4321)
             self.assertEqual(popen.call_args.args[0], [sys.executable, "-P", "-m", "cad_server._internal.engine_daemon",
-                                                       "--port", "4321"], "the environment's Python, never cad.exe")
+                                                       "--starter", str(os.getpid()), "--port", "4321"],
+                             "the environment's Python, never cad.exe; told which process started it, which cad's own "
+                             "update leaves running where this start becomes it")
 
 
 def setUpModule() -> None:

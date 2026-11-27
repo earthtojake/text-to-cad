@@ -1,16 +1,14 @@
 """cad's own update: what a global install is, the switches, the check, and its trigger.
 
-**The rule.** cad installs by itself any newer release with the same major version number as its own, and its own update
-never crosses a major: a release of a higher major is only named where it is out (``MAJOR_LINE``). Every update is
-forward only. The
-bound is worked out from the release that runs each time (``bound``: ``cad>=<this release>,<<its major + 1>``), never a
-fixed number, so it holds on a computer that has not updated for months.
+**The rule.** cad installs by itself the newest release there is: whatever its installer takes for ``cad`` with
+nothing else asked, a new major version too. Nothing here names a release to install or bounds one: uv decides, by the
+index and the settings the person gave it, and it never takes a release yanked on PyPI, which is how a release is held
+back. Every update is forward only: none begins unless the newest release uv finds is newer than this one.
 
 **How a release arrives.** The installer that made cad updates it where it is, with the person's own settings: uv
-(``base.find_uv``) runs ``uv tool upgrade "cad==<release>"`` on its tool, its receipt keeping its own requirements;
-pipx (``find_pipx``) runs ``pipx runpip cad install "cad==<release>"``, pip inside its environment, the person's pin
-there as it was (pipx 1.19 notes the requirement as the one it was installed by, which ``pipx upgrade`` moves on
-from). What cad adds is what makes that safe where processes run cad, which on Windows hold its files (the installer
+(``base.find_uv``) runs ``uv tool upgrade cad`` on its tool, its receipt keeping its own requirements (a range a
+person or an earlier release wrote there still holds: it is uv's to keep); pipx (``find_pipx``) runs ``pipx runpip
+cad install --upgrade cad``, pip inside its environment, the person's pin there as it was. What cad adds is what makes that safe where processes run cad, which on Windows hold its files (the installer
 downloads and prepares the release before it changes the environment, so a download that fails leaves cad as it was):
 the server stopped, on Windows every other process of the environment stopped and its ``cad`` command moved aside,
 the upgrade, a check that the release runs, the release before again where it does not, and, where that leaves no cad
@@ -31,10 +29,9 @@ the release the plugin is up to date for (``plugin_catch_up``), OFF where nothin
 
 **The check** (``due``): switch on, the check not turned off for this process (``updates.checking``), this cad a
 global install, no attempt underway, of whatever release (``underway``, ``believed``), and an update PyPI, as last
-read (``updates.feed``), calls for (``choose``): the newest release of this cad's major its ``lines`` names, where it
-is newer; where it names none of this major, its ``latest`` where that is of this major and newer, or, where ``latest`` is of a higher major,
-the bounded build with no release named, so an answer without ``lines`` never strands a computer. That release
-(``wanted``) is due by the schedule (``next_try``): after its ``n``-th automatic try it waits ``min(2 ** (n - 1),
+read (``updates.feed``), calls for (``choose``): its ``latest``, the newest release not yanked, where it is newer than
+this one. PyPI's word is the sign that there is something to take, never what is installed: uv finds that
+(``build``). That release (``wanted``) is due by the schedule (``next_try``): after its ``n``-th automatic try it waits ``min(2 ** (n - 1),
 WAIT_HOURS)`` hours, and no automatic attempt begins where ``DAILY`` began in the last day, of any release. The tries
 are kept by release (``tries``, ``TRIED``), so a newer release starts afresh and a server of another release never
 sets them back. One exception: a release an attempt at which ended ``start_failed`` (its server did not start, and
@@ -58,8 +55,10 @@ it cuts short says cad updated itself while it ran.
 **The trigger** (``trigger``) begins the update in one step across processes (``_claim``, under the state folder's
 lock): where an attempt is underway none begins (an automatic update) or it is joined (``cad update``); else the
 attempt before counted where it was not, and this one kept as underway, its ``phase`` ``switching``. Then uv builds
-the environment of the release the record names in its cache (``build``: where it cannot, the attempt ends ``failed``
-with uv's cause, nothing touched), and the worker starts from it, detached (``from_cache``, ``helper_command``). The
+the environment of the newest release in its cache (``build``, ``cad@latest``, the attempt beating meanwhile,
+``_beating``: where uv cannot, the attempt ends ``failed`` with uv's cause, and where what it finds is no newer than
+this release, ``current``, nothing touched either way), the record names the release uv built, and the worker starts
+from it, detached (``from_cache``, ``helper_command``). The
 attempt is kept in the state folder (``RECORD``: ``release``, ``wanted``, ``from``,
 ``at``, ``tries``, ``installer``, ``asked`` -- a person's own update --, ``phase``, ``beat``, then the worker's
 ``ended``, ``outcome``,
@@ -86,13 +85,12 @@ went (``plugin_catch_up.last``).
 
 **Asked for** (``cad update``, and the viewer's update button: the server judges it, ``asked``, and begins it at once,
 ``begin``; with no server running, ``cad update`` itself, whose worker then starts none): PyPI asked now
-(``updates.pypi``) for the newest release of this cad's major, chosen as the feed's answer is; where a release of a
-higher major is out, the answer names it (``higher``, ``MAJOR_LINE``), and nothing crosses to it. Neither the switch
-nor the schedule applies, and no automatic try is spent; where PyPI cannot be reached, the build
-runs all the same, bounded.
+(``updates.pypi``) for the newest release, chosen as the last read's answer is: where it names none newer, the answer
+says so and nothing begins. Neither the switch nor the schedule applies, and no automatic try is spent; where PyPI
+cannot be reached, the build runs all the same, and uv says what is newest.
 
 **A cad that has stayed behind** (``notice``): where automatic updates are on and a global install has been behind a
-release of its own major for ``BEHIND_SECONDS``, a ``cad`` command says so in one line on stderr after its own output,
+release for ``BEHIND_SECONDS``, a ``cad`` command says so in one line on stderr after its own output,
 at most once a day (``cad_server.cli``): the command line's counterpart of the viewer's update button.
 
 Imports the standard library alone; what it asks of cad it imports as it asks.
@@ -131,8 +129,12 @@ KEPT = 8  # how many releases' tries are kept: the newest tried
 LOST_SECONDS = 20 * 60.0  # an attempt whose worker has not beaten for this long is lost (``believed``)
 LONGEST_SECONDS = 6 * HOUR  # nor is one believed underway this long after it began, whatever its beat says
 RETRY_SECONDS = HOUR  # how long an attempt a release before the beat kept is believed underway
-# What the record names as the release of a typed update begun with no answer from PyPI: whatever the build gets.
+# What the record names as the release of a typed update begun with no answer from PyPI, until uv has built it.
 LATEST = "latest"
+# What uv is asked for, always: the newest release, for the worker's environment in its cache (``build``: ``@latest``
+# has uv look again, where a bare name would take what it built before) and for the upgrade (``UPGRADE``: uv's tool
+# and pip take the newest the name allows).
+NEWEST, UPGRADE = "cad@latest", "cad"
 # How long uv may take to upgrade cad (``auto_update_helper``).
 UPGRADE_SECONDS = 900.0
 # Who makes a global install of cad (``global_install``), named in the record and its count.
@@ -158,57 +160,12 @@ def newer(theirs: Any, mine: Any) -> bool:
     return a is not None and b is not None and a > b
 
 
-def bound(version: str) -> str:
-    """The requirement that keeps an update inside release ``version``'s major and never below it: ``cad>=<version>,<
-    <its major + 1>``, worked out from the release each time (see the module). ``ValueError`` for no plain ``X.Y.Z``."""
-    numbers = release(version)
-    if numbers is None:
-        raise ValueError(f"not a release: {version!r}")
-    return f"cad>={version},<{numbers[0] + 1}"
-
-
-# The migration guides, which say what a new major version asks of a person.
-MIGRATIONS = "https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations"
-# The one line that says a release of a higher major is out (``cad update``, ``cad doctor``, ``cad update auto``).
-MAJOR_LINE = f"cad {{release}}, a new major version, is out: the migration guides say what changes ({MIGRATIONS})"
-
-
-@dataclass(frozen=True)
-class Due:
-    """An update to make: ``target``, the release it moves to (None: the newest release of this major the build
-    gets), and ``wanted``, the release it is for, by which its tries are counted (``target``, or the feed's ``latest``
-    where it names none of this major)."""
-
-    target: str | None
-    wanted: str
-
-
-def choose(known: Any, version: str) -> Due | None:
-    """The update an answer in the feed's shape (``known``: ``{"latest", "lines"}``, the feed's or PyPI's) calls for,
-    from release ``version`` (see the module's check), or None. Never a higher major, never an older release."""
-    from cad_server import updates
-
-    mine = release(version)
-    if mine is None or not isinstance(known, dict):
-        return None
-    named = updates.newest_of_major(mine[0], known)
-    if named is not None:
-        return Due(named, named) if newer(named, version) else None
-    latest = known.get("latest")
-    top = release(latest)
-    if top is None or top[0] < mine[0]:
-        return None
-    if top[0] == mine[0]:
-        return Due(latest, latest) if newer(latest, version) else None
-    return Due(None, latest)  # no release of this major named: the bounded build, counted by ``latest``
-
-
-def higher(known: Any, version: str) -> str | None:
-    """The newest release of a higher major than release ``version``'s that ``known`` (the feed's shape) names, or
-    None."""
-    mine, latest = release(version), known.get("latest") if isinstance(known, dict) else None
-    top = release(latest)
-    return latest if mine is not None and top is not None and top[0] > mine[0] else None
+def choose(known: Any, version: str) -> str | None:
+    """The release an answer in the shape PyPI is kept in (``known``: ``{"latest"}``, ``updates.feed``'s or
+    ``updates.pypi``'s) calls an update for, from release ``version``: its ``latest`` where that is newer, or None.
+    Never an older release. A sign that there is something to take: what is installed is uv's to find (``build``)."""
+    latest = known.get("latest") if isinstance(known, dict) else None
+    return latest if newer(latest, version) else None
 
 
 def _data() -> Path:
@@ -636,8 +593,8 @@ def _kept(book: dict[str, Any]) -> dict[str, Any]:
 # --- the check and its trigger ----------------------------------------------------------------------------------------
 
 
-def due(*, fetch: bool = False, now: float | None = None) -> Due | None:
-    """The update to make now (``Due``), or None (see the module); one due that cannot begin (``blocked``) counted
+def due(*, fetch: bool = False, now: float | None = None) -> str | None:
+    """The release an update is due for now (``choose``), or None (see the module); one due that cannot begin (``blocked``) counted
     once for its release (``_blocked``). ``fetch``: the feed read first where an hour has passed (``updates.feed``; never for an update that cannot begin);
     else the feed as last read. Never raises."""
     try:
@@ -651,13 +608,13 @@ def due(*, fetch: bool = False, now: float | None = None) -> Due | None:
         stuck = blocked(found)
         chosen = choose(updates.feed(fetch=fetch and stuck is None), _version())
         now = time.time() if now is None else now
-        if chosen is None or underway(now) is not None or stale(chosen.wanted):
+        if chosen is None or underway(now) is not None or stale(chosen):
             return None
         book = tries(now)
-        if next_try(chosen.wanted, book, now) is not None or given_up(chosen.wanted, book):
+        if next_try(chosen, book, now) is not None or given_up(chosen, book):
             return None
         if stuck is not None:
-            _blocked(found, chosen.wanted, stuck, now)
+            _blocked(found, chosen, stuck, now)
             return None
         return chosen
     except Exception:  # noqa: BLE001 - a check that cannot be made is no update
@@ -740,26 +697,21 @@ def pinned(prefix: str | os.PathLike[str] | None = None) -> bool:
     return "==" in str(specifier)
 
 
-def requirement(target: str | None, version: str) -> str:
-    """What the worker installs from release ``version``: ``cad==<target>``; with no target the newest of this major,
-    never below ``version`` (``bound``)."""
-    return f"cad=={target}" if target is not None else bound(version)
-
-
 def helper_command(target: str | None, *, now: float, version: str, record: str, install: Global, tries: int = 1,
                    asked: bool = False, start: bool = True, wanted: str | None = None,
                    log: str | None = None, python: str = "python",
                    spare: list[int] | None = None) -> list[str]:
     """The worker's entry (``HELPER``): ``python`` (the one of the environment uv runs it from: ``from_cache``; the
     bridge's, the installed environment's own, ``cli.setup.move``), the worker as a module, and its one argument,
-    ``told``: ``target``, the release asked for (None: whatever uv gets), what to install (``requirement``), the global
+    ``told``: ``target``, the release the update is for -- the one uv built, the worker's own; the bridge's, the one
+    installed already: an environment that holds it or a newer one is left as it is --, the global
     install ``install``'s environment and its ``cad`` command, who made it, its uv and pipx; ``wanted``, the release
-    the attempt is for (``target`` or ``LATEST`` by default), ``tries``, ``asked`` (a typed update), ``start`` (whether
+    the attempt is counted for (``target`` or ``LATEST`` by default), ``tries``, ``asked`` (a typed update), ``start`` (whether
     a server is wanted at the end though none runs now), ``spare`` (on Windows, the processes the switch leaves
     running: ``spared``), ``record`` and ``log``, the files it keeps the attempt and each command in."""
     told = {"record": record, "log": log, "from": version, "at": now, "tries": tries,
             "wanted": wanted or target or LATEST, "asked": asked, "start": start, "target": target,
-            "requirement": requirement(target, version), "prefix": str(install.prefix),
+            "prefix": str(install.prefix),
             "cad": str(tool_command(install.prefix)), "uv": install.uv, "pipx": install.pipx,
             "installer": install.installer, "spare": spare or []}
     return [python, "-P", "-m", HELPER, json.dumps(told)]
@@ -774,12 +726,13 @@ def from_cache(uv: str, wanted: str, *command: str) -> list[str]:
     return [uv, "tool", "run", "--isolated", "--managed-python", "--python", PYTHON, "--from", wanted, *command]
 
 
-def build(uv: str, wanted: str, timeout: float = UPGRADE_SECONDS) -> tuple[str | None, int | None, str]:
-    """uv's environment of ``wanted`` built in its cache, as the worker runs from it (``from_cache``), and asked its
-    release (``cad --version``, which every release answers): ``(that release or None, uv's exit status, all it
-    printed)``, the status None where uv could not run or did not end within ``timeout``. Run with no window, in the
+def build(uv: str, timeout: float = UPGRADE_SECONDS) -> tuple[str | None, int | None, str]:
+    """uv's environment of the newest cad (``NEWEST``) built in its cache, as the worker runs from it
+    (``from_cache``), and asked its release (``cad --version``, which every release answers): ``(that release or None,
+    uv's exit status, all it printed)``, the status None where uv could not run or did not end within ``timeout``. The
+    newest is uv's to say: by the person's index and settings, never a release yanked. Run with no window, in the
     worker's environment (``environ``)."""
-    command = from_cache(uv, wanted, "cad", "--version")
+    command = from_cache(uv, NEWEST, "cad", "--version")
     try:
         done = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True, encoding="utf-8", errors="replace", timeout=timeout, env=environ(),
@@ -791,26 +744,42 @@ def build(uv: str, wanted: str, timeout: float = UPGRADE_SECONDS) -> tuple[str |
     return (found[1] if found else None), done.returncode, done.stdout or ""
 
 
-def _unbuilt(kept: dict[str, Any], line: list[str], uv: str, wanted: str,
+def _unbuilt(kept: dict[str, Any], line: list[str], uv: str,
              found: tuple[str | None, int | None, str], seconds: float) -> dict[str, Any]:
-    """The attempt ``kept`` ended where uv could not build the worker's environment of ``wanted`` (``build``'s
-    ``found``, in ``seconds``): ``failed``, with uv's cause (``auto_update_helper.cause_of``), its first error
-    (``auto_update_helper.why``), and
-    ``restored``: nothing was touched, and the release before runs on. Written to the record and the log."""
+    """The attempt ``kept`` ended where uv's build of the newest cad (``build``'s ``found``, in ``seconds``) gave no
+    worker to run, nothing touched, the release before running on (``restored``). Where uv could not build it:
+    ``failed``, with uv's cause (``auto_update_helper.cause_of``) and its first error (``auto_update_helper.why``).
+    Where the newest release uv finds is no newer than this one (PyPI named one uv does not take: yanked since, hidden
+    by a setting of uv's, not on the person's index yet): ``current``, this release its ``release``. Written to the
+    record and the log."""
     from cad_server._internal import auto_update_helper as helper
 
-    _named, code, said = found
+    named, code, said = found
     log = helper.Log(str(_data() / LOG))
     log.begin(json.loads(line[-1]))
-    log.ran(from_cache(uv, wanted, "cad", "--version"), code, seconds, said)
-    ended = {**{name: value for name, value in kept.items() if name not in ("phase", "beat")}, "outcome": "failed",
-             "ended": time.time(), "restored": True,
-             "cause": helper.cause_of(1 if code == 0 else code, said, log),  # 0: uv named no release
-             "detail": f"uv could not build {wanted} to update cad, and nothing was changed: "
-                       f"{helper.why(said) or 'uv said nothing'}"}
+    log.ran(from_cache(uv, NEWEST, "cad", "--version"), code, seconds, said)
+    ended = {**{name: value for name, value in kept.items() if name not in ("phase", "beat")},
+             "ended": time.time(), "restored": True}
+    if named is None:
+        ended.update(outcome="failed", cause=helper.cause_of(1 if code == 0 else code, said, log),  # 0: no release named
+                     detail=f"uv could not build the newest cad to update to, and nothing was changed: "
+                            f"{helper.why(said) or 'uv said nothing'}")
+    else:
+        ended.pop("restored")
+        ended.update(outcome="current", release=kept["from"], start=False,
+                     detail=f"cad {kept['from']} is the newest release uv finds (it built cad {named})")
     log.end(ended)
     _keep(_data() / RECORD, ended)
     return ended
+
+
+def _beating(record: Path, kept: dict[str, Any]) -> Any:
+    """The attempt ``kept`` marked as still underway every minute while this process works on it, before any worker
+    runs (uv's build of the newest cad can take minutes on a slow connection): the worker's own beat
+    (``auto_update_helper.Beat``), over the attempt's record. Its ``stop()`` ends it."""
+    from cad_server._internal import auto_update_helper as helper
+
+    return helper.Beat({"record": str(record), "at": kept["at"]})
 
 
 def spared(waiting: int | None = None) -> list[int]:
@@ -890,38 +859,45 @@ def _claim(*, release: str, wanted: str, version: str, installer: str, automatic
     return BEGUN, kept
 
 
-def _start(target: str | None, *, automatic: bool, start: bool, wanted: str | None,
+def _start(wanted: str | None, *, automatic: bool, start: bool,
            waiting: int | None = None) -> tuple[str, dict[str, Any]]:
-    """The update to ``target`` begun (``trigger``'s work), or the attempt underway found: ``(BEGUN, the attempt)``,
-    ``(UNDERWAY, the attempt underway)``, or ``("", {})`` where none could begin (``NOT_YET`` too). Once claimed
-    (``_claim``), uv builds the environment of the release the record names (``build``): where it cannot, the attempt
-    has ended (``_unbuilt``: ``(BEGUN, that record)``); else the worker starts from it, of the very release uv built
-    (``from_cache``), told what the record names (``helper_command``), outside any Windows app package
-    (``places.outside_package``). ``waiting``: the process that waits on the attempt (``spared``)."""
+    """The update begun for ``wanted`` (the release PyPI named; None: whatever uv finds: ``trigger``'s work), or the
+    attempt underway found: ``(BEGUN, the attempt)``, ``(UNDERWAY, the attempt underway)``, or ``("", {})`` where none
+    could begin (``NOT_YET`` too). Once claimed (``_claim``), uv builds the environment of the newest cad
+    (``build``), the attempt beating while it does (``_beating``): where it gives no newer release, the attempt has
+    ended (``_unbuilt``: ``(BEGUN, that record)``); else the record names the release uv built, its beat now, and the
+    worker starts from that very release (``from_cache``), told what the record names (``helper_command``), outside
+    any Windows app package (``places.outside_package``). ``waiting``: the process that waits on the attempt
+    (``spared``)."""
     from cad.engine.places import detached, outside_package
 
     found = global_install()
     if found is None or blocked(found) is not None:
         return "", {}
     version = _version()
-    bound(version)  # a release cad can bound a build by, or none begins (``ValueError``)
-    named = target or LATEST
-    said, kept = _claim(release=named, wanted=wanted or named, version=version, installer=found.installer,
-                        automatic=automatic)
+    if release(version) is None:  # no release to move on from
+        return "", {}
+    named = wanted or LATEST
+    said, kept = _claim(release=named, wanted=named, version=version, installer=found.installer, automatic=automatic)
     if said != BEGUN:
         return (said if said == UNDERWAY else ""), kept
     record = _data() / RECORD
     try:
-        line = helper_command(None if kept["release"] == LATEST else kept["release"], now=kept["at"],
-                              version=version, record=str(record), install=found, tries=kept["tries"],
-                              asked=kept["asked"], start=start, wanted=kept["wanted"],
-                              log=str(record.with_name(LOG)), spare=spared(waiting))
-        wanted_ = json.loads(line[-1])["requirement"]
         began = time.monotonic()
-        built = build(found.uv, wanted_)
-        if built[0] is None:
-            return BEGUN, _unbuilt(kept, line, found.uv, wanted_, built, time.monotonic() - began)
-        outside_package(from_cache(found.uv, f"cad=={built[0]}", *line), stdin=subprocess.DEVNULL,
+        beating = _beating(record, kept)
+        try:
+            built = build(found.uv)
+        finally:
+            beating.stop()
+        target = built[0] if newer(built[0], version) else None
+        line = helper_command(target, now=kept["at"], version=version, record=str(record), install=found,
+                              tries=kept["tries"], asked=kept["asked"], start=start, wanted=kept["wanted"],
+                              log=str(record.with_name(LOG)), spare=spared(waiting))
+        if target is None:
+            return BEGUN, _unbuilt(kept, line, found.uv, built, time.monotonic() - began)
+        kept = {**kept, "release": target, "beat": time.time()}
+        _keep(record, kept)
+        outside_package(from_cache(found.uv, f"cad=={target}", *line), stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=environ(), cwd=str(record.parent),
                         **detached(breakaway=True))
     except Exception as error:
@@ -932,17 +908,18 @@ def _start(target: str | None, *, automatic: bool, start: bool, wanted: str | No
     return BEGUN, kept
 
 
-def trigger(target: str | None, *, automatic: bool = True, start: bool = True, wanted: str | None = None,
+def trigger(wanted: str | None = None, *, automatic: bool = True, start: bool = True,
             waiting: int | None = None) -> dict[str, Any] | None:
-    """The update to ``target`` (None: whatever uv gets) begun, for ``wanted`` (``target`` by default): in one step
+    """The update to the newest release begun, counted for ``wanted`` (the release PyPI named; None: whatever uv
+    finds): in one step
     across processes (``_claim``) the attempt before counted where it was not and this one kept (``RECORD``, outcome
     ``underway``), unless one is underway (or, ``automatic``, ``wanted`` was tried since the check); then the worker
-    started from the release in uv's cache (``_start``), detached, with no window, in ``environ``; ``automatic``: the
+    started from the release uv built in its cache (``_start``), detached, with no window, in ``environ``; ``automatic``: the
     server's own update, else a typed one (``asked`` in the record); ``start``: a server wanted at the end though none
     runs now; ``waiting``: the process that waits on it (``spared``). The attempt this call began and its worker
     carries out (its record), or None; never raises."""
     try:
-        said, kept = _start(target, automatic=automatic, start=start, wanted=wanted, waiting=waiting)
+        said, kept = _start(wanted, automatic=automatic, start=start, waiting=waiting)
     except Exception:  # noqa: BLE001 - an update that cannot begin leaves cad as it is
         return None
     return kept if said == BEGUN and kept.get("outcome") == "underway" else None
@@ -955,27 +932,26 @@ def _keep(path: Path, record: dict[str, Any]) -> None:
     write_bytes_atomic(path, json.dumps(record, sort_keys=True).encode("utf-8"))
 
 
-def restart(*, fetch: bool = False) -> dict[str, Any] | None:
+def restart(*, fetch: bool = False, waiting: int | None = None) -> dict[str, Any] | None:
     """As the server starts (the start becomes the update, ``cad_server.engine.daemon.main``; ``after_failed_start``):
-    the automatic update begun where it is due (``due``: by the feed as last read, ``fetch`` read first where an hour
-    has passed), under ``_BEGIN``. The attempt begun (its record), or None. Never raises."""
+    the automatic update begun where it is due (``due``: by PyPI as last read, ``fetch`` read first where an hour
+    has passed), under ``_BEGIN``. ``waiting``: the command whose start this is, which waits for the next server and
+    the switch leaves running (``spared``). The attempt begun (its record), or None. Never raises."""
     try:
         with _BEGIN:
             found = due(fetch=fetch)
-            return trigger(found.target, wanted=found.wanted) if found is not None else None
+            return trigger(found, waiting=waiting) if found is not None else None
     except Exception:  # noqa: BLE001 - an update that cannot begin leaves cad as it is
         return None
 
 
 def after_failed_start() -> str | None:
     """``cad server start`` failed: the update begun where it is due, the feed read first where an hour has passed
-    (``restart``). What it updates to, in words (the release, or the newest release of this major), or None."""
+    (``restart``). What it updates to, in words (the release, or the newest release), or None."""
     found = restart(fetch=True)
     if found is None:
         return None
-    numbers = release(_version())
-    return found["release"] if found["release"] != LATEST else (
-        f"the newest {numbers[0]}.x release" if numbers else "the newest release")
+    return found["release"] if found["release"] != LATEST else "the newest release"
 
 
 # --- an update asked for: ``cad update`` ------------------------------------------------------------------------------
@@ -990,11 +966,10 @@ def asked(*, pypi: Callable[[], dict[str, Any] | None] | None = None) -> dict[st
     """``cad update`` judged by the server it asks (``{"op": "update"}``), for the cad this process is: ``{"failed"}``
     in one line where it cannot update cad -- not a global install, the check turned off for this process
     (``updates.checking``), none can begin (``blocked``: why, then what to do, ``advice``), no release cad can bound a
-    build by --; ``{"ok": true, "newest"}``, this release, where PyPI names none newer that
-    this update takes (of this cad's major, ``choose``); or ``{"ok": true, "updating", "from"}``, the update to
-    ``begin``: ``updating`` the release PyPI names, or None where PyPI could not be asked, or named no release of this
-    major (the build then runs all the same). Either with ``higher``, the newest release of a higher major, where PyPI
-    names one: named, never installed. PyPI is asked now (``updates.pypi``, or ``pypi``). Never raises."""
+    build by --; ``{"ok": true, "newest"}``, this release, where PyPI names none newer (``choose``); or ``{"ok":
+    true, "updating", "from"}``, the update to ``begin``: ``updating`` the release PyPI names, or None where PyPI
+    could not be asked (the build then runs all the same, and uv says what is newest). PyPI is asked now
+    (``updates.pypi``, or ``pypi``). Never raises."""
     try:
         version = _version()
         found = global_install()
@@ -1010,11 +985,10 @@ def asked(*, pypi: Callable[[], dict[str, Any] | None] | None = None) -> dict[st
         if release(version) is None:
             return {"failed": f"cad {version} is no release, so it does not update itself"}
         known = (pypi or updates.pypi)()
-        out = {"higher": higher(known, version)} if higher(known, version) else {}
         chosen = choose(known, version)
         if chosen is None and known is not None:
-            return {"ok": True, "newest": version, **out}
-        return {"ok": True, "updating": chosen.target if chosen else None, "from": version, **out}
+            return {"ok": True, "newest": version}
+        return {"ok": True, "updating": chosen, "from": version}
     except Exception as error:  # noqa: BLE001 - said in its one line, never a crash of the server's
         return {"failed": f"could not look for an update: {type(error).__name__}: {error}"}
 
@@ -1207,23 +1181,23 @@ def waiting(known: Any = None, version: str | None = None,
     now = time.time() if now is None else now
     chosen = choose(updates.feed(fetch=False) if known is None else known, version or _version())
     book = tries(now)
-    entry = book["tried"].get(chosen.wanted) if chosen is not None else None
+    entry = book["tried"].get(chosen) if chosen is not None else None
     if chosen is None or not entry or entry.get("tries", 0) < 1:
         return None
-    return chosen.wanted, entry, next_try(chosen.wanted, book, now)
+    return chosen, entry, next_try(chosen, book, now)
 
 
-def begin(target: str | None, *, start: bool = True, waiting: int | None = None) -> dict[str, Any] | None:
-    """The update to ``target`` (None: whatever uv gets) that ``cad update`` asked for, begun now, in the one step
+def begin(wanted: str | None = None, *, start: bool = True, waiting: int | None = None) -> dict[str, Any] | None:
+    """The update to the newest release (``wanted``: the one PyPI named, None where it could not be asked) that ``cad update`` asked for, begun now, in the one step
     across processes (``_claim``): the attempt underway joined, whatever its release, another process's too; else a
     new attempt. Never a second at once, never the install command after it. ``start``: a server wanted after it
     though none runs (false where ``cad update`` found none running); ``waiting``: the ``cad update`` that waits on
     it, which the switch leaves running (``spared``; this process where it is that one). The attempt's record
-    (``release``, ``at``; ended already where uv could not build the release, ``_unbuilt``), or None where it could
+    (``release``, ``at``; ended already where uv built no newer release, ``_unbuilt``), or None where it could
     not begin."""
     with _BEGIN:
         try:
-            said, found = _start(target, automatic=False, start=start, wanted=None, waiting=waiting)
+            said, found = _start(wanted, automatic=False, start=start, waiting=waiting)
         except Exception:  # noqa: BLE001 - an update that cannot begin leaves cad as it is
             return None
         return found if said in (BEGUN, UNDERWAY) else None
@@ -1237,7 +1211,7 @@ def button(*, now: float | None = None) -> dict[str, Any] | None:
     attempt's record, never asked of the network here: None where cad cannot update itself -- no global install, the
     check turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI), no release that runs --,
     whatever the switch says (a person can always click); else ``{"version", "latest", "state"}``: ``latest`` the
-    newest release of this cad's major the feed names, where it is newer (``choose``; never a higher major's), else
+    newest release PyPI names, as last read, where it is newer (``choose``), else
     None; ``state`` ``working`` (an attempt of this release underway and still believed, automatic or asked, with the
     attempt's ``at`` and ``asked``), ``failed`` (the last attempt of this
     release did not install what it was for -- ``lost`` too --, and this cad is still behind), with ``at`` the
@@ -1255,8 +1229,7 @@ def button(*, now: float | None = None) -> dict[str, Any] | None:
 
         if not updates.checking():
             return None
-        chosen = choose(updates.feed(fetch=False), version)
-        latest = chosen.target if chosen is not None else None
+        latest = choose(updates.feed(fetch=False), version)
         out: dict[str, Any] = {"version": version, "latest": latest, "state": "idle"}
         now = time.time() if now is None else now
         found = last()
@@ -1265,7 +1238,7 @@ def button(*, now: float | None = None) -> dict[str, Any] | None:
         attempt = {"at": found["at"], "asked": found.get("asked") is True} if mine else {}
         if mine and word is None and underway(now) is not None:
             return {**out, **attempt, "state": "working"}
-        if word is not None and latest is not None and not stale(chosen.wanted):
+        if word is not None and latest is not None and not stale(latest):
             log = _data() / LOG
             return {**out, **attempt, "state": "failed", "cause": word, "said": in_words(word, found.get("installer")),
                     **({"installer": found["installer"]} if found.get("installer") in INSTALLERS else {}),
@@ -1310,7 +1283,7 @@ def notice(now: float | None = None) -> str | None:
     that read "run `cad update`" might run it against that choice) and the check not turned off for this process
     (``updates.checking``); never where this cad is current by PyPI as last read (``choose``, never the
     network), where an update is underway (``underway``) or the environment runs a newer release already (``stale``).
-    Kept in ``NOTICE`` (written whole): ``from``, this release, ``behind``, the release of its major it is behind,
+    Kept in ``NOTICE`` (written whole): ``from``, this release, ``behind``, the release it is behind,
     ``since``, when a cad of this release was first seen behind, whatever newer release came out since, and ``said``.
     The first time only the time is noted; from ``BEHIND_SECONDS`` after it, and not within a ``DAY`` of the last time
     (a clock set back counts as long ago), the line, noted as said first: a file it cannot write says nothing, so it
@@ -1359,8 +1332,8 @@ def stayed_behind(now: float | None = None) -> str | None:
 
 
 def _lag(now: float) -> tuple[str, str | None, dict[str, Any]] | None:
-    """What ``notice`` judges by: ``(this release, the release of its major the feed as last read calls for or None
-    where it is current, what ``NOTICE`` keeps)``; None where nothing is said (see ``notice``)."""
+    """What ``notice`` judges by: ``(this release, the release PyPI as last read calls for or None where it is
+    current, what ``NOTICE`` keeps)``; None where nothing is said (see ``notice``)."""
     if uv_tool() is None and pipx_tool() is None or not switches()["on"]:
         return None
     from cad_server import updates
@@ -1369,13 +1342,13 @@ def _lag(now: float) -> tuple[str, str | None, dict[str, Any]] | None:
         return None
     version = _version()
     chosen = choose(updates.feed(fetch=False), version)
-    if chosen is not None and chosen.target is not None and (underway(now) is not None or stale(chosen.wanted)):
+    if chosen is not None and (underway(now) is not None or stale(chosen)):
         return None
     try:
         kept = json.loads((_data() / NOTICE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         kept = None
-    return version, chosen.target if chosen is not None else None, kept if isinstance(kept, dict) else {}
+    return version, chosen, kept if isinstance(kept, dict) else {}
 
 
 def behind_line(version: str, target: str, now: float) -> str:

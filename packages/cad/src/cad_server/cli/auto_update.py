@@ -1,8 +1,6 @@
 """``cad update auto`` (``cad_server.cli.update`` dispatches it here: ``switch``) -- show or change whether cad updates
-itself (``cad_server._internal.auto_update``), on by default: ``status`` (the default) says it, and, where the version
-feed as last read names a release of a higher major than this cad's, the one line that says so
-(``auto_update.MAJOR_LINE``: a new major version never installs itself); ``on`` turns it on, refused unless this cad
-is a global install; ``off`` turns it off. Off by the choice an earlier release kept (0.10.0 to 0.11.11), ``status``
+itself (``cad_server._internal.auto_update``), on by default: ``status`` (the default) says it; ``on`` turns it on,
+refused unless this cad is a global install; ``off`` turns it off. Off by the choice an earlier release kept (0.10.0 to 0.11.11), ``status``
 says so in a few words. A cad that is no global install never updates itself, and ``status`` says
 so. Where a server runs, of any release that knows how, it keeps the switch (``_by_the_server``), so a shell whose
 sandbox may not write the state folder needs no permission; with none, this command writes it. ``CAD_UPDATE_CHECK=0``
@@ -15,10 +13,9 @@ import argparse
 from collections.abc import Sequence
 
 DEFAULT_PROG = "cad update auto"
-DESCRIPTION = ("Show or change whether cad updates itself to the newest release of its major version: once one is "
-               "out, cad updates as its server next starts; the viewer's update button and `cad update` update it "
-               "now. A new major version never installs itself. On by default, for a global install (`uv tool "
-               "install cad`).")
+DESCRIPTION = ("Show or change whether cad updates itself to the newest release: once one is out, cad updates as its "
+               "server next starts; the viewer's update button and `cad update` update it now. On by default, for a "
+               "global install (`uv tool install cad`).")
 NOT_GLOBAL = "this cad is not a global install, so it does not update itself (`uv tool install cad` makes one)"
 REFUSED = "refused: this cad is not a global install, and only a global install updates itself (`uv tool install cad`)"
 # After the switch's word, where it is off by the choice an earlier release kept (``auto_update.switches``).
@@ -61,23 +58,7 @@ def switch(action: str, *, prog: str = DEFAULT_PROG) -> int:
         return 0
     kept = auto_update.switches() if found is None else {"on": found}
     print(f"update auto: {'on' if kept['on'] else 'off'}{EARLIER if kept.get('earlier') else ''}")
-    if action == "status":
-        higher = _higher()
-        if higher:
-            print(auto_update.MAJOR_LINE.format(release=higher))
     return 0
-
-
-def _higher() -> str | None:
-    """The release of a higher major than this cad's that the version feed as last read names, or None: read, never
-    fetched (``updates.feed``)."""
-    try:
-        from cad_server import updates
-        from cad_server._internal import auto_update
-
-        return auto_update.higher(updates.feed(fetch=False), auto_update._version())
-    except Exception:  # noqa: BLE001 - a line of the status, never a reason it fails
-        return None
 
 
 def _by_the_server(op: str, on: bool, **more: str | bool) -> bool | None:

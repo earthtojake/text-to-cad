@@ -256,7 +256,7 @@ its pull request. The tier holds:
   Windows) and brings each to this tree's build by the route it takes (where the new server runs the
   install command once, that command hands the apps to the cad it installed); then cad's own update
   in place with uv, at the server's next start, by the viewer's button or by a typed `cad update`
-  (PyPI reachable or not), inside its major, never across one (`cad update` names it), never against a
+  (PyPI reachable or not), to a new major version as to any release, never against a
   person's own pin, and never in the background, nor with automatic updates off; back by itself from a
   release whose server does not start, and then held back; untouched by a release uv cannot install;
   through a file held open and an upgrade stopped past its `RECORD`, which the worker repairs; with `cad`

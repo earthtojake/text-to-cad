@@ -4,9 +4,8 @@ there, whether the CAD kernel environment is made (``cad_server._internal.base``
 environment ``cad run`` made for a program that a build ran in, if one was (``extras.last_with_kernel``) --, where each
 integration's operations run, whether the server runs and its release, and cad's own update
 (``cad_server._internal.auto_update``: the switches, whether this cad is a global install and by which installer, and
-whether an update can begin at all, ``blocked``; the newest release of this cad's major PyPI, as last read,
-names, and when it was last asked for, and, where it names a release of a higher major, the one line that says it is
-out and where the migration guides are (``auto_update.MAJOR_LINE``); the uv the update runs; and the last
+whether an update can begin at all, ``blocked``; the newest release PyPI, as last read, names, and when it was last
+asked for; the uv the update runs; and the last
 attempt: its outcome and uv's words, why in plain words where it did not install what it was for, a release held back,
 and where the worker's log of it is), each of the project's notices for this cad, a line each
 (``cad_server.notices``: none where none is posted), and the plugin's record
@@ -197,27 +196,16 @@ def _update() -> tuple:
 
 
 def _newest() -> dict:
-    """What PyPI, as last read, says of releases (read, never fetched): the newest release of this cad's
-    major it names, and, under it, the one line that says a release of a higher major is out and how to get it."""
+    """What PyPI, as last read, says of releases (read, never fetched): the newest release it names, and when it
+    was last asked."""
     try:
-        import cad_server
         from cad_server import updates
 
-        auto = _auto()
-        version = cad_server.__version__
         known = updates.feed(fetch=False)
-        numbers = auto.release(version)
         if known is None:
             return _check("newest", INFO, "PyPI has not been read on this computer yet")
-        if numbers is None:
-            return _check("newest", INFO, f"cad {known['latest']} is the newest release PyPI names"
-                                          + _asked(updates.asked()))
-        named = updates.newest_of_major(numbers[0], known)
-        said = (f"cad {named} is the newest {numbers[0]}.x release PyPI names" if named else
-                f"PyPI names no {numbers[0]}.x release; its newest is cad {known['latest']}")
-        said += _asked(updates.asked())
-        higher = auto.higher(known, version)
-        return _check("newest", INFO, said, [auto.MAJOR_LINE.format(release=higher)] if higher else None)
+        return _check("newest", INFO, f"cad {known['latest']} is the newest release PyPI names"
+                                      + _asked(updates.asked()))
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return _check("newest", WARNING, f"unknown ({type(error).__name__}: {error})")
 
@@ -319,7 +307,7 @@ def _fix(checks: list[dict]) -> list[dict]:
     """The last check, ``fix``, only where cad or its update is not working: the one thing to do next, by the first of
     the install, update and attempt lines that fails or warns (the line under it: the reinstall line,
     ``auto_update.advice``), else where this cad has stayed
-    behind a release of its major for days by the rule of the line a cad command says then
+    behind a release for days by the rule of the line a cad command says then
     (``auto_update.stayed_behind``). Nothing where all is well."""
     for found in checks:
         if found["name"] in ("install", "update", "attempt") and found["status"] in (WARNING, FAILED) \

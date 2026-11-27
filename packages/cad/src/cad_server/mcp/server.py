@@ -237,7 +237,7 @@ UPDATES_OFF = ("cad {target} is out and this is {version}, and automatic updates
 def attention(now: float | None = None) -> list[str]:
     """What this cad needs that its agent can act on, from the feed as last read and the records, never the network:
     one line each, naming the command, in the words the ``cad`` command says them. Where this global install is behind
-    the newest release of its major, no update is underway and its environment holds no newer one: automatic updates
+    the newest release, no update is underway and its environment holds no newer one: automatic updates
     off, ``UPDATES_OFF``; else, at once where no update can begin (``auto_update.blocked``) or this release's last
     attempt did not install (``auto_update.cause``), and otherwise once it has stayed behind by the stayed-behind line's
     own rule and record (``auto_update.notice``, ``auto_update.stayed_behind``), that line. Then each of the project's
@@ -250,14 +250,14 @@ def attention(now: float | None = None) -> list[str]:
         now = time.time() if now is None else now
         install = auto.global_install()
         chosen = auto.choose(updates.feed(fetch=False), __version__) if updates.checking() else None
-        if install is not None and chosen is not None and chosen.target is not None \
-                and auto.underway(now) is None and not auto.stale(chosen.wanted):
+        if install is not None and chosen is not None \
+                and auto.underway(now) is None and not auto.stale(chosen):
             record = auto.last()
             failed = record is not None and record.get("from") == __version__ and auto.cause(record, now) is not None
             if not auto.switches()["on"]:
-                lines.append(UPDATES_OFF.format(target=chosen.target, version=__version__))
+                lines.append(UPDATES_OFF.format(target=chosen, version=__version__))
             elif failed or auto.blocked(install) is not None or auto.notice(now) or auto.stayed_behind(now):
-                lines.append(auto.behind_line(__version__, chosen.target, now).removeprefix("cad: "))
+                lines.append(auto.behind_line(__version__, chosen, now).removeprefix("cad: "))
     except Exception:  # noqa: BLE001 - a line never fails the session it rides on
         LOG.debug("could not tell whether cad is behind", exc_info=True)
     return lines + [notices.said(notice) for notice in notices.applying()]

@@ -112,10 +112,9 @@ cad_server/
   earlier left, and on Windows each `cad.exe` an update moved aside and could not remove then), `clean` removes all of the cache, refused while the server runs.
   Only these, cad's update and the server (at its start and then hourly) delete a past release's files; the
   server removes the environments made for other releases by `prune`'s rules, quietly (`base.tidy`).
-- **`cad update`**: cad, and only cad, updated now to the newest release of its major version on PyPI, by the
-  server that runs, or by the command itself where none runs (below), even with automatic updates off; where a
-  release of a higher major is out, one more line names it and where the migration guides are: nothing crosses
-  a major. It never starts a server, and is refused unless
+- **`cad update`**: cad, and only cad, updated now to the newest release on PyPI, a new major version too, by the
+  server that runs, or by the command itself where none runs (below), even with automatic updates off. It never
+  starts a server, and is refused unless
   this cad is a global install. It waits until the update ends and says how in one line: where it failed, why
   in plain words, what to do (`auto_update.advice`) and where the log is.
   **`cad update auto [status|on|off]`**: whether cad updates itself (below), on by
@@ -179,12 +178,14 @@ PowerShell pipeline is still wrong there, and that is PowerShell's to set.
 ## cad's own update
 
 `_internal/auto_update.py` decides when, `_internal/auto_update_helper.py` carries it out. **The rule**: cad installs
-by itself any newer release of its own major version, and never a release of a higher major: no command crosses one.
-Only a global install updates itself, one uv made (`uv tool install cad`) or pipx (`pipx install cad`): it is updated
+by itself the newest release there is, a new major version too: it names no release and bounds none, so what the
+person's installer takes for `cad` is what is installed, never a release yanked on PyPI (which is how one is held
+back). Only a global install updates itself, one uv made (`uv tool install cad`) or pipx (`pipx install cad`): it is updated
 where it is, by the person's own installer (`base.find_uv`: uv's default install place, then PATH, else a one-line
 error saying how to get uv; `find_pipx` for pipx, which needs uv too, for the kernel and the worker), with the
 person's settings and
-uv's receipt left as it is (pipx: `pipx runpip cad install`). One a person pinned (`uv tool install cad==X`, `pipx pin
+uv's receipt left as it is, a range a person or an earlier release wrote there included (pipx: `pipx runpip cad
+install`). One a person pinned (`uv tool install cad==X`, `pipx pin
 cad`) is left alone (cause `pinned`). Two switches in the person's settings:
 `auto_update.on`, whether cad updates itself, on unless turned off (`cad update auto`); and `plugin.auto_update`,
 whether the server runs `cad plugin install` once where cad is newer than the release the plugin is up to date for,
@@ -192,16 +193,16 @@ off unless turned on (`cad plugin update auto`).
 
 **When** (`due`). cad updates at two moments alone, and nothing runs in the background: a person's ask (`cad update`,
 and the viewer's button, which is `cad update`'s), and the server's start, where the switch is on and the feed as last
-read names a newer release of this cad's major (`restart`, from `daemon.main`: the start becomes the update; never for
+read names a newer release (`restart`, from `daemon.main`: the start becomes the update; never for
 `--foreground` or `--port`), or `cad server start` where the start failed. The server reads PyPI (`updates.py`, at
-most once an hour, in the background: `pypi.org/pypi/cad/json`, the newest release that is not yanked and the newest of
-each major) and the project's notices (`api.texttocad.dev/v1/notices`), kept together in `releases.json`, and does
+most once an hour, in the background: `pypi.org/pypi/cad/json`, the newest release that is not yanked: the sign
+that there is something to take, never what is installed) and the project's notices (`api.texttocad.dev/v1/notices`), kept together in `releases.json`, and does
 nothing else with them. Holding a release back is yanking it on PyPI. A server never restarted, whose person never asks, stays on its
 release, the button showing the update. Not due where the environment holds that release already under this older
 server (`stale`: `cad server start` replaces the server), nor for a release whose last try ended `start_failed`
 (`given_up`; `cad update` still tries it), nor while an attempt is underway. One due that cannot begin (`blocked`:
 `pinned`, `no_installer`) is counted once for its release. `CAD_UPDATE_CHECK=0` turns the check off for a process.
-A global install behind a release of its major for three days, the switch on, says so at most once a day on stderr
+A global install behind a release for three days, the switch on, says so at most once a day on stderr
 after a command's output (`auto_update.notice`; not after `cad update`, `cad doctor`, `cad run`, `cad plugin`, the
 server's commands, help or `--json`), with what to do (`advice`, the line `cad doctor` and a failed `cad update` give).
 
@@ -232,8 +233,8 @@ was. In order:
    stop` stops it; a `cad` command it cuts short says cad updated itself while it ran. On Windows, uv's bin `cad.exe` is
    moved aside, then every other process of the environment stopped but those it spares, until none is left (by the
    Win32 API, else PowerShell's `Get-CimInstance Win32_Process`).
-   Then `uv tool upgrade "cad==<release>"` (pipx: `pipx runpip cad install --upgrade "cad==<release>"`); the moment it
-   returns a bin `cad` is back.
+   Then `uv tool upgrade cad` (pipx: `pipx runpip cad install --upgrade cad`): the newest release the installer
+   takes; the moment it returns a bin `cad` is back.
 2. **Check**: `cad server start` where a server ran or one is wanted, which must leave a server of the release, else
    `cad --version` naming it.
 3. **Back**, where uv or the check failed: where uv failed and left the environment whole, the release it holds, as
@@ -243,7 +244,7 @@ was. In order:
    `cad_running`; the detail is uv's first error, never its rollback's after it.
 4. **Repair**, in one step, where no cad runs after that (or uv left a `*.dist-info` without its `RECORD`, which every
    later uv run fails on): the installer makes the environment anew, as the install command does (`uv tool install
-   --force "cad<N>"`, `pipx install --force cad`; never one release, which would pin it). The worker runs from uv's
+   --force cad`, `pipx install --force cad`; never one release, which would pin it). The worker runs from uv's
    cache, so nothing of it is in the way. That removes the environment, so the worker does it once nothing of it runs:
    the attempt `repairing` first, on which the processes the switch spared leave (`cad update` says so and ends),
    waited for, then every process of it stopped. Cause `broken` where that leaves no cad that runs either.
@@ -268,7 +269,7 @@ well.
 
 **The update button** (`auto_update.button`, `GET /api/v1/server`'s `cadUpdate`; `POST /api/v1/local/update`).
 Where cad can update itself (a uv global install), whatever the switch says, the viewer and the CAD app show it while
-the feed names a newer release of this cad's major: one state, Update (a click updates in place and restarts), working
+PyPI, as last read, names a newer release: one state, Update (a click updates in place and restarts), working
 while an attempt of this release is underway, or, where the last did not install what it was for and cad is still
 behind, its `cause` and the worker's log, said in the alert card until another attempt begins or the person puts it away (`dismissed`, `auto_update.dismiss`). A click is
 `cad update` (`Daemon.update`): PyPI asked, the attempt underway joined, else one begun at once. The route is
@@ -290,7 +291,7 @@ kept in `install-command.json` in the data folder: written when `cad plugin inst
 found gone well, and when the switch is turned on (`cad plugin update auto on`, the hosted install command's last
 step; with `CAD_INSTALL_FAILED=1`, where the plugin's step went badly, none; turned on by hand, "from this
 release on"). Only the computer's global install writes it: a cad run from anywhere else (the newest release
-from uv's cache) keeps none, since its release may be of a major the installed cad never reaches. A run of the global install that went badly marks its release as owed a run (`owed`), which the server
+from uv's cache) keeps none, since its release may be one the installed cad has not reached. A run of the global install that went badly marks its release as owed a run (`owed`), which the server
 makes for that release or a later one. With no record, no mark and the switch on, the record is written for this
 release and nothing runs. A run underway, of any release, begun less than an hour ago, is waited for, and the
 server asks the record again under the state folder's lock as it begins one. A run that failed, where any app
@@ -315,13 +316,12 @@ update is counted by the next server of the old cad, a successful one by the new
 one before it first, whatever begins it, as it stands where its `cad plugin install` run is still underway.
 
 `cad update` asks the server that runs (`{"op": "update"}`, which an agent's sandboxed shell may send with no
-permission): it asks PyPI for the newest release of this cad's major that is not yanked (`updates.pypi`, 5 s at
-most; `CAD_PYPI_URL` names a stand-in), says `cad X is the newest release` where none is newer (`the newest 0.x
-release` where a higher major is out, with one more line naming it and the migration guides' address), and
+permission): it asks PyPI for the newest release that is not yanked (`updates.pypi`, 5 s at
+most; `CAD_PYPI_URL` names a stand-in), says `cad X is the newest release` where none is newer, and
 otherwise begins the same update at once, with the switch off too and whatever the
 schedule says (it spends no automatic try, and counts among the day's four), or joins the one underway, another
 process's too. Where PyPI cannot be reached it updates
-all the same, to the newest release of the major uv finds. It waits for the end, up
+all the same, to the newest release uv finds. It waits for the end, up
 to 30 minutes, saying once on stderr `cad: updating cad Y to X`, then restarting the cad server where one ran. It never runs
 `cad plugin`. Where no server runs, the command judges and begins the update itself, and its worker starts no
 server: an update typed with none running leaves none running. In a shell whose

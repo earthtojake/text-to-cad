@@ -243,8 +243,8 @@ def _keep(on: bool, *, note: bool) -> bool:
     now. ``OSError`` where it could not be kept.
 
     A cad that is no global install keeps no release, as a run that ended badly keeps none: the newest release run
-    from uv's cache, a project's, a checkout's. Its release is not the installed cad's, and may be one that cad never
-    reaches by itself (a higher major): kept, the server of the installed cad, which runs ``cad plugin install`` only
+    from uv's cache, a project's, a checkout's. Its release is not the installed cad's, and may be one that cad has
+    not reached (its automatic updates off, say): kept, the server of the installed cad, which runs ``cad plugin install`` only
     where it is newer than the release kept, would never run it again. Where nothing is kept, the next server keeps
     its own (``plugin_catch_up.due``)."""
     from cad_server._internal import auto_update, plugin_catch_up

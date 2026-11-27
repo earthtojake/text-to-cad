@@ -24,8 +24,7 @@ plugin install``, which carries the one table of them. It does these things alon
    is what repairs a computer left so;
 3. brings a ``cad`` that was here already, and starts, up to date, only where a person ran this (``update``): that
    tool's own ``cad update`` (never PATH's), ``UPDATE_SECONDS`` at most (cad's update builds the release, then
-   restarts the server on it at once, and the command waits for it). It stays inside cad's major version, as ``cad update`` does:
-   cad's own update never crosses a major. What it prints is captured, never shown: one line says the update
+   restarts the server on it at once, and the command waits for it). What it prints is captured, never shown: one line says the update
    begins, and one line what came of it, over the first in a terminal (after it on a pipe or in a file). Its exit
    status says little (0 where it updated and where nothing is newer, non-zero where the update may still be
    queued), so the release the tool runs is read again, by its ``cad --version`` (uv's and pipx's listings name the
@@ -1021,7 +1020,7 @@ def update(here: Here, cad: Cad) -> None:
         said = f"cad {cad.release} updated to {release}"
         cad.release = release
     elif ran.ok and release:
-        # cad's own words where it said them: of its major alone, where a release of a higher major is out.
+        # cad's own words where it said them (a release before 0.12 says the newest of its major).
         newest = f"cad {cad.release} is the newest "
         said = next((line.strip() for line in ran.out.splitlines() if line.strip().startswith(newest)),
                     f"{newest}release")

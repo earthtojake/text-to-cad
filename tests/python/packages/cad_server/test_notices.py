@@ -26,7 +26,7 @@ NOTICE = {"id": "install-moved", "below": "0.2.0", "text": "cad now installs ano
           "url": "https://texttocad.dev/docs/install"}
 PLAIN = {"id": "plain", "below": "1.0.0", "text": "Words alone."}
 LINE = "cad: cad now installs another way: run the install command again. (https://texttocad.dev/docs/install)"
-FEED = {"latest": "0.1.0", "lines": {"0": "0.1.0"}}
+FEED = {"latest": "0.1.0"}
 
 
 def stand_in(feed: dict):

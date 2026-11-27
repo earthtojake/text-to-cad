@@ -124,8 +124,7 @@ where those files ship, so these scripts are what produces them.
   busy the server, nor with automatic updates off; back by itself from a release whose server cannot start, then
   held back; untouched by a release uv cannot install; through a source file held open and an upgrade stopped past
   its `RECORD` (the worker's repair); while three callers run `cad` every 50 ms (on Windows every failure inside the
-  switch, fast, never a cad half replaced); never against a person's own pin, never across a major (`cad update`
-  names it); after its worker was stopped midway; from 0.11.17's own update in place; the new cad's server running
+  switch, fast, never a cad half replaced); never against a person's own pin; to a new major version as to any release; after its worker was stopped midway; from 0.11.17's own update in place; the new cad's server running
   `cad plugin install` once where `cad plugin update auto` is on (read from cad's record of it: the install
   command's count stays 0); and the install command repairing a cad that does not start while a process runs from
   its environment (`install-repair`).
@@ -194,8 +193,8 @@ where those files ship, so these scripts are what produces them.
   branch; otherwise the bump must come from a branch of this repository (never a
   fork) and pass both the target's version and the latest tag, and a patch, which
   breaks nothing, may not add a migration guide, though it may correct one already
-  there (a minor may carry one: it installs itself on every computer of its major,
-  `release-tags.sh`'s `version_installs_itself`). Called by `test.yml` (`static`); see `docs/contributing/releases.md`,
+  there (a release that bumps the breaking part may carry one: it installs itself on every computer
+  all the same). Called by `test.yml` (`static`); see `docs/contributing/releases.md`,
   "Which number a release bumps".
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
   (or `--wait`) — what a release uploads to PyPI of one of its four projects
@@ -264,9 +263,7 @@ where those files ship, so these scripts are what produces them.
   commit is the manual fallback.
 - `release-tags.sh` — sourced helpers for tag spelling (`v0.5.0`, and the bare
   `0.4.x` releases before 0.5.0) and for comparing versions, Semantic Versioning's
-  among them: the part a release bumps, the breaking part, and whether a computer on an earlier
-  release installs it by itself (`version_installs_itself`: a later release of the same major, which
-  a test holds to that rule). Sourced by
+  among them: the part a release bumps and the breaking part. Sourced by
   `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
   `release-publish.yml`.
 - `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s
@@ -329,7 +326,7 @@ where those files ship, so these scripts are what produces them.
   installed again; a cad installed with pipx is a global cad too, installed again with pipx where it does not
   start), and puts cad's folder on the PATH with uv's own `uv tool update-shell` (unless `UV_NO_MODIFY_PATH`
   is set). Where a person ran it and cad was here already, that cad's own `cad update` brings it up to date,
-  inside its major, never failing the run, its output captured and said in one line (two on a pipe); where
+  never failing the run, its output captured and said in one line (two on a pipe); where
   cad ran it (0.11.12 and 0.11.13 do, and the bridge from earlier releases), cad is left as it is. Then `<cad> plugin install` puts the plugin into each agent app
   (cad's table of apps, `cad_server/plugin`, with the terminal's logo and live line); a cad with no such
   command, or none at all, gets the newest release's by `uv tool run cad@latest plugin install`. Last, that

@@ -13,8 +13,8 @@ up to date for -- written by ``cad plugin install`` as it ends with every app it
 0 and no app ``failed``; a run that found no app counts), and as the switch is turned on (``noted``, from
 ``auto_update.change_plugin``), and only ever by this computer's global install of cad (``tool``): a cad run from
 anywhere else (the newest release from uv's cache, which the hosted install command runs for an installed cad with no
-``cad plugin install``) is not the cad whose server asks the rule below, and its release, which may be of a higher major
-than that cad ever reaches, is never kept. ``cad plugin install`` installs and leaves the switch as it is; the switch is
+``cad plugin install``) is not the cad whose server asks the rule below, and its release, which may be one
+that cad has not reached, is never kept. ``cad plugin install`` installs and leaves the switch as it is; the switch is
 the person's, turned on by the hosted install command they ran, as its last step (``cad plugin update auto on``), which
 says how its run is ending in the environment of that call (``FAILED_ENV``): every app gone well, the switch is turned
 on and ``for`` written; otherwise (the plugin's step ended non-zero, or an app failed), the switch is turned on and

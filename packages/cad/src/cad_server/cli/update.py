@@ -1,9 +1,9 @@
-"""``cad update`` -- cad, and only cad, updated now to the newest release of its major version, by the server that runs
-(``{"op": "update"}``, ``Daemon.update``): it asks PyPI for the newest release of this cad's major that is not yanked
+"""``cad update`` -- cad, and only cad, updated now to the newest release, by the server that runs
+(``{"op": "update"}``, ``Daemon.update``): it asks PyPI for the newest release that is not yanked
 and, where it is newer, begins cad's own update at once (``cad_server._internal.auto_update``: ``asked``, ``begin``),
-even with automatic updates off; where nothing in this major is newer, it says so. It never crosses a major: where a
-release of a higher major is out, it adds one line naming it and where the migration guides are
-(``auto_update.MAJOR_LINE``). Where PyPI cannot be reached, the update runs all the same, and says what it got.
+even with automatic updates off; where nothing is newer, it says so. What is installed is the newest release the
+person's uv takes, a new major version too. Where PyPI cannot be reached, the update runs all the same, and says what
+it got.
 It never runs the install command. The server does the work where one runs: an agent's shell may not reach the network
 or change cad's folders, and the server, outside that sandbox, may; so the command asks no permission.
 
@@ -57,9 +57,9 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
 
     parser = command_parser(prog=prog, usage=f"%(prog)s [-h]\n       {prog} auto [{{status,on,off}}]",
                             description=(
-        "cad installs every newer release of its major version by itself, and never a new major version. "
-        "`cad update` updates cad now to the newest release of its major version, even with "
-        "automatic updates off: cad asks PyPI, and the installer that made it (uv, pipx) upgrades cad in place. A cad server that was running restarts "
+        "cad installs every newer release by itself. `cad update` updates cad now to the newest release, even with "
+        "automatic updates off: cad asks PyPI, and the installer that made it (uv, pipx) upgrades cad in place. A cad "
+        "server that was running restarts "
         "on it at once, stopping what is in flight; with none running, none is started. By itself, cad updates as "
         "the server next starts once a newer release is out. `cad update auto` shows or changes whether cad updates "
         "itself."))
@@ -95,28 +95,15 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if failed:
         return write(Failure(OLD_SERVER if str(failed).startswith("unknown request") else str(failed)), prog=prog,
                      as_json=False)
-    higher = answer.get("higher") if isinstance(answer.get("higher"), str) else None
     if isinstance(answer.get("newest"), str):
-        print(f"cad {answer['newest']} is {newest_of(answer['newest'], higher)}")
-        if higher:
-            print(auto_update.MAJOR_LINE.format(release=higher))
+        print(f"cad {answer['newest']} is the newest release")
         return 0
     target, was, since = answer.get("updating"), answer.get("from"), answer.get("since")
     if not (isinstance(target, (str, type(None))) and "updating" in answer and isinstance(was, str)
             and isinstance(since, (int, float))):
         return write(Failure(f"the cad server's answer was not understood: {answer}"), prog=prog, as_json=False)
-    code = wait(lambda: look(client, auto_update), was, float(since),
-                said=lambda words: write(Failure(words), prog=prog, as_json=False), higher=higher,
-                server=not answer.get("here"))
-    if code == 0 and higher:
-        print(auto_update.MAJOR_LINE.format(release=higher))
-    return code
-
-
-def newest_of(release: str, higher: str | None) -> str:
-    """What ``release`` is, said after it: the newest release, or, where a release of a higher major is out
-    (``higher``), the newest of its own major."""
-    return f"the newest {release.split('.', 1)[0]}.x release" if higher else "the newest release"
+    return wait(lambda: look(client, auto_update), was, float(since),
+                said=lambda words: write(Failure(words), prog=prog, as_json=False), server=not answer.get("here"))
 
 
 def here(auto_update: Any) -> dict[str, Any]:
@@ -156,10 +143,10 @@ def look(client: Any, auto_update: Any) -> tuple[str | None, Any, Any, bool]:
 def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, since: float, *,
          said: Callable[[str], int], seconds: float = WAIT_SECONDS, every: float = LOOK_SECONDS,
          clock: Callable[[], float] | None = None, sleep: Callable[[float], None] | None = None,
-         higher: str | None = None, server: bool = True) -> int:
+         server: bool = True) -> int:
     """The update that began at ``since`` (by the server's clock: an attempt begun then or later serves it) waited for
     until its record says it ended, each step said once on stderr as it begins (``step``; ``server``: one was running,
-    and is restarted), and the end said in one line (``higher``: a release of a higher major is out); or, where it is
+    and is restarted), and the end said in one line; or, where it is
     being installed again whole, that (``REPAIRING``), at once: its exit status."""
     clock, sleep = clock or time.monotonic, sleep or time.sleep
     deadline = clock() + seconds
@@ -173,7 +160,7 @@ def wait(looked: Callable[[], tuple[str | None, Any, Any, bool]], was: str, sinc
                 return said(REPAIRING.format(was=was, log=log_line()))
             step(attempt, was, told_of, server=server)
         if attempt is not None and attempt.get("outcome") not in (None, "underway"):
-            return ended(attempt, was, running, said, higher=higher)
+            return ended(attempt, was, running, said)
         if told and attempt is None and not waiting:
             return said(f"the update could not begin, so cad {was} stays as it is")
         if clock() >= deadline:
@@ -203,8 +190,7 @@ def log_line() -> str:
     return f"; its log: {log}" if log.is_file() else ""
 
 
-def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int], *,
-          higher: str | None = None) -> int:
+def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable[[str], int]) -> int:
     """An attempt that ended, said in one line: its exit status. The release it names is the one installed, where it
     ended well (an update begun without PyPI's answer finds out only then). One that failed for a cause it names says
     it in plain words (``auto_update.in_words``), then what to do (``auto_update.advice``, by who made the global
@@ -215,7 +201,7 @@ def ended(attempt: dict[str, Any], was: str, running: str | None, said: Callable
 
     target = attempt.get("release")
     if attempt.get("outcome") in ("installed", "current"):
-        done = (f"cad {target} is {newest_of(str(target), higher)}" if target == was
+        done = (f"cad {target} is the newest release" if target == was
                 else f"cad {was} updated to {target}")
         if str(attempt.get("started", "")).startswith("not started"):
             return said(f"{done}, but the cad server did not start again: run `cad server start`")

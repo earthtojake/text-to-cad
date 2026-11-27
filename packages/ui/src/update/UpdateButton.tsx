@@ -12,7 +12,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 /**
  * A newer text-to-cad, as the update button: a brand-blue icon and nothing else, which a host hands the viewer
  * (`update`) to draw last among the navbar's controls, outermost, over every file and over the home, while
- * this install is behind (a newer release of its own major: `auto_update.button`'s `latest`). A click
+ * this install is behind (a newer release: `auto_update.button`'s `latest`). A click
  * updates (`useUpdate`): the icon becomes a ring that fills a stage at a time as the release installs (each
  * step eased), then a spinner while the server restarts, and the page reloads itself into the new release
  * (the host's to do). The tooltip says "Update", then the percent of the stages done, then that the server

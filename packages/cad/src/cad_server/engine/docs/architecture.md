@@ -117,8 +117,8 @@ older release's server, an older one joins a newer server that runs (`client.sta
 `cad mcp` that is not the global `cad` installed on the computer (Codex's plugin line runs it from uvx's cache) starts
 none of its own: it runs the installed cad's `cad server start` and joins the server that leaves, whatever the two
 releases are, so the server is always the one that updates itself. Where no global cad is installed, one run from uv's
-cache installs it first (`cad_server._internal.tool_install`: `uv tool install "cad<N>"`, PyPI's newest of its own
-major, never `--force`, and never over a `cad` tool of a higher major).
+cache installs it first (`cad_server._internal.tool_install`: `uv tool install cad`, PyPI's newest, never
+`--force`).
 Every other command, `cad run` and a model run directly among them, attaches to the one that runs, and says so in one
 line where none does (`not_running`). A model's own process -- the library, which never starts a server of its own
 environment -- starts none. No client starts another release's engine beside the device's: an engine runs on until
@@ -132,18 +132,17 @@ server where the bridge pointed it there (below). Such a client's builds are ref
 
 The version feed (`cad_server.updates`): the server reads it in the background at most once an hour as it tends
 itself (`updates.refresh`), never waited on, for the update at a start and the button's release alone; `cad update` asks PyPI instead
-(`updates.pypi`), at once; nothing says a newer release to a person or an agent unasked (`cad update` and `cad
-doctor` name a release of a higher major, which never installs itself).
+(`updates.pypi`), at once; nothing says a newer release to a person or an agent unasked.
 
 A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself to
-newer releases of its own major, in place, with the person's own uv (`base.find_uv`), at two moments alone: when
-asked (`cad update`, the viewer's button: `Daemon.update`, begun at once, whatever the switch says; never across a
-major), and, unless the person turned it off (`cad update auto off`), as the server next starts where the version feed
-as last read names a newer release of its major (the start is the update, begun before it serves anything:
+the newest release, a new major version too, in place, with the person's own uv (`base.find_uv`), at two moments
+alone: when asked (`cad update`, the viewer's button: `Daemon.update`, begun at once, whatever the switch says), and,
+unless the person turned it off (`cad update auto off`), as the server next starts where PyPI as last read names a
+newer release (the start is the update, begun before it serves anything:
 `daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`). Nothing runs in the
 background: the server's tending only reads the feed. A detached worker (`auto_update_helper`, the release it updates
 to, run by uv from its cache and outside any Windows app package) stops the server at once, as `cad server stop`
-does, runs `uv tool upgrade "cad==X"` (pipx: `pipx runpip cad install`; on Windows after moving uv's `cad.exe` aside
+does, runs `uv tool upgrade cad` (pipx: `pipx runpip cad install`; on Windows after moving uv's `cad.exe` aside
 and stopping every process of the environment, since a process holds the files uv deletes one by one with no
 rollback), checks that the release runs and starts its server, and
 repairs the environment where it does not, installing it again whole where only that brings cad back. A command it

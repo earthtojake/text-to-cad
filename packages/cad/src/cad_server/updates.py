@@ -5,14 +5,14 @@ At most once an hour, a server reads, in the background (``refresh``), never wai
 
 - **PyPI** (``pypi``: ``GET https://pypi.org/pypi/cad/json``), cad's own project, read into one shape::
 
-      {"latest": "1.2.0", "lines": {"0": "0.12.3", "1": "1.2.0"}}
+      {"latest": "1.2.0"}
 
   from PyPI's ``releases`` (every release, and each of its files with ``yanked``): the newest plain ``X.Y.Z`` with a
-  file that is not yanked as ``latest``, and the newest such of each major as ``lines`` (``newest_of_major``); where
-  PyPI's answer has no ``releases``, its ``info.version`` (which leaves yanked releases out) as ``latest``, with no
-  ``lines``. A release is held back from every computer by yanking it on PyPI, and nothing else: no hour's wait, no
-  list of held releases. The ``cad`` project also lists another owner's releases of 2020 (0.8 to 1.1.2), every one of
-  them yanked, so none is ever read.
+  file that is not yanked; where PyPI's answer has no ``releases``, its ``info.version`` (which leaves yanked releases
+  out). It is the sign that a newer release is out, never what is installed: uv finds the newest itself as the update
+  begins (``auto_update.build``). A release is held back from every computer by yanking it on PyPI, and nothing else:
+  no hour's wait, no list of held releases. The ``cad`` project also lists another owner's releases of 2020 (0.8 to
+  1.1.2), every one of them yanked, so none is ever read.
 - **The notices** (``GET /v1/notices``, ``cad_server/_internal/api.py``: ``{"notices": [...]}``), the project's words
   for every cad older than a release (``parse_notices``, ``notices_for``; said by ``cad_server.notices``), kept with
   the releases as ``notices`` where there are any.
@@ -21,9 +21,9 @@ Either that cannot be read leaves what was last read of it as it was. Each is on
 nothing about the person or their machine beyond what any web request carries. ``CAD_UPDATE_CHECK=0`` turns both off,
 and they never run in CI (``CI`` set) or for a development build (``cad_server._internal.editable.development``). What
 was last read is kept in the state folder (``FILE``, ``releases.json``), where every process of the person's reads it:
-cad's own automatic update moves to the newest release of its own major that it names
-(``cad_server._internal.auto_update``). Releases 0.11.12 to 0.11.18 read the version feed of ``apps/api``
-(``/v1/releases``) into the same file in the same shape, and 0.10.0 to 0.11.11 theirs (``/v1/versions``) into
+cad's own automatic update begins where it names a newer release (``cad_server._internal.auto_update``). Releases
+0.11.12 to 0.11.18 read the version feed of ``apps/api`` (``/v1/releases``) into the same file, with each major's
+newest release beside ``latest`` (``lines``, which nothing here reads or keeps), and 0.10.0 to 0.11.11 theirs (``/v1/versions``) into
 ``versions.json``; nothing here reads either address, or writes that file. Nothing here updates anything, and nothing
 here says anything to a person or an agent.
 
@@ -78,19 +78,13 @@ def parse_release(value: Any) -> tuple[int, int, int] | None:
 
 
 def parse_feed(data: Any) -> dict[str, Any] | None:
-    """The feed as the server reads it: a release as ``latest`` (``None`` when there is none), and ``lines``, each major
-    version's newest release by its number as a string (``{"0": "0.12.3"}``): an entry whose release is of another
-    major, or no release, is left out, and a feed with none is read with ``lines`` empty; and ``notices``, only where
-    it carries one that passes (``parse_notices``), so a feed with none is read, and kept, as it was before notices.
-    Anything else in it is left out, so the feed can grow without a release of cad."""
+    """What is kept, as the server reads it: a release as ``latest`` (``None`` when there is none), and ``notices``,
+    only where it carries one that passes (``parse_notices``). Anything else in it is left out (the ``lines`` a
+    release before this one kept), so what is read can grow without a release of cad."""
     if not isinstance(data, dict) or parse_release(data.get("latest")) is None:
         return None
-    given = data.get("lines")
-    lines = {major: release for major, release in (given.items() if isinstance(given, dict) else ())
-             if isinstance(major, str) and (numbers := parse_release(release)) is not None
-             and str(numbers[0]) == major}
     notices = parse_notices(data.get("notices"))
-    return {"latest": data["latest"], "lines": lines, **({"notices": notices} if notices else {})}
+    return {"latest": data["latest"], **({"notices": notices} if notices else {})}
 
 
 def _notice(given: Any) -> dict[str, str] | None:
@@ -130,15 +124,6 @@ def notices_for(version: str, known: dict[str, Any] | None) -> list[dict[str, st
     if mine is None or not isinstance(known, dict):
         return []
     return [notice for notice in parse_notices(known.get("notices")) if mine < parse_release(notice["below"])]
-
-
-def newest_of_major(major: int, known: dict[str, Any] | None) -> str | None:
-    """The newest release of major version ``major`` that the feed ``known`` (as ``feed`` returns it) names in its
-    ``lines``; None where it names none (a feed with ``latest`` alone, or no feed)."""
-    lines = known.get("lines") if isinstance(known, dict) else None
-    found = lines.get(str(major)) if isinstance(lines, dict) else None
-    numbers = parse_release(found)
-    return found if numbers is not None and numbers[0] == major else None
 
 
 def checking() -> bool:
@@ -201,7 +186,7 @@ def _get(url: str) -> Any:
 
 def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, path: Path | None = None,
          get: Callable[[str], Any] | None = None) -> dict[str, Any] | None:
-    """What was last read, in the version feed's shape (``{"latest", "lines", "notices"?}``), read again first
+    """What was last read (``{"latest", "notices"?}``), read again first
     (``fetch``) when that was an hour ago or more -- or now, ``force``. ``get``: each address's JSON (a test's
     stand-in)."""
     path = path or _cache()
@@ -232,7 +217,7 @@ def _read(path: Path, now: float, known: dict[str, Any] | None,
     notices = parse_notices(said.get("notices")) if isinstance(said, dict) else None
     if releases is None and notices is None:
         return None
-    base = releases or ({"latest": known["latest"], "lines": known["lines"]} if known else None)
+    base = releases or ({"latest": known["latest"]} if known else None)
     if base is None:  # the notices alone, with no release ever read: nothing to keep them by
         return None
     notices = (known or {}).get("notices", []) if notices is None else notices
@@ -278,9 +263,9 @@ def _get_within(url: str, seconds: float) -> Any:
 
 
 def pypi(*, get: Callable[[str], Any] | None = None) -> dict[str, Any] | None:
-    """cad's releases on PyPI (``<CAD_PYPI_URL>/cad/json``) in the feed's shape, ``{"latest", "lines"}`` (see the
-    module): only plain ``X.Y.Z`` releases with a file that is not yanked. None where PyPI could not be asked or named
-    no such release. Asked once, ``TIMEOUT_SECONDS`` at most."""
+    """cad's newest release on PyPI (``<CAD_PYPI_URL>/cad/json``), ``{"latest"}`` (see the module): the newest plain
+    ``X.Y.Z`` with a file that is not yanked. None where PyPI could not be asked or named no such release. Asked once,
+    ``TIMEOUT_SECONDS`` at most."""
     found = (get or (lambda url: _get_within(url, TIMEOUT_SECONDS)))(f"{pypi_url()}/cad/json")
     if not isinstance(found, dict):
         return None
@@ -288,17 +273,11 @@ def pypi(*, get: Callable[[str], Any] | None = None) -> dict[str, Any] | None:
     if not isinstance(given, dict):  # no list of releases: PyPI's own newest, which leaves yanked ones out
         info = found.get("info")
         version = info.get("version") if isinstance(info, dict) else None
-        return {"latest": version, "lines": {}} if parse_release(version) is not None else None
+        return {"latest": version} if parse_release(version) is not None else None
     out = [numbers for version, files in given.items() if (numbers := parse_release(version)) is not None
            and isinstance(files, list) and any(isinstance(file, dict) and file.get("yanked") in (None, False)
                                                for file in files)]
-    if not out:
-        return None
-    lines: dict[str, tuple[int, int, int]] = {}
-    for numbers in out:
-        lines[str(numbers[0])] = max(lines.get(str(numbers[0]), numbers), numbers)
-    named = lambda numbers: ".".join(map(str, numbers))  # noqa: E731
-    return {"latest": named(max(out)), "lines": {major: named(numbers) for major, numbers in sorted(lines.items())}}
+    return {"latest": ".".join(map(str, max(out)))} if out else None
 
 
 def _quietly() -> None:

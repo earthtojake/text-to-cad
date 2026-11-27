@@ -256,14 +256,16 @@ def _spawn(port: int | None) -> subprocess.Popen:
     nothing of the command that started it, and that command, and on Windows its ``cad.exe``, exits as soon as
     the server answers. ``port``: the HTTP port it must take. The engine's folder is first on its ``PYTHONPATH``
     only where this environment would not find it -- a source tree --, so no process the daemon starts in the
-    base inherits it. On Windows, from inside an app package, it starts outside it (``places.outside_package``)."""
+    base inherits it. On Windows, from inside an app package, it starts outside it (``places.outside_package``). It is
+    told which process started it (``--starter``, this one): where its start becomes cad's own update, that update
+    leaves this process running on Windows, whoever the daemon's parent is (inside an app package, Task Scheduler)."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
     root, path = places.engine_root(), env.get("PYTHONPATH", "")
     inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
     if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
         env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
     places.bytecode(env)
-    return places.outside_package([sys.executable, "-P", "-m", DAEMON_MODULE,
+    return places.outside_package([sys.executable, "-P", "-m", DAEMON_MODULE, "--starter", str(os.getpid()),
                                    *(["--port", str(port)] if port is not None else [])],
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                   env=env, cwd=_working_folder(), **places.detached(breakaway=True))

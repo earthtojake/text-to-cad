@@ -32,13 +32,13 @@ def pypi_answer(*releases: str, yanked: tuple[str, ...] = ()) -> dict:
 
 
 def stand_in(feed: dict | None, notices: list | None = None, asked: list | None = None):
-    """A ``get`` for ``updates.feed``: PyPI's JSON naming each release of ``feed``'s ``lines`` (and ``latest``), the
-    notices' address ``{"notices": ...}`` (``feed``'s own by default); None for what is None. ``asked``: each URL."""
+    """A ``get`` for ``updates.feed``: PyPI's JSON naming ``feed``'s ``latest``, the notices' address ``{"notices":
+    ...}`` (``feed``'s own by default); None for what is None. ``asked``: each URL."""
     def get(url: str):
         if asked is not None:
             asked.append(url)
         if url.endswith("/cad/json"):
-            return None if feed is None else pypi_answer(feed["latest"], *(feed.get("lines") or {}).values())
+            return None if feed is None else pypi_answer(feed["latest"])
         said = (feed or {}).get("notices", []) if notices is None else notices
         return None if said is False else {"notices": said}
     return get
@@ -82,7 +82,7 @@ class UpdatesTest(unittest.TestCase):
         answers = [pypi_answer("0.9.0"), None, pypi_answer("0.9.0", "0.9.1")]
         get = lambda url: asked.append(url) or (answers.pop(0) if url.endswith("/cad/json") else {"notices": []})  # noqa: E731
         start = 1_000_000.0
-        self.assertEqual(updates.feed(get=get, now=start), {"latest": "0.9.0", "lines": {"0": "0.9.0"}})
+        self.assertEqual(updates.feed(get=get, now=start), {"latest": "0.9.0"})
         # PyPI's own JSON and the notices: neither address of the version feed, which earlier releases read.
         self.assertEqual(asked, ["https://pypi.org/pypi/cad/json", "https://api.texttocad.dev/v1/notices"])
         updates.feed(get=get, now=start + updates.CHECK_SECONDS - 60)
@@ -99,13 +99,12 @@ class UpdatesTest(unittest.TestCase):
         notice = {"id": "moved", "below": "0.10.0", "text": "Words."}
         yanked = pypi_answer("0.9.0", "0.9.1", "1.0.0", yanked=("0.9.1", "1.0.0"))
         get = lambda url: yanked if url.endswith("/cad/json") else {"notices": [notice]}  # noqa: E731
-        self.assertEqual(updates.feed(get=get, now=1_000_000.0),
-                         {"latest": "0.9.0", "lines": {"0": "0.9.0"}, "notices": [notice]})
-        self.assertEqual(updates.feed(get=stand_in(None, notices=[]), force=True),
-                         {"latest": "0.9.0", "lines": {"0": "0.9.0"}}, "PyPI down: its releases kept, notices taken")
-        self.assertEqual(updates.feed(get=stand_in({"latest": "0.9.2", "lines": {"0": "0.9.2"}}, notices=False),
-                                      force=True), {"latest": "0.9.2", "lines": {"0": "0.9.2"}})
-        self.just_read({"latest": "0.9.2", "lines": {"0": "0.9.2"}, "notices": [notice]})
+        self.assertEqual(updates.feed(get=get, now=1_000_000.0), {"latest": "0.9.0", "notices": [notice]})
+        self.assertEqual(updates.feed(get=stand_in(None, notices=[]), force=True), {"latest": "0.9.0"},
+                         "PyPI down: its release kept, notices taken")
+        self.assertEqual(updates.feed(get=stand_in({"latest": "0.9.2"}, notices=False), force=True),
+                         {"latest": "0.9.2"})
+        self.just_read({"latest": "0.9.2", "notices": [notice]})
         self.assertEqual(updates.feed(get=stand_in({"latest": "0.9.3"}, notices=False), force=True)["notices"],
                          [notice], "the notices down: theirs kept")
         (self.tmp / updates.FILE).unlink()
@@ -113,7 +112,7 @@ class UpdatesTest(unittest.TestCase):
                           "notices alone, no release ever read: nothing kept")
         self.assertIsNone(updates.feed(get=stand_in(None, notices=False), force=True))
 
-    def test_cad_update_asks_pypi_for_each_major_s_newest_release_not_yanked_and_keeps_nothing(self) -> None:
+    def test_cad_update_asks_pypi_for_the_newest_release_not_yanked_and_keeps_nothing(self) -> None:
         asked: list[str] = []
         answer = lambda found: lambda url: asked.append(url) or found  # noqa: E731
         file = lambda yanked=False: {"filename": "cad.whl", "yanked": yanked, "yanked_reason": None}  # noqa: E731
@@ -121,10 +120,12 @@ class UpdatesTest(unittest.TestCase):
                     "0.12.2": [file(True)], "0.13.0rc1": [file()], "1.0": [file(True)], "1.1.2": [file(True)],
                     "1.0.0": [file()], "2.0.0": [], "0.12.3": [{"filename": "cad.whl"}]}  # no `yanked`: not yanked
         self.assertEqual(updates.pypi(get=answer({"info": {"version": "1.0.0"}, "releases": releases})),
-                         {"latest": "1.0.0", "lines": {"0": "0.12.3", "1": "1.0.0"}},
+                         {"latest": "1.0.0"},
                          "a release every file of which is yanked, or that has none, or a pre-release, is none")
         self.assertEqual(asked, ["https://pypi.org/pypi/cad/json"])
-        self.assertEqual(updates.pypi(get=answer({"info": {"version": "0.9.1"}})), {"latest": "0.9.1", "lines": {}},
+        self.assertEqual(updates.pypi(get=answer({"releases": {**releases, "1.0.0": [file(True)]}})),
+                         {"latest": "0.12.3"}, "the newest yanked: the newest that is not")
+        self.assertEqual(updates.pypi(get=answer({"info": {"version": "0.9.1"}})), {"latest": "0.9.1"},
                          "no list of releases: PyPI's own newest, which leaves yanked ones out")
         for found in (None, {}, {"info": None}, {"info": {"version": "0.9.2rc1"}}, {"info": {"version": 1}},
                       {"info": {"version": "0.9.1"}, "releases": {"0.9.1": [file(True)]}}, {"releases": []}):
@@ -161,7 +162,7 @@ class UpdatesTest(unittest.TestCase):
         self.addCleanup(server.shutdown)
         self.addCleanup(hold.set)  # first: the slow request let go
         self.environment({updates.PYPI_ENV: f"http://127.0.0.1:{server.server_port}/pypi"})
-        self.assertEqual(updates.pypi(), {"latest": "0.9.3", "lines": {"0": "0.9.3"}})
+        self.assertEqual(updates.pypi(), {"latest": "0.9.3"})
         self.assertIsNone(updates._get_within(f"http://127.0.0.1:{server.server_port}/slow/cad/json", 0.2))
         self.assertTrue(quiet.is_set(), "asked, and given up on")
 
@@ -174,38 +175,25 @@ class UpdatesTest(unittest.TestCase):
         request = opened.call_args.args[0]
         self.assertEqual((request.get_header("User-agent"), request.get_header("Accept")), ("cad", "application/json"))
 
-    def test_a_feed_is_read_for_what_this_cadgen_knows(self) -> None:
-        self.assertEqual(updates.parse_feed({"latest": "1.2.3", "minimum": {"claude-directory": "1.0.0"}, "notices": []}),
-                         {"latest": "1.2.3", "lines": {}})
+    def test_what_is_kept_is_read_for_what_this_cad_knows(self) -> None:
+        self.assertEqual(updates.parse_feed({"latest": "1.2.3", "minimum": {"claude-directory": "1.0.0"}, "notices": [],
+                                             "lines": {"0": "0.12.3", "1": "1.2.3"}}),  # a release before's: left out
+                         {"latest": "1.2.3"})
         for broken in (None, [], {}, {"latest": "v1.2.3"}, {"latest": 1}, {"lines": {"0": "0.12.0"}}):
             with self.subTest(broken=broken):
                 self.assertIsNone(updates.parse_feed(broken))
-        # Each major's newest release; an entry that is not one (a pre-release, another major's, a number) left out.
-        self.assertEqual(updates.parse_feed({"latest": "2.0.0", "lines": {
-            "0": "0.12.3", "1": "1.4.0", "2": "2.0.0", "3": "2.0.0", "01": "1.4.0", "4": "4.0.0rc1", "5": 5, "x": "0.1.0"}}),
-            {"latest": "2.0.0", "lines": {"0": "0.12.3", "1": "1.4.0", "2": "2.0.0"}})
-        for lines in (None, [], "0.12.3", [["0", "0.12.3"]]):
-            with self.subTest(lines=lines):
-                self.assertEqual(updates.parse_feed({"latest": "0.12.3", "lines": lines}), {"latest": "0.12.3", "lines": {}})
 
-    def test_each_major_s_newest_release_is_kept_and_a_feed_without_lines_is_read_with_none(self) -> None:
-        answer = {"latest": "1.4.0", "lines": {"0": "0.12.3", "1": "1.4.0"}}
+    def test_the_newest_release_is_kept_in_a_file_of_its_own(self) -> None:
+        answer = {"latest": "1.4.0"}
         self.assertEqual(updates.feed(get=stand_in(answer), now=1_000_000.0), answer)
         kept = json.loads((self.tmp / updates.FILE).read_text(encoding="utf-8"))
         self.assertEqual(kept, {"checked": 1_000_000.0, "feed": answer}, "kept in a file of its own")
-        known = updates.feed(fetch=False)
-        self.assertEqual([updates.newest_of_major(major, known) for major in (0, 1, 2)], ["0.12.3", "1.4.0", None])
-        # A stand-in that answers `latest` alone: no lines, nothing else lost.
-        self.just_read({"latest": "0.11.11"})
-        known = updates.feed(fetch=False)
-        self.assertEqual(known, {"latest": "0.11.11", "lines": {}})
-        self.assertIsNone(updates.newest_of_major(0, known))
-        self.assertEqual(updates.feed(get=lambda url: {"info": {"version": "0.11.14"}} if url.endswith("/cad/json")
-                                      else None, force=True), {"latest": "0.11.14", "lines": {}},
-                         "PyPI naming its newest alone")
-        for nothing in (None, {}, {"latest": "1.0.0", "lines": {"1": "2.0.0"}}, {"latest": "1.0.0", "lines": None}):
-            with self.subTest(nothing=nothing):
-                self.assertIsNone(updates.newest_of_major(1, nothing))
+        self.assertEqual(updates.feed(fetch=False), answer)
+        # What 0.11.12 to 0.11.18 kept there, with each major's newest: read for its newest alone.
+        self.just_read({"latest": "0.11.18", "lines": {"0": "0.11.18"}})
+        self.assertEqual(updates.feed(fetch=False), {"latest": "0.11.18"})
+        self.assertEqual(updates.feed(get=lambda url: {"info": {"version": "0.11.19"}} if url.endswith("/cad/json")
+                                      else None, force=True), {"latest": "0.11.19"}, "PyPI naming its newest alone")
 
     def test_the_feed_is_kept_where_no_earlier_release_reads_it(self) -> None:
         """Releases 0.10.0 to 0.11.11 keep their feed (``/v1/versions``'s) in ``versions.json`` in the same state
@@ -215,7 +203,7 @@ class UpdatesTest(unittest.TestCase):
         theirs = json.dumps({"checked": 5.0, "feed": {"latest": "0.11.11"}, "dismissed": "0.11.10"})
         (self.tmp / "versions.json").write_text(theirs, encoding="utf-8")
         self.assertIsNone(updates.feed(fetch=False), "theirs is not read")
-        answer = {"latest": "1.0.0", "lines": {"0": "0.12.3", "1": "1.0.0"}}
+        answer = {"latest": "1.0.0"}
         self.assertEqual(updates.feed(get=stand_in(answer), now=1_000_000.0), answer)
         self.assertEqual((self.tmp / "versions.json").read_text(encoding="utf-8"), theirs, "nor written")
         self.assertEqual(json.loads((self.tmp / updates.FILE).read_text(encoding="utf-8"))["feed"], answer)

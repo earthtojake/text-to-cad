@@ -50,7 +50,7 @@ class StateFolderTest(unittest.TestCase):
             language.change({"locale": "ja"})
             analytics.choose(True, by="cli")
             self.assertEqual(updates.feed(get=lambda url: {"info": {"version": "9.9.9"}} if url.endswith("/cad/json")
-                                          else {"notices": []}), {"latest": "9.9.9", "lines": {}})
+                                          else {"notices": []}), {"latest": "9.9.9"})
             self.assertTrue(analytics.spool({"builds": [{"kind": "xbf", "via": "script", "outcome": "ok", "seconds": 1.0}]}))
             later = time.time() + analytics.FLUSH_SECONDS + 1
             started: list[Path] = []

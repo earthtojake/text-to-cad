@@ -1786,14 +1786,14 @@ class Daemon:
             send({"failed": f"unknown request {op!r}"})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
-        """``cad update`` (``{"op": "update"}``; the ``"major"`` an older ``cad update --major`` sends is not read):
+        """``cad update`` (``{"op": "update"}``):
         judged (``auto_update.asked``: PyPI asked now, this request's thread waiting), then, where a newer release is out
         or PyPI could not say, the attempt underway joined, or the update begun
         at once (``auto_update.begin``), whatever the switch says: it stops this server at once, whatever is in
         flight, and upgrades cad in place. ``pid``: the ``cad update`` that asks,
         which the switch leaves running (``auto_update.spared``). ``{"ok": true, "updating", "from", "since"}``
-        (``updating``: the release it is for, or null; ``since``: when the attempt that serves it began; ``higher``,
-        where ``asked`` names a release of a higher major, never installed), else what ``asked`` answers, or
+        (``updating``: the release it is for, or null; ``since``: when the attempt that serves it began), else what
+        ``asked`` answers, or
         ``{"failed"}`` where it could not begin. ``{"op": "update", "begin": false}`` begins nothing: ``{"ok": true,
         "version", "last", "waiting": null}``, this release and the last attempt (``auto_update.last``), which ``cad
         update`` asks while it waits (``waiting``: what the releases before this one say of an update not begun yet;
@@ -2408,15 +2408,16 @@ def _leaving() -> bool:
         return False
 
 
-def _restarted() -> dict[str, Any] | None:
-    """cad's own update, begun as this server starts where the feed as last read calls for one and automatic updates
+def _restarted(starter: int | None = None) -> dict[str, Any] | None:
+    """cad's own update, begun as this server starts where PyPI as last read calls for one and automatic updates
     allow it (``auto_update.restart``): the attempt begun, its record ``switching`` with a fresh beat,
-    so the start stands aside for it (``_leaving``); else None. Never raises: what cannot be told is no reason for a
-    server not to start."""
+    so the start stands aside for it (``_leaving``); else None. ``starter``: the command that started this server
+    (``client._spawn``), which waits for the next one: the update leaves it running. Never raises: what cannot be told
+    is no reason for a server not to start."""
     try:
         from cad_server._internal import auto_update
 
-        return auto_update.restart()
+        return auto_update.restart(waiting=starter)
     except Exception:  # noqa: BLE001 - see above
         return None
 
@@ -2424,7 +2425,8 @@ def _restarted() -> dict[str, Any] | None:
 def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False,
          rotated: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server start --port``, which hands a server
-    it starts ``--port N`` in ``argv``); ``foreground`` (``cad server start --foreground``): its HTTP server bound
+    it starts ``--port N`` in ``argv``, with ``--starter PID``, the command that started it: ``_restarted``);
+    ``foreground`` (``cad server start --foreground``): its HTTP server bound
     before anything else, so a port another process holds fails the command at once (``bind``). One started
     detached binds on the first request that serves, which may name its own port (``cad viewer --port``) -- but where
     the server it replaced served pages (``resumed``), it serves them there at once, as one in the foreground does,
@@ -2437,12 +2439,15 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
     person's ask."""
     from cad.engine.serve import Pressure
 
+    starter = None
     if argv:
         from cad_server._internal.cli_parser import parser
 
         named = parser("cad server start")
         named.add_argument("--port", type=int)
-        port = named.parse_args(argv).port
+        named.add_argument("--starter", type=int)
+        given = named.parse_args(argv)
+        port, starter = given.port, given.starter
     try:
         Pressure.override(os.environ)
     except ValueError as error:  # refused at the start, in its one line, before anything is held
@@ -2452,7 +2457,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
     sys.pycache_prefix = os.environ.get("PYTHONPYCACHEPREFIX") or None
     sys.dont_write_bytecode = sys.pycache_prefix is None
     if not foreground and port is None:
-        begun = _restarted()
+        begun = _restarted(starter)
         if begun is not None:
             named = "the newest release" if begun["release"] == "latest" else f"cad {begun['release']}"
             print(f"cad: {named} is out, so this start updates cad to it: its server starts in a moment",

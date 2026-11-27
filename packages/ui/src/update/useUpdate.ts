@@ -12,7 +12,7 @@ import { dismissedOf, keepDismissed, noticeAlert, noticesOf, type Notice, type N
 export interface UpdateState {
   /** The release this install runs. */
   version: string;
-  /** The newer release of its own major the button offers, or null: the install is current (a higher major is never offered). */
+  /** The newer release the button offers, or null: the install is current. */
   latest: string | null;
   /** `working`: an update is underway (the server stops, cad is updated in place, the next server starts); `failed`: the last one did not install. */
   state: "idle" | "working" | "failed";

@@ -248,35 +248,27 @@ def _breaks_nothing(have: str, want: str) -> bool:
     return bump == "patch" or (bump == "minor" and int(have.split(".")[0]) >= 1)
 
 
-def _installs_itself(have: str, want: str) -> bool:
-    """The rule cad's own update keeps: a later release of the same major -- a patch or a minor, below 1.0 and from
-    1.0, a minor that breaks included -- is one every device takes by itself; a new major never is."""
-    return _bump(have, want) in ("patch", "minor")
-
-
 class TheGuardKeepsTheReleaseRuleTests(unittest.TestCase):
     """The release scripts' rule (release-tags.sh: the release scripts import nothing of the packages, and its job
-    installs no Python) answers as the rules above: which part a release bumps, whether a computer on the earlier
-    release installs it by itself, and whether it must break nothing (so may carry no new migration guide)."""
+    installs no Python) answers as the rules above: which part a release bumps, and whether it must break nothing
+    (so may carry no new migration guide)."""
 
-    def test_every_pair_of_releases_bumps_installs_itself_and_breaks_nothing_as_the_rules_say(self) -> None:
+    def test_every_pair_of_releases_bumps_and_breaks_nothing_as_the_rules_say(self) -> None:
         pairs = [(have, want) for have in VERSIONS for want in VERSIONS]
         script = ('source "$1"; while read -r have want; do '
                   'bump="$(version_bump "$have" "$want")" || bump=none; '
-                  'if version_installs_itself "$have" "$want"; then takes=yes; else takes=no; fi; '
                   'if version_breaks_nothing "$have" "$want"; then safe=yes; else safe=no; fi; '
-                  'echo "$have $want $bump $takes $safe"; done')
+                  'echo "$have $want $bump $safe"; done')
         result = subprocess.run(
             ["bash", "-c", script, "bash", str(repo_path("scripts/release/release-tags.sh"))],
             input="".join(f"{have} {want}\n" for have, want in pairs),
             text=True, capture_output=True, check=True,
         )
-        answered = {(have, want): (bump, takes, safe)
-                    for have, want, bump, takes, safe in (line.split() for line in result.stdout.splitlines())}
+        answered = {(have, want): (bump, safe)
+                    for have, want, bump, safe in (line.split() for line in result.stdout.splitlines())}
         self.assertEqual(sorted(answered), sorted(pairs))
         for have, want in pairs:
-            expected = (_bump(have, want) or "none", "yes" if _installs_itself(have, want) else "no",
-                        "yes" if _breaks_nothing(have, want) else "no")
+            expected = (_bump(have, want) or "none", "yes" if _breaks_nothing(have, want) else "no")
             self.assertEqual(answered[have, want], expected, (have, want))
 
 

@@ -6,16 +6,17 @@ built that environment first (``auto_update.build``). So the newest release's co
 worker holds none of the environment's files. That entry and ``told`` are a contract every later release keeps: an
 older release starts a newer one's worker by them. ``told`` is one JSON argument: ``record`` (the attempt's file),
 ``log``, ``from`` (the release that runs), ``at``, ``tries``, ``wanted``, ``asked``, ``start`` (a server wanted at the
-end though none runs), ``target`` (the release asked for, or null), ``requirement`` (what is installed:
-``cad==<target>``; with no target the bound of ``from``'s major), ``prefix`` (the environment updated), ``cad`` (its
+end though none runs), ``target`` (the release the update is for: the one uv built, this worker's own; an environment
+that holds it or a newer one is left as it is), ``prefix`` (the environment updated), ``cad`` (its
 own ``cad`` command), ``installer`` (``uv`` or ``pipx``, who made the global install, kept in the record), ``uv`` (the
 person's uv, ``base.find_uv``), ``pipx`` (pipx's command, ``auto_update.find_pipx``, for a pipx install) and ``spare``
 (on Windows, the processes the switch leaves running: ``auto_update.spared``). Every record it writes keeps the fields
 the release that started it reads, and adds ``worker``, its own release.
 
-The installer that made cad updates it where it is, with the person's own settings: uv by ``uv tool upgrade``, its
-receipt untouched; pipx by pip inside its environment (``pipx runpip cad install``; ``uv pip`` under pipx's uv backend),
-pipx's pin untouched (``installing``). On Windows a file a process has open or loaded cannot be deleted: uv's upgrade
+The installer that made cad updates it where it is, to the newest release it takes for ``cad``, with the person's own
+settings: uv by ``uv tool upgrade cad``, its receipt untouched; pipx by pip inside its environment (``pipx runpip cad
+install --upgrade cad``; ``uv pip`` under pipx's uv backend), pipx's pin untouched (``installing``). No release is
+named and none bounded: a release yanked on PyPI is one no installer takes. On Windows a file a process has open or loaded cannot be deleted: uv's upgrade
 deletes the old files in the order of the package's ``RECORD`` and stops at the first it cannot delete, with nothing
 put back, and one stopped past the ``RECORD`` leaves a ``cad-*.dist-info`` without it that every later uv run fails on
 (pip puts back what it removed). Either downloads and prepares the release before it changes the environment, so a
@@ -36,9 +37,10 @@ repairs it where it fails anyway. In order (``update``):
       new ``cad`` fails at once rather than open the files being replaced; then every other process running from the
       environment stopped, but those spared, and looked for again until none is left (``stop_environment``). In that
       order: a ``cad`` launched between a sweep and the rename would hold the files being replaced.
-   d. The installer's upgrade to ``requirement`` (``installing``): the release it leaves is the one installed
+   d. The installer's upgrade to the newest release (``installing``): the release it leaves is the one installed
       (``auto_update.installed``); ``from`` itself is ``current``. uv's own failure to write the bin ``cad.exe`` (a file
-      in use) leaves the environment upgraded and whole: that is checked as an upgrade.
+      in use) leaves the environment upgraded and whole, a newer release in it than ``from``: that is checked as an
+      upgrade, whatever uv's exit status.
    e. The moment the installer returns, its bin ``cad`` again where it left none (``command_back``: an upgrade uv
       fails after it took the tool's commands out leaves none, and pip writes none there): on Windows the environment's own ``cad.exe`` copied there, as pipx exposes it, else the one moved aside
       put back, and the one moved aside removed where it can be (else the server's next tidying does,
@@ -53,7 +55,7 @@ repairs it where it fails anyway. In order (``update``):
       untouched), and checked. Nothing is installed again in place: the worker runs from uv's cache, outside the
       environment, so it can make that anew whole (h).
    h. Where that left no cad that runs, the repair, in one step (``reinstall``): the installer installs cad again
-      whole, as the install command does (``uv tool install --force "cad<N>"``, ``pipx install --force cad``), which
+      whole, as the install command does (``uv tool install --force cad``, ``pipx install --force cad``), which
       removes the environment, an unreadable one too, so nothing of it may run: the record's phase ``repairing``
       first, on which the processes the switch spared leave it (the ``cad update`` that waits says cad is being
       installed again, and ends), waited for (``WAIT_SECONDS`` at most), then every process of it stopped (c), the
@@ -275,9 +277,9 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
     if server is not None:
         stop(server, log)
     wanted = server is not None or told.get("start") is True
-    code, said, left = upgrade(told, run, installing(told, told["requirement"]), command, log, system)
+    code, said, left = upgrade(told, run, installing(told), command, log, system)
     got = auto_update.installed(prefix)
-    if code != 0 and got is not None and got == target and not unrecorded(prefix):
+    if code != 0 and auto_update.newer(got, told["from"]) and not unrecorded(prefix):
         # The environment is upgraded and whole: what failed after it is the bin command, which is back (``upgrade``).
         log.write(f"{by(told)} exited {code} with cad {got} installed whole: checked as an upgrade")
         code = 0
@@ -287,8 +289,10 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
         clear(got, log)
         ok, said = runs(told, run, got, wanted)
         if ok and got == told["from"]:
-            return {**named_, "outcome": "current", "detail": f"cad {got} is the newest release it may take",
-                    **started(wanted, True, said)}
+            held = (f"cad {got} is the newest release this install takes, though uv built cad {target}: a range in "
+                    f"{by(told)}'s record of the install, or its Python, holds it back"
+                    if auto_update.newer(target, got) else f"cad {got} is the newest release it may take")
+            return {**named_, "outcome": "current", "detail": held, **started(wanted, True, said)}
         if ok:
             return {**named_, "outcome": "installed", "detail": f"cad {got} runs, upgraded in place by {by(told)}",
                     **started(wanted, True, said)}
@@ -424,11 +428,11 @@ def replace(told, run, held, log, mark=lambda phase: None):
 # --- the installer's commands ------------------------------------------------------------------------------------
 
 
-def installing(told, requirement):
-    """The installer's command that installs ``requirement`` in cad's environment where it is, a later release or an
-    earlier one: uv's ``uv tool upgrade <requirement>``, which keeps its receipt; pipx's ``pipx runpip cad install
-    --upgrade <requirement>``, pip (or ``uv pip``, under pipx's uv backend) inside pipx's environment, which keeps
-    pipx's pin (pipx 1.19 notes ``requirement`` in its metadata, which ``pipx upgrade`` moves on from)."""
+def installing(told, requirement=auto_update.UPGRADE):
+    """The installer's command that installs ``requirement`` in cad's environment where it is -- ``cad``, the newest
+    release it takes, by default; the release before by name, on the way back (``recover``) --: uv's ``uv tool upgrade
+    <requirement>``, which keeps its receipt; pipx's ``pipx runpip cad install --upgrade <requirement>``, pip (or ``uv
+    pip``, under pipx's uv backend) inside pipx's environment, which keeps pipx's pin."""
     if told.get("installer") == "pipx":
         return [*told["pipx"], "runpip", "cad", "install", "--upgrade", requirement]
     return [told["uv"], "tool", "upgrade", requirement]
@@ -436,11 +440,11 @@ def installing(told, requirement):
 
 def reinstalling(told):
     """The installer's command that installs cad again whole, the repair (``reinstall``): uv's ``uv tool install
-    --force`` of the newest of ``from``'s major (``tool_install.command``: ``cad<N>``, as cad's installers write it,
-    never one release, which would pin it); pipx's ``pipx install --force cad``, unpinned."""
+    --force cad``, the newest release (``tool_install.command``, as cad's installers write it, never one release,
+    which would pin it); pipx's ``pipx install --force cad``, unpinned."""
     if told.get("installer") == "pipx":
         return [*told["pipx"], "install", "--force", "cad"]
-    command = tool_install.command(told["uv"], told["from"])
+    command = tool_install.command(told["uv"])
     return [*command[:3], "--force", *command[3:]]
 
 
@@ -887,9 +891,9 @@ class Log:
             with open(path, "w", encoding="utf-8") as handle:
                 wanted = told.get("wanted")
                 handle.write(f"cad's update, begun {_when(time.time())}: from {told.get('from')} to "
-                             f"{told.get('target') or 'the newest it may take'}"
+                             f"{told.get('target') or 'the newest release'}"
                              f"{f' (for {wanted})' if wanted and wanted != told.get('target') else ''}, "
-                             f"{told.get('requirement')} by {installer(told)}, "
+                             f"by {installer(told)}, "
                              f"{'typed' if told.get('asked') else 'automatic'}, try {told.get('tries', 1)}\n")
         except Exception:  # noqa: BLE001 - the worker never fails of its log
             self.path = None
@@ -1032,6 +1036,7 @@ def main(told):
     release being left starts that release's server, which a start meanwhile would not (``auto_update.leaving``)."""
     os.environ[auto_update.WORKER_ENV] = json.dumps(told.get("at"))
     beat = Beat(told)
+    beat.mark()  # at once: the server's start that became this update stands aside while it beats (``leaving``)
     try:
         found = update(told, mark=beat.mark)
     except Exception as error:  # noqa: BLE001 - said in the record, never a silent end
