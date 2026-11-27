@@ -6,11 +6,11 @@
  *
  * `/v1/releases` is what cad 0.11.12 and later reads (`cad_server/updates.py` in packages/cad): `latest`, the newest
  * release, and `lines`, the newest release of each major version that has one (its major as a string, the JSON key).
- * `lines` says when, and what: a cad updates itself where `lines` names a newer release of its own major, to exactly
- * that release (0.11.12 to 0.11.17 take it for the signal alone, and install PyPI's newest of that major: `uv tool
- * install --upgrade "cad>=X,<N"`); where `lines` names none of its major and `latest` is of a higher major, it
- * installs the newest of its own major all the same. A higher major never installs itself. The install command
- * installs PyPI's newest, reading no feed.
+ * `lines` says when: a cad updates itself where `lines` names a newer release of its own major, to PyPI's newest of
+ * that major (`uv tool install --upgrade "cad>=X,<N"`); where `lines` names none of its major and `latest` is of a
+ * higher major, it runs that bounded upgrade all the same. A higher major never installs itself. The install command
+ * installs PyPI's newest, reading no feed. The releases after 0.11.18 read neither address: they ask PyPI themselves,
+ * and read only the project's notices (`/v1/notices`, notices.mjs).
  *
  * `/v1/versions` is frozen: the releases 0.7.12 to 0.11.11 read it, and nothing newer will. It names the newest
  * release BELOW 0.12.0 (`OLD_BELOW`), in the shape it always had, `{latest}` alone. 0.11.0 to 0.11.11 install by
@@ -30,9 +30,6 @@
  *      its release not old enough;
  *   3. is not held: `held` is a set of `X.Y.Z` the feed never names, from the Vercel project's `CAD_HELD_RELEASES`
  *      (`heldOf`, README "Holding a release").
- * `/v1/releases` also carries `notices`, the words the project shows to every cad older than a release, where the
- * Vercel project's `CAD_NOTICES` holds any (`noticesOf`, README "Posting a notice"); with none, no `notices` key at all,
- * so the answer is what it was before notices existed.
  * A release that is held or too new is passed over, never answered as nothing: each address names the newest
  * release that qualifies (and `/v1/versions`, the newest below 0.12.0 that does).
  *
@@ -79,64 +76,6 @@ export function heldOf(env = {}, log = console.error) {
   return held;
 }
 
-// A notice (`noticesOf`), checked the same way by cad (`cad_server/updates.py`'s `parse_notices`), which trusts no feed.
-const NOTICE_ID = /^[a-z0-9-]{1,40}$/;
-const NOTICE_TEXT_MAX = 240; // characters (code points), as Python counts them
-const NOTICE_CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u; // control characters and every line break
-const NOTICE_URL = /^https:\/\/(?:texttocad\.dev|github\.com\/earthtojake\/text-to-cad)(?:[/?#][\x21-\x7e]*)?$/;
-const NOTICE_URL_MAX = 500;
-export const NOTICES_MAX = 10;
-
-/**
- * Why a notice is refused, or null for one kept: `{id, below, text, url?}`, `id` a short slug (what a cad keeps a
- * dismissal and its once a day by), `below` the release every cad older than which it is for, `text` one line of plain
- * text, and `url`, where there is one, on texttocad.dev or the project's GitHub repository, over https.
- */
-function noticeRefused(notice) {
-  if (!notice || typeof notice !== 'object' || Array.isArray(notice)) return 'not an object';
-  const { id, below, text, url } = notice;
-  if (typeof id !== 'string' || !NOTICE_ID.test(id)) return 'id';
-  if (typeof below !== 'string' || !RELEASE.test(below)) return 'below';
-  if (typeof text !== 'string' || /^ *$/.test(text) || [...text].length > NOTICE_TEXT_MAX || NOTICE_CONTROL.test(text)) return 'text';
-  if (url !== undefined && (typeof url !== 'string' || url.length > NOTICE_URL_MAX || !NOTICE_URL.test(url))) return 'url';
-  return null;
-}
-
-/**
- * The notices the Vercel project posts: `CAD_NOTICES`, a JSON list of `{id, below, text, url?}` (README, "Posting a
- * notice"), each kept with those keys alone, in order, at most `NOTICES_MAX`, an id once. An entry that breaks a rule
- * is dropped, and logged with the rule so a mistake is seen; a variable that is no JSON list gives none, logged.
- * Unset or blank: none, and nothing logged.
- */
-export function noticesOf(env = {}, log = console.error) {
-  const given = String(env?.CAD_NOTICES ?? '').trim();
-  if (!given) return [];
-  let list;
-  try {
-    list = JSON.parse(given);
-  } catch {
-    log('version feed: CAD_NOTICES is not JSON');
-    return [];
-  }
-  if (!Array.isArray(list)) {
-    log('version feed: CAD_NOTICES is not a list');
-    return [];
-  }
-  const notices = [];
-  list.forEach((notice, at) => {
-    const refused = noticeRefused(notice) ?? (notices.some(kept => kept.id === notice.id) ? 'id named twice'
-      : notices.length >= NOTICES_MAX ? `more than ${NOTICES_MAX}` : null);
-    if (refused) {
-      log(`version feed: CAD_NOTICES entry ${at} dropped:`, refused);
-      return;
-    }
-    const { id, below, text, url } = notice;
-    notices.push(Object.freeze({ id, below, text, ...(url === undefined ? {} : { url }) }));
-  });
-  if (notices.length) log('version feed: notices', notices.map(({ id, below }) => `${id} (below ${below})`).join(', '));
-  return Object.freeze(notices);
-}
-
 /**
  * The releases an index page (PEP 691 JSON) offers at `now`, oldest first: each with an unyanked file, every
  * unyanked file of it uploaded at least an hour before `now`, and not in `held`.
@@ -162,29 +101,26 @@ export function latestOf(page, options) {
 
 /**
  * Both addresses' answers from one index page at `now`, `null` when it offers no release at all:
- * `releases`, `{latest, lines}` (`/v1/releases`), with `notices` after them where `options.notices` holds any
- * (`noticesOf`), and `versions`, `{latest}` naming the newest release below `OLD_BELOW` (`/v1/versions`), or `null`
- * when none below it qualifies.
+ * `releases`, `{latest, lines}` (`/v1/releases`), and `versions`, `{latest}` naming the newest release below
+ * `OLD_BELOW` (`/v1/versions`), or `null` when none below it qualifies.
  */
-export function feedsOf(page, options = {}) {
+export function feedsOf(page, options) {
   const ready = readyOf(page, options);
-  const notices = Array.isArray(options.notices) && options.notices.length ? { notices: options.notices } : {};
   if (!ready.length) return null;
   const lines = {};
   for (const version of ready) lines[parts(version)[0]] = version; // oldest first: each major ends on its newest
   const old = ready.filter(version => newer(version, OLD_BELOW) < 0).at(-1);
   return {
-    releases: Object.freeze({ latest: ready.at(-1), lines: Object.freeze(lines), ...notices }),
+    releases: Object.freeze({ latest: ready.at(-1), lines: Object.freeze(lines) }),
     versions: old ? Object.freeze({ latest: old }) : null,
   };
 }
 
 /**
- * The feed, read from PyPI: two functions the handler calls, `releases` (`{latest, lines}`, and `notices` where there
- * are any) and `versions` (`{latest}`), sharing one read of PyPI, each answering its feed or `null`, and never throwing.
+ * The feed, read from PyPI: two functions the handler calls, `releases` (`{latest, lines}`) and `versions`
+ * (`{latest}`), sharing one read of PyPI, each answering its feed or `null`, and never throwing.
  */
-export function pypiFeeds({ fetch = globalThis.fetch, now = Date.now, log = console.error, timeout = TIMEOUT_MS, held = new Set(),
-  notices = [] } = {}) {
+export function pypiFeeds({ fetch = globalThis.fetch, now = Date.now, log = console.error, timeout = TIMEOUT_MS, held = new Set() } = {}) {
   let kept = null; // { feeds, at }; a failed first read keeps no feeds until the next attempt
   let asking = null;
   async function ask() {
@@ -194,7 +130,7 @@ export function pypiFeeds({ fetch = globalThis.fetch, now = Date.now, log = cons
         signal: AbortSignal.timeout(timeout),
       });
       if (!response.ok) throw Object.assign(new Error('PyPI refused'), { code: `pypi_${response.status}` });
-      const feeds = feedsOf(await response.json(), { now: now(), held, notices });
+      const feeds = feedsOf(await response.json(), { now: now(), held });
       if (!feeds) throw Object.assign(new Error('no release'), { code: 'pypi_no_release' });
       kept = { feeds, at: now() };
     } catch (error) {
