@@ -817,11 +817,13 @@ def _topology_fact(key: str, data: bytes, method: str, args: tuple) -> Any:
     return getattr(found, method)(*args)
 
 
-def _table(key: str, data: bytes, unmeshed: tuple[int, ...] = ()) -> bytes:
+def _table(key: str, data: bytes, unmeshed: tuple[int, ...] = (), measure: bool = False) -> tuple[bytes, Any]:
     """A part's whole table (``mesh.Topology.elements``, its mesh's ``unmeshed`` faces checked) as the JSON its
     route answers: a pool process's job (``Server.table``), encoded where it is made, so the server keeps and
-    sends its bytes as they come."""
-    return json.dumps(_topology_fact(key, data, "elements", (unmeshed,)), separators=(",", ":")).encode()
+    sends its bytes as they come. With ``measure``, also the part measured as a whole from the same topology
+    (``Topology.measured``: its box the union of the face boxes the table just made), else None."""
+    table = json.dumps(_topology_fact(key, data, "elements", (unmeshed,)), separators=(",", ":")).encode()
+    return table, _topology_fact(key, data, "measured", ()) if measure else None
 
 
 def _held(key: str, unmeshed: tuple[int, ...] = ()) -> str:
@@ -848,10 +850,9 @@ class _RemoteTopology:
 
 def _measured(batch: list[tuple[str, bytes]]) -> list[tuple[str, dict[str, Any]]]:
     """A batch of parts, each measured as a whole from its shape bytes (``mesh.measured``): a pool
-    process's job, one per batch of a document's parts (``Server.measure``)."""
-    from cad.engine.mesh import measured
-
-    return [(key, measured(data)) for key, data in batch]
+    process's job, one per batch of a document's parts (``Server.measure``). A part whose topology the
+    process holds (its picks', its table's) is measured from it, its faces' boxes made once."""
+    return [(key, _topology_fact(key, data, "measured", ())) for key, data in batch]
 
 
 def _pose_structure(structure: dict, pose: Any) -> dict:
@@ -1888,17 +1889,30 @@ class Server:
                 self.tables.pending[kept] = making
         if waiting is not None:
             return waiting.result()
+        # The part measured as a whole from the table's own topology, where no one has it or is making it: its
+        # box is the union of the face boxes the table makes (``Topology.measured``), so a view bundle's
+        # measures after its tables cost their volumes alone.
+        with self.facts.lock:
+            measure = _held(key) not in self.facts.items and _held(key) not in self.facts.pending
+            if measure:
+                self.facts.pending[_held(key)] = concurrent.futures.Future()
         try:
             data = self.shape_of(doc, key)
             if self.isolated:
-                made = self.mesher.run(_table, key, data, unmeshed, priority=FACT).result()
+                made, facts = self.mesher.run(_table, key, data, unmeshed, measure, priority=FACT).result()
             else:
-                made = json.dumps(self.topology(key, data).elements(unmeshed), separators=(",", ":")).encode()
+                topology = self.topology(key, data)
+                made = json.dumps(topology.elements(unmeshed), separators=(",", ":")).encode()
+                facts = topology.measured() if measure else None
         except BaseException as error:  # every asker hears why; this one raises it
+            if measure:
+                self._measured([key], None, error)
             with self.tables.lock:
                 self.tables.pending.pop(kept, None)
             making.set_exception(error)
             raise
+        if measure:
+            self._measured([key], [(key, facts)])
         with self.tables.lock:
             self.tables.pending.pop(kept, None)
             self.tables._put(kept, made)
@@ -1973,11 +1987,9 @@ class Server:
             self._measured(keys, None, error)
             return
         if not self.isolated:
-            from cad.engine.mesh import measured
-
             for key, data in parts:
                 try:
-                    facts = measured(data)
+                    facts = self.topology(key, data).measured()  # its faces' boxes made once, with its picks'
                 except BaseException as error:  # noqa: BLE001 - the kernel's refusal is the asker's answer
                     self._measured([key], None, error)
                     continue

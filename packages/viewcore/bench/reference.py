@@ -10,7 +10,7 @@ Per document, in OUT_DIR/<file stem>/:
   parts/<index>/key         the file's geometry key for the part
   parts/<index>/shape.bin   mesh.shape_bytes(shape, read=True); blake2b-128 of it is the key
   parts/<index>/mesh.xbm    mesh.mesh_shape(bytes, parallel=False).to_bytes()
-  parts/<index>/elements.json, groups.json, measure.json   Topology(bytes).elements(), .groups(), mesh.measured(bytes)
+  parts/<index>/elements.json, groups.json, measure.json   Topology(bytes).elements(), .groups(), .measured() (= mesh.measured(bytes))
 Parts are numbered by document.Loaded.prototypes; parts sharing a key hold the same files.
 """
 import hashlib, json, os, sys, time
@@ -32,7 +32,7 @@ def served(loaded, path: Path) -> dict:
 
 def dump(path: Path, out: Path) -> dict:
     from cad.engine.document import Loaded
-    from cad.engine.mesh import Topology, measured, mesh_shape, shape_bytes
+    from cad.engine.mesh import Topology, mesh_shape, shape_bytes
 
     timing = {}
     t = time.perf_counter()
@@ -59,7 +59,8 @@ def dump(path: Path, out: Path) -> dict:
         t = time.perf_counter(); topology = Topology(data); elements = topology.elements(); stages["elements_s"] += time.perf_counter() - t
         (folder / "elements.json").write_text(json.dumps(elements, separators=(",", ":")))
         (folder / "groups.json").write_text(json.dumps(elements["groups"], separators=(",", ":")))
-        t = time.perf_counter(); facts = measured(data); stages["measure_s"] += time.perf_counter() - t
+        # As the engine measures a part after its table: from the table's topology (the same answer as measured()).
+        t = time.perf_counter(); facts = topology.measured(); stages["measure_s"] += time.perf_counter() - t
         (folder / "measure.json").write_text(json.dumps(facts, separators=(",", ":")))
         done[prototype.key] = folder
     timing.update(stages)

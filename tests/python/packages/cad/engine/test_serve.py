@@ -464,7 +464,17 @@ class InspectionReadTest(unittest.TestCase):
         self.server = Server(mesh_mode="inline", http_factory=listener)
         self.server.start()
         self.addCleanup(self.server.stop)
-        self.kernel = mock.patch("cad.engine.mesh.measured", side_effect=kernel_facts).start()
+        # ``mesh.Topology``, standing in: a part measured from its topology (``Topology.measured``), each counted.
+        self.kernel = kernel = mock.Mock(side_effect=kernel_facts)
+
+        class Kernel:
+            def __init__(self, data: bytes) -> None:
+                self.data = data
+
+            def measured(self) -> dict:
+                return kernel(self.data)
+
+        mock.patch("cad.engine.mesh.Topology", Kernel).start()
         self.addCleanup(mock.patch.stopall)
 
     def read(self, route: str):
@@ -639,14 +649,19 @@ class PartTableTest(unittest.TestCase):
         server.start()
         self.addCleanup(server.stop)
         made: list[bytes] = []
+        measured: list[bytes] = []
 
-        class Kernel:  # ``mesh.Topology``, standing in: each table it makes counted
+        class Kernel:  # ``mesh.Topology``, standing in: each table and measure it makes counted
             def __init__(self, data: bytes) -> None:
                 self.data = data
 
             def elements(self, unmeshed=()) -> dict:
                 made.append(self.data)
                 return kernel_table(self.data)
+
+            def measured(self) -> dict:
+                measured.append(self.data)
+                return kernel_facts(self.data)
 
         mock.patch("cad.engine.mesh.Topology", Kernel).start()
         self.addCleanup(mock.patch.stopall)
@@ -660,13 +675,20 @@ class PartTableTest(unittest.TestCase):
         self.assertEqual([table(key) for key in ("k1", "k2", "k1")],
                          [answered(kernel_table(data)) for data in (b"one", b"three", b"one")])
         self.assertEqual(made, [b"one", b"three"], "each part's table made once, however often it is asked")
+        # A table measures its part from the same topology, where no one has: a view bundle's measures after it
+        # are held already.
+        status, body = server.read(f"/api/doc/{PLATE}/volumes")
+        self.assertEqual((status, json.loads(body)), (200, {"k1": kernel_facts(b"one"), "k2": kernel_facts(b"three")}))
+        self.assertEqual(measured, [b"one", b"three"], "measured with its table, and not again")
         registered(server, {"k1": b"one", "k3": b"seven"}, version=2)  # the next build: k2 became k3
         self.assertEqual(table("k3"), answered(kernel_table(b"seven")))
         table("k1")
         self.assertEqual(made, [b"one", b"three", b"seven"], "an edit makes the new part's alone")
-        self.assertEqual(server.memory()["facts"], sum(len(serve._held(key)) + len(answered(kernel_table(data))) for key, data in
+        self.assertEqual(measured, [b"one", b"three", b"seven"])
+        self.assertEqual(server.memory()["facts"], sum(2 * len(serve._held(key)) + len(answered(kernel_table(data)))
+                                                       + len(answered(kernel_facts(data))) for key, data in
                                                        (("k1", b"one"), ("k2", b"three"), ("k3", b"seven"))),
-                         "held under the budget, counted with the parts' facts as the JSON they answer")
+                         "held under the budget, the tables and the measures made with them, as the JSON they answer")
         server.trim(0)
         self.assertEqual((server.tables.size, server.tables.get("k1")), (0, None), "and evicted under it")
         self.assertEqual(table("k1"), answered(kernel_table(b"one")))
@@ -706,16 +728,20 @@ class PartTableTest(unittest.TestCase):
             # Both parts' tables are under way at once, each one job in the facts queue.
             one, two = sorted(jobs_by(2), key=lambda job: job[1])
             self.assertEqual([(fn, args, priority) for fn, args, priority, _future in (one, two)],
-                             [(serve._table, ("k1", b"one", ()), FACT), (serve._table, ("k2", b"three", ()), FACT)])
-            one[3].set_result(answered(kernel_table(b"one")))
+                             [(serve._table, ("k1", b"one", (), True), FACT), (serve._table, ("k2", b"three", (), True), FACT)])
+            one[3].set_result((answered(kernel_table(b"one")), kernel_facts(b"one")))
             two[3].set_exception(RuntimeError("the kernel refused the part"))
             answers = [found.result(30) for found in asked]
             self.assertEqual(answers[:2], [answered(kernel_table(b"one"))] * 2)
             self.assertEqual(str(answers[2]), "the kernel refused the part")
             self.assertEqual(server.table(doc, "k1"), answered(kernel_table(b"one")))
             self.assertEqual(len(jobs), 2, "a table held is asked of no one")
+            self.assertEqual(server.measure(doc, ["k1"]), {"k1": kernel_facts(b"one")})
+            self.assertEqual(len(jobs), 2, "the part was measured with its table: no job measures it")
             again = askers.submit(ask, "k2")
-            jobs_by(3)[2][3].set_result(answered(kernel_table(b"three")))
+            # The refused part's measure was let go with its table: it is asked again with it.
+            self.assertEqual(jobs_by(3)[2][1], ("k2", b"three", (), True))
+            jobs_by(3)[2][3].set_result((answered(kernel_table(b"three")), kernel_facts(b"three")))
             self.assertEqual(again.result(30), answered(kernel_table(b"three")), "a refused part is asked again")
 
 
