@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cad in the tab</title>
+<style>
+  :root { --bg: #f2f4f5; --panel: #ffffff; --ink: #18222a; --muted: #5f6e78; --line: #d7dfe4; --accent: #0b6e8f; color-scheme: light; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #12181c; --panel: #1a2329; --ink: #e4ebef; --muted: #91a1ab; --line: #2b383f; --accent: #49b6d6; color-scheme: dark; } }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+  @media (max-width: 720px) { body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(320px, 1fr); } }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 16px; display: grid; gap: 16px; align-content: start; overflow: auto; }
+  h1 { font-size: 16px; margin: 0; } p { margin: 4px 0 0; color: var(--muted); }
+  h2 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  td { padding: 3px 0; border-bottom: 1px solid var(--line); } td:last-child { text-align: right; font-family: ui-monospace, Menlo, monospace; }
+  label { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+  label input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+  output { font-family: ui-monospace, Menlo, monospace; }
+  button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { color: var(--muted); min-height: 1.4em; } #status.bad { color: #c0392b; }
+  main { position: relative; min-width: 0; min-height: 0; } canvas { display: block; width: 100%; height: 100%; }
+</style>
+<aside>
+  <div>
+    <h1>cad in the tab</h1>
+    <p>A model's script built here by cad's own build on a WebAssembly kernel, then read, meshed and exported by the view core. No server computes anything.</p>
+  </div>
+  <div id="status" role="status">Starting the kernel…</div>
+  <div><h2>Parameters</h2><div id="parameters"></div></div>
+  <div><h2>Seconds</h2><table><tbody id="timings"></tbody></table></div>
+  <div><h2>Export</h2><button id="step" type="button" disabled>Export STEP</button> <span id="exported"></span></div>
+</aside>
+<main><canvas id="view"></canvas></main>
+<script type="importmap">{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }</script>
+<script type="module" src="main.js"></script>
+</html>
