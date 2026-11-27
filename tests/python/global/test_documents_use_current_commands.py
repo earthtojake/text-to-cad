@@ -13,8 +13,11 @@ text, prose and code alike: a type's operation (``cad step inspect``, ``cad <typ
 any other earlier spelling where it is code, in a code span or a string, since "the cad server" and "its cad step" are
 prose. A shell runs the command through a variable that holds it as often as by its name (``"$COMMAND_PATH" xbf
 export``, ``& $cad server stop``, the installed-mode checks' way), or by its path (``"$VENV/bin/cad" server stop``):
-each of those is the command line too. The sample models are no test's to read (``test_tests_are_self_contained.py``),
-and a generated file is its source's text (``scripts/generated/regenerate.py``).
+each of those is the command line too. A Python program runs it from a list of arguments, where no text spells the
+line (``[cad, "stop"]``, ``run("-m", "cad_server.cli", "xbf", "inspect", path)``): the strings that follow the command
+there are read as its words (``runs``), since a cleanup that runs an earlier spelling fails no test and stops nothing.
+The sample models are no test's to read (``test_tests_are_self_contained.py``), and a generated file is its source's
+text (``scripts/generated/regenerate.py``).
 
 The documents about the earlier spellings themselves name them on purpose: the migration guides, the hint table and
 its tests, the bridge from releases 0.10.0 to 0.11.11 that runs their commands, and the pages that say what an old
@@ -23,6 +26,7 @@ spelling answers. Each is allowed the spellings it names (``ALLOWED``), and no o
 
 from __future__ import annotations
 
+import ast
 import re
 import subprocess
 import unittest
@@ -90,6 +94,11 @@ MENTION = re.compile(rf"(?<![\w./@$-])cad{_WORDS}")
 # braced or not), or by a path that ends in it (``"$VENV/bin/cad"``, ``"$dir\cad.exe"``).
 _HOLDER = r"\$\{?(?:cad|CAD|[A-Z_]*COMMAND[A-Z_]*)\}?"
 RUN = re.compile(rf'(?:"{_HOLDER}"|{_HOLDER}(?![\w}}])|"[^"\n]*[/\\]cad(?:\.exe|\.cmd)?"){_WORDS}')
+# The command among a Python call's or a sequence's arguments: a name that holds it (``cad``, ``self.cadgen``,
+# ``CAD_PATH``), or a string that is it: its name or path, its module after ``-m``, or ``-c``'s line that calls its
+# ``main``.
+_HELD = re.compile(r"cad(?:gen)?(?:_?(?:bin|command|exe|path))?", re.IGNORECASE)
+_NAMED = re.compile(r"(?:^|[/\\])cad(?:\.exe|\.cmd)?$|^cad_server\.cli$|\bcad_server\.cli import main\b")
 
 
 def asked(argv: list[str]) -> list[str]:
@@ -131,6 +140,34 @@ def mentions(text: str) -> list[tuple[int, list[str], bool]]:
     return [(line, argv, code) for _at, line, argv, code in sorted(found, key=lambda mention: mention[0])]
 
 
+def _command(node: ast.expr) -> bool:
+    """Whether an argument is the ``cad`` command: a name that holds it or a string that is it."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return _NAMED.search(node.value) is not None
+    name = node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name) else ""
+    return _HELD.fullmatch(name) is not None
+
+
+def runs(source: str) -> list[tuple[int, list[str]]]:
+    """Each command line a Python source holds as arguments: its line, and the strings that follow the command in a
+    list, a tuple or a call, up to the first argument that is no string (a path, a starred rest)."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        items = (node.args if isinstance(node, ast.Call)
+                 else node.elts if isinstance(node, (ast.List, ast.Tuple)) else [])
+        for at, item in enumerate(items):
+            if not _command(item):
+                continue
+            argv = []
+            for word in items[at + 1:]:
+                if not (isinstance(word, ast.Constant) and isinstance(word.value, str)):
+                    break
+                argv.append(word.value)
+            if argv:
+                found.append((item.lineno, argv))
+    return sorted(found)
+
+
 def _files() -> list[str]:
     listed = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=True)
     return [name for name in listed.stdout.splitlines()
@@ -157,7 +194,8 @@ class DocumentsUseCurrentCommands(unittest.TestCase):
             text = (REPO_ROOT / name).read_text(encoding="utf-8", errors="replace")
             if "cad" not in text:
                 continue
-            for line, argv, in_code in mentions(text):
+            held = [(line, argv, True) for line, argv in runs(text)] if name.endswith(".py") else []
+            for line, argv, in_code in (*mentions(text), *held):
                 if earlier(argv, in_code) and not (allowed and spelling(argv) in allowed):
                     found.append(f"{name}:{line}: {spelling(argv)}")
         self.assertEqual([], found, "an earlier spelling of a command, which runs nothing now: write the one it has "
@@ -197,6 +235,25 @@ class DocumentsUseCurrentCommands(unittest.TestCase):
                      '"$PYTHON_BIN" -c "import cad"', "Use $cad to create the model"):
             with self.subTest(text=text):
                 self.assertFalse(held(text))
+
+    def test_a_command_line_held_as_arguments_is_read(self) -> None:
+        def held(source: str) -> list[str]:
+            return [spelling(argv) for _line, argv in runs(source) if earlier(argv, True)]
+
+        for source, named in (('run([cls.cadgen, "stop"], env=env)', "cad stop"),
+                              ('run([CAD, "xbf", "export", str(a), "a.step"])', "cad xbf export"),
+                              ('self.run_("-c", "from cad_server.cli import main; raise SystemExit(main())",\n'
+                               '          "xbf", "inspect", str(xbf), *options)', "cad xbf inspect"),
+                              ('[sys.executable, "-m", "cad_server.cli", "status", "--json"]', "cad status"),
+                              ('(str(venv / "bin" / "cad"), "/opt/bin/cad", "step", "dfm", part)', "cad step dfm")):
+            with self.subTest(source=source):
+                self.assertEqual([named], held(source))
+        for source in ('run([cls.cadgen, "server", "stop"], env=env)', 'run([CAD, "export", str(a), "a.step"])',
+                       '[sys.executable, "-m", "cad_server.cli", *argv]', 'self.cad("status", "--json")',
+                       '[sys.executable, "-m", "cad_server.engine", "stop"]', '_build_parser("xbf", "export")',
+                       '(["xbf", "export", "a.xbf", "a.step", "--json"], "usage")', '[git, "status"]'):
+            with self.subTest(source=source):
+                self.assertEqual([], held(source))
 
 
 if __name__ == "__main__":

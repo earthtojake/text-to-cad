@@ -98,7 +98,7 @@ class CoreAndBaseTest(unittest.TestCase):
 
         api.stop()
         subprocess.run([cls.cadgen, "server", "start"], env=cls.env, check=True, capture_output=True)
-        cls.addClassCleanup(lambda: subprocess.run([cls.cadgen, "stop"], env=cls.env, capture_output=True))
+        cls.addClassCleanup(lambda: subprocess.run([cls.cadgen, "server", "stop"], env=cls.env, capture_output=True))
 
     def run_cadgen(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:
         return engine_daemon.run([self.cadgen, *args], env=self.env, cwd=str(cwd))
