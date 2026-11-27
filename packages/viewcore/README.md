@@ -32,10 +32,13 @@ block) and `kernel/bounds.py` are the reference until the core replaces them. `i
 | `scripts/core.sh` | The core linked into `dist/viewcore.wasm` |
 | `hosts/wasmtime/`, `hosts/web/` | Loading the module in Python (wasmtime) and in a page |
 | `bench/` | Reference outputs from cad's engine, the comparison, the benchmarks |
+| `licenses/` | OCCT's licence: the GNU LGPL 2.1 and the Open CASCADE exception, shipped beside the module |
 
 ## Licence
 
 The core's code is MIT, as the repository. The module links OCCT 8.0.1, which is under the GNU LGPL 2.1 with the
-Open CASCADE exception 1.0: whatever ships the module also ships those two texts and a notice that it uses Open
-CASCADE Technology, and offers OCCT's source (tag `V8_0_1`, unchanged) with the build scripts here, from where the
-module is offered. `scripts/occt.sh` changes no OCCT source.
+Open CASCADE exception 1.0: whatever ships the module also ships those two texts (`licenses/`, OCCT's own files at tag
+`V8_0_1`) and a notice that it uses Open CASCADE Technology, and offers OCCT's source (tag `V8_0_1`, unchanged) with
+the build scripts here, from where the module is offered. `scripts/occt.sh` changes no OCCT source. `scripts/core.sh`
+puts the texts beside the module in `dist/`; the viewer's build ships them with the notice beside it in `viewcore/`
+(`apps/web/scripts/viewcoreAssets.mjs`), and refuses to ship the module without them.

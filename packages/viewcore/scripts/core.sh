@@ -42,4 +42,6 @@ FEATURES=(--enable-exception-handling --enable-reference-types --enable-bulk-mem
 "$EMSDK_DIR/upstream/bin/wasm-opt" "${FEATURES[@]}" --translate-to-exnref -O2 "$OUT/${NAME%.wasm}.legacy.wasm" \
   -o "$OUT/$NAME"
 rm -f "$OUT/${NAME%.wasm}.legacy.wasm"
+# The module is OCCT's too: its licence texts lie beside it wherever it goes from here.
+cp "$HERE"/licenses/LICENSE_LGPL_21.txt "$HERE"/licenses/OCCT_LGPL_EXCEPTION.txt "$OUT/"
 ls -l "$OUT/$NAME"
