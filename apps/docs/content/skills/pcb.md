@@ -64,7 +64,7 @@ The `--to` kinds are `gerbers`, `drill`, `pos`, `bom`, `step`, `glb`, `odb`, `ip
 
 - Nothing to install for reading, viewing or taking snapshots of a board or schematic: text-to-cad reads the files itself. Showing a board or taking its snapshot does start the download below.
 - DRC, ERC, every export and every edit run KiCad's command line through the `kicad` integration (`cad[kicad]`), installed the first time a board command needs it: about 100 MB to download and 340 MB on disk, once. It runs headless and never opens the KiCad app. A KiCad you installed yourself is never run.
-- Edits start a local KiCad server on a socket. A sandbox that refuses sockets, as Codex's default does, stops the edit, and the script has to run outside the sandbox. Checks, exports and snapshots run inside it.
+- Edits start a local KiCad server on a socket. A sandbox that refuses sockets, as Codex's default does, stops the edit, and your agent asks you to approve running the script outside the sandbox. Checks, exports and snapshots run inside it.
 
 ## Ask for it
 

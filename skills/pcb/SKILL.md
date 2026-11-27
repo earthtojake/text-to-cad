@@ -51,8 +51,8 @@ board (its copper pours are refilled on a copy first) run KiCad's own `kicad-cli
   with none installed, ERC warns `lib_symbol_issues` and DRC `lib_footprint_issues`. A project that
   carries its libraries (`${KIPRJMOD}`) needs no KiCad installed.
 - **An edit needs a local socket.** A shell sandbox that refuses sockets (an agent app's default) stops
-  an edit at once, saying so: run the script outside the sandbox. Inspecting, DRC, exports and
-  snapshots run inside it.
+  an edit at once, saying so: ask the person to approve running that script outside the sandbox,
+  through the app's own approval prompt. Inspecting, DRC, exports and snapshots run inside it.
 - **A KiCad the person installed is never run.** Where the fetched one does not run on a computer,
   `CAD_KICAD_CLI` names another `kicad-cli` (KiCad 9 or newer; a nightly's for an edit).
 - **`CAD_KICAD_REFILL=0` in the server's environment turns the refill off**: showing a board then
@@ -115,8 +115,9 @@ cad run kicad-cli project downgrade --dry-run --target 10.0 board.kicad_pro   # 
 ```
 
 Most of its commands write only their `-o` (it may leave a `.kicad_prl` beside a board it reads).
-These rewrite the source: `pcb upgrade`, `sch upgrade`, `fp upgrade` and `sym upgrade` without `-o`,
-and `pcb drc --refill-zones --save-board`.
+These write over the person's source file, so run them only when the person asked for that change:
+`pcb upgrade`, `sch upgrade`, `fp upgrade` and `sym upgrade` without `-o`, and
+`pcb drc --refill-zones --save-board`.
 
 ## Check each change
 
