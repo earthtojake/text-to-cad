@@ -106,10 +106,11 @@ newest code does it and none of it runs from the environment it replaces: stops 
 on Windows moves uv's bin `cad.exe` aside (a new `cad` then fails at once, rather than hold the files) and
 stops every other process of the environment; runs uv, which downloads and prepares the release before it
 changes anything, so a failed download leaves cad as it was; puts `cad.exe` back; checks that the release
-runs; and, where it does not, deletes the folders uv left without their record and runs `uv tool upgrade
---reinstall` (pipx: `--force-reinstall`) of the release, then of the release before. Where that leaves no
-cad that runs, the installer makes the environment anew, `uv tool install --force "cad<N>"` or `pipx install
---force cad`: a range, never one release, which would pin it. That removes the environment, so the worker
+runs; and, where it does not, goes back to the release before by the same safe upgrade. Where no cad
+runs after that, or uv left a package without its record, the repair is one step, the install command's own:
+the installer makes the environment anew, `uv tool install --force "cad<N>"` or `pipx install --force cad`: a
+range, never one release, which would pin it. The worker runs from uv's cache, so nothing of it is in the way,
+and nothing is installed again in place. That removes the environment, so the worker
 waits for the processes it spared to leave and stops the rest first. Where uv cannot build the new release
 (offline, no such release), the attempt fails with uv's cause and nothing is touched. Inside a Windows
 app's package the update is refused, and the server and the worker are started outside it by Task Scheduler
@@ -388,12 +389,12 @@ later than one that does not, by as long as the update takes.
 **Decision.** Nothing installs a release older than the one installed: not the install command, not
 cad's update. An older starter never replaces a newer running server; it joins it. The one way back
 is at the update itself: where the release it has just installed does not run, or its server does not
-start, the worker reinstalls the release before with uv and it runs again. After that there is no
-automatic way back.
+start, the worker moves back to the release before by the same `uv tool upgrade` and it runs again. After
+that there is no automatic way back.
 
 **Why.** A way back is machinery that must work on every computer when something has already gone wrong,
-so it is the one uv gives the update (`--reinstall`, kept to the release before and tried once). Past it,
-holding the release back, yanking it on PyPI and shipping a fix is simpler and reaches everyone.
+so it is the update's own upgrade, run backwards (kept to the release before and tried once). Past it,
+yanking the release on PyPI and shipping a fix is simpler and reaches everyone.
 
 **What it costs.** A release that starts and then misbehaves stays on the computers that took it until
 the next one. A release whose server does not start on some computer is not tried there again by

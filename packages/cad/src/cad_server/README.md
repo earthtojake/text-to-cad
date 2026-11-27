@@ -235,19 +235,21 @@ was. In order:
    returns a bin `cad` is back.
 2. **Check**: `cad server start` where a server ran or one is wanted, which must leave a server of the release, else
    `cad --version` naming it.
-3. **Repair**, where uv or the check failed: where uv changed nothing and the release before runs, that; else each
-   `*.dist-info` left without its `RECORD` deleted and `uv tool upgrade --reinstall` (pipx: `--force-reinstall`) of the
-   release, then of the release before. Cause `start_failed` where the release did not start and the one before runs
-   again; where uv was refused a file and a process of the environment could not be stopped, `cad_running`; the
-   detail is uv's first error, never its rollback's after it. Where neither runs, the last resort: the installer makes the environment anew (`uv tool install --force
-   "cad<N>"`, `pipx install --force cad`; never one release, which would pin it), which removes the environment, so
-   the worker does it once nothing of it runs: the attempt `repairing` first, on which the processes the switch spared
-   leave (`cad update` says so and ends), waited for, then every process of it stopped. Cause `broken` where that
-   leaves no cad that runs either.
+3. **Back**, where uv or the check failed: where uv failed and left the environment whole, the release it holds, as
+   it is; where the release installed and did not run, the release before, by the same safe `uv tool upgrade
+   "cad==<before>"` (pipx: `pipx runpip cad install --upgrade`). Cause `start_failed` where the release did not start
+   and the one before runs again; where uv was refused a file and a process of the environment could not be stopped,
+   `cad_running`; the detail is uv's first error, never its rollback's after it.
+4. **Repair**, in one step, where no cad runs after that (or uv left a `*.dist-info` without its `RECORD`, which every
+   later uv run fails on): the installer makes the environment anew, as the install command does (`uv tool install
+   --force "cad<N>"`, `pipx install --force cad`; never one release, which would pin it). The worker runs from uv's
+   cache, so nothing of it is in the way. That removes the environment, so the worker does it once nothing of it runs:
+   the attempt `repairing` first, on which the processes the switch spared leave (`cad update` says so and ends),
+   waited for, then every process of it stopped. Cause `broken` where that leaves no cad that runs either.
 
 No step is tried twice in a run. Each command, its status, time and the end of its output go to `auto-update.log` in the
 state folder (the attempt before's, `auto-update.1.log`), which nothing sends. A worker that raises leaves the attempt
-underway, `helper_crash`. Forward only: nothing moves to an older release.
+underway, `helper_crash`. Forward only: nothing moves to an older release but step 3, at the update itself.
 
 **Notices** (`notices.py`). The version feed can carry the project's notices, one line of text and a link on
 texttocad.dev or the project's repository, for every cad older than a release (`updates.parse_notices`, which checks

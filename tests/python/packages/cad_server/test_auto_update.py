@@ -1360,7 +1360,6 @@ class WorkerTest(unittest.TestCase):
         self.elsewhere = False  # that server runs from another environment
         self.upgrade = (0, "Updated cad v0.1.0 -> v0.2.0\n")  # uv's exit status and words
         self.midway = False  # the upgrade stops past a package's RECORD
-        self.reinstalls: dict[str, int] = {}  # uv's exit status for ``--reinstall`` of a release (0 by default)
         self.forced = (0, "Installed 1 executable: cad\n")  # uv's exit status and words for ``install --force``
         self.bin: Path | None = None  # uv's bin folder, where uv says it is
         self.starts = {"0.1.0": True, "0.2.0": True}  # whether a release's server starts
@@ -1401,19 +1400,20 @@ class WorkerTest(unittest.TestCase):
             return (0, f"{self.bin}\n") if self.bin else (2, "error: no tool folder")
         if command[:5] == ["pipx", "runpip", "cad", "install", "--upgrade"]:  # pipx's, as uv's would do it
             self.pipx.append(list(command))
-            command = ["uv", "tool", "upgrade", *(["--reinstall"] if "--force-reinstall" in command else []),
-                       command[-1]]
+            command = ["uv", "tool", "upgrade", command[-1]]
         if command[:3] == ["pipx", "install", "--force"]:
             self.pipx.append(list(command))
             command = ["uv", "tool", "install", "--force", "cad"]
         self.ran.append(list(command))
-        if command[:4] == ["uv", "tool", "install", "--force"]:  # the last resort: the environment made anew
-            self.assertFalse(list(self.packages.glob("*.dist-info")), "what uv left without its RECORD went first")
+        if command[:4] == ["uv", "tool", "install", "--force"]:  # the repair: the environment made anew, whole
             code, said = self.forced
             if code == 0:
+                for path in self.packages.glob("*.dist-info"):
+                    path.rmdir()
                 self.installed = self.newest
             return code, said
-        if command[:3] == ["uv", "tool", "upgrade"] and command[3] != "--reinstall":
+        if command[:3] == ["uv", "tool", "upgrade"]:
+            self.assertNotIn("--reinstall", command, "nothing is installed again in place")
             code, said = self.upgrade
             if self.midway:
                 self.installed = None
@@ -1422,13 +1422,6 @@ class WorkerTest(unittest.TestCase):
                 wanted = command[3]
                 self.installed = wanted[len("cad=="):] if wanted.startswith("cad==") else self.newest
             return code, said
-        if command[:4] == ["uv", "tool", "upgrade", "--reinstall"]:
-            self.assertFalse(list(self.packages.glob("*.dist-info")), "what uv left without its RECORD went first")
-            release = command[4][len("cad=="):]
-            code = self.reinstalls.get(release, 0)
-            if code == 0:
-                self.installed = release
-            return code, f"Installed cad {release}\n" if code == 0 else "error: Failed to install cad"
         if command[0] == "uv":
             raise AssertionError(command)
         release = self.installed
@@ -1497,35 +1490,38 @@ class WorkerTest(unittest.TestCase):
                 self.assertEqual(self.installed, "0.1.0")
                 self.assertEqual(auto_update.event(found)["outcome"], "restored")
 
-    def test_a_release_that_does_not_start_is_reinstalled_then_the_release_before_is(self) -> None:
+    def test_a_release_that_does_not_start_goes_back_to_the_release_before_by_the_same_upgrade(self) -> None:
+        """The way back is the switch run backwards (``uv tool upgrade "cad==<before>"``, its receipt untouched),
+        never a reinstall in place."""
         self.starts["0.2.0"] = False
         found = self.update()
-        self.assertEqual(self.commands(), ["tool upgrade cad==0.2.0", "server start",
-                                           "tool upgrade --reinstall cad==0.2.0", "server start",
-                                           "tool upgrade --reinstall cad==0.1.0", "server start"])
+        self.assertEqual(self.commands(), ["tool upgrade cad==0.2.0", "server start", "tool upgrade cad==0.1.0",
+                                           "server start"])
         self.assertEqual((found["outcome"], found["cause"], found["restored"], found["started"], self.installed),
                          ("failed", "start_failed", True, "started the cad server (cad 0.1.0)", "0.1.0"))
         self.assertTrue(found["detail"].startswith("cad 0.2.0 did not start: "), found["detail"])
         self.assertEqual(auto_update.event(found)["outcome"], "restored")
 
-    def test_an_upgrade_stopped_midway_is_repaired_and_the_release_installed(self) -> None:
+    def test_an_upgrade_stopped_midway_is_repaired_in_one_step_and_the_release_installed(self) -> None:
         """uv deletes the old files in the order of the package's RECORD and stops at the first it cannot delete: one
-        stopped past the RECORD leaves a ``*.dist-info`` without it, which every later uv run fails on. It goes, then
-        ``uv tool upgrade --reinstall`` -- never ``uv tool install --force "cad==X"``, which pins uv's receipt."""
+        stopped past the RECORD leaves a ``*.dist-info`` without it, which every later uv run fails on. The repair is
+        one step, the install command's: ``uv tool install --force "cad<N>"``, a range (one release would pin uv's
+        receipt), which makes the environment anew -- nothing deleted by hand first, nothing reinstalled in place."""
         self.midway, self.upgrade = True, (2, "error: failed to remove file: The process cannot access the file "
                                               "because it is being used by another process. (os error 32)")
         found = self.update()
-        self.assertEqual(self.commands(), ["tool upgrade cad==0.2.0", "tool upgrade --reinstall cad==0.2.0",
+        self.assertEqual(self.commands(), ["tool upgrade cad==0.2.0", "tool install --force --managed-python",
                                            "server start"])
+        self.assertIn(["uv", "tool", "install", "--force", "--managed-python", "--python", "3.14", "cad<1"], self.ran)
         self.assertEqual((found["outcome"], found["release"], found["started"], self.installed),
                          ("installed", "0.2.0", "started the cad server (cad 0.2.0)", "0.2.0"))
-        self.assertIn("installed again after: error: failed to remove file", found["detail"])
-        self.assertFalse(any("--force" in command for command in self.ran))
-        self.assertIn("which uv left without its RECORD", Path(self.told["log"]).read_text(encoding="utf-8"))
+        self.assertIn("installed again by `uv tool install --force --managed-python --python 3.14 cad<1` after: "
+                      "error: failed to remove file", found["detail"])
+        self.assertEqual(self.phases[-1], "repairing")
 
     def test_where_the_repair_leaves_no_cad_that_runs_it_is_broken_and_says_to_install_again(self) -> None:
         self.midway, self.upgrade = True, (2, "error: (os error 32)")
-        self.reinstalls, self.forced = {"0.2.0": 1, "0.1.0": 1}, (2, "error: failed to remove directory")
+        self.forced = (2, "error: failed to remove directory")
         found = self.update()
         self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "broken", False))
         self.assertEqual(self.commands()[-1], "tool install --force --managed-python", "the last resort was tried")
@@ -1698,8 +1694,7 @@ class WorkerTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "a link, as uv makes the command elsewhere than on Windows")
     def test_the_bin_command_a_failed_upgrade_took_out_is_linked_again(self) -> None:
         """uv takes the tool's commands out before it installs the release, and a run that fails after (a dist-info
-        left without its RECORD) leaves none; its ``--reinstall`` makes none either (measured, uv 0.11): the person's
-        ``cad`` would be gone. The moment uv returns, it is a link to the environment's own again."""
+        left without its RECORD) leaves none (measured, uv 0.11): the person's ``cad`` would be gone. The moment uv returns, it is a link to the environment's own again."""
         self.bin = self.tmp / "bin"
         self.bin.mkdir()
         own = self.prefix / "bin" / "cad"
@@ -1901,10 +1896,10 @@ class WorkerTest(unittest.TestCase):
         found = self.update(log=str(self.tmp / "no" / "such" / "folder" / "auto-update.log"))
         self.assertEqual(found["outcome"], "installed")
 
-    def test_a_pipx_install_is_upgraded_and_repaired_in_place_by_pip_inside_pipx_s_environment(self) -> None:
+    def test_a_pipx_install_is_upgraded_and_moved_back_by_pip_inside_pipx_s_environment(self) -> None:
         """pipx's cad: the same steps, by pipx's commands: ``pipx runpip cad install --upgrade "cad==X"`` (pip inside
-        its environment, which leaves pipx's pin as it is), its repair ``--force-reinstall``, its bin folder as
-        pipx names it."""
+        its environment, which leaves pipx's pin as it is), the way back the same command to the release before, its
+        repair ``pipx install --force cad``, its bin folder as pipx names it."""
         pipx = {"installer": "pipx", "pipx": ["pipx"], "uv": None}
         found = self.update(**pipx)
         self.assertEqual(self.pipx, [["pipx", "runpip", "cad", "install", "--upgrade", "cad==0.2.0"]])
@@ -1914,17 +1909,16 @@ class WorkerTest(unittest.TestCase):
         self.pipx.clear()
         self.installed, self.starts["0.2.0"] = "0.1.0", False
         found = self.update(**pipx)
-        self.assertEqual(self.pipx[1:], [["pipx", "runpip", "cad", "install", "--upgrade", "--force-reinstall",
-                                          f"cad=={release}"] for release in ("0.2.0", "0.1.0")])
+        self.assertEqual(self.pipx, [["pipx", "runpip", "cad", "install", "--upgrade", f"cad=={release}"]
+                                     for release in ("0.2.0", "0.1.0")])
         self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "start_failed", True))
 
-    def test_where_the_repair_in_place_leaves_no_cad_that_runs_the_worker_installs_it_again_whole(self) -> None:
-        """The last resort, the worker's own: the record's phase ``repairing`` first, on which the processes the switch
+    def test_where_no_cad_runs_the_worker_installs_it_again_whole_once_nothing_of_it_runs(self) -> None:
+        """The repair, the worker's own: the record's phase ``repairing`` first, on which the processes the switch
         spared leave the environment (``cad update`` says so and ends), waited for; then every process of it stopped,
-        sparing none, the folders without their ``RECORD`` deleted, and ``uv tool install --force "cad<N>"`` (a range,
-        never one release): cad at the newest of its major, its server started."""
+        sparing none, and ``uv tool install --force "cad<N>"`` (a range, never one release): cad at the newest of its
+        major, its server started."""
         self.midway, self.upgrade = True, (2, "error: (os error 32)")
-        self.reinstalls = {"0.2.0": 1, "0.1.0": 1}
         python = str(self.prefix / "Scripts" / "python.exe")
         system = FakeWindows({10: (1, python), 11: (1, python)})
         looks, cad = [], self.cad
@@ -1952,7 +1946,7 @@ class WorkerTest(unittest.TestCase):
                              system=system, seconds=0.0, sleep=gone)
         self.assertEqual(system.ended, [[10]], "one still there past the wait: stopped")
         self.assertIn("still ran from cad's environment after 0 s", Path(self.told["log"]).read_text(encoding="utf-8"))
-        # Through the whole update: the upgrade and both repairs in place fail, the install again does.
+        # Through the whole update: the upgrade fails midway, the install again mends it.
         self.ran.clear()
         self.installed, self.phases[:] = "0.1.0", []
         found = self.update()

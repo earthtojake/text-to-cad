@@ -13,8 +13,8 @@ there as it was (pipx 1.19 notes the requirement as the one it was installed by,
 from). What cad adds is what makes that safe where processes run cad, which on Windows hold its files (the installer
 downloads and prepares the release before it changes the environment, so a download that fails leaves cad as it was):
 the server stopped, on Windows every other process of the environment stopped and its ``cad`` command moved aside,
-the upgrade, a check that the release runs, a repair in place where it does not, and, where that leaves no cad that
-runs, cad installed again whole. That work is the worker's (``auto_update_helper``), run from the release it updates to
+the upgrade, a check that the release runs, the release before again where it does not, and, where that leaves no cad
+that runs, the repair in one step: cad installed again whole, as the install command does. That work is the worker's (``auto_update_helper``), run from the release it updates to
 in uv's cache, never from the environment it replaces (``from_cache``): the newest release's code does the update.
 This module decides when it runs and keeps its record.
 

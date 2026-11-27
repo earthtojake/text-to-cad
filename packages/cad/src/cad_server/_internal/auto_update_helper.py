@@ -40,23 +40,24 @@ repairs it where it fails anyway. In order (``update``):
       (``auto_update.installed``); ``from`` itself is ``current``. uv's own failure to write the bin ``cad.exe`` (a file
       in use) leaves the environment upgraded and whole: that is checked as an upgrade.
    e. The moment the installer returns, its bin ``cad`` again where it left none (``command_back``: an upgrade uv
-      fails after it took the tool's commands out leaves none, ``--reinstall`` makes none, and pip writes none
-      there): on Windows the environment's own ``cad.exe`` copied there, as pipx exposes it, else the one moved aside
+      fails after it took the tool's commands out leaves none, and pip writes none there): on Windows the environment's own ``cad.exe`` copied there, as pipx exposes it, else the one moved aside
       put back, and the one moved aside removed where it can be (else the server's next tidying does,
       ``auto_update.tidy``); elsewhere a link to the environment's own, as uv and pipx make it.
    f. A server of another release that came up meanwhile stopped (``clear``), and the release checked (``runs``):
       ``cad server start`` where a server ran or ``start`` asks for one, ending 0 with a server whose greeting names
       it; else ``cad --version`` saying it.
-   g. Where d or f failed, the repair in place (``recover``): where nothing changed and the release before runs as it
-      is, that; else each ``*.dist-info`` without its ``RECORD`` deleted and the release installed again
-      (``installing``: ``uv tool upgrade --reinstall``, ``pipx runpip cad install --force-reinstall``), then the
-      release before, each made safe as d is (c, e) and checked. It keeps uv's receipt and pipx's pin.
-   h. Where that left no cad that runs, the last resort (``reinstall``): the installer installs cad again whole
-      (``uv tool install --force "cad<N>"``, ``pipx install --force cad``), which removes the environment, so nothing
-      of it may run: the record's phase ``repairing`` first, on which the processes the switch spared leave it (the
-      ``cad update`` that waits says cad is being installed again, and ends), waited for (``WAIT_SECONDS`` at most),
-      then every process of it stopped (c), the folders without their ``RECORD`` deleted, the install, e, and the
-      release that runs checked (f).
+   g. Where d or f failed, what runs (``recover``): where d failed and left the environment whole (the release it
+      holds whole, and no ``*.dist-info`` without its ``RECORD``, which every later uv run fails on), that release
+      checked as it is; where the release installed and f failed, the switch backwards: the release before installed
+      by the same upgrade (d, made safe by c and e: ``uv tool upgrade "cad==<before>"`` moves back, its receipt
+      untouched), and checked. Nothing is installed again in place: the worker runs from uv's cache, outside the
+      environment, so it can make that anew whole (h).
+   h. Where that left no cad that runs, the repair, in one step (``reinstall``): the installer installs cad again
+      whole, as the install command does (``uv tool install --force "cad<N>"``, ``pipx install --force cad``), which
+      removes the environment, an unreadable one too, so nothing of it may run: the record's phase ``repairing``
+      first, on which the processes the switch spared leave it (the ``cad update`` that waits says cad is being
+      installed again, and ends), waited for (``WAIT_SECONDS`` at most), then every process of it stopped (c), the
+      install, e, and the release that runs checked (f).
 
 3. **Outcome**, kept in the record: ``installed``, ``current`` or ``failed``, with ``detail``, ``cause`` where it did
    not install what it was for (one of ``CAUSES``: the installer's first error where the upgrade failed, ``why`` and
@@ -299,10 +300,10 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
             cause = "cad_running"
     back, again = recover(told, run, got, wanted, log, upgraded=code == 0, command=command, system=system)
     if back is not None and back == got and got != told["from"]:
-        return {**named_, "outcome": "installed", "detail": f"cad {got} runs, installed again after: {detail}",
+        return {**named_, "outcome": "installed", "detail": f"cad {got} runs after: {detail}",
                 **started(wanted, True, again)}
     if back is None:
-        detail = f"{detail}; and the repair in place left no cad that runs: {last_line(again) or 'no word'}"
+        detail = f"{detail}; and no cad ran after it: {last_line(again) or 'no word'}"
         back, again = reinstall(told, run, log, command=command, wanted=wanted, mark=mark, system=system)
         how = f"installed again by `{' '.join(map(str, reinstalling(told)))}`"
         if back is not None and back != told["from"]:
@@ -336,36 +337,34 @@ def upgrade(told, run, argv, command, log, system=None, spare=None):
 
 def recover(told, run, target, wanted, log, *, upgraded, command=None, system=None):
     """Step g (see the module), where the upgrade to ``target`` failed (``upgraded`` false) or its check did: the
-    release that runs after it, or None, and what its check said. Where nothing changed (no ``*.dist-info`` without its
-    ``RECORD``) the release before is checked as it is first; else, or where it does not run, ``target`` installed
-    again in place (``installing``: ``uv tool upgrade --reinstall``, ``pipx runpip cad install --force-reinstall``),
-    then the release before, each after a server of another release is stopped (``clear``) and the records left half
-    removed are deleted (``unrecorded``), made safe as the upgrade is (``upgrade``); each checked (``runs``)."""
-    prefix, before, said = Path(told["prefix"]), told["from"], ""
-    if target is None:  # the installer named none it got: the release before alone
-        target = before
-    if not upgraded and not unrecorded(prefix):
-        clear(before, log)
-        ok, said = runs(told, run, before, wanted)
-        if ok:
-            return before, said
-    for release_ in dict.fromkeys(name for name in (target, before) if release(name) is not None):
-        clear(release_, log)
-        removed(prefix, told, log)
-        code, said, _left = upgrade(told, run, installing(told, f"cad=={release_}", again=True), command, log, system)
-        if code == 0:
-            ok, said = runs(told, run, release_, wanted)
-            if ok:
-                return release_, said
-    return None, said
+    release that runs after it, or None for the repair (``reinstall``), and what its check said. Where the upgrade
+    failed and left the environment whole (``installed``, and nothing ``unrecorded``), the release it holds checked as
+    it is. Where ``target`` installed and did not run, the release before installed by the same upgrade, made safe as
+    the switch's is (``upgrade``: ``uv tool upgrade "cad==<before>"``, ``pipx runpip cad install --upgrade``), then
+    checked; each after a server of another release is stopped (``clear``), and checked by ``runs``."""
+    prefix, before = Path(told["prefix"]), told["from"]
+    if not upgraded:
+        held = auto_update.installed(prefix)
+        if held is None or unrecorded(prefix):
+            return None, ""
+        clear(held, log)
+        ok, said = runs(told, run, held, wanted)
+        return (held if ok else None), said
+    if release(before) is None or target == before:
+        return None, ""
+    clear(before, log)
+    code, said, _left = upgrade(told, run, installing(told, f"cad=={before}"), command, log, system)
+    if code != 0 or auto_update.installed(prefix) != before:
+        return None, said
+    ok, said = runs(told, run, before, wanted)
+    return (before if ok else None), said
 
 
 def reinstall(told, run, log, *, command, wanted, mark, system=None, seconds=WAIT_SECONDS, sleep=time.sleep):
-    """Step h (see the module), the last resort: the record's phase ``repairing`` (``mark``), the processes the switch
-    spared waited for until none runs from the environment (``running``; ``seconds`` at most: the sweep stops what is
-    left), the folders without their ``RECORD`` deleted (``removed``), and the installer's ``reinstalling`` run as an
-    upgrade is (``upgrade``), sparing none; then the release that runs checked (``runs``). That release, or None, and
-    what was said."""
+    """Step h (see the module), the repair: the record's phase ``repairing`` (``mark``), the processes the switch spared
+    waited for until none runs from the environment (``running``; ``seconds`` at most: the sweep stops what is left),
+    and the installer's ``reinstalling`` run as an upgrade is (``upgrade``), sparing none; then the release that runs
+    checked (``runs``). That release, or None, and what was said."""
     mark("repairing")
     prefix, spare = Path(told["prefix"]), told.get("spare") or []
     deadline = time.monotonic() + seconds
@@ -375,7 +374,6 @@ def reinstall(told, run, log, *, command, wanted, mark, system=None, seconds=WAI
             break
         sleep(LOOK_SECONDS)
     clear(None, log)
-    removed(prefix, told, log)
     code, said, _left = upgrade(told, run, reinstalling(told), command, log, system, spare=[])
     held = auto_update.installed(prefix) if code == 0 else None
     if held is None:
@@ -384,16 +382,9 @@ def reinstall(told, run, log, *, command, wanted, mark, system=None, seconds=WAI
     return (held if ok else None), said
 
 
-def removed(prefix, told, log):
-    """Each ``*.dist-info`` of the environment at ``prefix`` left without its ``RECORD`` (``unrecorded``) deleted."""
-    for path in unrecorded(prefix):
-        shutil.rmtree(path, ignore_errors=True)
-        log.write(f"removed {path}, which {by(told)} left without its RECORD")
-
-
 def unrecorded(prefix):
     """Each ``*.dist-info`` of the environment at ``prefix`` that has no ``RECORD``: what an upgrade stopped midway
-    leaves, which every later uv run fails on."""
+    leaves, which every later uv run fails on, and only the repair mends (``reinstall``)."""
     return [path for folder in auto_update.site_packages(prefix) for path in sorted(folder.glob("*.dist-info"))
             if path.is_dir() and not (path / "RECORD").is_file()]
 
@@ -433,19 +424,18 @@ def replace(told, run, held, log, mark=lambda phase: None):
 # --- the installer's commands ------------------------------------------------------------------------------------
 
 
-def installing(told, requirement, again=False):
-    """The installer's command that installs ``requirement`` in cad's environment where it is: uv's ``uv tool upgrade
-    [--reinstall] <requirement>``, which keeps its receipt; pipx's ``pipx runpip cad install --upgrade
-    [--force-reinstall] <requirement>``, pip (or ``uv pip``, under pipx's uv backend) inside pipx's environment,
-    which keeps pipx's pin (pipx 1.19 notes ``requirement`` in its metadata, which ``pipx upgrade`` moves on from)."""
+def installing(told, requirement):
+    """The installer's command that installs ``requirement`` in cad's environment where it is, a later release or an
+    earlier one: uv's ``uv tool upgrade <requirement>``, which keeps its receipt; pipx's ``pipx runpip cad install
+    --upgrade <requirement>``, pip (or ``uv pip``, under pipx's uv backend) inside pipx's environment, which keeps
+    pipx's pin (pipx 1.19 notes ``requirement`` in its metadata, which ``pipx upgrade`` moves on from)."""
     if told.get("installer") == "pipx":
-        return [*told["pipx"], "runpip", "cad", "install", "--upgrade", *(["--force-reinstall"] if again else []),
-                requirement]
-    return [told["uv"], "tool", "upgrade", *(["--reinstall"] if again else []), requirement]
+        return [*told["pipx"], "runpip", "cad", "install", "--upgrade", requirement]
+    return [told["uv"], "tool", "upgrade", requirement]
 
 
 def reinstalling(told):
-    """The installer's command that installs cad again whole, the last resort (``reinstall``): uv's ``uv tool install
+    """The installer's command that installs cad again whole, the repair (``reinstall``): uv's ``uv tool install
     --force`` of the newest of ``from``'s major (``tool_install.command``: ``cad<N>``, as cad's installers write it,
     never one release, which would pin it); pipx's ``pipx install --force cad``, unpinned."""
     if told.get("installer") == "pipx":

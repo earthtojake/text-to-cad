@@ -72,7 +72,8 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
 - ``self-held``: a source file of cad (``cad_server/__init__.py``) held open by another process, as a scanner holds
   one, until uv's first run ended (on Windows uv cannot delete it, and stops; the worker repairs): installed, healthy,
   the route says whether the repair ran; then cad's dist-info left without its ``RECORD``, as an upgrade stopped past
-  it leaves it: uv's upgrade fails on it, the worker deletes it and runs ``uv tool upgrade --reinstall``: healthy.
+  it leaves it: uv's upgrade fails on it, and the worker repairs in one step, ``uv tool install --force "cad<N>"``
+  (never a reinstall in place): healthy, uv's receipt the range.
 - ``self-called``: the button's update while three callers run uv's bin ``cad`` every 50 ms, rotating ``cad
   --version``, ``cad server status`` and ``cad server start``, as agent apps call it: cad ends healthy. Every call that
   failed overlapped the update (its record's ``at`` to ``ended``); on Windows each also failed fast (``FAST_SECONDS``)
@@ -89,11 +90,10 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   installs the release, the automatic try before kept as lost.
 - ``self-hop``: the shipped ``SHIPPED`` (0.11.17) installed from PyPI as a uv tool, its server running: its own ``cad
   update`` upgrades uv's tool in place into this tree, and this tree's ``cad update`` takes it on, in place.
-- ``self-forced``: the last resort, where the repair in place cannot bring cad back: uv's receipt one uv cannot read
-  (every ``uv tool upgrade`` fails on it, ``--reinstall`` too) and a cad that does not start; the button: the worker's
-  upgrade and its repairs fail, and the worker itself, which runs from uv's cache, makes it anew (``uv tool install
-  --force "cad<N>"``): healthy at the next release, its server started, uv's receipt the range, the record's worker
-  the next release.
+- ``self-forced``: the repair, where no upgrade can bring cad back: uv's receipt one uv cannot read (every ``uv tool
+  upgrade`` fails on it) and a cad that does not start; the button: the worker's upgrade fails, and the worker itself,
+  which runs from uv's cache, makes it anew in one step (``uv tool install --force "cad<N>"``): healthy at the next
+  release, its server started, uv's receipt the range, the record's worker the next release.
 - ``self-pipx``: cad installed with pipx (pipx itself by uv) updates itself as uv's does: the button while three
   callers run its ``cad``, then the server's next start, each by pip inside pipx's environment (``pipx runpip cad
   install``), healthy, pipx's pin as it was; then the person's ``pipx pin cad``: the start counts the update
@@ -914,11 +914,12 @@ def read_json(path: Path) -> dict:
     return found if isinstance(found, dict) else {}
 
 
-def in_place(box: Box, before: Tool, release: str, *, server: bool = True) -> None:
+def in_place(box: Box, before: Tool, release: str, *, server: bool = True, repaired: bool = False) -> None:
     """cad at ``release``, upgraded in place by uv, as the update leaves it: uv lists ``release`` as its tool, in the
     same environment; the environment holds that one ``cad-<release>.dist-info``, whole, and nothing without its
-    ``RECORD``; uv's receipt as it was (no pin written); ``cad --version`` from uv's bin folder says ``release``; and,
-    with ``server``, the server answers as ``release`` from the environment."""
+    ``RECORD``; uv's receipt as it was (no pin written), or, ``repaired`` (the worker's ``uv tool install --force``),
+    the range of its major; ``cad --version`` from uv's bin folder says ``release``; and, with ``server``, the server
+    answers as ``release`` from the environment."""
     tool = box.tool() or {}
     problems = []
     if (tool.get("version"), os.path.realpath(tool.get("env") or "/nowhere")) != (release, os.path.realpath(before.env)):
@@ -927,7 +928,10 @@ def in_place(box: Box, before: Tool, release: str, *, server: bool = True) -> No
         problems.append(f"the environment holds {dist_infos(before.env)}, without their RECORD {unrecorded(before.env)}")
     if box.version() != f"cad {release}":
         problems.append(f"cad --version says {box.version()!r}")
-    problems += before.same_receipt()
+    if not repaired:
+        problems += before.same_receipt()
+    elif before.requires() != [{"name": "cad", "specifier": f"<{MAJOR + 1}"}]:
+        problems.append(f"uv's receipt requires {before.requires()}, not the range")
     if problems:
         raise Failed(f"{box.label}: cad upgraded in place to {release}:\n  " + "\n  ".join(problems) + f"\n{box.said()}")
     if server:
@@ -966,21 +970,29 @@ def pages(box: Box, version: str) -> None:
     say(f"        an open page's port and token reach {version}'s server")
 
 
+# What a typed ``cad update`` says where its update left no cad that runs and the worker installs cad again whole: it
+# leaves the environment so the repair can remove it (``cad_server.cli.update.REPAIRING``), exit 1.
+REPAIRING = "left cad unable to run, so cad is being installed again: run `cad --version` in a few minutes"
+
+
 def typed_update(box: Box, was: str, target: str, *, server: bool | None = True, also: tuple[str, ...] = (),
-                 named: str | None = None) -> dict:
+                 named: str | None = None, repaired: bool | None = False) -> dict:
     """``cad update`` typed, which updates ``was`` to ``target``: it says the one step on stderr as it sees it begin
     (``cad: updating cad <was> to <named>``, ``named`` ``cad <target>`` by default, ``the newest release`` where PyPI
     named none; with ``server``, a server running, ``, then restarting the cad server``; None: either), and ``cad <was>
     updated to <target>`` (then ``also``) on stdout, exit 0. The step may go unsaid where the update was over before
-    the command looked. The record, ``installed`` and typed."""
+    the command looked. ``repaired``: the update leaves no cad that runs and the worker installs it again whole, so the
+    command says so on stderr (``REPAIRING``) and exits 1; None: either. The record, ``installed`` and typed."""
     began = time.time()
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS + 60)
     step = f"cad: updating cad {was} to {named or f'cad {target}'}"
     steps = ([[f"{step}, then restarting the cad server"]] if server in (True, None) else []) \
         + ([[step]] if server in (False, None) else [])
     said = done.stderr.strip().splitlines()
-    if (done.returncode, done.stdout.strip().splitlines()) != (0, [f"cad {was} updated to {target}", *also]) \
-            or said not in (*steps, []):
+    if repaired is not False and done.returncode == 1 and REPAIRING in done.stderr:
+        pass  # the repair's: the record says how it ended
+    elif repaired is True or (done.returncode, done.stdout.strip().splitlines()) != (
+            0, [f"cad {was} updated to {target}", *also]) or said not in (*steps, []):
         raise Failed(f"{box.label}: cad update exited {done.returncode}:\n{done.stdout}\n{done.stderr}\n{box.said()}")
     record = updated(box, target, after=began - 1)
     if (record.get("asked"), record.get("from"), record.get("worker")) != (True, was, target):
@@ -1418,6 +1430,10 @@ sys.stdin.read()
 """
 
 
+# What the worker's log shows of its repair, ``uv tool install --force "cad<N>"`` (``self-held``, ``self-forced``).
+FORCED = " tool install --force --managed-python --python 3.14 "
+
+
 def self_held(box: Box) -> None:
     """A source file of cad held open by another process as uv upgrades it (Windows: uv cannot delete it, and stops),
     let go once uv's first run ended; then the repair of an environment an upgrade stopped midway left with a
@@ -1431,29 +1447,33 @@ def self_held(box: Box) -> None:
         if holder.stdout.readline().strip() != "held":
             raise Failed(f"{box.label}: the file could not be held: exit {holder.poll()}")
         box.out(NEXT)
-        typed_update(box, NEW, NEXT)
+        typed_update(box, NEW, NEXT, repaired=None)  # Windows: uv stops on the held file, and the worker repairs
         if holder.stdout.readline().strip() != "let go":
             raise Failed(f"{box.label}: the holder ended before uv's first run did: exit {holder.poll()}")
     finally:
         holder.stdin.close()
         holder.wait(60)
-    in_place(box, before, NEXT)
     log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
-    repaired = "--reinstall" in log
+    repaired = FORCED in log
+    in_place(box, before, NEXT, repaired=repaired)
+    if "--reinstall" in log:
+        raise Failed(f"{box.label}: the worker reinstalled in place:\n{log[-3000:]}")
     say(f"        {NEW} -> {NEXT} with {held.relative_to(before.env).as_posix()} held open until uv's first run ended: "
-        f"installed, healthy ({'repaired: `uv tool upgrade --reinstall` ran' if repaired else 'uv was not stopped by it'})")
+        f"installed, healthy ({'repaired: `uv tool install --force` ran' if repaired else 'uv was not stopped by it'})")
     # The repair: cad's dist-info left without its RECORD, as an upgrade stopped past it leaves it. uv's upgrade then
-    # fails on it (it cannot remove that release), and the worker deletes it and installs the release again.
+    # fails on it (it cannot remove that release), and the worker makes the environment anew in one step.
     record_file = site_packages(before.env) / f"cad-{NEXT}.dist-info" / "RECORD"
     record_file.unlink()
     box.out(AFTER)
-    record = typed_update(box, NEXT, AFTER)
+    record = typed_update(box, NEXT, AFTER, repaired=True)
     log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
-    if "without its RECORD" not in log or "--reinstall" not in log:
-        raise Failed(f"{box.label}: no repair of the dist-info left without its RECORD: {record}\n{log[-3000:]}")
-    in_place(box, before, AFTER)
-    say(f"        then cad-{NEXT}.dist-info without its RECORD: uv's upgrade to {AFTER} failed on it, the worker removed "
-        f"it and ran `uv tool upgrade --reinstall`: {record['detail']!r}; healthy")
+    if FORCED not in log or "--reinstall" in log:
+        raise Failed(f"{box.label}: no repair in one step of the dist-info left without its RECORD: {record}\n"
+                     f"{log[-3000:]}")
+    in_place(box, before, AFTER, repaired=True)
+    say(f"        then cad-{NEXT}.dist-info without its RECORD: uv's upgrade to {AFTER} failed on it; `cad update` said cad "
+        f"is being installed again and left; the worker ran `uv tool install --force \"cad<{MAJOR + 1}\"`: "
+        f"{record['detail'][:160]!r}; healthy")
     pages(box, AFTER)
 
 
@@ -1697,12 +1717,12 @@ def self_hop(box: Box) -> None:
 
 
 def self_forced(box: Box) -> None:
-    """The last resort: an environment the repair in place cannot bring back -- uv's receipt one uv cannot read (its
-    entrypoints in a shape uv does not know: every ``uv tool upgrade`` fails, ``--reinstall`` too, and uv itself says
-    to run ``uv tool install --force``) and a cad that does not start (a source file of it gone) --, updated by the
-    button. The worker's upgrade and its repairs in place fail, and the worker, which runs from uv's cache, has ``uv
-    tool install --force "cad<N>"`` make the environment anew: cad healthy at the newest of its major, its server
-    started, uv's receipt the range, the record's worker that release."""
+    """The repair: an environment no upgrade can bring back -- uv's receipt one uv cannot read (its entrypoints in a
+    shape uv does not know: every ``uv tool upgrade`` fails, and uv itself says to run ``uv tool install --force``)
+    and a cad that does not start (a source file of it gone) --, updated by the button. The worker's upgrade fails,
+    no cad runs, and the worker, which runs from uv's cache, has ``uv tool install --force "cad<N>"`` make the
+    environment anew in one step: cad healthy at the newest of its major, its server started, uv's receipt the range,
+    the record's worker that release."""
     box.set_up("off")
     before = Tool(box)
     receipt = before.env / "uv-receipt.toml"
@@ -1717,9 +1737,8 @@ def self_forced(box: Box) -> None:
     box.out(NEXT)
     record = clicked(box, NEW, NEXT)
     log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
-    for said in ("--reinstall", " tool install --force --managed-python --python 3.14 "):
-        if said not in log:
-            raise Failed(f"{box.label}: the log does not say {said!r}:\n{log[-4000:]}")
+    if FORCED not in log or "--reinstall" in log:
+        raise Failed(f"{box.label}: the log does not say the repair in one step ({FORCED!r}):\n{log[-4000:]}")
     tool = box.tool() or {}
     requires = Tool(box).receipt
     problems = [] if (tool.get("version"), os.path.realpath(tool.get("env") or "/")) == (
@@ -1735,7 +1754,7 @@ def self_forced(box: Box) -> None:
     if problems:
         raise Failed(f"{box.label}: cad installed again from outside:\n  " + "\n  ".join(problems) + f"\n{box.said()}")
     serves(box, before.env, NEXT)
-    say(f"        uv's receipt unreadable to uv, cad not starting: the button; uv's upgrade and `--reinstall` failed, "
+    say(f"        uv's receipt unreadable to uv, cad not starting: the button; uv's upgrade failed, "
         f"the worker, from uv's cache, ran `uv tool install --force \"cad<{MAJOR + 1}\"`: "
         f"{record['detail'][:120]!r}; cad {NEXT} healthy, its server started, uv's receipt `cad<{MAJOR + 1}`")
     pages(box, NEXT)
