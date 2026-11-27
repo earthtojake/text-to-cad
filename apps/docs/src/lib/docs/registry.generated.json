@@ -766,7 +766,8 @@
         "trimesh",
         "rtree",
         "scipy",
-        "networkx"
+        "networkx",
+        "shapely"
       ],
       "commands": [],
       "holds": "trimesh",
