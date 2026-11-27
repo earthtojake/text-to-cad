@@ -3,7 +3,9 @@
     python reference.py OUT_DIR FILE.xbf [...]   (with cad's environment: `uv run python ...` in the repo)
 
 Per document, in OUT_DIR/<file stem>/:
-  structure.json            the subset of document.Loaded.structure() the core answers (viewcore.h)
+  structure.json            what the core's vc_structure answers, as the engine has it (viewcore.h): document.Loaded's
+                            structure() without where the file is (path, version), with the tessellation and the
+                            build closure the file holds, as the engine serves an .xbf's (serve._closed)
   timing.json               seconds per stage, one thread, this process
   parts/<index>/key         the file's geometry key for the part
   parts/<index>/shape.bin   mesh.shape_bytes(shape, read=True); blake2b-128 of it is the key
@@ -14,8 +16,18 @@ Parts are numbered by document.Loaded.prototypes; parts sharing a key hold the s
 import hashlib, json, os, sys, time
 from pathlib import Path
 
-STRUCTURE_PROTOTYPE = ("index", "key", "name", "color", "faceNames", "edgeNames", "vertexNames", "faceColors")
-STRUCTURE_INSTANCE = ("prototype", "path", "matrix", "color")
+
+
+def served(loaded, path: Path) -> dict:
+    """The structure as the core answers it (viewcore.h's vc_structure): the engine's, in the core's order."""
+    from cad.engine.mesh_format import TESSELLATION
+    from cad.engine.serve import _closed
+
+    structure = _closed(loaded.structure(), path)
+    found = {"name": structure["name"], "units": structure["units"], "tessellation": TESSELLATION}
+    found.update((key, value) for key, value in structure.items() if key not in ("name", "units", "path", "version"))
+    found["closure"] = found.pop("closure")
+    return found
 
 
 def dump(path: Path, out: Path) -> dict:
@@ -27,10 +39,8 @@ def dump(path: Path, out: Path) -> dict:
     loaded = Loaded(path)
     structure = loaded.structure()
     timing["read_s"] = time.perf_counter() - t
-    subset = {"prototypes": [{k: p.get(k) for k in STRUCTURE_PROTOTYPE} for p in structure["prototypes"]],
-              "instances": [{k: i.get(k) for k in STRUCTURE_INSTANCE} for i in structure["instances"]]}
     out.mkdir(parents=True, exist_ok=True)
-    (out / "structure.json").write_text(json.dumps(subset, separators=(",", ":")))
+    (out / "structure.json").write_text(json.dumps(served(loaded, path), separators=(",", ":"), ensure_ascii=False))
     done: dict[str, Path] = {}
     stages = {"shape_bytes_s": 0.0, "mesh_s": 0.0, "elements_s": 0.0, "measure_s": 0.0}
     for prototype in loaded.prototypes:

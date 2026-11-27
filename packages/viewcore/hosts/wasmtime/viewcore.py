@@ -1,7 +1,7 @@
 """Python host of the view core (viewcore.wasm) on wasmtime.
 
     core = Core("dist/viewcore.wasm")        # compiles once (cache=path keeps the serialized module)
-    doc = core.open_xbf(open("m.xbf", "rb").read())
+    doc = core.open_xbf(open("m.xbf", "rb").read(), "m")
     doc.structure(); doc.mesh(0); doc.fact(0, "face", 1); doc.close()
 
 Every Core holds one Store and one instance (one thread): use one Core per thread/process, or `Pool` for batches.
@@ -75,7 +75,7 @@ class Core:
         self.instantiate_s = time.perf_counter() - t
         self._len = self._call("vc_alloc", 4)  # the out-length cell, reused
         abi = self.abi_version
-        if abi != 1:
+        if abi != 2:
             raise ViewCoreError(f"unsupported ABI version {abi}")
 
     # -- plumbing -----------------------------------------------------------------------------------------------
@@ -127,14 +127,16 @@ class Core:
         self._call("vc_free", ptr)
         return data
 
-    def open_xbf(self, data: bytes) -> "Doc":
+    def open_xbf(self, data: bytes, stem: str = "") -> "Doc":
+        """Open an .xbf's bytes; ``stem`` names the document where its file does not (the file's stem)."""
         n = len(data)
-        ptr = self._call("vc_alloc", n)
+        name = stem.encode()
+        ptr = self._call("vc_alloc", n + len(name))
         if not ptr and n:
             self._fail("vc_alloc")
         try:
-            self.memory.write(self.store, data, ptr)
-            h = self._call("vc_open_xbf", ptr, n)
+            self.memory.write(self.store, data + name, ptr)
+            h = self._call("vc_open_xbf", ptr, n, ptr + n, len(name))
         finally:
             self._call("vc_free", ptr)
         if not h:

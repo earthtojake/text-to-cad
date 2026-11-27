@@ -72,6 +72,7 @@ class Json {
   Json& boolean(bool value) { comma(); out += value ? "true" : "false"; return *this; }
   Json& null() { comma(); out += "null"; return *this; }
   Json& str(const std::string& text) { comma(); string_(text); return *this; }
+  Json& raw(const std::string& text) { comma(); out += text; return *this; }  // JSON already written (a number)
   Json& point(double x, double y, double z) { open_list().num(x).num(y).num(z); return close_list(); }
 
  private:

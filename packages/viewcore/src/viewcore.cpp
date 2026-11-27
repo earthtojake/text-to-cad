@@ -94,11 +94,11 @@ void* vc_alloc(uint32_t size) { return std::malloc(size ? size : 1); }
 
 void vc_free(void* ptr) { std::free(ptr); }
 
-int32_t vc_open_xbf(const uint8_t* data, uint32_t size) {
+int32_t vc_open_xbf(const uint8_t* data, uint32_t size, const char* stem, uint32_t stem_len) {
   return guarded<int32_t>(0, [&] {
     VC_SCOPE(open_rest);
     if (!data && size) throw std::invalid_argument("no data");
-    auto doc = vc::open_xbf(data, size);
+    auto doc = vc::open_xbf(data, size, stem && stem_len ? std::string(stem, stem_len) : std::string());
     int32_t handle = next_handle++;
     documents[handle] = std::move(doc);
     return handle;

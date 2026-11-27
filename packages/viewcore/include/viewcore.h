@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-#define VC_ABI_VERSION 1u
+#define VC_ABI_VERSION 2u
 
 enum { VC_FACE = 0, VC_EDGE = 1, VC_VERTEX = 2 };
 
@@ -36,14 +36,21 @@ const char *vc_last_error(void);
 void *vc_alloc(uint32_t size);
 void vc_free(void *ptr);
 
-/* Read an .xbf (BinXCAF) from memory: a handle > 0, or 0. */
-int32_t vc_open_xbf(const uint8_t *data, uint32_t size);
+/* Read an .xbf (BinXCAF) from memory: a handle > 0, or 0. `stem` (UTF-8, `stem_len` bytes; NULL or empty for
+ * "document") is what document.Loaded names the document by where its file does not: the file's stem, for an
+ * unnamed root or a file of several roots. */
+int32_t vc_open_xbf(const uint8_t *data, uint32_t size, const char *stem, uint32_t stem_len);
 void vc_close(int32_t doc);
 
-/* The document's structure, JSON, by document.Loaded.structure's names: {"prototypes": [{"index", "key", "name",
- * "color", "faceNames", "edgeNames", "vertexNames", "faceColors"}...], "instances": [{"prototype", "path",
- * "matrix", "color"}...]}. "key" is the geometry key the file holds for the part. (Materials, frames, the tree,
- * kinematics, animations and parameters: later versions.) */
+/* The document's structure, JSON, as document.Loaded.structure() writes it, with the build closure its file holds
+ * (`closure`, null for none; serve._closed) and the tessellation every part is meshed at (`tessellation`): {"name",
+ * "units", "tessellation", "prototypes": [{"index", "key", "name", "color", "faceNames", "edgeNames", "vertexNames",
+ * "faceColors", "material", "faceMaterials", "frames", and what the part declares ("body", "drives", "mass",
+ * "pointMasses", "free", "link"), "untextured" where its materials carry texture maps}...], "instances": [{"prototype",
+ * "path", "matrix", "color"}...], "tree", "kinematics" (mechanism.block, where the document holds a mechanism),
+ * "animations" and "parameters" (where it holds any), "closure"}. Not given: where the document lives ("path",
+ * "version", "id": the host's). "key" is the geometry key the file holds for the part. A material is the record cad
+ * wrote beside XCAF's (a file cad did not write gives none). */
 uint8_t *vc_structure(int32_t doc, uint32_t *out_len);
 
 /* A part's canonical shape bytes: mesh.shape_bytes(shape, read=True) (BinTools format 4, geometry only, at the

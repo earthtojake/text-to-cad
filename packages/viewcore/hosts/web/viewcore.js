@@ -114,7 +114,7 @@ export class Core {
     const core = new Core(instance, memory);
     if (instance.exports._initialize) instance.exports._initialize();
     core.instantiateMs = performance.now() - t0;
-    if (core.x.vc_abi_version() !== 1) throw new ViewCoreError("unsupported ABI version " + core.x.vc_abi_version());
+    if (core.x.vc_abi_version() !== 2) throw new ViewCoreError("unsupported ABI version " + core.x.vc_abi_version());
     return core;
   }
 
@@ -152,15 +152,19 @@ export class Core {
     return out;
   }
 
-  openXbf(data) {
+  /** Open an .xbf's bytes; `stem` names the document where its file does not (the file's stem). */
+  openXbf(data, stem = "") {
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const name = new TextEncoder().encode(String(stem || ""));
     const n = bytes.length;
-    const ptr = this.x.vc_alloc(n) >>> 0;
+    const ptr = this.x.vc_alloc(n + name.length) >>> 0;
     if (!ptr && n) this.fail("vc_alloc");
     let h;
     try {
-      new Uint8Array(this.memory.buffer, ptr, n).set(bytes);
-      h = this.x.vc_open_xbf(ptr, n);
+      const into = new Uint8Array(this.memory.buffer, ptr, n + name.length);
+      into.set(bytes);
+      into.set(name, n);
+      h = this.x.vc_open_xbf(ptr, n, ptr + n, name.length);
     } finally {
       this.x.vc_free(ptr);
     }

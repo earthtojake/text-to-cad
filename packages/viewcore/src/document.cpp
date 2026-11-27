@@ -19,6 +19,10 @@
 #include <TDF_Tool.hxx>
 #include <TDataStd_AsciiString.hxx>
 #include <TDataStd_Name.hxx>
+#include <TDataStd_NamedData.hxx>
+#include <TDataStd_TreeNode.hxx>
+#include <XCAFDoc.hxx>
+#include <XCAFDoc_Material.hxx>
 #include <TDocStd_Document.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp.hxx>
@@ -89,12 +93,6 @@ TopoDS_Shape read_shape(const std::string& data) {
 
 // --- labels -----------------------------------------------------------------------------------
 
-namespace {
-
-const char* KEY_GUID = "c8f2d4a6-1b3e-4f5a-9c7d-2e8b6a4f0d13";
-const int MAX_OCCURRENCES = 250000;
-const int MAX_ASSEMBLY_DEPTH = 64;
-
 std::string utf8(const TCollection_ExtendedString& text) {
   std::string out;
   const char16_t* s = text.ToExtString();
@@ -122,6 +120,20 @@ std::string utf8(const TCollection_ExtendedString& text) {
   }
   return out;
 }
+
+namespace {
+
+const char* KEY_GUID = "c8f2d4a6-1b3e-4f5a-9c7d-2e8b6a4f0d13";
+const char* CLOSURE_GUID = "2f6c9d1e-8a43-4b7e-b5d0-7e1a3c9f4b62";
+const char* ANIMATIONS_GUID = "196117b9-7763-467d-8c37-7f838602e8a5";
+const char* DECLARATIONS_GUID = "8d3b6f2a-4c71-4e9b-a5d8-1f0c7e2b9a64";
+const char* PARAMETERS_GUID = "5b0e7c93-2f4d-4a68-9d31-c6a8e04f7b25";
+// document.DECLARED: what a part declares beside its frames, in the structure's order.
+const char* DECLARED[] = {"body", "drives", "mass", "pointMasses", "free", "link"};
+// parameters._RECORDED: what a recorded parameter says.
+const char* RECORDED[] = {"name", "value", "kind", "min", "max", "step", "unit"};
+const int MAX_OCCURRENCES = 250000;
+const int MAX_ASSEMBLY_DEPTH = 64;
 
 std::string entry_of(const TDF_Label& label) {
   TCollection_AsciiString text;
@@ -197,7 +209,96 @@ std::optional<Rgba> held_colors(const ShapeMap& faces, const std::vector<std::pa
   return color;
 }
 
-// document._prototype (names and colours; materials and declarations are not read).
+// document._label_material, for a document cad wrote: the material its label refers to (XCAF's material reference
+// tree node), as the bd_materials record cad keeps beside XCAF's subset on the material's label (_write_extra), read
+// back as material_json writes it (that record is material_key: material_json's own JSON). A material with no such
+// record (a file cad did not write) is not read: none.
+std::optional<Value> label_material(const TDF_Label& label) {
+  occ::handle<TDataStd_TreeNode> node;
+  if (!label.FindAttribute(XCAFDoc::MaterialRefGUID(), node) || !node->HasFather()) return std::nullopt;
+  TDF_Label held = node->Father()->Label();
+  occ::handle<XCAFDoc_Material> physical;
+  if (!held.FindAttribute(XCAFDoc_Material::GetID(), physical)) return std::nullopt;
+  occ::handle<TDataStd_NamedData> data;
+  TCollection_ExtendedString key("bd_materials");
+  if (!held.FindAttribute(TDataStd_NamedData::GetID(), data)) return std::nullopt;
+  data->LoadDeferredData();
+  if (!data->HasString(key)) return std::nullopt;
+  return Value::parse(utf8(data->GetString(key)));
+}
+
+// document._held_materials: faces given a material through the solids or shells that hold them.
+std::optional<Value> held_materials(const ShapeMap& faces, const std::vector<std::pair<TopoDS_Shape, Value>>& holding,
+                                    std::optional<Value> material, std::map<int, Value>& face_materials) {
+  struct Held { ShapeMap inner; int kind; const Value* given; };
+  std::vector<Held> held;
+  for (const auto& [shape, given] : holding) {
+    Held h;
+    TopExp::MapShapes(shape, TopAbs_FACE, h.inner);
+    h.kind = (int)shape.ShapeType();
+    h.given = &given;
+    held.push_back(std::move(h));
+  }
+  std::vector<size_t> order(held.size());
+  for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+  std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+    int ea = -held[a].inner.Extent(), eb = -held[b].inner.Extent();
+    return ea != eb ? ea < eb : held[a].kind < held[b].kind;
+  });
+  std::vector<std::pair<int, const Value*>> by_face;  // insertion order, as a dict keeps it
+  std::map<int, size_t> where;
+  for (size_t i : order) {
+    for (int at = 1; at <= held[i].inner.Extent(); ++at) {
+      int ordinal = faces.FindIndex(held[i].inner.FindKey(at));
+      if (!ordinal) continue;
+      auto found = where.find(ordinal);
+      if (found == where.end()) {
+        where[ordinal] = by_face.size();
+        by_face.emplace_back(ordinal, held[i].given);
+      } else {
+        by_face[found->second].second = held[i].given;
+      }
+    }
+  }
+  if ((int)by_face.size() == faces.Extent() && !by_face.empty()) {
+    bool one = true;
+    for (const auto& b : by_face) one = one && *b.second == *by_face[0].second;
+    if (one) {
+      const Value& appearance = *by_face[0].second;
+      if (!material) return appearance;
+      // FinishedMaterial(material.material, pbr=appearance.pbr): the part's physics in the held look, no process.
+      Value made;
+      made.kind = Value::OBJECT;
+      for (const char* name : {"type", "material"})
+        if (const Value* v = material->get(name)) made.keys.emplace_back(name, *v);
+      if (const Value* v = appearance.get("pbr")) made.keys.emplace_back("pbr", *v);
+      return made;
+    }
+  }
+  for (const auto& [ordinal, given] : by_face) {
+    if (!face_materials.count(ordinal) && (!material || *given != *material)) face_materials[ordinal] = *given;
+  }
+  return material;
+}
+
+// document.declarations_from: a part's frames (16 floats each) and the rest it declares (DECLARED).
+void read_declarations(Part& part, const std::optional<std::string>& text) {
+  if (!text || text->empty()) return;
+  Value value = Value::parse(*text);
+  if (const Value* frames = value.get("frames")) {
+    for (const auto& [name, values] : frames->keys) {
+      std::vector<double> found;
+      for (const Value& item : values.items) found.push_back(item.number());
+      part.frames.emplace_back(name, found);
+    }
+    std::sort(part.frames.begin(), part.frames.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+  }
+  for (const char* name : DECLARED)
+    if (const Value* v = value.get(name)) part.declared.emplace_back(name, *v);
+}
+
+// document._prototype.
 std::unique_ptr<Part> make_part(int index, const TDF_Label& label, const TopoDS_Shape& shape) {
   auto part = std::make_unique<Part>();
   part->index = index;
@@ -205,6 +306,7 @@ std::unique_ptr<Part> make_part(int index, const TDF_Label& label, const TopoDS_
   part->bytes = shape_bytes(part->shape);
   part->key = blake2b_hex(part->bytes.data(), part->bytes.size());
   part->color = label_color(label);
+  part->material = label_material(label);
   NCollection_Sequence<TDF_Label> subs;
   XCAFDoc_ShapeTool::GetSubShapes(label, subs);
   if (subs.Length()) {
@@ -213,6 +315,7 @@ std::unique_ptr<Part> make_part(int index, const TDF_Label& label, const TopoDS_
     TopExp::MapShapes(shape, TopAbs_FACE, faces);
     TopExp::MapShapes(shape, TopAbs_EDGE, edges);
     std::vector<std::pair<TopoDS_Shape, Rgba>> holding;
+    std::vector<std::pair<TopoDS_Shape, Value>> held_material;
     for (int at = 1; at <= subs.Length(); ++at) {
       const TDF_Label& sub = subs.Value(at);
       TopoDS_Shape held = XCAFDoc_ShapeTool::GetShape(sub);
@@ -220,12 +323,14 @@ std::unique_ptr<Part> make_part(int index, const TDF_Label& label, const TopoDS_
       TopAbs_ShapeEnum kind = held.ShapeType();
       if (kind != TopAbs_FACE && kind != TopAbs_EDGE && kind != TopAbs_VERTEX) {
         if (auto rgba = label_color(sub)) holding.emplace_back(held, *rgba);
+        if (auto material = label_material(sub)) held_material.emplace_back(held, *material);
       } else if (kind == TopAbs_FACE) {
         int ordinal = faces.FindIndex(held);
         if (ordinal) {
           std::string name = label_name(sub);
           if (!name.empty()) part->face_names[ordinal] = name;
           if (auto rgba = label_color(sub)) part->face_colors[ordinal] = *rgba;
+          if (auto material = label_material(sub)) part->face_materials[ordinal] = *material;
         }
       } else if (kind == TopAbs_EDGE) {
         int ordinal = edges.FindIndex(held);
@@ -242,10 +347,37 @@ std::unique_ptr<Part> make_part(int index, const TDF_Label& label, const TopoDS_
       }
     }
     if (!holding.empty()) part->color = held_colors(faces, holding, part->color, part->face_colors);
+    if (!held_material.empty())
+      part->material = held_materials(faces, held_material, part->material, part->face_materials);
   }
   std::string name = label_name(label);
   part->name = name.empty() ? "part" + std::to_string(index + 1) : name;
+  read_declarations(*part, label_text(label, DECLARATIONS_GUID));
   return part;
+}
+
+// document._matrix: 4x4, column-major.
+std::array<double, 16> matrix_of(const TopLoc_Location& location) {
+  std::array<double, 16> found;
+  const gp_Trsf transform = location.Transformation();
+  for (int column = 0; column < 4; ++column)
+    for (int row = 0; row < 4; ++row)
+      found[column * 4 + row] = row < 3 ? transform.Value(row + 1, column + 1) : (column == 3 ? 1.0 : 0.0);
+  return found;
+}
+
+Value string_value(const std::string& text) {
+  Value v;
+  v.kind = Value::STRING;
+  v.text = text;
+  return v;
+}
+
+Value integer_value(long long n) {
+  Value v;
+  v.kind = Value::INT;
+  v.text = std::to_string(n);
+  return v;
 }
 
 class Walker {
@@ -254,20 +386,35 @@ class Walker {
   std::map<std::string, int> by_entry;
   std::map<int, std::string> claims;
   int counted = 0;
+  // document.Loaded's instance_paths, worlds and occurrences: what its mechanism is read by.
+  std::vector<Occurrence> instance_paths;
+  std::map<Occurrence, std::array<double, 16>> worlds;
+  std::map<std::string, Occurrence> occurrences;
 
   explicit Walker(Document& d) : doc(d) {}
 
-  void visit(const TDF_Label& label, const TopLoc_Location& location, const std::vector<std::string>& path,
-             std::optional<Rgba> inherited, const std::string& name, int depth, const std::set<std::string>& ancestors) {
+  // document.Loaded._walk's visit: the tree's node for the label.
+  Value visit(const TDF_Label& label, const TopLoc_Location& location, const std::vector<std::string>& path,
+              std::optional<Rgba> inherited, const std::string& name, const Occurrence& occurrence,
+              const std::vector<std::string>& entries, const std::set<std::string>& ancestors) {
     if (++counted > MAX_OCCURRENCES) throw std::runtime_error("the assembly names too many occurrences");
-    if (depth > MAX_ASSEMBLY_DEPTH) throw std::runtime_error("the assembly is too deep");
+    if ((int)occurrence.size() > MAX_ASSEMBLY_DEPTH) throw std::runtime_error("the assembly is too deep");
     std::optional<Rgba> color = label_color(label);
     if (!color) color = inherited;
+    worlds[occurrence] = matrix_of(location);
+    std::string joined;
+    for (size_t i = 0; i < entries.size(); ++i) joined += (i ? "/" : "") + entries[i];
+    occurrences[joined] = occurrence;
+    Value node;
+    node.kind = Value::OBJECT;
+    node.keys.emplace_back("name", string_value(name));
     if (XCAFDoc_ShapeTool::IsAssembly(label)) {
       std::string own = entry_of(label);
       if (ancestors.count(own)) throw std::runtime_error("an assembly contains itself");
       std::set<std::string> inner = ancestors;
       inner.insert(own);
+      Value list;
+      list.kind = Value::LIST;
       NCollection_Sequence<TDF_Label> components;
       XCAFDoc_ShapeTool::GetComponents(label, components, false);
       for (int at = 1; at <= components.Length(); ++at) {
@@ -282,9 +429,14 @@ class Walker {
         if (!child_color) child_color = color;
         std::vector<std::string> child_path = path;
         child_path.push_back(child_name);
-        visit(referred, placed, child_path, child_color, child_name, depth + 1, inner);
+        Occurrence child = occurrence;
+        child.push_back(at - 1);
+        std::vector<std::string> child_entries = entries;
+        child_entries.push_back(entry_of(component));
+        list.items.push_back(visit(referred, placed, child_path, child_color, child_name, child, child_entries, inner));
       }
-      return;
+      node.keys.emplace_back("children", std::move(list));
+      return node;
     }
     TopoDS_Shape shape = XCAFDoc_ShapeTool::GetShape(label);
     std::string entry = entry_of(label);
@@ -301,15 +453,15 @@ class Walker {
     Instance instance;
     instance.prototype = index;
     for (size_t i = 0; i < path.size(); ++i) instance.path += (i ? "/" : "") + path[i];
-    // document._matrix: 4x4, column-major.
-    const gp_Trsf transform = placed.Transformation();
-    for (int column = 0; column < 4; ++column)
-      for (int row = 0; row < 4; ++row)
-        instance.matrix[column * 4 + row] =
-            row < 3 ? transform.Value(row + 1, column + 1) : (column == 3 ? 1.0 : 0.0);
+    std::array<double, 16> matrix = matrix_of(placed);
+    std::copy(matrix.begin(), matrix.end(), instance.matrix);
     const Part& prototype = *doc.parts[index];
     if (color != prototype.color) instance.color = color;
     doc.instances.push_back(instance);
+    instance_paths.push_back(occurrence);
+    node.keys.emplace_back("prototype", integer_value(index));
+    node.keys.emplace_back("instance", integer_value((long long)doc.instances.size() - 1));
+    return node;
   }
 
   // document._checked_keys: a part keeps the key its file names only where every part naming it makes it again.
@@ -347,7 +499,7 @@ occ::handle<TDocStd_Application> application() {
 
 }  // namespace
 
-std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size) {
+std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size, const std::string& given_stem) {
   occ::handle<TDocStd_Application> app = application();
   occ::handle<TDocStd_Document> xdoc = new TDocStd_Document(TCollection_ExtendedString("BinXCAF"));
   {
@@ -368,19 +520,93 @@ std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size) {
                                (status >= 0 && status < 23 ? names[status] : std::to_string(status).c_str()));
   }
   auto doc = std::make_unique<Document>();
+  const std::string stem = given_stem.empty() ? "document" : given_stem;
   Walker walker(*doc);
   occ::handle<XCAFDoc_ShapeTool> shapes = XCAFDoc_DocumentTool::ShapeTool(xdoc->Main());
   NCollection_Sequence<TDF_Label> free;
   shapes->GetFreeShapes(free);
+  std::vector<Value> roots;
   for (int at = 1; at <= free.Length(); ++at) {
     const TDF_Label& label = free.Value(at);
     std::string name = label_name(label);
-    // Python names an unnamed root by the file's stem, which bytes do not carry: "document" stands for it.
-    if (name.empty()) name = free.Length() == 1 ? "document" : "document" + std::to_string(at);
-    walker.visit(label, TopLoc_Location(), {name}, std::nullopt, name, free.Length() == 1 ? 0 : 1, {});
+    if (name.empty()) name = free.Length() == 1 ? stem : stem + std::to_string(at);
+    roots.push_back(walker.visit(label, TopLoc_Location(), {name}, std::nullopt, name,
+                                 free.Length() == 1 ? Occurrence{} : Occurrence{at - 1}, {entry_of(label)}, {}));
+  }
+  if (roots.size() == 1) {
+    doc->tree = roots[0];
+    doc->name = roots[0].get("name")->text;
+  } else {
+    doc->name = stem;
+    doc->tree.kind = Value::OBJECT;
+    doc->tree.keys.emplace_back("name", string_value(stem));
+    Value list;
+    list.kind = Value::LIST;
+    list.items = std::move(roots);
+    doc->tree.keys.emplace_back("children", std::move(list));
   }
   walker.checked_keys();
+  const TDF_Label main = xdoc->Main();
+  // The document's records on its main label: the closure, the animations (by name, as from_record keeps them:
+  // a later row of a name in the first one's place), the parameters (parameters.recorded: each its _RECORDED
+  // fields, a row with no string name left out; text that is no list is none).
+  if (auto text = label_text(main, CLOSURE_GUID); text && !text->empty()) doc->closure = Value::parse(*text);
+  if (auto text = label_text(main, ANIMATIONS_GUID); text && !text->empty()) {
+    for (const Value& row : Value::parse(*text).items) {
+      const Value* name = row.get("name");
+      const Value* duration = row.get("duration");
+      if (!name || !duration) throw std::runtime_error("the document's animations name no name or duration");
+      bool replaced = false;
+      for (auto& [held, seconds] : doc->animations)
+        if (held == name->text) { seconds = duration->number(); replaced = true; }
+      if (!replaced) doc->animations.emplace_back(name->text, duration->number());
+    }
+  }
+  doc->parameters.kind = Value::LIST;
+  if (auto text = label_text(main, PARAMETERS_GUID); text && !text->empty()) {
+    Value found;
+    try {
+      found = Value::parse(*text);
+    } catch (const std::runtime_error&) {
+      found = Value();
+    }
+    for (const Value& row : found.items) {
+      const Value* name = row.kind == Value::OBJECT ? row.get("name") : nullptr;
+      if (!name || name->kind != Value::STRING) continue;
+      Value kept;
+      kept.kind = Value::OBJECT;
+      for (const char* key : RECORDED) {
+        const Value* v = row.get(key);
+        kept.keys.emplace_back(key, v ? *v : Value());
+      }
+      doc->parameters.items.push_back(std::move(kept));
+    }
+  }
+  doc->kinematics = kinematics(main, walker.occurrences, walker.instance_paths, walker.worlds);
   return doc;
+}
+
+// document.untextured: the texture maps a part's materials carry, by material name.
+std::vector<std::pair<std::string, std::vector<std::string>>> untextured(const Part& part) {
+  std::map<std::string, std::set<std::string>> found;
+  auto add = [&](const Value& given) {
+    const Value* pbr = given.get("pbr");
+    const Value* maps = pbr ? pbr->get("textures") : nullptr;
+    if (!maps || maps->kind != Value::OBJECT || maps->keys.empty()) return;
+    std::string name;
+    const Value* physics = given.get("material");
+    const Value* named = physics ? physics->get("name") : nullptr;
+    if (named && named->kind == Value::STRING && !named->text.empty()) name = named->text;
+    if (name.empty() && (named = pbr->get("name")) && named->kind == Value::STRING && !named->text.empty())
+      name = named->text;
+    if (name.empty()) name = "material";
+    for (const auto& [map, _] : maps->keys) found[name].insert(map);
+  };
+  if (part.material) add(*part.material);
+  for (const auto& [_, given] : part.face_materials) add(given);
+  std::vector<std::pair<std::string, std::vector<std::string>>> listed;
+  for (const auto& [name, maps] : found) listed.emplace_back(name, std::vector<std::string>(maps.begin(), maps.end()));
+  return listed;
 }
 
 std::string structure(const Document& doc) {
@@ -396,7 +622,8 @@ std::string structure(const Document& doc) {
     for (const auto& [ordinal, name] : table) j.key(ordinal).str(name);
     j.close();
   };
-  j.open().key("prototypes").open_list();
+  j.open().key("name").str(doc.name).key("units").str("mm").key("tessellation").str(TESSELLATION);
+  j.key("prototypes").open_list();
   for (const auto& part : doc.parts) {
     j.open().key("index").integer(part->index).key("key").str(part->key).key("name").str(part->name);
     j.key("color");
@@ -412,7 +639,35 @@ std::string structure(const Document& doc) {
       j.key(ordinal);
       color(rgba);
     }
-    j.close().close();
+    j.close().key("material");
+    if (part->material) part->material->write(j); else j.null();
+    j.key("faceMaterials").open();
+    for (const auto& [ordinal, given] : part->face_materials) {
+      j.key(ordinal);
+      given.write(j);
+    }
+    j.close().key("frames").open();
+    for (const auto& [name, values] : part->frames) {
+      j.key(name).open_list();
+      for (double v : values) j.num(v);
+      j.close_list();
+    }
+    j.close();
+    for (const auto& [name, value] : part->declared) {
+      j.key(name);
+      value.write(j);
+    }
+    auto maps = untextured(*part);
+    if (!maps.empty()) {
+      j.key("untextured").open();
+      for (const auto& [name, listed] : maps) {
+        j.key(name).open_list();
+        for (const std::string& map : listed) j.str(map);
+        j.close_list();
+      }
+      j.close();
+    }
+    j.close();
   }
   j.close_list().key("instances").open_list();
   for (const Instance& instance : doc.instances) {
@@ -422,7 +677,21 @@ std::string structure(const Document& doc) {
     color(instance.color);
     j.close();
   }
-  j.close_list().close();
+  j.close_list().key("tree");
+  doc.tree.write(j);
+  if (doc.kinematics) j.key("kinematics").raw(*doc.kinematics);
+  if (!doc.animations.empty()) {
+    j.key("animations").open_list();
+    for (const auto& [name, duration] : doc.animations) j.open().key("name").str(name).key("duration").num(duration).close();
+    j.close_list();
+  }
+  if (!doc.parameters.items.empty()) {
+    j.key("parameters");
+    doc.parameters.write(j);
+  }
+  j.key("closure");
+  if (doc.closure) doc.closure->write(j); else j.null();
+  j.close();
   return j.out;
 }
 

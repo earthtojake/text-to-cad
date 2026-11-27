@@ -64,10 +64,11 @@ class Core:
         self.call("vc_free", at)
         return data
 
-    def open(self, data: bytes) -> int:
-        at = self.call("vc_alloc", len(data))
-        self.memory.write(self.store, data, at)
-        handle = self.call("vc_open_xbf", at, len(data))
+    def open(self, data: bytes, stem: str = "") -> int:
+        name = stem.encode()
+        at = self.call("vc_alloc", len(data) + len(name))
+        self.memory.write(self.store, data + name, at)
+        handle = self.call("vc_open_xbf", at, len(data), at + len(data), len(name))
         self.call("vc_free", at)
         if not handle:
             raise RuntimeError(f"vc_open_xbf: {self.error()}")
@@ -107,8 +108,9 @@ class NativeCore:
         self.lib.vc_free(self.ctypes.c_void_p(at))
         return data
 
-    def open(self, data: bytes) -> int:
-        handle = self.lib.vc_open_xbf(data, len(data))
+    def open(self, data: bytes, stem: str = "") -> int:
+        name = stem.encode()
+        handle = self.lib.vc_open_xbf(data, len(data), name, len(name))
         if not handle:
             raise RuntimeError(f"vc_open_xbf: {self.error()}")
         return handle
@@ -117,7 +119,7 @@ class NativeCore:
 def dump(core, path: Path, out: Path, picks: int) -> dict:
     timing = {"compile_s": core.compile_s, "instantiate_s": core.instantiate_s}
     data = path.read_bytes()
-    t = time.perf_counter(); doc = core.open(data); timing["open_s"] = time.perf_counter() - t
+    t = time.perf_counter(); doc = core.open(data, path.stem); timing["open_s"] = time.perf_counter() - t
     t = time.perf_counter(); structure = core.result("vc_structure", doc); timing["structure_s"] = time.perf_counter() - t
     out.mkdir(parents=True, exist_ok=True)
     (out / "structure.json").write_bytes(structure)

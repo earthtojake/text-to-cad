@@ -6,7 +6,8 @@
 // ops:
 //   init   { url } | { module }          -> { compileMs, fetchMs, instantiateMs, memoryBytes, occt }
 //          (`module`: a WebAssembly.Module the page compiled once, for several workers)
-//   open   { bytes: Uint8Array }         -> { doc }            (bytes is transferred in)
+//   open   { bytes: Uint8Array, stem? }  -> { doc }            (bytes is transferred in; stem: the file's, which
+//          names the document where the file does not)
 //   structureBytes|shapeBytes|mesh|groupsBytes|elementsBytes|measureBytes  { doc, part } -> Uint8Array
 //   factBytes { doc, part, kind, ordinal } -> Uint8Array
 //   structure|groups|elements|measure|fact -> parsed JSON (same args as the *Bytes forms)
@@ -31,7 +32,7 @@ async function handle(m) {
                memoryBytes: core.memoryBytes, occt: core.occtVersion };
     }
     case "open": {
-      const doc = core.openXbf(m.bytes);
+      const doc = core.openXbf(m.bytes, m.stem);
       const id = next++;
       docs.set(id, doc);
       return { doc: id };

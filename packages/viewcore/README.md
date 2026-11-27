@@ -4,20 +4,23 @@ The view core: one WebAssembly module, C++ on Open CASCADE Technology (OCCT), th
 answers what the viewer reads of it: its structure, each part's mesh, an element's facts, a part's groups and
 measures. The same file is meant to run in a page (a Worker) and in the engine (wasmtime), so both answer alike.
 
-Status: a prototype on a branch, to measure size, start, speed, memory and parity with the engine. Nothing in cad,
-the viewer or cad.fun uses it.
+Status: a prototype on a branch, to measure size, start, speed, memory and parity with the engine. The local viewer
+reads a model through it behind `?viewcore=N` (`packages/core/src/client/viewcore.js`); nothing else in cad, the
+viewer or cad.fun uses it.
 
 ## What it does, and what stays in Python
 
-In the core: reading an `.xbf` (parts, their geometry keys and element names, placements), meshing a part by cad's
-rule into the XBM2 buffer, one element's facts and a part's groups (what a pick asks), a part's whole table (what
-a view bundle holds), a part's measures. Later: materials, the tree, kinematics, exports (STEP, GLB, STL, 3MF).
+In the core: reading an `.xbf` into the structure the engine serves (parts, their geometry keys, element names and
+colours, materials, frames and declarations, placements, the tree, the mechanism as `kinematics`, animations,
+parameters, the build closure), meshing a part by cad's rule into the XBM2 buffer, one element's facts and a
+part's groups (what a pick asks), a part's whole table (what a view bundle holds), a part's measures. Later:
+exports (STEP, GLB, STL, 3MF).
 
 In cad's Python, as now: building and rebuilding models (build123d), writing the `.xbf`, the server and its
 caches, sharing, the command line, and every integration (KiCad, MuJoCo, FEA, DFM, renders).
 
-The rules are cad's: `packages/cad/src/cad/engine/mesh.py`, `mesh_format.py`, `document.py` and
-`kernel/bounds.py` are the reference until the core replaces them. `include/viewcore.h` is the ABI.
+The rules are cad's: `packages/cad/src/cad/engine/mesh.py`, `mesh_format.py`, `document.py`, `mechanism.py` (read and
+block) and `kernel/bounds.py` are the reference until the core replaces them. `include/viewcore.h` is the ABI.
 
 ## Layout
 

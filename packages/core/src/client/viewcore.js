@@ -23,21 +23,15 @@ export const VIEW_CORE_TESSELLATION = '0.25-28.5';
  * The core's own answers are passed on as they are.
  */
 export const VIEW_CORE_SYNTHESIZED = Object.freeze([
-  'structure.name: the tree root\'s name (the engine\'s rule for one root), else the document\'s name the caller gives',
   'structure.path: the document\'s id (a model\'s, as a view bundle writes it) or the path the caller gives',
   'structure.version: the version the caller gives (the envelope\'s), else a digest of the .xbf bytes',
-  'structure.units: "mm"',
-  `structure.tessellation: "${VIEW_CORE_TESSELLATION}"`,
   'structure.id: the document id the caller gives',
-  'structure.tree: rebuilt from the instances\' paths (an assembly per path prefix; sibling assemblies of one name, '
-    + 'and empty assemblies, cannot be told from paths)',
-  'structure.parameters: [] (the model\'s declared parameters are not read)',
-  'structure.prototypes[].material: null, faceMaterials: {}, frames: {} (materials and frames are not read)',
-  'structure: no kinematics, animations, closure or exportRevision (a mechanism is not read)',
+  'structure.parameters[].writable / reason / source: false, "no_worker", null (only the live worker that built the '
+    + 'model knows a value\'s bytes in its script)',
+  'structure: no exportRevision (the engine\'s check that an export reads what the page shows)',
   'structure.prototypes[].unmeshed / unmeshedCheck: not given (the part buffers carry their unmeshed faces)',
   'faces/<n>.meshed: from the part\'s own buffer, once this page meshed it (else null)',
   'faces|edges|vertices/<n>.made_by: null (provenance is the live worker\'s that built the model)',
-  'kinematics: 404 "the document has no joints"',
   '/api/v1/look and /api/v1/look/environment: static copies of the engine\'s (or the fallback\'s answer)',
 ]);
 
@@ -52,56 +46,18 @@ function abortError() {
 const now = () => (typeof performance === 'undefined' ? Date.now() : performance.now());
 
 /**
- * The tree an engine's structure gives (`document.Loaded._walk`: an assembly `{ name, children }`, a placed part
- * `{ name, prototype, instance }`), rebuilt from the instances in their order, each path's segments its
- * assemblies and then its own name. One root is the tree; several hang under `name`.
- * @param {{ prototype: number, path: string }[]} instances
- * @param {string} name
+ * The engine's structure from the core's (`vc_structure`: the document's own, every field the engine's but where it
+ * lives) and what the caller knows of the document.
+ * @param {object} core
+ * @param {{ id?: string, path?: string, version?: string }} document
  */
-export function viewCoreTree(instances, name = '') {
-  const roots = [];
-  let open = [];
-  instances.forEach((instance, index) => {
-    const segments = String(instance?.path ?? '').split('/');
-    const own = segments.pop() ?? '';
-    // The assemblies the last instance stood in are this one's while their names hold, in order.
-    let depth = 0;
-    while (depth < segments.length && depth < open.length && open[depth].name === segments[depth]) depth += 1;
-    open = open.slice(0, depth);
-    for (; depth < segments.length; depth += 1) {
-      const node = { name: segments[depth], children: [] };
-      (depth === 0 ? roots : open[depth - 1].children).push(node);
-      open.push(node);
-    }
-    const leaf = { name: own, prototype: instance.prototype, instance: index };
-    (segments.length ? open[segments.length - 1].children : roots).push(leaf);
-  });
-  return roots.length === 1 ? roots[0] : { name, children: roots };
-}
-
-/**
- * The engine's structure from the core's (`vc_structure`) and what the caller knows of the document.
- * @param {{ prototypes: object[], instances: object[] }} core
- * @param {{ id?: string, name?: string, path?: string, version?: string }} document
- */
-export function viewCoreStructure(core, { id = '', name = '', path = '', version = '' } = {}) {
-  const prototypes = (core.prototypes || []).map(prototype => ({ material: null, faceMaterials: {}, frames: {}, ...prototype }));
-  const instances = core.instances || [];
-  const tree = viewCoreTree(instances, name);
-  // One root names the document (the engine's rule); several hang under the name the caller gives.
-  const roots = new Set(instances.map(instance => String(instance.path).split('/')[0]));
-  return {
-    name: roots.size === 1 ? tree.name : name,
-    path: path || id,
-    version,
-    units: 'mm',
-    prototypes,
-    instances,
-    tree,
-    ...(id ? { id } : {}),
-    parameters: [],
-    tessellation: VIEW_CORE_TESSELLATION,
-  };
+export function viewCoreStructure(core, { id = '', path = '', version = '' } = {}) {
+  const found = { ...core, path: path || id, version };
+  if (id) found.id = id;
+  if (Array.isArray(core.parameters)) {
+    found.parameters = core.parameters.map(row => ({ ...row, writable: false, reason: 'no_worker', source: null }));
+  }
+  return found;
 }
 
 /** A digest of `bytes` as hex (its first 16 characters: a version where the caller gives none). */
@@ -120,7 +76,7 @@ function unmeshedOf(buffer) {
  * compiled module, and given its own copy of the document. Answers `{ call(op, args, { worker, transfer }), ready,
  * workers, dispose }`.
  */
-export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, Worker: WorkerImpl = globalThis.Worker }) {
+export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, stem = '', Worker: WorkerImpl = globalThis.Worker }) {
   if (typeof WorkerImpl !== 'function') throw new Error('The view core runs in a Worker, which this page has none of.');
   const n = Math.max(1, Math.min(16, Math.floor(Number(count) || 1)));
   const workers = [];
@@ -171,7 +127,7 @@ export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, W
     state.initMs = now() - started;
     state.init = init.result;
     const copy = copies[at];
-    const open = await send(state, { op: 'open', bytes: copy }, [copy.buffer]);
+    const open = await send(state, { op: 'open', bytes: copy, stem }, [copy.buffer]);
     state.doc = open.result.doc;
     state.phase = 'ready';
     state.openMs = now() - started;
@@ -292,11 +248,15 @@ export function createViewCoreFetch({ core, url, bytes, document = {}, look = {}
       const measures = await Promise.all(keys.map(([, part]) => jsonCall('measure', { part })));
       return json(Object.fromEntries(keys.map(([name], at) => [name, measures[at]])));
     }
-    if (route.length === 1 && head === 'kinematics') return json({ error: 'the document has no joints', hint: "a model's joints are its assembly's mates" }, 404);
+    if (route.length === 1 && head === 'kinematics') {
+      const found = (await structure()).kinematics;
+      return found ? json(found) : json({ error: 'the document has no joints', hint: "a model's joints are its assembly's mates" }, 404);
+    }
     if (head !== 'parts' || !key) return null;
     if (route.length === 2) {
       const tessellation = searchParams.get('tessellation');
-      if (tessellation && tessellation !== VIEW_CORE_TESSELLATION) return notFound(`this core meshes at ${VIEW_CORE_TESSELLATION}, not ${tessellation}`);
+      const meshedAt = (await structure()).tessellation || VIEW_CORE_TESSELLATION;
+      if (tessellation && tessellation !== meshedAt) return notFound(`this core meshes at ${meshedAt}, not ${tessellation}`);
       return new Response(await mesh(key), { headers: { 'content-type': 'application/octet-stream' } });
     }
     if (route.length === 3 && element === 'groups') return json(await jsonCall('groups', { part: await indexOf(key) }));
@@ -354,7 +314,8 @@ export function openViewCoreDocument({ bytes, url, workerUrl, wasmUrl, workers =
   const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   // The version is worked out before the bytes go to the workers (the last one takes them).
   const held = source.slice();
-  const core = connectViewCoreWorkers({ workerUrl, wasmUrl, count: workers, bytes: source, Worker: WorkerImpl });
+  // The name the document goes by where its file names none (the engine's: the file's stem).
+  const core = connectViewCoreWorkers({ workerUrl, wasmUrl, count: workers, bytes: source, stem: document.name || '', Worker: WorkerImpl });
   const fetch = createViewCoreFetch({ core, url, bytes: held, document, look, fallback });
   core.ready.then(states => {
     fetch.stats.workers = states.map(state => ({ initMs: Math.round(state.initMs), openMs: Math.round(state.openMs),

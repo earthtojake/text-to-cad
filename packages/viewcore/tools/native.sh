@@ -9,4 +9,4 @@ DEFINES=("${@:4}")
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 LIBS=$(ls "$LIBDIR"/libTK*.so* | grep -E "/libTK(BinXCAF|XCAF|VCAF|V3d|Service|Bin|BinL|CAF|LCAF|CDF|RWMesh|DE|Mesh|HLR|BO|Prim|ShHealing|TopAlgo|GeomAlgo|BRep|GeomBase|G3d|G2d|Math|ernel)[-.]")
 g++ -std=c++17 -O2 -fPIC -shared -DOCC_CONVERT_SIGNALS -DNo_Exception -I"$INC" -Wno-deprecated-declarations \
-  ${DEFINES[@]+"${DEFINES[@]}"} "$HERE"/src/{document,mesh,topology,viewcore,profile}.cpp $LIBS -Wl,-rpath,"$LIBDIR" -o "$OUT"
+  ${DEFINES[@]+"${DEFINES[@]}"} "$HERE"/src/{document,mechanism,mesh,topology,viewcore,profile}.cpp $LIBS -Wl,-rpath,"$LIBDIR" -o "$OUT"

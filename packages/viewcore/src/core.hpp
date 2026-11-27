@@ -20,8 +20,11 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <TDF_Label.hxx>
+#include <TCollection_ExtendedString.hxx>
 
 #include "json.hpp"
+#include "value.hpp"
 
 // The facts' rules, version 2 (cad's mesh.FACTS_VERSION): a part's shape read once for all its facts, its box the union
 // of its faces' boxes, areas, centroids and volumes integrated adaptively to VC_GPROP_EPS, and a face's checker
@@ -47,6 +50,8 @@ using Rgba = std::array<double, 4>;
 enum { FEATURE = 1, TANGENT = 2, SEAM = 3, BOUNDARY = 5, NONMANIFOLD = 6 };
 constexpr double DEVIATION = 0.25;
 const double ANGULAR = 28.5 * (3.141592653589793 / 180.0);  // math.radians(28.5), as Python computes it
+// mesh_format.TESSELLATION: what a structure names and every part's buffer is made at.
+constexpr const char* TESSELLATION = "0.25-28.5";
 
 // --- shapes and their bytes (document.cpp)
 std::string write_shape(const TopoDS_Shape& shape);           // mesh._write
@@ -89,6 +94,12 @@ std::string mesh_bytes(const std::string& data, std::set<int>* unmeshed = nullpt
 // --- the document (document.cpp)
 struct Part {
   int index = 0;
+  // document._label_material: the material cad wrote on the part's label (its bd_materials record, as
+  // material_json writes it), and its faces' where theirs differ; frames and the rest of its declarations.
+  std::optional<Value> material;
+  std::map<int, Value> face_materials;
+  std::vector<std::pair<std::string, std::vector<double>>> frames;  // by name, sorted
+  std::vector<std::pair<std::string, Value>> declared;              // document.DECLARED, in that order
   TopoDS_Shape shape;  // at the identity
   std::string name;
   std::optional<Rgba> color;
@@ -107,12 +118,28 @@ struct Instance {
   std::optional<Rgba> color;
 };
 
+// An occurrence: component indices from the root (document.Loaded.instance_paths, worlds' keys).
+using Occurrence = std::vector<int>;
+
 struct Document {
+  std::string name;  // the tree root's name (one root), else the name the host gave (the file's stem)
+  Value tree;
   std::vector<std::unique_ptr<Part>> parts;
   std::vector<Instance> instances;
+  std::optional<std::string> kinematics;  // mechanism.block's JSON, where the document has a mechanism
+  std::vector<std::pair<std::string, double>> animations;  // document._animations_listed: name, duration
+  Value parameters;                                         // parameters.recorded: a list
+  std::optional<Value> closure;                             // the build closure the file holds, if any
 };
 
-std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size);
+// `stem` names the document where its file does not (Python's path.stem): an unnamed root, several roots.
+std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size, const std::string& stem);
+
+// mechanism.cpp: mechanism.read then mechanism.block, as JSON; none where the document holds no mechanism.
+std::optional<std::string> kinematics(const TDF_Label& main, const std::map<std::string, Occurrence>& occurrences,
+                                      const std::vector<Occurrence>& instance_paths,
+                                      const std::map<Occurrence, std::array<double, 16>>& worlds);
+std::string utf8(const TCollection_ExtendedString& text);
 std::string structure(const Document& doc);
 
 }  // namespace vc

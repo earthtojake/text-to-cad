@@ -6,7 +6,8 @@ Per model, one line per check, with the first differences found. The tolerances 
 structure equal (matrices within 1e-9); shape bytes identical; XBM2 face table ordinals and order equal and index
 counts reported, edge table identical, edge points and vertices within 1e-5, header deflections equal; elements and
 groups equal but floats within 1e-6 relative (1e-9 absolute near zero); measures' floats within 1e-9 relative.
-Standard library only.
+The structure is compared whatever the order of an object's keys (a material is the record cad stored, its keys
+sorted; the engine's material_json writes them in its own order). Standard library only.
 """
 from __future__ import annotations
 
@@ -24,22 +25,23 @@ def close(a: float, b: float, rel: float, absolute: float) -> bool:
     return a == b or abs(a - b) <= max(rel * max(abs(a), abs(b)), absolute)
 
 
-def diff(a, b, rel: float, absolute: float, path: str = "", found: list | None = None) -> list:
-    """Where two JSON values differ: strings, ints, keys and lengths exactly, floats by tolerance."""
+def diff(a, b, rel: float, absolute: float, path: str = "", found: list | None = None, ordered: bool = True) -> list:
+    """Where two JSON values differ: strings, ints, keys and lengths exactly (keys' order too, if ``ordered``),
+    floats by tolerance."""
     found = [] if found is None else found
     if len(found) > 5:
         return found
     if isinstance(a, dict) and isinstance(b, dict):
-        if list(a) != list(b):
+        if (list(a) != list(b)) if ordered else (set(a) != set(b)):
             found.append(f"{path}: keys {sorted(set(a) ^ set(b))[:6]} or order")
         for k in a:
             if k in b:
-                diff(a[k], b[k], rel, absolute, f"{path}/{k}", found)
+                diff(a[k], b[k], rel, absolute, f"{path}/{k}", found, ordered)
     elif isinstance(a, list) and isinstance(b, list):
         if len(a) != len(b):
             found.append(f"{path}: length {len(a)} != {len(b)}")
         for i, (x, y) in enumerate(zip(a, b)):
-            diff(x, y, rel, absolute, f"{path}[{i}]", found)
+            diff(x, y, rel, absolute, f"{path}[{i}]", found, ordered)
     elif isinstance(a, float) or isinstance(b, float):
         if type(a) not in (int, float) or type(b) not in (int, float) or not close(a, b, rel, absolute):
             found.append(f"{path}: {a!r} != {b!r}")
@@ -98,7 +100,7 @@ def compare_mesh(ref: bytes, out: bytes) -> tuple[bool, str]:
 def compare(ref: Path, out: Path) -> dict:
     report = {"model": ref.name}
     sa, sb = json.loads((ref / "structure.json").read_bytes()), json.loads((out / "structure.json").read_bytes())
-    found = diff(sa, sb, 0.0, 1e-9)
+    found = diff(sa, sb, 1e-12, 1e-9, ordered=False)
     report["structure"] = "ok" if not found else found
     shape, meshes, elements, measures = [], [], [], []
     for part in sorted((ref / "parts").iterdir(), key=lambda p: int(p.name)):

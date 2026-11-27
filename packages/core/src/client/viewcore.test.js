@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fetchXbfElementFacts, fetchXbfPartGroups } from '../lib/xbf/xbfDocument.js';
-import { createViewCoreFetch, VIEW_CORE_TESSELLATION, viewCoreStructure, viewCoreTree } from './viewcore.js';
+import { createViewCoreFetch, VIEW_CORE_TESSELLATION, viewCoreStructure } from './viewcore.js';
 
 // A core made here, answering as the view core's Worker does (`hosts/web/worker.js`): an assembly of a plate and two
 // pegs of one geometry, by the prototypes' indices. A part's "mesh" is no XBM2 buffer: this reads routes, it draws nothing.
 const CORE_STRUCTURE = {
+  name: 'bracket',
+  units: 'mm',
+  tessellation: VIEW_CORE_TESSELLATION,
   prototypes: [
     { index: 0, key: 'aa11', name: 'plate', color: [1, 0, 0, 1], faceNames: { 1: 'f:plate.top' }, edgeNames: {}, vertexNames: {}, faceColors: {} },
     { index: 1, key: 'bb22', name: 'peg', color: null, faceNames: {}, edgeNames: {}, vertexNames: {}, faceColors: {} },
@@ -15,6 +18,13 @@ const CORE_STRUCTURE = {
     { prototype: 1, path: 'bracket/pegs/peg', matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1], color: null },
     { prototype: 1, path: 'bracket/pegs/peg', matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 9, 0, 0, 1], color: null },
   ],
+  tree: { name: 'bracket', children: [
+    { name: 'plate', prototype: 0, instance: 0 },
+    { name: 'pegs', children: [{ name: 'peg', prototype: 1, instance: 1 }, { name: 'peg', prototype: 1, instance: 2 }] },
+  ] },
+  kinematics: { schema: 'cadgen.kinematics/2', name: 'bracket', ground: 0, links: [], pairs: [] },
+  parameters: [{ name: 'wall', value: 2, kind: 'float', min: 1, max: 5, step: null, unit: null }],
+  closure: null,
 };
 const URL_ = 'http://cad.local/api/v1/documents/xbf/doc1';
 
@@ -37,30 +47,19 @@ function fakeCore() {
   };
 }
 
-test('the tree is rebuilt from the instances\' paths, as the engine walks it', () => {
-  assert.deepEqual(viewCoreTree(CORE_STRUCTURE.instances), { name: 'bracket', children: [
-    { name: 'plate', prototype: 0, instance: 0 },
-    { name: 'pegs', children: [{ name: 'peg', prototype: 1, instance: 1 }, { name: 'peg', prototype: 1, instance: 2 }] },
-  ] });
-  // One part alone is the tree; several roots hang under the document's name.
-  assert.deepEqual(viewCoreTree([{ prototype: 0, path: 'solo' }]), { name: 'solo', prototype: 0, instance: 0 });
-  assert.deepEqual(viewCoreTree([{ prototype: 0, path: 'a' }, { prototype: 1, path: 'b/c' }], 'file'),
-    { name: 'file', children: [{ name: 'a', prototype: 0, instance: 0 }, { name: 'b', children: [{ name: 'c', prototype: 1, instance: 1 }] }] });
-});
-
-test('the structure is the engine\'s: the core\'s prototypes and instances, and what the core does not give made here', () => {
-  const found = viewCoreStructure(CORE_STRUCTURE, { id: 'doc1', name: 'model', version: 'v7' });
+test('the structure is the core\'s, with where the document lives given by the caller', () => {
+  const found = viewCoreStructure(CORE_STRUCTURE, { id: 'doc1', version: 'v7' });
   assert.equal(found.name, 'bracket');
   assert.equal(found.path, 'doc1');
+  assert.equal(found.id, 'doc1');
   assert.equal(found.version, 'v7');
   assert.equal(found.units, 'mm');
   assert.equal(found.tessellation, VIEW_CORE_TESSELLATION);
-  assert.deepEqual(found.parameters, []);
-  assert.equal(found.prototypes[0].material, null);
-  assert.deepEqual(found.prototypes[0].faceMaterials, {});
-  assert.deepEqual(found.prototypes[0].faceNames, { 1: 'f:plate.top' });
+  assert.equal(found.tree, CORE_STRUCTURE.tree);
+  assert.equal(found.kinematics, CORE_STRUCTURE.kinematics);
   assert.equal(found.instances, CORE_STRUCTURE.instances);
-  assert.equal('kinematics' in found, false);
+  // A parameter's writability is the live worker's: read from the document alone, none is writable.
+  assert.deepEqual(found.parameters, [{ ...CORE_STRUCTURE.parameters[0], writable: false, reason: 'no_worker', source: null }]);
 });
 
 test('the document\'s routes are answered by the core, a part by its key\'s prototype; anything else by the fallback', async () => {
@@ -84,7 +83,8 @@ test('the document\'s routes are answered by the core, a part by its key\'s prot
   assert.deepEqual(await fetchXbfPartGroups(URL_, 'aa11', { fetch }), { faces: { 1: 1 }, edges: {}, part: 0 });
   assert.deepEqual(await (await fetch(`${URL_}/measure`)).json(), { aa11: { volume: 10 }, bb22: { volume: 11 } });
   assert.deepEqual(await (await fetch(`${URL_}/parts/aa11/volume`)).json(), { volume: 10 });
-  assert.equal((await fetch(`${URL_}/kinematics`)).status, 404);
+  // The mechanism is the structure's own, as the engine's route answers it.
+  assert.deepEqual(await (await fetch(`${URL_}/kinematics`)).json(), CORE_STRUCTURE.kinematics);
   // The structure is asked of the core once; a part's mesh once, however often it is read.
   await fetch(`${URL_}/parts/bb22`);
   assert.equal(core.asked.filter(([op]) => op === 'structure').length, 1);

@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parent
 def dump(core: Core, path: Path, out: Path, picks: int) -> dict:
     timing = {"compile_s": core.compile_s, "instantiate_s": core.instantiate_s}
     data = path.read_bytes()
-    t = time.perf_counter(); doc = core.open_xbf(data); timing["open_s"] = time.perf_counter() - t
+    t = time.perf_counter(); doc = core.open_xbf(data, path.stem); timing["open_s"] = time.perf_counter() - t
     t = time.perf_counter(); sbytes = core._result("vc_structure", "vc_structure", doc.handle); timing["structure_s"] = time.perf_counter() - t
     structure = json.loads(sbytes)
     out.mkdir(parents=True, exist_ok=True)
