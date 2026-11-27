@@ -37,6 +37,24 @@ export function withViewCore(client, { workers = 1, fetch: fetchImpl = globalThi
   const timeline = { workers, documents: opened, synthesized: VIEW_CORE_SYNTHESIZED };
   globalThis.__viewcore = timeline;
   const wrapped = Object.create(client);
+  // A document read by the core exports by it too (`openViewCoreDocument`'s `exports`): its STEP, STL, 3MF and GLB are
+  // made in the page; every other export, and every other document's, is the client's.
+  const served = new Map();
+  if (client.exports) {
+    const own = (request) => served.get(String(request?.source?.doc || ""));
+    const byJob = new Map();
+    wrapped.exports = {
+      epoch: (signal) => client.exports.epoch(signal),
+      async create(request, signal) {
+        const held = own(request);
+        const job = await (held || client.exports).create(request, signal);
+        if (held) byJob.set(job.id, held);
+        return job;
+      },
+      status: (id, sequence, signal) => (byJob.get(id) || client.exports).status(id, sequence, signal),
+      fileUrl: (id) => (byJob.get(id) || client.exports).fileUrl(id),
+    };
+  }
   wrapped.engineDocument = async (file, options = {}) => {
     const { signal } = options;
     const assets = await packaged();
@@ -57,14 +75,20 @@ export function withViewCore(client, { workers = 1, fetch: fetchImpl = globalThi
     }
     const bytes = new Uint8Array(await source.arrayBuffer());
     const fetchedAt = performance.now();
-    const served = openViewCoreDocument({
+    const opening = openViewCoreDocument({
       bytes, url: envelope.api, workerUrl: assets.worker, wasmUrl: assets.wasm, workers,
       document: { id: envelope.id, name: envelope.name, version: envelope.version, path: envelope.id },
-      look: assets.look || {}, fallback: fetchImpl,
+      look: assets.look || {}, fallback: fetchImpl, exports: client.exports || null,
     });
-    opened.push({ file, id: envelope.id, bytes: bytes.byteLength, startedAt: started, sourceAt: fetchedAt, stats: served.fetch.stats });
-    signal?.addEventListener("abort", () => served.fetch.dispose(), { once: true });
-    return { doc: envelope.id, kind: "xbf", url: envelope.api, fetch: served.fetch, final: true };
+    opened.push({ file, id: envelope.id, bytes: bytes.byteLength, startedAt: started, sourceAt: fetchedAt, stats: opening.fetch.stats });
+    // Its exports, asked by the document's id or the file's path: the core's (a DXF, the engine's).
+    for (const name of new Set([String(envelope.id), String(file)])) served.set(name, opening.exports);
+    signal?.addEventListener("abort", () => {
+      opening.fetch.dispose();
+      opening.exports.dispose();
+      for (const name of new Set([String(envelope.id), String(file)])) served.delete(name);
+    }, { once: true });
+    return { doc: envelope.id, kind: "xbf", url: envelope.api, fetch: opening.fetch, final: true };
   };
   return wrapped;
 }

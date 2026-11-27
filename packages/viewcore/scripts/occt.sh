@@ -14,14 +14,18 @@ EMSDK_DIR=$1 OCCT_SRC=$2 BUILD_DIR=$3 INSTALL_DIR=$4
 source "$EMSDK_DIR/emsdk_env.sh" >/dev/null
 # `-include mutex`: OCCT 8.0.1 uses std::lock_guard in NCollection_IncAllocator.cxx without including <mutex>,
 # which Emscripten 7's libc++ no longer pulls in through <shared_mutex>; forced here so OCCT's source stays as released.
-FLAGS="-fwasm-exceptions"
+# `-UOCC_CONVERT_SIGNALS`: OCCT's CMake defines it, which turns each OCC_CATCH_SIGNALS into a setjmp inside a try;
+# Emscripten 7.0.1's LLVM writes invalid wasm for some such functions (the STEP writer's path:
+# ShapeUpgrade_ShapeDivide::Perform and others: "popping from empty stack"). A wasm module has no signals to convert,
+# so nothing is lost; OCCT's own exceptions are C++ exceptions either way.
+FLAGS="-fwasm-exceptions -UOCC_CONVERT_SIGNALS"
 CXX_FLAGS="$FLAGS -include mutex"
 emcmake cmake -S "$OCCT_SRC" -B "$BUILD_DIR" -G "Unix Makefiles" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="$CXX_FLAGS" -DCMAKE_C_FLAGS="$FLAGS" \
   -DBUILD_LIBRARY_TYPE=Static -DINSTALL_DIR="$INSTALL_DIR" \
   -DBUILD_MODULE_FoundationClasses=ON -DBUILD_MODULE_ModelingData=OFF -DBUILD_MODULE_ModelingAlgorithms=OFF \
   -DBUILD_MODULE_Visualization=OFF -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF \
-  -DBUILD_MODULE_Draw=OFF -DBUILD_ADDITIONAL_TOOLKITS="TKBinXCAF TKRWMesh" \
+  -DBUILD_MODULE_Draw=OFF -DBUILD_ADDITIONAL_TOOLKITS="TKBinXCAF TKRWMesh TKDESTEP" \
   -DUSE_FREETYPE=OFF -DUSE_RAPIDJSON=OFF -DUSE_DRACO=OFF -DUSE_TBB=OFF -DUSE_FREEIMAGE=OFF -DUSE_OPENVR=OFF \
   -DUSE_FFMPEG=OFF -DUSE_VTK=OFF -DUSE_TK=OFF -DUSE_EIGEN=OFF -DUSE_JEMALLOC=OFF \
   -DBUILD_DOC_Overview=OFF -DBUILD_GTEST=OFF

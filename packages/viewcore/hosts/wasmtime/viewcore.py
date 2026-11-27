@@ -147,6 +147,10 @@ class Core:
         return self.memory.data_len(self.store)
 
 
+# The exports the core writes, by cad's kind name (``export.KINDS``), each its vc_* function.
+EXPORTS = {"step": "vc_step", "stl": "vc_stl", "threemf": "vc_3mf", "glb": "vc_glb"}
+
+
 class Doc:
     def __init__(self, core: Core, handle: int):
         self.core, self.handle = core, handle
@@ -156,6 +160,11 @@ class Doc:
 
     def structure(self) -> dict:
         return self._j("vc_structure", "vc_structure")
+
+    def export(self, kind: str) -> bytes:
+        """The whole document as a file, as ``cad export`` writes it: ``kind`` one of ``EXPORTS``."""
+        name = EXPORTS[kind]
+        return self.core._result(name, name, self.handle)
 
     def shape_bytes(self, part: int) -> bytes:
         return self.core._result("vc_shape_bytes", "vc_shape_bytes", self.handle, part)

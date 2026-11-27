@@ -13,6 +13,7 @@
 
 #include "../include/viewcore.h"
 #include "core.hpp"
+#include "exports.hpp"
 #include "profile.hpp"
 
 namespace {
@@ -123,11 +124,8 @@ uint8_t* vc_shape_bytes(int32_t doc, int32_t index, uint32_t* out_len) {
 uint8_t* vc_mesh(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
     VC_SCOPE(mesh_rest);
-    vc::Part& p = part(doc, index);
-    std::set<int> unmeshed;
-    std::string body = vc::mesh_bytes(p.bytes, &unmeshed);
-    p.unmeshed = unmeshed;  // what the part's whole table checks
-    return result(body, out_len);
+    // Kept on the part: its exports read it again, and its whole table checks the faces it left unmeshed.
+    return result(vc::part_mesh(part(doc, index)), out_len);
   });
 }
 
@@ -173,6 +171,22 @@ uint8_t* vc_measure(int32_t doc, int32_t index, uint32_t* out_len) {
 #endif
     return result(out.out, out_len);
   });
+}
+
+uint8_t* vc_step(int32_t doc, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::step_bytes(document(doc)), out_len); });
+}
+
+uint8_t* vc_stl(int32_t doc, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::stl_bytes(document(doc)), out_len); });
+}
+
+uint8_t* vc_3mf(int32_t doc, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::threemf_bytes(document(doc)), out_len); });
+}
+
+uint8_t* vc_glb(int32_t doc, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::glb_bytes(document(doc)), out_len); });
 }
 
 }  // extern "C"

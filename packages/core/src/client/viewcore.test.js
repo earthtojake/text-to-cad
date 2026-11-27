@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fetchXbfElementFacts, fetchXbfPartGroups } from '../lib/xbf/xbfDocument.js';
-import { createViewCoreFetch, VIEW_CORE_TESSELLATION, viewCoreStructure } from './viewcore.js';
+import { createViewCoreExports, createViewCoreFetch, VIEW_CORE_TESSELLATION, viewCoreStructure } from './viewcore.js';
 
 // A core made here, answering as the view core's Worker does (`hosts/web/worker.js`): an assembly of a plate and two
 // pegs of one geometry, by the prototypes' indices. A part's "mesh" is no XBM2 buffer: this reads routes, it draws nothing.
@@ -108,4 +108,36 @@ test('the look is read from its static copies where it has them', async () => {
   assert.deepEqual(read, ['/vc/look.json', '/vc/env.hdr']);
   // No fallback: a route it does not answer is a 404, never a request elsewhere.
   assert.equal((await fetch('http://cad.local/api/v1/documents/other/version')).status, 404);
+});
+
+test('a document read by the core exports by the core, the .xbf as itself, and anything else by the engine', async () => {
+  const asked = [];
+  const core = { async call(op, args) { asked.push([op, args]); return { result: new TextEncoder().encode(`${args.format} file`), ms: 1 }; } };
+  const engine = {
+    epoch: async () => 'engine-epoch',
+    create: async (request) => ({ id: 'engine-1', state: 'queued', requestId: request.requestId }),
+    status: async (id) => ({ id, state: 'ready' }),
+    fileUrl: (id) => `/api/v1/exports/${id}/file`,
+  };
+  const exports = createViewCoreExports({ core, bytes: new Uint8Array([1, 2, 3]), fallback: engine });
+  const request = (format) => ({ requestId: `request-${format}-0123456789`, epoch: 'engine-epoch', source: { doc: 'd1', revision: 'v1' }, format });
+  const step = await exports.create(request('step'));
+  assert.deepEqual([step.state, step.filename, step.bytes], ['ready', 'export.step', 9]);
+  assert.deepEqual(asked, [['exportBytes', { format: 'step' }]]);
+  assert.equal(await (await fetch(exports.fileUrl(step.id))).text(), 'step file');
+  assert.equal((await exports.status(step.id)).state, 'ready');
+  const glb = await exports.create(request('threemf'));
+  assert.equal(glb.filename, 'export.3mf');
+  // The .xbf is the bytes the page read; nothing is asked of the core for it.
+  const xbf = await exports.create(request('original'));
+  assert.deepEqual([...new Uint8Array(await (await fetch(exports.fileUrl(xbf.id))).arrayBuffer())], [1, 2, 3]);
+  assert.equal(asked.length, 2);
+  // A DXF the core does not write is the engine's job, read from the engine.
+  const dxf = await exports.create(request('dxf'));
+  assert.equal(dxf.id, 'engine-1');
+  assert.equal(exports.fileUrl('engine-1'), '/api/v1/exports/engine-1/file');
+  assert.equal(await exports.epoch(), 'engine-epoch');
+  exports.dispose();
+  // With no engine, a format the core does not write is refused.
+  await assert.rejects(createViewCoreExports({ core }).create(request('dxf')), /writes no dxf/);
 });

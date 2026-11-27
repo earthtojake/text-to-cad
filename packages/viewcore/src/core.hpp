@@ -22,6 +22,7 @@
 #include <TopoDS_Shape.hxx>
 #include <TDF_Label.hxx>
 #include <TCollection_ExtendedString.hxx>
+#include <TDocStd_Document.hxx>
 
 #include "json.hpp"
 #include "value.hpp"
@@ -109,6 +110,8 @@ struct Part {
   std::string bytes;  // shape_bytes(shape), made once on open (the key is its digest)
   std::unique_ptr<Topology> topology;  // made on the first pick (or whole-part answer)
   std::set<int> unmeshed;              // the faces its mesh left without triangles, once meshed
+  std::string mesh;                    // its XBM2 buffer, once an export or vc_mesh made it (part_mesh)
+  bool meshed = false;
 };
 
 struct Instance {
@@ -122,6 +125,7 @@ struct Instance {
 using Occurrence = std::vector<int>;
 
 struct Document {
+  occ::handle<TDocStd_Document> xcaf;  // the document as read: what an export writes from
   std::string name;  // the tree root's name (one root), else the name the host gave (the file's stem)
   Value tree;
   std::vector<std::unique_ptr<Part>> parts;
@@ -130,6 +134,10 @@ struct Document {
   std::vector<std::pair<std::string, double>> animations;  // document._animations_listed: name, duration
   Value parameters;                                         // parameters.recorded: a list
   std::optional<Value> closure;                             // the build closure the file holds, if any
+  // For the GLB (glb.cpp): each occurrence's placement in its assembly's frame (document.Loaded.locals, 4x4
+  // column-major), and the animations record's text as the file holds it.
+  std::map<Occurrence, std::array<double, 16>> locals;
+  std::string animations_record;
 };
 
 // `stem` names the document where its file does not (Python's path.stem): an unnamed root, several roots.
@@ -140,6 +148,13 @@ std::optional<std::string> kinematics(const TDF_Label& main, const std::map<std:
                                       const std::vector<Occurrence>& instance_paths,
                                       const std::map<Occurrence, std::array<double, 16>>& worlds);
 std::string utf8(const TCollection_ExtendedString& text);
+
+// step.cpp: the document's STEP, as cad's export/step.py writes it.
+std::string step_bytes(Document& doc);
+// exports.cpp: the mesh exports, each the whole document as cad's export/*.py writes it.
+std::string stl_bytes(Document& doc);
+std::string threemf_bytes(Document& doc);
+std::string glb_bytes(Document& doc);  // glb.cpp
 std::string structure(const Document& doc);
 
 }  // namespace vc

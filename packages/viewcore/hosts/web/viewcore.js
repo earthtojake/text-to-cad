@@ -175,6 +175,9 @@ export class Core {
 
 const json = (u8) => JSON.parse(new TextDecoder().decode(u8));
 
+/** The exports the core writes, by the viewer's format name, each its vc_* function. */
+export const EXPORTS = Object.freeze({ step: "vc_step", stl: "vc_stl", threemf: "vc_3mf", glb: "vc_glb" });
+
 export class Doc {
   constructor(core, handle) { this.core = core; this.handle = handle; }
   structureBytes() { return this.core.result("vc_structure", this.handle); }
@@ -191,5 +194,11 @@ export class Doc {
   elements(part) { return json(this.elementsBytes(part)); }
   measureBytes(part) { return this.core.result("vc_measure", this.handle, part); }
   measure(part) { return json(this.measureBytes(part)); }
+  /** The whole document as a file, as `cad export` writes it: `format` one of EXPORTS' keys. */
+  exportBytes(format) {
+    const fn = EXPORTS[format];
+    if (!fn) throw new ViewCoreError(`the core exports no ${format}`);
+    return this.core.result(fn, this.handle);
+  }
   close() { if (this.handle) { this.core.x.vc_close(this.handle); this.handle = 0; } }
 }

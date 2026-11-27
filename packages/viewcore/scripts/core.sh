@@ -7,11 +7,13 @@
 #   DEFINE...         measurement builds only (src/profile.hpp): -DVC_PROFILE, which also exports vc_profile, and the
 #                     variants' switches (-DVC_SHARED_PART, -DVC_NO_CHECK, ...). None is in the default build.
 # The flags are OCCT's own (occt.sh): wasm exceptions in the legacy encoding, which Emscripten 7's LLVM compiles
-# OCCT with (it crashes asked for exnref), the same defines, no threads, no SIMD. The linked module is a standalone
+# OCCT with (it crashes asked for exnref), the same defines (no signal conversion), no threads, no SIMD. The linked module is a standalone
 # reactor, PURE_WASI so that it imports WASI alone (src/wasi_only.cpp answers the few non-WASI calls OCCT's linked
 # code names), exporting every vc_* function and its memory; Binaryen then translates its exceptions to the standard
 # exnref encoding, which wasmtime and current browsers load. Binaryen is given the module's features by name: with
-# -all it would also write proposals' encodings (compact imports) that wasmtime does not parse.
+# -all it would also write proposals' encodings (compact imports) that wasmtime does not parse. zlib (the 3MF's deflate)
+# is Emscripten's port, which Emscripten downloads; where it cannot, ZLIB_SRC=DIR names a checkout of
+# github.com/madler/zlib (the port's tag, v1.4 for Emscripten 7.0.1), whose sources are compiled here instead.
 set -euo pipefail
 EMSDK_DIR=$1 OCCT=$2 NAME=${3:-viewcore.wasm}
 DEFINES=("${@:4}")
@@ -21,7 +23,15 @@ OUT="$HERE/dist"
 OBJ="$OUT/obj-${NAME%.wasm}"
 mkdir -p "$OBJ"
 
-CXXFLAGS=(-std=c++17 -O2 -fwasm-exceptions -include mutex -DOCC_CONVERT_SIGNALS -DNo_Exception -DOCCT_NO_PLUGINS
+ZLIB=(-sUSE_ZLIB=1)
+if [ -n "${ZLIB_SRC:-}" ]; then
+  ZLIB=(-I"$ZLIB_SRC")
+  mkdir -p "$OBJ/zlib"
+  for source in adler32 crc32 deflate trees zutil; do
+    emcc -O2 -c "$ZLIB_SRC/$source.c" -o "$OBJ/zlib/$source.o"
+  done
+fi
+CXXFLAGS=(-std=c++17 -O2 -ffp-contract=off -fwasm-exceptions -include mutex -DNo_Exception -DOCCT_NO_PLUGINS "${ZLIB[@]}"
           -I"$OCCT/include/opencascade" -Wall -Wno-deprecated-declarations ${DEFINES[@]+"${DEFINES[@]}"})
 pids=()
 for source in "$HERE"/src/*.cpp; do
@@ -29,11 +39,13 @@ for source in "$HERE"/src/*.cpp; do
 done
 for pid in "${pids[@]}"; do wait "$pid"; done
 
-EXPORTS=$(grep -o 'vc_[a-z_]*(' "$HERE/include/viewcore.h" | tr -d '(' | sort -u | sed 's/^/_/' | paste -sd, -)
+EXPORTS=$(grep -o 'vc_[a-z0-9_]*(' "$HERE/include/viewcore.h" | tr -d '(' | sort -u | sed 's/^/_/' | paste -sd, -)
 case " ${DEFINES[*]-} " in *" -DVC_PROFILE "*) EXPORTS="$EXPORTS,_vc_profile" ;; esac
-LIBS=(TKBinXCAF TKXCAF TKVCAF TKV3d TKService TKBin TKBinL TKCAF TKLCAF TKCDF TKRWMesh TKDE TKMesh TKHLR TKBO TKPrim
+LIBS=(TKDESTEP TKXSBase TKBinXCAF TKXCAF TKVCAF TKV3d TKService TKBin TKBinL TKCAF TKLCAF TKCDF TKRWMesh TKDE TKMesh TKHLR TKBO TKPrim
       TKShHealing TKTopAlgo TKGeomAlgo TKBRep TKGeomBase TKG3d TKG2d TKMath TKernel)
-em++ -O2 -fwasm-exceptions -sSTANDALONE_WASM -sPURE_WASI --no-entry -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB \
+LINK_ZLIB=(-sUSE_ZLIB=1)
+[ -n "${ZLIB_SRC:-}" ] && LINK_ZLIB=("$OBJ"/zlib/*.o)
+em++ -O2 -fwasm-exceptions "${LINK_ZLIB[@]}" -sSTANDALONE_WASM -sPURE_WASI --no-entry -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=4GB \
   -sSTACK_SIZE=8MB -sEXPORTED_FUNCTIONS="$EXPORTS" \
   "$OBJ"/*.o -L"$OCCT/lib" "${LIBS[@]/#/-l}" -o "$OUT/${NAME%.wasm}.legacy.wasm"
 FEATURES=(--enable-exception-handling --enable-reference-types --enable-bulk-memory --enable-bulk-memory-opt

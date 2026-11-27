@@ -13,14 +13,16 @@ viewer or cad.fun uses it.
 In the core: reading an `.xbf` into the structure the engine serves (parts, their geometry keys, element names and
 colours, materials, frames and declarations, placements, the tree, the mechanism as `kinematics`, animations,
 parameters, the build closure), meshing a part by cad's rule into the XBM2 buffer, one element's facts and a
-part's groups (what a pick asks), a part's whole table (what a view bundle holds), a part's measures. Later:
-exports (STEP, GLB, STL, 3MF).
+part's groups (what a pick asks), a part's whole table (what a view bundle holds), a part's measures, and the whole
+document exported as `cad export` writes it: STEP (OCCT's STEP writer, then cad's settling of its bytes), STL, 3MF and
+GLB (`src/exports.cpp`, `src/step.cpp`, `src/glb.cpp`). The viewer's Export asks the core for them behind
+`?viewcore=N`; a DXF is still the engine's.
 
 In cad's Python, as now: building and rebuilding models (build123d), writing the `.xbf`, the server and its
 caches, sharing, the command line, and every integration (KiCad, MuJoCo, FEA, DFM, renders).
 
 The rules are cad's: `packages/cad/src/cad/engine/mesh.py`, `mesh_format.py`, `document.py`, `mechanism.py` (read and
-block) and `kernel/bounds.py` are the reference until the core replaces them. `include/viewcore.h` is the ABI.
+block), `kernel/bounds.py` and the writers in `export/` are the reference until the core replaces them. `include/viewcore.h` is the ABI.
 
 ## Layout
 
@@ -39,6 +41,7 @@ block) and `kernel/bounds.py` are the reference until the core replaces them. `i
 The core's code is MIT, as the repository. The module links OCCT 8.0.1, which is under the GNU LGPL 2.1 with the
 Open CASCADE exception 1.0: whatever ships the module also ships those two texts (`licenses/`, OCCT's own files at tag
 `V8_0_1`) and a notice that it uses Open CASCADE Technology, and offers OCCT's source (tag `V8_0_1`, unchanged) with
-the build scripts here, from where the module is offered. `scripts/occt.sh` changes no OCCT source. `scripts/core.sh`
+the build scripts here, from where the module is offered. It also links zlib (Emscripten's port, for the 3MF's
+deflate), under the zlib licence, which asks nothing of a binary. `scripts/occt.sh` changes no OCCT source. `scripts/core.sh`
 puts the texts beside the module in `dist/`; the viewer's build ships them with the notice beside it in `viewcore/`
 (`apps/web/scripts/viewcoreAssets.mjs`), and refuses to ship the module without them.

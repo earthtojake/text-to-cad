@@ -73,6 +73,23 @@ uint8_t *vc_elements(int32_t doc, int32_t part, uint32_t *out_len);
 /* A part measured as a whole, JSON: mesh.measured(bytes). */
 uint8_t *vc_measure(int32_t doc, int32_t part, uint32_t *out_len);
 
+/* Exports: a file of the whole document, as `cad export FILE.xbf OUT` writes it (cad/engine/export). */
+
+/* The document's STEP (AP242), export/step.py's bytes: names, colours, materials and element names; a pinned time
+ * stamp, so the same document writes the same bytes. */
+uint8_t *vc_step(int32_t doc, uint32_t *out_len);
+
+/* The document's binary STL, export/stl.py's bytes: every placed triangle at cad's tessellation, in millimetres. */
+uint8_t *vc_stl(int32_t doc, uint32_t *out_len);
+
+/* The document's 3MF, export/threemf.py's: an object per part (its vertices welded), a build item per placement, its
+ * looks as base materials, in a zip deflated by zlib. */
+uint8_t *vc_3mf(int32_t doc, uint32_t *out_len);
+
+/* The document's GLB, export/glb.py's: a mesh per part, its looks as glTF materials, the assembly as nodes, every
+ * configuration sequence and animation as a glTF animation. */
+uint8_t *vc_glb(int32_t doc, uint32_t *out_len);
+
 #ifdef __cplusplus
 }
 #endif

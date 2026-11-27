@@ -390,6 +390,7 @@ class Walker {
   std::vector<Occurrence> instance_paths;
   std::map<Occurrence, std::array<double, 16>> worlds;
   std::map<std::string, Occurrence> occurrences;
+  std::map<Occurrence, TopLoc_Location> locals;  // document.Loaded.locals
 
   explicit Walker(Document& d) : doc(d) {}
 
@@ -431,6 +432,7 @@ class Walker {
         child_path.push_back(child_name);
         Occurrence child = occurrence;
         child.push_back(at - 1);
+        locals[child] = XCAFDoc_ShapeTool::GetLocation(component);
         std::vector<std::string> child_entries = entries;
         child_entries.push_back(entry_of(component));
         list.items.push_back(visit(referred, placed, child_path, child_color, child_name, child, child_entries, inner));
@@ -450,6 +452,7 @@ class Walker {
       index = found->second;
     }
     TopLoc_Location placed = location.Multiplied(shape.Location());
+    if (auto own = locals.find(occurrence); own != locals.end()) own->second = own->second.Multiplied(shape.Location());
     Instance instance;
     instance.prototype = index;
     for (size_t i = 0; i < path.size(); ++i) instance.path += (i ? "/" : "") + path[i];
@@ -520,6 +523,7 @@ std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size, const std::
                                (status >= 0 && status < 23 ? names[status] : std::to_string(status).c_str()));
   }
   auto doc = std::make_unique<Document>();
+  doc->xcaf = xdoc;
   const std::string stem = given_stem.empty() ? "document" : given_stem;
   Walker walker(*doc);
   occ::handle<XCAFDoc_ShapeTool> shapes = XCAFDoc_DocumentTool::ShapeTool(xdoc->Main());
@@ -551,7 +555,9 @@ std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size, const std::
   // a later row of a name in the first one's place), the parameters (parameters.recorded: each its _RECORDED
   // fields, a row with no string name left out; text that is no list is none).
   if (auto text = label_text(main, CLOSURE_GUID); text && !text->empty()) doc->closure = Value::parse(*text);
+  for (const auto& [occurrence, location] : walker.locals) doc->locals[occurrence] = matrix_of(location);
   if (auto text = label_text(main, ANIMATIONS_GUID); text && !text->empty()) {
+    doc->animations_record = *text;
     for (const Value& row : Value::parse(*text).items) {
       const Value* name = row.get("name");
       const Value* duration = row.get("duration");

@@ -305,12 +305,66 @@ export function createViewCoreFetch({ core, url, bytes, document = {}, look = {}
   return viewCoreFetch;
 }
 
+/** The formats the core writes a document as (`vc_step`, `vc_stl`, `vc_3mf`, `vc_glb`), by the viewer's names. */
+export const VIEW_CORE_EXPORTS = Object.freeze(['step', 'stl', 'threemf', 'glb']);
+const EXPORT_SUFFIX = Object.freeze({ step: '.step', stl: '.stl', threemf: '.3mf', glb: '.glb', xbf: '.xbf', original: '.xbf' });
+const EXPORT_TYPE = Object.freeze({ step: 'model/step', stl: 'model/stl', threemf: 'model/3mf', glb: 'model/gltf-binary',
+  xbf: 'application/octet-stream', original: 'application/octet-stream' });
+
+/**
+ * A document's exports made by the core in the page (the `ExportService` the viewer's Export asks), as the engine's
+ * export route makes them: a STEP, an STL, a 3MF or a GLB of the whole document written by the core, and the `.xbf`
+ * itself (`xbf`, `original`). Each job is ready when it is made: its file a blob of this page, named `export<suffix>`
+ * as the engine names a job's file. Any other format is `fallback`'s (the engine's service), where there is one.
+ * @param {{ call: Function }} options.core  `connectViewCoreWorkers`' answer.
+ * @param {Uint8Array} [options.bytes]  The `.xbf`'s bytes: what `xbf` and `original` download.
+ * @param {import('./types.js').ExportService | null} [options.fallback]
+ */
+export function createViewCoreExports({ core, bytes = null, fallback = null }) {
+  const files = new Map();
+  let next = 1;
+  const stamp = () => Date.now();
+  return {
+    // The page's own: no server restarts under it.
+    epoch: async (signal) => (fallback ? fallback.epoch(signal) : 'view-core'),
+    async create(request, signal) {
+      const format = request?.format;
+      const own = VIEW_CORE_EXPORTS.includes(format) || ((format === 'xbf' || format === 'original') && bytes);
+      if (!own) {
+        if (fallback) return fallback.create(request, signal);
+        throw Object.assign(new Error(`the view core writes no ${format}`), { status: 400 });
+      }
+      const made = VIEW_CORE_EXPORTS.includes(format)
+        ? (await core.call('exportBytes', { format })).result
+        : bytes;
+      if (signal?.aborted) throw signal.reason;
+      const id = `core-${next++}`;
+      const url = URL.createObjectURL(new Blob([made], { type: EXPORT_TYPE[format] }));
+      const at = stamp();
+      const job = { id, requestId: request.requestId, epoch: request.epoch, filename: `export${EXPORT_SUFFIX[format]}`,
+        state: 'ready', stage: 'ready', sequence: 1, createdAt: at, finishedAt: at, expiresAt: 0, bytes: made.byteLength };
+      files.set(id, { job, url });
+      return job;
+    },
+    async status(id, sequence, signal) {
+      const held = files.get(id);
+      if (held) return held.job;
+      if (fallback) return fallback.status(id, sequence, signal);
+      throw Object.assign(new Error(`no export ${id}`), { status: 404 });
+    },
+    fileUrl: (id) => files.get(id)?.url ?? fallback?.fileUrl(id) ?? '',
+    /** Each export's file let go. */
+    dispose() { for (const { url } of files.values()) URL.revokeObjectURL(url); files.clear(); },
+  };
+}
+
 /**
  * Open an `.xbf`'s bytes in the core (`workers` Workers) and answer where the page reads it, as a CAD client's
- * `engineDocument` does: `{ doc, kind, url, fetch, final: true }`. The document as it stands: no engine is
- * waited on for a next version of it.
+ * `engineDocument` does: `{ doc, kind, url, fetch, final: true }`, with its `exports` (`createViewCoreExports`). The
+ * document as it stands: no engine is waited on for a next version of it.
  */
-export function openViewCoreDocument({ bytes, url, workerUrl, wasmUrl, workers = 1, document = {}, look = {}, fallback = null, Worker: WorkerImpl }) {
+export function openViewCoreDocument({ bytes, url, workerUrl, wasmUrl, workers = 1, document = {}, look = {}, fallback = null,
+  exports: otherExports = null, Worker: WorkerImpl }) {
   const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   // The version is worked out before the bytes go to the workers (the last one takes them).
   const held = source.slice();
@@ -324,5 +378,7 @@ export function openViewCoreDocument({ bytes, url, workerUrl, wasmUrl, workers =
   core.compileMs.then(ms => { fetch.stats.compileMs = Math.round(ms); }, () => {});
   // Where each worker is (created, loaded, init, open, ready): what a page that waits says it waits on.
   Object.defineProperty(fetch.stats, 'phases', { enumerable: true, get: () => core.workers.map(state => state.phase) });
-  return { doc: document.id || '', kind: 'xbf', url, fetch, final: true, core };
+  // Its exports: what the core writes made here, any other the given service's (`otherExports`, the engine's).
+  const exports = createViewCoreExports({ core, bytes: held, fallback: otherExports });
+  return { doc: document.id || '', kind: 'xbf', url, fetch, final: true, core, exports };
 }

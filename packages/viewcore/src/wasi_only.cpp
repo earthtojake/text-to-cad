@@ -4,6 +4,7 @@
 #include <emscripten/syscalls.h>
 
 #include <cerrno>
+#include <netdb.h>
 
 extern "C" {
 
@@ -15,5 +16,8 @@ int __syscall_getdents64(int, void*, size_t) { return -ENOSYS; }
 // Image_AlienPixMap (a browser's preloaded image) and Standard_StackTrace (a JavaScript call stack).
 char* emscripten_get_preloaded_image_data(const char*, int*, int*) { return nullptr; }
 int emscripten_get_callstack(int, char*, int) { return 0; }
+
+// OSD_Host (the machine's address, which the STEP writer's header never asks for here).
+int getaddrinfo(const char*, const char*, const struct addrinfo*, struct addrinfo**) { return EAI_FAIL; }
 
 }

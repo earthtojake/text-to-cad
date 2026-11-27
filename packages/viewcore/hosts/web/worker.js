@@ -11,6 +11,7 @@
 //   structureBytes|shapeBytes|mesh|groupsBytes|elementsBytes|measureBytes  { doc, part } -> Uint8Array
 //   factBytes { doc, part, kind, ordinal } -> Uint8Array
 //   structure|groups|elements|measure|fact -> parsed JSON (same args as the *Bytes forms)
+//   exportBytes { doc, format }          -> Uint8Array: the document as a file (format: step, stl, threemf, glb)
 //   close  { doc }
 //   memory {}                            -> { memoryBytes }
 // `ms` is the time the worker spent in the call. Once its handler is set the worker says so, once: { ready: true }
@@ -21,7 +22,7 @@ let core = null;
 const docs = new Map();
 let next = 1;
 
-const BINARY = new Set(["structureBytes", "shapeBytes", "mesh", "groupsBytes", "elementsBytes", "measureBytes", "factBytes"]);
+const BINARY = new Set(["exportBytes", "structureBytes", "shapeBytes", "mesh", "groupsBytes", "elementsBytes", "measureBytes", "factBytes"]);
 const JSONOPS = new Set(["structure", "groups", "elements", "measure", "fact"]);
 
 async function handle(m) {
@@ -44,7 +45,8 @@ async function handle(m) {
       if (!doc) throw new Error("no such doc " + m.doc);
       if (BINARY.has(m.op) || JSONOPS.has(m.op)) {
         const args = m.op === "structure" || m.op === "structureBytes" ? [] :
-          m.op === "fact" || m.op === "factBytes" ? [m.part, m.kind, m.ordinal] : [m.part];
+          m.op === "fact" || m.op === "factBytes" ? [m.part, m.kind, m.ordinal] :
+          m.op === "exportBytes" ? [m.format] : [m.part];
         return doc[m.op](...args);
       }
       throw new Error("unknown op " + m.op);
