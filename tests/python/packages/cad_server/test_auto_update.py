@@ -1747,7 +1747,8 @@ class WorkerTest(unittest.TestCase):
         # Elsewhere a refused file is no process's doing: one run.
         self.installed, self.serving = "0.1.0", "0.1.0"
         tried.clear()
-        found = helper.switch({**self.told, "spare": []}, refused, helper.Log(None), system=FakeWindows({}))
+        with mock.patch.object(helper, "WINDOWS", False):
+            found = helper.switch({**self.told, "spare": []}, refused, helper.Log(None), system=FakeWindows({}))
         self.assertEqual((found["cause"], len(tried)), ("denied", 1))
 
     def test_where_the_win32_api_cannot_list_the_processes_powershell_does(self) -> None:
