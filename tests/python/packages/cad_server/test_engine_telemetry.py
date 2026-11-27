@@ -644,7 +644,11 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(outcomes.count(("stl", "ok")), 2, "both exports by id were counted")
         if drawn:
             self.assertTrue(any(counts.get("snapshots") for counts in counted), "the snapshot by id was counted")
-        # What the sender sends: the spool taken into a batch, kept beside the settings when nothing answers.
+        # What the sender sends: the spool taken into a batch, kept beside the settings when nothing answers. The
+        # engine stopped first, as in the test above: a recorder of its takes the kept file aside while it sends
+        # (``Recorder.send_kept``), so a read of that file beside a live engine may find none.
+        stopped = self.run_in("-m", "cad_server.engine", "stop")
+        self.assertEqual(stopped.returncode, 0, stopped.stderr)
         env = {**self.env, "CAD_API_URL": "http://127.0.0.1:9"}
         sent = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"], env=env,
                               capture_output=True, text=True, timeout=120)
