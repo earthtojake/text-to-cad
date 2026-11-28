@@ -20,8 +20,9 @@ sentence and never a model's own words; ``done`` of ``total`` counts the stage's
 has any (``total`` null where they cannot be counted: a build's bodies, whose ``done`` still
 counts), and ``elapsedMs`` counts from the job's start. A stage opens with a frame of its own; the
 frames a stage says as its count moves (a body done, a part collected or measured) come at least
-``INTERVAL`` apart, the latest held one sent when the interval is up (or with the next frame), so
-a thousand small steps send a frame an interval and a job's last state is always its last frame.
+``INTERVAL`` apart, the latest held one sent when the interval is up, so a thousand small steps send
+a frame an interval and a job's last state is always its last frame (a Python that starts no thread,
+``places.THREADS``, holds none: every frame is sent as it is said).
 The end of a job is no stage: it is the job's answer on the same channel (a build's report, the
 page's ``building`` null, the verb's ``wrote`` line, an operation's ``succeeded``).
 
@@ -151,9 +152,12 @@ class Progress:
         if self.closed:
             return
         now = time.monotonic()
-        if not force and now - self.sent < INTERVAL:
+        # A frame is held only where a thread can send it when the interval is up (``places.THREADS``): held with
+        # none, the frame before a long step would wait for the step's end, and the job's last frame would not be
+        # where the job is.
+        if not force and THREADS and now - self.sent < INTERVAL:
             self.held = True
-            if self.timer is None and THREADS:  # with no thread to send it, a held frame goes with the next one
+            if self.timer is None:
                 self.timer = threading.Timer(INTERVAL - (now - self.sent), self._flush)
                 self.timer.daemon = True
                 self.timer.start()

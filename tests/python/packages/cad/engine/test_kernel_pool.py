@@ -198,21 +198,19 @@ class ThreadlessWorkerTest(unittest.TestCase):
 
 
 class ThreadlessProgressTest(unittest.TestCase):
-    def test_a_held_frame_goes_with_the_next_one_where_no_thread_can_send_it(self) -> None:
+    def test_no_frame_is_held_where_no_thread_could_send_it_when_its_interval_is_up(self) -> None:
+        # A build that says a body's name and then spends a minute in it: the page shows that name, not the one before.
         from cad.engine import progress
 
         sent: list[dict] = []
-        with mock.patch.object(progress, "THREADS", False), mock.patch.object(progress, "INTERVAL", 0.05):
+        with mock.patch.object(progress, "THREADS", False), mock.patch.object(progress, "INTERVAL", 60.0):
             said = progress.Progress(sent.append, script=Path("model.py"))
             said.load()
             first = len(sent)
-            with said.lock:
-                said._emit()  # within the interval: held, and no timer is started for it
-            self.assertEqual((len(sent), said.held, said.timer), (first, True, None))
-            time.sleep(0.08)
-            with said.lock:
-                said._emit()
-            self.assertEqual((len(sent), said.held), (first + 1, False))
+            for _ in range(3):
+                with said.lock:
+                    said._emit()  # well within the interval of the frame before
+            self.assertEqual((len(sent), said.held, said.timer), (first + 3, False, None))
 
 
 if __name__ == "__main__":

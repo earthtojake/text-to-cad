@@ -9,8 +9,8 @@
 //   - the real standard streams, as bytes: the engine's worker protocol (frames on the pipe) passes untouched;
 //   - the real environment, working folder, process id and file times (bootstrap.py puts right what the platform
 //     rounds or invents);
-//   - `sys.path` as CPython makes it: the script's folder (unless -P), PYTHONPATH, then the kernel folder's
-//     site-packages.
+//   - `sys.path` as CPython makes it: the script's folder (unless -P), PYTHONPATH (unless -E or -I), then the
+//     kernel folder's site-packages, its `.pth` files read and `sitecustomize` imported (unless -S).
 //
 // What it cannot be: a Python with threads, child processes or sockets. A program that starts one fails there, as
 // on any Pyodide.
@@ -45,7 +45,8 @@ const made = JSON.parse(fs.readFileSync(path.join(home, "kernel.json"), "utf8"))
 
 // The command line, as CPython reads it.
 const args = process.argv.slice(2);
-const run = { safe: false, unbuffered: false, xoptions: [], kind: null, target: null, argv: [] };
+const run = { safe: false, isolated: false, site: true, unbuffered: false, xoptions: [], kind: null, target: null,
+  argv: [] };
 while (args.length) {
   const arg = args.shift();
   if (arg === "-X") { run.xoptions.push(args.shift() ?? ""); continue; }
@@ -61,9 +62,12 @@ while (args.length) {
   if (arg.startsWith("-") && arg.length > 1) {
     // Single-letter options, which may be written together (-BP).
     for (const letter of arg.slice(1)) {
-      if (letter === "P" || letter === "I") run.safe = true;
+      if (letter === "P") run.safe = true;
+      else if (letter === "I") run.safe = run.isolated = true;
+      else if (letter === "E") run.isolated = true;
+      else if (letter === "S") run.site = false;
       else if (letter === "u") run.unbuffered = true;
-      else if (!"BEsSqOdvb".includes(letter)) refuse(`unknown option -${letter}`);
+      else if (!"BsqOdvb".includes(letter)) refuse(`unknown option -${letter}`);
     }
     continue;
   }
@@ -190,6 +194,8 @@ pyodide.globals.set("_host", pyodide.toPy({
   target: run.target,
   argv: run.argv,
   safe: run.safe,
+  isolated: run.isolated,
+  customize: run.site,
   site,
   mounted: process.platform !== "win32",
   libraries: fs.readdirSync(path.join(home, "lib", `python${made.python}`, "site-packages"))
@@ -197,7 +203,9 @@ pyodide.globals.set("_host", pyodide.toPy({
   deferred: made.deferred ?? [],
 }));
 pyodide.globals.set("_host_files", pyodide.toPy({ stat: realStat, open_stat: openStat, open_path: openPath,
-  umask: (mask) => process.umask(mask) }, { depth: 1 }));
+  umask: (mask) => process.umask(mask),
+  // The folder the process itself stands in, which the system sees (a folder a process stands in is held).
+  chdir: (folder) => { try { process.chdir(folder); return true; } catch { return false; } } }, { depth: 1 }));
 // Beside the standard library's extension modules: on the path already, and a library's module to a build (cad's
 // build forgets a model's own modules between builds, which it tells from libraries' by where their files are).
 const dynload = pyodide.runPython("import sysconfig; sysconfig.get_path('stdlib') + '/lib-dynload'");

@@ -28,7 +28,9 @@ def _files(host, real) -> None:
     them). Only for the real filesystem; a failure is the platform's own, raised as it raises it. What stays the
     platform's: an entry of ``os.scandir`` read without ``os.stat`` (``DirEntry.stat``, ``DirEntry.inode``).
 
-    And the process's mask for the files it makes (``os.umask``), which the platform keeps to itself."""
+    And two things the platform keeps to itself, which the system must see: the process's mask for the files it
+    makes (``os.umask``), and the folder it stands in (``os.chdir``: a worker leaves a project's folder when it is
+    idle, so that the folder is not held)."""
     if not host["mounted"]:
         return
     kept = ("/dev/", "/lib/", "/sys/")
@@ -81,7 +83,15 @@ def _files(host, real) -> None:
     def umask(mask):
         return int(real["umask"](int(mask)))
 
-    os.stat, os.lstat, os.fstat, os.umask = stat_exact, lstat_exact, fstat_exact, umask
+    chdir = os.chdir
+
+    def chdir_real(path):
+        chdir(path)
+        here = os.getcwd()
+        if not (here + "/").startswith(kept):
+            real["chdir"](here)
+
+    os.stat, os.lstat, os.fstat, os.umask, os.chdir = stat_exact, lstat_exact, fstat_exact, umask, chdir_real
 
 
 # --- imports a program may never use ------------------------------------------------------------------------------
@@ -232,18 +242,40 @@ def _libraries(host) -> None:
 
 
 def _path(host) -> None:
-    """``sys.path`` as CPython makes it: the program's folder first (the script's, or the working folder for -m and
-    -c) unless it was started safe (-P), then PYTHONPATH, then the standard library and the installed packages."""
-    listed = [entry for entry in os.environ.get("PYTHONPATH", "").split(":") if entry]
+    """``sys.path`` as CPython makes it: the program's folder first (the script's; the working folder for -m, by
+    its path, and for -c, as the empty entry) unless it was started safe (-P), then PYTHONPATH, then the standard
+    library and the installed packages."""
+    named = [entry for entry in os.environ.get("PYTHONPATH", "").split(":") if entry]
+    listed = [] if host["isolated"] else named  # -E, -I: the environment's path is not this program's
     first: list[str] = []
-    if not host["safe"] and not os.environ.get("PYTHONSAFEPATH"):
-        first = [os.path.dirname(os.path.abspath(host["target"]))] if host["kind"] == "script" else [os.getcwd()]
+    if not host["safe"] and (host["isolated"] or not os.environ.get("PYTHONSAFEPATH")):
+        first = [{"script": os.path.dirname(os.path.abspath(host["target"] or "")), "module": os.getcwd()}
+                 .get(host["kind"], "")]
     # The interpreter started before the real filesystem was there: it put PYTHONPATH and its own first entry on
     # the path already, and remembered that none of those folders existed.
-    rest = [entry for entry in sys.path if entry and entry not in listed]
+    rest = [entry for entry in sys.path if entry and entry not in named]
     sys.path[:] = [*first, *listed, *rest]
     sys.path_importer_cache.clear()
     importlib.invalidate_caches()
+
+
+def _site(host) -> None:
+    """What ``site`` does at a Python's start, which this one's ran before the installed packages and the real
+    filesystem were there: the packages folder's ``.pth`` files read, then ``sitecustomize`` imported where the
+    path holds one. Not with -S."""
+    if not host["customize"]:
+        return
+    import site
+
+    site.addsitedir(host["site"])
+    for name in ("sitecustomize", "usercustomize"):
+        if name in sys.modules:
+            continue
+        try:
+            importlib.import_module(name)
+        except ImportError as error:
+            if error.name != name:
+                raise
 
 
 def main(host, real) -> int:
@@ -259,6 +291,7 @@ def main(host, real) -> int:
                 *host["argv"]]
     _path(host)
     _defer(host)
+    _site(host)
     import runpy
 
     try:
