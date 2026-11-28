@@ -325,7 +325,10 @@ class Documents(HttpLayerTestCase):
         part.unlink()
         # A page that showed it says that file is not there, by its path, not that an id names nothing.
         status, _, body = self.fixture.request("GET", f"/api/v1/documents/{envelope['id']}")
-        self.assertEqual((status, json.loads(body)["path"]), (404, str(part).replace(os.sep, "/")))
+        # The file is said by its name in its folder, which a system may spell two ways (a short name on Windows).
+        said = json.loads(body)["path"]
+        self.assertEqual((status, os.path.basename(said)), (404, "gone.stl"))
+        self.assertTrue(os.path.samefile(os.path.dirname(said), part.parent), said)
         # An id nothing here ever named has none.
         status, _, body = self.fixture.request("GET", "/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ff")
         self.assertEqual((status, "path" in json.loads(body)), (404, False))
