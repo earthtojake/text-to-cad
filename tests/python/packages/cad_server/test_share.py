@@ -239,7 +239,8 @@ class Service:
     (the most a pack may be), ``limited`` (how many requests to answer 429 next, with ``Retry-After: retry_after``),
     ``conflicts`` (how many commits to refuse as if another replaced the manifest meanwhile), ``losing`` (how many
     commits find every pack of their share gone), ``zips`` (a zip to answer for an id in place of the share's) and
-    ``cut`` (how many bytes of a zip to send before the connection closes, its length said whole)."""
+    ``cut`` (how many bytes of a zip, or of a commit's answer, to send before the connection closes, its length
+    said whole)."""
 
     def __init__(self) -> None:
         self.shares: dict[str, dict[str, Any]] = {}
@@ -401,9 +402,19 @@ class Service:
                 share["packs"] = {name: data for name, data in share["packs"].items() if name in kept}
                 expires = datetime(2030, 1, 1, tzinfo=timezone.utc) + timedelta(days=7, seconds=service.commits)
                 share["expires"] = expires.strftime("%Y-%m-%dT%H:%M:%SZ")
-                return self.answer(201 if replaced is None else 200, {
-                    "id": ident, "expires": share["expires"], "files": len(_listed(manifest)),
-                    "bytes": sum(len(share["packs"][name]) + 28 for name in named)})
+                said = {"id": ident, "expires": share["expires"], "files": len(_listed(manifest)),
+                        "bytes": sum(len(share["packs"][name]) + 28 for name in named)}
+                if service.cut is not None:  # the commit's answer: its status and length, then part of it and no more
+                    body = json.dumps(said).encode()
+                    self.send_response(201 if replaced is None else 200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body[:service.cut])
+                    self.wfile.flush()
+                    self.close_connection = True
+                    return None
+                return self.answer(201 if replaced is None else 200, said)
 
             def do_DELETE(self) -> None:  # noqa: N802
                 service.seen.append(("DELETE", self.path, dict(self.headers), time.monotonic()))
@@ -1703,6 +1714,16 @@ class SendTest(unittest.TestCase):
             self.send(share, folder, again.stored)
         self.assertEqual((refused.exception.status, bool(refused.exception.missing)), (409, True))
         self.assertEqual(self.service.commits - commits, 3)
+
+    def test_a_commit_s_answer_cut_off_part_way_is_a_cut_transfer_not_a_refusal(self) -> None:
+        from cad_server import sharing
+
+        folder = _bundle(self.base / "a.view", {"structure.json": b"{}"})
+        self.service.cut = 5  # the 201 and its length, five bytes of its JSON, then the connection closed
+        with self.assertRaises(sharing.Cut) as cut:
+            self.send(self.share(), folder)
+        self.assertRegex(str(cut.exception), r"began to answer, then stopped \(\d+ bytes short\)")
+        self.service.cut = None
 
     def test_a_409_naming_no_pack_commits_again_once(self) -> None:
         from cad_server import sharing

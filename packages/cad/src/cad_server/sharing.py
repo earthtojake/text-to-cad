@@ -1067,7 +1067,10 @@ def _call(method: str, share: Share, path: str, headers: dict[str, str], body: b
                     if into is not None:
                         _streamed(answer, into)
                         return answer.status, None, answer.headers
-                    return answer.status, _answer(answer.read(ANSWER_BYTES)), answer.headers
+                    said = answer.read(ANSWER_BYTES)
+                    if len(said) < ANSWER_BYTES and getattr(answer, "length", None):  # short of the length it said
+                        raise http.client.IncompleteRead(b"", answer.length)
+                    return answer.status, _answer(said), answer.headers
                 except (OSError, http.client.HTTPException) as error:  # the network reached it: the answer stopped
                     if isinstance(error, http.client.IncompleteRead):
                         detail = f"{error.expected} bytes short" if error.expected else "it ended before its last part"
