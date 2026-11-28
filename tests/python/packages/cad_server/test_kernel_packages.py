@@ -31,10 +31,15 @@ class Uv:
     def __init__(self, resolved: str, native: tuple[str, ...] = (), fails: str | None = None) -> None:
         self.resolved, self.native, self.fails = resolved, native, fails
         self.steps: list[list[str]] = []
+        self.constraints: list[str] = []
+        self.asked: list[str] = []
 
     def __call__(self, step: list[str], folder: Path) -> subprocess.CompletedProcess:
         self.steps.append(list(step))
         if step[2] == "compile":
+            self.asked = Path(step[3]).read_text(encoding="utf-8").split()
+            if "--constraint" in step:  # read now: the folder that holds it is gone after
+                self.constraints = Path(step[step.index("--constraint") + 1]).read_text(encoding="utf-8").split()
             if self.fails:
                 return subprocess.CompletedProcess(step, 1, "", f"  x No solution found\n{self.fails}\n")
             return subprocess.CompletedProcess(step, 0, self.resolved, "")
@@ -86,17 +91,42 @@ class KernelPackagesTest(unittest.TestCase):
         self.assertEqual(again.steps, [], "made once")
         self.assertEqual(sorted(path.name for path in folder.parent.iterdir()), [folder.name])
 
-    def test_a_folder_the_script_names_is_built_where_it_stands_beside_what_an_index_holds(self) -> None:
-        uv = Uv("tabulate==0.9.0\n")
-        mine = str(self.root / "mine")
-        folder = self.ensure(uv, "tabulate", mine)
+    def test_a_folder_the_script_names_is_built_where_it_stands_its_dependencies_resolved(self) -> None:
+        mine = self.root / "mine"
+        mine.mkdir()
+        (mine / "pyproject.toml").write_text('[project]\nname = "mine"\ndependencies = ["attrs"]\n', encoding="utf-8")
+        uv = Uv(f"tabulate==0.9.0\nattrs==25.4.0\n{mine}\n")
+        folder = self.ensure(uv, "tabulate", str(mine))
         self.assertEqual([step[2] for step in uv.steps], ["compile", "install", "install"])
-        self.assertIn("--only-binary", uv.steps[1])
-        self.assertEqual((uv.steps[2][-1], "--only-binary" in uv.steps[2]), (mine, False))
-        self.assertTrue((folder / "mine.py").is_file() and (folder / "tabulate.py").is_file())
-        only = Uv("")
-        self.ensure(only, mine + "[extra]")
-        self.assertEqual([step[2] for step in only.steps], ["install"], "nothing of an index's to resolve")
+        self.assertEqual(uv.asked, ["tabulate", str(mine)], "the folder resolved with the rest")
+        self.assertEqual([item for item in uv.steps[1] if "==" in item], ["tabulate==0.9.0", "attrs==25.4.0"],
+                         "its own dependency installed beside it")
+        self.assertEqual((uv.steps[2][-1], "--only-binary" in uv.steps[2], "--no-deps" in uv.steps[2]),
+                         (str(mine), False, True))
+        self.assertTrue((folder / "mine.py").is_file() and (folder / "attrs.py").is_file())
+        # Edited, it is another folder: the program never runs a stale copy.
+        self.assertEqual(self.ensure(Uv(""), "tabulate", str(mine)), folder, "unchanged: the same folder")
+        (mine / "pyproject.toml").write_text('[project]\nname = "mine"\ndependencies = ["attrs", "tabulate"]\n',
+                                             encoding="utf-8")
+        os.utime(mine / "pyproject.toml", ns=(10**18, 10**18))
+        edited = self.ensure(Uv(f"tabulate==0.9.0\nattrs==25.4.0\n{mine}\n"), "tabulate", str(mine))
+        self.assertNotEqual(edited, folder)
+
+    def test_the_resolution_is_held_to_the_versions_the_kernel_folder_carries(self) -> None:
+        uv = Uv("tabulate==0.9.0\n")
+        self.ensure(uv, "tabulate")
+        step = uv.steps[0]
+        held = Path(step[step.index("--constraint") + 1])
+        self.assertEqual(held.name, "constraints.txt")
+        self.assertEqual(uv.constraints, ["build123d==0.13.0", "numpy==2.4.6", "typing-extensions==4.15.0"])
+        with self.assertRaises(base.Refused) as refused:
+            self.ensure(Uv("", fails="  cause: Because mine==0.1 depends on numpy>=2.5 and numpy==2.4.6, we can "
+                                     "conclude that mine==0.1 cannot be used.\n         And because only mine==0.1 is "
+                                     "available, your requirements are unsatisfiable."), "numpy>=2.5")
+        said = str(refused.exception)
+        self.assertRegex(said, r"^the script's own packages do not resolve beside the WebAssembly kernel's own .*: "
+                               r"Because mine==0.1 depends on numpy>=2.5 and numpy==2.4.6")
+        self.assertNotIn("\n", said)
 
     def test_a_package_with_native_code_is_refused_by_name_and_nothing_is_left(self) -> None:
         uv = Uv("ujson==5.11.0\ntabulate==0.9.0\n", native=("ujson",))

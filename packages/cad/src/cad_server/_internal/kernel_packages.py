@@ -3,10 +3,12 @@
 A program ``cad run`` runs on the WebAssembly kernel (``cad_server.cli.run``) has the kernel folder's packages --
 the kernel's binding, build123d, numpy, scipy and what they need -- and no environment of its own to install into:
 no package with native code built for another platform runs there. What its ``# /// script`` header or ``--with``
-names beyond those is resolved by uv, and each package the kernel folder does not carry is installed, alone, into a
-folder in the cache (``kernel-packages/<key>``, keyed by the requirements and the kernel folder's own making),
-which the program's path then holds. A package that is not pure Python is refused in one line that names it,
-before the program starts; nothing is left of a folder that was not finished.
+names beyond those is resolved by uv -- a local package's own dependencies too, and every version held to the one the
+kernel folder carries -- and each package the folder does not carry is installed, alone, into a folder in the cache
+(``kernel-packages/<key>``, keyed by the requirements, each local package as it is now, and the kernel folder's own
+packages), which the program's path then holds. A requirement that needs another version of a package the folder
+carries, and a package that is not pure Python, are refused in one line that names it, before the program starts;
+nothing is left of a folder that was not finished.
 """
 
 from __future__ import annotations
@@ -55,8 +57,10 @@ def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
 
 
 def _said(done: subprocess.CompletedProcess) -> str:
+    """uv's reason in one line: the first that gives a cause, else its last."""
     lines = [line.strip() for line in (done.stderr or "").splitlines() if line.strip()]
-    return lines[-1] if lines else f"uv exited {done.returncode}"
+    causes = [line.removeprefix("cause:").strip() for line in lines if line.startswith(("cause:", "Because"))]
+    return causes[0] if causes else lines[-1] if lines else f"uv exited {done.returncode}"
 
 
 def _impure(folder: Path) -> list[str]:
@@ -83,9 +87,12 @@ def ensure(kernel: dict[str, Any], requirements: tuple[str, ...], told: Callable
     if not requirements:
         return None
     from cad.engine import places
+    from cad_server._internal import extras
 
     carried, python = provided(kernel), _python(kernel)
-    key = hashlib.sha256(json.dumps([sorted(requirements), sorted(carried.items()), python]).encode()).hexdigest()[:16]
+    # A local package is keyed by what it is now (``extras.fingerprints``): an edit to it is another folder.
+    key = hashlib.sha256(json.dumps([sorted(requirements), sorted(extras.fingerprints(list(requirements)).items()),
+                                     sorted(carried.items()), python]).encode()).hexdigest()[:16]
     folder = places.cache_dir() / "kernel-packages" / key
     if (folder / MARKER).is_file():
         return folder
@@ -94,23 +101,24 @@ def ensure(kernel: dict[str, Any], requirements: tuple[str, ...], told: Callable
     shutil.rmtree(staged, ignore_errors=True)
     staged.mkdir(parents=True)
     try:
-        # A folder or a file the script names (``--with ./mine``, a header's path) is built where it stands; what
-        # an index holds is resolved first, so that what the kernel folder carries is left to it.
+        # Everything is resolved together, a local package's own dependencies too, each version held to the one the
+        # kernel folder carries (constraints); then what the folder does not carry is installed, and a folder or a
+        # file the script names (``--with ./mine``, a header's path) is built where it stands, its dependencies
+        # those just resolved.
         local = [line for line in requirements if os.path.isabs(line.partition("[")[0]) or "://" in line]
-        indexed = [line for line in requirements if line not in local]
         told("resolving the script's own packages for the WebAssembly kernel: " + ", ".join(requirements))
-        wanted: list[str] = []
-        if indexed:
-            asked = staged / "requirements.in"
-            asked.write_text("".join(f"{line}\n" for line in indexed), encoding="utf-8")
-            resolved = _uv([uv, "pip", "compile", str(asked), "--python-version", python, "--only-binary", ":all:",
-                            "--no-header", "--no-annotate", "--quiet"], staged)
-            if resolved.returncode:
-                raise base.Refused("the script's own packages do not resolve for the WebAssembly kernel, which runs "
-                                   f"pure-Python packages and its own: {_said(resolved)}", "other")
-            pinned = [match.groups() for match in map(_PINNED.match, resolved.stdout.splitlines()) if match]
-            wanted = [f"{name}=={version}" for name, version in pinned if _name(name) not in carried]
-            asked.unlink()
+        asked, held = staged / "requirements.in", staged / "constraints.txt"
+        asked.write_text("".join(f"{line}\n" for line in requirements), encoding="utf-8")
+        held.write_text("".join(f"{name}=={version}\n" for name, version in sorted(carried.items())), encoding="utf-8")
+        resolved = _uv([uv, "pip", "compile", str(asked), "--constraint", str(held), "--python-version", python,
+                        "--only-binary", ":all:", "--no-header", "--no-annotate", "--quiet"], staged)
+        if resolved.returncode:
+            raise base.Refused("the script's own packages do not resolve beside the WebAssembly kernel's own (which "
+                               f"runs pure-Python packages, and the versions it carries): {_said(resolved)}", "other")
+        pinned = [match.groups() for match in map(_PINNED.match, resolved.stdout.splitlines()) if match]
+        wanted = [f"{name}=={version}" for name, version in pinned if _name(name) not in carried]
+        asked.unlink()
+        held.unlink()
         for group, binary in ((wanted, ["--only-binary", ":all:"]), (local, [])):
             if not group:
                 continue
