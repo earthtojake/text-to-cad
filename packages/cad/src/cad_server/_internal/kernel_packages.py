@@ -134,7 +134,8 @@ def ensure(kernel: dict[str, Any], requirements: tuple[str, ...], told: Callable
                                    "the WebAssembly kernel does not run: a script there uses pure-Python packages "
                                    "and the ones the kernel carries (numpy, scipy and the rest)", "other")
         (staged / MARKER).write_text(json.dumps({"requirements": sorted(requirements), "installed": wanted,
-                                                 "python": python}, indent=1) + "\n", encoding="utf-8")
+                                                 "python": python, "kernel": str(kernel["prefix"])}, indent=1)
+                                     + "\n", encoding="utf-8")
         folder.parent.mkdir(parents=True, exist_ok=True)
         try:
             staged.rename(folder)

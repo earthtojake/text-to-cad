@@ -128,6 +128,41 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(out.endswith(" freed\n"), out)
         self.assertTrue(all(path.exists() for path in kept), "data and another program's folder stay")
 
+    def test_prune_and_clean_know_the_webassembly_kernel_s_folders(self) -> None:
+        """``prune``: a kernel folder of another lock or Node, a download the lock does not name, a script's own
+        packages for a kernel folder that is gone; this release's folder, its downloads and live packages stay.
+        ``clean``: all of them."""
+        from cad.engine import client
+        from cad_server._internal import kernel_folder, kernel_packages
+
+        kernels = self.cache / "kernel"
+        mine, other = kernels / "aaaaaaaaaaaaaaaa", kernels / "bbbbbbbbbbbbbbbb"
+        for made in (mine, other):
+            (made / "bin").mkdir(parents=True)
+            (made / "bin" / "python").write_text("#!/bin/sh\n", encoding="utf-8")
+        downloads = kernels / "downloads"
+        downloads.mkdir()
+        named = kernel_folder.lock()["core"][0]["sha256"]
+        (downloads / named).write_bytes(b"pyodide")
+        (downloads / ("f" * 64)).write_bytes(b"an earlier release's wheel")
+        live, orphan = self.cache / "kernel-packages" / "1111", self.cache / "kernel-packages" / "2222"
+        for packages, made_for in ((live, mine), (orphan, self.root / "a kernel folder removed")):
+            packages.mkdir(parents=True)
+            (packages / kernel_packages.MARKER).write_text(json.dumps({"kernel": str(made_for)}), encoding="utf-8")
+        with mock.patch.object(kernel_folder, "where", return_value=mine):
+            code, out, _err = _run("prune")
+        self.assertEqual(code, 0)
+        for gone in (other, downloads / ("f" * 64), orphan):
+            self.assertIn(f"removed {gone} (", out)
+            self.assertFalse(gone.exists(), gone)
+        self.assertTrue(all(path.exists() for path in (mine, downloads / named, live)))
+        with mock.patch.object(kernel_folder, "where", side_effect=base.Refused("no node on PATH", "other")):
+            self.assertEqual(_run("prune")[1], "nothing removed\n", "no Node to say which is this one's: none goes")
+        with mock.patch.object(client, "connect", return_value=None):
+            code, out, _err = _run("clean")
+        self.assertEqual(code, 0)
+        self.assertFalse(kernels.exists() or (self.cache / "kernel-packages").exists(), out)
+
     def note(self, name: str, *, gone: bool = False) -> Path:
         """A file of the work folder, its note written as the engine writes one (``library.Notes``, which names the
         file), and the file then deleted where ``gone``: its folder of the cache."""

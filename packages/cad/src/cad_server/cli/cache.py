@@ -5,7 +5,8 @@ else ``~/.cache/cad``): the CAD kernel environment and the environments ``cad ru
 and set of integrations, ``cad_server._internal.base``), the engine's bytecode, hulls, MJCF assets, integrations'
 homes and kept interference measurements (``OWN``), and what the engine derived of each document (``documents/<id>/``:
 the file's note and picture, a KiCad board's plots, kept checks, a shared file's view bundle and where its share's
-files are). The records, Recents and settings in the state folder stay, and anything else in the folder, which may be
+files are), and the WebAssembly kernel's folders, their downloads and scripts' own packages for it (``kernel/``,
+``kernel-packages/``). The records, Recents and settings in the state folder stay, and anything else in the folder, which may be
 another program's.
 
 - ``dir``: the cache folder.
@@ -15,7 +16,9 @@ another program's.
   document's folder whose file is gone (its note names the file, ``library.Notes``), and one whose note names none (a
   note an earlier build wrote) or that has none, once nothing in it has been written for ``UNUSED_DAYS``
   (``documents``); and the meshes kept by the geometry they are of, the least recently used first, past
-  ``MESH_BYTES`` (``meshes``).
+  ``MESH_BYTES`` (``meshes``); the WebAssembly kernel's folders made for another lock or another Node than this
+  release's and the one on PATH, its downloads the lock no longer names, and a script's own packages for it whose
+  kernel folder is gone (``kernel``).
 - ``clean``: all of the cache but the documents' folders (``OWN``), and what ``prune`` removes; refused while a
   server runs, which runs from it.
 
@@ -53,7 +56,7 @@ UNUSED_DAYS = 30
 #: -- a part's mesh by the engine in seconds as its file is shared again, its hulls by CoACD in minutes, once.
 MESH_BYTES = 2**30
 # What cad keeps in its cache folder, each made again on demand (the module): ``documents/`` is its documents', and stays.
-OWN = ("base", "pycache", "hulls", "mjcf", "homes", "interference")
+OWN = ("base", "pycache", "hulls", "mjcf", "homes", "interference", "kernel", "kernel-packages")
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -69,7 +72,8 @@ def build_parser(prog: str = DEFAULT_PROG):
                                     f"file that is gone, and of a file no note names once unused for {UNUSED_DAYS} "
                                     f"days; and, past {size(MESH_BYTES)}, the meshes cad keeps by geometry (shared "
                                     "files' part meshes, parts' hulls) used longest ago: about what the CAD kernel "
-                                    "takes, each made again when next needed. What is in use stays: an environment a "
+                                    "takes, each made again when next needed; and the WebAssembly kernel's folders "
+                                    "and downloads of other releases. What is in use stays: an environment a "
                                     "process runs from, a file's folder while it is being shared.")
     commands.add_parser("clean", help="remove all of cad's cache; cad makes it again as it needs it",
                         description="Remove all of cad's cache, and what prune removes; cad makes it again as it needs "
@@ -118,7 +122,41 @@ def prunable() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
             kept.append((old, "the release 0.11.11 and earlier start (installations/current)"))
         else:
             found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier"))
+    found += kernel()
     return _running(found, kept)
+
+
+def kernel() -> list[tuple[Path, str]]:
+    """What ``prune`` removes of the WebAssembly kernel's, each with what it is: a folder the engine made for another
+    lock or another Node than this release's and the one on PATH (none where no Node is there to say which is this
+    one's), a download the lock no longer names, and a script's own packages whose kernel folder is gone."""
+    from cad_server._internal import base, kernel_folder, kernel_packages
+
+    root, found = folder(), []
+    pinned = kernel_folder.lock()
+    try:
+        mine: str | None = kernel_folder.where(pinned).name
+    except base.Refused:
+        mine = None
+    for made in _folders(root / "kernel"):
+        if made.name == "downloads" or ".making-" in made.name:
+            continue
+        if mine is not None and made.name != mine:
+            found.append((made, "a WebAssembly kernel folder of another release's lock or another Node"))
+    named = {item["sha256"] for item in (*pinned["core"], *pinned["packages"], *([pinned["viewcore"]]
+                                                                                 if pinned.get("viewcore") else []))}
+    with contextlib.suppress(OSError):
+        for kept in sorted((root / "kernel" / "downloads").iterdir()):
+            if kept.is_file() and ".part-" not in kept.name and kept.name not in named:
+                found.append((kept, "a download of the WebAssembly kernel's this release's lock does not name"))
+    for packages in _folders(root / "kernel-packages"):
+        try:
+            made_for = json.loads((packages / kernel_packages.MARKER).read_text(encoding="utf-8")).get("kernel")
+        except (OSError, ValueError):
+            continue  # being made, or of an earlier release that named no kernel: kept
+        if isinstance(made_for, str) and not Path(made_for).is_dir():
+            found.append((packages, "a script's own packages for a WebAssembly kernel folder that is gone"))
+    return found
 
 
 def _release(env: Path) -> str | None:
