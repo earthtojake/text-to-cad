@@ -82,6 +82,8 @@ SCHEMA = "cadgen.engine closure/2"
 FORMAT = "xbf/9"
 # The libraries a key covers: what decides the geometry and native material payload.
 KEYED_LIBRARIES = ("build123d", "OCP", "bd_materials", "threejs_materials")
+# The distributions that carry OCP, the first of them installed the one a body runs on (``_libraries``).
+OCP_DISTRIBUTIONS = ("cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-novtk-OCP.wasm", "cad-ocp-wasm")
 # The keyed platform fields; the closure also records Python as information only.
 KEYED_PLATFORM = ("system", "arch")
 # The start of a closure's text: the schema first, so a head scan finds it.
@@ -124,10 +126,9 @@ def _libraries() -> dict[str, str]:
     from importlib import metadata
 
     found = {}
-    # OCP ships as two distributions, with VTK and without, and a third built for WebAssembly: whichever is
-    # installed is the OCP a body runs on.
-    for shown, names in (("build123d", ("build123d",)),
-                         ("OCP", ("cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-novtk-OCP.wasm")),
+    # OCP ships as two distributions, with VTK and without, and builds for WebAssembly (OCP.wasm's, and cad's own,
+    # ``cad-ocp-wasm``): whichever is installed is the OCP a body runs on.
+    for shown, names in (("build123d", ("build123d",)), ("OCP", OCP_DISTRIBUTIONS),
                          ("bd_materials", ("bd_materials",)), ("threejs_materials", ("threejs-materials",))):
         for name in names:
             try:

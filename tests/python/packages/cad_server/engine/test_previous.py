@@ -617,6 +617,29 @@ class ClosureTest(unittest.TestCase):
         with mock.patch.object(metadata, "version", version):
             self.assertEqual(previous._libraries(), {"build123d": "1.0", "OCP": "7.9.3.1"})
 
+    def test_ocp_built_for_webassembly_is_the_ocp_recorded(self) -> None:
+        from importlib import metadata
+        from unittest import mock
+
+        from cad.engine import _measuring
+
+        for distribution, said in (("cadquery-ocp-novtk-OCP.wasm", "8.0.1.1.post202609241841"),
+                                   ("cad-ocp-wasm", "8.0.1.1+m8ab59531")):
+            def version(name: str, distribution: str = distribution, said: str = said) -> str:
+                if name == "build123d":
+                    return "0.10.0"
+                if name == distribution:
+                    return said
+                raise metadata.PackageNotFoundError(name)
+
+            previous._libraries.cache_clear()
+            self.addCleanup(previous._libraries.cache_clear)
+            with self.subTest(distribution), mock.patch.object(metadata, "version", version):
+                self.assertEqual(previous._libraries(), {"build123d": "0.10.0", "OCP": said})
+                self.assertEqual(_measuring._version("OCP", _measuring.MEASURING["OCP"],
+                                                     {_measuring._normal(distribution): said}), said,
+                                 "a check measured on it names its OCP")
+
 
 
 

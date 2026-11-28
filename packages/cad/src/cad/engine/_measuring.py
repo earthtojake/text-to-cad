@@ -17,7 +17,7 @@ __all__ = ["MEASURING", "measure", "measuring"]
 # arrays numpy's; a mesh's check (trimesh's) is measured in its caller's own process, never asked of the engine
 # (``api.check``), so its libraries name nothing here.
 MEASURING: dict[str, tuple[str, ...]] = {
-    "build123d": ("build123d",), "OCP": ("cadquery-ocp-novtk", "cadquery-ocp"), "bd_materials": ("bd_materials",),
+    "build123d": ("build123d",), "OCP": ("cadquery-ocp-novtk", "cadquery-ocp", "cadquery-ocp-novtk-OCP.wasm", "cad-ocp-wasm"), "bd_materials": ("bd_materials",),
     "numpy": ("numpy",)}
 # What a code edited since this process loaded it is said as (``measuring``): no other process's.
 EDITED = "+edited"
