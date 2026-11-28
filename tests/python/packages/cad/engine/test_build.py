@@ -763,5 +763,65 @@ class DateTest(unittest.TestCase):
         self.assertEqual(len(loaded.prototypes[0].face_names), 7, "the block's six faces and its bore")
 
 
+class StandbyWarmUpTest(unittest.TestCase):
+    """A standby's warm-up build (``worker.warm_up``) leaves its process as a fresh worker's but for what it loaded:
+    no memo entry, no document record, no module or folder of its script, no build123d shims installed; and the first
+    build after it reports what a fresh process's first build reports. One that fails says so and leaves the same."""
+
+    PROBE = textwrap.dedent("""
+        import json, os, sys, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from cad.engine import build, worker
+        from cad.engine.kernel import determinism, memo
+        path, modules = list(sys.path), set(sys.modules)
+        if sys.argv[1] == "fails":
+            with mock.patch.object(build, "build", side_effect=RuntimeError("no kernel today")):
+                worker.warm_up()
+        elif sys.argv[1] == "warm":
+            worker.warm_up()
+        left = {"path": sys.path == path, "warm module": "cad_standby_warm" in sys.modules,
+                "memo": len(memo._MEMO), "records": sum(map(len, (build._WRITTEN, build._BUILT, build._PARTS, build._HELD))),
+                "shims": determinism._installed, "folders": sorted(p.name for p in Path(tempfile.gettempdir()).glob("cad-warm-*")),
+                "fields read": memo._own_fields.cache_info().currsize > 0, "environment": "CAD_ENGINE_DETERMINISM" in os.environ}
+        script = Path(sys.argv[2])
+        [report] = build.build(script, ["bracket"], cwd=script.parent)
+        left["build"] = {"ok": report["ok"], "model": report["model"].rsplit("::", 1)[-1],
+                         "files": {os.path.relpath(name, script.parent): {k: v for k, v in found.items() if k != "seconds"}
+                                   for name, found in report.get("files", {}).items()}}
+        print(json.dumps(left))
+    """)
+
+    def probe(self, how: str) -> tuple[dict, str]:
+        import subprocess
+        import sys
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-warm-")).resolve()
+        self.addCleanup(lambda: __import__("shutil").rmtree(folder, ignore_errors=True))
+        (folder / "tmp").mkdir()
+        script = folder / "frame.py"
+        script.write_text(textwrap.dedent(MODEL.format(width=30)), encoding="utf-8")
+        env = {**os.environ, "TMPDIR": str(folder / "tmp")}
+        env.pop("CAD_ENGINE_DETERMINISM", None)
+        done = subprocess.run([sys.executable, "-c", self.PROBE, how, str(script)], capture_output=True, text=True,
+                              timeout=600, env=env, cwd=folder)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout.strip().splitlines()[-1]), done.stderr
+
+    def test_a_warm_up_leaves_a_fresh_worker_but_for_what_it_loaded(self) -> None:
+        fresh, _ = self.probe("cold")
+        warm, said = self.probe("warm")
+        self.assertNotIn("warm-up build failed", said)
+        self.assertTrue(warm.pop("fields read"), "it read build123d's classes, which the first build then reads not")
+        fresh.pop("fields read")
+        self.assertEqual(warm, fresh)
+        self.assertEqual((warm["path"], warm["warm module"], warm["memo"], warm["records"], warm["shims"],
+                          warm["folders"], warm["environment"]), (True, False, 0, 0, False, [], False))
+        failed, said = self.probe("fails")
+        self.assertIn("cad: the standby's warm-up build failed: RuntimeError: no kernel today", said)
+        failed.pop("fields read")
+        self.assertEqual(failed, fresh)
+
+
 if __name__ == "__main__":
     unittest.main()

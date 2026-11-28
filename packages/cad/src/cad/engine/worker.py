@@ -421,6 +421,60 @@ def load_kernel() -> None:
 
 _KERNEL_LOADED = False
 
+# The standby's warm-up model (``warm_up``): what most builds reach first -- a boolean, a fillet, a second part, a
+# colour, the document and its file.
+_WARM_MODEL = '''from cad import xbf
+import build123d as bd
+
+
+@xbf
+def warm():
+    plate = bd.Box(40, 30, 6) - bd.Pos(8, 0, 0) * bd.Cylinder(4, 6)
+    plate = bd.fillet(plate.edges().filter_by(bd.Axis.Z), 2)
+    plate.label, plate.color = "plate", "#888888"
+    pin = bd.Pos(8, 0, 6) * bd.Cylinder(3.9, 12)
+    pin.label = "pin"
+    return bd.Compound(children=[plate, pin], label="warm")
+'''
+
+
+def warm_up() -> None:
+    """One small build, then forgotten, as a standby loads the kernel (``main``): what a first build pays once
+    -- build123d's own imports, the kernel code a box does not reach, the memo's reading of build123d's classes --
+    is paid while nobody waits. Nothing it made is kept: the memo, this process's records of documents, its
+    script's module and its folder on the module search path are as a fresh worker's, and its folder is removed.
+    The build123d shims are not installed by it (``determinism.install`` reads the environment, which is the first
+    request's to give). One that fails is said on stderr and costs the first build its one-time work, nothing
+    else."""
+    import shutil
+
+    from cad.engine import build
+    from cad.engine.kernel import memo
+
+    folder = Path(tempfile.mkdtemp(prefix="cad-warm-"))
+    script = folder / "cad_standby_warm.py"
+    path, determinism = list(sys.path), os.environ.get("CAD_ENGINE_DETERMINISM")
+    os.environ["CAD_ENGINE_DETERMINISM"] = "0"
+    try:
+        script.write_text(_WARM_MODEL, encoding="utf-8")
+        reports = build.build(script, None, cwd=folder)
+        failed = [report.get("error") for report in reports if report.get("ok") is False]
+        if failed:
+            print(f"cad: the standby's warm-up build failed: {failed[0]}", file=sys.stderr, flush=True)
+    except Exception as error:  # noqa: BLE001 - a warm-up costs the first build nothing but its one-time work
+        print(f"cad: the standby's warm-up build failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+    finally:
+        if determinism is None:
+            os.environ.pop("CAD_ENGINE_DETERMINISM", None)
+        else:
+            os.environ["CAD_ENGINE_DETERMINISM"] = determinism
+        memo.clear()
+        for record in (build._WRITTEN, build._BUILT, build._PARTS, build._HELD):
+            record.clear()
+        sys.modules.pop(script.stem, None)
+        sys.path[:] = path
+        shutil.rmtree(folder, ignore_errors=True)
+
 
 def kernel(say: Callable[[str], None]) -> None:
     """The kernel loaded before a build of this worker, unless it is (``load_kernel``): a load that
@@ -974,6 +1028,7 @@ def main() -> int:
 
     if "--standby" in sys.argv[1:]:
         load_kernel()
+        warm_up()
     resident = resident_mb()
     send({"ready": os.getpid(), "rssMb": None if resident is None else round(resident)})
     gc.disable()
