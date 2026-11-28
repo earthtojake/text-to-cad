@@ -13,7 +13,7 @@ options are its own, and its runner (``cad_server.cli.document_types.OPERATIONS`
 as its program's.
 
 ``cad <verb> --help`` says every type's options (``build_parser``, the reference's too); ``cad <verb> FILE --help``
-the file's type's alone.
+the file's type's alone, an ``inspect`` of a B-rep with each mode's options (``_type_help``).
 """
 
 from __future__ import annotations
@@ -228,6 +228,30 @@ def _type_parser(verb: str, document_type: str, operation: str, prog: str) -> ar
     return type_parser(document_type, operation, prog)
 
 
+def _type_help(verb: str, document_type: str, operation: str, prog: str) -> argparse.ArgumentParser | None:
+    """What ``cad <verb> FILE --help`` says of a file's type: its operation's parser with the options of each mode the
+    type also has for the verb (``cad inspect FILE --interference``, ``--ranges``), each in a group of its own, and
+    those modes' forms in its usage; None for a type with no mode, whose parser says all it takes."""
+    from cad.registry import MODES, operation_for
+
+    modes = [mode for mode in MODES if verb == "inspect" and operation_for(verb, document_type, mode) is not None]
+    if not modes:
+        return None
+    parser = _type_parser(verb, document_type, operation, prog)
+    flags = {flag for action in parser._actions for flag in action.option_strings}  # noqa: SLF001
+    usage = [USAGES[verb][0]]
+    for mode in modes:
+        taking = _type_parser(verb, document_type, MODES[mode], prog)
+        group = parser.add_argument_group(f"with --{mode}", taking.description)
+        for action in taking._actions:  # noqa: SLF001 - argparse exposes no public view
+            if action.option_strings and not flags & set(action.option_strings):
+                flags.update(action.option_strings)
+                group._add_action(action)  # noqa: SLF001
+        usage += [form for form in USAGES[verb] if f"--{mode}" in form]
+    parser.usage = "\n       ".join(usage).replace(f"cad {verb}", "%(prog)s")
+    return parser
+
+
 def _parsers(verb: str, prog: str | None = None) -> list[argparse.ArgumentParser]:
     """Every parser a type's runner of ``cad <verb>`` reads its command line by, in the table's order."""
     from cad.registry import DOCUMENT_TYPES, MODES, operation_for
@@ -309,7 +333,12 @@ def dispatch(verb: str, argv: list[str], prog: str | None = None) -> int:
 
         return answered(VERBS["snapshot"][2], parser_for("snapshot", prog).parse_args(argv), prog)
     try:
-        document_type, operation, _mode = resolve(verb, argv)
+        document_type, operation, mode = resolve(verb, argv)
     except Failure as failure:
         return write(failure, prog=prog, as_json=wants_json(argv))
+    if asked and mode is None:
+        said = _type_help(verb, document_type, operation, prog)
+        if said is not None:
+            sys.stdout.write(said.format_help())
+            return 0
     return _runner(verb, document_type, operation)(argv, prog)

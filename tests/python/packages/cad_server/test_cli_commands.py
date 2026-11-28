@@ -139,6 +139,39 @@ class TheCommandTable(unittest.TestCase):
         [own, *_rest] = build_parser("dfm", ["part.xbf"])._get_positional_actions()
         self.assertIn("the .xbf file a model is saved as", own.help, "a file's own type's help is its own")
 
+    def test_a_file_s_help_lists_every_option_its_type_takes_for_the_verb(self) -> None:
+        """``cad <verb> FILE --help`` is the file's type's: each option a parser of that type's runs for the verb reads,
+        a mode's too (``cad inspect FILE --interference``, ``--ranges``), which the file's help names without the flag."""
+        import re
+
+        from cad.registry import MODES, operation_for
+        from cad_server.cli.document_types import build_parser as type_parser
+
+        for document_type, verbs in TYPES.items():
+            for verb in verbs:
+                suffix = DOCUMENT_TYPES[document_type].extensions[0]
+                with self.subTest(verb=verb, type=document_type):
+                    code, said, err = _run([verb, f"no-such-file{suffix}", "--help"])
+                    self.assertEqual((code, err), (0, ""))
+                    taken = set()
+                    for mode in (None, *(MODES if verb == "inspect" else ())):
+                        operation = operation_for(verb, document_type, mode)
+                        if operation is not None:
+                            parser = type_parser(document_type, operation, f"cad {verb}")
+                            taken |= {flag for action in parser._actions for flag in action.option_strings  # noqa: SLF001
+                                      if flag.startswith("--")}
+                    self.assertGreater(len(taken), 1, f"cad {verb} takes options of {document_type}")
+                    for flag in sorted(taken):
+                        self.assertRegex(said, rf"(?<![\w-]){re.escape(flag)}(?![\w-])",
+                                         f"cad {verb} {suffix} --help does not list {flag}")
+        # A B-rep's inspect says each mode's forms in its usage, and groups the options of each
+        _, said, _ = _run(["inspect", "part.xbf", "--help"])
+        self.assertIn("\n       cad inspect FILE --interference [--pose POSE]", said)
+        self.assertIn("\nwith --ranges:\n", said)
+        # and a mode's own help is that mode's alone
+        _, said, _ = _run(["inspect", "part.xbf", "--ranges", "--help"])
+        self.assertNotIn("--interference", said)
+
     def test_a_file_that_is_not_there_is_the_same_failure_for_every_type(self) -> None:
         """Every verb of every file's type refuses a file that is not there before anything runs, alike:
         ``not_found``, exit 2, with ``--json`` and without; and a file of no type as ``wrong_type``."""
