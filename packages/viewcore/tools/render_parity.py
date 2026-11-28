@@ -20,8 +20,10 @@ the Node host on the WebAssembly module, as the engine would ask it), and holds 
   moved    the share over 32 levels once each picture may shift by a pixel (the difference to the nearest value in
            the other's 3x3 neighbourhood): what is left is not an edge drawn a pixel aside
 
-and writes ``<model>.sheet.png``, each case a row: OCCT's, the core's, and where they differ. One line per case with
-both renderers' times, then the totals; ``--json`` writes the table.
+and writes ``<model>.sheet.<core>.png``, each case a row: OCCT's, the core's, and where they differ. One line per
+case with both renderers' times (OCCT's as ``reference`` timed it), then the worst of each measure; ``--json`` writes
+the table. It ends 1 where a picture's mean difference is over a level and a half or over 0.5% of it has moved.
+``--samples`` is 4 by default: what a software OpenGL gave the reference pictures, of the 8 cad asks for.
 """
 from __future__ import annotations
 
@@ -543,7 +545,15 @@ def compare(args: argparse.Namespace) -> int:
     core.close()
     if args.json:
         Path(args.json).write_text(json.dumps(table, indent=1))
-    return 0
+    if not table:
+        print("no case was drawn")
+        return 1
+    worst_mean = max(max(row["mean"]) for row in table)
+    worst_moved = max(row["moved32"] for row in table)
+    print(f"{len(table)} pictures: the largest mean difference {worst_mean:.3f} levels, the largest share moved over 32 "
+          f"levels {worst_moved:.3f}%")
+    # Past these the two are no longer one picture: a level and a half all over, or a pixel in two hundred elsewhere.
+    return 0 if worst_mean <= 1.5 and worst_moved <= 0.5 else 1
 
 
 def main(argv: list[str] | None = None) -> int:

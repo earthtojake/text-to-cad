@@ -572,6 +572,12 @@ const int SAMPLE_AT[9][8][2] = {
 
 const uint32_t FLAT = 0x80000000u;
 const float DEPTH_UNIT = 1.0f / 16777216.0f;  // a 24-bit depth buffer's least step: glPolygonOffset's unit
+const float DEPTH_FAR = 16777215.0f;
+// A depth as OpenGL's 24-bit buffer keeps it: the nearest of its steps (held as a float, which holds each exactly).
+// Two surfaces a hair apart are then at one depth, and the later drawn has the pixel, as on OpenGL.
+inline float kept_depth(float z) {
+  return (float)(int32_t)((z < 0 ? 0.0f : (z > 2 ? 2.0f : z)) * DEPTH_FAR + 0.5f);
+}
 const double GUARD = 8192;                    // pixels beyond the picture a triangle may reach before it is clipped
 
 // A triangle set up for the rasterizer: its edges as integer functions of the pixel (8 bits below it), its depth a
@@ -1294,7 +1300,12 @@ struct Renderer {
       // samples' box): what tells a pixel wholly outside or wholly inside without asking each sample.
       s.off_low[e] = a * (a > 0 ? sx_low : sx_high) + b * (b > 0 ? sy_low : sy_high);
       s.off_high[e] = a * (a > 0 ? sx_high : sx_low) + b * (b > 0 ? sy_high : sy_low);
-      for (int k = 0; k < samples; ++k) s.off[e][k] = a * sx[k] + b * sy[k];
+      if (samples == 4) {
+        s.off[e][0] = a * sx[0] + b * sy[0], s.off[e][1] = a * sx[1] + b * sy[1];
+        s.off[e][2] = a * sx[2] + b * sy[2], s.off[e][3] = a * sx[3] + b * sy[3];
+      } else {
+        for (int k = 0; k < samples; ++k) s.off[e][k] = a * sx[k] + b * sy[k];
+      }
     }
     if (count == 3) {
       s.a[3] = s.b[3] = s.c[3] = s.off_low[3] = s.off_high[3] = 0;
@@ -1310,7 +1321,12 @@ struct Renderer {
     if (factor != 0 || units != 0)
       z0 += factor * std::max(std::fabs(zx), std::fabs(zy)) + units * DEPTH_UNIT;
     s.zx = (float)zx, s.zy = (float)zy, s.z0 = (float)z0;
-    for (int k = 0; k < samples; ++k) s.zoff[k] = (float)(zx * fsx[k] + zy * fsy[k]);
+    if (samples == 4) {
+      s.zoff[0] = (float)(zx * fsx[0] + zy * fsy[0]), s.zoff[1] = (float)(zx * fsx[1] + zy * fsy[1]);
+      s.zoff[2] = (float)(zx * fsx[2] + zy * fsy[2]), s.zoff[3] = (float)(zx * fsx[3] + zy * fsy[3]);
+    } else {
+      for (int k = 0; k < samples; ++k) s.zoff[k] = (float)(zx * fsx[k] + zy * fsy[k]);
+    }
     s.cut = false;
     return true;
   }
@@ -1403,9 +1419,12 @@ struct Renderer {
     float dx = b.x - a.x, dy = b.y - a.y;
     float length = std::sqrt(dx * dx + dy * dy);
     if (!(length > 0)) return;
-    float nx = -dy / length * (line * 0.5f), ny = dx / length * (line * 0.5f);
-    Point corner[4] = {{a.x + nx, a.y + ny, a.z, a.iw}, {a.x - nx, a.y - ny, a.z, a.iw},
-                       {b.x - nx, b.y - ny, b.z, b.iw}, {b.x + nx, b.y + ny, b.z, b.iw}};
+    // Its ends and its half-width each to 1/256 of a pixel before they are put together, as the rasterizers do.
+    const float scale = 1.0f / 256.0f;
+    const float nx = snap(-dy / length * (line * 0.5f)) * scale, ny = snap(dx / length * (line * 0.5f)) * scale;
+    const float ax = snap(a.x) * scale, ay = snap(a.y) * scale, bx = snap(b.x) * scale, by = snap(b.y) * scale;
+    Point corner[4] = {{ax + nx, ay + ny, a.z, a.iw}, {ax - nx, ay - ny, a.z, a.iw},
+                       {bx - nx, by - ny, b.z, b.iw}, {bx + nx, by + ny, b.z, b.iw}};
     const float ca = cuts[ia], cb = cuts[ib];
     const Point* corners[4] = {&corner[0], &corner[1], &corner[2], &corner[3]};
     Setup s;
@@ -1585,7 +1604,7 @@ struct Renderer {
 
   void draw() {
     const size_t count = (size_t)width * height * samples;
-    depth.assign(count, 1.0f);
+    depth.assign(count, DEPTH_FAR);
     color.assign(count, 0u);
     depth_at = depth.data(), color_at = color.data();
     bool after = false;  // anything drawn once the opaque are lit: see-through surfaces, the layers above
@@ -1626,7 +1645,7 @@ struct Renderer {
       for (const Item& item : items)
         if (item.layer == layer && (layer > 0 || item.blend || item.kind == TRIANGLES)) any = true;
       if (!any) continue;
-      if (layer == 2) std::fill(depth.begin(), depth.end(), 1.0f);
+      if (layer == 2) std::fill(depth.begin(), depth.end(), DEPTH_FAR);
       for (int pass = 0; pass < 2; ++pass)  // the opaque of a layer above first, then the see-through in order
         for (const Item& item : items) {
           if (item.layer != layer || (item.blend ? pass == 0 : pass == 1)) continue;
@@ -1640,11 +1659,12 @@ struct Renderer {
     RENDER_SAY("resolve", resolving);
   }
 
-  inline void visible(size_t pixel, int mask, float z, const float* zoff, uint32_t id) {
+  __attribute__((always_inline)) inline void visible(size_t pixel, int mask, float z, const float* zoff, uint32_t id) {
     float* d = depth_at + pixel * samples;
     uint32_t* c = color_at + pixel * samples;
     if (samples == 4 && mask == 15) {
-      const float z0 = z + zoff[0], z1 = z + zoff[1], z2 = z + zoff[2], z3 = z + zoff[3];
+      const float z0 = kept_depth(z + zoff[0]), z1 = kept_depth(z + zoff[1]), z2 = kept_depth(z + zoff[2]),
+                  z3 = kept_depth(z + zoff[3]);
       if (z0 <= d[0]) d[0] = z0, c[0] = id;
       if (z1 <= d[1]) d[1] = z1, c[1] = id;
       if (z2 <= d[2]) d[2] = z2, c[2] = id;
@@ -1653,7 +1673,7 @@ struct Renderer {
     }
     for (int k = 0; k < samples; ++k) {
       if (!(mask >> k & 1)) continue;
-      float zs = z + zoff[k];
+      float zs = kept_depth(z + zoff[k]);
       if (zs <= d[k]) d[k] = zs, c[k] = id;
     }
   }
@@ -1707,8 +1727,9 @@ struct Renderer {
         uint32_t* c = &color[pixel * samples];
         for (int k = 0; k < samples; ++k) {
           if (!(mask >> k & 1)) continue;
-          float zs = (float)(z0 + zx * (px + sx[k] / 256.0) + zy * (py + sy[k] / 256.0));
-          if (zs >= 0 && zs < d[k]) d[k] = zs, c[k] = item.flat;  // the capping's own depth test: nearer alone
+          const float exact = (float)(z0 + zx * (px + sx[k] / 256.0) + zy * (py + sy[k] / 256.0));
+          const float zs = kept_depth(exact);
+          if (exact >= 0 && zs < d[k]) d[k] = zs, c[k] = item.flat;  // the capping's own depth test: nearer alone
         }
       }
   }
@@ -1814,8 +1835,8 @@ struct Renderer {
       float* d = depth_at + pixel * samples;
       int pass = 0;
       for (int k = 0; k < samples; ++k) {
-        const float zs = z + zoff[k];
-        if ((mask >> k & 1) && zs <= d[k] && zs >= 0) {
+        const float exact = z + zoff[k], zs = kept_depth(exact);
+        if ((mask >> k & 1) && zs <= d[k] && exact >= 0) {
           pass |= 1 << k;
           if (write) d[k] = zs;
         }
@@ -1953,6 +1974,11 @@ std::string render(const std::string& scene_text, const uint8_t* blob, size_t si
   }
   RENDER_SAY("write", writing);
   RENDER_SAY("all", started);
+  // A very large still's buffers are given back; an ordinary one's are kept for the next.
+  if (Renderer::depths().capacity() > (size_t)1 << 24) {
+    std::vector<float>().swap(Renderer::depths());
+    std::vector<uint32_t>().swap(Renderer::colors());
+  }
   return out;
 }
 

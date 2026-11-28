@@ -2,7 +2,7 @@
 
 The view core under Node: `viewcore.mjs` loads the module with the browser host's own loader and WASI shim, and
 `serve.mjs` is a job server that answers the engine's pool jobs from it, in one long-lived process of a few tens of
-megabytes. Nothing in cad starts it yet.
+megabytes.
 
     node serve.mjs [VIEWCORE_WASM]        # default: ../../dist/viewcore.wasm (scripts/core.sh)
 
@@ -40,6 +40,7 @@ Each answers what the engine's own job answers, in the engine's bytes: JSON is s
 | `fact` | `{key?, method, args}`, shape bytes | the JSON | `serve._topology_fact`: `face`, `edge`, `vertex` (`args: [ordinal]`), `groups` (`[]`), `elements` (`[[ordinals]]`), `measured` (`[]`) |
 | `read_xbf` | `{path}` | `{path, version: [mtime_ns as text, size], parts: [{key, name}...]}`, the structure's JSON, then each part's shape bytes in the parts' order | `serve._read_document` |
 | `export` | `{path, format}` (`step`, `stl`, `threemf`, `glb`) | the file's bytes | `export.translate(path, kind, ...)` at the engine's own tessellation |
+| `render` | `{scene}`, the buffers the scene names, in order | `{width, height, format, seconds}`, the picture: RGBA bytes, or a PNG | `render.occt`'s frame: `Scene.show`, `frame`, `grid`, `Canvas.frame` (below) |
 | `close` | | `{}`, and the process ends | |
 
 - **A part's shape bytes** are `mesh.shape_bytes(shape, read=True)`: what `read_xbf` answers for each part, and what
@@ -110,3 +111,57 @@ over the frame (`overlay.py`), the PNG (`context.encode`) and the 2D drawings (`
 (`context.py`), the shapes crafted for it (`shapes.py`), the materials and lights put up (`finish.py`'s `aspect`,
 `put_up`), the presentations and the frame itself (`occt.py`), the cap carriers (`clip.py`'s `apply`), the grid's
 and the ink's presentations (`grid._present`, `Scene._structure`).
+
+### The scene
+
+`render` (`vc_render`, `core.render(scene, payloads)`) takes the draw list Python made, in plain numbers. Lengths
+are the model's (millimetres), colours linear RGB, matrices column-major as the structure holds them. A payload is
+named by its place among the job's payloads.
+
+| Member | What |
+|---|---|
+| `width`, `height` | the picture, in pixels |
+| `samples` | samples a pixel: 1, 2, 4 or 8 (8, what cad asks of OpenGL; a software OpenGL gives 4) |
+| `background` | the flat colour behind the model |
+| `format` | `"rgba"` (width x height x 4 bytes, sRGB, the top row first), or `"png"` |
+| `camera` | `{projection: "orthographic" \| "perspective", eye, target, up, height \| fov}`: `height` the view's, `fov` the vertical field of view in degrees (`Scene.frame`'s record: `scale`, `fov`). Near and far are fitted to what is drawn, as `ZFitAll` fits them |
+| `light` | `{lights: [{direction, intensity}...], environment: {payload, width, height, intensity}}`: the PBR rig. `direction` is the way the light travels; the environment is the equirectangular radiance (`finish.environment()`: float32 RGB rows, +Z at the top) |
+| `phong` | `{ambient, specular, shininess, lights}`: X-ray's colour-only rig, in place of `light` |
+| `clip` | `[a, b, c, d]`: what is kept is where `a x + b y + c z + d >= 0` |
+| `meshes` | the payloads that are parts' XBM2 buffers; a draw names one by its place here |
+| `matrices` | a payload of placements, sixteen float64 each; a draw's `matrix` is its place here (or sixteen numbers) |
+| `draw` | what is drawn, in OCCT's order |
+
+A draw is one of:
+
+- `{faces: mesh, ranges?, matrix, shading, color, alpha, metallic, roughness, ior, emission, offset, layer}`: a
+  part's triangles, all of them or the index ranges `[[first, count]...]` of a face group. `shading` is `"pbr"`
+  (`finish.finish`'s numbers; `roughness` is three's), `"phong"` (`color` the part's colour, which the program
+  squares) or `"unlit"`. `alpha` under 1 draws it after the opaque, blended, writing no depth. `offset` is the
+  polygon offset `[factor, units]`.
+- `{edges: mesh, classes, matrix, color, width, layer}`: the mesh's polylines of the classes named (the XBM2 edge
+  table's codes), `width` pixels wide.
+- `{cap: mesh, matrix, color}`: the instance's cut by `clip`, flat and unlit.
+- `{triangles: {positions, texels?, indices}, texture?: {payload, width, height}, color, blend, offset, clip,
+  layer}`: triangles Python computed (the grid's bands, an annotation's ribbons and text), unlit, in `color`
+  (RGBA) times the texture (RGBA bytes, sRGB, rows from the top, read bilinearly), blended where `blend`.
+  `clip: false` leaves them uncut.
+
+`layer` is `"default"`, `"top"` (above the model, tested against its depth, writing none: the ink) or `"topmost"`
+(above everything, a depth of its own: X-ray's and Wireframe's edges). `tools/render_parity.py`'s `scene_of` builds
+the scene from a `render.occt.Scene` shown and framed: the decisions of `Scene.show`, `clip.apply` and `grid.show`
+without the OCCT calls.
+
+### How it is held to OpenGL's picture
+
+`tools/render_parity.py reference` draws a set of cases with cad's renderer and writes each one's scene;
+`compare` draws them with the core and measures the two pictures apart. What the rasterizer reproduces, each found
+by that measure: OpenGL's sample positions and fill rule run up the picture (the frame is stored bottom row first);
+a line is the rectangle a pixel wide about it; the frame is resolved in linear light from sRGB bytes; a see-through
+surface is blended in the order drawn; a cap passes the depth only where it is nearer. Of OCCT's PBR program: a
+face seen from behind is lit by its lights with the normal turned over and by the environment with the normal as it
+is; the view direction is a vertex's, read across the triangle; the environment's cube map is read by the nearest
+texel (cad sets no filter on it); the specular map is kept in bytes, of the cube map's 0 to 1.
+
+Not drawn by the core: Preview's studio (its floor, contact shadow and tone mapping, `Scene.preview_look`), the
+path tracer, and a GLB's base colour textures on lit faces.

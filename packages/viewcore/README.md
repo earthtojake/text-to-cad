@@ -17,7 +17,10 @@ part's groups (what a pick asks), a part's whole table (what a view bundle holds
 document exported as `cad export` writes it: STEP (OCCT's STEP writer, then cad's settling of its bytes), STL, 3MF and
 GLB (`src/exports.cpp`, `src/step.cpp`, `src/glb.cpp`). A part's canonical shape bytes can be opened by themselves
 (`vc_open_shape`), as the engine's pool jobs hand a part over, and meshed to an export's own tolerance (`vc_mesh_at`). The viewer's Export asks the core for them behind
-`?viewcore=N`; a DXF is still the engine's.
+`?viewcore=N`; a DXF is still the engine's. It also draws a still in software (`vc_render`, `src/render.cpp`): the
+picture cad's OpenGL renderer draws, from the same meshes, placements, materials, lights and camera, said as a scene
+of plain numbers (`hosts/node/README.md`, "Stills"). No OCCT is called for it; `tools/render_parity.py` measures its
+pictures against the OpenGL renderer's.
 
 In cad's Python, as now: building and rebuilding models (build123d), writing the `.xbf`, the server and its
 caches, sharing, the command line, and every integration (KiCad, MuJoCo, FEA, DFM, renders).
@@ -34,7 +37,8 @@ block), `kernel/bounds.py` and the writers in `export/` are the reference until 
 | `scripts/occt.sh` | OCCT's static libraries for WebAssembly, the subset the core links |
 | `scripts/core.sh` | The core linked into `dist/viewcore.wasm` |
 | `hosts/wasmtime/`, `hosts/web/` | Loading the module in Python (wasmtime) and in a page |
-| `hosts/node/` | Loading it in Node, and a job server that answers the engine's pool jobs (meshing, tables, measures, a pick's facts, reading and exporting an `.xbf`) from it |
+| `hosts/node/` | Loading it in Node, and a job server that answers the engine's pool jobs (meshing, tables, measures, a pick's facts, reading and exporting an `.xbf`, drawing a still) from it |
+| `tools/` | The core built natively, and the checks that hold it to cad's own code: the pool jobs (`pool_parity.py`), the stills (`render_parity.py`) |
 | `bench/` | Reference outputs from cad's engine, the comparison, the benchmarks |
 | `licenses/` | OCCT's licence: the GNU LGPL 2.1 and the Open CASCADE exception, shipped beside the module |
 
