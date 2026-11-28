@@ -785,7 +785,8 @@ class CadApp:
             source = model.get("source") or {}
             state = str(model.get("state") or "held")
             kind = XBF
-            found = {"name": str(source.get("name") or row.get("name") or ""),
+            # Named by its .xbf's file name, as its row is and as the same document read from that file is.
+            found = {"name": str(row.get("name") or source.get("name") or ""),
                      "version": str(model.get("version") if model.get("version") is not None else row.get("hash") or ""),
                      "state": state,
                      # `/`-separated, as a file's path is (its row's ``file``), whichever way its id was found.

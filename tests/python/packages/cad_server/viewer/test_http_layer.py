@@ -318,7 +318,8 @@ class Documents(HttpLayerTestCase):
     def test_a_model_by_its_id_is_its_envelope_at_the_build_held_and_one_not_held_names_nothing(self):
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
         script = os.path.join(self.fixture.root, "parts", "cube.py")
-        answers = {"model_info": {"model": {"source": {"name": "cube", "script": script}, "version": "v1",
+        xbf = os.path.join(self.fixture.root, "parts", "cube.xbf")
+        answers = {"model_info": {"model": {"source": {"name": "cube", "script": script, "xbf": xbf}, "version": "v1",
                                             "builtAt": 12.5, "state": "held"}}}
         app = self.fixture.app
 
@@ -334,8 +335,10 @@ class Documents(HttpLayerTestCase):
             self.assertEqual(status, 200)
             row = found["entry"]
             self.assertEqual((row["id"], row["file"], row["sourcePath"], row["hash"]), (ident, ident, None, "model:v1"))
-            self.assertEqual((found["kind"], found["name"], found["version"], found["state"], found["held"]),
-                             ("xbf", "cube", "v1", "held", True))
+            # Named by its .xbf's file name, as its card is and as the same file read from disk is; the function's
+            # name is its source's.
+            self.assertEqual((found["kind"], found["name"], row["name"], found["version"], found["state"], found["held"]),
+                             ("xbf", "cube.xbf", "cube.xbf", "v1", "held", True))
             # Its script, and whether it is there now: one named but gone (or never kept) is not.
             self.assertEqual(found["source"], {"type": "script", "path": script.replace(os.sep, "/"), "function": "cube",
                                               "present": False})
