@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parent
 DRC_BEFORE_CLEANUP = "tmp/drc_before_cleanup.json"
 
 # (how, script, arguments): "python" runs with this interpreter (the standard library alone), "cad" through
-# `cad run`, "drc" saves `cad kicad_pcb drc --json` of the board as it stands to the file named.
+# `cad run`, "drc" saves `cad kicad drc --json` of the board as it stands to the file named.
 STEPS = (
     ("python", "scripts/make_libs.py"),            # twin_orbit.pretty and the library tables
     ("python", "scripts/gen_schematic.py"),        # root, LFO (x2) and power sheets
@@ -50,7 +50,7 @@ def main() -> None:
             out = HERE / script
             out.parent.mkdir(parents=True, exist_ok=True)
             with out.open("w", encoding="utf-8") as fh:
-                subprocess.run([cad, "kicad_pcb", "drc", "twin_orbit.kicad_pcb", "--json"], cwd=HERE, stdout=fh)
+                subprocess.run([cad, "kicad", "drc", "twin_orbit.kicad_pcb", "--json"], cwd=HERE, stdout=fh)
         else:
             command = [sys.executable, script, *args] if how == "python" else [cad, "run", script, *args]
             subprocess.run(command, cwd=HERE, check=True)

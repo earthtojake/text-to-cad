@@ -533,6 +533,14 @@ class LinuxTest(unittest.TestCase):
         self.assertFalse({"fusion", "solidworks", "solidedge", "rhino"} & set(everything))
         self.assertEqual(everything["plasticity"], "/usr/bin/plasticity")
 
+    def test_the_default_handler_is_xdg_open_where_the_look_finds_it_and_always_on_macos_and_windows(self) -> None:
+        self.assertEqual(apps.linux({"xdg-open": "/usr/bin/xdg-open"}.get), {apps.DEFAULT: "/usr/bin/xdg-open"})
+        for platform, found, handles in (("linux", {apps.DEFAULT: "/usr/bin/xdg-open"}, True),
+                                         ("linux", {"vscode": "/usr/bin/code"}, False),
+                                         ("darwin", {}, True), ("win32", {}, True)):
+            with self.subTest(platform=platform, found=found):
+                self.assertEqual(apps.Detected(platform=platform).handles(found), handles)
+
 
 class KindsTest(unittest.TestCase):
     def test_the_apps_each_kind_takes_in_the_menus_order(self) -> None:
@@ -555,6 +563,45 @@ class KindsTest(unittest.TestCase):
                                      "solidedge": "Solid Edge"})
         self.assertEqual([apps.file_manager(platform) for platform in ("darwin", "win32", "linux")],
                          ["finder", "explorer", "files"])
+
+    def test_a_file_that_is_no_document_is_opened_by_what_its_extension_allows_and_no_more(self) -> None:
+        every = {app: f"/apps/{app}" for app in apps.APPS}
+        editors = ["vscode", "cursor", "zed", "pycharm", "sublime"]
+
+        def offered(name: str) -> tuple[str, list[str], bool]:
+            kind = apps.kind_of(name)
+            return kind, [entry["id"] for entry in apps.apps_for(kind, every)], apps.defaults(name)
+
+        for names, expected in (
+                # Code and structured text: an editor, never the system's handler, which may run it.
+                (("check.py", "app.TSX", "pyproject.toml", "run.sh", "index.html", "main.rs"), ("code", editors, False)),
+                (("notes.md", "README.txt", "bom.csv", "build.log"), ("text", editors, True)),
+                (("drawing.pdf",), ("pdf", [], True)),
+                (("render.png", "photo.JPG", "logo.svg", "scan.tiff"), ("image", [], True)),
+                (("arm.f3d", "arm.SLDPRT", "arm.dwg", "arm.3dm", "arm.iges", "arm.x_t", "arm.scad"), ("cad", [], True)),
+                (("arm.FCStd",), ("fcstd", ["freecad"], True)),
+                (("scene.blend",), ("blend", ["blender"], True)),
+                # Any other extension, or none: nothing opens it. A cloned folder's file may be a program.
+                (("setup.exe", "run.command", "app.desktop", "tool.bat", "lib.dylib", "Makefile", "a.zip", ".env"),
+                 ("file", [], False))):
+            for name in names:
+                with self.subTest(name=name):
+                    self.assertEqual(offered(name), expected)
+        # A document type's own files keep the handler, but KiCad's; the opener refuses what the table does.
+        self.assertEqual([apps.defaults(name) for name in ("a.step", "a.stl", "a.xbf", "a.kicad_pcb", "a.kicad_pro")],
+                         [True, True, True, False, False])
+        spawn, startfile = mock.Mock(), mock.Mock()
+        for name in ("/m/check.py", "/m/setup.exe", "/m/Makefile", "/m/run.sh"):
+            for platform in ("darwin", "win32", "linux"):
+                with self.subTest(name=name, platform=platform), self.assertRaises(PermissionError):
+                    apps.open_file(name, None, platform=platform, spawn=spawn, startfile=startfile)
+        spawn.assert_not_called()
+        startfile.assert_not_called()
+        apps.open_file("/m/check.py", "/usr/bin/code", app_id="vscode", platform="linux", spawn=spawn)
+        self.assertEqual(spawn.call_args.args[0], ["/usr/bin/code", "/m/check.py"], "in an editor found here")
+        # Blender opens its own file from its command line, with no import script.
+        apps.open_file("/m/scene.blend", "/usr/bin/blender", app_id="blender", platform="linux", spawn=spawn)
+        self.assertEqual(spawn.call_args.args[0], ["/usr/bin/blender", "/m/scene.blend"])
 
 
 def settle(detected: apps.Detected) -> None:

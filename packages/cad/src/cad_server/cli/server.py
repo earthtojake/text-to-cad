@@ -2,8 +2,10 @@
 in this process), ``stop`` and ``status`` (the engine's verbs, ``cad_server.engine.cli``) -- and ``--rotate-token``,
 which replaces the page token, asking first (``cad_server._internal.consent``).
 
-Bare ``cad server`` runs the server in this process, as ``cad server start --foreground`` does: releases 0.10.0 to
-0.11.11 tell an agent in a sandbox to run `cad server` outside it, so it stays, unlisted, until the bridge goes.
+Bare ``cad server`` (and ``cad server --port N``), which ran the server in this process and which releases 0.10.0 to
+0.11.11 told a person to run outside an agent's sandbox, runs nothing: it is answered in one line with ``cad server
+start``, exit 2 (the dispatcher's one table of earlier spellings, ``cad_server.cli._hint``). ``cad server
+--rotate-token`` replaces the token, then runs the server here where none runs, as ``start --foreground`` does.
 
 A start that fails asks for cad's own update before it gives up (``auto_update.after_failed_start``): a release whose
 server cannot start still updates.
@@ -34,7 +36,7 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
 
     parser = command_parser(prog, description="The cad server, which builds, keeps and serves your documents: "
                                               "start it, stop it, or say what it runs.")
-    _port(parser)  # bare ``cad server --port N``'s (see the module)
+    _port(parser)  # ``cad server --rotate-token --port N``'s (see the module)
     parser.add_argument("--rotate-token", action="store_true",
                         help="replace the page token: every link and browser session made before stops working, in "
                              "the server running too; asked first")
@@ -66,11 +68,16 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 
 def _start(args: argparse.Namespace, prog: str) -> int:
     """``cad server start``: this release's server started, detached (``client.start``), and that said; with
-    ``--foreground``, or bare ``cad server``, run here until it stops, once room is made for it (``client.make_way``).
-    ``--rotate-token`` first."""
+    ``--foreground``, or ``cad server --rotate-token``, run here until it stops, once room is made for it
+    (``client.make_way``). ``--rotate-token`` first; bare ``cad server`` refused, naming ``start``."""
     from cad.engine import client
     from cad_server.engine.cli import Failed
 
+    if args.command is None and not args.rotate_token:  # bare ``cad server``: an earlier spelling, run no more
+        from cad_server.cli import _hint
+
+        raise Failed(_hint(["server", *(["--port", str(args.port)] if args.port is not None else [])]) or "", 2,
+                     "usage")
     if args.port is not None and not 0 <= args.port <= 65535:
         raise Failed("--port must be between 0 and 65535", 2)
     if args.rotate_token:
@@ -112,11 +119,9 @@ def _rotate(args: argparse.Namespace, prog: str) -> None:
                      "with the one it has now stops working at once, in the server running too, and each page needs a "
                      "new link (cad viewer prints one). This cannot be undone."])
     try:
-        rotated = rotate_token(told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
+        rotate_token(told=lambda line: print(f"cad: {line}", file=sys.stderr, flush=True))
     except (OSError, ValueError) as error:
         raise Failed(f"cannot replace the page token: {getattr(error, 'strerror', None) or error}") from None
-    if rotated is None:
-        raise Failed("cannot replace the page token: there is no state folder to keep it in")
     print("cad: a new page token: every link and browser session made before no longer works", file=sys.stderr,
           flush=True)
 

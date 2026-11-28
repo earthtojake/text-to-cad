@@ -313,7 +313,7 @@ export const BOARD_FIT_MARGIN_SHARE = 0.06;
 /**
  * The room a board's fit leaves round it, in pane pixels: 6% of the pane's smaller side, never less
  * than drawing2d's 16px — the breathing room a STEP's default view has, more than a drawing's
- * fixed gutter. `cad kicad_pcb snapshot` frames with the same (`render/board.py`).
+ * fixed gutter. `cad snapshot` frames with the same (`render/board.py`).
  *
  * @param {number} width
  * @param {number} height

@@ -74,7 +74,7 @@ def parts(spec):
 
 def collisions(spec, part):
     """The collision geoms (``mujoco.MjsGeom``) of the part ``part`` names in ``spec`` (a spec ``spec`` made): its
-    label path, as ``cad model inspect`` prints it, a last segment enough where only one part ends in it; a list,
+    label path, as ``cad inspect`` prints it, a last segment enough where only one part ends in it; a list,
     empty for a part that collides as nothing. A label that names no part, or two, is refused by name
     (``cad.mujoco._parts``)."""
     from cad.mujoco._parts import collisions as _collisions

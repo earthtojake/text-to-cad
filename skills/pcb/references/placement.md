@@ -28,8 +28,8 @@ pins is free:
 
 1. What the mechanics fix: connectors, buttons, LEDs, mounting holes, an antenna and its keep-out, anything
    the enclosure locates. These go first and are locked. A horizontal connector sits at a board edge with
-   its mating face out over it: check it in a GLB export opened in the viewer (`cad kicad_pcb export
-   board.kicad_pcb --to glb -o tmp/glb`).
+   its mating face out over it: check it in a GLB export opened in the viewer (`cad export
+   board.kicad_pcb tmp/board.glb`).
 2. What the vendor fixes, and the high-frequency paths: an RF network, a regulator's hot loop, a ground
    tied to one pin.
 3. Decoupling and filter capacitors, each at its own pin, supply pad toward the pin, even when a
@@ -138,7 +138,7 @@ DRC then warns `lib_footprint_mismatch` ("does not match copy in library") on a 
 
 After each group:
 
-- **DRC.** `cad kicad_pcb drc board.kicad_pcb`: fix every courtyard, clearance and edge error.
+- **DRC.** `cad kicad drc board.kicad_pcb`: fix every courtyard, clearance and edge error.
   Unconnected items are expected until routing.
 - **Your own measurements.** A check script reading the saved board measures each pin to its part,
   each ground pad's via site and each crystal's gaps ([layout's list](layout.md#a-property-check)).

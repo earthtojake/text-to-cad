@@ -17,9 +17,9 @@ Vendor STEPs come in two kinds, and the steps say what each needs:
 ## 1. Read it
 
 ```bash
-cad step export vendor/arm.step vendor/arm.xbf      # once: the model reads the xbf
-cad step inspect vendor/arm.step --query structure  # counts the parts
-cad step snapshot vendor/arm.step tmp/as-drawn.png --camera right
+cad export vendor/arm.step vendor/arm.xbf      # once: the model reads the xbf
+cad inspect vendor/arm.step --query structure  # counts the parts
+cad snapshot vendor/arm.step tmp/as-drawn.png --camera right
 ```
 
 In the model's body, `leaves(xbf.read(path), paths=True)` gives each part placed where it stands,
@@ -164,14 +164,14 @@ one.
   the motor out, `point_mass()` adds it.
 - **Boards and cables**: a weighed figure, or an assumed one written in a comment beside it.
 
-`cad model inspect "$ID"` weighs the result and lists each declared mass: read its total against the
+`cad inspect src/arm.xbf` weighs the result and lists each declared mass: read its total against the
 hardware's.
 
 ## 5. Stops and drive limits
 
 ```bash
-cad model ranges "$ID"               # every joint, each swept alone until its child link meets its parent
-cad model ranges "$ID" --joint jaw   # one joint again, after a change
+cad inspect src/arm.xbf --ranges               # every joint, each swept alone until its child link meets its parent
+cad inspect src/arm.xbf --ranges --joint jaw   # one joint again, after a change
 ```
 
 The sweep takes tens of seconds for a few hundred small parts and minutes for a few large freeform
@@ -255,17 +255,18 @@ reach (an elbow that stops short of straight cannot stand the arm upright).
 Check each joint's sign on the model before exporting:
 
 ```bash
-cad model snapshot "$ID" tmp/home.png --pose home --camera right
-cad model snapshot "$ID" tmp/lift.png --pose '{"shoulder": 30}' --camera right
+cad snapshot src/arm.xbf tmp/home.png --pose home --camera right
+cad snapshot src/arm.xbf tmp/lift.png --pose '{"shoulder": 30}' --camera right
 ```
 
 ## 7. Export and compare
 
 ```bash
-cad model export "$ID" sim/arm.xml description/arm.urdf   # add --zero <state> only where step 6 re-zeroed
+cad export src/arm.xbf sim/arm.xml            # the model's own .xbf; add --zero <state> only where step 6 re-zeroed
+cad export src/arm.xbf description/arm.urdf   # the same --zero, if any
 cad mujoco check sim/scene.xml
-cad urdf validate description/arm.urdf
-cad urdf snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder": 30}' --camera right
+cad inspect description/arm.urdf
+cad snapshot description/arm.urdf tmp/urdf.png --pose '{"shoulder": 30}' --camera right
 ```
 
 Both files come from one model, so the two exports' summaries must name the same links and joints
@@ -304,7 +305,7 @@ no actuator: its equality drives it.
   region. Find out whether that matters before changing anything: in a throwaway script, set the
   joint whose parts enter that region to each end and the middle of its range (`mujoco.mj_forward`)
   and print the geom names of `d.contact[:d.ncon]`. A contact between two hulls at a pose where the
-  parts clear each other in the CAD (`cad model snapshot` at that pose) is a hull bridging the gap; a
+  parts clear each other in the CAD (`cad snapshot` at that pose) is a hull bridging the gap; a
   pair of bodies the file excludes makes no contact at all, so read the `excludes` line first. A hull
   that fills a pocket a neighbour moves into, a slot or the gap between jaws is contact the hardware
   does not make: raise that part's cap (`max_hulls=32`) or lower its `threshold`. One that only

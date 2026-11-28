@@ -1,9 +1,9 @@
 """Open the running server's viewer page: the home, or each file named (no server running: its one line, which
 says to run ``cad server start``).
 
-The page is the engine's one page, whose explorer opens where it was last, else your home folder.
-Each FILE (an on-disk CAD file, a relative one read from this folder, or a document id the engine
-holds) is registered and printed as its page, ``/<id>``."""
+The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a
+share's link, this computer's copy of it) is registered and printed as its page, ``/<id>``. A folder is opened as a
+project, shown a folder at a time on the home, whose page is printed. Nothing is written to the folder."""
 # A FILE that is not there, or that the viewer does not open -- a model's script among them -- is the
 # command line's (the ``cad`` command's failure contract, ``cad_server._internal.cli_errors``): refused
 # here, before the engine is asked, as the engine refuses it (``unopened``); a document id the engine does
@@ -39,9 +39,10 @@ class Unopened(ValueError):
 def unopened(name, start):
     """Why a launch's FILE ``name`` -- read from ``start`` when it is relative, as the engine reads it -- is no
     file the viewer opens, as ``(reason, words)`` (``cad_server._internal.cli_errors.REASONS``), or None for one
-    it opens: a model's script (``part.py``, ``part.py::fn``), whose run makes its documents and prints each
-    one's page, ``wrong_type``; a path that is not there, ``not_found``; a file of no type the viewer opens,
-    ``wrong_type``. A document id is not a FILE here: the engine alone knows what it holds."""
+    it opens, or a folder (a project's): a model's script (``part.py``, ``part.py::fn``), whose run makes its
+    documents and prints each one's page, ``wrong_type``; a path that is not there, ``not_found``; a file of no
+    type the viewer opens, ``wrong_type``. A document id is not a FILE here: the engine alone knows what it holds,
+    and which folder is no project (``projects.Refused``) is the engine's to say too."""
     import shlex
 
     from .content_types import extension_of
@@ -54,16 +55,21 @@ def unopened(name, start):
     path = os.path.join(start, os.path.expanduser(name))
     if not os.path.exists(path):
         return 'not_found', f'no such file: {name}'
+    if os.path.isdir(path):
+        return None
     if extension_of(path) not in VIEWER_EXTENSIONS or not os.path.isfile(path):
         return 'wrong_type', f'no CAD file at {os.path.abspath(path)}'
     return None
 
 
 def _files_opened(parsed):
-    """The check of a launch's FILEs before the engine is asked (``unopened``), each read from this folder."""
+    """The check of a launch's FILEs before the engine is asked (``unopened``), each read from this folder; a share's
+    link is this computer's copy of it from then on, and refused where it has none (``engine.cli.linked``)."""
     from cad.engine.ids import is_id
     from cad_server._internal.cli_errors import Failure
+    from cad_server.engine.cli import linked
 
+    parsed.files = [linked(name) for name in parsed.files]
     for name in parsed.files:
         refused = None if is_id(name) else unopened(name, os.getcwd())
         if refused is not None:
@@ -77,7 +83,8 @@ def build_parser(prog=DEFAULT_PROG):
 
     parser = command_parser(prog=prog, description=__doc__)
     parser.add_argument('files', nargs='*', metavar='FILE',
-                        help='a CAD file to open (or a document id the engine holds): its page is /<id>')
+                        help='a CAD file to open: its page is /<id>; '
+                             'a folder opens as a project, on the home')
     parser.add_argument('--host', default=None, help='Pin the engine bind address; default loopback.')
     parser.add_argument('--port', type=int, default=None, help='Pin this installation’s engine HTTP port.')
     parser.add_argument('--json', action='store_true', help='Print launch information without opening a browser.')
@@ -97,9 +104,15 @@ def parse_args(argv=None, *, prog=DEFAULT_PROG):
 
 
 def main(argv=None, *, prog=DEFAULT_PROG):
-    from cad.engine.client import request
+    from cad.engine.client import connect, request
     options = parse_args(argv, prog=prog)
     options['start'] = os.getcwd()
+    # The server first, as every command that needs one asks: none running, or one of another release, is the
+    # one line said, whether or not this computer has the viewer's client built.
+    try:
+        connect().close()
+    except OSError as error:
+        return _failed(options, prog, error)
     if not options['api_only']:
         options['dist'] = resolve_dist_dir(options['dist'])
         if not options['dist']:
@@ -123,8 +136,10 @@ def main(argv=None, *, prog=DEFAULT_PROG):
     if options['json']:
         print(json.dumps(answer), flush=True)
     else:
-        # The page of each file named, a line each; the home's when none is.
-        for url in [document['url'] for document in answer.get('documents') or []] or [answer['url']]:
+        # The page of each file named, then of each folder opened as a project, a line each; the home's where
+        # nothing was named.
+        pages = [named['url'] for named in [*(answer.get('documents') or []), *(answer.get('projects') or [])]]
+        for url in pages or [answer.get('home') or answer['url']]:
             print(url, flush=True)
     if not options['json'] and not options['no_open'] and not options['api_only']:
         from .browser_open import CannotOpen, open_page

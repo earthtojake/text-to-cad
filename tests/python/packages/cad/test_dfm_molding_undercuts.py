@@ -150,7 +150,7 @@ class UndercutTest(unittest.TestCase):
             codes = {(f.severity, f.code) for f in result.findings if f.code.startswith("molding.undercut")}
             finding = next(f for f in result.findings if f.code.startswith("molding.undercut"))
             self.assertIn("mm deep against the pull", finding.message)
-            # every ref it names is a whole one (`cad step inspect` resolves it): its faces', never a bare word
+            # every ref it names is a whole one (`cad inspect` resolves it): its faces', never a bare word
             self.assertTrue(set(item["trapped_faces"]) <= set(finding.refs))
             self.assertEqual(set(finding.refs), {*item["faces"], *item["trapped_faces"], *item["blocked_by"]})
             if inset == 0.5:

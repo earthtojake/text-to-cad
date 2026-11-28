@@ -12,6 +12,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Build it and assert it is complete | `scripts/bundle/bundle.sh --check` |
 | Run code tests | `scripts/test/test.sh` |
 | Run docs checks | `scripts/test/test-docs.sh` |
+| Regenerate every file made from the code (the docs site's references and registry, @cad/core's types and look), or check them | `scripts/generated/regenerate.py`, `scripts/generated/regenerate.py --check` |
 | Check the release version and every stamp of it | `scripts/release/check-version.sh` |
 | Check the shipping contract | `scripts/github-workflows/check-builds.sh` |
 | Install this checkout into the agent apps to test it, and go back | `scripts/install/dev_install.py`, `scripts/install/dev_install.py --release` |
@@ -44,7 +45,7 @@ where those files ship, so these scripts are what produces them.
 
 `test/` — test runners.
 
-- `test.sh` — `test-js.sh`, `test-api.sh`, `test-python.sh`, then `test-global.sh`, on one
+- `test.sh` — `test-js.sh`, `test-api.sh`, `test-share.sh`, `test-python.sh`, then `test-global.sh`, on one
   machine, for a local run. It is not CI's coverage: the fea, KiCad and Blender suites, the docs
   check, packaging, the browser suite and the release tier are jobs of `test.yml`, which calls the
   focused runners.
@@ -108,6 +109,9 @@ where those files ship, so these scripts are what produces them.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` (`static`, on every
   change) and `deploy-api.yml`.
+- `test-share.sh` — `npm --prefix apps/share test`: the share service's tests (its Worker and
+  its local runner), which need no install. Called by `test.yml` (`static`, on every change) and
+  `deploy-share.yml`.
 - `test-installed.sh` — builds the `cad` wheel and its aliases' (or accepts
   `--wheels DIR` to test the exact artifacts already built), installs them together into a
   scratch venv and exercises them from outside the repo, including `cad mcp` serving the
@@ -168,7 +172,16 @@ where those files ship, so these scripts are what produces them.
 - `test-viewer-browser.sh` — creates tiny inputs and owns its temporary project,
   engine daemon and viewer. Requires a bundled viewer and npm Playwright Chromium
   (`npx --no-install playwright install chromium`). Runs the format and camera
-  gates, exactly what `test.yml` runs.
+  gates and the prompt gate (a Quick Edit copied from the engine's page, its snapshot inline), then
+  stops the engine and runs the share gate (the model shared by its `.xbf` with `cad share --yes`, then
+  shared again unchanged by its id and imported by `cad import`, against the share service's own Worker, run by
+  `apps/share/serve.mjs`, which serves the bundled client too: the same link and no file sent again, the
+  script that built it and its `.xbf` imported byte for byte as another computer would, viewed under the
+  service's content security policy with a face's facts and read-only parameters, a copied prompt the engine
+  page's for the same model but for its address (the prompt gate copies that one, its snapshot inline), an
+  unknown id said to be gone, deleted from its delete link; then a KiCad board and schematic shared the same way,
+  the board drawn as saved, opened in 3D on its model's body, the schematic's second sheet shown from the
+  Hierarchy): exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
   `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness (and that
@@ -369,6 +382,17 @@ this edit still BUILD? It no longer has anything to say about the index.
 `build/library.mjs` — the esbuild library build `packages/core` and
 `packages/ui` share; each package's `scripts/build.mjs` calls it.
 
+`generated/regenerate.py [--check]` — every committed file generated from the code, made again from this
+checkout's sources: the docs site's command and library references (`apps/docs/src/lib/docs/cli-reference.generated.json`,
+`library-reference.generated.json`) and its copy of the registry (`registry.generated.json`), and @cad/core's
+table of document types (`packages/core/src/lib/documentTypes.generated.js`) and copy of the engine's look
+(`packages/core/src/lib/xbf/look.generated.js`), each by its source's own module
+(`python -m cad_server._internal.cli_reference --docs`, `cad._internal.reference --docs`, `cad.registry --docs`,
+`cad.registry --js`, `cad.engine.render.look`'s `as_js`), in the Python the test runners take. `--check` writes
+nothing and names each stale file (exit 1). Run by hand after changing a command, a public name of the library, the
+registry or the look, which the tests that hold each file to its source ask for; tested by
+`tests/python/global/test_regenerate.py`.
+
 `brand/` — `export-logos.mjs` exports app and plugin icons from the committed SVGs.
 Run by hand when the brand changes; ordinary builds use the committed files. See
 [the brand recipe](brand/README.md).
@@ -390,11 +414,12 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to and PRs against `main` and `build-test`; nightly on `main`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run whole on its one flag, only when the change selects it (`select_checks.py`; `docs/contributing/testing.md#ci` lists the jobs): `static` always (the version check, the tracked tree's rules, the light contracts, the API's tests; on a pull request, what merging it releases); the package suites on Linux and Windows, in shards (`packages (Linux I/2)`, `packages (Windows I/3)`); `routing (macOS)`; `skills`; `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`; `fea`, `kicad`, `blender`; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheels and runs the installed-mode tests; `viewer-e2e` serves that bundle's viewer through the backend to the launch smoke test and the browser gates. A full run (a `VERSION` change, the nightly, a dispatch, `Publish Release`'s call) adds the release tier: the package suites on Python 3.11, the installer rehearsals and the update rehearsal (`update-rehearsal`, on Linux, macOS and Windows). `CI`, the one required check, fails when any job did. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; nightly on `main`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run whole on its one flag, only when the change selects it (`select_checks.py`; `docs/contributing/testing.md#ci` lists the jobs): `static` always (the version check, the tracked tree's rules, the light contracts, the API's and the share service's tests; on a pull request, what merging it releases); the package suites on Linux and Windows, in shards (`packages (Linux I/2)`, `packages (Windows I/3)`); `routing (macOS)`; `skills`; `js-core`, `js-ui`, `js-web`, `js-mcp`, `docs`; `fea`, `kicad`, `blender`; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheels and runs the installed-mode tests; `viewer-e2e` serves that bundle's viewer through the backend to the launch smoke test and the browser gates. A full run (a `VERSION` change, the nightly, a dispatch, `Publish Release`'s call) adds the release tier: the package suites on Python 3.11, the installer rehearsals and the update rehearsal (`update-rehearsal`, on Linux, macOS and Windows). `CI`, the one required check, fails when any job did. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
 | `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest`, `claude-plugin` and `codex-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`), or, dispatched with `preview`, that ref as a Vercel preview with production untouched: configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. The site serves the install command, so a production deploy first asks PyPI's newest cad whether it has `cad plugin install` (`scripts/release/newest_cad.py`) and deploys nothing where it has not; a preview, and a ref from before that check, are not asked. |
 | `deploy-api.yml` (`Deploy API`) | pushes to `main` that change `apps/api`; manual dispatch | Deploys `api.texttocad.dev` (`apps/api`) to Vercel production after its tests (`test-api.sh`). It follows no release. |
+| `deploy-share.yml` (`Deploy Share`) | manual dispatch | Deploys the share service (`apps/share`) to Cloudflare after its tests (`test-share.sh`), with the viewer built and copied in as its assets, then checks the deployed origin (`SHARE_ORIGIN`). It follows no release. |
 | `install-linux.yml` (`Linux installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install` or to cad's `cad plugin install`); manual dispatch | Runs `install.sh`, piped, on `ubuntu-latest` and in `python:3.12-slim-bookworm`, against this tree's wheel or, dispatched with `published`, the site's `install.sh` and PyPI; checks `cad --version`, both switches on, a model and `cad doctor`. |
 | `install-windows.yml` (`Windows installer rehearsal`) | called by `test.yml` (a full run; a change under `scripts/install` or to cad's `cad plugin install`); manual dispatch | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds, or, dispatched with `published`, the site's `install.ps1` and PyPI. |
 

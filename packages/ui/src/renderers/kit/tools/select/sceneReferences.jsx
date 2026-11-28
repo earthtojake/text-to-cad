@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
-import { formatPromptReference } from "@cad/core/prompt";
+import { formatPromptReference, validatePromptReference } from "@cad/core/prompt";
 import { english, useI18n } from "@cad/ui/i18n";
+import { subjectReference } from "../../shell/promptContext.js";
 
 const EMPTY = Object.freeze([]);
 
@@ -37,20 +38,27 @@ export function useSceneInspect({ scene, selection, describe, tip = null, data =
 
 /**
  * One reference into the file on screen naming `ids`, and what it copies, or null off a workspace file or where
- * the file's grammar cannot name an id (`formatPromptReference` refuses it). A view draws a pick whatever its
+ * the file's grammar cannot name an id (`validatePromptReference` refuses it). A view draws a pick whatever its
  * scene calls it, so a pick that cannot be named is that view's, not a reason to throw where a chip is drawn
  * (a throw inside the hook's `useMemo` takes the whole view down with it): it is no reference and copies nothing.
- * `validatePromptReference` stays strict for what sends or parses a reference; this is the display's guard.
+ * `validatePromptReference` stays strict for what sends or parses a reference; this is the display's guard. What
+ * it copies names the file as the host's prompts do (`subject`, its `promptSubject`: a shared model's link).
  */
-function named(resource, ids) {
+function named(resource, ids, subject = null) {
   if (resource?.kind !== "workspace-file" || !ids.length) return null;
   const reference = { resource: { ...resource }, target: { kind: "cad-selector", selectors: [...ids] } };
-  try { return { reference, text: formatPromptReference(reference) }; } catch { return null; }
+  try {
+    validatePromptReference(reference);
+    return { reference, text: formatPromptReference(subjectReference(reference, resource, subject)) };
+  } catch { return null; }
 }
 
-/** What Copy Reference copies for `ids` in the file on screen: one reference naming them all ("" off a workspace file, or where one cannot be named). */
-export function sceneCopyText(resource, ids) {
-  return named(resource, ids)?.text ?? "";
+/**
+ * What Copy Reference copies for `ids` in the file on screen: one reference naming them all, the file named as the
+ * host's prompts name it (`subject`) ("" off a workspace file, or where one cannot be named).
+ */
+export function sceneCopyText(resource, ids, subject = null) {
+  return named(resource, ids, subject)?.text ?? "";
 }
 
 /**
@@ -58,22 +66,24 @@ export function sceneCopyText(resource, ids) {
  * the file on screen, by the id its scene picks it by — the file's own name for it, whose grammar
  * is its renderer's (`renderers.md`) — and as a chip named as the file names it, its card what the
  * view says of it (`describe`: `useSceneDescribe` unless the view has its own).
- * A click on a chip copies its reference; its X drops it; resting on it lights it. A pick the file's grammar
- * cannot name is still a chip, with nothing to copy, and no reference.
+ * A click on a chip copies its reference, the file named as the host's prompts name it (`subject`); its X drops
+ * it; resting on it lights it. A pick the file's grammar cannot name is still a chip, with nothing to copy, and no
+ * reference.
  *
  * @param {{ scene: { describePart?: (id: string) => ({ name: string, facts: { label: string, value: string }[] } | null) } | null,
  *   describe?: ((id: string) => import("../../inspector/inspect.js").DetailItem | null) | null,
  *   selection: ReturnType<typeof import("./useSceneSelection.js").useSceneSelection>,
- *   resource: import("@cad/core/prompt").ResourceRef | null, group?: string }} options
+ *   resource: import("@cad/core/prompt").ResourceRef | null, group?: string,
+ *   subject?: import("../../../../host/types.js").PromptSubject | null }} options
  *   `group`: what Quick Edit groups the chips as (`ReferenceChips.jsx`'s `CHIP_GROUPS`): a scene's parts, a drawing's entities.
  */
-export function useSceneReferences({ scene, selection, resource, describe = null, group = "part" }) {
+export function useSceneReferences({ scene, selection, resource, describe = null, group = "part", subject = null }) {
   const { selected, select, hover } = selection;
   const own = useSceneDescribe(scene);
   const described = describe || own;
   return useMemo(() => {
     if (!scene) return { references: EMPTY, chips: EMPTY };
-    const names = selected.map(id => named(resource, [id]));
+    const names = selected.map(id => named(resource, [id], subject));
     const references = names.map(name => name?.reference).filter(Boolean);
     const chips = selected.map((id, at) => {
       const detail = described(id);
@@ -82,5 +92,5 @@ export function useSceneReferences({ scene, selection, resource, describe = null
         onRemove: () => select(id, { multiSelect: true }), onHover: on => hover(on ? id : "") };
     });
     return { references, chips };
-  }, [scene, selected, resource, select, hover, described, group]);
+  }, [scene, selected, resource, subject, select, hover, described, group]);
 }

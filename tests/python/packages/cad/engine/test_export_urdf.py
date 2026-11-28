@@ -179,10 +179,10 @@ TWO = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import free, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/two.xbf")
+@model("XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -260,7 +260,7 @@ class HandBuiltTest(_Folder):
         path = self.folder / "rig.urdf"
         # The slider link and its joint share a name: legal, said at export as the validator warns of it.
         with self.assertWarnsRegex(ExportWarning, r"^1 name held by a link and a joint both: slider \(legal URDF; "
-                                                  r"cad urdf validate warns of it, joint_link_name_collision"):
+                                                  r"cad inspect warns of it, joint_link_name_collision"):
             write_description(rig(), path)
         checked = urdf.validate(path)
         self.assertTrue(checked.ok, [f.message for f in checked.findings])
@@ -376,10 +376,10 @@ class HandBuiltTest(_Folder):
 HINGE = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -400,10 +400,10 @@ def hinge():
 TURNED = """
 import build123d as bd
 from bd_materials import metals
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/turned.xbf")
+@model("XBF/turned.xbf")
 def turned():
     base = bd.Pos(0, 38, 0) * bd.Rot(90, 0, 0) * bd.Box(100, 20, 60)
     base.label = "base"
@@ -423,10 +423,10 @@ PLAIN = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import frame, limits, mass
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/plain.xbf")
+@model("XBF/plain.xbf")
 def plain():
     base = bd.Box(100, 60, 20)
     base.label = "base"

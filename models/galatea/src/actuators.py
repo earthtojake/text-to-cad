@@ -1,7 +1,7 @@
 """Galatea's actuators on a bench: the five RobStride models it uses, each on a mounting plate
 with its output hub through it, so the joint packaging can be read off one picture."""
 
-from cad import model
+from cad import xbf
 
 from lib import geo
 from lib.dims import ACTUATORS, PLATE_T
@@ -9,7 +9,7 @@ from lib.hardware import Hardware, mount_bores
 from lib.kit import group, part
 
 
-@model
+@xbf
 def galatea_actuators():
     hw = Hardware()
     stations, x = [], 0.0

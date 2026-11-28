@@ -41,12 +41,12 @@ if __name__ == "__main__":
 
 PAIR = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SIZE = {size}
 
 
-@xbf("XBF/pair.xbf")
+@model("XBF/pair.xbf")
 def pair():
     block = bd.Box(SIZE, 4, 2)
     block.label = "block"
@@ -890,10 +890,12 @@ class SweepTest(unittest.TestCase):
             return done.returncode, done.stdout, done.stderr
 
         unknown = "00000000-0000-5000-8000-000000000000"
-        for words in (("server", "status"), ("status",)):  # the short form, for skill text of 0.10.0 to 0.11.11
-            self.assertEqual(cad(*words), (0, f"{NOT_RUNNING}\n", ""))
+        self.assertEqual(cad("server", "status"), (0, f"{NOT_RUNNING}\n", ""))
+        # The short form, the skill text of 0.10.0 to 0.11.11's, runs nothing: it names the command that does it.
+        self.assertEqual(cad("status"), (2, "", "cad: 'cad status' is 'cad server status' now; 'cad server --help' says "
+                                                "its options\n"))
         self.assertEqual(cad("server", "status", "--json")[:2], (0, "null\n"))
-        self.assertEqual(cad("serve", unknown), (1, "", f"cad serve: {NOT_RUNNING}\n"))
+        self.assertEqual(cad("viewer", unknown), (1, "", f"cad viewer: {NOT_RUNNING}\n"))
         # A client build of its own: a checkout's apps/web is built on one computer and not on another (CI).
         (own / "dist").mkdir()
         (own / "dist" / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
@@ -904,11 +906,26 @@ class SweepTest(unittest.TestCase):
         said = f"the cad server (cad {version()})"
         self.assertEqual(cad("server", "start"), (0, f"started {said}\n", ""))
         self.assertEqual(cad("server", "start"), (0, f"{said} is already running\n", ""))
-        self.assertEqual(cad("serve", unknown)[0], 2, "the server answers: a document it does not hold")
+        self.assertEqual(cad("inspect", unknown)[0], 2, "the server answers: a document it does not hold")
         self.assertEqual(cad("server", "stop")[0], 0)
-        for words in (("server", "stop"), ("stop",)):
-            self.assertEqual(cad(*words), (0, "the cad server is not running\n", ""))
+        self.assertEqual(cad("server", "stop"), (0, "the cad server is not running\n", ""))
+        self.assertEqual(cad("stop")[0], 2, "the short form runs nothing")
         self.assertEqual(cad("server", "status"), (0, f"{NOT_RUNNING}\n", ""))
+
+    def test_a_start_s_wait_takes_a_door_gone_for_the_server_gone_whoever_holds_the_lock(self) -> None:
+        """What a start waits for once it told an older server to stop (``client.wait_gone`` with ``leave``): its door
+        gone is it gone, by the wait's end, though the lock is held still -- by its last moments, or by a server
+        another start began, which takes the lock before its door opens. A stop's wait, which leaves nothing running,
+        waits for the lock too."""
+        from cad.engine import client, places
+
+        gone = places.Endpoint(self.state / "x.door", self.state / "x.lock")  # no door: nothing answers there
+        held = places.lock(gone.lock)  # as a server holds it while it starts, its door not open yet
+        self.addCleanup(held.close)
+        self.assertTrue(client.wait_gone(0.2, endpoint=gone, leave="0.0.1"))
+        self.assertFalse(client.wait_gone(0.2, endpoint=gone))
+        held.close()
+        self.assertTrue(client.wait_gone(0.2, endpoint=gone), "nothing answers and nobody holds the lock: gone")
 
     def test_a_start_replaces_a_server_of_another_release_and_starts_at_once_end_with_one(self) -> None:
         """A server of another release refuses a ``cad`` command in one line, never a person's own Python;
@@ -931,10 +948,10 @@ class SweepTest(unittest.TestCase):
                 self.assertLess(time.monotonic(), deadline, "the older server's door answered")
                 time.sleep(0.05)
             found.close()
-        refused = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "serve", "00000000-0000-5000-8000-000000000000"],
+        refused = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "viewer", "00000000-0000-5000-8000-000000000000"],
                                     env=self.env)
         self.assertEqual((refused.returncode, refused.stderr),
-                         (1, f"cad serve: cad here is {version()}; the running server is 0.0.1: install cad 0.0.1, or run "
+                         (1, f"cad viewer: cad here is {version()}; the running server is 0.0.1: install cad 0.0.1, or run "
                              f"`cad server start` to run {version()}'s server\n"))
         theirs = engine_daemon.run([sys.executable, "-c", "from cad.engine.client import request; "
                                     "print(request({'op': 'pid'})['pid'])"], env=self.env)
@@ -1287,12 +1304,12 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
 
         with Image.open(self.folder / "bracket.png") as picture:
             self.assertEqual(picture.size, (200, 150))
-        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.png", "bracket.py"])
+        # The picture beside the model's own .xbf, which its build wrote: nothing written for the snapshot.
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.png", "bracket.py", "bracket.xbf"])
 
-    def test_a_served_declared_xbf_follows_its_file_when_its_model_runs_again(self) -> None:
-        """A model's declared xbf opened as a file is a file: a run that rewrites it sends the page
-        nothing, and the page's version moves because the file's bytes did -- its version is the
-        file's, and its parts are read from it."""
+    def test_a_served_xbf_is_its_model_and_follows_its_runs(self) -> None:
+        """A model's .xbf opened by its path is the model, live while its worker holds the build: the page's id is the
+        model's, a run that changes it moves the page to the build's new generation, and its parts are the build's."""
         self.script = self.folder / "pair.py"
         self.script.write_text(textwrap.dedent(PAIR.format(size=10)), encoding="utf-8")
         self.assertEqual(self.run_script("pair.py").returncode, 0)
@@ -1310,16 +1327,18 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
         ran = self.run_script("pair.py")
         self.assertEqual(ran.returncode, 0, ran.stderr)
         answer = get_json(f"{base}/api/v1/documents/{ident}/version?after={before['version']}&wait=60", token)
+        from cad.engine.ids import file_id
+
+        self.assertEqual(ident, file_id(self.folder / "XBF/pair.xbf"), "the model's id, its .xbf's")
         stat = (self.folder / "XBF/pair.xbf").stat()
-        self.assertEqual(answer["version"], f"{stat.st_mtime_ns}-{stat.st_size}", "the file's own version")
-        self.assertNotIn("patch", answer, "nothing of the run reached the page")
+        self.assertNotEqual(answer["version"], f"{stat.st_mtime_ns}-{stat.st_size}", "the build's generation, not a file's")
         after = get_json(f"{api}/structure", token)
         keys = lambda s: {p["name"]: p["key"] for p in s["prototypes"]}  # noqa: E731
         self.assertNotEqual(keys(after)["block"], keys(before)["block"])
         self.assertEqual(keys(after)["peg"], keys(before)["peg"])
         self.assertEqual(get(f"{api}/parts/{keys(after)['block']}", token)[:4], b"XBM2")
 
-    def test_the_viewer_moves_before_a_derived_file_is_written(self) -> None:
+    def test_the_viewer_hears_the_build_before_a_derived_file_is_written(self) -> None:
         # An STL writer held until the test lets it go, put in place in the worker by the model's own module.
         gate = self.folder / "gate"
         gate.touch()  # the first build writes at once
@@ -1337,8 +1356,8 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
                 given = export.KINDS["stl"]
                 export.KINDS["stl"] = Slow(given.name, given.suffixes, given.writer, given.atomic)
                 export.slow = True
-        """).replace("GATE_PATH", repr(str(gate))) + textwrap.dedent(PAIR).replace('@xbf("XBF/pair.xbf")', '@xbf("XBF/pair.xbf")\n@stl("pair.stl")').replace(
-            "import xbf", "import stl, xbf")
+        """).replace("GATE_PATH", repr(str(gate))) + textwrap.dedent(PAIR).replace('@model("XBF/pair.xbf")', '@model("XBF/pair.xbf")\n@stl("pair.stl")').replace(
+            "import model", "import model, stl")
         self.script = self.folder / "pair.py"
         self.script.write_text(slow.format(size=10), encoding="utf-8")
         self.assertEqual(self.run_script("pair.py").returncode, 0)
@@ -1347,20 +1366,27 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
         url = urlsplit(served.stdout.strip())
         base, query = f"{url.scheme}://{url.netloc}", parse_qs(url.query)
         ident, token = url.path.strip("/"), query["token"][0]
-        before = get_json(f"{base}/api/v1/documents/xbf/{ident}/structure", token)
+        version = f"{base}/api/v1/documents/{ident}/version"
+        idle = get_json(f"{version}?wait=0", token)
         stl = self.folder / "pair.stl"
         written = stl.stat().st_mtime_ns
         self.script.write_text(slow.format(size=12), encoding="utf-8")
         gate.unlink()
+        self.addCleanup(gate.touch)  # however the test ends, the writer is let go before the build is waited on
         building = subprocess.Popen([sys.executable, "pair.py"], cwd=self.folder, env=self.env,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(building.wait)
-        answer = get_json(f"{base}/api/v1/documents/{ident}/version?after={before['version']}&wait=60", token)
-        self.assertNotEqual(answer["version"], before["version"])
-        self.assertEqual(stl.stat().st_mtime_ns, written, "the viewer moved before the STL was written")
+        # Its .xbf's page is the model's: it hears the build as it goes, the STL held.
+        answer = idle
+        while (answer.get("building") or {}).get("stage") != "write" or (answer.get("building") or {}).get("detail") != "pair.stl":
+            answer = get_json(f"{version}?after={idle['version']}&progress={answer['progress']}&wait=60", token)
+            self.assertEqual(answer["version"], idle["version"], "the version moves only when the build is done")
+        self.assertEqual(stl.stat().st_mtime_ns, written, "the page heard the build before the STL was written")
         gate.touch()
         self.assertEqual(building.wait(timeout=300), 0)
         self.assertNotEqual(stl.stat().st_mtime_ns, written)
+        moved = get_json(f"{version}?after={idle['version']}&wait=60", token)
+        self.assertNotEqual(moved["version"], idle["version"])
 
     def test_exports_and_a_model_s_document_through_the_daemon(self) -> None:
         self.script = self.folder / "pair.py"
@@ -1371,7 +1397,7 @@ class DaemonServerTest(daemon_fixtures.DaemonCase):
         workers = json.loads(self.cli("status", "--json").stdout)["workers"]
         self.assertEqual(([Path(row["script"]).name for row in self.mine(workers)],
                           [row["script"] for row in workers if row["script"] == "documents"]), (["pair.py"], ["documents"]),
-                         "a declared xbf is a file: the documents worker read it, never the model's worker")
+                         "an export of an .xbf by its path reads the file: the documents worker, never the model's worker")
         done = self.cli("export", "pair.step", "back.xbf")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertTrue((self.folder / "back.xbf").is_file())

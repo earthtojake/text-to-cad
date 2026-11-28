@@ -1,7 +1,7 @@
 # Logo CAD sources
 
 `models/branding` on cadgen 0.8: the brand's block-letter logos as solids, each a
-plain `@model`, and `exports.py`, which writes the STEP each delivers: this corpus's
+plain `@xbf`, and `exports.py`, which writes the STEP each delivers: this corpus's
 example of a STEP deliverable kept current by an `exports.py`.
 
 | Model | Delivers (`exports.py`) | Solids |
@@ -28,6 +28,6 @@ geometry.
 `profiles.json` holds the committed front outlines for the brand artwork. The models read it through
 `lib/logo_shape.py`, so a change to it rebuilds the logos.
 
-The port: `@step(out=...)` -> `@model`, the STEP written by `exports.py`; cadgen's
+The port: `@step(out=...)` -> `@xbf`, the STEP written by `exports.py`; cadgen's
 build123d proxy -> `import build123d as bd`; `cadgen.srgb("#…")` -> the hex itself, which
 a shape takes as it is. Each script's `__main__` calls its model.

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
 from cad.gltf import animation
 from math import cos, sin, tau
@@ -273,7 +273,7 @@ def _neg(vector):
     return tuple(-v for v in vector)
 
 
-@model
+@xbf
 def planetary_gear_assembly():
     """Return a labeled simplified planetary gear assembly in millimeters."""
     sun_pitch_angle = tau / SUN_TEETH

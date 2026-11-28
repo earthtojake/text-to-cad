@@ -28,10 +28,10 @@ from cad.mujoco import spec
 HINGE = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import step, xbf
+from cad.engine import step, model
 
 
-@xbf("XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 @step(out="hinge.step")
 def hinge():
     base = bd.Box(100, 60, 20)

@@ -28,7 +28,7 @@ const structureOf = ({ wall = 2, holes = 6 } = {}) => ({ parameters: [
   { name: 'pitch', value: 30, kind: 'float', min: null, max: null, step: null, unit: 'deg', writable: false, reason: 'shared', source: 'lib/spec.py' },
   { name: 'gap', value: 0.5, kind: 'float', min: 0, max: 1, step: null, unit: null, writable: false, reason: 'expression', source: 'bracket.py' },
 ] });
-const modelDocument = (structure: object) => ({ source: { kind: 'model', doc: ID }, structure });
+const modelDocument = (structure: object) => ({ source: { kind: 'xbf', doc: ID }, structure });
 const resource = { kind: 'cad-model', path: ID } as const;
 const face = { resource, target: { kind: 'cad-selector', selectors: ['base/f:base.extrude1.2'] } } as const;
 
@@ -99,18 +99,18 @@ it('is a slider over a declared range, a number field without one, and one the c
   expect([foot.contains(save()), Boolean(last.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING), foot.classList.contains('sticky')]).toEqual([true, true, true]);
 });
 
-it('a file document and a model no worker holds say why in the foot\'s status; a host that cannot save says it on Save', async () => {
+it('a model no worker holds says why in the foot\'s status; a host that cannot save says it on Save', async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   const statusReason = () => tab().querySelector('[data-parameters-status]')!.getAttribute('data-parameters-status-reason');
   const read = () => [off(), rows().map(row => row[3]), save().disabled, saveWhy(), status(), statusReason()];
-  const fileStructure = { parameters: structureOf().parameters.map(parameter => ({ ...parameter, writable: false, reason: 'file', source: null })) };
-  const { rerender } = render(<Tab client={{ setModelParameters: vi.fn() }} document={{ source: { kind: 'xbf', doc: ID }, structure: fileStructure }} />);
-  // Nothing in the tab can work: said once, as text, left of Reset and Save; Save is simply off, with no hint.
-  expect(read()).toEqual([[true, true, true, true], [null, null, null, null], true, null, 'Edit these in the script.', 'file']);
+  // No worker holds the script's run (`no_worker`: an `.xbf` read from its file, a model after a restart). Nothing in the
+  // tab can work: said once, as text, left of Reset and Save; Save is simply off, with no hint.
+  const unheld = { parameters: structureOf().parameters.map(parameter => ({ ...parameter, writable: false, reason: 'no_worker' })) };
+  const nameless = { parameters: unheld.parameters.map(parameter => ({ ...parameter, source: null })) };
+  const { rerender } = render(<Tab client={{ setModelParameters: vi.fn() }} document={modelDocument(nameless)} />);
+  expect(read()).toEqual([[true, true, true, true], [null, null, null, null], true, null, 'Run the script again to edit.', 'no_worker']);
   // From one file (none named another): no heading at all.
   expect(tab().querySelector('[data-parameters-file]')).toBeNull();
-  // After a restart no worker holds the script's run (`no_worker`): the same, its own line.
-  const unheld = { parameters: structureOf().parameters.map(parameter => ({ ...parameter, writable: false, reason: 'no_worker' })) };
   rerender(<Tab client={{ setModelParameters: vi.fn() }} document={modelDocument(unheld)} />);
   expect(read()).toEqual([[true, true, true, true], [null, null, null, null], true, null, 'Run the script again to edit.', 'no_worker']);
   // Locked, only the controls look it: the labels and the values keep their colours (no half strength on them), the

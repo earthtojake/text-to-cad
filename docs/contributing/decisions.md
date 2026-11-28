@@ -14,7 +14,7 @@ The decisions, by what they govern:
   Windows app's package
 - **Updating**: PyPI says when, uv says what; notices reach what a release cannot; always the newest
   release; who updates which copy; updated at a start or a person's ask; forward only;
-  the 30-day rule
+  replaced, not kept
 - **Past releases**: the bridge for 0.10.0 to 0.11.11; old releases are carried through the newest
   0.11; no version left behind
 - **The plugin**: browser first; no hooks, no pre-approved tools
@@ -78,7 +78,7 @@ servers. One cad is what every other command-line tool does. The update
 chooses a release, and no command names one.
 
 **What it costs.** A chat that is open while cad updates meets the new release. Skills may be older
-than cad, which [the 30-day rule](#the-30-day-rule) covers. A server started from uv's cache would
+than cad, which [replaced, not kept](#replaced-not-kept) covers. A server started from uv's cache would
 never update itself, which is why the CAD app's line installs cad first.
 
 ## uv installs cad, and uv updates it where it is
@@ -242,7 +242,8 @@ version ahead of them. Where a release needs words on every older computer, a no
 ([Notices reach what a release cannot](#notices-reach-what-a-release-cannot)).
 
 **What it costs.** A breaking major reaches every computer by itself, as a breaking minor does today:
-the migration guide and the 30-day rule are what stand between a release and a person's work. A
+the migration guide and [replaced, not kept](#replaced-not-kept) are what stand between a release and a
+person's work. A
 computer whose uv record holds a range an earlier release wrote (`cad>=X,<1`, `cad<1`) would stay below
 the next major, since `uv tool upgrade cad` keeps to uv's record. So where uv built a newer release than
 the upgrade took, and the record's range only caps the major, the worker installs cad over uv's record
@@ -413,22 +414,27 @@ itself: that computer waits for the next release, or for a person's `cad update`
 an older release installs it by hand, with automatic updates off
 ([Staying on an older release](../install.md#staying-on-an-older-release)).
 
-## The 30-day rule
+## Replaced, not kept
 
-**Decision.** A command the skills used keeps working for at least 30 days after the skills stop
-using it, hidden if need be. No test holds it: the change that removes a command says which
-releases' skills typed it and who may still be following them. Apart from that, a command, option
-or tool may change or go in any release.
+**Decision.** A `cad` command or option the skills used is replaced, not kept: its old spelling answers in
+one line with the new one. A library spelling keeps working, with a warning, for at least one minor
+release. Nothing another program calls (an installer, an earlier release's updater, an agent app's
+launch) is removed before its replacement ships. A breaking change comes with a migration guide. The
+old spellings the command answers are one table (`cad_server/cli/__init__.py`'s `_hint`), each with a
+test; the change that replaces a command adds its row and says which releases' skills typed it.
 
 **Why.** cad moves to the newest release on every computer, while a store's copy of the
-skills can lag by weeks. The rule keeps those skills working. A test once replayed every command
-of the last 30 days' skills against the command line; it was removed, because it measured the 30
-days back from the newest release tag and so held a removal the owner had decided on until some
-later release was cut.
+skills can lag by weeks. An agent that runs an old spelling reads the one line and runs the new one, so
+those skills keep working without the old code staying: a hidden command that still runs is code no
+skill reads and every change must keep. A program reads no line, so what a program calls stays until
+its replacement ships. A model's script is a person's own code, which keeps running a release at least,
+its warnings naming what to write. A test once replayed every command of the last 30 days' skills
+against the command line; it was removed, because it measured the 30 days back from the newest release
+tag and so held a removal the owner had decided on until some later release was cut.
 
-**What it costs.** An old spelling lives on for a month after the skills drop it. A person's own
-scripts that run `cad` commands are not covered and may need changes after an update. A model's
-Python imports and a person's data are not covered by this rule either: they keep tiers 2 and 3 of
+**What it costs.** An agent following older skills spends a turn on the line. A person's own scripts
+that run `cad` commands meet the same lines after an update and need an edit; the migration guide says
+which. A model's Python imports and a person's data keep tiers 2 and 3 of
 [law 14](../../packages/cad/README.md#the-design-laws).
 
 ## The install command gets cad, and hands the apps to it
@@ -506,8 +512,8 @@ fail for reasons no run of ours can fix: an app release that fails every git ins
 one nobody is signed in to.
 
 **What it costs.** A few commands stay for those releases: `cad setup --engine-update`; plain
-`cad setup`, which a `cad update` typed on those releases runs; and the hidden short forms `cad status`
-and `cad stop` their skill text uses. An app that fails in the bridge's run gets three tries a
+`cad setup`, which a `cad update` typed on those releases runs; and, for the short forms `cad status`
+and `cad stop` their skill text uses, a line naming `cad server status` and `cad server stop`. An app that fails in the bridge's run gets three tries a
 release, not one a day: one that would come right by itself within the month waits for the next
 release of cad, or for a person's `cad plugin install`. The bridge's run is counted as done where an
 app failed; the app is counted by the run of `cad plugin install` that met it, as any run's apps

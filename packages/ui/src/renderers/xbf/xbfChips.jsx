@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchXbfElementFacts } from "@cad/core/lib/xbf/xbfDocument.js";
 import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { formatPromptReference } from "@cad/core/prompt";
+import { subjectReference } from "../kit/shell/promptContext.js";
 import { formatNumber } from "../kit/inspector/referenceRows.jsx";
 import { english } from "../../i18n/core.js";
 import { useI18n } from "@cad/ui/i18n";
@@ -14,7 +15,7 @@ import { useI18n } from "@cad/ui/i18n";
 // (`fetchXbfElementFacts`).
 //
 // Each selected thing is also a reference into the document: the engine's canonical refs
-// (`xbfTree.js`: `refOf`, `elementRefOf`), the ones `cad <type> inspect` and `select` read, for an .xbf,
+// (`xbfTree.js`: `refOf`, `elementRefOf`), the ones `cad inspect` and `select` read, for an .xbf,
 // a STEP and a model alike: a part or subassembly by its label, or its occurrence path where the
 // label is shared (`hand/finger.2`), an element by its name, else its kind and number, under it
 // (`hand/finger.2/face 7`).
@@ -192,18 +193,22 @@ export function useXbfElementFacts({ source, fetch, version, scene, elementIds }
  *
  * @param {{ scene: object | null, tree: ReturnType<typeof import("./xbfTree.js").presentXbfTree>, resource: object | null,
  *   selectedIds: string[], facts: Map<string, object>, onRemove: (ids: string[]) => void,
- *   onHover: (ids: string[] | null) => void }} options
+ *   onHover: (ids: string[] | null) => void, subject?: import("../../host/types.js").PromptSubject | null }} options
  *   `selectedIds`: parts (`i3`), subassemblies (`n0.2`), faces and edges (`i3/face/12`), in the order picked.
+ *   `subject`: the host's `promptSubject`, which the chips' copies name the file by (the references stay the view's).
  */
-export function useXbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove, onHover, describe = null }) {
+export function useXbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove, onHover, describe = null, subject = null }) {
   const { t } = useI18n();
-  return useMemo(() => xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove, onHover, describe, t }),
-    [scene, tree, resource, selectedIds, facts, onRemove, onHover, describe, t]);
+  return useMemo(() => xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove, onHover, describe, t, subject }),
+    [scene, tree, resource, selectedIds, facts, onRemove, onHover, describe, t, subject]);
 }
 
-/** What `ids` copy, as their chips do: their references, each with the file's path, a line each. */
-export function xbfCopyText({ scene, tree, resource, ids }) {
-  return xbfSelectionChips({ scene, tree, resource, selectedIds: ids, facts: new Map(), onRemove: () => {}, onHover: () => {} })
+/**
+ * What `ids` copy, as their chips do: their references, each with the file's path, a line each; the file named as the
+ * host's prompts name it (`subject`, its `promptSubject`: a shared model's link) where it says how.
+ */
+export function xbfCopyText({ scene, tree, resource, ids, subject = null }) {
+  return xbfSelectionChips({ scene, tree, resource, selectedIds: ids, facts: new Map(), onRemove: () => {}, onHover: () => {}, subject })
     .chips.map(chip => chip.copy).filter(Boolean).join("\n");
 }
 
@@ -220,14 +225,16 @@ export function xbfNodeRefs({ scene, tree, resource, ids }) {
 
 // How a node and an element are referenced in `resource`: by the engine's canonical refs, which
 // every document the engine draws is named by (an .xbf, a STEP, a model by its id). A node's copy is
-// its reference with the file's path, or the document's id.
-function referencing({ tree, resource }) {
+// its reference with the file's path, or the document's id; or, where the host's prompts name the
+// file otherwise (`subject`), by that name.
+function referencing({ tree, resource, subject = null }) {
   const workspace = resource?.kind === "workspace-file" || resource?.kind === "cad-model";
   const referenceOf = selector => (workspace && selector
     ? { resource: { ...resource }, target: { kind: "cad-selector", selectors: [selector] } } : null);
   const nodeSelector = id => tree.refOf(id);
   const elementSelector = (part, element) => tree.elementRefOf(part, element.kind, element.ordinal, element.name);
-  const copyOf = (references, fallback) => (references.length ? references.map(formatPromptReference).join("\n") : fallback);
+  const copyOf = (references, fallback) => (references.length
+    ? references.map(reference => formatPromptReference(subjectReference(reference, resource, subject))).join("\n") : fallback);
   const nodeCopy = id => {
     const reference = referenceOf(nodeSelector(id));
     return copyOf(reference ? [reference] : [], nodeSelector(id));
@@ -235,10 +242,10 @@ function referencing({ tree, resource }) {
   return { referenceOf, nodeSelector, elementSelector, copyOf, nodeCopy };
 }
 
-function xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove, onHover, describe = null, t = english }) {
+function xbfSelectionChips({ scene, tree, resource, selectedIds, facts, onRemove, onHover, describe = null, t = english, subject = null }) {
   {
     if (!scene || !selectedIds.length) return { references: EMPTY, chips: EMPTY };
-    const { referenceOf, nodeSelector, elementSelector, copyOf, nodeCopy } = referencing({ tree, resource });
+    const { referenceOf, nodeSelector, elementSelector, copyOf, nodeCopy } = referencing({ tree, resource, subject });
     const partName = id => tree.nodes.get(id)?.label || scene.describePart(id)?.name || id;
     // A document of one part names it already: its element chips say their kind and number alone.
     const onePart = new Set(tree.roots.flatMap(root => root.leafPartIds || [])).size === 1;

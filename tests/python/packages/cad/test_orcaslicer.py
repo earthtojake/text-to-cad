@@ -127,7 +127,7 @@ class OrcaSlicerPresets(unittest.TestCase):
         found, _ = _presets.index([self.root])
         with self.assertRaises(ArgumentRefused) as raised:
             _presets.merged(found, "machine", "No Such Printer")
-        self.assertIn("cad orcaslicer presets machine", str(raised.exception))
+        self.assertIn("cad.orcaslicer.presets('machine')", str(raised.exception))
         with self.assertRaisesRegex(ArgumentRefused, "No filament preset named 'No Such PLA'"):
             orcaslicer.complete(printer="Acme One 0.4 nozzle", process="0.20mm @Acme", filament=("No Such PLA",),
                                 out=self.root / "out", profiles=(str(self.root),))

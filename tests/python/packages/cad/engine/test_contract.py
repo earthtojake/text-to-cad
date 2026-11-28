@@ -6,17 +6,15 @@ to update."""
 from __future__ import annotations
 
 import io
-import os
 import re
 import sys
 import tomllib
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from tests.python.support.paths import LIBRARY
 
-from cad import model
+from cad import xbf
 from cad.engine import api, contract, places
 
 OURS = {"protocol": 2, "format": "xbf/9", "kernel": "OCP 8.0"}
@@ -90,17 +88,14 @@ class ContractTest(unittest.TestCase):
         base = {"executable": "/base/bin/python", "prefix": "/base", "root": "/"}
         with mock.patch.object(places, "HOME", base):
             self.assertIsNone(contract.interpreter(), "cad run's script is built in the server's own environment")
-        # An environment of a model's own packages (``cad run --with``, a script's header): its Python, and
-        # the requirements ``cad run --with`` handed the program, which build its documents again.
-        named = '{"with": ["pandas"], "script": "/w/check.py", "header": ["scipy"]}'
-        with mock.patch.object(places, "HOME", base), mock.patch.object(places, "EXTRAS", ("pandas", "scipy")), \
-                mock.patch.dict(os.environ, {places.RUN_WITH: named}):
+        # An environment of a model's own packages (``cad run --with``, a script's header): its Python.
+        with mock.patch.object(places, "HOME", base), mock.patch.object(places, "EXTRAS", ("pandas", "scipy")):
             here = contract.interpreter()
-        self.assertEqual((here["executable"], here["with"], here["header"]),
-                         (sys.executable, ["pandas"], {"script": "/w/check.py", "with": ["scipy"]}))
+        self.assertEqual(set(here), {"executable", "prefix", "release", "contract"})
+        self.assertEqual(here["executable"], sys.executable)
 
 
-@model
+@xbf
 def plate():  # built by a stand-in engine below, never run here
     raise AssertionError("the engine is a stand-in")
 

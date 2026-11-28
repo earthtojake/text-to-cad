@@ -39,43 +39,75 @@ async function waitPayload(value) { await page.waitForFunction((expected) => doc
 // this harness's App); here, what needs a layout. Two frames on: what a change asked for has been drawn.
 const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
-test("the file's name opens the explorer under it, over the view, its long folder scrolling inside it; a pick is shown through the host and puts it away", async () => {
+test("a document in a project has the project's name before its own: in a narrow row and on a phone a folder tile named by it, the document's name whole; a press goes to the home at it", async () => {
   await reset();
   await waitPayload("root-a notes");
-  await page.evaluate(() => { for (let index = 0; index < 80; index += 1) window.harness.a.files.set(`/work/many-${String(index).padStart(2, "0")}.txt`, "many"); });
-  const view = () => payload().evaluate((element) => element.closest(".overflow-hidden")?.getBoundingClientRect().toJSON());
-  const before = await view();
-  await pane().locator("[data-file-name]").click();
-  const explorer = page.locator("[data-file-explorer]");
-  await explorer.locator('[data-path="/work/many-00.txt"]').waitFor();
-  // Measured where it comes to rest, once its opening animation has run.
-  await explorer.evaluate((node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished)));
-  assert.deepEqual(await view(), before, "the view keeps its box");
-  const [name, box] = await Promise.all([pane().locator("[data-file-name]").boundingBox(), explorer.boundingBox()]);
-  assert.ok(box.y >= name.y + name.height && box.y + box.height <= page.viewportSize().height, `under the name, inside the page: ${JSON.stringify([name, box])}`);
-  assert.ok(await explorer.locator('[data-slot="scroll-area-viewport"]').evaluate((element) => element.scrollHeight > element.clientHeight), "its rows scroll inside it");
-  await explorer.locator('[data-path="/work/next.txt"]').click();
-  await waitPayload("root-a next");
-  assert.deepEqual(await page.evaluate(() => window.harness.opened), ["/work/next.txt"]);
-  // The pick puts the explorer away (once its closing animation has run).
-  await explorer.waitFor({ state: "detached" });
+  assert.equal(await pane().locator("[data-navbar-project]").count(), 0, "a document in no project has none");
+  const name = "a-project-with-a-rather-long-name-indeed";
+  await page.evaluate((name) => window.harness.project({ id: "p1", name, root: "/work", documents: [] }), name);
+  const crumb = pane().locator("[data-navbar-project]");
+  const text = crumb.getByRole("button", { name, exact: true });
+  await text.waitFor();
+  const whole = (locator) => locator.evaluate((element) => element.scrollWidth <= element.clientWidth);
+  assert.ok(await whole(text.locator("span")), "a wide row has it whole");
+  // A narrow row (a desktop's, its controls left little room): the folder tile, the control's size, and the document's name whole.
+  const nav = '[data-testid="primary"] [data-viewer-navbar] nav';
+  await page.evaluate((nav) => { document.querySelector(nav).style.maxWidth = "140px"; }, nav);
+  const tile = crumb.locator("[data-project-tile]");
+  await tile.waitFor();
+  assert.deepEqual(await tile.evaluate((element) => { const box = element.getBoundingClientRect(); return [element.getAttribute("aria-label"), box.width, box.height]; }), [name, 28, 28]);
+  assert.ok(await whole(pane().locator("[data-file-name] span")), "the document's name whole beside the tile");
+  await tile.click();
+  assert.deepEqual(await page.evaluate(() => window.harness.events.filter((event) => event.startsWith("project:"))), ["project:p1"]);
+  // Room again: the name again.
+  await page.evaluate((nav) => { document.querySelector(nav).style.maxWidth = ""; }, nav);
+  await text.waitFor();
+  // A phone (the viewer under 600px): the tile at the phone's control, 36px.
+  await page.evaluate(() => { document.querySelector('[data-testid="primary"]').parentElement.style.width = "420px"; });
+  await page.waitForFunction(() => document.querySelector('[data-testid="primary"] [data-project-tile]')?.getBoundingClientRect().width === 36);
 });
 
-test("the explorer opens with its filter taking the keyboard, under a breadcrumb of whole folder names: those that do not fit beside the folder it is in are the ellipsis's", async () => {
+// A document in a project, its name too long for the row, and a failed update put away (its icon the first of the
+// right-hand controls): the name gives way, so the ⋯ and every control at the right keep their room at every width.
+test("a long name gives way at every width from 320 up: the ⋯ and every right-hand control keep their room", async () => {
   await reset();
-  const deep = "/work/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.txt";
-  await page.evaluate((path) => { window.harness.a.files.set(path, "root-a planetary"); window.harness.open(path); }, deep);
-  await waitPayload("root-a planetary");
-  await pane().locator("[data-file-name]").click();
-  const crumbs = page.locator('[data-file-explorer] nav[aria-label="Folders"] button');
-  await page.locator('[data-file-explorer] [data-path$="planetary_gear_assembly.txt"]').waitFor();
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Filter files");
-  // Every crumb is its folder's whole name; "assemblies" did not fit beside the rest, so it went into the ellipsis.
-  assert.deepEqual(await crumbs.evaluateAll((buttons) => buttons.map((button) => [button.getAttribute("aria-label") || button.textContent, button.scrollWidth <= button.clientWidth])),
-    [["Folders above", true], ["STEP", true], ["planetary_gear_assembly", true]]);
-  await crumbs.first().click();
-  assert.deepEqual(await page.getByRole("menuitem").allTextContents(), ["/", "work", "assemblies"]);
-  await page.keyboard.press("Escape");
+  await page.evaluate(() => window.harness.open("/work/an-enclosure-with-a-long-name.txt"));
+  await waitPayload("root-a an-enclosure-with-a-long-name");
+  await page.evaluate(() => window.harness.project({ id: "p1", name: "proj", root: "/work", documents: [] }));
+  await page.evaluate(() => window.harness.update("put away"));
+  // The view's own settings, as a 3D view portals them in: Display and Preview.
+  await page.evaluate(() => window.harness.rendererCallbacks.get("root-a").onNavigationActionsChange([
+    { id: "display", label: "Display", icon: "span", onInvoke() {} }, { id: "preview", label: "Preview", icon: "span", onInvoke() {} }]));
+  const navbar = pane().locator("[data-viewer-navbar]");
+  await navbar.getByRole("button", { name: "Couldn’t update to 0.9.1" }).waitFor();
+  await navbar.getByRole("button", { name: "Preview" }).waitFor();
+  for (const width of [1000, 600, 430, 390, 360, 320]) {
+    await page.evaluate((next) => { document.querySelector("#root > div").style.width = `${next}px`; }, width);
+    await settle();
+    const drawn = await navbar.evaluate((row) => {
+      const box = (node) => node.getBoundingClientRect();
+      const lead = row.querySelector("nav");
+      const menu = row.querySelector('[data-testid="file-actions"]');
+      const right = [...row.lastElementChild.querySelectorAll("button")];
+      // What a press at a control's centre reaches: the control itself, uncovered.
+      const reached = (node) => { const at = box(node); const hit = document.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2); return node === hit || node.contains(hit); };
+      return { row: box(row).toJSON(), lead: box(lead).toJSON(), menu: box(menu).toJSON(), menuReached: reached(menu),
+        right: right.map((node) => ({ name: node.getAttribute("aria-label") || node.textContent, box: box(node).toJSON(), reached: reached(node) })),
+        name: (({ scrollWidth, clientWidth }) => ({ scrollWidth, clientWidth }))(row.querySelector("[data-file-name] span")) };
+    });
+    const at = `at ${width}: ${JSON.stringify(drawn)}`;
+    assert.equal(drawn.right.length, 4, `the alert's icon, Display, Preview and the update button ${at}`);
+    assert.ok(drawn.menuReached, `the ⋯ uncovered ${at}`);
+    assert.ok(drawn.menu.right <= drawn.lead.right + 0.5, `the ⋯ whole, inside its side of the row ${at}`);
+    assert.ok(drawn.menu.right <= drawn.right[0].box.left, `the ⋯ short of the right-hand controls ${at}`);
+    for (const [index, control] of drawn.right.entries()) {
+      assert.ok(control.reached, `${control.name} uncovered ${at}`);
+      assert.ok(control.box.width >= 24 && control.box.right <= drawn.row.right + 0.5, `${control.name} whole, in the row ${at}`);
+      if (index) assert.ok(drawn.right[index - 1].box.right <= control.box.left + 0.5, `${control.name} after the one before ${at}`);
+    }
+    if (width <= 390) assert.ok(drawn.name.scrollWidth > drawn.name.clientWidth, `the name the one to give way ${at}`);
+  }
+  await page.evaluate(() => { document.querySelector("#root > div").style.width = "1000px"; window.harness.update("none"); window.harness.project(null); window.harness.open("/work/notes.txt"); });
 });
 
 test("the renderer is not re-rendered by the frame's own chrome: a navbar action it published or a resize within a layout", async () => {
@@ -90,8 +122,6 @@ test("the renderer is not re-rendered by the frame's own chrome: a navbar action
   assert.equal(await page.evaluate(() => window.harness.renders["root-a"]), before, "no renderer render for its own navbar action, or a width that does not cross the breakpoint");
 });
 
-// A library card's picture is drawn by a viewer of its own, out of sight at 480 × 360 (`OffscreenPicture.tsx`). That viewer
-// is under the phone breakpoint, and the page's type once followed it: Home's text grew a step while its cards got pictures.
 test("the update button is the navbar's outermost control, and a failed update is the viewer's alert card, centred over the view, until its X or Escape", async () => {
   await reset();
   await waitPayload("root-a notes");
@@ -141,7 +171,7 @@ test("the update button is the navbar's top-right corner, over a file and over t
     await page.evaluate((next) => { document.querySelector("#root > div").style.width = `${next}px`; }, width);
     for (const where of ["home", "file"]) {
       await page.evaluate((path) => window.harness.open(path), where === "home" ? null : "/work/notes.txt");
-      if (where === "home") await navbar.locator("[data-navbar-home-right]").getByRole("button", { name: "Open", exact: true }).waitFor();
+      if (where === "home") await navbar.locator("[data-navbar-home-right]").getByRole("button", { name: "Import", exact: true }).waitFor();
       else await waitPayload("root-a notes");
       for (const [state, tip] of [["behind", "Update"]]) {
         await page.evaluate((next) => window.harness.update(next), state);
@@ -153,11 +183,9 @@ test("the update button is the navbar's top-right corner, over a file and over t
         assert.equal(Math.max(...rights), at.right, `the navbar's last control: ${where_}`);
         assert.ok(Math.abs(row.right - pad - at.right) <= 0.5, `on the row's right end, less its padding: ${where_} ${JSON.stringify([row, pad, at])}`);
         if (where === "home") {
-          // The home's own controls end on the grid's column where it is narrower than the row, else short of the button.
+          // The home's own controls (the search and Import) end short of the button, which keeps the row's end.
           const end = (await box(navbar.locator("[data-navbar-home-right]"))).right;
-          const column = width - (Math.max(0, (width - 1128) / 2) + 24);
-          if (width > 600) assert.ok(Math.abs(end - column) <= 1, `the search and Open end on the column: ${where_} ${end} ${column}`);
-          else assert.ok(end <= at.left - 8, `short of the button: ${where_}`);
+          assert.ok(end <= at.left - 8, `short of the button: ${where_} ${end} ${at.left}`);
         }
         // Its hint under a resting pointer. A hover the hint did not take is tried again, as a person moves the pointer
         // again: three hovers, each awaited, and the place and state said where none was taken.
@@ -189,7 +217,9 @@ test("the update button is the navbar's top-right corner, over a file and over t
   await page.evaluate(() => { document.querySelector("#root > div").style.width = "1000px"; window.harness.update("none"); window.harness.open("/work/notes.txt"); });
 });
 
-test("a viewer drawn out of sight for a picture never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
+// A viewer that is not the page's own (`FileViewerProps.layout`), here out of sight at 480 × 360, is under the phone
+// breakpoint: the page's type must not follow it.
+test("a viewer that is not the page's own never changes the page: its layout pinned, no data-viewer-layout, the page's type its own", async () => {
   await reset();
   await page.setViewportSize({ width: 1280, height: 800 });
   await settle();
@@ -198,17 +228,11 @@ test("a viewer drawn out of sight for a picture never changes the page: its layo
     layouts: [...document.querySelectorAll("[data-viewer-layout]")].map((node) => node.getAttribute("data-viewer-layout")) }));
   const desktop = await type();
   assert.deepEqual(desktop.layouts, ["desktop"]);
-  // As OffscreenPicture draws it: pinned, it neither measures nor carries the attribute the page's stylesheet reads.
+  // Pinned, it neither measures nor carries the attribute the page's stylesheet reads.
   await page.evaluate(() => window.harness.picture("pinned"));
   await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").waitFor({ state: "attached" });
   await settle();
-  assert.deepEqual(await type(), desktop, "a pinned picture viewer leaves the page as it was");
+  assert.deepEqual(await type(), desktop, "a pinned viewer leaves the page as it was");
   assert.equal(await page.getByTestId("picture").locator("[data-viewer-pinned-layout]").getAttribute("data-viewer-pinned-layout"), "mobile");
-  // And a viewer in the picture's box that measured itself a phone's is still not the page's.
-  await page.evaluate(() => window.harness.picture("measured"));
-  await page.getByTestId("picture").locator('[data-viewer-layout="mobile"]').waitFor({ state: "attached" });
-  await settle();
-  const measured = await type();
-  assert.deepEqual([measured.xs, measured.name], [desktop.xs, desktop.name], "a phone-sized viewer out of sight never sets the page's type");
   await page.evaluate(() => window.harness.picture("none"));
 });

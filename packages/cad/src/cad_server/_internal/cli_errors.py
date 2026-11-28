@@ -43,7 +43,8 @@ REASONS: dict[str, int] = {
     "not_found": 2,              # an input that is not there: a file, a document the engine has no record of or does not hold
     "confirmation_required": 2,  # a destructive command where no one can be asked, without --yes: nothing was changed
     # The work.
-    "declined": 1,               # the person answered no to a destructive command's question: nothing was changed
+    "declined": 1,               # the person answered no to a destructive command's question, or keeps a no (sharing
+                                 # turned off, `cad share off`): nothing was changed
     "not_running": 1,            # no server runs: `cad server start` starts it (``next``)
     "other_release": 1,          # the server that runs is another release's than this command's
     "engine_unavailable": 1,     # the engine server could not be reached or started

@@ -16,10 +16,10 @@ import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
  *
  * - **Display's card** (`boardViewGroups`, `kit/shell/DisplaySettings.jsx`), opened by the navbar's Display
  *   button: **Side** (KiCad's View ▸ Flip Board View), the side the board is seen from, top or bottom: from the
- *   bottom the board is mirrored, its back layers on top; **Mode**, 2D or 3D, and in 3D the camera's **Projection**;
- *   then **Style**, the presets (the modes, `plot2d/boardDisplay.js`'s layer sets, KiCad's layer presets: Board,
- *   Copper, Assembly, Placement, and **Custom** while the Layers tab's eyes have left the mode's set: choosing a mode
- *   goes back to it), and the Background.
+ *   bottom the board is mirrored, its back layers on top; **Mode**, 2D or 3D (where the board has a 3D: not a
+ *   share's), and in 3D the camera's **Projection**; then **Style**, the presets (the modes, `plot2d/boardDisplay.js`'s
+ *   layer sets, KiCad's layer presets: Board, Copper, Assembly, Placement, and **Custom** while the Layers tab's eyes
+ *   have left the mode's set: choosing a mode goes back to it), and the Background.
  * - **Layer display**, in the panel's Layers tab (`LayersSection.jsx`), under its layers, as KiCad's
  *   Appearance panel has them, KiCad's Layer
  *   Display Options: **Others**, every layer but the active one (a press on its row chooses it) **Shown**,
@@ -29,7 +29,7 @@ import { BoardBottomSideIcon, BoardTopSideIcon } from "./boardSideIcons.jsx";
  *   **Tracks**' (100%) opacities.
  *
  * The contract — `{ mode, side, poured, layers, active, others, zones, tracks }` — is core's, shared
- * with `cad <type> snapshot --display`, so what is drawn here is drawn there, and kept with the file's view.
+ * with `cad snapshot --display`, so what is drawn here is drawn there, and kept with the file's view.
  */
 export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };
 
@@ -113,6 +113,7 @@ export const BOARD_DIMENSION_SHORTCUT = "3";
  * first: **Side** (Top, Bottom; ⇧F), **Mode** (2D, 3D; 3), in 3D the camera's **Projection**; then the picture's:
  * **Style**, its presets (`boardPresetMode`), and the **Background**. A side or a mode chosen is counted as the keys
  * count them (`board_side`, `board_dimension`), and does what they do (`onSide` turns a 3D view's camera over).
+ * Without `onDimensionChange` there is no Mode: a board with no 3D (a share's) is drawn in 2D alone.
  * `defaults`: `{ side, dimension, style, projection }`, what a board opened for the first time gets (Reset's).
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet?: object | null, onChange(display: object): void,
  *   dimension?: "2d" | "3d", onDimensionChange?: ((dimension: "2d" | "3d") => void) | null,

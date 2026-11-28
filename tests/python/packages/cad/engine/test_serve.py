@@ -2,7 +2,7 @@
 same buffer whichever way it is meshed, a document read again after another process
 rebuilt it, a model's declared xbf served as a file following its bytes alone, and the cap on
 the buffers held; an inspection's read, which meshes nothing; each part's facts, measured once by
-its key, in batches, on the pool's queue for facts."""
+its key, in batches, on the pool's queue for facts; and each part's whole table, made once by its key."""
 
 from __future__ import annotations
 
@@ -29,17 +29,17 @@ from tests.python.support.http_listener import listener
 
 MODEL = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SIZE = {size}
 
 
-@xbf("XBF/post.xbf")
+@model("XBF/post.xbf")
 def post():
     return bd.fillet((bd.Box(SIZE, 4, 10) - bd.Cylinder(1, 20)).edges().filter_by(bd.Axis.Z), 0.5)
 
 
-@xbf("XBF/rack.xbf")
+@model("XBF/rack.xbf")
 def rack():
     left = post().shape
     right = post().shape.moved(bd.Location((20, 0, 0)))
@@ -104,7 +104,7 @@ class ServeTest(unittest.TestCase):
         self.assertEqual(waited.call_args.args[2], 0.0, "a negative wait waits not at all")
 
     def test_a_version_wait_on_a_model_deleted_meanwhile_ends_not_found(self) -> None:
-        # A page waits on a model's next version; `cad delete` forgets the model: the wait ends 404,
+        # A page waits on a model's next version; its file gone, the server forgets the model: the wait ends 404,
         # as every read of it does now, never as the server's own failure.
         held = self.server.document(self.ident)
         model = "a0000000-0000-5000-8000-00000000000d"
@@ -153,12 +153,12 @@ class ServeTest(unittest.TestCase):
 
 SHELF = """
 import build123d as bd
-from cad.engine import paint, step, xbf
+from cad.engine import paint, step, model
 
 SIZE = {size}
 
 
-@xbf("XBF/shelf.xbf")
+@model("XBF/shelf.xbf")
 @step("shelf.step")
 def shelf():
     post = bd.fillet(bd.Box(SIZE, 4, 10).edges().filter_by(bd.Axis.Z), 0.5)
@@ -237,8 +237,10 @@ class DeclaredFileTest(unittest.TestCase):
             after = answers[0]
             stat = self.path.stat()
             self.assertEqual(after.version, f"{stat.st_mtime_ns}-{stat.st_size}", "the file's own version")
+            read = document.Loaded(self.path)
             self.assertEqual(json.loads(json.dumps(after.structure)),
-                             json.loads(json.dumps(document.Loaded(self.path).structure())))
+                             json.loads(json.dumps({**read.structure(), "closure": read.closure})),
+                             "the file's structure, and the build closure its head holds")
             self.assertIs(server.document(ident), after, "the file, unchanged since, is not read again")
             kept = {p["key"] for p in before.structure["prototypes"]} & {p["key"] for p in after.structure["prototypes"]}
             self.assertTrue(kept, "the parts the edit left alone keep their keys")
@@ -476,7 +478,7 @@ def kernel_facts(data: bytes) -> dict:
 
 
 class InspectionReadTest(unittest.TestCase):
-    """What ``cad <type> inspect`` reads through the engine's door (``Server.read``): a structure that
+    """What ``cad inspect`` reads through the engine's door (``Server.read``): a structure that
     sends no part to the mesher, and each part's facts measured once by its geometry key -- an edit
     measures only the parts whose key is new. Measuring is lazy: a build of a document no inspection
     measured reads and measures nothing; once one has, each later build's new parts are measured
@@ -639,6 +641,108 @@ class PoolFactsTest(unittest.TestCase):
         self.assertEqual(len(serve._batches(light, 8)), 1, "a light document is one job")
 
 
+def kernel_table(data: bytes) -> dict:
+    """What the kernel's table of a part (``mesh.Topology.elements``) stands in for here: one made of its bytes alone."""
+    return {"faces": {"1": {"kind": "face", "ordinal": 1, "area": float(len(data))}}, "edges": {}, "vertices": {},
+            "groups": {"faces": {"1": 1}, "edges": {}}}
+
+
+def answered(table: dict) -> bytes:
+    """A table as its route answers it."""
+    return json.dumps(table, separators=(",", ":")).encode()
+
+
+class PartTableTest(unittest.TestCase):
+    """A part's whole table (``.../elements``, what a view bundle holds of it) is made once by its geometry key and
+    kept under the budget: every version that holds the part answers it, and an edit makes only the new part's. On
+    the daemon's pool each is one job of the facts queue however many ask, tables asked at once are made at once,
+    and one the kernel refuses is every asker's error and made again when next asked."""
+
+    def test_a_part_s_table_is_made_once_by_its_key_and_held_under_the_budget(self) -> None:
+        server = Server(mesh_mode="inline", http_factory=listener)
+        server.start()
+        self.addCleanup(server.stop)
+        made: list[bytes] = []
+
+        class Kernel:  # ``mesh.Topology``, standing in: each table it makes counted
+            def __init__(self, data: bytes) -> None:
+                self.data = data
+
+            def elements(self) -> dict:
+                made.append(self.data)
+                return kernel_table(self.data)
+
+        mock.patch("cad.engine.mesh.Topology", Kernel).start()
+        self.addCleanup(mock.patch.stopall)
+
+        def table(key: str) -> bytes:
+            status, body = server.read(f"/api/doc/{PLATE}/part/{key}/elements")
+            self.assertEqual(status, 200, body)
+            return body
+
+        registered(server, {"k1": b"one", "k2": b"three"})
+        self.assertEqual([table(key) for key in ("k1", "k2", "k1")],
+                         [answered(kernel_table(data)) for data in (b"one", b"three", b"one")])
+        self.assertEqual(made, [b"one", b"three"], "each part's table made once, however often it is asked")
+        registered(server, {"k1": b"one", "k3": b"seven"}, version=2)  # the next build: k2 became k3
+        self.assertEqual(table("k3"), answered(kernel_table(b"seven")))
+        table("k1")
+        self.assertEqual(made, [b"one", b"three", b"seven"], "an edit makes the new part's alone")
+        self.assertEqual(server.memory()["facts"], sum(len(key) + len(answered(kernel_table(data))) for key, data in
+                                                       (("k1", b"one"), ("k2", b"three"), ("k3", b"seven"))),
+                         "held under the budget, counted with the parts' facts as the JSON they answer")
+        server.trim(0)
+        self.assertEqual((server.tables.size, server.tables.get("k1")), (0, None), "and evicted under it")
+        self.assertEqual(table("k1"), answered(kernel_table(b"one")))
+        self.assertEqual(made[-1], b"one", "made again when asked")
+
+    def test_on_the_pool_a_table_is_one_job_and_tables_asked_at_once_are_made_at_once(self) -> None:
+        server = Server(isolated=True)
+        self.addCleanup(server.stop)
+        jobs: list[tuple] = []
+        changed = threading.Condition()
+
+        def run(fn, *args, priority):
+            future: concurrent.futures.Future = concurrent.futures.Future()
+            with changed:
+                jobs.append((fn, args, priority, future))
+                changed.notify_all()
+            return future
+
+        def jobs_by(count: int) -> list[tuple]:
+            with changed:
+                self.assertTrue(changed.wait_for(lambda: len(jobs) >= count, timeout=30), jobs)
+                return list(jobs)
+
+        mock.patch.object(server.mesher, "run", side_effect=run).start()
+        self.addCleanup(mock.patch.stopall)
+        registered(server, {"k1": b"one", "k2": b"three"})
+        doc = server.document(PLATE)
+
+        def ask(key: str) -> bytes | Exception:
+            try:
+                return server.table(doc, key)
+            except RuntimeError as refused:
+                return refused
+
+        with concurrent.futures.ThreadPoolExecutor(3) as askers:
+            asked = [askers.submit(ask, key) for key in ("k1", "k1", "k2")]
+            # Both parts' tables are under way at once, each one job in the facts queue.
+            one, two = sorted(jobs_by(2), key=lambda job: job[1])
+            self.assertEqual([(fn, args, priority) for fn, args, priority, _future in (one, two)],
+                             [(serve._table, ("k1", b"one"), FACT), (serve._table, ("k2", b"three"), FACT)])
+            one[3].set_result(answered(kernel_table(b"one")))
+            two[3].set_exception(RuntimeError("the kernel refused the part"))
+            answers = [found.result(30) for found in asked]
+            self.assertEqual(answers[:2], [answered(kernel_table(b"one"))] * 2)
+            self.assertEqual(str(answers[2]), "the kernel refused the part")
+            self.assertEqual(server.table(doc, "k1"), answered(kernel_table(b"one")))
+            self.assertEqual(len(jobs), 2, "a table held is asked of no one")
+            again = askers.submit(ask, "k2")
+            jobs_by(3)[2][3].set_result(answered(kernel_table(b"three")))
+            self.assertEqual(again.result(30), answered(kernel_table(b"three")), "a refused part is asked again")
+
+
 class PoolQueueTest(unittest.TestCase):
     """The pool's queues: a fact someone waits on goes before every mesh still waiting, measurements after a
     build use the same priority, and the pool is handed one
@@ -704,6 +808,19 @@ class PoolStopTest(unittest.TestCase):
         while engine_daemon._alive(pid):
             self.assertLess(time.monotonic(), deadline, "the stop ended the busy pool process")
             time.sleep(0.05)
+
+
+class PoolLetGoTest(unittest.TestCase):
+    def test_a_reader_pool_shut_down_without_waiting_starts_no_worker_in_a_leaver_s_place(self) -> None:
+        """A pool whose workers leave after their tasks (the readers') has its manager thread replace each that
+        left. Shut down without waiting, the pool has let go of its processes, and replaces none: Python 3.11 and
+        3.12's thread died of it there (``TypeError``, CPython's gh-132969)."""
+        import sys
+
+        with mock.patch("cad.engine.places.kernel", return_value={"own": True, "python": sys.executable, "path": []}):
+            pool = serve._process_pool(1, max_tasks_per_child=1)
+        pool.shutdown(wait=False)
+        self.assertIsNone(pool._adjust_process_count())  # what the manager thread calls as a worker leaves
 
 
 class MeshCacheTest(unittest.TestCase):

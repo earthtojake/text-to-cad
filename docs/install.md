@@ -458,8 +458,8 @@ They are off until the install command turns them on, or you do: `cad plugin ins
 changes them, and cad never changes your apps where you did not ask it to.
 
 A copy from a plugin store (Codex's or Claude's) is updated by that store, on its own schedule. Its
-skills may then be older than cad. That is fine: a command the skills used keeps working for at least
-30 days after the skills stop using it.
+skills may then be older than cad. That is fine: a command they run that cad has replaced answers in one
+line with the command that does it now, which the agent runs instead.
 
 ### Staying on an older release
 
@@ -526,7 +526,8 @@ folders, which you can delete by hand:
 `cad doctor` and `cad cache dir` print where they are on your computer; run them before you remove
 cad. What uv downloaded stays in uv's cache until you clear it (`uv cache prune`; `cad cache prune`
 clears cad's own releases there). The data folder also
-holds cad's settings, the documents' records and the update's record and log. The cache folder holds
+holds cad's settings, the library (the projects, and the files you opened, starred, built,
+shared or imported) and the update's record and log. The cache folder holds
 the CAD kernel environment of the release that runs, its files links into uv's cache where both are
 on one file system. cad removes by itself, as its server starts, what no process runs from of the
 environments made for other releases and of the release folders cad 0.11.11 and earlier kept in the

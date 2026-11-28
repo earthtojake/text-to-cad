@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -137,7 +137,7 @@ def _diameter_callout(ann, centre, radius, label, side):
     )
 
 
-@model
+@xbf
 def cabinet_panel_drawing():
     elevation_x, elevation_y = ELEVATION_ORIGIN
     section_x, section_y = SECTION_ORIGIN

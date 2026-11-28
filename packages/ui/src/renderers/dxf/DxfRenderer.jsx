@@ -46,7 +46,7 @@ import { useI18n } from "@cad/ui/i18n";
  * Ctrl, Cmd or Shift drag pans, the wheel or a pinch zooms, a double-click fits; Annotate, which draws on the sheet; and Measure, between points
  * snapped to its ends, centres and lines, in the unit the drawing declares (bare drawing units when
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
- * on screen as a plan-view camera, which `cad <type> snapshot --annotation PACKET --camera authored` draws again. A drawing with
+ * on screen as a plan-view camera, which `cad snapshot --annotation PACKET --camera authored` draws again. A drawing with
  * layers and blocks to read has the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a
  * board's and a 3D view's): its search, then its Layers tab (from the first frame), kept open or
  * collapsed as the other views' panel is, ⌘\ to show or hide it and / to search it. The chrome and
@@ -144,7 +144,7 @@ function DxfSurface({ view, data }) {
   selectionRef.current = selection;
   // What a pick is, as its chip's card and the hover tip read it (`describeDrawingPick`).
   const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.unit, t) : null), [drawing, units, t]);
-  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe, group: "entity" });
+  const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe, group: "entity", subject: host.promptSubject });
   const overlay = useCallback((ctx, { transform, pixelRatio }) => {
     const drawable = drawingRef.current;
     if (!drawable) return;
@@ -389,7 +389,7 @@ function DxfSurface({ view, data }) {
     }
     const id = drawingReferenceId(handle), selected = now.selected.includes(id);
     const layer = drawingRef.current?.entities?.get(handle)?.layer || "0";
-    const copyText = sceneCopyText(workspace.resource, [...new Set([...now.selected, id])]);
+    const copyText = sceneCopyText(workspace.resource, [...new Set([...now.selected, id])], host.promptSubject);
     return menuGroups(
       referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
       pickGroup({ selected, onSelect: () => now.select(id, { multiSelect: selected }), t }),
@@ -399,7 +399,7 @@ function DxfSurface({ view, data }) {
 
   // What is picked, as the frame reads it: Quick Edit's chips and their cards' rows, and the hover tip.
   const resource = workspace.resource;
-  const copyText = useCallback(ids => sceneCopyText(resource, ids), [resource]);
+  const copyText = useCallback(ids => sceneCopyText(resource, ids, host.promptSubject), [resource, host.promptSubject]);
   const tip = useCallback(id => (drawing ? drawingPickTip(drawing, id, units.unit, t) : ""), [drawing, units, t]);
   const inspect = useSceneInspect({ scene, selection, describe, tip, data: "drawing" });
 

@@ -469,8 +469,7 @@ class SchedulingTest(unittest.TestCase):
             "script": "/w/a.py", "function": "a", "held": ident, "via": "/w/a.py",
             "python_key": "/venv\x000.10.0"}}, sent.append)
         self.assertEqual(asked, [], "never asked of the server's own worker of its script")
-        self.assertEqual(sent[0]["state"], "unsaved")
-        self.assertIn(ident, sent[0]["failed"])
+        self.assertEqual(sent[0]["failed"], f"no document {ident} is held")
 
 
 # The child a protocol test starts: the frames as a service's process sends them, by request.
@@ -784,7 +783,7 @@ class ProtocolTest(unittest.TestCase):
 
     def test_the_supervisor_s_stop_takes_a_standby_still_starting(self) -> None:
         # A standby reads nothing until it is ready, after its kernel loads (40 s on a fresh installation):
-        # the daemon's stop takes it then too, never leaving it loading on its own after `cad stop`.
+        # the daemon's stop takes it then too, never leaving it loading on its own after `cad server stop`.
         service, folder = self.silent()
         service = dataclasses.replace(service, standby=Standby((), "adopt"))
         supervisor = Supervisor(1, (service,))

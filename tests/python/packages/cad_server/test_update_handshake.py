@@ -66,10 +66,9 @@ def _flags(parser) -> list[str]:
 
 def _ask(app, path: str) -> tuple[int, str, bytes]:
     """``app``'s answer to ``GET path``, in process: its status, its content type and its body."""
-    from cad_server.mcp.tunnel import _CapturedHandler
-    from cad_server.viewer.response import Request, Response
+    from cad_server.viewer.response import Captured, Request, Response
 
-    handler = _CapturedHandler()
+    handler = Captured()
     app.handle(Request(raw_method="GET", path=path, query=[], headers={}, read_body=lambda: b""), Response(handler))
     return handler.status, handler.headers.get("content-type", ""), handler.wfile.getvalue()
 
@@ -104,7 +103,7 @@ def surface() -> dict:
     from cad_server._internal import installations, releases
     from cad_server.cli import setup as setup_cli
     from cad.engine import client
-    from cad_server.engine import daemon, registry
+    from cad_server.engine import daemon, state as engine_state
     from cad_server.viewer.engine_app import EngineApp
 
     # A server started by this release (``client.start``): its Python, these arguments, as the helper starts one.
@@ -183,7 +182,7 @@ def surface() -> dict:
             "current_bytes": (root / installations.CURRENT).read_bytes().decode("ascii"),
             "record": f"{installations.FOLDER}/<version>.json",
             "record_keys": sorted(record),
-            "token": registry.TOKEN,
+            "token": engine_state.TOKEN,
             "releases": releases.FOLDER,
             "release_marker": releases.MARKER,
             "release_schema": releases.SCHEMA,

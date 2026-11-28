@@ -6,7 +6,7 @@ the runtime fixture. Each model was its own script in `models/tendon_hand/src/`;
 share nothing expensive, so none is a `@memo` and no model calls another.
 """
 
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
@@ -38,7 +38,7 @@ from lib.universal_carrier import make_universal_carrier
 from lib.wrist import make_wrist_bushings, make_wrist_fixed_fork, make_wrist_palm_cradle, make_wrist_yaw_carrier
 
 
-@model
+@xbf
 def axle_review():
     """Resolved axle family: two finger stubs, a wrist journal, a locating dowel."""
     return bd.Compound(label="polished_axle_and_dowel_family", children=[
@@ -49,7 +49,7 @@ def axle_review():
     ])
 
 
-@model
+@xbf
 def driven_axle_review():
     """Keyed through shafts and separate universal-joint yaw stub, native +Z."""
     return bd.Compound(label="D_keyed_drive_axle_family", children=[
@@ -59,7 +59,7 @@ def driven_axle_review():
     ])
 
 
-@model
+@xbf
 def bushing_review():
     """Three finished bushing sizes, each a separate closed polished body."""
     return bd.Compound(label="polished_flanged_bushing_family", children=[
@@ -69,7 +69,7 @@ def bushing_review():
     ])
 
 
-@model
+@xbf
 def retaining_ring_review():
     """Isolated rings and paired in-groove fit examples, at real millimeter scale."""
     children = []
@@ -86,7 +86,7 @@ def retaining_ring_review():
     return bd.Compound(label="retaining_ring_family_and_groove_fit", children=children)
 
 
-@model
+@xbf
 def pulley_review():
     """Macro review of the five driven D-bore tendon pulley radii, in mm."""
     children = []
@@ -97,13 +97,13 @@ def pulley_review():
     return bd.Compound(label="turned_tendon_pulley_family", children=children)
 
 
-@model
+@xbf
 def pulley_hub_review():
     """Two separately resolved turned PIP hub-spacer bodies, assembled datums."""
     return bd.Compound(label="middle_PIP_turned_hub_spacers", children=[b.shape for b in representative_bodies()])
 
 
-@model
+@xbf
 def universal_carrier_review():
     """Middle MCP carrier with its actual adjacent phalanx and crossed drums."""
     children = [make_universal_carrier(), make_phalanx(45, 18)]
@@ -114,7 +114,7 @@ def universal_carrier_review():
     return bd.Compound(label="universal_carrier_in_joint_context", children=children)
 
 
-@model
+@xbf
 def wrist_review():
     """The skeletal wrist: fixed fork, yaw carrier, palm cradle, drive drums, bushings."""
     p = [make_wrist_fixed_fork(), make_wrist_yaw_carrier(), make_wrist_palm_cradle()]
@@ -126,19 +126,19 @@ def wrist_review():
     return bd.Compound(label="skeletal_wrist", children=p)
 
 
-@model
+@xbf
 def palm_cradle_clearance_review():
     """Strict inspection target for the headed-shaft withdrawal relief."""
     return make_wrist_palm_cradle()
 
 
-@model
+@xbf
 def thumb_metacarpal_review():
     """The thumb metacarpal frame alone."""
     return make_thumb_metacarpal()
 
 
-@model
+@xbf
 def motor_review():
     """A complete miniature motor and a separated, readable component set."""
     return bd.Compound(label="miniature_motor_family", children=[
@@ -151,7 +151,7 @@ def motor_review():
     ])
 
 
-@model
+@xbf
 def gearbox_review():
     """Resolved planetary reducer in assembly and a separated display."""
     parts = make_gearbox_parts("assembled_gearbox")
@@ -165,14 +165,14 @@ def gearbox_review():
         bd.Pos(12 + x, y, z) * p for p, (x, y, z) in zip(separated, offsets)])
 
 
-@model
+@xbf
 def capstan_review():
     """The six-turn storage capstan, its terminal ferrule and the stored tendon."""
     return bd.Compound(label="six_turn_storage_capstan_review",
                        children=[make_capstan(), make_terminal_ferrule(), make_stored_tendon()])
 
 
-@model
+@xbf
 def capstan_index_overlay():
     """The 48 notched capstans, placed exactly as the assembled hand places them.
 
@@ -195,7 +195,7 @@ def capstan_index_overlay():
     return compound(parts, "capstan_index_overlay")
 
 
-@model
+@xbf
 def tension_cartridge_review():
     """A single cartridge shown upright and inverted to expose its three sensors."""
     bodies = []
@@ -204,7 +204,7 @@ def tension_cartridge_review():
     return bd.Compound(label="torsional_tendon_load_cartridge_review", children=bodies)
 
 
-@model
+@xbf
 def tension_cartridge_bank_review():
     """The exact 48 forearm mounting cartridge placements, for strict validation."""
     prototype = make_tension_cartridge()
@@ -220,7 +220,7 @@ def tension_cartridge_bank_review():
     return bd.Compound(label="all_48_tension_cartridges", children=bodies)
 
 
-@model
+@xbf
 def drive_terminal_review():
     """Ten drive terminal prototypes: five pulley radii and both antagonists."""
     children = []
@@ -248,7 +248,7 @@ def drive_terminal_review():
     return bd.Compound(label="ten_captured_driven_tendon_terminal_prototypes", children=children)
 
 
-@model
+@xbf
 def drive_terminal_macro():
     """R3.5 driven terminal, assembled and with its installation cover lifted."""
     children = []
@@ -270,14 +270,14 @@ def drive_terminal_macro():
     return bd.Compound(label="R3_5_captured_driven_tendon_macro", children=children)
 
 
-@model
+@xbf
 def drive_terminal_placements():
     """All 336 driven terminal and capstan bond occurrences in the assembled neutral hand fan."""
     return bd.Compound(label="all_48_driven_tendon_terminal_assemblies",
                        children=[s for s, *_ in drive_terminal_bodies() + capstan_bond_bodies()])
 
 
-@model
+@xbf
 def runtime_fixture():
     """A real continuous swept tube, the fixture of the old flexible-animation checks."""
     centerline = bd.Edge.make_line((0, 0, 8), (60, 0, 8))

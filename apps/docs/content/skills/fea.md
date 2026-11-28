@@ -17,7 +17,7 @@ The `fea` skill answers whether a part holds under its loads and how far it bend
 With no study, a solve is a setup that writes nothing. It lists the parts, the pairs that touch, and each face with its reference, area and a hint such as `plane, normal -Z, largest`:
 
 ```bash
-cad step solve part.step
+cad fea part.step
 ```
 
 Your agent matches "the mounting face" to a reference from that list; a face you picked in the viewer arrives as one already.
@@ -39,10 +39,10 @@ A model or its `.xbf` brings the material the model set, at the low end of its y
 The solve writes into a folder:
 
 ```bash
-cad step solve part.step --study study.json --out /tmp/bracket-load --json
+cad fea part.step --study study.json --out /tmp/bracket-load --json
 ```
 
-`cad model solve` takes a model's id, and `cad xbf solve` an `.xbf`. The first study installs netgen for the mesh and CalculiX for the solve. If the safety factor comes out under 3, the run meshes again at half the element size and the finer result is the one written.
+`cad fea` takes a model's id, or its `.xbf`. The first study installs netgen for the mesh and CalculiX for the solve. If the safety factor comes out under 3, the run meshes again at half the element size and the finer result is the one written.
 
 | File | What it holds |
 | --- | --- |

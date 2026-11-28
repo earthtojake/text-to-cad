@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {EngineStopped} from './EngineStopped.tsx'; export {createWebCadClient} from './host/cadClient.js'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@cad/ui/cad-viewer'; export {autoReloadOptions} from './host/useViewerAutoReload.js'; export {createTabStore} from '@cad/ui/tab-store'; export {sessionTabRecord, TAB_RECORD_KEY} from './persistence/tabRecord.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {default as BundleApp} from './BundleApp.tsx'; export {sharePromptSubject} from './host/share.js'; export {EngineStopped} from './EngineStopped.tsx'; export {createWebCadClient} from './host/cadClient.js'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@cad/ui/cad-viewer'; export {autoReloadOptions} from './host/useViewerAutoReload.js'; export {createTabStore} from '@cad/ui/tab-store'; export {sessionTabRecord, TAB_RECORD_KEY} from './persistence/tabRecord.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output, loader: { '.css': 'empty', '.svg': 'dataurl' },
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
@@ -27,11 +27,12 @@ await build({
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/cad-viewer')) return { contents: `let current; export function CadViewer(props){current=props; return null;} export const snapshot=()=>current; export const createCadFileSource=client=>({id:'local',client}); export const normalizePath=path=>String(path||'').trim().replace(/\\\\/g,'/').replace(/(.)\\/+$/,'$1');`, loader: 'js' };
       if (args.path.endsWith('useViewerAutoReload.js')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};', loader: 'js' };
-      return { contents: `const links={version:'0.7.4',release:'r',x:'x',github:'g',discord:'d',issues:'i'}; export const useViewerLinks=()=>links;`, loader: 'js' };
+      return { contents: `const links={version:'0.7.4',release:'r',github:'g',discord:'d',issues:'i'}; export const useViewerLinks=()=>links;`, loader: 'js' };
     });
   } }],
 });
-const { App, EngineStopped, createWebCadClient, act, createElement, createRoot, snapshot, autoReloadOptions, createTabStore, sessionTabRecord, TAB_RECORD_KEY } = await import(pathToFileURL(output).href);
+const { App, BundleApp, sharePromptSubject, EngineStopped, createWebCadClient, act, createElement, createRoot, snapshot, autoReloadOptions, createTabStore, sessionTabRecord,
+  TAB_RECORD_KEY } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 /** Awaits `check()`, the page's timers running meanwhile; fails after five seconds. */
@@ -76,7 +77,8 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     if (url === '/api/v1/settings' && init.body) guards.push(init.headers?.['x-cad-viewer']);
     const telemetry = init.body ? { share: false, reason: 'choice', policy: 'p' } : { share: false, reason: 'untold', policy: 'p' };
     const reply = isCatalog(url, init) ? catalogOf(url)
-      : url === '/api/v1/documents' ? { documents: [] } : url === '/api/v1/local/pick' ? { path: '/m/picked.step' }
+      : url === '/api/v1/documents' ? { documents: [] }
+      : url === '/api/v1/local/pick' ? (JSON.parse(init.body).any ? { path: '/m/one.step', folder: false } : { path: '/m/picked.step' })
       : url === '/api/v1/local/link' ? { link: '1767225600.abc', expires: 1767225600 }
       : url !== '/api/v1/settings' ? { ok: true }
       : { language: { locale: null }, telemetry, whats_new: { seen: init.body ? ['0.11'] : [], release: '0.11' } };
@@ -89,7 +91,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const viewer = () => snapshot();
   try {
     const historyAtStart = window.history.length;
-    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, platform: 'darwin' }, tabStore })));
+    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, pickAny: true, platform: 'darwin' }, tabStore })));
     // The document the URL names, as it names it; the host's file menu and links; the tab's store
     // for everything the viewer keeps.
     assert.equal(viewer().file, ONE);
@@ -106,8 +108,16 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(viewer().host.fileActions.platform, 'darwin', 'Reveal is labeled for the machine the server runs on');
     await viewer().host.fileActions.perform.reveal({ path: '/m/one.step', kind: 'file' });
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/reveal'), [['/api/v1/local/reveal', { path: '/m/one.step' }]]);
+    // A computer with no file manager to open (a Linux without xdg-open: the server's `reveal`) is offered none.
+    const linux = { start: '/m', pick: true, pickAny: false, platform: 'linux', reveal: false };
+    await act(() => root.render(createElement(App, { client, server: linux, tabStore })));
+    assert.deepEqual(Object.keys(viewer().host.fileActions.perform).sort(), ['copy-link', 'copy-path']);
+    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, pickAny: true, platform: 'darwin' }, tabStore })));
     assert.equal(viewer().host.links.version, '0.7.4');
-    assert.equal('navigation' in viewer().host, false, 'navigation is the shared viewer\'s: the host only shows what it is asked to');
+    // Navigation is the shared viewer's: the host only shows what it is asked to. What it adds is what only a page
+    // knows: each target's own address, and Open in new tab.
+    assert.deepEqual(Object.keys(viewer().host.navigation).sort(), ['hrefOf', 'openBeside']);
+    assert.equal(viewer().host.navigation.openBeside.kind, 'tab');
     // The page asks its server who it is, fresh, to tell another process on its port.
     assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
     assert.deepEqual(serverCalls[0], { fresh: true });
@@ -195,7 +205,14 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.ok(libraryCalls.some(([url]) => url === '/api/v1/local/pick'));
     assert.equal(viewer().file, PICKED);
     assert.equal(new URL(window.location.href).pathname, `/${PICKED}`);
-    // Back to home leads to the bare URL: the home is a step of the browser's history, as a file is,
+    // Where one chooser takes a file or a folder (the server's `pickAny`: a Mac's), Import's one chooser: a file chosen is
+    // shown here, as one picked with File is.
+    let chosen;
+    await act(async () => { chosen = await viewer().library.importAny(); });
+    assert.deepEqual(chosen, { file: '/m/one.step' });
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/pick').map(([, body]) => body), [{}, { any: true }]);
+    assert.equal(viewer().file, ONE);
+    // The way home (the navbar's logo) leads to the bare URL: the home is a step of the browser's history, as a file is,
     // so the browser's Back and Forward walk between them (the page hands no history of its own).
     const beforeHome = window.history.length;
     await act(async () => { viewer().onShow(''); await new Promise(resolve => setTimeout(resolve, 10)); });
@@ -203,10 +220,81 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(new URL(window.location.href).search, '');
     assert.equal(window.history.length, beforeHome + 1);
     assert.equal(viewer().history, undefined);
+    assert.deepEqual(viewer().place, { view: 'recents' });
   } finally {
     globalThis.fetch = fetchBefore;
     await act(() => root.unmount());
     assert.equal(appearanceListeners.size, 0);
+    dom.window.close();
+  }
+});
+
+test('each place of the home has its own address: a step in the history, kept by a reload, named in the title, and linked for a new tab', async () => {
+  // A link to a project's page, carrying the page's link as every address of the page does.
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://cad.local/?project=p1&token=1800000000.mac' });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => new Response(JSON.stringify(isCatalog(url, init) ? catalogOf(url)
+    : url === '/api/v1/settings' ? { language: { locale: null } } : { documents: [] }), { headers: { 'content-type': 'application/json' } });
+  const opened = [];
+  window.open = (address, name, features) => { opened.push([address, name, features]); return null; };
+  const client = { ...createWebCadClient({ document: window.document }), serverInfo: async () => ({ start: '/m' }) };
+  const root = createRoot(window.document.getElementById('root'));
+  const address = () => `${window.location.pathname}${window.location.search}`;
+  const tick = () => new Promise(resolve => setTimeout(resolve, 10));
+  try {
+    await act(() => root.render(createElement(App, { client, server: { start: '/m' }, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
+    // The address names the place, as a reload of it does: nothing is rewritten, and nothing is pushed.
+    assert.deepEqual([snapshot().file, snapshot().place, address()], ['', { view: 'project', project: 'p1' }, '/?project=p1&token=1800000000.mac']);
+    // The page's title names the place, as the home says it; before it has, the page's own name.
+    assert.equal(window.document.title, 'text-to-cad');
+    await act(() => snapshot().onHomeShown({ view: 'project', project: 'p1' }, 'gearbox'));
+    assert.equal(window.document.title, 'gearbox · text-to-cad');
+    // Another place is a new step, at its own address beside what the page's carries.
+    const length = window.history.length;
+    await act(async () => { snapshot().onShow('', { view: 'pinned' }); await tick(); });
+    assert.deepEqual([snapshot().place, address(), window.history.length], [{ view: 'pinned' }, '/?view=pinned&token=1800000000.mac', length + 1]);
+    await act(async () => { snapshot().onShow('', { view: 'pinned' }); await tick(); });
+    assert.equal(window.history.length, length + 1, 'the place on screen is no navigation at all');
+    await act(async () => { snapshot().onShow('', { view: 'project', project: 'p1', path: 'v3' }); await tick(); });
+    assert.equal(address(), '/?project=p1&path=v3&token=1800000000.mac');
+    // The home with no place named is Recents, at the bare address.
+    await act(async () => { snapshot().onShow(''); await tick(); });
+    assert.deepEqual([snapshot().place, address(), window.history.length], [{ view: 'recents' }, '/?token=1800000000.mac', length + 3]);
+    // A document's page names no place; Back from it is the place the person left.
+    await act(async () => { snapshot().onShow('', { view: 'project', project: 'p 2' }); await tick(); });
+    await act(async () => { snapshot().onShow('/m/one.step'); await tick(); });
+    assert.deepEqual([snapshot().file, address()], [ONE, `/${ONE}?token=1800000000.mac`]);
+    await act(async () => { window.history.replaceState({}, '', '/?project=p+2&token=1800000000.mac'); window.dispatchEvent(new window.PopStateEvent('popstate')); await tick(); });
+    assert.deepEqual([snapshot().file, snapshot().place], ['', { view: 'project', project: 'p 2' }]);
+    await act(async () => { window.history.replaceState({}, '', '/?view=pinned&token=1800000000.mac'); window.dispatchEvent(new window.PopStateEvent('popstate')); await tick(); });
+    assert.deepEqual(snapshot().place, { view: 'pinned' });
+
+    // Every target's address is this origin's: a document's page by its id, a place's on the home. A file named by
+    // its path has no address: its page is by its id.
+    const { hrefOf, openBeside } = snapshot().host.navigation;
+    assert.equal(hrefOf({ document: TWO }), `/${TWO}?token=1800000000.mac`);
+    assert.equal(hrefOf({ document: '/m/folder/two.step' }), null);
+    assert.deepEqual(['recents', 'pinned'].map(view => hrefOf({ home: { view } })),
+      ['/?token=1800000000.mac', '/?view=pinned&token=1800000000.mac']);
+    assert.equal(hrefOf({ home: { view: 'project', project: 'p1' } }), '/?project=p1&token=1800000000.mac');
+    // Open in new tab: that address, in a tab of this browser cut off from this page.
+    await openBeside.open({ home: { view: 'project', project: 'p1' } });
+    await openBeside.open({ document: TWO });
+    // A file by its path is asked for its id first, as a show of it is: its tab is asked for at once, inside the
+    // press, and where the browser gives none back (here), opened once the id is known.
+    await openBeside.open({ document: '/m/picked.step' });
+    assert.deepEqual(opened, [['http://cad.local/?project=p1&token=1800000000.mac', '_blank', 'noopener'], [`http://cad.local/${TWO}?token=1800000000.mac`, '_blank', 'noopener'],
+      ['', '_blank', undefined], [`http://cad.local/${PICKED}?token=1800000000.mac`, '_blank', 'noopener']]);
+    // This page stays where it was.
+    assert.deepEqual([snapshot().file, snapshot().place], ['', { view: 'pinned' }]);
+  } finally {
+    globalThis.fetch = fetchBefore;
+    await act(() => root.unmount());
+    client.dispose?.();
     dom.window.close();
   }
 });
@@ -428,6 +516,33 @@ test('the notice says the page reconnects, and how to start the engine', async (
     await act(() => root.render(createElement(EngineStopped, { locale: 'en', refused: true })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
       "This link no longer works.Ask your agent to open the model again and use the new link.");
+  } finally {
+    await act(() => root.unmount());
+    dom.window.close();
+  }
+});
+
+test("a share's page hands the viewer what its prompts name the model by, and nothing in its navbar", async () => {
+  const id = 'AbCdEfGhIjKlMnOpQrSt_-';
+  const dom = new JSDOM('<div id="root"></div>', { url: `https://cad.example/${id}` });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  // A view bundle's service, as far as its host reads it: its one document.
+  const client = { manifest: { document: { id: '1024a2f2-2b65-5151-8299-282973f2a9fc', kind: 'xbf', name: 'bracket', version: 'v1' } },
+    file: '1024a2f2-2b65-5151-8299-282973f2a9fc' };
+  const subject = sharePromptSubject(id);
+  const root = createRoot(window.document.getElementById('root'));
+  const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
+  try {
+    await act(() => root.render(createElement(BundleApp, { client, tabStore, promptSubject: subject })));
+    assert.deepEqual(snapshot().host.promptSubject, { resource: { kind: 'url', url: `https://cad.example/${id}` } });
+    // What the page offers of the files is its prompt's line: no host action in the navbar, and no file menu.
+    assert.deepEqual(['fullSize', 'navbarActions'].filter(name => name in snapshot()), []);
+    assert.equal(snapshot().host.fileActions, undefined);
+    // No cad serves the page, so there is nothing to update: no update button and no failed update's card.
+    assert.deepEqual(['update', 'alert'].filter(name => snapshot()[name] != null), []);
   } finally {
     await act(() => root.unmount());
     dom.window.close();

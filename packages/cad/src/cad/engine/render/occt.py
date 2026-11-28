@@ -4,7 +4,7 @@
 [--preview] [--pose NAME|JSON] [--explode AMOUNT] [--annotation FILE] [--measurements FILE]
 [--path-trace N] [--mesh-cache DIR] [--width W --height H] [--json]``
 
-The flags are ``cad <type> snapshot``'s where it has them, and mean what the viewer means:
+The flags are ``cad snapshot``'s where it has them, and mean what the viewer means:
 
 - The document is read (``document.Loaded``: structure, names, colours, the mechanism) and every
   part's mesh is the engine's XBM buffer -- from the daemon, or a folder of them -- turned into
@@ -78,7 +78,7 @@ EDGES_WIN_OFFSET = (1.0, 1.0)
 SEE_THROUGH_OFFSET = (0.0, -4.0)
 FOCAL_LENGTH = 50.0  # the view's default camera.focalLength (viewSettings.js), on three's 35 mm film gauge
 # Preview's studio is the viewer's, light (viewSettings.js previewDefaults, photographicStudioRig.js),
-# drawn only in a still asked for Preview (``snapshot(preview=True)``, ``cad <type> snapshot --preview``):
+# drawn only in a still asked for Preview (``snapshot(preview=True)``, ``cad snapshot --preview``):
 # the backdrop white, lifted toward white behind the middle of the frame and shaded
 # toward its corners (a dark and a light colour's share) and above the horizon (studioBackdrop.js);
 BACKDROP = "#ffffff"

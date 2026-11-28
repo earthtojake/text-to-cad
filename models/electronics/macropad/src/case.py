@@ -13,7 +13,7 @@ or the USB receptacle on the board, run this script again, and the case follows.
 Frame: the board's STEP (x, -y of the board file; z = 0 at the board's bottom face).
 """
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import board_geometry
 
@@ -146,28 +146,28 @@ def knob_body(od=19.0, height=14.0, bore=6.1, flat=4.6, ridges=24):
 KNOB_Z = THICK + 7.4             # 0.9 mm above the encoder body, 2.4 mm above the plate
 
 
-@model
+@xbf
 def tray():
     b = tray_body(board_geometry.read())
     b.label, b.color = "tray", "#3e4a59"
     return b
 
 
-@model
+@xbf
 def plate():
     b = plate_body(board_geometry.read())
     b.label, b.color = "plate", "#e8e4dc"
     return b
 
 
-@model
+@xbf
 def keycap():
     c = keycap_body()
     c.label, c.color = "keycap", "#f2efe9"
     return c
 
 
-@model
+@xbf
 def knob():
     k = knob_body()
     k.label, k.color = "knob", "#c8553d"
@@ -175,14 +175,14 @@ def knob():
 
 
 # print orientation: each part as it lies on the bed (the plate, keycap and knob face down)
-@model
+@xbf
 def tray_print():
     p = tray().shape
     p.label = "tray"
     return bd.Pos(0, 0, -(FLOOR_TOP - FLOOR_T)) * p
 
 
-@model
+@xbf
 def plate_print():
     p = bd.Rot(180, 0, 0) * plate().shape
     p = bd.Pos(0, 0, -p.bounding_box().min.Z) * p
@@ -190,7 +190,7 @@ def plate_print():
     return p
 
 
-@model
+@xbf
 def keycap_print():
     p = bd.Rot(180, 0, 0) * keycap().shape
     p = bd.Pos(0, 0, -p.bounding_box().min.Z) * p
@@ -198,7 +198,7 @@ def keycap_print():
     return p
 
 
-@model
+@xbf
 def knob_print():
     p = bd.Rot(180, 0, 0) * knob().shape
     p = bd.Pos(0, 0, -p.bounding_box().min.Z) * p

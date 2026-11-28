@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import chassis as B
 
 
-@model
+@xbf
 def center_stand():
     built = B.build_center_stand()
     if isinstance(built, list):

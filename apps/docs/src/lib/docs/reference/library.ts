@@ -1,7 +1,8 @@
 /**
  * /docs/reference/library, "The cad library": the library's own description of its public names
- * (`library-reference.generated.json`, `python -m cad._internal.reference --docs`) set as one Markdown
- * page, as the command line's page is (`cli.ts`). Each name is a heading whose id is its dotted path
+ * (`library-reference.generated.json`, `python -m cad._internal.reference --docs`, which
+ * `scripts/generated/regenerate.py` writes) set as one Markdown page, as the command line's page is
+ * (`cli.ts`). Each name is a heading whose id is its dotted path
  * (`#cad.step.export`) and whose kind shows beside it (`{#id kind=...}`, read by `source.ts`), then
  * its signature, and its docstring made Markdown (`text.ts`).
  */
@@ -144,7 +145,7 @@ function memberMarkdown(member: Member, parent: string, level: number, out: stri
     out.push(`Bases: ${member.bases.map((base) => codeSpan(base)).join(", ")}.`);
   }
   if (member.operation) {
-    // One to one with a command: `cad.step.export` is `cad step export`.
+    // One to one with a command: `cad.export` is `cad export`.
     const command = path.replace(/\./g, " ");
     const summary = member.summary ? `: ${inline(member.summary, { flags: true })}` : "";
     out.push(
@@ -179,7 +180,7 @@ export function libraryIds() {
 /** The page: its title, what it is, and its Markdown. `commands` are the command line's commands. */
 export function libraryPage(version: string, commands: Set<string>) {
   const out: string[] = [
-    "`cad` is the Python library a model is written with: `import cad`, then the document types, their decorators and their operations, and the integrations' helpers. A model's script runs with `cad run`, which puts this release of the library and the integrations the script imports on its path, so a script names no installation of its own.",
+    "`cad` is the Python library a model is written with: `import cad`, then the verbs (`cad.export`, `cad.inspect`, ...), the document types and their decorators, and the integrations' helpers. A model's script runs with `cad run`, which puts this release of the library and the integrations the script imports on its path, so a script names no installation of its own.",
     `A program of your own that imports \`cad\` names the release exactly, \`cad==${version}\` (with an integration's extra, \`cad[build123d]==${version}\`): PyPI's \`cad\` project holds unrelated earlier releases an open requirement would pick. \`cad requirement\` prints the exact requirement for this release.`,
   ];
 
@@ -189,7 +190,7 @@ export function libraryPage(version: string, commands: Set<string>) {
 
   out.push(
     "## Document types",
-    "One object a type, each its decorator where it has one, its reader, its edit, and its operations, one to one with the `cad <type> <operation>` commands.",
+    "One object a type, each its decorator where it has one, its reader and its edit. What is done to a file of any type is a verb of the root's, one to one with the `cad <verb> FILE` commands: `cad.export`, `cad.inspect`, `cad.snapshot`, `cad.dfm` and `cad.fea`.",
     table(
       ["Object", "Type", "Members"],
       library.documentTypes.map((type) => [
@@ -220,7 +221,7 @@ export function libraryPage(version: string, commands: Set<string>) {
   return {
     title: "The cad library (Python)",
     description:
-      "Every public name of the cad Python library, generated from its docstrings: the root module, each document type's object and each integration's module.",
+      "Every public name of the cad Python library, generated from its docstrings: the root module and its verbs, each document type's object and each integration's module.",
     markdown: out.join("\n\n") + "\n",
   };
 }

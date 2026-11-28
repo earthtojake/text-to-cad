@@ -1,5 +1,5 @@
 """A model call returns its document's handle -- never a bare shape, never a report -- and
-``model(shape, name=...)`` makes a document of a shape a program holds.
+``xbf(shape, name=...)`` makes a document of a shape a program holds.
 
 A handle has the document's id and page; its ``shape`` is transferred into the caller, the kernel
 loaded, on first access and never before; ``handle.export(...)`` is ``export(handle, ...)``. Inside a
@@ -28,15 +28,14 @@ from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
-from cad.engine.ids import derived_id, model_id  # noqa: E402
-from cad_server.engine.registry import Registry  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 
 PARTS = """
 import build123d as bd
-from cad import model, xbf
+from cad import xbf
 
 
-@model
+@xbf
 def peg():
     return bd.Cylinder(2, 10)
 
@@ -74,7 +73,7 @@ EIGHT = """
 import pathlib
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 RUNS = pathlib.Path(__file__).with_name("runs.txt")
 
@@ -87,7 +86,7 @@ def _box(name, size):
     return box
 """ + "".join(f"""
 
-@model
+@xbf
 def m{at}():
     return _box("m{at}", {at + 1})
 """ for at in range(8))
@@ -112,27 +111,32 @@ HANDED = """
 import json
 
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import animation
 
 lid = bd.Box(10, 10, 2)
 lid.label = "lid"
 crate = bd.Compound(children=[bd.Box(10, 10, 10), lid.moved(bd.Pos(0, 0, 6))], label="crate")
 lift = animation(crate, "lift", duration=2).translation("lid", by=(0, 0, 10), end=2)
-handle = model(crate, name="crate", animations=[lift])
+handle = xbf(crate, name="crate", animations=[lift])
 handle.export("crate.glb", "crate.step")
-tag = model(bd.Box(1, 1, 1), name="tag")
+tag = xbf(bd.Box(1, 1, 1), name="tag")
+xbf(bd.Box(2, 2, 2), name="spare/pin")  # its .xbf is <name>.xbf joined to the script's folder, whatever the name
+xbf(bd.Box(1, 1, 3), "pegs/peg-v1.xbf", name="peg")  # a path given second: there, relative to the script
+from cad import step
+
+step(crate, "loose/crate.step")  # that one file of the shape, now: no .xbf, no document
 print("RESULT " + json.dumps({"id": handle.id, "url": handle.url, "same": handle.shape is crate, "tag": tag.id}))
 """
 
 
 HINGE = """
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import mechanism_state, posed
 
 
-@model
+@xbf
 def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -145,7 +149,7 @@ def hinge():
     return mechanism_state(assembly, "open", elbow=90)
 
 
-@model
+@xbf
 def hinge_open():
     return posed(hinge().shape, "open")
 """
@@ -181,7 +185,7 @@ import json
 import pathlib
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
 def tree(node, path=()):
@@ -195,7 +199,7 @@ def tree(node, path=()):
     return rows
 
 
-@model
+@xbf
 def arm():
     base = bd.Box(40, 40, 10).located(bd.Location((0, 0, 5)))
     servo = bd.Box(20, 10, 8).located(bd.Location((10, 0, 0)))
@@ -206,7 +210,7 @@ def arm():
     return bd.Compound(children=[base, elbow], label="arm")
 
 
-@model
+@xbf
 def inside():
     shape = arm().shape
     pathlib.Path(__file__).with_name("inside.json").write_text(json.dumps(tree(shape)), encoding="utf-8")
@@ -285,7 +289,7 @@ class HandleTest(unittest.TestCase):
     def test_a_call_returns_a_handle_whose_shape_loads_on_first_access_and_a_child_s_composes(self) -> None:
         project = self.project("parts", {"parts.py": PARTS, "caller.py": CALLER})
         found = self.run_python("caller.py", cwd=project)
-        ident = model_id(project / "parts.py", "base")
+        ident = model_id(project / "parts.py", "base", xbf="XBF/base.xbf")
         self.assertEqual((found["type"], found["id"], found["name"]), ("Document", ident, "base"))
         self.assertTrue(found["url"].split("?")[0].endswith(f"/{ident}"), found["url"])
         self.assertEqual((found["kernel_before"], found["kernel_after"]), (False, True),
@@ -299,9 +303,9 @@ class HandleTest(unittest.TestCase):
 
     def test_a_model_exported_by_its_function_is_built_as_its_call_is_never_cold(self) -> None:
         """``export(model, path)`` is the model's call, then its handle's export: eight in one program
-        run once, replay in the next run, and after a restart are taken from the engine's cache --
+        run once, replay in the next run, and after a restart are taken from their .xbf files --
         no body runs again -- and write what the handle form writes, byte for byte. (A document taken
-        from the cache writes its STEP as read back, a signed zero apart from the live build's: the
+        from its .xbf writes its STEP as read back, a signed zero apart from the live build's: the
         handle form's the same.)"""
         from cad.engine.render import context
         from tests.python.support import opengl
@@ -318,46 +322,62 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "a second program's run replays")
         self.restart()
         self.run_python("exporter.py", *draw, cwd=project)
-        self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "after a restart: taken from the cache")
+        self.assertEqual(len(runs.read_text(encoding="utf-8").split()), 8, "after a restart: taken from each .xbf")
         self.assertEqual((project / "out/m0.step").read_bytes(), (project / "out/handle.step").read_bytes(),
-                         "from the cache too, the function form writes the handle form's bytes")
+                         "taken from its .xbf too, the function form writes the handle form's bytes")
 
-    def test_a_shape_handed_over_is_a_document_held_served_exported_and_never_rebuilt(self) -> None:
+    def test_a_shape_handed_over_is_its_xbf_served_exported_and_never_rebuilt(self) -> None:
+        from cad.engine.ids import file_id
+
         project = self.project("handed", {"hand.py": HANDED})
         found = self.run_python("hand.py", cwd=project)
-        ident = derived_id(project / "hand.py", "crate")
-        self.assertEqual((found["id"], found["tag"], found["same"]), (ident, derived_id(project / "hand.py", "tag"), True))
+        ident = file_id(project / "crate.xbf")
+        self.assertEqual((found["id"], found["tag"], found["same"]), (ident, file_id(project / "tag.xbf"), True),
+                         "a shape's id is its .xbf's")
         self.assertEqual(_served(found["url"], ident)["name"], "crate", "its page serves it")
         self.assertEqual([clip["name"] for clip in _glb_json(project / "crate.glb").get("animations") or []],
                          ["lift"], "the animations passed are baked into its GLB")
         self.assertTrue((project / "crate.step").is_file())
-        record = Registry(self.state).get(ident)
-        self.assertEqual((record["kind"], record["entry"], record["program"]), ("shape", "crate", "hand.py"))
-        self.assertEqual(set(record) - {"cache"}, {"schema", "id", "kind", "root", "home", "entry", "program",
-                                                   "revision", "built", "created", "namespace", "name"}, "a model's shape, and the program that showed it")
-        from cad_server.viewer.recents import RecentStore
+        # A model always writes its .xbf: handed over from a script, <name>.xbf beside it, its document.
+        from cad.engine import document
 
-        [shown] = [entry.public() for entry in RecentStore(self.state).list() if entry.path == ident]
-        self.assertIn(f"a shape handed over by {project / 'hand.py'}, a program the engine did not run", shown["shown"],
-                      "its words, from its program")
-        # From a REPL: the working folder is its scope.
-        repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import model\n"
-                               "h = model(bd.Box(2, 2, 2), name='scratch')\nprint('RESULT ' + json.dumps(h.id))\n")
-        self.assertEqual(repl, derived_id(project, "scratch"))
-        # Exported by its id, as any document the engine holds; after a restart, from the cache.
+        self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "tag.xbf"])
+        self.assertEqual(document.Loaded(project / "crate.xbf").structure()["name"], "crate")
+        self.assertTrue((project / "spare" / "pin.xbf").is_file())
+        self.assertEqual(((project / "pegs" / "peg-v1.xbf").is_file(), (project / "peg.xbf").exists()), (True, False))
+        # step(shape, path) writes that file of it alone, as @step's run writes it: the crate's two parts, no .xbf.
+        self.assertEqual(sorted(path.name for path in (project / "loose").iterdir()), ["crate.step"])
+        self.assertEqual(sorted(document.Loaded(project / "loose" / "crate.step").structure()["name"]
+                                for _ in (0,)), ["crate"])
+        # Its .xbf is a file the library knows, as a model's a run built: one row, with its parts' occurrences, counted
+        # from the structure handed over: the crate and its lid; the tag is one part.
+        from cad_server.engine.library import Library, Notes
+        from cad_server.viewer.projects import Projects
+        from cad_server.viewer.recents import listing
+
+        library = Library(self.state, self.cache)
+        rows = {row["id"]: row for row in listing(library, Notes(self.cache), Projects(library))}
+        self.assertEqual((rows[ident]["path"], rows[ident]["name"], rows[ident]["record"], rows[ident]["parts"],
+                          rows[found["tag"]]["parts"]), (str(project / "crate.xbf"), "crate.xbf", "file", 2, 1))
+        # From a REPL: its .xbf in the working folder.
+        repl = self.run_python("-", cwd=project, input="import json, build123d as bd\nfrom cad import xbf\n"
+                               "h = xbf(bd.Box(2, 2, 2), name='scratch')\nxbf(bd.Box(1, 1, 1), 'kept/kept.xbf', name='kept')\n"
+                               "print('RESULT ' + json.dumps(h.id))\n")
+        self.assertEqual(repl, file_id(project / "scratch.xbf"))
+        self.assertEqual(sorted(path.name for path in project.glob("*.xbf")), ["crate.xbf", "scratch.xbf", "tag.xbf"],
+                         "from a REPL, which has no script, <name>.xbf in its working folder: no document without its file")
+        self.assertTrue((project / "kept" / "kept.xbf").is_file(), "and where a path is given, relative to that folder")
+        # Exported by its id, as any document; after a restart, from its .xbf.
         self.assertEqual(self.cli("export", ident, str(project / "again.stl")).returncode, 0)
         self.restart()
         self.assertEqual(self.cli("export", ident, str(project / "restarted.stl")).returncode, 0)
-        # With its cache file gone, nothing builds it again, and the words say so.
+        # With its .xbf gone, its id names nothing.
         self.assertEqual(self.cli("stop").returncode, 0)
-        shutil.rmtree(self.cache / "documents" / ident)
+        (project / "crate.xbf").unlink()
         engine_daemon.start(self.env)
         refused = self.cli("export", ident, str(project / "gone.stl"))
         self.assertEqual(refused.returncode, 2, refused.stderr)
-        self.assertIn("a program the engine did not run: no script to rerun", refused.stderr)
-        answer = self.ask({"op": "state", "id": ident})
-        self.assertEqual((answer["state"], answer["rebuild"]), ("unsaved", None))
-
+        self.assertIn(f"no document {ident} is held", refused.stderr)
 
     def test_a_handle_is_posed_where_the_engine_holds_its_mechanism(self) -> None:
         # From a plain script, the handle is posed (its .shape carries no joints, and says what to pass
@@ -384,7 +404,7 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(elbow["location"][3], 100.0, "the elbow stands where the body put it, turned")
         self.maxDiff = None
         self.assertEqual(found["caller"], found["inside"])
-        # After a restart the document comes from the engine's cache, read as its xbf: the same tree.
+        # After a restart the document is its .xbf, read as it is: the same tree.
         self.restart()
         self.assertEqual(self.run_python("nested.py", cwd=project)["caller"], found["inside"])
 
@@ -398,12 +418,12 @@ class HandleTest(unittest.TestCase):
             import json
 
             import build123d as bd
-            from cad import model
+            from cad import xbf
 
             from dims import WIDTH
 
 
-            @model
+            @xbf
             def plate():
                 return bd.Box(WIDTH, 2, 1)
 
@@ -437,10 +457,10 @@ UNREACHED = """
 import sys
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def peg():
     return bd.Cylinder(2, 10)
 

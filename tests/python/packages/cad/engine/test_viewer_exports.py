@@ -37,7 +37,7 @@ class ViewerExportsTest(unittest.TestCase):
                     _export({**request, "source": {"script": str(script), "function": "part"},
                              "expected": {"digest": "old"}}, lambda _: None)
 
-    def test_a_planar_document_writes_its_dxf_and_no_xbf_of_an_xbf(self):
+    def test_a_planar_document_writes_its_dxf_and_an_xbf_a_copy_of_it(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()
             script = root / "plate.py"
@@ -48,9 +48,14 @@ class ViewerExportsTest(unittest.TestCase):
             request = {"source": {"path": str(source.path)}, "expected": {"version": source.structure["version"]},
                        "destinations": [str(root / "plate.dxf")]}
             self.assertGreater(_export(request, lambda _: None)["files"][0]["bytes"], 0)
-            with self.assertRaisesRegex(ExportRefused, "not written from another xbf"):
-                _export({**request, "destinations": [str(root / "again.xbf")]}, lambda _: None)
-            self.assertFalse((root / "again.xbf").exists())
+            # An xbf of an xbf is a copy of its document (`cad export a.xbf b.xbf`), read back as the same one.
+            _export({**request, "destinations": [str(root / "again.xbf")]}, lambda _: None)
+            self.assertEqual(Source.read(root / "again.xbf").structure["prototypes"], source.structure["prototypes"])
+            from cad.engine import document
+
+            closure = document.Loaded(root / "plate.xbf").closure
+            self.assertTrue(closure)
+            self.assertEqual(document.Loaded(root / "again.xbf").closure, closure, "its build closure with it")
 
 
 class ViewerExportHttpTest(unittest.TestCase):
@@ -89,12 +94,12 @@ class ViewerExportHttpTest(unittest.TestCase):
 
         with contextlib.chdir(self.root):
             root = self.root
-            # A bare model: its document is the worker's memory alone.
+            # A bare model: its run writes its .xbf beside the script, and the export is the worker's.
             script = root / 'export_http.py'
-            script.write_text('import build123d as bd\nfrom cad import model\n\n\n@model\n'
+            script.write_text('import build123d as bd\nfrom cad import xbf\n\n\n@xbf\n'
                               'def export_http():\n    return bd.Box(2, 3, 4)\n', encoding='utf-8')
             built = api.build_script(script, ['export_http'])
-            self.assertEqual(built.files, {})
+            self.assertEqual(list(built.files), [str(root / 'export_http.xbf')])
             url = urlparse(built.models[0]['url'])
             doc = url.path.strip('/')
             session = request({'op': 'viewer', 'start': str(root), 'api_only': True})
@@ -174,7 +179,8 @@ class ViewerExportHttpTest(unittest.TestCase):
             self.assertIn('source changed', job['error'])
             _, _, data = http('/api/v1/documents/' + doc + '/version')
             self.assertIsNone(json.loads(data)['failed'], 'an export failure is not a model build failure')
-            self.assertEqual(list(root.iterdir()), [script], 'no implicit source or intermediate artifact')
+            self.assertEqual(sorted(root.iterdir()), [script, root / 'export_http.xbf'],
+                             'its declared .xbf and no implicit source or intermediate artifact')
 
 
 def setUpModule() -> None:

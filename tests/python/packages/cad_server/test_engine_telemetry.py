@@ -520,7 +520,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
 
     def spooled(self, lines: int) -> list[dict]:
         """The spool once it holds ``lines`` lines: the daemon keeps a build's count after its answer is sent."""
-        from tests.python.support.cache_fixtures import await_
+        from tests.python.support.store_fixtures import await_
 
         spool = self.state / analytics.SPOOL
 
@@ -542,9 +542,9 @@ class ThroughTheDaemonTest(unittest.TestCase):
             (self.folder / f"{name}.py").write_text(textwrap.dedent(f"""
                 import os
                 import build123d as bd
-                from cad.engine import stl, xbf
+                from cad.engine import stl, model
 
-                @xbf("XBF/{name}.xbf")
+                @model("XBF/{name}.xbf")
                 @stl("{name}.stl")
                 def {name}():
                     {{body}}
@@ -558,7 +558,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(script.returncode, 0, script.stderr)
         self.assertEqual(self.run_in("plate.py").returncode, 0)  # unchanged: its xbf taken whole
         # A command exports the xbf the script built: counted by the command, its warm worker no health of its.
-        command = self.run_in("-m", "cad_server.cli", "xbf", "export", "XBF/plate.xbf", "plate.step")
+        command = self.run_in("-m", "cad_server.cli", "export", "XBF/plate.xbf", "plate.step")
         self.assertEqual(command.returncode, 0, command.stderr)
         self.assertEqual(self.run_in("raises.py").returncode, 1)  # the person's script: count alone
         self.assertEqual(self.run_in("dies.py").returncode, 1)  # its worker died under it: crashed
@@ -598,7 +598,8 @@ class ThroughTheDaemonTest(unittest.TestCase):
     def test_a_telemetry_batch_holds_no_id_and_no_path(self) -> None:
         """Verbs by document id -- a pointer model's and a shape's handed over, one refused, one whose body
         raised -- count kinds, outcomes and times: no id, script or state folder reaches the spool or the batch."""
-        from cad.engine.ids import canonical, model_id
+        from cad.engine.ids import canonical
+        from tests.python.support.ids import model_id
 
         (self.folder / "part.py").write_text(textwrap.dedent("""
             import build123d as bd
@@ -615,15 +616,15 @@ class ThroughTheDaemonTest(unittest.TestCase):
                 raise ValueError(f"broken in {__file__}")
         """), encoding="utf-8")
         run = self.run_in("-c", "import part, build123d as bd, cad\npart.part()\n"
-                                "print('SHAPE', cad.model(bd.Box(1, 2, 3), name='handed').id)\n"
+                                "print('SHAPE', cad.xbf(bd.Box(1, 2, 3), name='handed').id)\n"
                                 "try:\n    part.broken()\nexcept Exception:\n    pass\n")
         self.assertEqual(run.returncode, 0, run.stderr)
         pointer, handed = model_id(self.folder / "part.py", "part"), run.stdout.split("SHAPE ", 1)[1].split()[0]
         refused = model_id(self.folder / "part.py", "nowhere")
         for ident in (pointer, handed):
-            done = self.run_in("-m", "cad_server.cli", "model", "export", ident, str(self.folder / f"{ident}.stl"))
+            done = self.run_in("-m", "cad_server.cli", "export", ident, str(self.folder / f"{ident}.stl"))
             self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "model", "export", refused, str(self.folder / "x.stl")).returncode, 0)
+        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "export", refused, str(self.folder / "x.stl")).returncode, 0)
         from tests.python.packages.cad_server.engine.test_snapshot import gl
 
         try:
@@ -632,7 +633,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         except unittest.SkipTest:
             drawn = False
         if drawn:
-            done = self.run_in("-m", "cad_server.cli", "model", "snapshot", pointer, str(self.folder / "part.png"))
+            done = self.run_in("-m", "cad_server.cli", "snapshot", pointer, str(self.folder / "part.png"))
             self.assertEqual(done.returncode, 0, done.stderr)
         spool = self.state / analytics.SPOOL
         spooled = spool.read_text(encoding="utf-8")
@@ -643,7 +644,11 @@ class ThroughTheDaemonTest(unittest.TestCase):
         self.assertEqual(outcomes.count(("stl", "ok")), 2, "both exports by id were counted")
         if drawn:
             self.assertTrue(any(counts.get("snapshots") for counts in counted), "the snapshot by id was counted")
-        # What the sender sends: the spool taken into a batch, kept beside the settings when nothing answers.
+        # What the sender sends: the spool taken into a batch, kept beside the settings when nothing answers. The
+        # engine stopped first, as in the test above: a recorder of its takes the kept file aside while it sends
+        # (``Recorder.send_kept``), so a read of that file beside a live engine may find none.
+        stopped = self.run_in("-m", "cad_server.engine", "stop")
+        self.assertEqual(stopped.returncode, 0, stopped.stderr)
         env = {**self.env, "CAD_API_URL": "http://127.0.0.1:9"}
         sent = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.telemetry_send"], env=env,
                               capture_output=True, text=True, timeout=120)

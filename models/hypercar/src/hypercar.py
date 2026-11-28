@@ -24,15 +24,15 @@ The assembly tree is grouped BY SYSTEM -- thirteen sibling stages under
 
 The car is one model, ``hypercar``, holding the doors' motion, ``doors``, and two
 GLB animations, the ``showcase`` tour and the ``explode``. Its GLB, whose clips they
-are, is exported on demand (``cad model export <id> GLB/hypercar.glb``, the id its run
-prints).
+are, is exported on demand (``cad export src/hypercar.xbf GLB/hypercar.glb``, the .xbf its run
+saves).
 """
 
 from __future__ import annotations
 
 import math
 
-from cad import model
+from cad import xbf
 from cad.ap242 import configuration_sequence, mechanism_state
 from cad.gltf import animation
 
@@ -441,7 +441,7 @@ def _explode(t):
     return _explode_values(lambda _tour: k, k)
 
 
-@model
+@xbf
 def hypercar():
     groups = [system() for system in SYSTEMS]
     car = bd.Compound(children=groups, label="mid_engine_hypercar")

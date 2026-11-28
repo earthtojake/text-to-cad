@@ -30,7 +30,8 @@ default; a one-off part can be one script in a flat folder.
   tmp/                    # ignored scratch: checks, snapshots
 ```
 
-Runs write nothing, so the output folders exist only once someone asks for files.
+Runs write only each model's `<name>.xbf` beside its script, so the output folders exist
+only once someone asks for files.
 `exports.py` ([standing deliverables](exports.md#standing-deliverables-exportspy)) is the
 one script in a project that writes files.
 
@@ -76,4 +77,4 @@ __pycache__/
 ```
 
 Vendor STEP files are irreplaceable inputs: commit them. The xbf converted from one is
-made again by one `cad step export`.
+made again by one `cad export`.

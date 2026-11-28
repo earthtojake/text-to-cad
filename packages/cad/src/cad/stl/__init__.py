@@ -2,8 +2,9 @@
 
 ``@stl("arm.stl")`` declares a model's STL file;
 ``stl.read(path)`` reads one into a model;
-its operations (``stl.export(source, *destinations)``, ...) are the ``cad stl <operation>`` commands'.
-``stl.dfm(source)`` measures it for 3D printing (molding, CNC and sheet are judged on exact geometry), with
+the verbs take one as the ``cad`` command's do (``cad.export("arm.stl", "arm.glb")``, a mesh to the other
+mesh kinds; ``cad.snapshot``).
+``cad.dfm("arm.stl")`` measures it for 3D printing (molding, CNC and sheet are judged on exact geometry), with
 the trimesh integration (``cad._internal.manufacturing``).
 Everything loads on first use: ``import cad.stl`` imports no CAD kernel (``cad._internal.document_type``).
 """

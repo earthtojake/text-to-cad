@@ -49,7 +49,9 @@ class TheControlsAreOneVocabulary(unittest.TestCase):
 class TheKindsAreOneVocabulary(unittest.TestCase):
     def test_current_sender_kinds_match_its_receiver_schema(self) -> None:
         # File suffixes are local lookup keys; only their formats and the closed model word cross the wire:
-        # each document type's wire spelling (the registry's), which the sender's FILE_KINDS is made of.
+        # each document type's wire spelling (the registry's), which the sender's FILE_KINDS is made of -- but a
+        # model's file, its .xbf, which crosses as the schemas' word for that format, xbf (``model`` is a live
+        # model's, counted apart).
         import sys
 
         sys.path.insert(0, str(ROOT / "packages/cad/src"))
@@ -59,7 +61,7 @@ class TheKindsAreOneVocabulary(unittest.TestCase):
         assignments = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
                        for target in node.targets if isinstance(target, ast.Name)}
         self.assertEqual("_file_kinds()", ast.unparse(assignments["FILE_KINDS"]))
-        formats = {entry.wire for entry in DOCUMENT_TYPES.values()}
+        formats = {"xbf" if entry.held else entry.wire for entry in DOCUMENT_TYPES.values()}
         extra = names(CADGEN, "KINDS = frozenset({", "})")
         receiver = set(names(RECEIVER, "const KINDS = new Set([", "]);")
                        + names(RECEIVER, "const KINDS_6 = new Set([", "]);")

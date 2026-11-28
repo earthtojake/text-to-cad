@@ -226,7 +226,7 @@ def mount():
 # Declares its xbf, the corpus's example of a slow model's result kept across runs and
 # engine restarts: a cold build takes most of an hour. Every body replays; a no-op without
 # the file still samples the running motion again (5 s), which a run that takes it skips.
-@xbf(out="../XBF/radial.xbf")
+@xbf("../XBF/radial.xbf")
 def radial():
     systems = [
         crankcase(), crankshaft(), rods(), pistons(), barrels(), heads(), valvetrain(), cam(), pushrods(),

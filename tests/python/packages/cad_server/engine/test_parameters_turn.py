@@ -20,7 +20,7 @@ from tests.python.support.paths import add_sources
 add_sources()
 
 from cad.engine import api, client  # noqa: E402
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 GATED = """\
@@ -28,16 +28,16 @@ import socket
 from pathlib import Path
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
-WALL = model.param("wall", 2.0, min=1, max=5)
+WALL = xbf.param("wall", 2.0, min=1, max=5)
 _HOLD = Path(__file__).with_name("hold")
 if _HOLD.exists():  # the test's gate: this load waits until the test lets it go
     with socket.create_connection(("127.0.0.1", int(_HOLD.read_text()))) as _gate:
         _gate.recv(1)
 
 
-@model
+@xbf
 def bracket():
     return bd.Box(30, 10, WALL)
 """

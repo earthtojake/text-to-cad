@@ -118,6 +118,7 @@ const FAMILY_BY_KIND = Object.freeze({
   "3mf": MESH_FAMILY,
   urdf: ROBOT_FAMILY,
   srdf: ROBOT_FAMILY,
+  // The engine's document, a model's (and a STEP, which opens as one).
   xbf: XBF_FAMILY
 });
 

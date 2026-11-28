@@ -15,14 +15,16 @@ import { createScreenSpaceLineStrip } from "./renderEdges.js";
  *   width?: number, widths?: ArrayLike<number>, closed?: boolean, group?: string,
  *   outline?: number, triangles?: ArrayLike<number>,
  *   text?: string, fontPx?: number,
- *   touches?: { part: string, ref?: string }[]
+ *   touches?: (string | { part: string, ref?: string })[]
  * }} AnnotationMark
  *   `points`: x, y, z triples, in model coordinates. A stroke's are its line; an area's (a fill) its outline (the first `outline`) then the points inside
- *   it its `triangles` index; a text mark's its label's four corners. `width`: a stroke's thickness in
+ *   it its `triangles` index; a text mark's its label's four corners. An area with no `triangles` (as a Quick Edit's
+ *   packet carries one) is its outline alone, drawn as a closed line. `width`: a stroke's thickness in
  *   screen pixels, at any zoom; `widths`: the pen's, each point's share of it. `fontPx`: a text mark's
  *   size on screen as it was written. `view`: the label of the view it was drawn in. `touches`: what
  *   it was drawn over, most first: a part, with the face or edge of it (`ref`, a prompt reference)
- *   where the view could name one. What it touches says what it is about; its points alone say where.
+ *   where the view could name one, or (a Quick Edit's packet's) the selector of each in the file.
+ *   What it touches says what it is about; its points alone say where.
  * @typedef {{ units: string, marks: AnnotationMark[] }} Annotation
  */
 
@@ -46,7 +48,10 @@ const numbers = (value, label) => {
 
 /**
  * An annotation as it is read from a file or a job: checked field by field, each refusal naming what is
- * wrong. Unknown fields are refused too, so a misspelt one never passes for a default.
+ * wrong. Unknown fields are refused too, so a misspelt one never passes for a default. A Quick Edit's
+ * packet carries it shortened (`@cad/core/prompt`'s `snapshotPacket`), which reads the same: a mark with no
+ * `id` takes one of its own, by its place (`mark 3`), that no other mark has; `touches` may be selectors; an
+ * area may have no `triangles`.
  * @param {unknown} raw
  * @returns {Annotation}
  */
@@ -63,9 +68,10 @@ export function normalizeAnnotation(raw) {
       if (!["id", "kind", "view", "points", "color", "opacity", "width", "widths", "closed", "group",
         "outline", "triangles", "text", "fontPx", "touches"].includes(key)) fail(`${at}: unknown field "${key}"`);
     }
-    const id = String(mark.id ?? "");
-    if (!id || ids.has(id)) fail(`${at}.id must be a unique, non-empty string`);
-    ids.add(id);
+    // A mark with no id is given one once every mark's own is known (below).
+    const id = mark.id == null ? null : String(mark.id);
+    if (id !== null && (!id || ids.has(id))) fail(`${at}.id must be a unique, non-empty string`);
+    if (id !== null) ids.add(id);
     if (!ANNOTATION_MARK_KINDS.includes(mark.kind)) fail(`${at}.kind must be one of ${ANNOTATION_MARK_KINDS.join(", ")}`);
     if (!COLOR.test(String(mark.color ?? ""))) fail(`${at}.color must be a #rrggbb colour`);
     const points = numbers(mark.points, `${at}.points`);
@@ -87,9 +93,12 @@ export function normalizeAnnotation(raw) {
       out.closed = Boolean(mark.closed);
       if (count < 2) fail(`${at}: a stroke has at least two points`);
     } else if (mark.kind === "area") {
-      out.triangles = numbers(mark.triangles, `${at}.triangles`);
-      if (!out.triangles.length || out.triangles.length % 3 || out.triangles.some(index => !Number.isInteger(index) || index < 0 || index >= count)) {
-        fail(`${at}.triangles must index its points, three to a triangle`);
+      // An area with no triangles is its outline alone, which is drawn as a closed line.
+      if (mark.triangles != null) {
+        out.triangles = numbers(mark.triangles, `${at}.triangles`);
+        if (!out.triangles.length || out.triangles.length % 3 || out.triangles.some(index => !Number.isInteger(index) || index < 0 || index >= count)) {
+          fail(`${at}.triangles must index its points, three to a triangle`);
+        }
       }
       out.outline = mark.outline ?? count;
       if (!Number.isInteger(out.outline) || out.outline < 3 || out.outline > count) fail(`${at}.outline must count its outline's points`);
@@ -101,12 +110,22 @@ export function normalizeAnnotation(raw) {
     }
     if (mark.group != null) out.group = String(mark.group);
     if (mark.touches != null) {
-      if (!Array.isArray(mark.touches) || mark.touches.some(touch => typeof touch?.part !== "string" || (touch.ref != null && typeof touch.ref !== "string"))) {
-        fail(`${at}.touches must list { part, ref? } entries`);
+      const selector = touch => typeof touch === "string" && touch.length > 0;
+      if (!Array.isArray(mark.touches) || mark.touches.some(touch => !selector(touch)
+        && (typeof touch?.part !== "string" || (touch.ref != null && typeof touch.ref !== "string")))) {
+        fail(`${at}.touches must list { part, ref? } entries, or selectors`);
       }
-      out.touches = mark.touches.map(touch => (touch.ref ? { part: touch.part, ref: touch.ref } : { part: touch.part }));
+      out.touches = mark.touches.map(touch => (selector(touch) ? touch : touch.ref ? { part: touch.part, ref: touch.ref } : { part: touch.part }));
     }
     return out;
+  });
+  // A mark with no id of its own takes one by its place, never another mark's.
+  marks.forEach((mark, index) => {
+    if (mark.id !== null) return;
+    let id = `mark ${index + 1}`;
+    for (let again = 2; ids.has(id); again += 1) id = `mark ${index + 1}.${again}`;
+    ids.add(id);
+    mark.id = id;
   });
   return { units, marks };
 }
@@ -195,9 +214,13 @@ function onceOnly(THREE, material, ref) {
   material.needsUpdate = true;
 }
 
+// An area drawn by its outline alone is a line this many screen pixels wide, as cad's own stills draw every area.
+export const ANNOTATION_OUTLINE_PX = 1.5;
+
 /**
  * One mark's object: a stroke a screen-width line along its points, an area a flat mesh of its
- * triangles, a text mark its picture on a quad, where its points are: in model coordinates.
+ * triangles (one with none, its outline alone, a closed screen-width line round it), a text mark its
+ * picture on a quad, where its points are: in model coordinates.
  *
  * @param {{ THREE: typeof import("three"), Line2: any, LineGeometry: any, LineMaterial: any }} context
  * @param {AnnotationMark} mark
@@ -206,8 +229,17 @@ function onceOnly(THREE, material, ref) {
 export function annotationMarkObject(context, mark, { lineScale }) {
   const { THREE } = context;
   const positions = mark.points instanceof Float32Array ? mark.points : new Float32Array(mark.points);
+  const ring = mark.kind === "area" && !mark.triangles;
   let object;
-  if (mark.kind === "stroke") {
+  if (ring) {
+    // Its outline, back to where it started.
+    const outline = positions.subarray(0, 3 * (mark.outline ?? positions.length / 3));
+    const closed = new Float32Array(outline.length + 3);
+    closed.set(outline);
+    closed.set(outline.subarray(0, 3), outline.length);
+    object = createScreenSpaceLineStrip(context, closed, { color: mark.color, opacity: mark.opacity ?? 1,
+      lineWidth: Math.max(1, ANNOTATION_OUTLINE_PX * lineScale), renderOrder: ANNOTATION_RENDER_ORDER, depthTest: true, depthWrite: false });
+  } else if (mark.kind === "stroke") {
     object = createScreenSpaceLineStrip(context, positions, { color: mark.color, opacity: mark.opacity ?? 1,
       lineWidth: Math.max(1, mark.width * lineScale), renderOrder: ANNOTATION_RENDER_ORDER, depthTest: true, depthWrite: false });
     if (object && mark.widths?.length === positions.length / 3) {

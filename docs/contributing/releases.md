@@ -81,19 +81,19 @@ compatibility each keeps. This table says which slot a change in each tier takes
 
 | Law 14's tier | Breaks nothing: the patch below 1.0, the minor or patch from 1.0 | Breaking: the breaking slot, with a migration guide |
 | --- | --- | --- |
-| 1. What an agent reads each session: the skills, the `cad` command's verbs and options, the CAD tools | any change, in any release, once no skill text of the last 30 days uses what it removes | nothing: the 30-day rule keeps what released skills use |
+| 1. What an agent reads each session: the skills, the `cad` command's verbs and options, the CAD tools | an addition; a command or option replaced, its old spelling answering in one line with the new one | a command or option removed with nothing to name in its place |
 | 2. The library's public imports | an addition; a rename or a move whose earlier spelling stays an alias of the same object, its interface unchanged (a deprecation, which bumps the minor from 1.0) | the alias's removal; a change to a name's contract (what it takes or returns), including a spelling kept by something that is not the same object with the same interface |
 | 3. A person's data | a new form, with the previous shipped release's read and migrated on first touch | a release that cannot read what the previous shipped release wrote, or reads it as meaning something else |
 | 4. Protocols where two releases meet while both run | an addition within a number; a new number whose newer side keeps answering the previous one | a new number whose newer side stops answering the previous one |
 
-- **Tier 1, the 30-day rule.** What the skills of any release in the last 30 days use keeps working,
-  hidden if need be: a `cad` command, an option, a `--json` key, an exit status, an MCP tool or its
-  arguments. No test holds it: the change that removes one says which releases' skills used it.
-  Past the window it may change or go in any release, a hard cutover and not a breaking
-  change. A person's own script that runs `cad` commands may then need an edit: the release notes say
-  what changed.
-- **Tier 2 changes in two steps, and only the second breaks.** The rename keeps its alias for a
-  release at least: the non-breaking slot, and no guide, since its warning names the new spelling and
+- **Tier 1, replaced, not kept.** A `cad` command or option the skills used is replaced, not kept: its
+  old spelling runs nothing and answers in one line with the new one, from one table
+  (`cad_server/cli/__init__.py`'s `_hint`), and the change that replaces it says which releases' skills
+  used it. Nothing another program calls (an installer, an earlier release's updater, an agent app's
+  launch) is removed before its replacement ships. A person's own script that runs `cad` commands may then
+  need an edit: the migration guide says what changed.
+- **Tier 2 changes in two steps, and only the second breaks.** The rename keeps its alias, with a warning,
+  for at least one minor release: the non-breaking slot, and no guide, since its warning names the new spelling and
   `cad._internal.aliases` pins the table. It is listed in a migration guide when a breaking release
   next writes one, at the latest the release that removes it, where it must be. The removal takes the
   breaking slot.
@@ -152,7 +152,7 @@ major](#before-the-first-release-of-a-higher-major).
   it is on PyPI, unless the project yanks it there. 0.11.12 to 0.11.18 read
   [the version feed](#the-version-feed) instead: an hour after, unless the project holds it back.
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may
-  be older than cad, which the 30-day rule covers.
+  be older than cad: a command they run that cad replaced answers with the new one (tier 1, below).
 - **Releases 0.10.0 to 0.11.11** are carried over once by their own updater
   ([No version left behind](#no-version-left-behind)).
 
@@ -578,6 +578,10 @@ gh workflow run deploy-docs.yml --ref my-branch -f ref=my-branch -f preview=true
 `Deploy API` (`.github/workflows/deploy-api.yml`) deploys `api.texttocad.dev` on every change to
 `apps/api` on `main`, and redeploys `main` on dispatch (`gh workflow run deploy-api.yml`). It follows
 no release.
+
+`Deploy Share` (`.github/workflows/deploy-share.yml`) deploys the share service (`apps/share`) on
+dispatch alone (`gh workflow run deploy-share.yml --ref main`). It follows no release either; its
+one-time set-up is in its [README](../../apps/share/README.md#set-up-once).
 
 ## The install branches
 

@@ -11,16 +11,16 @@ snapshot can draw.
 - [Annotations and Quick Edit views](#annotations-and-quick-edit-views)
 - [Mesh files, robots and drawings](#mesh-files-robots-and-drawings)
 
-`cad <type> snapshot SRC OUT.png` draws SRC as the viewer draws it, rendered by OCCT, into a
+`cad snapshot SRC OUT.png` draws SRC as the viewer draws it, rendered by OCCT, into a
 PNG: one command, one picture. SRC is a model's id (the document the server holds, as it is:
 nothing is built), a document file (`.xbf`, `.step`), a mesh (`.stl`, `.3mf`, `.glb`), a robot
 (`.urdf`, `.srdf`) or a drawing (`.dxf`). A script is never a source, and SRC is a whole document,
-never a ref into one (`$ID#bracket`): `--display '{"isolated": ["bracket"]}'` draws one part alone.
+never a ref into one (`model.xbf#bracket`): `--display '{"isolated": ["bracket"]}'` draws one part alone.
 
 ```bash
-cad model snapshot "$ID" tmp/review.png
-cad model snapshot "$ID" tmp/below_behind.png --camera 225:-30
-cad model snapshot "$ID" tmp/top.png --display hidden-line --grid --camera top
+cad snapshot model.xbf tmp/review.png
+cad snapshot model.xbf tmp/below_behind.png --camera 225:-30
+cad snapshot model.xbf tmp/top.png --display hidden-line --grid --camera top
 ```
 
 With no flags a snapshot is the `solid` display from an orthographic isometric camera fitted to the
@@ -97,8 +97,8 @@ of a large curved part (a faceted outline, uneven shading). For a still that nee
 export the model as a GLB at the tolerance wanted and draw that file:
 
 ```bash
-cad model export "$ID" tmp/fine.glb --tolerance 0.02 --angle 3
-cad glb snapshot tmp/fine.glb tmp/close.png --camera 35:20
+cad export src/bracket.xbf tmp/fine.glb --tolerance 0.02 --angle 3
+cad snapshot tmp/fine.glb tmp/close.png --camera 35:20
 ```
 
 ## Clipped views
@@ -109,7 +109,7 @@ relation to a floor. `display.clip` takes `enabled`, `axis` (`x`, `y` or `z`, lo
 and `invert`; the cut is capped. Look straight at the cut:
 
 ```bash
-cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
+cad snapshot model.xbf tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
 ```
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
@@ -120,36 +120,35 @@ numbered segment and its path written with either, so one entry leaves out a kin
 part wherever it is; a glob that matches nothing is refused.
 
 ```bash
-cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
-cad model snapshot "$ID" tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
+cad snapshot model.xbf tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad snapshot model.xbf tmp/frame.png --display '{"hidden": ["*skin*", "*/skin_screw"]}'   # the structure alone
 ```
 
 ## Annotations and Quick Edit views
 
-A Quick Edit prompt carries a snapshot packet: inline JSON up to 1 KiB (save it to a
-`.snapshot.json` first), or the path of a `.snapshot.json` in a folder of the server's under
-`/tmp`. The prompt names files relative to your workspace, else from `~/`; `cad <type> snapshot`
-reads either from the workspace. The packet holds:
+A Quick Edit prompt carries a snapshot packet, inline JSON after its references. The prompt names
+files relative to your workspace, else from `~/`, or a shared model by its cad.fun link (`cad import
+LINK` first: then `cad snapshot` reads the link as the copy it wrote). The packet holds:
 
-- `input`: what the person looked at: a model's id, or a file's path;
+- `input`: what the person looked at: a model's id, a file's path, or a cad.fun link;
 - `jobs`: one per view they captured (the current view and each view they drew
   in), each with the view's `camera`, its `display` (the parts that view hid and isolated among
-  it, as `hidden` and `isolated` refs) and an output `label`; a posed document's or a robot's
-  carries its pose as `jointValues`;
+  it, as `hidden` and `isolated` refs) and an output `label`, `width` and `height`; a posed
+  document's or a robot's carries its pose as `jointValues`;
 - `annotation`: their ink, when they drew any. Each mark is in model coordinates,
   on the part it was drawn on, and its `touches` lists what it was drawn over, most
-  first: faces and edges as refs where the viewer could name them, each with its
-  part. Read those to know what a mark is about;
+  first: faces and edges as refs within the file, where the viewer could name them.
+  Read those to know what a mark is about;
 - `hidden` and `isolated`: with ink, the parts the view it was last drawn in hid
   and isolated, which `--annotation` leaves out of the picture unless `--display` says otherwise.
 
 Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cad model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad snapshot model.xbf tmp/quick_edit.png --annotation '<packet>' --camera authored
 ```
 
-`--annotation FILE` takes the packet or an annotation file and draws each mark on its part,
+`--annotation` takes the packet and draws each mark on its part,
 wherever the picture places that part (posed or exploded). `--camera authored` draws exactly the
 view the last mark was drawn in (no fit), at its size and projection unless other flags say
 otherwise. Pass a job's `display` object as `--display` to draw in the person's mode with the
@@ -158,17 +157,19 @@ parts they hid left out, and its `jointValues` as `--pose`. A view without ink i
 over the model, a JSON list of `{start, end, label, color}` or a file of it.
 
 `--job` replays the whole packet in one call (every view, each with its own camera, display and
-pose, the ink over each) into the files its outputs name:
+pose, the ink over each), each picture into the current folder (or `--out DIR`) as
+`<input>-<label>.png`, and says where:
 
 ```bash
-cad model snapshot --job tmp/bracket.snapshot.json
-cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
+cad snapshot --job '<packet>'
+cad snapshot --job '<packet>' model.xbf   # the same views, of the document as it is now
 ```
 
 `--job` also takes a job (`{input, camera, display, preview, jointValues, output, outputs}`) or a
-list of jobs, as a file or JSON, so one command draws many pictures. A job's `jointValues` takes
+list of jobs, so one command draws many pictures. A job's `jointValues` takes
 what `--pose` does, so a list of jobs is a sequence's frames. Its `outputs` are its pictures
-(`path`, and `width`, `height`, `camera` of their own; a folder `path` takes a generated name). A
+(`path`, and `width`, `height`, `camera` of their own; a folder `path` takes a generated name; no
+`path`, a name in `--out`). A
 SRC given is drawn in place of every job's input, and any other flag overrides every job. Every
 job is checked before anything renders, and a failure writes none of its pictures. A job's
 `output` settings finish its pictures:

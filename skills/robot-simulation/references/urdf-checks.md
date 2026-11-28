@@ -2,13 +2,13 @@
 
 Read this when a `.urdf` was written or changed by hand, or a check's result has to be read.
 [Check each change](../SKILL.md#check-each-change) has the commands and which change takes which
-check; this is what `cad urdf validate` covers, how to sweep the joints, and what a clean result
+check; this is what `cad inspect` covers, how to sweep the joints, and what a clean result
 leaves open.
 
 ## The validator
 
 ```bash
-cad urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
+cad inspect path/to/robot.urdf --packages robot_description=/path/to/pkg
 ```
 
 ```text
@@ -54,8 +54,8 @@ from a camera that looks along its axis, and hold each picture against the ledge
 joint:
 
 ```bash
-cad urdf snapshot robot.urdf zero.png --camera front
-cad urdf snapshot robot.urdf shoulder.png --camera front --pose '{"shoulder_pitch": 60}'
+cad snapshot robot.urdf zero.png --camera front
+cad snapshot robot.urdf shoulder.png --camera front --pose '{"shoulder_pitch": 60}'
 ```
 
 A positive turn shows counter-clockwise from the camera at the positive end of its axis (`top` for
@@ -71,7 +71,7 @@ the person is not the sweep: say which joints were swept and which were not.
 - **Units.** A limit typed in degrees is a legal number of radians. A mesh file is found, never
   opened, so one in millimetres with no `scale`, or in a format `cad` cannot draw, passes.
 - **An inertial's values**, beyond the warnings above ([inertials.md](inertials.md) has the gates).
-- **That a picture means a valid file.** `cad urdf snapshot` runs no validation and draws files the
+- **That a picture means a valid file.** `cad snapshot` runs no validation and draws files the
   validator fails (a negative mass, reversed limits). The viewer does not: its page refuses one,
   with the validator's errors.
 - **That a consumer loads it.** `package://` resolves differently in every environment. Run

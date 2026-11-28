@@ -28,7 +28,7 @@ function RoutineMenu({ runtime, disabled }) {
         </Button>
       </DropdownMenuTrigger>
     </TooltipHint>
-    <DropdownMenuContent side="top" align="start" sideOffset={6} collisionPadding={8} aria-label={name}
+    <DropdownMenuContent side="top" align="start" collisionPadding={8} aria-label={name}
       className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
       <DropdownMenuRadioGroup value={runtime.activeClipId} onValueChange={id => runtime.onClipSelect?.(id)}>
         {clips.map(clip => <DropdownMenuRadioItem key={clip.id} value={clip.id}>

@@ -311,7 +311,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const updater = useUpdate(updateCalls, { release: version, cadUpdate: initial.cadUpdate ?? null }, { followed, restartForSkills: true, notices: frameNoticeDismissals,
     onRestarted: () => { if (!loadNextRelease(version)) setStale(true); } });
   const updating = updater.phase.phase !== 'idle';
-  // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
+  // The navbar's links: the same as every app's (Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);

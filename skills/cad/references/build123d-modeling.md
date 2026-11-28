@@ -64,7 +64,7 @@ There is no `metals.steel()`: plain steel is `mild_steel()`. A grade is a name, 
 - **Units.** A material is a `FinishedMaterial`, with physics in `.material` and appearance in
   `.pbr`; each family's `custom_*` factory (`metals.custom_metal`) makes one of your own. Density
   is a single value in kg/m³; mechanical properties are ranges, modulus in GPa and strength in
-  MPa. `shape.mass()` is in grams; `cad <type> inspect` reports kilograms. A measured weight is
+  MPa. `shape.mass()` is in grams; `cad inspect` reports kilograms. A measured weight is
   declared beside the material, `mass(part, grams)` from `cad.build123d`
   ([declaring for a simulator](kinematics.md#declaring-for-a-simulator)).
 - **A part read from a STEP or an xbf** keeps the file's colours until it is given a material,
@@ -126,7 +126,7 @@ Prefer these to `bd_materials`' textured finishes (`bead_blast`, `brushed`, `zin
 `tin_plate`), which draw flat at roughness 1. Texture maps (every wood, cardboard and CFRP in the
 catalogue, a finish such as `processes.mjf()`) are kept in an xbf but not drawn: the viewer,
 snapshots and GLB and 3MF exports draw the part in its material's scalar look and name what
-they left out (`PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`; `cad xbf
+they left out (`PART: Hardwood_ASH's color, normal and roughness maps not drawn: ...`; `cad
 inspect` lists the parts under `textures`). Set the scalar values with `pbr.override(...)` when
 the look matters. What each file keeps of a material is in [formats](exports.md#formats).
 

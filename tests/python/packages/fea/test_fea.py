@@ -505,7 +505,7 @@ class Cantilever(unittest.TestCase):
 
         out = io.StringIO()
         with redirect_stdout(out), quiet():
-            code = cli.main(["step", "solve", str(self.step), "--study", json.dumps(self.study),
+            code = cli.main(["fea", str(self.step), "--study", json.dumps(self.study),
                              "--out", str(self.out.with_name("again")), "--json"])
         self.assertEqual(code, 0, out.getvalue())
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
@@ -613,8 +613,8 @@ class Cantilever(unittest.TestCase):
                 shutil.copyfile(xbf, target)
 
             with mock.patch.object(api, "export", held), quiet():
-                listing = cad.model.solve(model)
-                result = cad.model.solve(model, study=self.study, out=Path(tmp) / "model")
+                listing = cad.xbf.solve(model)
+                result = cad.xbf.solve(model, study=self.study, out=Path(tmp) / "model")
             self.assertEqual([source for source, _ in written], [model, model])
             self.assertFalse(any(target.exists() for _, target in written))  # its temporary folder is gone
             self.assertEqual((listing.path, len(listing.faces)), (Path(model), 6))
@@ -1342,10 +1342,10 @@ class ModelMaterial(unittest.TestCase):
         script.write_text(textwrap.dedent('''
             import build123d as bd
             from bd_materials import metals
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf(out="XBF/bar.xbf")
+            @model("XBF/bar.xbf")
             def bar():
                 part = bd.Box(40, 10, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
                 part.material = metals.aluminum()

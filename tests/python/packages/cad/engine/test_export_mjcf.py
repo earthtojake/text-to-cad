@@ -130,10 +130,10 @@ TWO = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import free, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/two.xbf")
+@model("XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -331,10 +331,10 @@ def _rotation_z(angle: float) -> np.ndarray:
 HINGE = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -357,7 +357,7 @@ import math
 
 import build123d as bd
 from bd_materials import metals
-from cad.engine import xbf
+from cad.engine import model
 
 A, B, C, D = (0, 0), (15, 26), (55, 50), (80, 0)  # mm, in the XZ plane
 
@@ -379,7 +379,7 @@ def hinge(name, holder, child, at, connect=True):
         joint.connect_to(child.joints[name], angle=0)
 
 
-@xbf("XBF/four_bar.xbf")
+@model("XBF/four_bar.xbf")
 def four_bar():
     base = bd.Pos(40, -20, -10) * bd.Box(100, 10, 10)
     base.label = "base"
@@ -397,10 +397,10 @@ GRIPPER = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import mechanism_state, rack_and_pinion_pair
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/gripper.xbf")
+@model("XBF/gripper.xbf")
 def gripper():
     palm = bd.Box(80, 20, 20)
     palm.label = "palm"
@@ -442,14 +442,13 @@ from pathlib import Path
 
 import build123d as bd
 from bd_materials import plastics
-from cad import xbf as xbf_file
+from cad import xbf
 from cad.build123d import leaves
-from cad.engine import xbf
 
 
 @xbf("XBF/painted.xbf")
 def painted():
-    parts = leaves(xbf_file.read(Path(__file__).parent / "vendor.xbf"))
+    parts = leaves(xbf.read(Path(__file__).parent / "vendor.xbf"))
     for part in parts:
         part.material = plastics.pe()
     return bd.Compound(children=parts, label="painted")
@@ -460,10 +459,10 @@ def painted():
 # tessellation folds by 16 to 45 degrees from triangle to triangle all along it.
 WIRE = """
 import build123d as bd
-from cad.engine import paint, xbf
+from cad.engine import paint, model
 
 
-@xbf("XBF/wire.xbf")
+@model("XBF/wire.xbf")
 def wire():
     block = bd.Box(40, 40, 40)
     block.label = "block"

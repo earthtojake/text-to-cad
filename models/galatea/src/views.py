@@ -10,7 +10,7 @@ Three passes, the camera going round the robot through the first two:
     x-ray     one gait cycle of the `walk` motion, the mechanism showing through the skins. The pelvis is the
               mechanism's fixed link, so the feet tread under it, as they do when the viewer plays the motion.
 
-Every frame is one `cad model snapshot` job: the engine draws it with the renderer and the display modes of the
+Every frame is one `cad snapshot` job: the engine draws it with the renderer and the display modes of the
 viewer's page, from the document it holds. `film.py`'s cut takes the frames as they are.
 """
 
@@ -71,7 +71,7 @@ def main(arguments):
     for first in range(0, len(jobs), 12):                   # a dozen at a time: a packet's pictures are drawn in one go
         packet = OUT / ".jobs.json"
         packet.write_text(json.dumps(jobs[first:first + 12]))
-        done = subprocess.run(["cad", "model", "snapshot", "--job", str(packet), "--json"], capture_output=True, text=True)
+        done = subprocess.run(["cad", "snapshot", "--job", str(packet), "--json"], capture_output=True, text=True)
         if done.returncode:
             raise SystemExit(f"snapshot failed: {done.stdout.strip()[-400:] or done.stderr.strip()[-400:]}")
         print(f"frames {first * step} to {min(len(jobs), first + 12) * step - 1}", flush=True)

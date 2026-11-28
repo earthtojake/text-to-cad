@@ -94,7 +94,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
-force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``cad <type> export`` or
+force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``cad export`` or
 ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of them, and each model build the
 daemon answers (a ``python model.py``, a ``Model.build()``) by the daemon, under its asker's environment
 (``cad_server._internal.engine_telemetry``). Whichever process takes it sends it as a batch of its own,
@@ -376,6 +376,7 @@ HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take
 def _file_kinds() -> dict[str, str]:
     from cad.registry import DOCUMENT_TYPES
 
+    # A model's file, its .xbf, is the format the schemas name ``xbf``: ``model`` is a live model, counted apart.
     return {extension: entry.wire for entry in DOCUMENT_TYPES.values() for extension in entry.extensions}
 
 
@@ -392,7 +393,7 @@ KINDS = frozenset({"model", *FILE_KINDS.values()})  # a live model, or an actual
 # commands counted (``cad_server._internal.telemetry_send``).
 PROCESSES = frozenset({"app", "viewer", "cli"})
 # Who asked for a build: a model script (``python model.py``, or a Python caller's ``Model.build()``) or a
-# ``cadgen`` command (``cad <type> export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
+# ``cadgen`` command (``cad export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
 # source text (``cadgen build``); the receiver reads it still, as it reads every schema a release sent.
 VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its
@@ -526,12 +527,18 @@ CONTROLS = frozenset({
     "quick_edit_copy", "quick_edit_queue", "quick_edit_send", "quick_edit_shown", "quick_edit_dismissed", "board_side", "board_dimension",
     "navbar_back", "navbar_forward", "models", "models_open", "models_filter", "explorer", "explorer_filter",
     "file_copy_path", "file_copy_link", "file_reveal", "file_open_app", "home",
+    "file_import_folder", "file_open_beside", "file_download_files", "project_crumb", "project_previous", "project_next",
+    "search_open", "search_pick", "search_new_tab",
     "theme_system", "theme_light", "theme_dark", "language", "feedback",
     "export_step", "export_stl", "export_threemf", "export_glb", "export_dxf", "export_xbf", "export_original",
     "export_gerbers", "export_drill", "export_pos", "export_bom", "export_odb", "export_ipc", "export_pdf",
-    "home_search", "home_filter_all", "home_filter_models", "home_filter_files", "home_layout_grid", "home_layout_list",
+    "home_search", "home_kind_all", "home_kind_models", "home_kind_drawings", "home_kind_boards", "home_kind_schematics",
+    "home_kind_robots", "home_layout_grid", "home_layout_list",
     "home_open", "home_pick", "home_copy_path", "home_copy_link", "home_reveal", "home_pin", "home_unpin", "home_delete",
     "home_delete_cancel",
+    "home_import_folder", "home_project_copy_path", "home_project_reveal", "home_project_remove", "home_project_more",
+    "home_place_recents", "home_place_pinned", "home_place_standalone", "home_place_project",
+    "home_sort_activity", "home_sort_name", "home_sort_kind", "home_sort_viewed", "home_sort_edited", "home_open_new_tab", "home_project_open_new_tab", "home_back",
 })
 # The most one page's report (``Recorder.controlled``) may say of a control: a page reports at least every minute
 # it is shown, and counts a tool's seconds only while it is.

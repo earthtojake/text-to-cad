@@ -1,6 +1,6 @@
-"""`cad <type> snapshot --job` replays a board view as a Quick Edit saved it: its window, its Display, its ink.
+"""`cad snapshot --job` replays a board view as a Quick Edit saved it: its window, its Display, its ink.
 
-A Quick Edit on a board writes a job packet (`cad_server.viewer.prompt_files`): each view a plan-view
+A Quick Edit on a board makes a job packet, which its message carries: each view a plan-view
 camera (the window the board view showed, in the plot's plan frame, y up) and the board's Display,
 and the annotation once, its marks on the board in the sheet's millimetres (y down). This renders
 such a packet through the real Python -> native renderer path and reads the PIXELS back: the window frames
@@ -59,7 +59,7 @@ class BoardJobReplayTest(unittest.TestCase):
             return {"input": str(board), "camera": PLAN, "display": display,
                     "outputs": [{"path": str(workspace / f"{name}.png"), "width": SIZE[0], "height": SIZE[1]}]}
 
-        packet = workspace / "board.snapshot.json"
+        packet = workspace / "board.packet.json"
         packet.write_text(json.dumps({"annotation": str(annotation), "jobs": [
             job("top", {"mode": "board", "side": "top", "poured": True}),
             job("below", {"mode": "copper", "side": "bottom", "poured": False}),
@@ -164,7 +164,7 @@ class BoardJobReplayTest(unittest.TestCase):
 
 
 class BoardWindowTest(unittest.TestCase):
-    """A display's ``window`` (``cad kicad_pcb snapshot --window``) frames that box of the board, in KiCad's
+    """A display's ``window`` (``cad snapshot BOARD --window``) frames that box of the board, in KiCad's
     millimetres (y down), filling the picture; from below, mirrored with the board."""
 
     @classmethod

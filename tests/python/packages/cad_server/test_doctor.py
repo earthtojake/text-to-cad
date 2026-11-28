@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import unittest
@@ -88,6 +89,25 @@ class DoctorTests(unittest.TestCase):
         _code, out, _err = _run([])
         self.assertIn(f"  cache    {self.root / 'cache'}: `cad cache prune` would remove 1 folder of other releases and "
                       "free 3.0 MB\n", out)
+        self.assertEqual(self.tree(), before, "said, never removed")
+        # And a file's folder whose file is gone, which its note names, and the meshes past their cap.
+        from cad_server.cli import cache
+        from cad_server.engine.library import Notes
+
+        gone = self.root / "work" / "gone.stl"
+        gone.parent.mkdir()
+        gone.write_bytes(b"solid")
+        Notes(self.root / "cache").count(gone, 1)
+        gone.unlink()
+        hull = self.root / "cache" / "hulls" / "h.npz"
+        hull.parent.mkdir()
+        hull.write_bytes(b"h" * 4096)
+        before = self.tree()
+        with mock.patch.object(cache, "MESH_BYTES", 0):
+            _code, out, _err = _run([])
+        self.assertRegex(out, rf"  cache    {re.escape(str(self.root / 'cache'))}: `cad cache prune` would remove 1 folder of "
+                              r"other releases, 1 document's folder no file needs and 1 mesh past the cap and free "
+                              r"\d+\.\d MB\n")
         self.assertEqual(self.tree(), before, "said, never removed")
 
     def test_the_server_is_said_with_its_release_and_never_started(self) -> None:

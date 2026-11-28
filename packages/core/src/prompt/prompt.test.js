@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference, parsePromptReference, validatePromptReference, promptReferenceIds, resolveAttachmentPaths } from './index.js';
 
-// A STEP's ref is the engine's: its part's label, then its element's name, as `cad <type> inspect` writes it.
+// A STEP's ref is the engine's: its part's label, then its element's name, as `cad inspect` writes it.
 const FACE = 'bracket/f:bracket.extrude1.3';
 const EDGE = 'bracket/e:bracket.fillet1.2';
 const reference = { resource: { kind: 'workspace-file', path: '/work/STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: [FACE] } };
@@ -58,6 +58,20 @@ test('an .xbf and a STEP are referenced in the engine\'s grammar: one line per r
   const plate = { kind: 'workspace-file', path: '/work/out/plate.3mf' };
   assert.equal(formatPromptReference({ resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } }), '/work/out/plate.3mf#o2.1');
   assert.deepEqual(parsePromptReference('/work/out/plate.3mf#o2.1'), { resource: plate, target: { kind: 'cad-selector', selectors: ['o2.1'] } });
+});
+test("a document named by its link (a shared model's page) is the link, whole or with what is picked in it in either grammar", () => {
+  const link = { kind: 'url', url: 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-' };
+  const picked = selectors => referencePart({ resource: link, target: { kind: 'cad-selector', selectors } }).reference;
+  // The engine's grammar (a model's, a STEP's) and a renderer's labels (a mesh's, a robot's) alike, each as the engine
+  // spells it, which leaves a label as it is and a comma inside a quoted label in it.
+  for (const selector of ['kit/hand/finger.2/face 7', '"M3, M4 screw"/e:screw.body.2', 'f:base.make_box1.6', 'upper_arm', 'glb:3', 'o2.1']) {
+    assert.equal(formatPromptReference(picked([selector])), `${link.url}#${selector}`);
+  }
+  const context = createPromptContext([textPart('Thicker.'), referencePart({ resource: link, target: { kind: 'whole-resource' } }, 'file'),
+    referencePart(picked([FACE, EDGE]), 'picked')]);
+  assert.equal(formatPromptMessage(context), `Thicker.\n\nFile: ${link.url}\nReferences:\n${link.url}#${FACE},${EDGE}`);
+  // What neither grammar reads is no reference.
+  assert.throws(() => picked(['kit//face 1']), /invalid CAD/);
 });
 test('code targets preserve explicit ranges rather than borrowing the CAD fragment grammar', () => {
   const code = { resource: { kind: 'workspace-file', path: '/work/src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };
@@ -136,6 +150,19 @@ test('prompt serialization prefers inline text and preserves references without 
     inlineText: Promise.resolve(null), path: Promise.resolve('/tmp/a.snapshot.json'), label: 'Snapshot' }])),
     'Keep it.\n\nSnapshot: /tmp/a.snapshot.json');
   await assert.rejects(resolvePromptMessage(createPromptContext([{ ...small, inlineText: Promise.reject(new Error('save failed')) }])), /save failed/);
+});
+
+test("a document's address is its message's one spelling of it: a file from the workspace, a model by its id, a link as it is", async () => {
+  const { promptAddress } = await import('./index.js');
+  const folders = { start: '/Users/jake/robots/demo', home: '/Users/jake' };
+  const file = { kind: 'workspace-file', path: '/Users/jake/robots/demo/my board.kicad_pcb' };
+  assert.deepEqual([promptAddress(file, folders), promptAddress(file), promptAddress({ kind: 'workspace-file', path: '/Users/jake/a.step' }, folders)],
+    ['my board.kicad_pcb', file.path, '~/a.step']);
+  assert.equal(promptAddress({ kind: 'cad-model', path: '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab' }, folders), '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab');
+  assert.equal(promptAddress({ kind: 'url', url: 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-' }, folders), 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-');
+  // The file a message's `File:` line names, unquoted.
+  const message = formatPromptMessage(createPromptContext([referencePart({ resource: file, target: { kind: 'whole-resource' } }, 'file')]), { folders });
+  assert.equal(message, `File: ${JSON.stringify(promptAddress(file, folders))}`);
 });
 
 test('a model is referenced by its document id, in the engine grammar, and nothing else names one', () => {

@@ -29,7 +29,7 @@ an edit. It answers a read-only view in the board's frame (millimetres, y down):
   10 degrees.
 - `from cad.kicad_pcb import inside`: whether a point lies in a polygon (a pour's fill, the outline), by the
   even-odd rule, in the same millimetres.
-- `cad kicad_pcb inspect board.kicad_pcb` prints the board in one look (`--json`: `format`, `thickness`,
+- `cad inspect board.kicad_pcb` prints the board in one look (`--json`: `format`, `thickness`,
   `size`, `layers`, `parts`, `nets`, `counts`, and `models`, each part's 3D model found or why not).
 
 What DRC does not establish (decoupling distances, width for current, a pair's geometry, the ground under a
@@ -39,7 +39,7 @@ fast net) is measured from this view, each threshold from the circuit, the datas
 ## DRC as data
 
 ```bash
-cad kicad_pcb drc board.kicad_pcb --json
+cad kicad drc board.kicad_pcb --json
 ```
 
 `findings` are the lines it prints without `--json` (`severity`, `code`, `message`, `location`), and
@@ -48,7 +48,7 @@ Both carry the finding's `items`, each with KiCad's `uuid`, `description` and `p
 it is: `kind` (track, via, pad, zone, footprint, shape, text, field), `layers`, `net`, `part`, and `ref`, the
 reference `board.resolve` takes (`#track:<uuid>`, `#U3.7`, `#U3`). KiCad reports a copper sliver with no item
 and no position: the check finds it again in that layer's saved copper (`at_source: "board"`), and where it
-cannot, `note` says why. `kicad_pcb.drc(path)` answers the same in a script run with `cad run` (`.ok`,
+cannot, `note` says why. `cad.kicad.drc(path)` answers the same in a script run with `cad run` (`.ok`,
 `.findings`, `.measurements["drc"]`, `.human_lines()`).
 
 DRC checks the copper as saved and refills nothing. A zone outline is not proof of connected copper: a
@@ -87,5 +87,5 @@ The viewer hands you what the person picked as references, the file then `#` the
   such an item is named under its footprint's uuid, `#text:<footprint uuid>/<uuid>`. A reference whose
   item is gone raises `ValueError`.
 - **A path containing spaces** is quoted before its reference: `"my board.kicad_pcb"#U1.3`.
-- **A Quick Edit's packet** (`cad kicad_pcb snapshot --job PACKET`) lights the same references on the
+- **A Quick Edit's packet** (`cad snapshot --job PACKET`) lights the same references on the
   board it draws, as the person saw them; one that no longer resolves is listed in its warnings.

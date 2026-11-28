@@ -93,7 +93,7 @@ def _env() -> dict[str, str]:
     env["PYTHONPATH"] = os.pathsep.join([SOURCE_PATH, *filter(None, [WATCHED.get("PYTHONPATH"), env.get("PYTHONPATH")])])
     env[engine_daemon.JOURNAL] = WATCHED.get(engine_daemon.JOURNAL, "")
     env["CAD_ENGINE_DIR"] = ENGINE
-    # Its registry of documents and its cache too: what the builds record never reaches the developer's.
+    # Its library and its cache too: what the builds record never reaches the developer's.
     env["CAD_STATE_DIR"] = str(Path(ENGINE).parent / "state")
     env["CAD_CACHE_DIR"] = str(Path(ENGINE).parent / "cache")
     return env
@@ -133,7 +133,7 @@ def run_export_json() -> subprocess.CompletedProcess:
     built = run_script(PART)
     assert built.returncode == 0, built.stderr
     step = Path(PART).parent.parent / "STEP" / "part.step"
-    return run("step", "export", str(step), str(step.with_suffix(".glb")), "--json")
+    return run("export", str(step), str(step.with_suffix(".glb")), "--json")
 
 
 class StdoutIsTheResultTests(unittest.TestCase):
@@ -153,11 +153,11 @@ class StdoutIsTheResultTests(unittest.TestCase):
         self.assertEqual(1, len(lines), result.stdout)
         self.assertNotIn("\n  ", result.stdout, "payloads on stdout are compact")
 
-    def test_validate_answers_on_stdout(self):
+    def test_a_robot_check_answers_on_stdout(self):
         with tempfile.TemporaryDirectory() as tmp:
             robot = Path(tmp) / "stream_contract.urdf"
             robot.write_text(ROBOT_URDF, encoding="utf-8")
-            result = run("urdf", "validate", str(robot))
+            result = run("inspect", str(robot))
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertTrue(result.stdout.strip())
 

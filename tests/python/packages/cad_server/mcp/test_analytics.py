@@ -29,7 +29,7 @@ from cad_mcp.shim import initialize_params
 from cad_server.mcp.protocol import RequestContext, RpcError
 from cad_server.mcp.server import Server
 from cad_server.mcp.ui import AppPage
-from cad_server.viewer.recents import RecentStore
+from cad_server.engine.library import Library
 
 # Where the notice is said, and the default holds: a release's process outside CI (a checkout is a development build
 # unless it is told the version it runs as, and then sends nothing by default: ``cad_server/_internal/editable.py``).
@@ -69,7 +69,7 @@ class _Tmp(unittest.TestCase):
         # ``Recorder.of``).
         recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         (self.tmp / "app").mkdir(exist_ok=True)
-        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
+        server = Server(page=AppPage(self.tmp / "app"), library=Library(self.tmp / "state"),
                         analytics=recorder.of(client))
         server.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {},
                                      "clientInfo": {"name": client, "version": "0.159.0"}}), None)
@@ -1011,7 +1011,7 @@ class NoticeTest(_Tmp):
     def test_every_command_says_it_but_the_servers_and_telemetry_itself(self) -> None:
         with mock.patch("cad_server.analytics.notify") as told, mock.patch.object(cli, "_run", return_value=0), \
                 mock.patch("sys.stdout", io.StringIO()):
-            for argv in (["cache", "dir"], ["dxf", "snapshot", "a.dxf"], ["viewer"], ["mcp"], ["server"],
+            for argv in (["cache", "dir"], ["snapshot", "a.dxf"], ["viewer"], ["mcp"], ["server", "start"],
                          ["telemetry", "off"], ["doctor"]):  # `doctor` is a report, which writes nothing
                 cli.main(argv)
             cli.main(["--help"])

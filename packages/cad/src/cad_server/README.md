@@ -18,20 +18,23 @@ The mechanisms its laws constrain are the engine's pages: [`engine/README.md`](e
 ```
 cad_server/
   engine/                # the engine's server half: the daemon, its supervisor and the services it
-                         #   declares (its workers, its render processes), its registry of documents,
-                         #   the live models' book, the document cache, the verbs as commands
+                         #   declares (its workers, its render processes), the library and the state
+                         #   folder's own (library, state), the live models' book, the verbs as commands
                          #   (cli), and the engine's README and pages (docs/), the mechanisms the laws
                          #   constrain
-  cli/                   # the `cad` command: a module per command and per document type
-                         #   (`cad <type> <operation>`: document_types, from the library's
-                         #   registry), each a shell over the function or parser that does the work
+  cli/                   # the `cad` command: a module per command and per verb (`cad <verb> FILE`:
+                         #   verbs, over what each document type does for it, document_types,
+                         #   from the library's registry), each a shell over the function or
+                         #   parser that does the work; the one table of the spellings it had
   viewer/                # the engine's HTTP application (engine_app), launcher (main), routes
                          #   (http_app: /api/v1, its document kinds in kinds), files by
-                         #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
+                         #   absolute path (backend), a file's catalog row (scanner), the folders a person opened as
+                         #   projects, each shown a folder at a time (projects), the library's rows
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload, drawn in a kernel process (drawings), a KiCad board's or schematic's plot (plots), a robot's
-                         #   (robots), Quick Edit's packets (prompt_files)
+                         #   payload, drawn in a kernel process (drawings), a KiCad board's or
+                         #   schematic's plot (plots), a robot's (robots), a document's view bundle,
+                         #   its page's reads written as a folder (bundle)
   plugin/                # the plugin in the agent apps, and the one place that names an app, a plugin or
                          #   a skill: the table of apps (apps), this computer and its files (computer),
                          #   where the plugin comes from and what is ours (source), what a person's
@@ -48,6 +51,12 @@ cad_server/
   analytics.py           # telemetry: usage counts and crash reports, on by default once
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the data folder
+  sharing.py             # `cad share`'s and `cad import`'s client of the share service: a share's names and links,
+                         #   a shared file's files (a model's .xbf and its closure's), the cad-share/2 packs of the
+                         #   files a share lacks, the service's API (urllib, in the command's own process), a
+                         #   share's zip written into a folder, a share's link as the name of this computer's copy
+                         #   of it, and what is kept: the agreement, the setting, each share and import in its
+                         #   file's entry of the library, and what a share keeps in its file's folder of the cache
   language.py            # the language the person chose for the CAD views
   whats_new.py           # the releases whose What's new the person has seen
   updates.py             # the hourly read of the version feed, and PyPI asked for `cad update`
@@ -73,16 +82,18 @@ cad_server/
 
 `cad --help` lists them all.
 
-- **Document types**: `cad <document_type> <operation> <file>`, one id per type as the library's registry
-  names it: `cad model export <id>`, `cad xbf export`, `cad step snapshot`, `cad glb inspect`,
-  `cad urdf validate`. `model` is a model the engine holds, by its document id, with no file. `export`,
-  `snapshot` and `inspect` are shared by every type that has them; every other operation is named for
-  what it does -- `dfm`, `interference`, `solve`, `ranges`, `drc`, `erc`, `validate` -- each a check whose
-  findings carry a severity, a code and a location (`--json`). `cad <type> --help` lists a type's
-  operations, `cad <type> <operation> --help` its options, and a file of another type is refused by name
-  (`cli/document_types.py`, each type's module `cli/<type>.py`).
-- **Integrations**, for a tool's own files that are no document type: `cad mujoco check MODEL.xml`
-  (`cli/integrations.py`). `cad orcaslicer presets|complete` are deprecated: unlisted, still run, and say so.
+- **The verbs**: `cad <verb> FILE`, the file's type by its suffix as the library's registry names it:
+  `cad export SRC DST [--as KIND]` (one destination, as `cp` writes one: a file by its suffix, or of a KiCad
+  board or schematic a folder or a `.zip` too, `--as` naming the kind where DST cannot), `cad inspect FILE [REF]`
+  (what a document holds; a robot description's conformance check; `--interference`, which parts share volume;
+  `--ranges`, each joint's stops), `cad snapshot FILE OUT.png`, `cad dfm FILE` (whether a part can be made) and
+  `cad fea FILE` (a stress study). A model is its `.xbf`, the file that is its document and whose id is the
+  model's (`cad export arm.xbf arm.glb`). Each check's findings carry a severity, a code and a location
+  (`--json`). `cad <verb> --help` gives every form, `cad <verb> FILE --help` that file's type's options, and a
+  file whose type lacks the verb is refused in one line naming the types that have it (`cli/verbs.py`, over
+  `cli/document_types.py`).
+- **Integrations**, a tool's own operations on its files: `cad kicad drc BOARD`, `cad kicad erc SCHEMATIC`
+  (KiCad's own checks) and `cad mujoco check MODEL.xml` (`cli/integrations.py`).
 - **The server**: `cad server start` starts it, detached, and says so; `cad server stop` stops it;
   `cad server status` says whether it runs, its release, its workers and what they build.
   `cad server start --foreground` runs it in this process; `cad server --rotate-token` replaces the page
@@ -97,7 +108,7 @@ cad_server/
 - **`cad run`**: a program exactly as `uv run` runs it, with cad pinned at this release and the
   integrations its imports use (`_internal/extras.py`, `_internal/scan.py`), in an environment the engine
   makes.
-- **`cad viewer`** opens a page of the running server; `cad delete` deletes documents.
+- **`cad viewer [FILE|FOLDER ...]`** opens a page of the running server: each file's, a folder as a project.
 - **`cad doctor`**: one read-only report: this cad's release, its Python, where it runs from (the environment,
   the release installed there and who installed it), its data and cache folders and what `cad cache prune` would free,
   the CAD kernel environment and whether it loads, the integrations, whether the server runs and its release, and
@@ -107,11 +118,21 @@ cad_server/
   its update is not working, a last check, `fix`, says the one thing to do next. It changes nothing. Exit 1 where
   the kernel is installed and does not load; `--json` gives the report
   as one document.
-- **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder, `prune`
-  removes what this release cannot use (environments made for other releases, the release folders 0.11.11 and
-  earlier left, and on Windows each `cad.exe` an update moved aside and could not remove then), `clean` removes all of the cache, refused while the server runs.
-  Only these, cad's update and the server (at its start and then hourly) delete a past release's files; the
-  server removes the environments made for other releases by `prune`'s rules, quietly (`base.tidy`).
+- **`cad cache dir|prune|clean`**, as `uv cache` treats uv's: `dir` prints the cache folder; `prune`
+  removes what no file and no release needs -- environments made for other releases, the release folders
+  0.11.11 and earlier left, a file's folder once its file is gone (its note names the file), one whose note
+  names none (an earlier build's) once nothing in it was written for 30 days, and, past 1 GiB, the meshes cad
+  keeps by geometry (a shared file's part meshes, a part's hulls) used longest ago -- and, where no update is
+  underway, cad's own releases in uv's cache (`uv cache clean cad`; nothing of another package) and on Windows
+  each `cad.exe` an update moved aside and could not remove then, each said, with what it freed (`--json`: one
+  document, by kind -- `environments`, `releases`, `gone`, `unused`, `meshes`, `aside` -- the paths removed and
+  the bytes freed, the bytes freed in all, what came of uv's cache, `uv`, and each path kept, of which kind, and
+  why); `clean` removes all of the cache, refused while the server runs. `prune` runs beside a server: it keeps
+  what is in use (an environment a process runs from, a file's folder while it is being shared) and says so. The
+  cap is about what the CAD kernel's environment takes, so meshes never cost more than the kernel; each is made
+  again when it is next needed. Only these, cad's update and the server (once, as it starts) delete a past
+  release's files; the server removes what `prune` removes of cad's own by `prune`'s rules, quietly (`base.tidy`,
+  `releases.tidy`), and never touches uv's cache.
 - **`cad update`**: cad, and only cad, updated now to the newest release on PyPI, a new major version too, by the
   server that runs, or by the command itself where none runs (below), even with automatic updates off. It never
   starts a server, and is refused unless
@@ -151,24 +172,48 @@ cad_server/
   release), as 0.11.12 and 0.11.13 read it too. `cad plugin` is the one command that reaches `plugin/`, and that package the
   one place in cad that names an agent app, a plugin or a skill.
 - **`cad telemetry [status|on|off]`**: the person's answer about usage stats and crash reports.
+- **`cad share FILE [--yes]`**: one file (a CAD file the viewer opens, turned into its canonical path; a model by
+  its `.xbf`, a script refused) shared for anyone with its link to open in the
+  hosted viewer and to download its files (a model's `.xbf` and the script, modules and files it read, from the build
+  closure the `.xbf` holds, none changed since it was made; a file's file), for 7 days after its last share: the
+  server writes its view bundle into the file's folder in the cache, over the one it wrote there last, and the command
+  uploads the files the share lacks itself, so an agent app's sandbox sees the connection, and sharing it again sends
+  only what changed. The first share on a computer is refused without `--yes`, the person's yes, in lines that say
+  what goes, where, who can open it, for how long and how to delete it. **`cad share status|on|off`**: whether
+  sharing is on and agreed, and this computer's live shares; `off` refuses every share until `on`. **`cad share
+  delete FILE|LINK`**: a share deleted, asked first. The agreement, the setting, a share in its file's entry of
+  the library and the cache's folders are written by the server that runs, as every change of the library is, else
+  by the command (the engine's **Sharing**). **`cad import LINK [FOLDER]`**: a share's files downloaded by the command
+  itself into a folder, every entry kept inside it, a model's `.xbf` among them, and the file the share is of added to
+  the library with the link it came from; it runs nothing and makes no project, and prints the commands that show it
+  and build it. Of a share this computer made, it downloads nothing and says where its files are. A share's link
+  names this computer's copy of it wherever cad takes a document, as the library holds them: the file it shared,
+  else the file its import wrote.
 
 No command removes cad, and installing it is uv's (`uv tool install cad`, `uv tool uninstall cad`).
 One command can install it with uv where a computer has none: `cad mcp` run from uv's cache, which
 runs that same `uv tool install`.
-Every command that destroys asks first (`cad delete`,
-`cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`).
+A command that destroys asks first (`cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`;
+`_internal/consent.py`).
 
 Kept only for releases 0.10.0 to 0.11.11, and deleted with that bridge (`cli/setup.py`): `cad setup
---engine-update`, which those releases' updater runs on the new release; plain `cad setup`, which a `cad
-update` typed on those releases runs, the install command in install mode; and the hidden short forms
-`cad status` and `cad stop`, which their skill text uses. On a computer whose apps got text-to-cad only
-from a store, the bridge moves cad alone, installs it with uv, and runs no install command.
+--engine-update`, which those releases' updater runs on the new release; and plain `cad setup`, which a `cad
+update` typed on those releases runs, the install command in install mode. On a computer whose apps got
+text-to-cad only from a store, the bridge moves cad alone, installs it with uv, and runs no install command.
 
-Run, and never listed by `cad --help`, because programs rather than people use them: `cad serve`, which
-serves a document over HTTP and prints its URL, and `cad requirement [INTEGRATION ...]`, which prints the
-exact requirement a Python of a program's own installs this release's cad by (`cad[build123d]==<release>`).
+Run, and never listed by `cad --help`, because programs rather than people use them: `cad requirement
+[INTEGRATION ...]`, which prints the exact requirement a Python of a program's own installs this release's cad
+by (`cad[build123d]==<release>`); `cad plugin update`, `install` under the name the servers of 0.11.12 and 0.11.13
+run; and `cad plugin --refresh`, which the updater of 0.11.10 runs after it moves a computer, and which does
+nothing. Nothing another program calls -- an
+installer, an earlier release's updater, an agent app's launch -- is removed before its replacement ships.
 
-A command the skills used keeps working for at least 30 days after the skills stop using it.
+A command or an option the skills used is replaced, not kept: its old spelling runs nothing and answers in one
+line with the spelling the command has now, exit 2 (`usage`), from one table (`cli/__init__.py`'s `_hint`):
+`cad xbf export a.xbf a.step` and every other `cad <type> <operation>`, `cad model <operation>` (the skill text
+of releases up to 0.12), the short forms `cad status` and `cad stop` (0.11.0 to 0.11.11's skill text), bare
+`cad server` and `cad orcaslicer`: `'cad xbf export' is 'cad export SRC DST' now; 'cad export --help' says its
+options`.
 
 On Windows, what a command writes to a pipe or a file is UTF-8, and so is what the program `cad run` runs
 writes (a console is left as it is, as is every stream elsewhere); Windows PowerShell 5.1 decodes a
@@ -333,13 +378,18 @@ sandbox cannot start a server, it says so and updates nothing.
 ## Folders
 
 The data folder (the state folder, `cad.engine.places.state_dir`) is `cad` in the platform's place for state (`~/Library/Application Support/cad` on macOS,
-`~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, Recents, the
-documents' records, the page token and port, the telemetry spool and the feed's last answer. The cache
-folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: the documents' bytes, the
-environments, bytecode and the integrations' private homes, all made again on demand. On Windows neither
+`~/.local/state/cad` on Linux and Windows) or the folder `CAD_STATE_DIR` names: settings, the library
+(`library.json`, which this user alone may read, as it holds the keys of their shares: the project folders, and the
+files a person opened, starred, built, shared or imported, a shared file's entry with each share of it and an
+imported file's with the link it came from), the page token and port, the telemetry spool and the feed's last answer. The cache
+folder is `~/.cache/cad`, on Windows too, or the folder `CAD_CACHE_DIR` names: what the engine derived of a
+document (a file's count and picture, `documents/<id>/note.json`, which names the file; a board's plots, kept checks;
+a shared file's last view bundle, `documents/<id>/view/`), the environments, bytecode, parts' hulls and the
+integrations' private homes, all made again on demand. A file's folder goes with its file, and the meshes are held to
+a size, the least recently used first, a read counting as a use (`cad cache prune`). A model's document is its `.xbf`, which the engine keeps no copy of. On Windows neither
 is in the local application data, which Windows virtualizes for every process an app package (the Claude
 desktop app) starts. A release reads what the release before wrote and migrates it on first touch, once
-(`cad.engine.identity.migrate`); nothing in the cache is converted.
+(`cad_server.engine.library`); nothing in the cache is converted.
 
 Coming from 0.7 or 0.8 (named cadgen): their caches (`~/.cache/cadgen`, `%LOCALAPPDATA%\cadgen`) and the
 state files only they wrote are not read or removed by anything here; `cad doctor` says where they are,

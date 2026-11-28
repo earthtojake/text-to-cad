@@ -41,7 +41,7 @@ describe("viewer renderer registrations", () => {
     expect(["fullscreen", "preview", "previewing"].some(key => key in dxf || key in xbf)).toBe(false);
   });
 
-  it("opens a STEP and an .xbf in the engine document's renderer, and nothing else in it", () => {
+  it("opens a STEP and an .xbf in the model's renderer, and nothing else in it", () => {
     const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
       createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
     for (const path of ["part.step", "PART.STP", "model.xbf"]) expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe("xbf");

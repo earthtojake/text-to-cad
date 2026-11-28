@@ -92,7 +92,7 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
     worker = "" if fresh is None else (" cold" if fresh else " warm")
     if memo.get("bodies_loaded"):
         taken = (report.get("cache") or {}).get("from")
-        holder = "the engine's cache" if taken == "cache" else "its document in memory"
+        holder = "its .xbf" if taken == "xbf" else "its document in memory"
         loaded = memo.get("bodies_loaded", 0)
         line = (f"took {report['model']}{worker} in {wall:.2f}s: {holder} holds the model's key, "
                 f"{loaded} bod{'y' if loaded == 1 else 'ies'} loaded, nothing ran") + _waited(report, "took")
@@ -118,6 +118,7 @@ def describe(report: dict[str, Any], wall: float, fresh: bool | None) -> str:
         listed.append(f"retired: {report['retired']}")
     return (line + "".join(f"\n  {text}" for text in listed) + children
             + "".join(f"\n  warning: kinematics: {text}" for text in report.get("kinematics", {}).get("warnings", ()))
+            + "".join(f"\n  warning: {text}" for text in report.get("warnings") or ())
             + _verified(report.get("verify")))
 
 
@@ -255,7 +256,7 @@ def reported(reports: list[dict[str, Any]], wall: float, fresh: bool | None, as_
 
 def written(rows: Any, typed: Any) -> None:
     """A line on stdout per file an export wrote or found holding its bytes already (``rows``), each
-    named as ``typed`` names it (``given``): ``cad <type> export``'s, and a program's own ``export()`` call's;
+    named as ``typed`` names it (``given``): ``cad export``'s, and a program's own ``export()`` call's;
     after a robot description's, what it holds on stderr (``robot``)."""
     for row in rows:
         if row.written:

@@ -829,7 +829,7 @@ it("the view's menu offers Select tangent faces over a face or while faces are s
     .toEqual(['i3', 'i0/face/3', 'i0/face/2', 'i0/face/4', 'i0/edge/9']);
 });
 
-it('an .xbf and a STEP have the engine document renderer, prepared from the catalog entry', async () => {
+it('an .xbf and a STEP have the xbf renderer, prepared from the catalog entry', async () => {
   let disposed = 0;
   const client = { resolveEntry: async (path: string) => ({ file: path, kind: 'xbf' }), createRenderSession: () => ({ dispose: () => { disposed += 1; } }) } as never;
   const xbf = createXbfRenderer({ client });

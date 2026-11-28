@@ -27,12 +27,12 @@ DOCS = repo_path("apps", "docs", "src", "lib", "docs", "registry.generated.json"
 class TheTableIsTheSource(unittest.TestCase):
     def test_the_javascript_is_generated_from_the_registry(self) -> None:
         self.assertEqual(registry.as_js(), GENERATED.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad.registry --js > packages/core/src/lib/documentTypes.generated.js")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_the_docs_site_reads_the_registry(self) -> None:
         # The documentation site's pages of the types and the integrations are this table's own words.
         self.assertEqual(registry.as_docs_json(), DOCS.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_every_type_is_well_formed(self) -> None:
         seen: dict[str, str] = {}
@@ -53,6 +53,25 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("3mf", registry.DOCUMENT_TYPES["threemf"].wire)
         self.assertIsNone(registry.type_of("model.py"))
 
+    def test_xbf_is_one_type_whose_file_is_its_xbf_and_model_an_alias_of_it(self) -> None:
+        # One type: a model held by the engine, or saved as its .xbf, which names it. ``model``, the earlier id of
+        # the document, is looked up as xbf everywhere a type is found by its id, and no listing shows it.
+        xbf = registry.DOCUMENT_TYPES["xbf"]
+        self.assertEqual((xbf.extensions, xbf.suffix, xbf.held, xbf.wire), ((".xbf",), ".xbf", True, "xbf"))
+        self.assertIs(registry.DOCUMENT_TYPES["model"], xbf)
+        self.assertIs(registry.by_extension(".XBF"), xbf)
+        self.assertIs(registry.type_of("share/arm.xbf"), xbf)
+        self.assertEqual(dict(registry.ALIASES), {"model": "xbf"})
+        self.assertEqual((registry.resolve("model"), registry.resolve("step")), ("xbf", "step"))
+        self.assertIn("model", registry.DOCUMENT_TYPES)
+        self.assertNotIn("model", list(registry.DOCUMENT_TYPES))
+        self.assertNotIn("model", [entry.id for entry in registry.DOCUMENT_TYPES.values()])
+        self.assertEqual(len(registry.DOCUMENT_TYPES), len(list(registry.DOCUMENT_TYPES.items())))
+        self.assertEqual(["xbf"], [entry.id for entry in registry.DOCUMENT_TYPES.values() if entry.held])
+        self.assertEqual(registry.producers_for("model"), registry.producers_for("xbf"))
+        self.assertEqual(registry.help_text("model"), registry.help_text("xbf"))
+        self.assertEqual({"model": "xbf"}, registry.as_data()["aliases"])
+
     def test_every_integration_is_well_formed(self) -> None:
         for integration in registry.INTEGRATIONS.values():
             with self.subTest(integration=integration.name):
@@ -70,22 +89,30 @@ class TheTableIsTheSource(unittest.TestCase):
                 self.assertRegex(integration.python or "3.13", r"^3\.\d+$", "a Python line, as uv is asked for one")
                 self.assertTrue(set(integration.platforms) <= set(registry.PLATFORMS))
         self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
-        # An integration has operations of its own only on its tool's own files, which are no document type (files
-        # cad checks or writes and never shows): a MuJoCo model's, which mujoco checks, and OrcaSlicer's presets,
-        # found by name, which orcaslicer lists and writes complete. A name is a type's or an integration's, a
-        # suffix one or the other's, and a type's file has its operations there alone.
-        self.assertEqual({"mujoco": (("check",), (".xml", ".mjcf")), "orcaslicer": (("presets", "complete"), ())},
+        # An integration has operations of its own on its tool's own files: a MuJoCo model's, which is no document type
+        # and which mujoco checks; a KiCad board's and schematic's, document types whose own checks are KiCad's, by its
+        # name (drc, erc); and OrcaSlicer's presets, found by name, which orcaslicer lists and writes complete. A name
+        # is a type's or an integration's, and an operation lives in one place: a type has none an integration has.
+        self.assertEqual({"kicad": (("drc", "erc"), (".kicad_pcb", ".kicad_sch")),
+                          "mujoco": (("check",), (".xml", ".mjcf")), "orcaslicer": (("presets", "complete"), ())},
                          {name: (found.operation_names, found.files)
                           for name, found in registry.INTEGRATIONS.items() if found.operations})
-        self.assertEqual(("check", "presets", "complete"), registry.INTEGRATION_OPERATIONS)
-        self.assertEqual(("check",), registry.FILE_OPERATIONS)
+        self.assertEqual({"drc": (".kicad_pcb",), "erc": (".kicad_sch",)},
+                         {name: registry.INTEGRATIONS["kicad"].files_of(name) for name in ("drc", "erc")})
+        self.assertEqual(("check", "drc", "erc", "presets", "complete"), registry.INTEGRATION_OPERATIONS)
+        self.assertEqual(("check", "drc", "erc"), registry.FILE_OPERATIONS)
         self.assertFalse(set(registry.INTEGRATIONS) & set(registry.DOCUMENT_TYPES))
+        self.assertFalse(set(registry.VERBS) & (set(registry.INTEGRATIONS) | set(registry.DOCUMENT_TYPES)),
+                         "a name is a type's, an integration's or a verb's, never two (law 26)")
         for found in registry.INTEGRATIONS.values():
             self.assertEqual(bool(set(found.operation_names) & set(registry.FILE_OPERATIONS)), bool(found.files))
-            self.assertFalse([suffix for suffix in found.files if registry.by_extension(suffix)],
-                             "a suffix that is a document type's is not an integration's too")
+            if found.name != "kicad":  # KiCad's checks are of document types' files, by its own name
+                self.assertFalse([suffix for suffix in found.files if registry.by_extension(suffix)],
+                                 "a suffix that is a document type's is not an integration's too")
             for operation in found.operations:
                 self.assertEqual(found.name, operation.integration)
+        operations = {name for entry in registry.DOCUMENT_TYPES.values() for name in entry.operation_names}
+        self.assertFalse(operations & set(registry.INTEGRATION_OPERATIONS), "an operation lives in one place")
         self.assertNotIn("mjcf", registry.DOCUMENT_TYPES, "an MJCF is written and checked, never shown: no type")
         self.assertIsNone(registry.type_of("robot.xml"))
         self.assertIn("operations (on .xml, .mjcf):\n  check  ", registry.integration_help("mujoco"))
@@ -120,7 +147,17 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("calculix", integrations.for_command("ccx"))
         # A mechanism's joint stops are the kernel's, run in the caller: a script that calls them needs build123d.
         self.assertEqual("build123d", integrations.for_name("cad.xbf.ranges"))
-        self.assertEqual({"model", "xbf", "step"},
+        # A verb needs what it runs of its source's type, by the source's suffix; by its name alone, what every type
+        # it takes needs alike (the study's calculix), else nothing: the engine runs a document's export.
+        self.assertEqual(("calculix", "build123d", "trimesh", "kicad", None),
+                         (integrations.for_name("cad.fea"), integrations.for_verb("dfm", ".step"),
+                          integrations.for_verb("dfm", ".stl"), integrations.for_verb("export", ".kicad_sch"),
+                          integrations.for_verb("export", ".xbf")))
+        self.assertEqual(("build123d", None, None, None),
+                         (integrations.for_verb("inspect", mode="ranges"), integrations.for_name("cad.dfm"),
+                          integrations.for_name("cad.export"), integrations.for_verb("dfm", ".urdf")))
+        self.assertEqual(("build123d", "calculix", "netgen"), integrations.needs("cad.fea"))
+        self.assertEqual({"xbf", "step"},
                          {entry.id for entry in registry.DOCUMENT_TYPES.values() if "ranges" in entry.operation_names})
         self.assertEqual("cad.calculix._command", integrations.INTEGRATIONS["calculix"].runner)
         self.assertEqual(("build123d", "netgen"), registry.INTEGRATIONS["calculix"].alongside)
@@ -146,6 +183,18 @@ class TheTableIsTheSource(unittest.TestCase):
                          [registry.platform_of(*given) for given in (("darwin", "x86_64"), ("linux", "aarch64"),
                                                                      ("win32", "AMD64"), ("darwin", "arm64"))])
 
+    def test_each_verb_runs_the_operation_a_type_has_for_it(self) -> None:
+        self.assertEqual({"export": ("export",), "inspect": ("inspect", "validate"), "snapshot": ("snapshot",),
+                          "dfm": ("dfm",), "fea": ("solve",)}, dict(registry.VERBS))
+        self.assertEqual({"interference": "interference", "ranges": "ranges"}, dict(registry.MODES))
+        self.assertEqual("validate", registry.operation_for("inspect", "urdf"))
+        self.assertEqual("inspect", registry.operation_for("inspect", "kicad_pcb"))
+        self.assertEqual("solve", registry.operation_for("fea", "step"))
+        self.assertEqual("interference", registry.operation_for("inspect", "xbf", "interference"))
+        self.assertIsNone(registry.operation_for("inspect", "glb", "ranges"))
+        self.assertIsNone(registry.operation_for("dfm", "kicad_pcb"))
+        self.assertEqual(("xbf", "step"), registry.types_for("fea"))
+        self.assertEqual(("xbf", "step", "stl", "glb", "threemf", "dxf"), registry.types_for("dfm"))
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone
             __module__ = "build123d.topology"
@@ -180,7 +229,7 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertIn("carries: geometry", said)
         self.assertIn('@step("out.step")', said)
         self.assertIn("written by: no producer", registry.help_text("urdf"))
-        # A board and a schematic are written by their edits (``cad kicad_pcb --help``, ``cad kicad_sch --help``).
+        # A board and a schematic are written by their edits (``python -m cad.registry kicad_pcb``, ``... kicad_sch``).
         self.assertIn('with kicad_pcb.edit("board.kicad_pcb") as board: the open board', registry.help_text("kicad_pcb"))
         self.assertIn('with kicad_sch.edit("schematic.kicad_sch") as schematic: the open schematic',
                       registry.help_text("kicad_sch"))

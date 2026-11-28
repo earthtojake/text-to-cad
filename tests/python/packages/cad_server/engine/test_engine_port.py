@@ -124,8 +124,8 @@ class EnginePortTest(unittest.TestCase):
             return places.address()
 
     def server(self, *args: str, **extra: str) -> subprocess.Popen:
-        """``cad server ARGS`` in the background -- the server run in this process, as ``cad server start
-        --foreground`` runs it --, once its door answers; ``extra``: its environment."""
+        """``cad server ARGS`` in the background -- the server run in this process (``start --foreground``, or
+        ``--rotate-token`` where none runs) --, once its door answers; ``extra``: its environment."""
         from cad.engine import client, places
 
         env = {**self.env, **extra}
@@ -174,22 +174,22 @@ class EnginePortTest(unittest.TestCase):
     def bound(self, default: int, **extra: str) -> tuple[Listener, dict]:
         """``daemon.bind`` in this process, nothing named, its default ``default``: its listener
         (closed at the end) and where its port came from. ``extra``: this process's environment."""
-        from cad_server.engine import daemon, registry
+        from cad_server.engine import daemon
 
         environment = {key: value for key, value in os.environ.items() if key != "CAD_ENGINE_PORT"}
         with mock.patch.dict(os.environ, {**environment, "CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"],
+                                          "CAD_STATE_DIR": str(self.root / "state"),
                                           "CAD_ENGINE_DEFAULT_PORT": str(default), **extra},
-                             clear=True), \
-                mock.patch.object(registry, "FACTORY", lambda: registry.Registry(self.root / "state")):
+                             clear=True):
             server, where = daemon.bind("127.0.0.1", None, Listener)
         self.addCleanup(server.socket.close)
         return server, where
 
     def remembered(self) -> int | None:
         from cad.engine import places
-        from cad_server.engine import registry
+        from cad_server.engine import state
 
-        return registry.Registry(self.root / "state").engine(places.NAME).get("port")
+        return state.State(self.root / "state").engine(places.NAME).get("port")
 
     def test_the_default_port_is_3245_and_taken_when_free(self) -> None:
         from cad_server.engine import daemon
@@ -234,21 +234,25 @@ class EnginePortTest(unittest.TestCase):
 
     def test_a_server_in_the_foreground_on_a_held_port_fails_at_once_and_leaves_no_engine(self) -> None:
         port = held_port(self)
-        # No request is ever sent: it binds at its start. Bare ``cad server`` is that start's alias.
-        for words in (("server", "start", "--foreground", "--port", str(port)), ("server", "--port", str(port))):
-            done = self.cad(*words)
-            self.assertEqual(done.returncode, 1, done.stdout)
-            self.assertRegex(done.stderr.strip().splitlines()[-1],
-                             rf"^cad: port {port} is held by .+: stop it, or pass another --port$")
-            self.answering()
+        # No request is ever sent: it binds at its start.
+        done = self.cad("server", "start", "--foreground", "--port", str(port))
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertRegex(done.stderr.strip().splitlines()[-1],
+                         rf"^cad: port {port} is held by .+: stop it, or pass another --port$")
+        self.answering()
+        # Bare ``cad server``, which ran it here once, runs nothing: it names the start that does.
+        bare = self.cad("server", "--port", str(port))
+        self.assertEqual((bare.returncode, bare.stdout), (2, ""), bare.stderr)
+        self.assertEqual(bare.stderr, "cad server: 'cad server' alone is 'cad server start' now; 'cad server --help' "
+                                      "says its forms\n")
+        self.answering()
 
     def test_a_start_beside_a_running_server_of_its_release_does_nothing(self) -> None:
         from cad.engine.previous import version
 
         running = self.launch(CAD_ENGINE_PORT=str(free_port()))
         asked = free_port()
-        for words in (("server", "start", "--port", str(asked)), ("server", "start", "--foreground", "--port", str(asked)),
-                      ("server",)):
+        for words in (("server", "start", "--port", str(asked)), ("server", "start", "--foreground", "--port", str(asked))):
             done = self.cad(*words)
             self.assertEqual((done.returncode, done.stdout), (0, f"the cad server (cad {version()}) is already running\n"),
                              done.stderr)
@@ -280,11 +284,11 @@ class EnginePortTest(unittest.TestCase):
 
     def test_the_installation_port_returns_to_a_free_default_and_rolls_from_a_held_remembered_one(self) -> None:
         from cad.engine import places
-        from cad_server.engine import registry
+        from cad_server.engine import state
 
         default, remembered = held_port(self), free_port()
-        registry.Registry(self.root / "state").put_token("t" * 43)
-        registry.Registry(self.root / "state").put_engine(places.NAME, {"port": remembered})
+        state.State(self.root / "state").put_token("t" * 43)
+        state.State(self.root / "state").put_engine(places.NAME, {"port": remembered})
         server, where = self.bound(default)  # the default held, the remembered port free: used, nothing said
         self.assertEqual((server.port, where["source"], "notice" in where), (remembered, "rolled", False))
         self.assertEqual(server.token, "t" * 43)
@@ -308,9 +312,9 @@ class EnginePortTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
                      "a file's mode is POSIX's, and refuses no one running as root")
     def test_a_page_token_that_cannot_be_read_serves_nothing_and_is_left_as_it_is(self) -> None:
-        from cad_server.engine import registry
+        from cad_server.engine import state
 
-        registry.Registry(self.root / "state").put_token("t" * 43)
+        state.State(self.root / "state").put_token("t" * 43)
         token = self.root / "state" / "engines" / "token"
         token.chmod(0)
         self.addCleanup(token.chmod, 0o600)
@@ -326,7 +330,7 @@ class EnginePortTest(unittest.TestCase):
         default = free_port()
         other = {"CAD_ENGINE_DIR": str(self.root / "other-engine"), "CAD_STATE_DIR": str(self.root / "other-state"),
                  "CAD_ENGINE_STANDBY": "0"}
-        theirs = self.server("--port", str(default), **other)
+        theirs = self.server("start", "--foreground", "--port", str(default), **other)
         self.addCleanup(lambda: self.cli("stop", **other))
         done = self.started(CAD_ENGINE_DEFAULT_PORT=str(default))
         self.assertEqual(done.returncode, 0, done.stderr)

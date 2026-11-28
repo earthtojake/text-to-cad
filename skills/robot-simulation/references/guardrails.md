@@ -59,4 +59,4 @@ Risks:
 - Actuator gains were not tuned against the hardware.
 ```
 
-A URDF or SRDF report has the same shape: `cad urdf validate` or `cad srdf validate`, `check_urdf`, the viewer sweep, MoveIt smoke tests, each run or skipped, and the assumptions (inferred TCP links, manual collision pairs, unverified planner behavior).
+A URDF or SRDF report has the same shape: `cad inspect` or `cad inspect`, `check_urdf`, the viewer sweep, MoveIt smoke tests, each run or skipped, and the assumptions (inferred TCP links, manual collision pairs, unverified planner behavior).

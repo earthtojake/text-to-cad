@@ -44,6 +44,9 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
  * (`building`), and one that fails with its error (`failed`), until another begins or one succeeds.
  *
  *
+ * A document the client serves as `final` (a view bundle's: the document as it stood, with no engine
+ * behind it) is read once, and nothing waits on a next version of it.
+ *
  * A model's preview (`preview`: the URL the engine answered a page's look at other values of its parameters
  * with, `client.previewModelParameters`) is drawn in the document's place as it lands: read as a version is,
  * with the document and the preview before it as `previous`, so only the parts the values changed are fetched,
@@ -64,7 +67,7 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
  *   now, else null; `sceneRevision`: the version of what is drawn (the preview's, else the document's).
  */
 /**
- * Whether a document's read failed because the engine no longer holds it (`cad delete` while it is
+ * Whether a document's read failed because the engine no longer holds it (its file deleted while it is
  * open, among others): the file viewer then opens the file again, which says so in the document's
  * own words ("This model is not saved"), not as a load that failed.
  */
@@ -131,6 +134,8 @@ export function useXbfScene({ client, file, preview = null }) {
           previewError: current.previewError }));
         held.current.update = update || held.current.update || null;
         previous = document;
+        // A document as it stood (a view bundle's) has no engine to wait on: this version is its only one.
+        if (served.final) return;
         // The next version: the engine answers when a build lands or moves, else after its wait with this one.
         for (;;) {
           try {

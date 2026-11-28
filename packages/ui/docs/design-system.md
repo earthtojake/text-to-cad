@@ -32,9 +32,9 @@ the phone's. Every primitive and shared class reads them; script that counts pix
 
 | Token (Tailwind) | Desktop | Phone | What uses it |
 | --- | --- | --- | --- |
-| `--cad-control` (`h-control`, `size-control`) | 28 | 36 | strip and sub-toolbar tiles, navbar buttons, panel tabs, head buttons and settings rows, a tab's actions, Quick Edit's buttons, dropdown triggers, fields |
+| `--cad-control` (`h-control`, `size-control`) | 28 | 36 | strip and sub-toolbar tiles, navbar buttons, panel tabs and pills, head buttons and settings rows, a tab's actions, Quick Edit's buttons, dropdown triggers, fields, a segmented control's options, the scale's text button (`Button size="control"`) |
 | `--cad-icon-button` (`size-icon-button`) | 24 | 36 | small icon buttons (a card's X), a settings card's controls, the `xs` button |
-| `--cad-row` (`min-h-row`), `--cad-row-sm` | 28, 24 | 36 | menu and dropdown items, the panel's tree rows; the explorer's rows |
+| `--cad-row` (`min-h-row`), `--cad-row-sm` | 28, 24 | 36 | menu and dropdown items, the panel's tree rows, the Home's places and folders; a list's rows outside the panel |
 | `--cad-chip` (`h-chip`) | 20 | 28 | chips |
 | `--cad-glyph`, `--cad-glyph-sm` | 16, 14 | 18, 16 | a tile's icon; Quick Edit's action icons, a chip's X button |
 | `--cad-pad` (`px-pad`), `--cad-step` (`gap-step`) | 8, 4 | 10, 4 | a control's side padding; the gap between neighbouring tiles |
@@ -58,20 +58,37 @@ holds.
 
 | Step | Desktop | Phone | Used for |
 | --- | --- | --- | --- |
-| `text-tiny` | 11/16 | 13/18 | tooltips, key hints, small metadata (the zoom's percentage, the app menu's version, the Home's ages) |
+| `text-tiny` | 11/16 | 13/18 | tooltips, key hints, small metadata (the zoom's percentage, the app menu's version) |
 | `text-xs` | 12/16 | 14/20 | Quick Edit's bar and chips, sub-toolbars, the update status, every menu, list and context menu, toasts |
-| `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
-| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the Home's without a navbar, its welcome title, the CAD app's notice |
+| `text-ui` | 13/20 | 15/20 | the navbar and file name, dialogs and the search, the Home, Quick Edit's note, the loading line, status screens; `text-sm` and `text-base` are aliases |
+| `text-heading` | 15/20, 600 | 17/22, 600 | the one heading: the Home's title (at medium weight, 500, set where it is drawn), the CAD app's notice |
 | `--cad-text-panel` | 12/16 | 14/20 | every step inside the panel and the settings cards |
 
 - **No other size**: no 10px step, no `text-[Npx]`, no font size in a stylesheet but the scale's variables.
-- **One size per surface.** Inside the panel and the settings cards (`[data-panel-surface]`) and a pick's card
+- **One size per surface.** Inside the panel (a file's: `[data-panel-surface]`), the settings cards and a pick's card
   (`[data-detail-card]`), every step is the panel's size and text is told apart by colour and weight. A menu portalled
-  out of them keeps the chrome's scale. Why: nothing there jumps in size, and a pick reads alike in panel and card.
+  out of them keeps the chrome's scale. Why: nothing there jumps in size, and a pick reads alike in panel and card. The
+  Home's sidebar is the panel's surface but not its size (`[data-library-sidebar]`, left out of the rule): it is a
+  page's navigation, at the Home's body size, as Figma's and Drive's sidebars are at theirs.
 - **A menu item** is its `text-xs` line in 6px of vertical padding, at least the row tall, set by the primitives alone.
 - **Weight.** Text is regular. Medium (500) marks a title: the open tab, a card's title and section headings, a chip,
-  the Home's names. Semibold (600) is the heading step's and a dialog title's. A list's emphasis is colour, never
-  bold; a search's match is `--brand-text` at medium weight. Numbers that change or line up are tabular.
+  the name on a Home's card or tile, the Home's title and section labels. Semibold (600) is the heading step's own
+  and a dialog title's; the Home's title sets medium on the heading step, as Figma's file browser's title is medium. A list's emphasis is colour,
+  never bold (a name in the Home's list is regular, in the foreground beside its muted facts); a search's match is
+  `--brand-text` at medium weight. Numbers that change or line up are tabular.
+- **The Home is three sizes**, as Figma's file browser is: one body size for its sidebar, its tabs, a file's name and
+  its "Edited 1 month ago" line, told apart by weight and colour, and one title a step up at medium weight.
+  - **Title**: `text-heading` at medium weight (15/20 500; 17/22 500 on a phone), the page's title alone and its `h1`:
+    "Recents", "Starred", a project's name, or a project's path, every part at the title's size (as Drive's and
+    Dropbox's paths are), the parts above the folder on screen and the slashes regular and muted, the folder on screen
+    medium in the foreground.
+  - **Body**: `text-ui` (13/20; 15/20 on a phone) for everything else: the sidebar's rows and its "Projects" heading,
+    Sort, a card's or a tile's name (medium) and a card's line (regular, muted), the list's header
+    (muted) and cells, the welcome's title (medium) and lines, every line and note.
+  - **Chip**: the chip's own step (12/16 medium) for a card's format, and nothing else.
+  No `text-tiny` (a key cap drawn by `Kbd` keeps its own step). Why: a second small size beside the body read as a
+  different surface, and a title that is the body's size read as no title; one body size and one title is what a file
+  browser needs.
 - **The picture's own text** keeps its own sizes, never under 10px: the cube's letters and face names 10px, a
   measurement's label and the snap chip 10px semibold, a drawn text mark 16, 20 or 28px. Why: it is the picture's.
 - **Greyscale antialiasing** covers the page while a viewer is on it. Why: subpixel antialiasing draws light text on
@@ -85,15 +102,21 @@ vertical step.
 
 - **The panel inset**, `--panel-inset` (16px), is one line on each side, on a desktop and a phone. Every text, glyph
   and control starts on the left line; values, switches, sliders and a row's last action end on the right one. The
-  navbar's panel toggle puts its icon on the same column. Why: one edge the eye can follow, as in Figma's panels.
+  navbar's first glyph, the logo's drawn mark, stands on the same column; the panel toggle after it does not
+  ([The navbar](viewer-ux.md#the-navbar)). Why: one edge the eye can follow, as in Figma's panels.
 - **Only the body pads**, by the inset; no section, list or row sets its own side padding. A box hangs past the line
   by its own padding, so what it holds stays on it: a row's fill by 8px, a tab's pill by 6px, the head's icon buttons
   by 7px (11 on a phone), a value field by 7px.
 - **Vertical steps.** The body starts 8px under the head. A slider control is 48px (its 28px line, its 12px band, 8px
   under). A settings row is the control tall with 8px under it; the Animation tab's rows are 4px apart. A tab's
-  actions row stands 8px under the last control, with 8px under its buttons.
+  actions row stands 8px under the last control, with 8px under its buttons. The panel's foot is pinned under its
+  scroller: a full-width rule, then its row with 8px over and under it ([The panel's foot](#the-panels-foot)).
 - **A card's inset is 12px on all four sides**: the panel inset less the card's 4px gap, so its content stands where
   the docked panel's does.
+- **The Home's place** is padded by the panel inset on all four sides, on a desktop and a phone, and its blocks are
+  16px apart: its head (one row: the title at the left, Sort and the layout at the right) and the content 16px under it; a label over a block
+  of it (a project's top page's Recent and All files) stands 8px over what it labels. Its rows hang past that line as
+  the panel's do. Why: the logo, the sidebar and the place share one line, and no width has gutters of its own.
 - **Over the view**, the strip and the tool stack stand 8px in (`CHROME_INSET_PX`), the corner's zoom 12px
   (`CORNER_INSET_PX`), a card or a peek 4px (`PANEL_PEEK_GAP_PX`). The navbar has 8px of side padding.
 
@@ -145,8 +168,8 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
 | `--warning`, `--destructive` | amber, red | amber, red | a warning's icon, edge and tint (its words `--warning-foreground`); an error |
 
 - **The brand marks focus and state, never an action**: focus rings and a focused field's edge, a text selection, a
-  selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's chosen layout and its focused
-  card, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
+  selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's focused card and the ring round
+  the document just left, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
   blue says "on" only while nothing else is blue. The one brand fill is the update button's (`@cad/ui/update`: `--brand`, the logo's blue, not Tailwind's `blue-500`; its
   hover `--brand-icon` in light and the brand at 75% in dark; its ring and spinner `--brand-icon`): a newer release is the one
   thing the chrome asks a person to act on, so it is the one thing that stands out ([viewer layout](viewer-ux.md#the-navbar)).
@@ -154,7 +177,7 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
   only 2.2:1 (the dark glyph is 8:1); its glyph is a download arrow, or a restart arrow where a release is installed and
   only the restart is left, never words. `--brand-icon` is at least 3:1 on the pressed fill and on white;
   `--brand-text` is darker, for text, as that blue reads dark and odd on a glyph.
-- **A link in the chrome** (the app menu's version, "Made by") is muted `text-tiny` that turns the foreground and
+- **A link in the chrome** (the app menu's version) is muted `text-tiny` that turns the foreground and
   underlined under the pointer or keyboard focus. A slider's colours are its own `--slider-*` tokens.
 - **The scene's colours are core's** (`@cad/core/lib/viewportTheme.js`): selection #2979ff (more saturated than the
   brand on purpose: it is read against a model), its fill #4f9dff, hover #8dc5ff, a selected edge #1a73e8, the box
@@ -185,14 +208,16 @@ layout, never a surface. Why: chrome reads as chrome over any canvas, light or d
 
 | Surface | How | Look | Used by |
 | --- | --- | --- | --- |
-| Docked chrome | `bg-sidebar` | opaque, a 1px rule on its inner edge | the navbar, the docked panel, a tab's actions row |
+| Docked chrome | `bg-sidebar` | opaque, a 1px rule on its inner edge | the navbar, the docked panel, a tab's actions row, the Home's sidebar |
 | Floating chrome | `FLOATING_CHROME_SURFACE_CLASS` | the popover colour at 90%, a border, `shadow-md`, `backdrop-blur-sm` | the strip, sub-toolbars, the tool stack, Quick Edit's bar, the bar over picked ink |
-| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, the name menu, chip lists |
+| Popups | `FLOATING_SURFACE_CLASS` | the popover colour at 95%, a border, `shadow-sm`, `backdrop-blur-md` | dropdown lists, tool menus, the app menu, the view's menu, chip lists, the search card (a card's 10px corners) |
 | Cards | `PANEL_PEEK_CARD_CLASS`, `SettingsCard` | opaque `bg-sidebar`, a border, `shadow-md`, 10px corners | the panel's peek, the Display card, Preview's Settings |
 | On the picture | the picture's scheme | the zoom: the foreground at 6% (10% under the pointer, 14% open), haloed; the update status: the background at 95% | the corner's zoom, the update status; Preview's bar has no surface |
 
 Corners: a tile is `rounded-control` (4px; 6 on a phone), and a bar round tiles takes the tile's radius + 6 (10px; 12),
-so the curves run parallel. A card is 10px. Rows, pills, fields, menus, chips and tooltips are `rounded-md` (8px).
+so the curves run parallel. A card is 10px (`rounded-lg`): the cards over the view, and a document's card on the Home,
+which is a card on the page (`bg-card`, a border, no shadow). Rows, pills, fields, menus, chips and tooltips are
+`rounded-md` (8px). There is no other radius: no 6px or 12px box.
 
 ### Layering
 
@@ -202,7 +227,8 @@ The view's layers, bottom to top (`kit/shell/ViewFrame.jsx`). New chrome joins o
 2. **The panel**, docked beside the picture, or its peek over it (`z-40`).
 3. **The top layer** (`data-view-top-layer`, `z-50`): the strip, its rows, the tool stack and Quick Edit.
 4. **The Display card**, on the same z and drawn after it (`SETTINGS_CARD_LAYER_CLASS`), over the strip and corner.
-5. **Portalled popups** at the page's end: menus and lists (a card's own too), tooltips, dialogs and sheets.
+5. **Portalled popups** at the page's end: menus and lists (a card's own too), tooltips, dialogs and sheets, and the
+   search card, a dialog with nothing dimmed under it.
 
 ### Motion
 
@@ -249,24 +275,31 @@ One component for each job. A renderer brings its tools, rows, tabs and state, b
 | Picking one value from a list | `ValueDropdown` | `primitives/value-dropdown.jsx` |
 | A menu of actions | `DropdownMenu`; a tree row's right-click, `ContextMenu` | `primitives/dropdown-menu.jsx`, `primitives/context-menu.jsx` |
 | A row of a list | `TreeRowSurface` and its parts | `primitives/tree-row.jsx` |
+| A way to a place, as a row (the Home's places in its sidebar) | `PlaceLink` | `library/LibraryPlaces.jsx` |
+| A document's picture | `PICTURE_CLASS`, `ROW_PICTURE_CLASS` | `library/thumbnails.ts` |
 | A labelled setting in the panel | `PanelSelectRow`, `PanelSwitchRow` | `kit/inspector/panelRows.jsx` |
 | A number a slider sets | `SliderField` | `kit/inspector/SliderField.jsx` |
 | A number with no range | `FileSheetNumberProperty` | `kit/inspector/FileSheet.js` |
 | On or off | `Switch` | `primitives/switch.jsx` |
+| One of two (or a few) ways to show the same thing (the Home's grid or list) | `SegmentedControl` | `primitives/segmented-control.jsx` |
 | A chip | `Badge`, as `ReferenceChips` draws it | `kit/tools/quick-edit/ReferenceChips.jsx` |
 | Settings over the view | `SettingsCard` | `kit/view-settings/SettingsCard.jsx` |
 | A tab's Reset and Save | `PanelActions` | `kit/inspector/PanelActions.jsx` |
 | A tool's row under the strip | `SubToolbar` | `kit/tools/SubToolbar.jsx` |
 | A hint | `TooltipHint` | `primitives/tooltip.jsx` |
+| A key beside what it does | `Kbd` | `primitives/kbd.jsx` |
+| The places and apps a file opens in, as menu rows | `OpenInItems` | `file-viewer/navigation/OpenInItems.jsx` |
 | A control's label; a scroll region | `FieldLabel`; `ScrollArea` | `primitives/field-label.jsx`, `primitives/scroll-area.jsx` |
 | Loading | `LoadingStep`, over `Progress` | `loading/LoadingStep.jsx` |
 | A status screen | `EmptyState` with a `StatusAction` | `file-viewer/navigation/EmptyState.jsx` |
 | A dialog, a sheet | `Dialog` or `AlertDialog`; `Sheet` | `primitives/dialog.jsx`, `primitives/sheet.jsx` |
+| Finding and opening any document | `DocumentSearch` | `search/DocumentSearch.tsx` |
 
 - **Label and value.** A control's label is `FieldLabel`: muted, regular, the size of where it stands, truncating.
   Its value is the foreground. No control styles its own label. Why: Figma's rule; the eye finds values by colour.
 - **Scrolling.** Every chrome scroll region is a `ScrollArea`, with thin overlay bars in the theme's colours; chrome
-  has no native `overflow-auto` or `overflow-scroll`. The Home is a page and scrolls with the platform's scrollbar.
+  has no native `overflow-auto` or `overflow-scroll`. The Home's place is a page and scrolls with the platform's
+  scrollbar; its sidebar is chrome, a `ScrollArea`.
 
 ### Buttons
 
@@ -282,7 +315,10 @@ quiet button reads as a button and nothing more, and the one filled button is th
 | A tool with a menu | the tile and `ToolSettingsMenu`'s chevron | one control under one fill, no divider; the chevron half a tile wide, touching it |
 | Navbar items (logo, Back, Forward, the name, ⋯); Display and Preview | `NAV_ITEM_CLASS`; `NAVBAR_VIEW_BUTTON_CLASS` | the control tall, transparent at rest, `bg-accent` under the pointer and while open; Display and Preview a 16px muted glyph |
 | A tab's actions | `PANEL_ACTION_CLASS` | the control tall, 8px in, regular weight; Reset ghost, Save `default` while it can save |
-| A status screen's action; the Home's Open | `StatusAction`; `Button variant="outline"` | outline, the control tall, `text-ui` at regular weight (Open with a 16px FolderOpen), never a filled primary |
+| A status screen's action | `StatusAction` | outline, the control tall, `text-ui` at regular weight, never a filled primary |
+| The scale's text button: the Home's Import and its welcome's | `Button variant="outline" size="control"` | the control tall, `--cad-pad` in at each side, `text-ui` at regular weight, its icon the glyph token 8px before its words; a chevron (a dropdown's, 12px at 60%) only where Import opens a menu, none where it opens the system's one chooser |
+| The Home's Sort | `Button variant="ghost" size="control"`, opening a `DropdownMenu` | one control, as Figma's sort is: the control tall, `--cad-pad` from its edges to its first and last ink, a sort glyph (lucide's `ArrowDownUp`, the glyph token, muted), the sort's name in the foreground, then a 12px chevron muted at full strength; the accent fill under the pointer and while open, as every ghost control. No label beside it: a muted "Sort" flush against the trigger was hit by the trigger's fill. Its name is "Sort by Last activity" |
+| The Home's way back to the document just left | `Button variant="outline" size="control"` | the same button, as tall as the row's other controls, never a name cut short: where its name has no room (a phone's) it is the back arrow the navbar's Back draws (`ArrowLeft`, the glyph token) alone, a control wide, keeping its accessible name "Back to <name>"; otherwise its name, then its key ("Esc") a `Kbd`, left out where nothing hovers. Why not the small button: it stood 24px tall in `text-xs` in a row of 28px controls in `text-ui`, a second size on one surface |
 | Quick Edit's actions | `Button`, `size-control` | square and icon only, 4px apart; the rightmost `default`, the others `secondary` |
 | A small icon button (a card's X) | `size-icon-button` | a 12px muted glyph; the foreground and `bg-accent` under the pointer |
 
@@ -295,30 +331,36 @@ quiet button reads as a button and nothing more, and the one filled button is th
 
 ### Dropdowns
 
-`ValueDropdown` is the one way to pick one value from a list: panel rows, the settings cards, a board's Layer display,
-the Home's type filter. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
-popup, one keyboard and one touch rule, so a fix lands in every picker.
+`ValueDropdown` is the one way to pick one value from a list beside its label: panel rows, the settings cards, a board's
+Layer display. It is built on `DropdownMenu`; there is no Radix Select and no native `<select>`. Why: one
+popup, one keyboard and one touch rule, so a fix lands in every picker. A value picked from a control of its own, with
+no label (the Home's Sort), is a ghost button opening a `DropdownMenu`, its list the value dropdown's
+(`VALUE_DROPDOWN_LIST_CLASS`) and its items radio items.
 
 - **The trigger** shows the chosen option's icon (where the options have icons), its label in the foreground and a
   12px chevron at 60%. It is bordered as a field (`border-input`, `shadow-xs`), the control tall, at least 6rem wide
   and 8px in, and `bg-accent` while open. Its accessible name is "Label: value".
 - **The list** holds radio items, the chosen one ticked at the right, disabled options dimmed, and a `fallback`
-  ("Custom") on the trigger where no option matches. It is at least the trigger's width, end-aligned, 4px under it.
+  ("Custom") on the trigger where no option matches. It is at least the trigger's width, end-aligned, 6px under it
+  (the menu's gap).
 - **Half the row.** A dropdown takes half its row and its label the rest
   (`grid-cols-[minmax(max-content,1fr)_minmax(50%,max-content)]`), growing past half only where its value needs it. A
-  colour field, and a dropdown set to fit (the Home's ghost filter, a picker on a toolbar tile), are as wide as their
-  content. Why: one as wide as its value reads ragged, and one wider than half for no reason crowds its label.
+  colour field and a picker on a toolbar tile are as wide as their content. Why: one as wide as its value reads ragged,
+  and one wider than half for no reason crowds its label.
 - **In a settings card every dropdown is one width**: half the content (132px in a desktop's 288px card, 148px in a
   phone's 320px one) or the card's widest
   option (`fixedWidth`, so the width never changes with the choice), 24px tall (36 on a phone), 6px in, 14px icons.
 
 ### Menus
 
-- **A menu of actions is a `DropdownMenu`**: the file's ⋯, the app menu, the view's menu, a tab's overflow, a tool's
-  chevron, the zoom. A tree row's right-click menu is `ContextMenu`, with the same items. A picker drawn as a toolbar
+- **A menu of actions is a `DropdownMenu`**: the file's ⋯, the app menu (opened upward from Settings' cog in the
+  panel's foot, the cog lit while it is open), the view's menu, a tab's overflow, a tool's
+  chevron and the zoom. A tree row's right-click menu is `ContextMenu`, with the same items. A picker drawn as a toolbar
   tile (Draw's colour and stroke, Clip's axis, Preview's routines) keeps its tile and opens a `DropdownMenu`.
-- **The menu** is `rounded-md` with 4px of padding, at least 8rem wide, 4px to 6px from its trigger and 8px from the
-  window's edges. A menu taller than its room scrolls in a `ScrollArea`.
+- **The menu** is `rounded-md` with 6px of padding (`p-1.5`, on both scales: its items are the row, 28 or 36), at
+  least 8rem wide, 6px from its trigger (`MENU_GAP_PX`, `DropdownMenuContent`'s default, which no menu sets again) and
+  8px from the window's edges. A tool's popover over the strip stands 8px off it, a chip's list 6px or 8px. Why: a menu
+  pressed against its trigger, and tight inside, read cramped. A menu taller than its room scrolls in a `ScrollArea`.
 - **An item** is `text-xs`, at least the row tall, `--cad-pad` in, with a 16px muted icon 8px before its words. It
   takes the accent fill under the pointer or the keyboard, is at 50% when disabled, and is worded in sentence case.
 - **Checks sit on the right** (a dash for some-of), so every item's words start on one edge. Choosing a value closes
@@ -330,7 +372,7 @@ popup, one keyboard and one touch rule, so a fix lands in every picker.
 
 ### Rows
 
-One primitive draws every list in the panel and the explorer: `TreeRowSurface` with `TreeRowGlyph` or
+One primitive draws every list in the panel: `TreeRowSurface` with `TreeRowGlyph` or
 `TreeRowToggle`, `TreeRowName`, `TreeRowDetail`, `TreeRowActions` and `TreeRowHeading`, long lists through
 `VirtualRows`. Only it sets a row's horizontal geometry: no list pads a row, draws a chevron or sets a text size.
 Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md#trees).
@@ -348,7 +390,15 @@ Why: a fix to the row lands in every list. What a row does: [Trees](viewer-ux.md
   name fades out under them.
 - **A heading** (`TreeRowHeading`) is a muted line the control tall, on the inset, at regular weight. **Placeholder
   rows** (`TreeRowsLoading`) stand on the rows' lines while a tab loads, in the muted colour at 20%.
-- **The explorer's rows** are the same primitive at 24px (36 on a phone) in `text-xs`, 5px in, padding themselves.
+- **Outside the panel** the same primitive draws a way to a place (`PlaceLink`: the Home's places in its sidebar), the
+  row tall, its glyph on the line and its fill hanging 8px past it. A folder on a project's page is not one of these:
+  among cards it is a tile of the cards' family ([the project's page](viewer-ux.md#the-home)), since a row there read
+  as a different surface beside the cards; and a file the viewer does not open is the same tile after the cards, its
+  kind's glyph for the folder's and its ⋯ centred in a square at its right end, as tall as the tile's inside, so the
+  button is padded alike on every side and its glyph ends 16px in on both scales.
+- **A row with a picture** (a document in the search's results and in the Home's list) is the control + 16 tall (44px;
+  a phone's 52) with a row's corners, its picture the control + 4 tall at 3:2, 8px before its name. The Home's has
+  columns after the name, 16px apart, and its star and ⋯ (small icon buttons, 4px apart) over its right end.
 - **Settings rows.** `PanelSelectRow` is a `FieldLabel` and a `ValueDropdown`, the control tall, the dropdown at least
   half the row and 6rem. `PanelSwitchRow` is an optional 16px icon, the label and the switch at the right end; the
   whole row is the switch's label. A parameter with no range is `FileSheetSettingRow`, its field in a 5.5rem column.
@@ -388,6 +438,20 @@ the playback scrubber import the slider primitive. Why: no site brings its own s
 **A number with no range** (Params') is `FileSheetNumberProperty`: a bordered field the control tall, a muted fill at
 30%, 8px in, its number tabular. Focus selects it, Enter or leaving commits, Escape puts back; disabled, it is at 50%.
 
+### Pills and the segmented control
+
+- **A pill** is the panel's tab pill (`PILL_CLASS`): the control tall, 6px in at each side, `rounded-md`, `text-ui`. The one
+  on is `bg-accent` with the foreground at medium weight; the others muted, with `bg-accent/50` under the pointer. The
+  panel's head draws its tabs with it ([The panel's head](#the-panels-head)). The Home has no row of pills: it filters
+  nothing by kind.
+- **A segmented control** (`SegmentedControl`) is one choice of two (or a few) ways to show the same thing, side by
+  side on one muted track (`bg-muted`), the chosen one raised on it (the page's colour and `shadow-xs`; in dark, the
+  accent). Each option is a toggle (`aria-pressed`) the control tall, its face drawn 2px in, so the track shows 2px
+  round the faces and 4px between them, and its corners are a face's (`rounded-control`) + 2. An icon option is the
+  control + 4 wide, its glyph the glyph token. The group is one Tab stop, on the chosen option; ← and → (Home, End)
+  choose the neighbour and wrap, and pressing the chosen one does nothing. Why: grid and list are one choice, and two
+  loose tiles read as two.
+
 ### Switches and checkboxes
 
 - **On or off is a `Switch`**: shadcn's, 24 × 14 (36 × 20 on a phone), the primary colour when on and the muted
@@ -400,8 +464,10 @@ the playback scrubber import the slider primitive. Why: no site brings its own s
 ### Chips
 
 - **A chip is shadcn's `Badge`**, secondary, with an edge (`border-border`): the chip token tall, `rounded-md`,
-  `text-xs` at medium weight, 8px in, its 12px icon first. `ReferenceChips.jsx` draws every chip: Quick Edit's
-  attachments and Measure's measurements. Why: a chip reads as a chip, the way shadcn draws one.
+  `text-xs` at medium weight, 8px in, its 12px icon first. `ReferenceChips.jsx` draws every chip that is pressed: Quick
+  Edit's attachments and Measure's measurements. A format on a Home card's picture is the same badge, with nothing to
+  press, 8px in from the picture's corner, in the light theme's tokens as the picture is. Why: a chip reads as a chip,
+  the way shadcn draws one.
 - Its label and its X are two buttons; the X is a muted 12px glyph in a `size-glyph-sm` box with `.cad-hit`. A part's
   name is cut to 16 characters. A reference pasted into Quick Edit's note is an inline pill on the note's 20px line.
 
@@ -439,6 +505,27 @@ so the two look and move alike.
   explain the buttons stand right-aligned above them. Which tabs have actions: [Parameters](viewer-ux.md#parameters),
   [Joints](viewer-ux.md#joints), [Animation](viewer-ux.md#animation).
 
+### The panel's foot
+
+`PanelFoot` (`file-viewer/PanelFoot.jsx`) is the last block of a panel, on the home and over a document: the app's
+links and Settings. One component, mounted by the home's sidebar and by the view's panel (`PanelSurface`'s `foot`), in
+the pinned panel, the peek and the phone's sheet. What it holds and why it is there:
+[The panel's foot](viewer-ux.md#the-panels-foot).
+
+- **A rule, then one row.** A 1px rule in the border's colour, the panel's full width (as the rule under the tabs),
+  then the row: 8px, the tiles, 8px (more where a host's composer floats over the bottom,
+  `--cad-host-bottom-inset`). It stands outside the scroller, so nothing scrolls it away.
+- **Icon tiles**, the head's icon button: the control square, a 14px glyph, muted at rest, the foreground on a faint
+  fill under the pointer, 2px apart. The row pads by the inset less a tile's own padding, so the first glyph and the
+  cog's stand on the panel's two lines. Each has a hint above it and an accessible name.
+- **The links at the left**, a link each (`<a>`, opened the host's way): GitHub and Discord as their marks
+  (`navigation/brandMarks.jsx`, one colour, the text's), then Send feedback, lucide's `MessageCircle`. Links that do
+  not fit wrap upward.
+- **The cog at the right corner**, lucide's `Settings`, is the app menu's trigger: on the accent fill while the menu
+  is open, the menu above it, its right edge on the cog's. It never wraps and never moves.
+- **Under a tab's actions.** A tab's sticky actions row ends flush on the foot's rule. The foot's own background is
+  the panel's (a peek's card shows through).
+
 ### Tooltips
 
 Every hint is a `TooltipHint`, never a native `title` (Quick Edit's chip list still shows a reference's full name
@@ -447,6 +534,8 @@ with one).
 - **The look**: `text-tiny` on the popover surface with a border and an arrow, 12px by 6px in, at most 16rem wide,
   6px from its control. It opens after 400ms and closes on a press. On focus it opens only when the focus came by
   Tab, never when code moved it, and a finger never opens one.
+- **A key written beside what it does** (the search's keys' line and its field's key, the Home's way back) is a `Kbd`:
+  `text-tiny`, muted and regular, in a hairline box a tile's corners round, 4px in. A menu's key hint has no box.
 - **The words** are one or two. A tool's hint is its name, then its key muted ("Measure M"); the key is also its
   `aria-keyshortcuts`. A truncated name shows whole in a hint (`overflowOnly`).
 - **No hint** on a disabled control, the tool in hand or an open trigger, except one that says why a control is off
@@ -459,8 +548,14 @@ with one).
 
 - **Dialogs** are shadcn's `Dialog` and `AlertDialog` as shipped, on `text-ui`: one centred card, at most 28rem and
   1rem in from the window's sides, 24px in, `rounded-lg`, over a black overlay at 50%. A dialog has no corner X; it
-  closes by its own buttons, Escape or a press outside. The viewer's are What's new and the Home's Delete.
-- **Sheets** are shadcn's `Sheet`: three quarters of the window wide, at most 20rem. The phone's panel is one, 85%
+  closes by its own buttons, Escape or a press outside. The viewer's is What's new.
+- **The search** (`search/DocumentSearch.tsx`) is Radix's dialog with no overlay: a card near the page's top, at most
+  35rem and 1rem in from the sides, on the popups' surface with a card's 10px corners, its input row and its keys'
+  line (on the chrome's colour) the control + 16 and + 8 tall, parted from the results by a full-width rule. On a phone
+  it is a sheet the view's width under the navbar, with no keys' line. Why: it is looked through, not at, and the page
+  under it stays in sight.
+- **Sheets** are shadcn's `Sheet`: three quarters of the window wide, at most 20rem. The phone's panel is one (a
+  file's, and the Home's sidebar: `PanelSheet`), 85%
   wide, with no scrim (its overlay is clear, so a press beside it closes it and reaches nothing under it), sliding with
   the peek's timings and closed by a 48px swipe towards its edge ([A phone](viewer-ux.md#a-phone)).
 - **No window breakpoints**: a dialog or a sheet sizes itself by its caps, never by `sm:` or `md:`, as the viewer is
@@ -503,7 +598,8 @@ with one).
   phone's sheet to the panel toggle), and a hint does not open on focus handed back.
 - **Tabs and trees.** A tab list is one Tab stop; ← and → move between tabs and wrap. Tree rows follow the WAI-ARIA
   tree pattern (`primitives/tree-keys.js`): ↓ and ↑ the next and previous row, Home and End, → opens or enters a
-  branch, ← shuts it or goes to its parent, Enter and Space press the row.
+  branch, ← shuts it or goes to its parent, Enter and Space press the row. The Home's sidebar walks its rows with the
+  same keys; each of its rows is its own Tab stop, as a list of links is.
 - **The panel's grip** is a separator in the Tab order: ← and → by 16px, Home and End to its bounds.
 - **Escape closes the innermost thing first**: a popup opened inside a card or the panel closes before the card or
   peek (`hasOpenPopup`), and an element marked `data-escape-owner` spends its own Escape. The rest of the order:
@@ -517,18 +613,21 @@ transitions and drawn sizes, not class names, and a test of a layout that is gon
 
 | Test | What it holds |
 | --- | --- |
-| `designSystem.test.js` | the type tokens at both scales, no 10px step, no `text-[Npx]` and no stylesheet font size; no window breakpoint in chrome; every chrome scroll region a `ScrollArea`; menus at `text-xs` on the row, tooltips at `text-tiny`; the Home's type; the navbar's row; rows padded by the row primitive alone; only `SliderField` and the scrubber import the slider |
+| `designSystem.test.js` | the type tokens at both scales, no 10px step, no `text-[Npx]` and no stylesheet font size; no window breakpoint in chrome; every chrome scroll region a `ScrollArea`; menus at `text-xs` on the row, 6px in and 6px off their trigger, tooltips at `text-tiny`; the Home's three sizes (the title's step at a weight of its own, the body's, no `text-tiny`), its sidebar out of the panel's one size and no font in its stylesheet rules, its place on the panel's inset; the navbar's row; rows padded by the row primitive alone; only `SliderField` and the scrubber import the slider |
 | `lib/scale.test.js` | `scale.js` equals the stylesheet's tokens, at both scales |
 | `styles/canvas.test.js` | core's written-out colours equal the tokens, and every view's canvas is `--canvas` |
 | `kit/look/sceneColors.test.js` | no view hard-codes a selection, hover or box blue |
 | `file-viewer/panelPeek.test.js` | the slide's classes carry its duration constants; the fallback outlasts the slide |
 | `kit/inspector/FieldLabels.test.tsx` | every control's label is `FieldLabel`, its value the foreground |
-| `kit/shell/PanelInset.browser.test.mjs` | every piece of the panel's content on the 16px inset, in every tab of several files, placeholder rows too |
+| `kit/shell/PanelInset.browser.test.mjs` | every piece of the panel's content on the 16px inset, in every tab of several files, placeholder rows too; a document's panel's foot under its rule, a tab's actions flush against it, in the peek and the phone's sheet; the navbar's logo mark on the same line |
+| `RendererShell.browser.test.mjs`: "the logo stands in one place on every page" | the logo first and its mark 16px in over the home, over a document with a panel and over a page with no toggle; the toggle after it |
 | `RendererShell.browser.test.mjs`: "a phone's scale", "every control and every text on the walk is its scale's" | 36px controls and each text 2px up on a phone, and no fill or ring left by a tap; on a phone and a desktop, every control and text on the view, the Display card, each tab, a menu, Quick Edit and Preview's Settings is its scale's |
 | … "every popup trigger opens on one tap and shuts on a second tap on it" | the touch rule in the navbar, the strip, the Display card, the sheet and Preview's Settings |
 | … "the type scale and the strip's proportions, as drawn" | the 40px strip of 28px tiles, the 32px head with its rule under the strip, panel and menu text 12/16, the navbar 13/20, a tooltip 11/16 |
 | … "a toolbar button under the pointer is seen…", "Preview's bar takes the backdrop's ink…" | hover fills and ink read on their surface |
 | … "three tabs and the search fit the 232px panel…", "Display's card is the peek card's mirror…" | the tab budget; the card's top, gaps and 12px inset, its 288px width, its dropdowns one width, nothing cut |
+| `library/ModelLibrary.browser.test.mjs` | the Home's sidebar as the panel: 232px on the panel's surface and inset, its 28px rows and the marked place, pushing while pinned and gone collapsed, its peek card 4px in, its grip's bounds, a phone's sheet; the panel's foot under its full-width rule, its tiles on the inset, fitting at 200px, the cog's menu over it; the logo as a link home and no "Home" in the navbar; the place's title (its h1) in one row the control tall with Sort and the layout centred on it at its right, the content 16px under it, on the 16px inset on every side, the row staying one row on a narrow page and a phone (the title cut first, then Sort its glyph alone); the layout's segmented control (its track and faces); Sort as one ghost control, its glyph and chevron 8px from its edges, its chevron muted at full strength, its hover and open fill; a menu 6px off its trigger and 6px in; a card and a place as real links; the ring round the document just left, in view; as drawn, on a desktop and a phone: the three sizes (title 15/20 and 17/22 medium, body 13/20 and 15/20, the chip's step) and nothing else; a project's top page's Recent, one row of the cards' grid (five at 1440px) in the listing's columns, its labels 8px over what they label, a resize changing how many stand across and a search replacing it; a card's corners, inset, 3:2 picture and chip, 16px between cards, a folder as a tile of the cards' family, the list's header (Name, Type, Last viewed, Last edited) and its control + 16 rows, a place's one muted line; a file that is no document as a 46px tile of that family in a grid of its own 16px under the cards (its ⋯ at its right end, there under the pointer and in focus, always on a phone), a row after the documents' in the list, a press on either opening it in an app; Import as one button where the system's chooser takes either, else a menu of two; a phone's 36px controls, chips and options |
+| `primitives/segmented-control.test.tsx` | the segmented control's pressed state, its one Tab stop and its keys, and its measures from the scale's tokens |
 | `scripts/test/check-ui-strings.mjs`, `i18n/i18n.test.mjs` | no English literal in the chrome; the locales mirror `en.js` |
 | `tests/python/global/test_document_links.py` | every relative link and `#anchor` in these docs lands on a heading |
 

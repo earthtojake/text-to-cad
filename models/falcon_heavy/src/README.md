@@ -9,17 +9,17 @@ museum-style full-vehicle reconstruction from public sources. One script,
 
 | Model | | What it is |
 | --- | --- | --- |
-| `falcon_heavy` | `@model` | Full stack: three cores, 27 linked Merlin 1D engines, nosecones, grid fins, stowed legs, raceways, attach hardware, MVac second stage, 5.2 m fairing (85 parts, 2,142 placements) |
-| `falcon_heavy_cutaway` | `@model` | Center core + S2 + fairing sectioned 270° (opening +Y): schematic LOX/RP-1 volumes, transfer tube, domes, COPV-like placeholders, octaweb frames, avionics/separation placeholders, payload adapter + payload |
-| `falcon_heavy_exploded` | `@model` | Boosters outboard, stage/fairing lifted, translucent guide rods |
+| `falcon_heavy` | `@xbf` | Full stack: three cores, 27 linked Merlin 1D engines, nosecones, grid fins, stowed legs, raceways, attach hardware, MVac second stage, 5.2 m fairing (85 parts, 2,142 placements) |
+| `falcon_heavy_cutaway` | `@xbf` | Center core + S2 + fairing sectioned 270° (opening +Y): schematic LOX/RP-1 volumes, transfer tube, domes, COPV-like placeholders, octaweb frames, avionics/separation placeholders, payload adapter + payload |
+| `falcon_heavy_exploded` | `@xbf` | Boosters outboard, stage/fairing lifted, translucent guide rods |
 
-Build from this folder: `python falcon_heavy.py` builds all three, each printing its id
+Build from this folder: `python falcon_heavy.py` builds all three, each printing its `.xbf`
 and page; a run writes nothing.
 
 ```
 python falcon_heavy.py
-cad model snapshot "$STACK_ID" falcon_heavy.png        # the id: lines the run printed
-cad model snapshot "$CUTAWAY_ID" cutaway.png --camera back
+cad snapshot "$STACK_ID" falcon_heavy.png        # the id: lines the run printed
+cad snapshot "$CUTAWAY_ID" cutaway.png --camera back
 ```
 
 The sources, confidence and estimates behind every number
@@ -61,4 +61,4 @@ replays the engine (1.8 s); reverted, the files are the cold build's bytes.
 ## Not ported
 
 Nothing: the three models are the three scripts. The STEP each wrote is an export
-on request now (`cad model export "$STACK_ID" STEP/falcon_heavy.step`).
+on request now (`cad export "$STACK_ID" STEP/falcon_heavy.step`).

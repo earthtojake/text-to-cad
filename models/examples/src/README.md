@@ -1,6 +1,6 @@
 # examples
 
-Every script of `models/examples/src`, on cadgen 0.8: a `@model` each, writing nothing, but
+Every script of `models/examples/src`, on cadgen 0.8: a `@xbf` each, writing nothing, but
 the two print parts below, which declare their files, and the import's `__main__`, which
 exports the two STEPs it reads.
 
@@ -37,7 +37,7 @@ exports the two STEPs it reads.
 | `t_slot_slider_block.py` | — | T-slot slider block with central channel, side relief cuts, and mounting holes (Aluminum 6061-T6) |
 
 The 24 parts after the first five are the old project's, ported as they were: `@step`
-became `@model`, `build123d` is imported directly, and the two that also declared STL,
+became `@xbf`, `build123d` is imported directly, and the two that also declared STL,
 3MF and GLB keep those decorators, alone: this corpus's example of declared files, a print
 part whose STL, 3MF and GLB every run writes (`../STL/`, `../3MF/`, `../GLB/`, gitignored). Their shared builders are `lib/simple_model_library.py` (the
 `make_*` parts) and `lib/part_common.py`, plain modules; a colour is the sRGB hex itself,

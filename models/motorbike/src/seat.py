@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import bodywork as B
 
 
-@model
+@xbf
 def seat():
     built = B.build_seat()
     if isinstance(built, list):

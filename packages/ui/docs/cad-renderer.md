@@ -51,7 +51,7 @@ for a drawing. Render is no mode. Every
 renderer hands its list to the shell, which configures the view-settings store
 (`configure({ features })`) and Display's settings from it, and to its Explode and Clip
 tools. The OCCT parity bench's headless page (core's `common/renderMeshScene.js`) resolves a job
-of each family under the same rule; `cad <type> snapshot` itself draws every family by OCCT in the
+of each family under the same rule; `cad snapshot` itself draws every family by OCCT in the
 engine.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
@@ -126,7 +126,7 @@ flattener.
 
 ### One scene builder per family: the viewer and the parity page
 
-`cad <type> snapshot` draws every family by OCCT in the engine (`engine/snapshot.py`,
+`cad snapshot` draws every family by OCCT in the engine (`engine/snapshot.py`,
 `render/occt.py`; a DXF through `render/drawing.py`), never through these builders. What calls
 them beside the viewer is the OCCT parity bench's headless page, which draws each family beside
 OCCT's still to measure how alike they are (`scripts/bench/occt_parity.py`): a family's scene
@@ -151,7 +151,7 @@ file's unit, the cut capped as a STEP's is), Explode through the scene's `setExp
 Quick Edit's view hid come back in its job's `selection.hide`. A robot opens at
 `openingControlValues` (core's `common/articulation.js`: every joint's default, then an SRDF's
 `home` state) and the job's `resolved.controls` go on top through the same joint matrices
-(`cad <type> snapshot` poses a robot by `--pose`). A GLB's clips play in the viewer's Animation
+(`cad snapshot` poses a robot by `--pose`). A GLB's clips play in the viewer's Animation
 section and have no snapshot flag. The pieces are pinned by `common/headlessScene.test.js`
 (core) and `kit/view-settings/renderState.test.js` (one look from either route); the engine's
 stills of each family are `tests/python/packages/cad_server/engine/test_snapshot.py`'s.
@@ -312,6 +312,11 @@ is, both out of sight (Preview's Background may be see-through), and the flat vi
 (`useFlatHandover`'s `previewing`). A live `capture` and `resetCamera` act on the view on screen, Preview's while it
 is up. Preview's settings and Orbit's speed are written with the file's view (`preview`, `playback`).
 
+The board in 3D and Preview are offered where the client has the models table they stand the parts on
+(`boardModels`). A client without one (a view bundle's: a share shows a board in 2D, its 3D a GLB of its own) has the
+board in 2D alone: `boardViewGroups` is handed no `onDimensionChange`, so the card has no Mode; 3 does nothing; a
+file's view left in 3D opens in 2D; there is no Preview and no 3D models row; and neither lazy chunk loads.
+
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState.read()` is called at the moment the view is
 written, so the last write before unmount is saved; `shell.scheduleStateSave()`
@@ -394,7 +399,7 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit's bar at the bot
   panel docking or going leaves a view the person framed where it was (`useDrawingView.js`).
 - **Quick Edit** carries the picks and the ink; its views are the window on screen as a
   plan-view camera (`planCamera`: looking straight down, `up` +Y, `orthographicHalfHeight` the
-  window's half height), each with its label, which the ink's marks name. `cad <type> snapshot --job
+  window's half height), each with its label, which the ink's marks name. `cad snapshot --job
   PACKET` draws each view's window with the ink on the sheet, and `--annotation PACKET
   --camera authored` the view the ink was last drawn in. Quick Edit puts no measurement in its
   packet: they are the person's.
@@ -413,7 +418,7 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit's bar at the bot
   colour for strokes and per primitive for fills; text kept as strings) and
   `drawDrawing(ctx, drawable, …)` (text set with `fillText`, stretched to the width the
   server measured, so the page's face keeps the drawing's layout).
-  `cad <type> snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`) as
+  `cad snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`) as
   this pane draws it: from above, fitted, hairlines in their pens, on the light theme's paper
   whatever the pane's theme (every snapshot is light), with the plan-view `camera` and the
   `annotation` on the sheet a Quick Edit's view carries.
@@ -719,9 +724,8 @@ the loader asks which format it was.
 
 ## Engine document renderer
 
-`createXbfRenderer` (`@cad/ui/renderers/xbf`, id `xbf`, `src/renderers/xbf`) shows a
-engine document: an `.xbf`, and a `.step` or `.stp`, which the engine reads and serves as
-one. The strip is Select with its menu's chevron, Draw, Measure with its own, Explode for two or more
+`createXbfRenderer` (`@cad/ui/renderers/xbf`, id `xbf`; `src/renderers/xbf`) shows a model's document, the engine's: one the engine holds by its
+id, a model's `.xbf` opened from disk, and a `.step` or `.stp`, which the engine reads and serves as one. The strip is Select with its menu's chevron, Draw, Measure with its own, Explode for two or more
 parts, and Clip; the panel its Model tab (a part file's one row, an assembly's tree), then Params where the
 document records any, then Joints where it carries a mechanism, each a tab; and selection, hover, the menus, isolation, Escape and Quick Edit's chips
 follow the rules of [Selection and inspection tools](#selection-and-inspection-tools).
@@ -739,6 +743,11 @@ pairs (core's `lib/xbf/xbfKinematics.js`), a geared pair written through its gea
 a STEP's are (`xbfJointHandles.js`). A pair the engine could not keep a value for is said in the
 tab, under the rows.
 
+A document its client serves as `final` (a view bundle's, [the host's side](viewer-host.md#a-view-bundles-host))
+is read once and waits on no next version: there is no engine to build one. Everything else is the same: its
+structure, parts, look and mechanism are the document's, and a chip's facts and Select tangent faces' groups are
+asked of the same routes, which its client answers from each part's one table.
+
 A document with motions plays them from the shell's routine transport, named by its runtime's
 `noun`, over `useXbfMotion.js`: the top of its Joints tab (`kit/tools/playbar/AnimationSection.jsx`'s
 `AnimationControls`: a Sequence dropdown row of the motions by name, Play or Pause and the scrubber (its start the
@@ -755,7 +764,7 @@ of the document's motions with Explode and the pose (below): taking it up puts b
 and Explode used puts it at rest, nothing set aside.
 
 What an engine document's selection copies -- an `.xbf`'s, a STEP's alike; a chip, Copy Reference,
-Copy Prompt -- is the engine's canonical ref of each thing, the file's path first, the ref `cad <type> inspect` answers and
+Copy Prompt -- is the engine's canonical ref of each thing, the file's path first, the ref `cad inspect` answers and
 `select` labels its shapes with (`cad.engine.refs`): a part or subassembly by its label where that
 names it alone in the document, else by its occurrence path, each segment its label numbered among the
 siblings sharing it (`/work/XBF/kit.xbf#kit/hand/finger.2`); an element by its name, else its kind and
@@ -842,8 +851,8 @@ const renderers = [createXbfRenderer({ client, preferences })];
 
 `source.id` names the file source a document's key is made of, independently of the
 backend's port. The client serves a
-file by its absolute path and catalogs only the files on screen; `client.folder(path)`
-and `client.search(path, query)` are the explorer's reads, and `isMissingFileError(error)`
+file by its absolute path and catalogs only the files on screen; `client.projects()` lists the projects a person
+opened and `client.projectFolder(id, { path, q })` reads one folder of one (or searches below it), and `isMissingFileError(error)`
 says the file asked for is not there. The host owns source access, file selection,
 URL/history, title, navigation, browser storage and application color scheme. It calls
 `client.dispose()` when the connection is no longer owned.
@@ -937,13 +946,14 @@ the shell what is selected as `references`, in the prompt grammar (an `.xbf`'s a
 `model.glb#n12`, the file's `nodes[12]`; a 3MF's objects, `model.3mf#o2.1`, its build's second
 item's first component; an STL's bodies, `model.stl#b2`; the file itself always
 goes), and the
-shell hands Quick Edit the file, its prompt (`quickEditPrompt`: the views it
+shell hands Quick Edit the file, its prompt (`quickEditPrompt.snapshot`: the views it
 carries — the view on screen, from `ShellViewport.promptCamera` and the renderer's
-`viewState`, its pose and hidden and isolated parts — and the files `host.promptFiles`
-makes of them, with the annotations as an annotation file) and the viewer's Escape. `quickEditPrompt.js` builds the context at
-the press, from what is live then (`createQuickEditContext`), and the text a copy writes
+`viewState`, its pose and hidden and isolated parts — and the annotation, read at the press)
+and the viewer's Escape. `quickEditPrompt.js` builds the context at
+the press, from what is live then (`createQuickEditContext`), its snapshot packet the page's
+(core's `snapshotPacket`), inline, and the text a copy writes
 (`copiedQuickEdit`, over core's `formatPromptMessage`), its files named from the workspace
-(`host.promptFiles.folders()`), the inline packet's `input` too. The drawing tools hand it whether there is
+(`host.promptFiles.folders()`), the packet's `input` too. The drawing tools hand it whether there is
 ink, and the Annotation chip copies its `.annotation.json` file's path. Copying without
 Quick Edit is the copy shortcut — the selection's references, or, while Draw is up, the
 view with its annotations — which writes the clipboard directly. See
@@ -1117,7 +1127,7 @@ A pair reads what the two make (`@cad/core/lib/viewer/measureEntities.js`), draw
 every measurement is. Completed rulers are chips in its sub-toolbar while it is the tool
 (`kit/tools/measure/measurementChips.jsx`'s `MeasurementsBar`, Quick Edit's chips, their card
 `MeasurementCard.jsx`), and no row while there are none. They are the person's alone: nothing of
-them reaches Quick Edit or its snapshots (`cad <type> snapshot --measurements` draws the rulers it is
+them reaches Quick Edit or its snapshots (`cad snapshot --measurements` draws the rulers it is
 given). Leaving Measure cancels its draft but keeps completed rulers, drawn on the model, under
 every other tool.
 
@@ -1307,7 +1317,7 @@ then the framing group; `xbfModelMenu`). A single-part document has no part menu
 the part opens this one too — so there it opens with the part menu's reference group for the
 whole part: Copy Reference. The tree starts directly below the model tree
 section's head, its filter (`TreeFilterInput`, `primitives/tree-filter`, shared with the
-explorer), with a conditional Show all after it; in the view's panel, the panel's search. While
+Links), with a conditional Show all after it; in the view's panel, the panel's search. While
 parts are hidden a status line heads the tree (`3 hidden` and **Show all**; what is isolated says
 so on its own row): a box on the panel's 8px lines, its glyph on the 16px one, its words where the rows' names start, its action's
 text ending on the right 16px line. Clicking empty tree space clears selection.
@@ -1610,11 +1620,11 @@ snapshot job, and a picture of each ([annotations](annotation.md#lifetime-and-ca
 
 ### File navbar
 
-The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-explorer): the panel's toggle, where the
+The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-project): the panel's toggle, where the
 file has a panel, then the logo,
-which opens the app menu (Back to home, the person's settings, feedback, the links, the
-version), Back and Forward where the host keeps the view's history, the file's name (which
-opens the explorer) and its ⋯ menu at the left (the web viewer's Export is a submenu of the
+which leads home where the host has a home (and opens the app menu where it has none: the person's settings,
+feedback, the links, the version), Back and Forward where the host keeps the view's history, the project's name where the file is in one
+(which goes to the home at it), the file's name and its ⋯ menu at the left (the web viewer's Export is a submenu of the
 ⋯); at the right only what a host or a file adds: the renderer's actions, then the view's own controls, Display
 and Preview, which the view portals into the navbar's view slot, then, outermost, the host's actions
 (the CAD app's Full size). Every host has the navbar; only Preview, which draws its own bar, and a compact view are
@@ -1623,7 +1633,7 @@ alert card the model survives: the card's own icon, which brings it back (see
 [Inspect, Render and live revisions](#inspect-render-and-live-revisions)). What a person
 tells the agent is Quick Edit's. The renderer's update
 status is in the viewport, under the strip, never in the navbar. So a view drawn as a
-picture (`compact`, as the home draws its thumbnails) needs no navbar at all.
+small (`compact`, a small inline view) needs no navbar at all.
 
 The host's `captureRequest` command captures the view (with its annotations, when there
 are some): to a composer destination it goes through the prompt-context port

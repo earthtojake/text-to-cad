@@ -44,9 +44,7 @@ version is answered at once rather than held: the page asks again a second later
 from __future__ import annotations
 
 import base64
-import email.utils
 import gzip
-import io
 import re
 import threading
 import time
@@ -54,7 +52,7 @@ from collections import OrderedDict
 from typing import Any
 
 from cad_server.viewer import url_norm
-from cad_server.viewer.response import Request, Response
+from cad_server.viewer.response import Captured, Request, Response
 
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 _ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
@@ -87,32 +85,6 @@ ENGINE_RETRY_MS = 750
 _CONTENT_RANGE = re.compile(r"bytes [0-9]+-([0-9]+)/([0-9]+)")
 
 
-class _CapturedHandler:
-    """The slice of ``BaseHTTPRequestHandler`` a viewer Response writes to."""
-
-    def __init__(self) -> None:
-        self.status = 500
-        self.headers: dict[str, str] = {}
-        self.wfile = io.BytesIO()
-        self.close_connection = False
-        self.connection = self
-
-    def send_response_only(self, status: int, message: str | None = None) -> None:
-        self.status = status
-
-    def send_header(self, name: str, value: str) -> None:
-        self.headers[name.lower()] = value
-
-    def date_time_string(self) -> str:
-        return email.utils.formatdate(usegmt=True)
-
-    def end_headers(self) -> None:
-        pass
-
-    def shutdown(self, how: int) -> None:
-        pass
-
-
 def _result(status: int, headers: dict[str, str], body: bytes) -> dict[str, Any]:
     reply: dict[str, Any] = {"status": status, "headers": headers}
     media_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
@@ -130,9 +102,9 @@ def _result(status: int, headers: dict[str, str], body: bytes) -> dict[str, Any]
 class ViewerTunnel:
     """The viewer backend every view of this server shares, made when the first one asks."""
 
-    def __init__(self, *, recents=None, analytics=None, clock=time.monotonic, app=None) -> None:
+    def __init__(self, *, library=None, analytics=None, clock=time.monotonic, app=None) -> None:
         self._app = app
-        self._recents = recents
+        self._library = library
         self._analytics = analytics
         self._lock = threading.Lock()
         self._clock = clock
@@ -147,8 +119,8 @@ class ViewerTunnel:
                 from cad_server.viewer.http_app import create_cad_app
 
                 app = create_cad_app(host="127.0.0.1", port=0)
-                if self._recents is not None:
-                    app.recents = self._recents
+                if self._library is not None:
+                    app.library = self._library
                 # The server's recorder: a person's answer on a card here is the CAD app's.
                 app.analytics, app.consent_by = self._analytics, "app"
                 app.drawings.hold_seconds, app.drawings.retry_ms = DRAWING_HOLD_SECONDS, DRAWING_RETRY_MS
@@ -197,7 +169,7 @@ class ViewerTunnel:
             if part is not None:
                 return part
         request = Request(raw_method=method, path=path, query=query, headers=lowered, read_body=lambda: body)
-        handler = _CapturedHandler()
+        handler = Captured()
         response = Response(handler, head_only=request.is_head, byte_range=byte_range, on_parts=self._keep)
         try:
             self.app.handle(request, response)
@@ -239,7 +211,7 @@ class ViewerTunnel:
         if kept is None:
             return None
         data, content_type, extra_headers, _when = kept
-        handler = _CapturedHandler()
+        handler = Captured()
         Response(handler, byte_range=byte_range).send_bytes(200, data, content_type, extra_headers, etag=etag)
         sent = _CONTENT_RANGE.fullmatch(handler.headers.get("content-range", ""))
         if sent is None or int(sent.group(1)) + 1 == int(sent.group(2)):

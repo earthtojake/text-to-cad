@@ -126,8 +126,10 @@ protocol relationship never imports Python or discovers an interpreter.
 
 ```
 src/
-  client/          # CAD service/resource contracts, HTTP adapter and worker tickets
-  prompt/          # typed context bundles, identity/targets and pure serialization
+  client/          # CAD service/resource contracts, HTTP adapter and worker tickets, and
+                   #   bundle.js: the same service over a view bundle, with no engine
+  prompt/          # typed context bundles, identity/targets and pure serialization, and
+                   #   snapshotPacket (a Quick Edit's snapshot packet, made in the page)
   common/          # rendering + runtime entries shared by every consumer:
                    #   renderModel/renderOptions (interactive canvases, the docs
                    #   hero), renderMeshScene (the parity page's stills),
@@ -149,7 +151,9 @@ src/
                    #   fit/pan/zoom maths, batched Path2D, screen-width strokes),
                    #   cadRefs (the ref grammars: the engine's, for an .xbf
                    #   and a STEP, parity-tested against engine/refs.py;
-                   #   a label, for any other file)
+                   #   a label, for any other file), documentPages (a
+                   #   document's page in the viewer's origin, `/<id>`: the
+                   #   one place a document's address is spelt and read)
 scripts/           # chunk-ids.mjs (the pages' builds: a chunk's debug id) and
                    #   source-maps.mjs (the pages' builds: maps into the packages'
                    #   src/), beside the package's own build and test runners
@@ -181,8 +185,9 @@ starts no download; the host hands that URL to the browser. Construction is
 inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
 (the web's pauses while its page is hidden). The client also carries what every
 CAD view asks of its server, so each host reaches it the same way: the model
-library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
-(`pick`), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), What's
+library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Import
+(`pick`: a file, `{ folder: true }` a folder, `{ any: true }` either where the server's
+`pickAny` says one chooser takes both), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), What's
 new (`whatsNew`) and what the page did for
 telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
 change (POST, PUT, PATCH or DELETE) carries the viewer's guard header. A host reports its page's crashes
@@ -217,8 +222,14 @@ by which rows join: one file however its path is spelled (a symlink, a case vari
 server lacks is an `isMissingFileError`, in the engine's words for an id it does not hold),
 `entryOf(file)` is the row the catalog has, and `createRenderSession({ file })` keeps the displayed
 file's entry current as polling refreshes it. A cancelled or older request
-cannot overwrite a newer file revision. `folder(path)` lists one folder and
-`search(path, query)` finds the CAD files under it, for the explorer.
+cannot overwrite a newer file revision. `projects()` lists the folders a person opened as projects (no
+documents: a project is its folder), `projectFolder(id, { path, q })` reads one folder of one, below its root (its
+subfolders, then every file in it, rows as `recents()` reads them; a file that is no document has no `documentKind`,
+`api`, picture or pin, and is opened in an app with `openInApps(id)` and `openIn(id, "source", app)`) or with words
+searches everything below that folder, `openProject(path)` opens a folder as one (the project it already is, or is
+inside, where it is), `removeProject(id)` forgets one, and `pick({ folder, start })` asks the desktop's chooser for a
+folder, opening in `start`. A row names the project it is in by its id (`project`); an entry names it in full, with
+the folder the document is in below the project's root (`project.folder`).
 
 `CadWorkspaceService` exposes a scoped `resources` provider and, where its host serves
 the engine, where the page reads a document the engine serves
@@ -229,15 +240,61 @@ transport](docs/workspace-resources.md) for worker transfer, nested dependencies
 cache generations and the standalone static-HTTP default. No client reads model
 source or starts a source build.
 
-`createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
-Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,
-validates the packet without rendering and answers `{ inline: compactJson }` up to
-1024 UTF-8 bytes, otherwise writes one `.snapshot.json` and answers `{ snapshot: absolutePath }`.
-The client sends `acceptInline: true`; without this capability the server always saves
-and returns a path for compatibility with already-open viewers;
-`read(path)` fetches a JSON file. The annotation format, and
+`openViewBundle(source)` (`client/bundle.js`) is the same service over a view bundle (a share's view,
+which `cad share` has the server write): the answers a page reads of one document, as files, read with no
+engine behind the page from a `ViewBundleSource` -- a share's (`openShare`), or
+`viewBundleMemorySource(files)`, the files held in the page -- each the bytes of a path of the bundle; a source's `dispose`, where it has one, goes with the
+service's. It checks the manifest (`view-bundle/1`; a file not its listed size fails), and
+answers the catalog (the one document: a model by its id, a file by `/<name>`), an engine document
+(its API URL under `http://view-bundle.invalid`, answered by a fetch of its own that maps each route
+to its file: one element's facts and a part's groups out of the part's one `elements.json`; served
+`final`, so nothing waits on a next version), a drawing, a robot and the resources their loaders
+read, and a KiCad board's plot (its 2D alone: no `boardModels`, so its view has no 3D) and a schematic's a sheet at
+a time (the hierarchy's index, held once in `schematic.json`, put back unless `index: false`). The look an engine
+document is drawn in is no file of a bundle, being the same for every document of a release: the service answers
+`/api/v1/look` with the record core holds (`lib/xbf/look.generated.js`, which `scripts/generated/regenerate.py` makes
+from the engine's) and `/api/v1/look/environment` with the image its host's build holds, handed to it as
+`environment` (`openViewBundle(source, { environment })`, `openShare(id, service, { environment })`: a function of a
+request's options to the image's bytes); with none, an engine document's look has no image and the document does not
+open. The structure it answers is the
+engine's: where the bundle keeps the mechanism in
+`kinematics.json` alone and each prototype's element names in a file named by their content
+(`names/<sha256>.json`, which the prototype names as `names`), both are put back, each names file
+read once and all of them at once; a structure that holds both itself is answered as its bytes.
+What needs an engine it leaves out ([workspace resources](docs/workspace-resources.md)).
+
+`openShare(id, service)` (`client/share.js`) opens a shared view bundle (`cad-share/2`), whose link is
+the share's address alone: the AES-256-GCM key every object of it is sealed with is derived from its id
+(`deriveShareBits`: HKDF-SHA256 of the id's text, the salt `cad-share/2`, the info `key`), so no link
+holds a key. `service` is the host's two reads of the share service (`ShareService`): `manifest()`, the
+share's manifest, and `pack(id)`, one of its packs, each sealed (`IV || ciphertext-and-tag`, the IV 12
+bytes, its AAD `cad-share/2 manifest` or `cad-share/2 pack <pack id>`). The manifest names the document
+(`name`; for a model its script, `entry`, and what built it, `made`, each null for a file document) and two
+maps of files by their paths, each with its size, its SHA-256 and the ranges of packs its gzip member lies
+in, in order: the view bundle's (`view`) and the files that made it (`files`, which the service serves as
+the share's zip, `/<id>.zip`), and nothing else. The page reads `view` alone: a read fetches each pack it
+names once, kept while the share is open, opens it, joins the ranges, gunzips them (`DecompressionStream`)
+and checks the size and the SHA-256. Every pack of the view is fetched ahead as soon as the manifest is
+read, the ones holding `manifest.json` and `structure.json` first, `SHARE_PREFETCH` (6) at a time, and a
+read's packs go ahead of the rest; a pack only `files` names is never fetched. Then the bundle opens with
+`openViewBundle`, and disposing its service stops what the share still fetches. It fails with one of three codes:
+`SHARE_DAMAGED`, a manifest that does not open or is not one, or a file not as it says;
+`SHARE_UNAVAILABLE`, a pack the service did not give (the next read asks again); and
+`SHARE_UNSUPPORTED`, a bundle this viewer does not open. A failure of `manifest()` (a share the service
+has none of) is the host's, passed on as it is. `readShareAddress(href)` reads a share's page address:
+its path exactly one share id (22 base64url characters), and its fragment `delete=<secret>` for the
+delete page; any other fragment (such as an earlier link's key) is passed over, and any other path is
+null. `isShareSecret` checks a delete secret's form.
+
+`createHttpPromptFiles({ origin, fetch })` is how a Quick Edit's message names the files on the viewer
+server's computer: `folders()` reads its workspace (`start`, the folder it was last launched in) and the
+person's home from its description (`GET /api/v1/server`), which the message names each file from
+(`displayPath`). The page makes a Quick Edit's snapshot packet itself (below), and asks the server nothing
+for it. The annotation format, and
 the code that draws an annotation in a scene for the viewer and for a snapshot alike, is
-`common/annotation.js`.
+`common/annotation.js`, which reads a packet's shortened marks as the page's own: one with no id takes one
+by its place, `touches` may be selectors, and an area with no triangles is its outline, drawn as a closed line
+as cad's own stills draw every area.
 
 Inspect and Render each resolve their fixed scene base. Legacy host theme input
 cannot replace either base.
@@ -263,19 +320,38 @@ canonical release versions during normal development.
 `@cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
-person wrote, then `File:`, `References:` and, for a picture that travels as a file,
-its label and path. A context's `folders` (`{ start, home }`, which the host says) name every file in that
-message as `displayPath` does: relative to the workspace, else `~/`, so the person's home is never in it;
-its parts, and Copy References, keep the absolute path. Text, typed resource
+person wrote, then `File:`, `References:` and each attachment, inline where it is text (a Quick Edit's
+snapshot packet) or, for one that travels as a file, by its label and path. A context's `folders`
+(`{ start, home }`, which the host says) name every file in that
+message as `displayPath` does (`promptAddress`: a model by its id, a link as it is): relative to the
+workspace, else `~/`, so the person's home is never in it; its parts, and Copy References, keep the absolute path. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts, and an attachment's
 optional `label` ("Annotation") names it in that message. Text ranges use
 zero-based UTF-16 coordinates with an exclusive end. CAD targets retain the
 existing selector grammar and document revision, without interpreting a code
-range as a CAD fragment. Apps own clipboard/draft delivery, MIME/size limits and
+range as a CAD fragment; a document named by its link (`url`, a shared model's page), whose kind the link does not
+say, takes selectors of either grammar, written as the engine writes them (`<url>#<selectors>`), which leaves a
+label as it is. Apps own clipboard/draft delivery, MIME/size limits and
 acknowledged outcomes: `PromptContextPort.deliver` hands a context to its destination
 (`added`, `copied`) and `send`, where a host has a chat to post to, posts it as the
 person's message (`sent`); this package never submits a prompt or knows a session.
+
+A Quick Edit's snapshot packet is the page's, the same code for every host (`prompt/snapshotPacket.js`):
+`snapshotPacket({ input, type, views, annotation, references })` is what `cad snapshot --job` draws
+again — a job per view (its `camera`, and its `display`, `kinematics`, `jointValues`, `animation` and
+`selection` where it has them; a 3D view's `output` framing, a drawing's none; its picture by its `label`
+and size, never a path), a board's `references`, the ink, and the parts hidden and isolated where it was
+last drawn — shortened: a mark's points to a quarter of a pixel of the view it was drawn in, each view's camera
+two decimals finer, a stroke within half a pixel of its line (Douglas–Peucker), a mark without its id or a default,
+an area its outline alone, and what a mark touches and the parts a view hides by their selectors within the file. `input` is the file's
+address as `File:` names it, so the same views and ink on a local and a shared page make packets that differ
+in it alone. `snapshotPacketText` is the packet as a message carries it, inline and whole: compact JSON in ASCII
+alone, with no character a single-quoted argument ends at (an apostrophe is written `\u0027`, and every character
+that is not ASCII its escape too, PowerShell's typographic quotes, U+2018 to U+201B, among them), so `--job
+'<packet>'` pastes as one argument in bash and PowerShell alike, and `'<packet>' | cad snapshot --job -`
+carries it whole where Windows PowerShell 5.1, which takes the double quotes out of a program's arguments, pipes
+ASCII by default.
 
 Native KiCad board plots use the read-only payload contract in [plot-payload](docs/plot-payload.md).
 `lib/plot2d` draws its layers; `lib/board2d` handles picking and nets; `lib/board3d` stands the

@@ -13,7 +13,7 @@ bytes, its ``.kicad_pro``'s and its ``.kicad_dru``'s, and the source of the code
 package's modules). A changed file is a new key, so nothing stale is ever read. It is kept on disk, gzipped,
 in the engine's document cache beside the board's own document, under its document id (the board file's,
 ``ids.file_id``) and its key (``<cache>/documents/<id>/kicad/<key>/plot.json.gz``: ``folder``, ``cached``), so
-deleting the document (``cad delete``, the home's Delete) deletes it too, and where the snapshot's render
+forgetting the document (the home's Remove) removes it too, and where the snapshot's render
 process reads what the engine plotted; a plot as saved (no refill) is never kept there, so a later run with
 KiCad refills it.
 """
@@ -65,8 +65,8 @@ def key(path: Path | str, *, extra: bytes = b"") -> str:
 
 def folder(path: Path | str, board_key: str) -> Path:
     """Where what is made of the board at ``path`` with ``board_key`` (``key``) is kept: under its document in
-    the engine's document cache, ``<cache>/documents/<the file's document id>/kicad/<key>``, which deleting
-    the document removes with it (``registry.Registry.delete``)."""
+    the engine's document cache, ``<cache>/documents/<the file's document id>/kicad/<key>``, which forgetting
+    the document removes with it."""
     from cad.engine.ids import file_id
     from cad.engine.places import cache_dir
 

@@ -63,7 +63,10 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-async function open({ colorScheme = 'light', promptFiles = undefined as any, background = 'light' } = {}) {
+// What the pane copied: a Quick Edit's prompt among it.
+let copied: string[] = [];
+async function open({ colorScheme = 'light', background = 'light' } = {}) {
+  copied = [];
   const file = '/models/divider.kicad_sch';
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -84,11 +87,10 @@ async function open({ colorScheme = 'light', promptFiles = undefined as any, bac
   // The tab's settings: the viewport's Background (Light, the default, unless a test picks).
   const renderers = [createSchematicRenderer({ client, live, preferences: createCadPreferences({ initial: { viewportBackground: background as any } }) })];
   const host = {
-    promptFiles,
     files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 400, extension: 'kicad_sch' }) },
     navigation: { openFile: noop },
     environment: { colorScheme, locale: 'en' },
-    clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    clipboard: { writeText: async (text: string | Promise<string>) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => DESTINATION, subscribe: () => noop, deliver: async () => ({ status: 'copied', partIds: [] }) },
   };
   let latest: any = { renderers: {} };
@@ -382,8 +384,7 @@ it('the sheet is drawn in the viewport\'s theme: light in the dark app by defaul
 });
 
 it("a note on a pick hands over the view and its sheet, and no references: lighting them is a board's snapshot's alone", async () => {
-  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/divider.snapshot.json' })), read: vi.fn(), save: vi.fn() };
-  const view = await open({ promptFiles });
+  const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
   const controller = await controllerOf(view);
@@ -395,11 +396,11 @@ it("a note on a pick hands over the view and its sheet, and no references: light
   note.textContent = 'Make R1 10k.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  // `cad kicad_sch snapshot --job` refuses a packet's references (a schematic's still lights none), as the prompt-files
-  // route does any but a board's: a packet that named the pick would answer 400 and the note would not go.
-  const request = promptFiles.create.mock.calls[0][0] as any;
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { sheet: '/', border: true } })]);
-  expect(request).not.toHaveProperty('references');
+  await waitFor(() => expect(copied.at(-1)).toContain('Snapshot JSON (`cad snapshot --job`)'));
+  // `cad snapshot --job` refuses a packet's references (a schematic's still lights none): a packet that named
+  // the pick would not draw.
+  const packet = JSON.parse(/```json\n(.*)\n```/.exec(copied.at(-1)!)![1]);
+  expect(packet.jobs).toEqual([expect.objectContaining({ display: { sheet: '/', border: true }, outputs: [expect.objectContaining({ label: 'current view' })] })]);
+  expect(packet).not.toHaveProperty('references');
   view.dispose();
 });

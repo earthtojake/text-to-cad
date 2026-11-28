@@ -509,6 +509,20 @@ def written_by_build(path: Any) -> str | None:
     return None
 
 
+# The reader of each kind of file a model reads, as a refusal names the one to use instead.
+_READERS = {".xbf": "a model saved as a file with xbf.read", ".step": "a STEP with step.read",
+            ".stp": "a STEP with step.read", ".stl": "an STL with stl.read"}
+
+
+def refuse_other_file(path: Any, verb: str, *suffixes: str) -> None:
+    """Refuse a read of a file whose suffix is none of ``suffixes``, by name, with the reader that takes it."""
+    name = os.path.basename(os.fspath(path))
+    suffix = os.path.splitext(name)[1].lower()
+    if suffix not in suffixes:
+        raise ValueError(f"{verb} reads {' or '.join(f'an {item}' for item in suffixes)}, not {name}"
+                         + (f": read {_READERS[suffix]}" if suffix in _READERS else ""))
+
+
 def refuse_written(path: Any, verb: str) -> None:
     """Refuse a read, by a model of the build running on this thread, of a file the build writes
     (``written_by_build``): see the module."""
@@ -545,8 +559,7 @@ def read_xbf(path: Any) -> Any:
     from cad.engine.document import _read
 
     path = Path(os.fspath(path))
-    if path.suffix.lower() != ".xbf":
-        raise ValueError(f"xbf.read reads an .xbf, not {path.name}: read a STEP with step.read")
+    refuse_other_file(path, "xbf.read", ".xbf")
     refuse_written(path, "xbf.read")
     if not path.is_file():
         raise FileNotFoundError(f"no document {path}")
@@ -639,17 +652,13 @@ _READ_MESH: Any = None
 def read_mesh(path: Any) -> Mesh:
     """A mesh file (``MESH_SUFFIXES``: an ``.stl``) as data, never a shape (``Mesh``: its
     vertices, triangles and name, and ``bounding_box()``): what a model sizes or places B-rep
-    by. In a build the read is the model's own, keyed by the file's bytes as ``read_step``'s is
+    by. In a build the read is the model's own, keyed by the file's bytes as ``step.read``'s is
     (one of the closure's ``inputs``): a later build's read of the same bytes is this object, and
     a changed file runs the body that reads it. A file a model of the build writes is refused."""
     global _READ_MESH
     from pathlib import Path
 
-    suffix = Path(os.fspath(path)).suffix.lower()
-    if suffix not in MESH_SUFFIXES:
-        other = {".step": "a STEP with step.read", ".stp": "a STEP with step.read", ".xbf": "an xbf with xbf.read"}
-        raise ValueError(f"stl.read reads an .stl, not {Path(os.fspath(path)).name}"
-                         + (f": read {other[suffix]}" if suffix in other else ""))
+    refuse_other_file(path, "stl.read", *MESH_SUFFIXES)
     refuse_written(path, "stl.read")  # before the memo, as read_step's
     if _READ_MESH is None:
         from cad.engine.kernel.memo import wrap_function

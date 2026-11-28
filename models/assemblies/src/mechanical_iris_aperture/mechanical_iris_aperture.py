@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 from math import cos, degrees, radians, sin, tau
 from typing import Iterable
@@ -502,7 +502,7 @@ def _make_aperture_shadow():
     return _set_metadata(shadow.part, "dark_central_aperture_void_36mm_visual_shadow", APERTURE_BLACK)
 
 
-@model
+@xbf
 def mechanical_iris_aperture():
     """Return a labeled mechanical iris aperture assembly in millimeters."""
     parts = [

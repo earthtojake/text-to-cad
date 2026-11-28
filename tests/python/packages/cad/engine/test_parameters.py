@@ -16,46 +16,46 @@ from tests.python.support.paths import add_sources
 
 add_sources()
 
-from cad import model  # noqa: E402
+from cad import xbf  # noqa: E402
 from cad.engine import parameters  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 SCRIPT = """\
 # -- é: a byte beyond ASCII before the numbers, so a column is a byte, not a character
-from cad import model
+from cad import xbf
 from spec import PITCH
 
-WALL = model.param("wall", 2.0, min=1, max=5)
-HOLES = model.param(
+WALL = xbf.param("wall", 2.0, min=1, max=5)
+HOLES = xbf.param(
     "holes", -6, min=-12, max=-3)
-TWICE = model.param("twice", WALL * 2)
+TWICE = xbf.param("twice", WALL * 2)
 """
-SPEC = 'from cad import model\n\nPITCH = model.param("pitch", 30.0, unit="mm")\n'
+SPEC = 'from cad import xbf\n\nPITCH = xbf.param("pitch", 30.0, unit="mm")\n'
 
 
 class DeclaringTest(unittest.TestCase):
     def test_a_declaration_returns_its_default_and_is_refused_by_name_where_it_is_wrong(self) -> None:
-        self.assertIs(model.param, parameters.param, "cad.model.param is the function itself")
+        self.assertIs(xbf.param, parameters.param, "cad.xbf.param is the function itself")
         namespace: dict = {}
-        exec("from cad import model\nWALL = model.param('wall', 2.0, min=1, max=5, unit='mm')\n"
-             "HOLES = model.param('holes', 6, step=2)\n", namespace)
+        exec("from cad import xbf\nWALL = xbf.param('wall', 2.0, min=1, max=5, unit='mm')\n"
+             "HOLES = xbf.param('holes', 6, step=2)\n", namespace)
         self.assertEqual((namespace["WALL"], type(namespace["HOLES"])), (2.0, int))
         refused = {
-            "a bool": ("model.param('flag', True)", TypeError),
-            "not finite": ("model.param('wall', float('nan'))", ValueError),
-            "text": ("model.param('wall', '2')", TypeError),
-            "an unknown option": ("model.param('wall', 2.0, maximum=5)", TypeError),
-            "a unit outside the set": ("model.param('wall', 2.0, unit='in')", ValueError),
-            "min not below max": ("model.param('wall', 2.0, min=5, max=5)", ValueError),
-            "a default outside its range": ("model.param('wall', 9.0, max=5)", ValueError),
-            "a step not above zero": ("model.param('wall', 2.0, step=0)", ValueError),
-            "an integer's bound not whole": ("model.param('holes', 6, max=7.5)", ValueError),
-            "a name that is no identifier": ("model.param('Wall', 2.0)", ValueError),
-            "inside a function": ("def body():\n    return model.param('wall', 2.0)\nbody()", RuntimeError),
+            "a bool": ("xbf.param('flag', True)", TypeError),
+            "not finite": ("xbf.param('wall', float('nan'))", ValueError),
+            "text": ("xbf.param('wall', '2')", TypeError),
+            "an unknown option": ("xbf.param('wall', 2.0, maximum=5)", TypeError),
+            "a unit outside the set": ("xbf.param('wall', 2.0, unit='in')", ValueError),
+            "min not below max": ("xbf.param('wall', 2.0, min=5, max=5)", ValueError),
+            "a default outside its range": ("xbf.param('wall', 9.0, max=5)", ValueError),
+            "a step not above zero": ("xbf.param('wall', 2.0, step=0)", ValueError),
+            "an integer's bound not whole": ("xbf.param('holes', 6, max=7.5)", ValueError),
+            "a name that is no identifier": ("xbf.param('Wall', 2.0)", ValueError),
+            "inside a function": ("def body():\n    return xbf.param('wall', 2.0)\nbody()", RuntimeError),
         }
         for what, (code, kind) in refused.items():
             with self.subTest(what), self.assertRaises(kind) as caught:
-                exec("from cad import model\n" + code, {})
+                exec("from cad import xbf\n" + code, {})
             if what == "an unknown option":
                 self.assertIn("min, max, step, unit", str(caught.exception))
 
@@ -95,7 +95,7 @@ class RecordingTest(unittest.TestCase):
         self.assertIsNone(declared["twice"].span, "an expression has no bytes to write")
         self.assertEqual((declared["holes"].kind, declared["holes"].line), ("int", 6))
         with self.assertRaises(ValueError) as caught:  # one name, two declarations: both named
-            self.script.write_text(SCRIPT + 'AGAIN = model.param("wall", 3.0)\n', encoding="utf-8")
+            self.script.write_text(SCRIPT + 'AGAIN = xbf.param("wall", 3.0)\n', encoding="utf-8")
             self.load()
         self.assertRegex(str(caught.exception), r"bracket\.py:5 and .*bracket\.py:9")
 
@@ -109,14 +109,13 @@ class RecordingTest(unittest.TestCase):
         self.assertEqual(listed[1], {"name": "wall", "value": 2.0, "kind": "float", "min": 1, "max": 5, "step": None,
                                      "unit": None})
         live = {"script": str(self.script), "rows": list(rows.values())}
-        served = {row["name"]: row for row in parameters.served(listed, model=True, live=live)}
+        served = {row["name"]: row for row in parameters.served(listed, live=live)}
         self.assertEqual({name: (row["writable"], row["reason"], row["source"]) for name, row in served.items()},
                          {"pitch": (False, "shared", "spec.py"), "wall": (True, None, "bracket.py"),
                           "holes": (True, None, "bracket.py"), "twice": (False, "expression", "bracket.py")})
-        self.assertEqual({row["reason"] for row in parameters.served(listed, model=False, live=None)}, {"file"})
-        self.assertEqual({(row["reason"], row["source"]) for row in parameters.served(listed, model=True, live=None)},
+        self.assertEqual({(row["reason"], row["source"]) for row in parameters.served(listed, live=None)},
                          {("no_worker", None)})
-        self.assertEqual(parameters.served(None, model=True, live=live), [])
+        self.assertEqual(parameters.served(None, live=live), [])
 
     def test_a_change_is_checked_spelled_and_written_at_its_bytes_alone(self) -> None:
         rows = self.rows()
@@ -170,17 +169,17 @@ class RecordingTest(unittest.TestCase):
 
     def test_a_literal_that_is_not_one_declaration_s_alone_has_no_span(self) -> None:
         cases = {
-            "a loop": "for name in ('a', 'b'):\n    model.param(name, 1)\n",
-            "a comprehension": "X = [model.param(f'x{i}', 1) for i in range(2)]\n",
+            "a loop": "for name in ('a', 'b'):\n    xbf.param(name, 1)\n",
+            "a comprehension": "X = [xbf.param(f'x{i}', 1) for i in range(2)]\n",
             "a coding that is not UTF-8": None,
         }
         for what, code in cases.items():
             with self.subTest(what):
                 if code is None:
-                    self.script.write_bytes("# -*- coding: latin-1 -*-\nfrom cad import model\ns = 'ééé'\n"
-                                            "A = model.param('a', 1)\n".encode("latin-1"))
+                    self.script.write_bytes("# -*- coding: latin-1 -*-\nfrom cad import xbf\ns = 'ééé'\n"
+                                            "A = xbf.param('a', 1)\n".encode("latin-1"))
                 else:
-                    self.script.write_text("from cad import model\n" + code, encoding="utf-8")
+                    self.script.write_text("from cad import xbf\n" + code, encoding="utf-8")
                 try:
                     declared = self.load()
                 except RuntimeError:  # before 3.12 a comprehension is a function of its own: refused

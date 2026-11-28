@@ -127,7 +127,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    output folder after the process was killed mid-draw. They should live under the
    system temp folder, or be swept on the next run.
 
-4. **`cad model inspect <id>` prints every occurrence path of every material on one
+4. **`cad inspect <id>` prints every occurrence path of every material on one
    line.** For this model that is one line of several hundred paths per material, about
    50 kB to say twelve numbers. Cap the list (first three, "and 847 more") unless asked.
 
@@ -191,7 +191,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     carries) and read it in `mirror_tree`. The build line said `lib/kit.py` had changed
     and rebuilt in seconds, and the right-hand drives were still placed the old way, 6
     degrees off their bolt holes: the memo's hits handed back shapes made before the
-    change, without the attribute. `cad stop` and `cad delete` did not clear it (the
+    change, without the attribute. `cad server stop` and deleting the document did not clear it (the
     bodies came back from the disk cache under the same key); a further edit on a fresh
     worker did, 174 s cold. A check of the brackets against the drives found it, not the
     build. A memo hit should not survive a change to the function that made the shape, or
@@ -233,7 +233,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    too) is right, and the plugin offers the primitive, but an assembly of 851 parts has
    thousands of near pairs, poses, a mirrored side, and solids that take 0.3 to 40 s
    each to intersect. I wrote that machinery twice, and the first version was wrong
-   (above). A built-in `cad model check interference [--pose NAME | --sweep JOINT]`,
+   (above). A built-in `cad inspect FILE --interference [--pose NAME | --sweep JOINT]`,
    exact, pruned by boxes, parallel, with fits declared by name, would be the single
    most valuable addition for assemblies. Even a documented, tested helper would do.
    For scale: this model has 1,353 pairs of parts whose boxes meet as built (leaving out
@@ -241,7 +241,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
    pair (a lofted back plate against the frame under it) four minutes by itself, so a
    check needs a per-pair time limit and must report what it could not measure.
 
-12. **A motion cannot be drawn.** `cad model snapshot` takes a pose, not a
+12. **A motion cannot be drawn.** `cad snapshot` takes a pose, not a
    configuration sequence and a time, and has no frame output. To review the gait I
    recomputed each frame's joint values in my own code and called the command sixty
    times. `--motion walk --at 0.6`, or `--frames 30` into a folder, would make motion
@@ -274,14 +274,14 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 
 17. **A worker retired for memory makes the next run cold without saying so.** With the
     default 3.9 GB budget the 1.2 GB worker of a 68 s model was retired several times
-    (`retired: galatea.py (RSS)` in `cad status`). The next `cad run` just reports
+    (`retired: galatea.py (RSS)` in `cad server status`). The next `cad run` just reports
     `cold in 67.73s`. Say why in the run's own line, and name `CAD_ENGINE_MEMORY_MB`.
 
 18. **Loft seams are drawn as edges in shaded pictures.** Every lofted skin shows a line
     where its sections close. I rotated each seam under a cut-out. An option to draw
     only sharp edges would be the real fix.
 
-19. **A still for a person needs a studio, and the command line has none.** `cad model
+19. **A still for a person needs a studio, and the command line has none.** `cad
     snapshot` draws "technical OCCT images": flat light, no shadow, no reflection, so a
     gloss-black part is a black silhouette and a white one has no form but its edges. The
     viewer has a photographic Preview, but a checkout serves no built client (the page is
@@ -300,7 +300,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     size together passed the machine's memory, and the kernel killed the robot's worker
     mid-picture (`the worker for galatea.py exited (-9) ... Drawing the picture`: the
     message is exact). Its memo went with it: the next build was 133 s cold instead of
-    22 s. `cad status` could show each worker's memory against the budget, and the
+    22 s. `cad server status` could show each worker's memory against the budget, and the
     engine could refuse a new job rather than lose a warm worker.
 
 22. **A snapshot's background is clear or white, nothing else.** `output` takes
@@ -339,7 +339,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 31. **The skill says to keep a vendor's STEP beside the model; this repository keeps no
     CAD file in Git.** The five drives are 53 MB. What reconciles the two is a fetch
     script that names the maker's commit and each file's checksum, and an ignored
-    `vendor/` folder. A `cad step fetch <url> --sha256 ...` (or a documented pattern for
+    `vendor/` folder. A `cad fetch <url> --sha256 ...` (or a documented pattern for
     it) would make that the path of least effort, and the build's error for a missing
     xbf could name the command.
 
@@ -429,7 +429,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     on one foot still fall, for a reason no path answers (entry 48). What would have helped: a word in the skill where it tells a
     robot's builder to fix the base link ("the fixed link is a choice of frame: a motion
     written under it needs checking in the frame of whatever the robot stands on"); a
-    `plant=<link>` on `cad model snapshot` and on the viewer's playbar, so that a motion
+    `plant=<link>` on `cad snapshot` and on the viewer's playbar, so that a motion
     can be watched standing on a foot; and, further off, a sequence that names a second
     link to keep still and solves the chain between.
 
@@ -472,7 +472,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     A link's mass needs each part's density, and a simulator's meshes each part's look.
     The way that works is `handle.shape`: every solid of the robot transferred into the
     script (8 s, 1.5 GB resident) to read `node.material` off 689 leaves.
-    `cad model inspect <id> --query structure --json` has density by label in 3 s, but
+    `cad inspect <id> --query structure --json` has density by label in 3 s, but
     not the look, and there is no Python call for either. `inspect` also gives a part's
     volume, mass and bounds and stops there: a robot description needs the centre of
     mass and the inertia tensor too, and `references/inertials.md` itself says the
@@ -484,7 +484,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     assembly of 73 links with its joints in the document, so the engine knows each
     link's parts and the joint that carries it, and the sim's `mjcf.py` regroups the
     GLB's nodes by link and moves each into its joint's frame in a hundred lines.
-    `cad model export <id> --links DIR` (one mesh per link in the frame of the joint
+    `cad export <id> --links DIR` (one mesh per link in the frame of the joint
     that carries it, optionally one per material) is the export a robot description
     needs, for URDF as much as MJCF. (b) A mesh export can only get finer:
     `export(tolerance=, angle=)` "meshes again at the finer of each". A simulator wants
@@ -530,7 +530,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
     reach: a software rasteriser at niceness 19 still cost a four-core Cycles render
     beside it about a third of its speed (niceness shares out processor time, not the
     caches or the memory's bandwidth), and nothing told the session that started it that
-    another session's long job had the machine. A line in `cad status` for the programs
+    another session's long job had the machine. A line in `cad server status` for the programs
     `cad run` has running, with their start times, would have.
 
 48. **The robot-simulation skill has nothing on standing.** `references/guardrails.md`
@@ -568,7 +568,7 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   `overlap_volume` on two of its solids is exact and takes seconds.
 - The build line's delta (`bounds 627 x 419 x 1,745 (was 585 x 569 x 1,745)`) caught
   two unintended changes on the spot.
-- `cad status`: one screen that says what every worker is doing and why one went away.
+- `cad server status`: one screen that says what every worker is doing and why one went away.
 - Exports: a GLB with eight animation clips in 13 s, a 67 MB STEP in 5 s.
 - Snapshot `isolated`, `pose` and `transparent` cover most review pictures without
   touching the model, and a camera preset frames the isolated parts, so "this link alone
@@ -583,8 +583,8 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
   for the housings, then twenty minutes of the build line's part count and the exact
   check saying which brackets no longer fitted. A parametric model in a real language is
   what made a change of that size affordable in an afternoon.
-- A maker's STEP into the model: `cad step export RS04.stp RS04.xbf` once, then
-  `xbf.read` in the build, and `cad step inspect` and `cad step snapshot` to find a
+- A maker's STEP into the model: `cad export RS04.stp RS04.xbf` once, then
+  `model.read` in the build, and `cad inspect` and `cad snapshot` to find a
   mounting face and a bolt circle on it. Five drives were in the robot, aligned and
   mirrored, in an afternoon, and their real shapes found five interferences my cans
   drawn from the datasheet had hidden.
@@ -598,10 +598,10 @@ check" below: the plugin leaves the hardest part of that sentence to the agent.
 - The exploded view as an `animation()` on the model: 73 link channels, a radial
   `.explode` per link and a slide per skin, written in sixty lines, rebuilt in 2.4 s, and
   there in the GLB as a clip that `cad.blender` plays like any motion.
-- `cad model snapshot --job` with a list of jobs draws the viewer's own display modes
+- `cad snapshot --job` with a list of jobs draws the viewer's own display modes
   (`solid` with the grid, `parts`, `xray`, `exploded`) at any pose from any camera:
   120 frames of plain CAD footage for the film from one short script, 3.7 s a frame.
-- A pose can be looked at before the model has it: `cad model snapshot --job` with
+- A pose can be looked at before the model has it: `cad snapshot --job` with
   `jointValues` drew sixteen pictures of eight new poses on the document the engine
   already held, in 66 s, while the sources were mid-edit and a render had the machine.
 - A motion as dense samples: five motions of 40 to 63 waypoints, 72 joints each, went
@@ -665,7 +665,7 @@ that did not hold as written, and what a reader should take from them instead.
   `CAD_ENGINE_MEMORY_MB` is the documents' budget, not the workers' cap.
 - **18.** `--display shaded` draws no edges at all. The seam line is in `solid`, the default, and
   in the x-ray, hidden-line and wireframe modes.
-- **21.** `cad status` already shows each worker's memory and the total against the cap. The `-9`
+- **21.** `cad server status` already shows each worker's memory and the total against the cap. The `-9`
   was the system's out-of-memory killer, which the engine's cap does not see coming: it counts its
   own workers, not a `cad run` program or a check's processes.
 - **26.** More than a line beside `handle.shape`: the skill's own `world_parts` helper called
@@ -676,7 +676,7 @@ that did not hold as written, and what a reader should take from them instead.
   its label first (`galatea/lumbar_yoke`). The refusal listed the paths without that label, the
   first of which was the refused name itself, which is what hid it.
 - **43.** A part's density was to be had without its solids, from Python:
-  `cad.model.inspect(id, query="structure")["summary"]["materials"]`. A centre of mass and an
+  `cad.inspect(handle, query="structure")["summary"]["materials"]`. A centre of mass and an
   inertia tensor of several parts at their own densities is `cad.build123d.mass_properties`. The
   look's name is still not there.
 
@@ -688,7 +688,7 @@ that did not hold as written, and what a reader should take from them instead.
   shapes made before it (25). The build's line counts the calls that ran uncached and says why a
   body is not retained (32), and a cold run whose worker was retired says why (17). A worker
   holding an older state takes the document another environment's worker built (42).
-- `cad model interference "$ID"`: every pair of parts whose boxes meet, measured exactly, as built
+- `cad inspect "$ID" --interference`: every pair of parts whose boxes meet, measured exactly, as built
   and at the poses, states and sequences asked, the named fits apart, a pair it could not measure
   said and never passed (11).
 - `hidden` and `isolated` take globs (`*skin*`, `*/skin_screw`), and a name an assembly shares with

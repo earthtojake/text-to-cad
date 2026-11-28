@@ -24,32 +24,32 @@ from tests.python.support.paths import add_sources
 add_sources()
 
 from cad.engine import api, client  # noqa: E402
-from cad.engine.ids import model_id  # noqa: E402
+from tests.python.support.ids import model_id  # noqa: E402
 from cad.engine.parameters import ParameterRefused  # noqa: E402
 
 SCRIPT = """\
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from spec import PITCH
 
-WALL = model.param("wall", 2.0, min=1, max=5)
-HOLES = model.param("holes", 6, min=3, max=12)
+WALL = xbf.param("wall", 2.0, min=1, max=5)
+HOLES = xbf.param("holes", 6, min=3, max=12)
 
 
-@model
+@xbf
 def bracket():
     if WALL > 4.5:
         raise ValueError(f"a wall of {WALL} leaves no room for the holes")
     return bd.Box(PITCH, 10 + HOLES, WALL)
 
 
-@model
+@xbf
 def plate():
     # Reached through globals(): its key falls back to the module's bytes, which a preview leaves as they are.
     return bd.Box(10, 10, globals()["WALL"])
 """
-SPEC = 'from cad import model\n\nPITCH = model.param("pitch", 30.0, unit="mm")\n'
+SPEC = 'from cad import xbf\n\nPITCH = xbf.param("pitch", 30.0, unit="mm")\n'
 
 
 class PreviewCase(unittest.TestCase):
@@ -179,11 +179,14 @@ class PreviewTest(PreviewCase):
         self.assertEqual(self.call("POST", route, {"values": {"wall": 3}, "page": "../x"})[0], 400)
         self.assertEqual(self.call("POST", route, {"values": {"wall": 3}, "page": "p", "path": "x"})[0], 400)
         self.assertEqual(self.call("GET", route)[0], 405)
-        self.assertEqual(self.call("POST", f"xbf/{self.ident}/preview", {"values": {}, "page": "p"})[0], 404)
+        self.assertEqual(self.call("POST", f"step/{self.ident}/preview", {"values": {}, "page": "p"})[0], 404)
+        # ``xbf``, the kind a model's file had, answers as the model's.
+        self.assertEqual(self.call("POST", f"xbf/{self.ident}/preview", {"values": {}, "page": "p"}),
+                         self.call("POST", route, {"values": {}, "page": "p"}))
 
     def test_a_document_no_live_worker_built_is_not_previewed(self) -> None:
         self.assertTrue(api.stop())
-        engine_daemon.start()  # the document read from the engine's cache, served: no worker built it
+        engine_daemon.start()  # the document read from its .xbf, served: no worker built it
         client.request({"op": "serve", "path": self.ident}, start=False)
         self.serving = client.request({"op": "status"}, start=False)["serving"]
         self.token = client.request({"op": "http"}, start=False)["token"]

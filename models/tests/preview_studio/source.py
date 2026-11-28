@@ -10,7 +10,7 @@ import build123d as bd
 from bd_materials import FinishedMaterial, glass, metals
 from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
-from cad import model, paint
+from cad import xbf, paint
 
 
 def coating(name, **values):
@@ -62,7 +62,7 @@ def socket_screw():
     return finish(body - recess, "socket_cap_screw", STEEL)
 
 
-@model
+@xbf
 def machined_bearing_housing():
     body = rounded_plate(108, 78, 20, 5)
     body = bd.fillet(body.edges().filter_by(bd.Axis.Z, reverse=True), 0.8)
@@ -84,7 +84,7 @@ def machined_bearing_housing():
     return bd.Compound(children=[body, bearing, seal, *screws], label="machined_bearing_housing")
 
 
-@model
+@xbf
 def painted_pressure_regulator():
     housing = bd.Cylinder(30, 51, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     housing += bd.Pos(0, 0, 7) * rounded_plate(69, 49, 8, 7)
@@ -116,7 +116,7 @@ def painted_pressure_regulator():
     return bd.Compound(children=[housing, knob, *ports, bezel, dial, *ticks, needle, crystal, *screws], label="painted_pressure_regulator")
 
 
-@model
+@xbf
 def glass_sample_vessel():
     shell = bd.Cylinder(31, 72, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     shell -= bd.Pos(0, 0, 3) * bd.Cylinder(28, 71, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -136,7 +136,7 @@ def glass_sample_vessel():
     return bd.Compound(children=[shell, liquid, *contents, lid, seal], label="glass_sample_vessel")
 
 
-@model
+@xbf
 def mixed_material_instrument():
     enclosure = rounded_plate(116, 82, 24, 7)
     enclosure -= bd.Pos(0, 0, 3) * rounded_plate(108, 74, 24, 5)

@@ -3,6 +3,7 @@ import {
   PARAMETER_REASONS, PARAMETER_REFUSALS, changedParameters, formatParameterValue, parameterIsRanged, parameterStep, parameterValue,
   sameParameterValue, savedParametersNote, settledDrafts, unsavedParametersNote, xbfParameters
 } from "@cad/core/lib/xbf/xbfParameters.js";
+import { documentKind } from "@cad/core/lib/fileFormats.js";
 import { Button } from "@cad/ui/primitives/button";
 import { Spinner } from "@cad/ui/primitives/spinner";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
@@ -61,8 +62,8 @@ const pageToken = () => {
   return `page-${random}`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
 };
 // A reason that is the whole document's, not one parameter's: said once, over the list, in this order
-// (a file's before anything else; a script no worker holds before a view that could not save anyway).
-const DOCUMENT_REASONS = ["file", "no_worker", "unavailable"];
+// (a script no worker holds before a view that could not save anyway).
+const DOCUMENT_REASONS = ["no_worker", "unavailable"];
 // A parameter's row: its name takes the room, and its value a column at the right, ending on the panel's line.
 const ROW_COLUMNS = "grid-cols-[minmax(0,1fr)_5.5rem]";
 const FOOT_MARKS = Object.freeze({ "data-parameters-foot": "" });
@@ -144,7 +145,7 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
   const structure = document?.structure || null;
   const parameters = useMemo(() => xbfParameters(structure), [structure]);
   // Only a model has a script to write: the engine says so of every parameter of any other document.
-  const model = document?.source?.kind === "model" ? String(document.source.doc || "") : "";
+  const model = documentKind(document?.source?.kind) === "xbf" ? String(document.source.doc || "") : "";
   // A host that cannot make the request leaves the client's method out: its view shows the values alone.
   const savable = Boolean(model) && typeof client?.setModelParameters === "function";
   const previewable = savable && typeof client?.previewModelParameters === "function";
@@ -419,7 +420,7 @@ export function useXbfParameters({ client, document, onPreview = null, onEdit = 
   }), []);
 
   return useMemo(() => ({ parameters, drafts: state.drafts, changed, dirty: Object.keys(changed).length > 0, saving: state.saving, saved: state.saved,
-    error: state.error, locked: state.locked, ofModel: Boolean(model), savable, setDraft, commit, reset, save, notes }),
+    error: state.error, locked: state.locked, savable, setDraft, commit, reset, save, notes }),
   [parameters, state.drafts, state.saving, state.saved, state.error, state.locked, changed, model, savable, setDraft, commit, reset, save, notes]);
 }
 
@@ -445,11 +446,10 @@ export default function XbfParametersSection({ parameters: model }) {
   const { parameters, drafts, saving, savable } = model;
   // The panel's search covers its tree-like tabs alone, never Parameters: every parameter is shown.
   const shown = parameters;
-  // Why a parameter is not set here: the engine's reason; a document that is no model's (a file,
-  // whatever it says); or this view's own (a host that cannot save).
-  const reasonOf = parameter => (!parameter.writable ? parameter.reason || "unknown" : !model.ofModel ? "file" : savable ? "" : "unavailable");
+  // Why a parameter is not set here: the engine's reason, or this view's own (a host that cannot save).
+  const reasonOf = parameter => (!parameter.writable ? parameter.reason || "unknown" : savable ? "" : "unavailable");
   const reasons = parameters.map(reasonOf);
-  // A reason that is the document's own (a file, a model whose script no worker holds, a view that cannot
+  // A reason that is the document's own (a model whose script no worker holds, a view that cannot
   // save), or a refusal that says the same (the script changed or ran out since it ran): every control is
   // off, and Save says why. A parameter's own (declared elsewhere, computed) is said on its control.
   const documentReason = DOCUMENT_REASONS.find(reason => reasons.includes(reason)) || "";
@@ -458,11 +458,11 @@ export default function XbfParametersSection({ parameters: model }) {
     : t(`parameters.reason.${[...PARAMETER_REASONS, "unavailable"].includes(reason) ? reason : "unknown"}`));
   const editable = reasons.some(reason => !reason);
   const error = model.error;
-  // Why nothing in the tab can work, where that is so: a file's document, a script no worker holds (its reason,
+  // Why nothing in the tab can work, where that is so: a script no worker holds (its reason,
   // or a refusal that found it), a script changed since it ran. Said once, as the foot's status, in place of
   // "Saved"; Save is simply off then, with no hint of its own.
   const blockedBy = saving ? ""
-    : documentReason === "file" || documentReason === "no_worker" ? documentReason
+    : documentReason === "no_worker" ? documentReason
     : locked?.code === "no_worker" || error?.code === "script_changed" ? (locked || error).code
     : "";
   const blocked = blockedBy ? t(blockedBy === "script_changed" ? "parameters.error.script_changed" : `parameters.reason.${blockedBy}`) : "";

@@ -16,14 +16,14 @@ and edits through its IPC API. There is no board model or build step; the files 
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| Read a board or a schematic | `kicad_pcb.read`, `kicad_sch.read` in a script; `cad kicad_pcb inspect` | [Checks](references/checks.md), [schematic](references/schematic.md#read-it) |
-| Draw or edit a schematic | `kicad_sch.edit`, then `cad kicad_sch erc` | [Schematic](references/schematic.md) |
+| Read a board or a schematic | `kicad_pcb.read`, `kicad_sch.read` in a script; `cad inspect board.kicad_pcb` | [Checks](references/checks.md), [schematic](references/schematic.md#read-it) |
+| Draw or edit a schematic | `kicad_sch.edit`, then `cad kicad erc` | [Schematic](references/schematic.md) |
 | Choose parts and footprints | The datasheet, then the project's libraries | [Parts](references/parts.md) |
 | Create or edit a board | `kicad_pcb.edit` ([below](#native-files-are-the-source)) | [Native files](references/board-api.md) |
 | Place and route | The schematic's netlist, one functional group at a time | [Layout](references/layout.md), [placement](references/placement.md) |
-| Check a change | `cad kicad_pcb drc`, snapshots | [Check each change](#check-each-change) |
+| Check a change | `cad kicad drc`, snapshots | [Check each change](#check-each-change) |
 | Review before ordering | DRC, then measurements, then the checklist | [Before ordering](#before-ordering) |
-| Export fabrication files, a BOM, or a STEP for an enclosure | `cad kicad_pcb export`, `cad kicad_sch export` | [Manufacturing](references/manufacturing.md) |
+| Export fabrication files, a BOM, or a STEP for an enclosure | `cad export board.kicad_pcb DST [--as KIND]` | [Manufacturing](references/manufacturing.md) |
 | Show a board or a schematic; what the person can see or pick in it; a missing 3D model | `cad viewer --json FILE` | [Show the model](#show-the-model), [views](references/views.md) |
 
 ## Setup
@@ -70,6 +70,7 @@ the block changed it; a block that raises saves nothing. `kicad_sch.edit` does t
 ([schematic](references/schematic.md#edit-it)). Run the script with `cad run board.py`:
 
 ```python
+import cad
 from cad import kicad_pcb
 from kicode.util.units import from_mm
 
@@ -81,11 +82,14 @@ with kicad_pcb.edit(BOARD) as b:       # the board file is the source; the block
         track.width = from_mm(0.8)
     b.update_items(power)
     b.refill_zones()
-drc = kicad_pcb.drc(BOARD)
+drc = cad.kicad.drc(BOARD)
 if not drc.ok:
     raise SystemExit("\n".join(drc.human_lines()))  # each finding, then FAILED and the count
-for kind in ("gerbers", "drill", "pos", "bom", "step"):
-    kicad_pcb.export(BOARD, to=kind, out=f"fab/{kind}")
+for kind in ("gerbers", "drill"):                  # several files each: into a folder, as_ naming which
+    cad.export(BOARD, f"fab/{kind}/", as_=kind)
+for kind in ("pos", "bom"):                        # a .csv is either: as_ names which
+    cad.export(BOARD, f"fab/{kind}.csv", as_=kind)
+cad.export(BOARD, "fab/board.step")                # one file, its kind by its suffix
 ```
 
 - **State the result, not the change**: "U1 is at (10, 20)", "the power tracks are 0.8 mm", never
@@ -125,12 +129,12 @@ Check the saved board after every step, from the revision you will hand over:
 
 | The change | Check it with |
 | --- | --- |
-| The schematic | `cad kicad_sch erc board.kicad_sch`, and `cad kicad_sch snapshot board.kicad_sch tmp/sheet.png --sheet /Power/` for each sheet changed |
+| The schematic | `cad kicad erc board.kicad_sch`, and `cad snapshot board.kicad_sch tmp/sheet.png --sheet /Power/` for each sheet changed |
 | Board against schematic | The pin-by-pin comparison in [schematic](references/schematic.md#into-the-board-and-back): every pad on its schematic pin's net |
-| Anything on the board | `cad kicad_pcb drc board.kicad_pcb` (`--json`): KiCad's DRC against the board's own rules. It exits 1 on errors or unconnected items; unconnected items are the routing still to do |
-| Placement | `cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`: short, uncrossed ratsnest lines mean a group is placed well |
+| Anything on the board | `cad kicad drc board.kicad_pcb` (`--json`): KiCad's DRC against the board's own rules. It exits 1 on errors or unconnected items; unconnected items are the routing still to do |
+| Placement | `cad snapshot board.kicad_pcb tmp/placement.png --display placement`: short, uncrossed ratsnest lines mean a group is placed well |
 | Routing | The layout's [property script](references/layout.md#a-property-check): segments off 45 degrees, detours, width for current |
-| How copper and silkscreen look | `cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper` ([more views](references/views.md#board-snapshots)) |
+| How copper and silkscreen look | `cad snapshot board.kicad_pcb tmp/copper.png --display copper` ([more views](references/views.md#board-snapshots)) |
 | Ready to order | The review below |
 
 - Warnings count: KiCad's silkscreen, mask and courtyard rules are warnings, and they are what a fab's
@@ -184,19 +188,28 @@ unless the person says to go ahead, and the report then names every error they w
 
 Show the person each model you create or change as soon as its first run succeeds, and any model
 or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
-that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
-the first of these you have:
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Once per project,
+before the first page you show from it, run `cad viewer --json FOLDER` with the project's folder: it
+opens that folder as a project, so the person reaches its other models and files from any one of
+them. Show a page with the first of these you have:
 
-1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
-   absolute path; its description says the rest.
+1. `cad_show` among your tools (your host may prefix it): call it with the absolute path of the model's
+   `.xbf` or of the file; its description says the rest.
 2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
    Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
    open the page there yourself, and give the person the link as well.
-3. Neither: give the person the link, to open in their browser.
+3. Neither, and the person is at this computer: give them the link, to open in their browser.
+4. They are not (you run in a cloud sandbox, or they are on a phone): share it, `cad share FILE` (a
+   model's `.xbf`), and give them the view link it prints; share it again after each change. The first
+   share on a computer is refused until the person agrees: pass on what it says, and run it again with
+   `--yes` once they have.
 
 The page follows every run of the model. A file you export is a download: give its path. Showing is
-for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
+for the person: to check your own work, review with `cad snapshot`, never a screenshot
 of the page. If it fails to launch, say so.
+
+A shared board opens in 2D. For its 3D, run `cad export board.kicad_pcb board.glb`, then `cad share board.glb`.
+An import of the board's share gets the whole project, its 3D models included.
 
 What the board and schematic pages offer the person (layers, selection, 3D, part models), and what
 they approximate, is in [views](references/views.md).

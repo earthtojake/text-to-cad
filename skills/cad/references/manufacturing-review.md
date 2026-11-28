@@ -20,8 +20,8 @@ part as it stands there, and a part used several times each way it stands (a pri
 molding's draft turn with it): an occurrence turned another way has findings of its own, at its own
 ref, and the totals count every occurrence.
 
-In a check script the same check is `cad.model.dfm(handle, ...)`, `cad.step.dfm(path, process=...)`
-or, on a live build123d shape, `cad.build123d.dfm(shape, process=...)`. The options go by name, numbers
+In a check script the same check is `cad.dfm(handle, ...)`, `cad.dfm(path, process=...)`
+or, on a live build123d shape, `cad.dfm(shape, process=...)`. The options go by name, numbers
 as numbers (`tools=[3, 6]`, `strict=True`), and the result is data: `result.status`, `.findings`,
 `.measurements`.
 
@@ -38,7 +38,7 @@ figures and cite it. Where two specifications conflict, record both rather than 
 
 ## Read the result
 
-`cad model dfm "$ID" --tools 3,6,10`, on a plate whose pocket corners are 0.5 mm:
+`cad dfm plate.xbf --tools 3,6,10`, on a plate whose pocket corners are 0.5 mm:
 
 ```text
 error: cnc.internal_corner_radius, 4 place(s). Hint: radius the corner to at least 1.5 mm, the smallest tool's radius, or add a smaller tool. Source: Protolabs Network (Hubs), How to design parts for CNC machining.
@@ -53,9 +53,9 @@ any other finding is one line. The last line is the check's state, and so is the
 
 | Last line | Exit | `status` | It says |
 | --- | --- | --- | --- |
-| `OK <id>: [N warning(s); ]<what was measured>` | 0 | `ok` | every part was measured and no finding is an error. Not an approval: warnings (recommendations, cost, risk) and rules not evaluated remain |
-| `FAILED <id>: E error(s)[, W warning(s)]; <what was measured>; failed: <code> xN, ...` | 1 | `failed` | a finding is an error: the part cannot be made by this process as drawn. With `--strict`, a warning fails too |
-| `NOT CHECKED <id>: <code> ...` | 3 | `not_checked` | the check did not judge what it was asked to: never a pass, never "no findings" |
+| `OK <file>: [N warning(s); ]<what was measured>` | 0 | `ok` | every part was measured and no finding is an error. Not an approval: warnings (recommendations, cost, risk) and rules not evaluated remain |
+| `FAILED <file>: E error(s)[, W warning(s)]; <what was measured>; failed: <code> xN, ...` | 1 | `failed` | a finding is an error: the part cannot be made by this process as drawn. With `--strict`, a warning fails too |
+| `NOT CHECKED <file>: <code> ...` | 3 | `not_checked` | the check did not judge what it was asked to: never a pass, never "no findings" |
 
 Exit 2 (`"status": "usage"`) is the command refused. Its message says the fix, which is in the
 command, not the part.
@@ -97,8 +97,8 @@ why nothing was judged, not that the part fails.
   (`cnc.material_assumed`, `resin_unknown`, `sheet.k_factor_assumed`: report it), `several_solids`
   (a warning: one part of several solids, its message saying how the process read them) and
   `several_bodies` (several parts, every occurrence counted).
-- **The place and the figures.** Resolve a ref with `cad model inspect "$ID" '<ref>'`, a file's
-  with `cad step inspect part.step '<ref>'`. The figures behind a finding are
+- **The place and the figures.** Resolve a ref with `cad inspect plate.xbf '<ref>'`, a file's
+  with `cad inspect part.step '<ref>'`. The figures behind a finding are
   `measurements.<family>.items`, worst first.
 - **What was not judged.** `measurements.rules.outcomes` has one entry for every rule, failed or
   not: `rule`, `status`, `limit` (for this part's options), `source`, `reason` and `failures`, each

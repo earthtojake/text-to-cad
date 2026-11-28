@@ -1,6 +1,6 @@
-"""The library's engine stands alone: it imports nothing of the packages but itself and the document type
+"""The library's engine stands alone: it imports nothing of the packages but itself, the document type
 registry (``cad.registry``, with the producers it gathers: which producer makes a model's files of what
-its body returned), and a build loads nothing of them beyond what importing the library itself loads. The engine's modules the server runs
+its body returned) and the table of earlier spellings (``cad._internal.aliases``), and a build loads nothing of them beyond what importing the library itself loads. The engine's modules the server runs
 -- the daemon, the registry, the live models' book, the document cache and the verbs as commands --
 are the server's (``cad_server.engine``, ``test_core_imports``), which takes its application and
 telemetry from its own composition root."""
@@ -36,8 +36,11 @@ def library_files() -> list[Path]:
     return sorted(ENGINE.rglob("*.py"))
 
 
-# The library's modules the engine reads beside itself: the registry and the producers it gathers.
-REGISTRY = {"cad.registry", "cad.build123d", "cad.build123d._producers", "cad.kicad", "cad.kicad._producers"}
+# The library's modules the engine reads beside itself: the registry and the producers it gathers, and the table of
+# the library's earlier spellings (the standard library alone), which the engine's own (``cad.engine.xbf``) answer
+# through, as every module's do.
+REGISTRY = {"cad.registry", "cad.build123d", "cad.build123d._producers", "cad.kicad", "cad.kicad._producers",
+            "cad._internal.aliases"}
 
 
 def ours_beyond_the_engine(name: str) -> bool:
@@ -94,9 +97,9 @@ class StandaloneTest(unittest.TestCase):
             script = Path(folder) / "part.py"
             script.write_text(textwrap.dedent("""
                 import build123d as bd
-                from cad.engine import xbf, step, stl
+                from cad.engine import model, step, stl
 
-                @xbf("XBF/part.xbf")
+                @model("XBF/part.xbf")
                 @step("part.step")
                 @stl("part.stl")
                 def part():

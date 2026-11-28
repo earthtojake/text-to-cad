@@ -6,20 +6,20 @@ A script declares a model's parameters at a module's top level (law 30), and goe
 they return:
 
 ```python
-from cad import model
+from cad import xbf
 import build123d as bd
 
-WALL = model.param("wall", 2.0, min=1, max=5)             # a float; WALL is 2.0
-HOLES = model.param("holes", 6, min=3, max=12)            # an integer; HOLES is 6
-ANGLE = model.param("angle", 30.0, min=0, max=90, unit="deg")
+WALL = xbf.param("wall", 2.0, min=1, max=5)             # a float; WALL is 2.0
+HOLES = xbf.param("holes", 6, min=3, max=12)            # an integer; HOLES is 6
+ANGLE = xbf.param("angle", 30.0, min=0, max=90, unit="deg")
 
-@model
+@xbf
 def bracket():
     ...
 ```
 
 **Declaring.** `param(name, default, *, min=None, max=None, step=None, unit=None)` (`parameters.py`) is
-`cad.model.param`, the standard library alone, so `import cad` imports no kernel. It returns `default`
+`cad.xbf.param`, the standard library alone, so `import cad` imports no kernel. It returns `default`
 unchanged, a plain `int` or `float`: the memo's keys, what a body retains and the closure see a number like
 any other. An `int` default makes an integer parameter, whose bounds, step and values are whole numbers; a
 `float` default a float one. Refused by name: a `bool`, a number that is not finite, anything else; a name that
@@ -53,13 +53,13 @@ its own script would: the declarations of the files its script's closure reaches
 (`document.py`), beside the closure and the animations' record: a list of `{name, value, kind, min, max,
 step, unit}`, an option not declared `null`, in the order declared; no file, no line, no span. A model whose
 script declares none writes no attribute, so its bytes are what they were before parameters existed. The
-record is part of the document's signature, and a model taken from its key (the worker's last build, the
-engine's cache) is built again when the record the script declares now differs from the one it holds
+record is part of the document's signature, and a model taken from its key (the worker's last build, its
+`.xbf`) is built again when the record the script declares now differs from the one it holds
 (`build._taken`), so a document never lists values its code no longer has. The record is part of its revision
 too (`models.revision`: the closure's key and the record, digested, for a document that records any): a model
 whose body reads no parameter of its script -- a sibling's `wall` -- has the same key after `wall` changes, but
-not the same document, so it is a new generation, its pages fetch it again, its cache file is saved again and
-its rows are served at it, however the record changed (the viewer's Save, or an edit and a run). A declared or exported xbf carries
+not the same document, so it is a new generation, its pages fetch it again, its `.xbf` is written again and
+its rows are served at it, however the record changed (the viewer's Save, or an edit and a run). Its `.xbf`, and an exported one, carries
 the same record (`Loaded.parameters`; an export writes the document's own, `export/tree.py`'s `tree_of`); opening
 that file shows them, read-only. It is an attribute of its
 own under a GUID of its own, which a reader that does not know it passes over, and a document without it reads
@@ -68,7 +68,7 @@ tier 3). STEP, GLB and the other translations carry none.
 
 **Held while the worker lives.** The build's report carries the rows with their spans and digests
 (`report["parameters"]`); the daemon takes them out of it as it registers the document (`models.Models.register`)
-and keeps them beside its record, in memory alone, never in the registry, the cache or an answer. They are
+and keeps them beside its record, in memory alone, never in the registry, a file or an answer. They are
 the worker's to say: `Models.live` answers them only while the worker that recorded them is live in the
 supervisor and of the generation asked; a worker retired or gone (`prune`) takes them with it, and a build
 that records others replaces them.
@@ -76,14 +76,15 @@ that records others replaces them.
 **What the page reads.** `serve.Server.structure` adds `parameters` to every structure it serves, `[]` for a
 document that records none, through `parameters.served`: each recorded parameter with `writable`, `reason`
 and `source`. `writable` is true only for a model's document whose live worker recorded a span for the value
-the document holds; else `reason` is one of `file` (a file's document: a declared or exported xbf, a STEP),
-`no_worker` (no live worker recorded where it is: the script must run again), `shared` or `expression` (no
+the document holds; else `reason` is one of
+`no_worker` (no live worker recorded where it is: a model's `.xbf` no worker holds, an exported or a copied one
+among them; the script must run again), `shared` or `expression` (no
 span: an expression, or a literal not that declaration's alone, above).
 `source` is the declaring file relative to the script's folder where it is under it, else its name, and null
-where nothing live says it. `cad model inspect` and `cad xbf inspect` list the same rows (`api._summary`'s
+where nothing live says it. `cad inspect` lists the same rows, of an id and of an `.xbf` file (`api._summary`'s
 `parameters`).
 
-**Setting.** One entrance, the viewer's Save: the page's `POST /api/v1/documents/model/<id>/parameters` with
+**Setting.** One entrance, the viewer's Save: the page's `POST /api/v1/documents/xbf/<id>/parameters` with
 `{"values": {...}}` (`viewer/http_app.py`, behind the guard header and the page token every changing route has;
 only a model's document has it, and it names a document and parameters alone, never a path or text). No command
 or library function writes parameters: an agent changes a value by editing the script and running it. The route
@@ -151,7 +152,7 @@ of a document no live worker built; overwrite a file another writer changed whil
 the run that last ran; write the record into a STEP, a GLB or any other translation.
 
 **Previewing.** Before a Save, the page's Parameters tab shows the model at its drafts as a person moves them:
-`POST /api/v1/documents/model/<id>/preview` with `{"values": {...}, "page": token}` (`viewer/http_app.py`, behind
+`POST /api/v1/documents/xbf/<id>/preview` with `{"values": {...}, "page": token}` (`viewer/http_app.py`, behind
 the guard header and the page token as `set`'s route is; `page` a token of the page's own making, letters,
 digits, `-` and `_`, which keeps one page's previews from another's), answered by `parameters.Previewing.preview`
 in the daemon (`client.previewModelParameters` on the page; no command and no library function: nothing but the
@@ -186,7 +187,7 @@ page reads what it makes). It writes nothing, and does in order:
    no canonical form) is keyed by the values too (`BuildContext.preview`), since a preview leaves those bytes as
    they are and must not replay another value's run. Nothing a build keeps is touched: no declared file is
    written, no document is kept (`_WRITTEN`, `_BUILT`, the provenance `made_by` answers), no closure is made,
-   nothing is taken from or saved to the engine's cache, and the worker's last run (`ran`, which `set` builds
+   nothing is taken from an `.xbf`, and the worker's last run (`ran`, which `set` builds
    again) is not changed; no progress frame is sent, so no page shows a build. It answers the structure and the
    shape bytes of each part whose key the daemon does not hold already (`known`: the document's and the page's
    last previews'), as `result` answers a held model.
@@ -202,7 +203,7 @@ so a part the values did not change is never meshed again and the page fetches o
 not held: `xbfDocument.js`), a part's groups, an element's facts, the parts' facts. It has no envelope, no
 version to wait on, no pose, no kinematics, no mesh run, no export, no thumbnail and no Recents row
 (`http_app.PREVIEW_MARK`); only the page that asked is told its id. It is never the document: the document's
-structure, version, record, cache file and every verb of it are as they were. A page holds two at most (the one
+structure, version, record, `.xbf` and every verb of it are as they were. A page holds two at most (the one
 drawn and the next), the server those of eight pages; a page's are let go by its next preview, by values equal to
 the document's, by a new version of the document (`Models.register`), and once nobody has read them for
 `PREVIEW_IDLE` seconds (two minutes, `Previewing.expire` at the daemon's `tend`).

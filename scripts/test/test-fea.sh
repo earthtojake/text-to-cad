@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The stress study (cad <type> solve) and its result (cad fea) with their integrations installed: netgen, the
+# The stress study (cad fea) with its integrations installed: netgen, the
 # netgen integration's (cad[netgen]), meshes, and CalculiX's ccx, the calculix integration's (cad[calculix]: the
 # cad-ccx package), solves. The suite's own folder, tests/python/packages/fea, is this job's alone: the package jobs
 # install neither. The study's parse, checks and materials run in seconds; the solves against hand calculations

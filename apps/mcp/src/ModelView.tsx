@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createHttpPromptFiles, libraryRow, type CadClient } from '@cad/core/client';
 import { unavailablePromptContext } from '@cad/core/prompt';
-import { CadViewer, createCadFileActions, createCadFileSource, normalizePath } from '@cad/ui/cad-viewer';
+import { CadViewer, createCadFileActions, createCadFileSource, normalizePath, type CadViewerProps } from '@cad/ui/cad-viewer';
 import type { AppSetting, ColorSchemeSetting, HostAlert, LanguageSetting } from '@cad/ui/file-viewer';
-import type { ViewerHost, ViewerLinks } from '@cad/ui/host';
-import type { ModelLibrarySource } from '@cad/ui/library';
+import type { HomeLocation, NavigationTarget, ViewerLinks } from '@cad/ui/host';
+import { samePlace, type ModelLibrarySource } from '@cad/ui/library';
 import type { TabStore } from '@cad/ui/tab-store';
 import type { Bridge } from './host/bridge';
 import { frameClipboard } from './host/clipboard';
@@ -17,6 +17,10 @@ import { TUNNEL_ORIGIN } from './host/tunnel';
 
 // The most steps a view's history keeps: the oldest go first.
 const HISTORY_LIMIT = 100;
+// A step of a view's history: a file, by its absolute path, or the home ('') at a place on it.
+interface Step { file: string; place: HomeLocation }
+const RECENTS: HomeLocation = { view: 'recents' };
+const sameStep = (a: Step | undefined, b: Step) => Boolean(a) && a!.file === b.file && (b.file !== '' || samePlace(a!.place, b.place));
 
 export interface ViewReporter {
   /** This view now shows `model` (absolute), or nothing. */
@@ -25,15 +29,20 @@ export interface ViewReporter {
 
 /**
  * One view: the shared viewer over this host — the model a launch names, by its absolute path,
- * or with none, the home (the library, and Open) — under the navbar: its logo and
- * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
- * the file manager), and at the right the host's Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
- * shows to the library. Everything differs by data — what a Quick Edit can do in the chat, whether
+ * or with none, the home (the library, and Open) — under the navbar: its logo (the way home: a
+ * button, as a page in an app's frame has no address), the panel's toggle, Back and Forward, the file's name and menus
+ * (its ⋯: Copy path, and Open in › Browser and the file manager), and at the right the host's Full size. The links
+ * (GitHub, Discord, Send feedback) and Settings (Language, Telemetry, Theme) are the foot of the sidebar, on the home
+ * and over a document. A view shows what is opened in place, and adds what it
+ * shows to the library. A page in an app's frame has no address of its own: a place on the home (Recents, Starred, a
+ * project's page) is a step of the view's history, and a document's Open in browser is its page in the web
+ * viewer. Everything differs by data — what a Quick Edit can do in the chat, whether
  * the view has a home — never by where the view is.
  *
  * Codex's file handler (`surface: file`, `alone`) shows its file alone, under the same navbar: the host's own file
  * tree is its navigation, so it has no home, no explorer and no Back or Forward, and no Open in › Browser; its navbar
- * holds the file's name, its ⋯, the panels' toggles and Full size where the host offers it.
+ * holds the logo, which opens the app's menu there (a view with no home has no foot in its panel), the panel's toggle,
+ * the file's name, its ⋯ and Full size where the host offers it.
  */
 export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, update, alert, whatsNew, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
@@ -79,22 +88,20 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   engineOrigin?: string;
 }) {
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
-  // has neither the home nor the explorer (a source that cannot list or search offers none).
+  // has neither the home nor a project's name (a view with no library has neither).
   const homed = !alone;
-  const source = useMemo(() => {
-    const { list, search, ...alone } = createCadFileSource(client);
-    return homed ? { ...alone, list, search } : alone;
-  }, [client, homed]);
+  const source = useMemo(() => createCadFileSource(client), [client]);
   // The view's own history, as a browser keeps a tab's: what it showed — files, by absolute path,
-  // and the home ('') — the agent's shows and the person's own moves alike. Back and Forward walk
-  // them; a move after a Back drops what was ahead, and showing what is already on screen adds
+  // and the home ('') at each place the person went to on it — the agent's shows and the person's own moves alike.
+  // Back and Forward walk them; a move after a Back drops what was ahead, and showing what is already on screen adds
   // nothing.
   const launched = () => normalizePath(launch.model || '');
-  const [history, setHistory] = useState(() => ({ entries: [launched()], index: 0 }));
-  const file = history.entries[history.index] ?? '';
-  const navigate = useCallback((next: string) => setHistory(current => {
-    if (current.entries[current.index] === next) return current;
-    const entries = [...current.entries.slice(0, current.index + 1), next].slice(-HISTORY_LIMIT);
+  const [history, setHistory] = useState<{ entries: Step[]; index: number }>(() => ({ entries: [{ file: launched(), place: RECENTS }], index: 0 }));
+  const { file, place } = history.entries[history.index] ?? { file: '', place: RECENTS };
+  const navigate = useCallback((next: string, where: HomeLocation = RECENTS) => setHistory(current => {
+    const step = { file: next, place: next ? RECENTS : where };
+    if (sameStep(current.entries[current.index], step)) return current;
+    const entries = [...current.entries.slice(0, current.index + 1), step].slice(-HISTORY_LIMIT);
     return { entries, index: entries.length - 1 };
   }), []);
   const back = useCallback(() => setHistory(current => current.index > 0 ? { ...current, index: current.index - 1 } : current), []);
@@ -102,7 +109,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     current.index < current.entries.length - 1 ? { ...current, index: current.index + 1 } : current), []);
   const showing = useRef(file);
   showing.current = file;
-  // A Quick Edit's views, annotation and pictures are made by the server, which is on this machine.
+  // How a Quick Edit names this machine's files: from the workspace the server's transport was started in, else `~/`.
   const promptFiles = useMemo(() => createHttpPromptFiles({ origin: TUNNEL_ORIGIN, fetch: tunnel }), [tunnel]);
   // What the chat's port says to the person, in the view's language as it is when it speaks.
   const sayRef = useRef(translator(locale));
@@ -116,10 +123,12 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // and, in a view with a home, the document's page in the browser (Open in › Browser).
   const fileActions = useMemo(() => {
     // Open in's apps too, through the tunnel as Reveal is: the server opens them on this computer.
-    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path), openIn: client,
+    // Reveal only where this computer has a file manager to open (`launch.reveal`).
+    const actions = createCadFileActions({ platform, clipboard: frameClipboard, openIn: client,
+      ...(launch.reveal !== false ? { reveal: (path: string) => client.reveal(path) } : {}),
       ...(engineOrigin ? { link: { origin: engineOrigin, client } } : {}) });
     return homed && openInBrowser ? { ...actions, perform: { ...actions.perform, browser: (entry: { path: string }) => openInBrowser(entry.path) } } : actions;
-  }, [platform, client, homed, openInBrowser, engineOrigin]);
+  }, [platform, client, homed, openInBrowser, engineOrigin, launch.reveal]);
 
   // The agent's show of a file is a step in the view's history, as a person's is.
   useEffect(() => { navigate(launched()); }, [launch, sequence]);
@@ -129,11 +138,12 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   }), [sync, client]);
   useEffect(() => { reporter.showing(file || null); }, [reporter, file]);
 
-  // Every other view has the home: the models opened before, from every view and the web viewer.
-  // What it opens is shown in place.
-  // The home's first list came with its launch, its rows as `GET /api/v1/documents` lists them: the
+  // Every other view has the home: the projects (a project's page is one folder of it) and the documents opened before,
+  // from every view and the web viewer. What it opens is shown in place.
+  // The home's first lists came with its launch, as `GET /api/v1/documents` and `GET /api/v1/projects` list them: the
   // cards draw at once, each its picture read by its document's id, and later reads ask.
   const seeded = useRef(launch.recents ?? null);
+  const seededProjects = useRef(launch.projects ?? null);
   const library = useMemo<ModelLibrarySource | undefined>(() => homed ? {
     list: () => {
       const first = seeded.current;
@@ -143,25 +153,56 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
     thumbnail: model => client.thumbnail(model),
     open: async entry => { navigate(normalizePath(entry.path)); },
-    // Open, with the desktop's chooser where this computer has one: what it picks is shown in place.
-    ...(launch.pick ? { pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); } } : {}),
-  } : undefined, [client, homed, launch.pick, navigate]);
+    projects: () => {
+      const first = seededProjects.current;
+      seededProjects.current = null;
+      return first ? Promise.resolve(first) : client.projects?.() ?? Promise.resolve([]);
+    },
+    // A project's page: one folder of it, or a search below it, through the tunnel as every read is.
+    ...(client.projectFolder ? { folder: (project: string, options: { path?: string; q?: string }) => client.projectFolder!(project, options) } : {}),
+    removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
+    // Import, with the desktop's chooser where this computer has one: a file it picks is shown in place, a folder
+    // opened as a project; where one chooser takes either (`pickAny`: a Mac's), that one too.
+    ...(launch.pick ? {
+      pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); },
+      importFolder: async (start?: string) => {
+        const folder = await client.pick({ folder: true, start });
+        if (!folder || !client.openProject) return null;
+        return { ...await client.openProject(folder), folder };
+      },
+    } : {}),
+    ...(launch.pick && launch.pickAny ? {
+      importAny: async () => {
+        const chosen = await client.pick({ any: true });
+        if (!chosen) return null;
+        if (!chosen.folder) { navigate(normalizePath(chosen.path)); return { file: chosen.path }; }
+        if (!client.openProject) return null;
+        return { ...await client.openProject(chosen.path), folder: chosen.path };
+      },
+    } : {}),
+  } : undefined, [client, homed, launch.pick, launch.pickAny, navigate]);
   // Back and Forward, wherever the view can go elsewhere: not a file handler's, which shows its file alone.
   const viewerHistory = useMemo(() => homed ? {
     canGoBack: history.index > 0, canGoForward: history.index < history.entries.length - 1, back, forward,
   } : undefined, [homed, history, back, forward]);
-  const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files: source, fileActions, clipboard: frameClipboard, promptContext, promptFiles, links,
+  // A page in an app's frame has no address: no link to a document or a place (`hrefOf`). Where a launch carried a
+  // page, a document opens beside the view in the person's browser, its page in the web viewer (Open in browser); the
+  // server opens that page by the document's name and nothing else, so a place on the home is not offered.
+  const navigation = useMemo(() => (homed && openInBrowser ? { openBeside: { kind: 'browser' as const, places: false,
+    open: (target: NavigationTarget) => { if ('document' in target) openInBrowser(normalizePath(target.document)); } } } : undefined),
+    [homed, openInBrowser]);
+  const host = useMemo<CadViewerProps['host']>(() => ({
+    files: source, fileActions, clipboard: frameClipboard, promptContext, promptFiles, links, ...(navigation ? { navigation } : {}),
     // A Quick Edit copied, queued or sent, counted by the CAD app's server for its telemetry.
     usage: { used: feature => { if (feature === 'quickEdit') client.reportActivity({ quickEdit: true }); },
       // The controls a person used, and how long a tool was up, counted by the shared viewer.
       controls: counts => client.reportActivity({ controls: counts }) },
     environment: { colorScheme, locale, platform },
-  }), [client, source, fileActions, promptContext, promptFiles, links, colorScheme, locale, platform]);
+  }), [client, source, fileActions, promptContext, promptFiles, links, navigation, colorScheme, locale, platform]);
 
   // Every view is under the navbar, the file handler's too: it carries the host's controls and the panels' toggles.
   // The file on screen joins the library every CAD view shares, with its picture.
-  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate}
+  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} place={place}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
     fullSize={fullSize} update={update} alert={alert}

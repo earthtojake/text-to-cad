@@ -46,8 +46,8 @@ and of Xometry's rib guide, named beside each. The few errors are the floors und
 ## Check it
 
 ```bash
-cad model dfm "$ID" --process molding --pull z --material abs --cavities 4
-cad step dfm cover.step --process molding --candidates
+cad dfm cover.xbf --process molding --pull z --material abs --cavities 4
+cad dfm cover.step --process molding --candidates
 ```
 
 - `--pull`: the pull, an axis (`z`, `-y`) or `x,y,z` components; `z` by default, and the result then

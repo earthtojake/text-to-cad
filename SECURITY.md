@@ -87,7 +87,7 @@ a non-loopback `--host` unless you mean to offer exactly that to everyone who
 can reach the port.
 
 **The one route that writes code.** A model's Parameters Save in the viewer
-(`POST /api/v1/documents/model/<id>/parameters`) is the one page route that
+(`POST /api/v1/documents/xbf/<id>/parameters`) is the one page route that
 writes a file the server later runs as Python: the model's own script, which it
 then builds again. It is behind the same Host check, guard header and
 credentials as every route that changes something. Its body is
@@ -100,7 +100,7 @@ told it:
   and written in the server's own spelling (an integer's digits; a float rounded to
   six decimals, in the shortest text that reads back as it). A value is never
   written as the text it was sent as.
-- Only where a run recorded: the bytes of a `model.param` default that is a plain
+- Only where a run recorded: the bytes of a `xbf.param` default that is a plain
   numeric literal, at the position the script's last run recorded, in that model's
   own script. A parameter declared in another module, or whose default is an
   expression, is never written, nor is any other byte of the file.
@@ -118,7 +118,7 @@ script's own code as it ran before. They cannot pick the file, write any other
 file, or add or change code.
 
 **Its preview runs code and writes nothing.** Before a Save, the Parameters tab asks
-for the model at its drafts (`POST /api/v1/documents/model/<id>/preview`), behind the
+for the model at its drafts (`POST /api/v1/documents/xbf/<id>/preview`), behind the
 same Host check, guard header and credentials. Its body is `{"values": {name: number},
 "page": token}` (64 KiB at most; `page` 1 to 64 letters, digits, `-` and `_`): no path,
 no text the server runs. The values are checked exactly as a Save's are (the live
@@ -262,6 +262,11 @@ plugin install` installs, is `latest`, the newest of all.
 - A file from someone else that reads, writes or runs anything beyond what
   opening, viewing, exporting or snapshotting it should. This includes a file
   that makes the server do unbounded work or hold unbounded memory.
+- A press in the viewer that runs a file. A project's page lists every file in
+  its folder, and one cad does not show is handed to an app: an editor found on
+  the computer, or the operating system's own handler only for the kinds of
+  file it is listed for (text, PDFs, images, other CAD tools' files), never for
+  code and never for a kind it does not know.
 - A Parameters Save that writes anything but a number at a
   position a run recorded in a model's own script, or writes when the script's
   bytes are not the ones that run read; a preview that writes anything, runs a
@@ -278,6 +283,14 @@ plugin install` installs, is `latest`, the newest of all.
 - `api.texttocad.dev`: anything beyond its documented behaviour (version feed,
   consented analytics), including a way to make the feed name a release it should
   not.
+- The share service (`cad.fun`, [apps/share](apps/share/README.md)): a way to read a
+  share without its link, to replace or delete one without its secrets, to make it keep
+  or log a link, a key or a secret, or to make its page fetch from another origin.
+- A share that `cad import` writes outside the folder it names, or whose files make a
+  command later run in that folder, which the person did not choose to run, run code: a
+  version control's folder (`.git` and the like, which `git status` reads) or a
+  repository's bare form is refused, whatever origin served it. A model's scripts travel
+  in its share and run only when the person runs them (`cad run`).
 
 Out of scope: what someone who already has your token, a link or
 your session cookie, or already runs code as you, can do; and effects on your

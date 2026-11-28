@@ -41,9 +41,10 @@ bundled `@cad/core`'s `lib/viewer/surfaceLook.js`). The engine serves the record
 `GET /api/v1/look` and its image as `GET /api/v1/look/environment`; the page reads both once per
 engine, beside the document, and the document's scene brings them as its own lighting and surface
 rule (the bundled `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot
-page put up in place of the theme's. Preview is drawn as any file's is.
+page put up in place of the theme's. A share's page, which has no engine, reads its own copies of both
+(**View bundle**). Preview is drawn as any file's is.
 
-`cad <type> snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
+`cad snapshot` writes PNG images with OCCT, and no video. `--preview` (a job's `"preview": true`,
 `snapshot(preview=True)`) draws the viewer's Preview in place of a display mode, by the same raster: the
 model in its materials under the viewer's rig (`photographicStudioRig.js`: its key from the same direction
 at the same strength, shadowing the model, and the look's `studio.hdr` -- the viewer's room and softboxes --
@@ -58,7 +59,7 @@ draws it: a frame holds no light past 1, so a highlight comes out the tone a ful
 ambient occlusion and no reflection in the floor; glass is drawn at its preview alpha; and OCCT's baked
 reflections read lighter on a polished metal. The first Preview of a document bakes its light (seconds).
 
-`cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
+`cad snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. Every snapshot is
 light -- a 3D document on the look's flat backdrop (`#f0f4f9`; the shaded studio sweep is Preview's,
@@ -90,10 +91,10 @@ object's `preset` (a preset or a pair), `position`, `target`, `up`, `direction`,
 `orthographicHalfHeight` and `name` are checked as the viewer checks a camera, its lens (`projection`,
 `focalLength`) is the display's (`display.camera`), and a view straight down or up with no `up` has +Y
 up the picture, as `top` and `bottom` do. SRC is a whole document: one that names something inside a
-document (`ID#bracket`, `arm.step#arm/face 3`) is refused, saying how to draw a part alone
+document (`arm.xbf#bracket`, `arm.step#arm/face 3`) is refused, saying how to draw a part alone
 (`display.isolated`). `--annotation FILE` draws the viewer's annotation over the
 model -- each mark on the part it was drawn on, wherever the picture places that part -- from an
-annotation file or the Quick Edit packet that carries one (the `.snapshot.json` the viewer writes),
+annotation or the Quick Edit packet that carries one, as its JSON, a file of it, or `-` (standard input),
 and `--measurements FILE` Measure's dimensions (`[{start, end, label, color}]`). A camera object's
 lengths (`position`, `target`, `orthographicHalfHeight`), a measurement's points and the ink are in
 the viewer's scene coordinates, as a Quick Edit packet carries them -- a document's and a GLB's
@@ -102,15 +103,20 @@ millimetres, a robot's metres, a 3MF's declared unit (the structure's `millimetr
 (`render/occt.py` `camera_in_millimetres`, `measure`, `annotate`). A mark names the
 view it was drawn in by label alone (`"view": "view 1"`); the view itself -- its camera
 (`position`, `target`, `up`, `orthographicHalfHeight`, the snapshot's own camera object), size and
-projection -- is a job of the packet. `--camera authored` draws the picture from the view of the
+projection -- is a job of the packet. A mark as a packet carries it shortened reads as the whole one
+(`snapshot.parse_annotation`): no `id`, `opacity` 1 and `closed` false where it gives neither, no
+`triangles` (no still reads them), an area's points its outline alone, and what it was drawn over
+(`touches`, which no still draws) the refs of the file it touches, or the `{part, ref}` objects of an
+earlier packet. `--camera authored` draws the picture from the view of the
 last mark, exactly (no fit), at its size and projection unless the flags say otherwise: from the
-packet given as `--annotation`, else the newest packet beside the annotation file that draws this
-document; with none, it is refused by name. A face the mesher left without triangles is named in a
+packet given as `--annotation`, else the newest packet saved beside the annotation file as a
+`.snapshot.json` that draws this document; with none, it is refused by name. A face the mesher left without triangles is named in a
 warning. Nothing is written but OUT. OUT may be a folder -- one that is there, or a path ending in a
 separator -- and the picture is then `<SRC's stem>_<UTC time>.png` in it (a model's name for a model,
 `snapshot.picture_path`), the path the verb prints and reports (`output`).
 
-**A job.** `--job PACKET` replays a whole Quick Edit packet -- or a job file in its words: a job, a list
+**A job.** `--job PACKET` replays a whole Quick Edit packet -- the JSON a Quick Edit's message carries,
+given as it is, a file of it, or `-` (standard input), or a job file in its words: a job, a list
 of jobs, or `{"input", "jobs": [...], "annotation", "measurements"}` -- in one call
 (`snapshot.job_pictures`, `api.snapshot(job=)`), on the machinery above: each job is a view, drawn with
 its own `camera` (an output's own `camera` over it), its `display` (its `hidden` and `isolated` parts
@@ -119,7 +125,11 @@ takes it), and -- a robot's -- the visuals its `selection.hide` names by the vie
 (`link:v1`, each robot instance carrying its visual's), the packet's ink and dimensions over each
 (a job's own `annotation` and `measurements` over the packet's); and each of its `outputs` (`path`,
 `width`, `height`, `camera`, `label`) is a picture written at its path (a folder takes
-`<stem>[_j<m>][_<n>]_<UTC time>.png`, the job's and the output's place where there are several). A
+`<stem>[_j<m>][_<n>]_<UTC time>.png`, the job's and the output's place where there are several), or,
+where it names none, in `--out DIR` (the current folder unless given) as `<its input's
+stem>-<its label>.png`, each a slug (`view-<n>` for the `n`-th job's where it has no label), and
+`-2`, `-3` after it where two would share a name. The input, the packet's or a job's, is a path, a
+document's id or a share's link, which names this computer's copy of it (**Sharing**). A
 job's `output` settings finish its pictures: `padding` (0 to 0.15 of the picture each side, 0.04
 unless given) and `tightFrame` (true unless given: the fit on every drawn vertex, else on the drawn
 parts' box) frame a fitted camera, and a view's own camera -- a position, a target and, orthographic,
@@ -134,20 +144,28 @@ drawing's hairlines) stay one pixel of the larger frame and read finer: OCCT's c
 line wider than a pixel, and this is that, not a bug; `sizeProfile` sizes an output that gives no
 size. SRC, given, is drawn in place of every job's input, and a flag given overrides every job: the
 display, the grid, the camera, the pose, the ink, the dimensions, the size of every
-output; an OUT is refused. Every job is checked before anything renders (an unknown key, a setting
+output; an OUT is refused (`--out DIR` names the folder). Every job is checked before anything renders (an unknown key, a setting
 out of range, two outputs at one path, a file that is not there: refused by name, every file left as
 it was), and a picture that fails writes none of the job's: every picture is staged beside its
 output and moved into place only when all are drawn, and a failed snapshot leaves every existing picture as it was. Through the daemon each picture is a frame
 of the file's warm render process; `daemon=False` serves each file once for all its pictures.
-`--json` prints `{"ok": true, "pictures": [what each drew]}`.
+Each picture's line says the file it wrote; `--json` prints `{"ok": true, "pictures": [what each drew,
+its `output` the file]}`.
+
+Windows PowerShell 5.1 takes the double quotes out of every argument it passes a program (and cuts what is
+left at its spaces), so `--job '<packet>'` arrives there as `{input:...}`: a `--job` or `--annotation` given JSON
+with its quotes taken out is refused before anything is read (`invalid_argument`, exit 2), in one line saying so
+and to pipe it in instead, `'<packet>' | cad snapshot --job -` (the parser's screen, `engine/cli.py`
+`_unquoted`). The page writes a packet in ASCII alone, every other character its `\u` escape, since a pipe there
+is ASCII by default.
 
 **Native KiCad stills.** A `.kicad_pcb` is a file source, with no XCAF document or model worker.
 `formats/kicad/plot.py` builds the plot payload from the board and its sibling project, its pours KiCad's
 refill of a copy (`formats/kicad/poured.py`: the server's `_internal/boards.refill`, kicode in the
 environment of `cad[kicad]`), kept by the bytes it reads (`poured.key`) in the engine's memory
 (`viewer/plots.py`) and gzipped in the document cache beside the board's document,
-`<cache>/documents/<its id>/kicad/<key>/` (with its DRC and its kept exports, `_internal/boards.py`; a
-`cad delete` of the board deletes them with it), which a board's snapshot is drawn from too
+`<cache>/documents/<its id>/kicad/<key>/` (with its DRC and its kept exports, `_internal/boards.py`;
+forgetting the board removes them with it), which a board's snapshot is drawn from too
 (`renders.py` keeps it before the render process reads it; a payload drawn as saved says why in
 `pours` and in the snapshot's warnings). `render/board.py` paints the same layer primitives
 with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved
@@ -189,7 +207,7 @@ stops with it;
 where none can be made the engine fails the picture (`snapshot.NO_GL`). The caller then draws it itself where it
 can (`snapshot.drawable_here`: the kernel in its process and a context it makes, on its own `DISPLAY`), saying so
 on stderr -- a held document's picture from an xbf the engine exports to a temporary folder --; a `cad` command
-that carries no kernel but has a display (`xvfb-run cad urdf snapshot ...`) runs the same snapshot in the
+that carries no kernel but has a display (`xvfb-run cad snapshot ...`) runs the same snapshot in the
 installation's base from its own process, which draws it so (`cli._drawn_elsewhere`); and with neither the
 snapshot fails, naming what to install. Nothing is written but OUT.
 

@@ -169,8 +169,9 @@ class PthTest(unittest.TestCase):
         seen, loaded = json.loads(found)
         self.assertEqual(loaded, [])
         self.assertEqual(seen["cad.build123d"], sorted(cad.build123d.__all__))
-        self.assertEqual(seen["cad.step"],
-                         ["dfm", "export", "inspect", "interference", "ranges", "read", "snapshot", "solve"])
+        # A type lists its reader; what it does for a verb is the verb's (``cad.export``, ...), its own spelling of
+        # one an alias, listed nowhere.
+        self.assertEqual(seen["cad.step"], ["read"])
         self.assertEqual(seen["cad.engine"], sorted(cad.engine.__all__))
         self.assertEqual(seen["cad"], sorted({*cad.__all__, "build123d", "engine"} - {"__version__"}))
 

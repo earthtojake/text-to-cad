@@ -163,7 +163,7 @@ jobs:
           cad="$HOME/.local/bin/cad"
           "$cad" server start
           mkdir -p "$RUNNER_TEMP/box" && cd "$RUNNER_TEMP/box"
-          printf 'from cad import model\n\n\n@model\ndef box():\n    import build123d as bd\n\n    return bd.Box(40, 20, 6)\n\n\nif __name__ == "__main__":\n    box()\n' > box.py
+          printf 'from cad import xbf\n\n\n@xbf\ndef box():\n    import build123d as bd\n\n    return bd.Box(40, 20, 6)\n\n\nif __name__ == "__main__":\n    box()\n' > box.py
           built=0
           out=$("$cad" run box.py 2>&1) || built=$?
           echo "$out"

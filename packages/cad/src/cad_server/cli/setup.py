@@ -382,7 +382,7 @@ def _appdata_ours():
     0.10 (one ``_take_over`` pointed it at), else None."""
     from cad.engine import places
     from cad_server._internal import installations
-    from cad_server.engine.registry import Folder
+    from cad_server.engine.state import Folder
 
     folder = places.appdata_state_dir()
     if folder is None:
@@ -397,7 +397,7 @@ def _point(version: str, found: tuple[str, str, str] | None, *, take_over: bool 
     ``ValueError``."""
     from cad.engine import places
     from cad_server._internal import installations
-    from cad_server.engine.registry import Folder
+    from cad_server.engine.state import Folder
 
     appdata = places.appdata_state_dir() if take_over else None
     for folder in (Folder(places.state_dir()), Folder(appdata) if appdata is not None else _appdata_ours()):

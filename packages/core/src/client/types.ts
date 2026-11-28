@@ -12,6 +12,11 @@ export interface CadEntry {
   script?: string;
   /** Whether the document's source (a model's script, a file) is on disk now (its envelope's `source.present`). */
   sourcePresent?: boolean;
+  /**
+   * The project it is in (the nearest above its file), named in full with the folder the file is in below its root;
+   * null for a standalone one. A list's row (`CadRecent`) names its project by id alone.
+   */
+  project?: CadEntryProject | null;
   kind?: string;
   format?: string;
   sourceFormat?: string;
@@ -41,11 +46,15 @@ export interface CadServerInfo {
   identityToken?: string;
   /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;
-  /** Whether this computer has a file chooser for the home's Open. */
+  /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
+  /** Whether one chooser there takes a file or a folder (a Mac's open panel): `pick({ any: true })`, and Import is one button. */
+  pickAny?: boolean;
   /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
   platform?: string;
-  /** The person's home folder, `/`-separated: where the explorer starts with nowhere else to. */
+  /** Whether this computer has a file manager Reveal can open; false where it has none (a Linux without `xdg-open`). */
+  reveal?: boolean;
+  /** The person's home folder, `/`-separated: a path in it is said from `~`, and it is no project. */
   home?: string;
   /** The engine process answering (`os.getpid()`). */
   pid?: number;
@@ -75,35 +84,72 @@ export interface CadUpdateState {
   installer?: string;
 }
 /**
- * A model in the library every CAD view shares (`GET /api/v1/documents`): times in seconds. The API
- * names a row's document kind `kind` and its record's `record`; the client hands the library the
- * record's as `kind`, the document's as `documentKind`.
+ * A document in the library every CAD view shares (`GET /api/v1/documents`), or a file of a project's folder
+ * (`GET /api/v1/projects/<id>`): a CAD file, or in a folder a file that is no document (`documentKind` and `api` null:
+ * no page, picture or pin; opened in an app, `openInApps` and `openIn`), times in seconds. The API names a row's document kind `kind` and
+ * its record's (always `file`) `record`; the client hands the library the record's as `kind`, the document's
+ * as `documentKind`.
  */
 export interface CadRecent {
   /** The document's id: its page is `/<id>`, its picture `thumbnail()`'s. */
   id: string;
-  /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`). */
-  api?: string;
-  /** The document's kind (`model`, `step`, `xbf`, `stl`, ...). */
-  documentKind?: string;
-  path: string; name: string; folder: string;
-  /** Identity namespace: the script folder in 0.8; a file’s folder for an opened file. */
+  /** Where its kind's reads are (`/api/v1/documents/<kind>/<id>`); null for a file that is no document. */
+  api?: string | null;
+  /** The document's kind (`xbf` -- a model's document, held by the engine or its `.xbf` opened from disk --, `step`,
+   * `stl`, ...); an earlier server's `model` is an `xbf` too (`documentKind`, `lib/fileFormats.js`). Null: a folder's
+   * file that is no document. */
+  documentKind?: string | null;
+  /** The file, absolute: Recents' by its canonical path, a folder's as reached in it, `/`-separated. */
+  path: string;
+  /** The file's name, with its extension. */
+  name: string;
+  /** Its folder. */
+  folder: string;
   namespace?: string;
-  /** When a page last opened it; null for a model no page has opened. */
+  /** When a page last opened it; null for a file no page has opened. */
   opened: number | null;
-  /** When it last changed: a file's time on disk (null once it is gone), a model's run. */
+  /** The file's time on disk. */
   updated: number | null;
-  /** When its record was first made: a model's first run, a file's first open; null for a record from before the engine kept it. */
+  /** When the library first knew it; null for a folder's file it does not know. */
   created: number | null;
-  pinned: boolean; missing: boolean;
-  /** The picture's name (its content's), and when it was taken. */
+  pinned: boolean;
+  /** Always false: a file that is gone is not listed. */
+  missing: boolean;
+  /** A token that changes with the picture, and when it was taken; null with no picture of the file as it is now. */
   thumbnail: string | null; pictured: number | null;
-  /** A file's size on disk, in bytes; null once it is gone, and for a document built from code (its script is never read). */
+  /** The file's size on disk, in bytes. */
   size?: number | null;
-  /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
-  kind: 'file' | 'model' | 'shape';
-  /** A model's or a shape's: the script it was built from (a shape's home). */
-  script?: string;
+  /** How many part occurrences its document holds, where the engine knows it for the file as it is now; null where not. */
+  parts?: number | null;
+  /** Every row is a file. */
+  kind: 'file';
+  /** The id of the nearest project above it (a document's own entry, `CadEntry`, names it in full); null for none. */
+  project?: string | null;
+}
+/** A project as a document names it: its id, its name (its folder's) and its folder, `/`-separated. */
+export interface CadProjectRef { id: string; name: string; root: string }
+/** A document's own project (`CadEntry.project`): with the folder it is in below the project's root (`""` at the root). */
+export interface CadEntryProject extends CadProjectRef { folder: string }
+/**
+ * A folder a person opened as a project (`GET /api/v1/projects`): when it was first and last opened as one
+ * (seconds), and whether its folder is gone.
+ */
+export interface CadProject extends CadProjectRef {
+  created: number | null;
+  opened: number | null;
+  missing: boolean;
+}
+/**
+ * One folder of a project (`GET /api/v1/projects/<id>?path=`): the folder (`path`, below the project's root, `""` its
+ * root), its subfolders, then every file in it, CAD files and the rest together; or, asked with words, every file below
+ * it that holds them, and no folders. `truncated`: not all of it is listed.
+ */
+export interface CadProjectFolder {
+  project: CadProject;
+  path: string;
+  folders: { name: string; path: string }[];
+  documents: CadRecent[];
+  truncated: boolean;
 }
 /** Whether the person's usage stats are sent (`/api/v1/settings`' `telemetry`; nothing asks): `reason` says who decided. */
 export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
@@ -111,14 +157,10 @@ export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'ch
 export interface CadWhatsNew { seen: string[]; release: string | null }
 export interface CadCatalog {
   entries: CadEntry[];
-  /** Why an id asked for has no row: the engine holds no such document (its words name the command that builds it again). */
+  /** Why an id asked for has no row: the engine holds no such document (its words). */
   missing?: string;
   [key: string]: unknown;
 }
-/** One folder's subfolders and CAD files (`GET /api/v1/local/folder`). */
-export interface CadFolder { path: string; entries: { name: string; kind: 'directory' | 'file' }[]; truncated: boolean }
-/** The CAD files nested under a folder whose path below it holds the query (`GET /api/v1/local/folder?q=`). */
-export interface CadSearch { path: string; results: string[]; truncated: boolean }
 export interface CadCatalogSnapshot {
   entries: CadEntry[];
   revision: number;
@@ -179,9 +221,11 @@ export interface CadEngineDocument {
   kind: string;
   url: string;
   fetch: typeof fetch;
+  /** The document as it stood, with no engine to wait on for a next version (a view bundle's): the page reads it once. */
+  final?: boolean;
 }
 /**
- * What a save of a model's parameters answers (`POST /api/v1/documents/model/<id>/parameters`): each
+ * What a save of a model's parameters answers (`POST /api/v1/documents/xbf/<id>/parameters`): each
  * value the engine wrote into the script (one equal to the script's is not written, and not listed),
  * with the script's absolute path and the line it is on, and the models it built again.
  */
@@ -191,7 +235,7 @@ export interface CadParametersSaved {
   rebuilt: string[];
 }
 /**
- * What a preview of a model's parameters answers (`POST /api/v1/documents/model/<id>/preview`): the model
+ * What a preview of a model's parameters answers (`POST /api/v1/documents/xbf/<id>/preview`): the model
  * built at those values for this page alone, nothing written -- its own id and the URL its structure and
  * parts are read at (a document's routes), its version, the document version it was built against
  * (`basis`), the values it differs from the document by, the build's seconds and how its memo went. `preview:
@@ -252,7 +296,11 @@ export interface CadRenderSession {
   signal: AbortSignal;
   dispose(): void;
 }
-/** Domain service consumed by renderers; HTTP metadata stays on its adapter. */
+/**
+ * Domain service consumed by renderers; HTTP metadata stays on its adapter. What only a host with an
+ * engine can answer (the library, the projects, the person's settings, this computer's apps) is the HTTP
+ * client's (`CadClient`); a service without an engine (a view bundle's) leaves out what needs one too.
+ */
 export interface CadWorkspaceService {
   exports?: ExportService;
   getSnapshot(): CadCatalogSnapshot;
@@ -262,24 +310,93 @@ export interface CadWorkspaceService {
   resolveEntry(path: string, options?: CadRequestOptions): Promise<CadEntry>;
   /** The row the catalog has of a document (its path, or its id), joined by the document's id; null when it has none. */
   entryOf?(path: string): CadEntry | null;
+  /** The server's description; a service with no server has none. */
+  serverInfo?(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
+  /**
+   * `GET /api/v1/projects/<id>?path=&q=`: one folder of a project (`path`, below its root; the root with none), or with
+   * words (`q`) a search of everything below it. Each is sent only when it is not empty. A service with no projects
+   * (a view bundle's) has none, and its view steps through no folder.
+   */
+  projectFolder?(id: string, options?: CadRequestOptions & { path?: string; q?: string }): Promise<CadProjectFolder>;
+  /**
+   * A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files.
+   * A `.kicad_sch`'s: `sheet` (a sheet's path, `/` the root) draws that sheet's page alone, `index: false` leaves the
+   * hierarchy's index out (the viewer reads it with the first sheet it shows).
+   */
+  plotPayload?(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
+  /**
+   * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
+   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path. A
+   * service without an engine (a view bundle's) has none, and its board is drawn in 2D alone.
+   */
+  boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
+  /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
+  drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
+  /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
+  robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
+  /**
+   * `POST /api/v1/documents`: where the page reads a document the engine serves (an `.xbf`, a STEP, a model),
+   * through this server (`lib/xbf/xbfDocument.js`), once the engine holds it. A host without an
+   * engine leaves it out, and the xbf renderer says it cannot open the file.
+   */
+  /** `onProgress` hears each frame of the engine's import of the file while it reads it (a STEP's), as the build frames are shaped. */
+  engineDocument?(file: string, options?: CadRequestOptions & { onProgress?(frame: Record<string, unknown>): void }): Promise<CadEngineDocument>;
+  /** Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one. */
+  engineHolds?(file: string, options?: CadRequestOptions): Promise<boolean>;
+  /**
+   * `POST /api/v1/documents/xbf/<id>/parameters`: new values for a model's declared parameters, by
+   * name, each a finite number. The engine rewrites them in the model's script and builds it again,
+   * and answers once that build has ended; a refusal rejects with a `CadParametersRefusal`. The one
+   * call of a view that changes a design. A host that cannot make it leaves it out, and its views
+   * show a model's parameters without a way to save them.
+   */
+  setModelParameters?(id: string, values: Record<string, number>, options?: CadRequestOptions): Promise<CadParametersSaved>;
+  /**
+   * `POST /api/v1/documents/xbf/<id>/preview`: the model at other values of its declared parameters, for
+   * this page alone (`page`, the page's own token): the engine builds it in the model's worker and writes
+   * nothing; the page reads the preview's structure and parts as a document's. `{}` lets the page's previews
+   * go. A host that cannot make it leaves it out, and its views show a value only once it is saved.
+   */
+  previewModelParameters?(id: string, values: Record<string, number>, options: CadRequestOptions & { page: string }): Promise<CadParametersPreview>;
+  readonly resources: CadResourceProvider;
+  createRenderSession(options?: { file?: string }): CadRenderSession;
+  dispose(): void;
+}
+/** Reusable HTTP implementation, also used by existing catalog adapters: a viewer's server, with its engine. */
+export interface CadClient extends CadWorkspaceService {
+  readonly origin: string;
   serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
-  folder(path: string, options?: CadRequestOptions): Promise<CadFolder>;
-  search(path: string, query: string, options?: CadRequestOptions): Promise<CadSearch>;
+  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
   /** The home's library, newest first. */
   recents(options?: CadRequestOptions): Promise<CadRecent[]>;
   /**
-   * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` a file's entry, its file
-   * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
+   * A change to the library (`PATCH /api/v1/documents`: `open`, `pin`, `unpin`, `thumbnail`; `remove`, the file's
+   * entry forgotten, the file untouched): the library as it now is.
    */
-  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
   /** Keep a model's picture in the library: the light viewport's, which the home shows in both themes. */
   keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
   /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
   thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
   /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
   thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
-  /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
-  pick(): Promise<string | null>;
+  /**
+   * Import: the file the person picks with the desktop's chooser -- or the folder (`folder`), the chooser
+   * opening in `start` where one is named -- by its absolute path, or null. With `any`, the one chooser of a file
+   * or a folder where the server's computer has one (`CadServerInfo.pickAny`: a Mac's): whichever was chosen and
+   * whether it is a folder, or null.
+   */
+  pick(options: { any: true }): Promise<{ path: string; folder: boolean } | null>;
+  pick(options?: { folder?: boolean; start?: string | null; any?: false }): Promise<string | null>;
+  /** The projects, the latest activity first (`GET /api/v1/projects`). */
+  projects?(options?: CadRequestOptions): Promise<CadProject[]>;
+  /**
+   * A folder opened as a project, by its absolute path (`POST /api/v1/projects`): the project, and whether it was
+   * made now (false: the folder was one already, or is inside the one answered).
+   */
+  openProject?(path: string): Promise<{ project: CadProject; made: boolean }>;
+  /** A project forgotten, nothing in its folder. The projects as they now are. */
+  removeProject?(id: string): Promise<CadProject[]>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;
   /** Open in: the document's files and the apps this computer has for each (`GET /api/v1/local/open-in?id=`). */
@@ -299,56 +416,73 @@ export interface CadWorkspaceService {
    * noted by the server and sent only with consent. Never fails.
    */
   reportActivity(activity: CadActivity): void;
-  /** The update button's click: a person's update of cad (`POST /api/v1/local/update`); refused (409) where cad cannot update itself. */
+  /**
+   * The update button's click: a person's update of cad (`POST /api/v1/local/update`); refused (409) where cad cannot
+   * update itself. The local server's alone: a shared page's client (`CadViewBundleClient`) has none, as no cad is
+   * behind that page to update.
+   */
   startUpdate(): Promise<Pick<CadServerInfo, 'release' | 'instance' | 'cadUpdate'>>;
   /** A failed update put away for every page, by its attempt's start (`at`). */
   dismissUpdate(at: number): Promise<Pick<CadServerInfo, 'release' | 'instance' | 'cadUpdate'>>;
-  /**
-   * A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files.
-   * A `.kicad_sch`'s: `sheet` (a sheet's path, `/` the root) draws that sheet's page alone, `index: false` leaves the
-   * hierarchy's index out (the viewer reads it with the first sheet it shows).
-   */
-  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
-  /**
-   * A board's 3D models table (`GET <board>/models`): each model name its footprints write, a STEP the engine
-   * serves by `document` (`engineDocument`), or the reason it has none (`missing`). The page names no path.
-   */
-  boardModels?(file: string, options?: CadRequestOptions): Promise<Record<string, CadBoardModel>>;
-  /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
-  drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
-  /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
-  robot(file: string, options?: CadRequestOptions): Promise<CadRobotPayload>;
-  /**
-   * `POST /api/v1/documents`: where the page reads a document the engine serves (an `.xbf`, a STEP, a model),
-   * through this server (`lib/xbf/xbfDocument.js`), once the engine holds it. A host without an
-   * engine leaves it out, and the xbf renderer says it cannot open the file.
-   */
-  /** `onProgress` hears each frame of the engine's import of the file while it reads it (a STEP's), as the build frames are shaped. */
-  engineDocument?(file: string, options?: CadRequestOptions & { onProgress?(frame: Record<string, unknown>): void }): Promise<CadEngineDocument>;
-  /** Whether the engine holds a read of the document now (its envelope's `held`), asked without starting one. */
-  engineHolds?(file: string, options?: CadRequestOptions): Promise<boolean>;
-  /**
-   * `POST /api/v1/documents/model/<id>/parameters`: new values for a model's declared parameters, by
-   * name, each a finite number. The engine rewrites them in the model's script and builds it again,
-   * and answers once that build has ended; a refusal rejects with a `CadParametersRefusal`. The one
-   * call of a view that changes a design. A host that cannot make it leaves it out, and its views
-   * show a model's parameters without a way to save them.
-   */
-  setModelParameters?(id: string, values: Record<string, number>, options?: CadRequestOptions): Promise<CadParametersSaved>;
-  /**
-   * `POST /api/v1/documents/model/<id>/preview`: the model at other values of its declared parameters, for
-   * this page alone (`page`, the page's own token): the engine builds it in the model's worker and writes
-   * nothing; the page reads the preview's structure and parts as a document's. `{}` lets the page's previews
-   * go. A host that cannot make it leaves it out, and its views show a value only once it is saved.
-   */
-  previewModelParameters?(id: string, values: Record<string, number>, options: CadRequestOptions & { page: string }): Promise<CadParametersPreview>;
-  readonly resources: CadResourceProvider;
-  createRenderSession(options?: { file?: string }): CadRenderSession;
-  dispose(): void;
 }
-/** Reusable HTTP implementation, also used by existing catalog adapters. */
-export interface CadClient extends CadWorkspaceService {
-  readonly origin: string;
+/**
+ * Where a view bundle's files are read (a share's, `viewBundleMemorySource`): the bytes of one path of the bundle
+ * (`manifest.json`, `parts/<key>/<tessellation>.xbm`…), or an error whose `status` is 404 for a path it does not
+ * hold.
+ */
+export interface ViewBundleSource {
+  read(path: string, options?: CadRequestOptions): Promise<ArrayBuffer>;
+  /** Let go of what it holds (a share's packs, the fetches under way): the bundle's service calls it once, when it is disposed. */
+  dispose?(): void;
+}
+/**
+ * The bytes of the look's environment image as the page's build holds it (the engine's `studio.hdr`, the same in
+ * every release's look): what a view bundle's service answers `/api/v1/look/environment` with, which no bundle holds.
+ */
+export type ViewBundleEnvironment = (options?: CadRequestOptions) => Promise<ArrayBuffer>;
+/**
+ * One file of a share (`ShareManifest`): the SHA-256 and the size of its own bytes, and where its gzip member
+ * lies: `[pack id, offset, length]` ranges of the packs' bytes (before sealing), joined in order.
+ */
+export interface ShareFile { sha256: string; bytes: number; at: [pack: string, offset: number, length: number][] }
+/**
+ * A share's manifest (`cad-share/2`, sealed by its service): its document, and two maps of files by their paths,
+ * its view bundle's (what a page reads) and the files that made it (what its zip holds, never a page's).
+ */
+export interface ShareManifest {
+  format: 'cad-share/2';
+  /** The document's name (the share's zip is named for it). */
+  name: string;
+  /** A model's script, by its path among `files`; null for a file document. */
+  entry: string | null;
+  /** What built a model (the `cad` release, its libraries, its platform), each as text; null for a file document. */
+  made: Record<string, string> | null;
+  /** The view bundle's files, `manifest.json` among them. */
+  view: Record<string, ShareFile>;
+  /** The files that made it, by their paths in the project; may be none. */
+  files: Record<string, ShareFile>;
+}
+/**
+ * The share service's reads of one share (`openShare`), each its sealed bytes (`IV || ciphertext-and-tag`): its
+ * manifest, and one of its packs by its id. A share the service has none of is the host's to say.
+ */
+export interface ShareService {
+  manifest(options?: CadRequestOptions): Promise<ArrayBuffer>;
+  pack(pack: string, options?: CadRequestOptions): Promise<ArrayBuffer>;
+}
+/** A view bundle's `manifest.json` (the engine's documentation, "View bundle"). */
+export interface ViewBundleManifest {
+  format: 'view-bundle/1';
+  document: { id: string; kind: string; name: string; version: string };
+  made?: { tool?: string; release?: string };
+  files: Record<string, { bytes: number; sha256?: string; type?: string }>;
+}
+/** The viewer's CAD service over one view bundle (`openViewBundle`): its one document, read from the bundle alone. */
+export interface CadViewBundleClient extends CadWorkspaceService {
+  readonly manifest: ViewBundleManifest;
+  /** What the viewer shows it by: a model's id, a file's `/<name>`. */
+  readonly file: string;
+  engineDocument(file: string, options?: CadRequestOptions): Promise<CadEngineDocument>;
 }
 export interface CadClientOptions {
   resources?: CadResourceProvider;
@@ -380,7 +514,7 @@ export interface CadActivity {
   crash?: CadPageCrash;
 }
 
-/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad kicad_pcb export --to`). */
+/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad export --as`). */
 export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
   | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf' | 'svg' | 'netlist';
 export interface ExportSource { doc: string; revision: string }

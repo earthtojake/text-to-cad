@@ -3,13 +3,14 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { createCadClient } from '@cad/core/client';
+import { createCadClient, openViewBundle, viewBundleMemorySource } from '@cad/core/client';
 import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createBoardRenderer } from '../../../dist/renderers/board/index.js';
 import { createCadPreferences } from '../../../dist/renderers/workspace/index.js';
 import { FLOATING_CHROME_SURFACE_CLASS } from '../../../dist/lib/floatingSurface.js';
+import { ControlUsageProvider } from '../../../dist/usage/controls.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
 import '../../../dist/renderers/board/BoardRenderer.js';
 import BOARD from './__fixtures__/board.plot.json';
@@ -74,6 +75,8 @@ const noop = () => {};
 const FILE = '/models/blinky.kicad_pcb';
 const KEY = JSON.stringify([FILE, 'board']);
 let copied: string[] = [];
+// The snapshot packet a copied Quick Edit carries inline.
+const packetOf = (message: string | undefined) => JSON.parse(/```json\n(.*)\n```/.exec(String(message))![1]);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const UNREADABLE = 'broken.kicad_pcb is not a KiCad board: a .kicad_pcb starts with (kicad_pcb ...)';
 let readPlot: () => Response | Promise<Response> = () => json(BOARD);
@@ -109,9 +112,24 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); while (restores.length) restores.pop()!(); });
 
-/** One pane: a host, a workspace with one board, a live binding, and the tab. */
-async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any, models = null as any } = {}) {
-  const file = `/models/${name}`;
+/**
+ * A share's client: the board's view bundle, its plot alone (the engine's documentation, "View bundle"), read from the
+ * files held in the page. It answers the board's own name, `/<name>`, and no models table.
+ */
+async function sharedBoard(name: string) {
+  const plot = new TextEncoder().encode(JSON.stringify(BOARD));
+  const manifest = { format: 'view-bundle/1', document: { id: '5b1a2f2c-2b65-5151-8299-282973f2a9fc', kind: 'kicad_pcb', name, version: 'b1' },
+    made: { tool: 'cad', release: '0.12.0' }, files: { 'plot.json': { bytes: plot.byteLength, type: 'application/json' } } };
+  return openViewBundle(viewBundleMemorySource({ 'plot.json': plot, 'manifest.json': new TextEncoder().encode(JSON.stringify(manifest)) }));
+}
+
+/**
+ * One pane: a host, a workspace with one board, a live binding, and the tab. `shared`: the board a share's view bundle
+ * holds, read through its client, in place of the engine's; `report`: what a host that counts the controls is told.
+ */
+async function open(name = 'blinky.kicad_pcb', { strict = false, locale = "en", state = { renderers: {} } as any, models = null as any, shared = false,
+  report = null as ((counts: { control: string; count: number }[]) => void) | null } = {}) {
+  const file = shared ? `/${name}` : `/models/${name}`;
   let revision = 'one';
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -130,7 +148,7 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
     if (models && url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/models')) return json({ models });
     return new Response('', { status: 404 });
   });
-  const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
+  const client = shared ? await sharedBoard(name) : createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
   await client.refresh();
   let controller: any = null;
   const live = { bind(next: unknown) { controller = next; return () => { controller = null; }; } };
@@ -138,7 +156,6 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
   const preferences = createCadPreferences();
   const renderers = [createBoardRenderer({ client, live, preferences })];
   const host = {
-    promptFiles,
     files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 400, extension: 'kicad_pcb' }) },
     navigation: { openFile: noop },
     environment: { colorScheme: 'light', locale },
@@ -156,7 +173,8 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
     latest = state;
     return <section data-testid="pane"><FileViewer file={file} host={themed as any} renderers={renderers} state={state} onStateChange={setState} /></section>;
   }
-  render(strict ? <StrictMode><Pane /></StrictMode> : <Pane />);
+  const tree = report ? <ControlUsageProvider report={report}><Pane /></ControlUsageProvider> : <Pane />;
+  render(strict ? <StrictMode>{tree}</StrictMode> : tree);
   const pane = screen.getByTestId('pane');
   return { pane, get controller() { return controller; }, get state() { return latest; }, scheme: (next: 'light' | 'dark') => act(() => setScheme(next)),
     background: (next: 'light' | 'dark') => act(() => preferences.update({ viewportBackground: next })),
@@ -316,7 +334,7 @@ it("a board's strip is a drawing's — Select (in hand), Draw, Measure; its view
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
   // The panel, docked at the left: one head row, the tabs, then the search's icon at its right end; its toggle is the
-  // navbar's, its first control, the same neutral button open or shut (aria-expanded says which).
+  // navbar's, after the logo, the same neutral button open or shut (aria-expanded says which).
   const aside = panel(pane);
   expect([aside.getAttribute('data-flat-panel'), aside.hidden]).toEqual(['docked', false]);
   const head = aside.querySelector<HTMLElement>('[data-flat-panel-head]')!;
@@ -563,8 +581,7 @@ it('a locked footprint is no pick until Locked items is ticked, but for its pads
 });
 
 it("a drag under Select draws the shared box: over bare board it names the area on the working layer, over the board's items it takes what it touches; the other drags pan as the 3D views' do; a jittered click is a click", async () => {
-  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
-  const view = await open('blinky.kicad_pcb', { promptFiles });
+  const view = await open('blinky.kicad_pcb');
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
@@ -632,9 +649,8 @@ it("a drag under Select draws the shared box: over bare board it names the area 
   note.textContent = 'Keep this clear.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#R1.1', '#F.Cu@x25y1..x35y11']);
   await waitFor(() => expect(copied.at(-1)).toContain(`${FILE}#F.Cu@x25y1..x35y11`));
+  expect(packetOf(copied.at(-1)).references).toEqual(['#R1.1', '#F.Cu@x25y1..x35y11']);
   // A box that starts on R1 is a box all the same. It takes what it touches, even in part, as the filter
   // does (the part, its pads, the track into it), in place of the rest, whichever way it is drawn.
   const drag = (from: [number, number], to: [number, number]) => {
@@ -937,7 +953,7 @@ it("a board's card picture is drawn once, in the light theme, on nothing but the
   await opened(pane);
   const controller = await controllerOf(view);
   themes.length = 0;
-  const picture = await controller.thumbnail({ width: 480, height: 360 });
+  const picture = await controller.thumbnail({ width: 480, height: 320 });
   expect(picture).toBeInstanceOf(Blob);
   expect('dark' in picture).toBe(false);
   expect(themes).toEqual(['light']);
@@ -967,8 +983,7 @@ it('a preset chooses the layers; the side (Flip) and the pours are kept through 
 });
 
 it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens no Quick Edit; a note on a pick carries the view and its Display", async () => {
-  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
-  const { pane, dispose } = await open('blinky.kicad_pcb', { promptFiles });
+  const { pane, dispose } = await open('blinky.kicad_pcb');
   await opened(pane);
   fireEvent.click(within(strip(pane)).getByRole('button', { name: 'Measure' }));
   // A little off each pad's centre: the ends land on the centres.
@@ -985,11 +1000,14 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   note.textContent = 'Move this pad.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  const request = promptFiles.create.mock.calls[0][0] as any;
-  expect(request).not.toHaveProperty('measurements');
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, others: 'shown', zones: 0.6, tracks: 1 } })]);
-  expect(request.views[0].camera).toMatchObject({ up: [0, 1, 0] });
+  await waitFor(() => expect(copied.at(-1)).toContain('Snapshot JSON (`cad snapshot --job`)'));
+  const packet = packetOf(copied.at(-1));
+  expect(JSON.stringify(packet)).not.toContain('measurements');
+  // A board's view is its plan view: no 3D framing to pin, its picture by its label.
+  expect(packet.jobs).toEqual([expect.objectContaining({ display: { mode: 'board', side: 'top', poured: true, others: 'shown', zones: 0.6, tracks: 1 },
+    outputs: [expect.objectContaining({ label: 'current view' })] })]);
+  expect(packet.jobs[0]).not.toHaveProperty('output');
+  expect(packet.jobs[0].camera).toMatchObject({ up: [0, 1, 0] });
   dispose();
 });
 
@@ -1287,6 +1305,73 @@ it("Display's Side and Mode choose the state on screen; ⇧F flips as F still fi
   await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'top' }));
   expect(viewValue(pane, 'side')).toBe('top');
   dispose();
+});
+
+// What a host that counts the controls was told of one, in all, once the view has gone.
+const counted = (reports: { control: string; count: number }[][], control: string) =>
+  reports.flat().filter(row => row.control === control).reduce((sum, row) => sum + row.count, 0);
+
+it("3 and ⇧F are counted as Display's Mode and Side are: board_dimension and board_side", async () => {
+  const reports: { control: string; count: number }[][] = [];
+  const view = await open('blinky.kicad_pcb', { report: counts => reports.push(counts) });
+  const { pane } = view;
+  await opened(pane);
+  const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
+  // ⇧F turns the board over; 3 draws it in 3D, and 3 again flat; then Display's Side and Mode do the same.
+  fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
+  await waitFor(() => expect(viewValue(pane, 'side')).toBe('bottom'));
+  fireEvent.keyDown(canvas, { key: '3' });
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).not.toBeNull());
+  fireEvent.keyDown(pane.querySelector('[data-board-3d] canvas')!, { key: '3' });
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).toBeNull());
+  flip(pane);
+  switchDimension(pane);
+  await waitFor(() => expect(pane.querySelector('[data-board-3d]')).not.toBeNull());
+  view.dispose();
+  cleanup();
+  // Told as the view went: each key once a press, as Display's choice of the same.
+  expect([counted(reports, 'board_side'), counted(reports, 'board_dimension')]).toEqual([2, 3]);
+});
+
+it("a board a share's view bundle holds is 2D alone: Display has no Mode, 3 does nothing, no Preview, no 3D models row, a view left in 3D opens in 2D; the engine's has them", async () => {
+  // Through the engine's client the board offers its 3D: Display's Mode, Preview, and the Layers tab's 3D models row.
+  const local = await open();
+  await opened(local.pane);
+  expect([viewButtons(local.pane), cardSections(local.pane)[0]]).toEqual([['Display', 'Preview'], [['side', 'Top'], ['dimension', '2D']]]);
+  showTab(local.pane, 'Layers');
+  await waitFor(() => expect(local.pane.querySelector('[data-layer-row="models-3d"]')).not.toBeNull());
+  local.dispose();
+  cleanup();
+  // A share's client has no models table: its board in 2D alone, though its view was left in 3D, in perspective.
+  const key = JSON.stringify(['/blinky.kicad_pcb', 'board']);
+  const left = { renderers: { [key]: { version: 2,
+    renderer: { board3d: { signature: '1', value: { mode: '3d', camera: null, projection: 'perspective', models: true } } } } } };
+  const reports: { control: string; count: number }[][] = [];
+  Object.assign(viewport3d, { props: null });
+  frames.length = 0;
+  drawn.length = 0;
+  const shared = await open('blinky.kicad_pcb', { shared: true, state: left, report: counts => reports.push(counts) });
+  const { pane } = shared;
+  await opened(pane);
+  const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
+  expect([pane.querySelector('[data-board-3d]'), ['pointer-events-none', 'invisible'].map(name => canvas.classList.contains(name))]).toEqual([null, [false, false]]);
+  // Display is its Side, then its Style and Background: no Mode, no Projection, and no Preview beside it.
+  expect(viewButtons(pane)).toEqual(['Display']);
+  expect(cardSections(pane)).toEqual([[['side', 'Top']], [['display', 'Board'], ['background', 'Light']]]);
+  expect(displayButton(pane).hasAttribute('data-view-dimension')).toBe(false);
+  showTab(pane, 'Layers');
+  expect(pane.querySelector('[data-layer-row="models-3d"]')).toBeNull();
+  // 3 does nothing (the flat canvas would give up the pointer to a board in 3D at once); ⇧F turns the board over, flat.
+  fireEvent.keyDown(canvas, { key: '3' });
+  expect(canvas.classList.contains('pointer-events-none')).toBe(false);
+  fireEvent.keyDown(canvas, { key: 'F', code: 'KeyF', shiftKey: true });
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ side: 'bottom' }));
+  // The file's view is 2D now, and no 3D viewport was ever mounted: neither the board in 3D nor Preview.
+  await waitFor(() => expect(shared.state.renderers?.[key]?.renderer?.board3d?.value?.mode).toBe('2d'));
+  expect([pane.querySelector('[data-board-3d]'), viewport3d.props]).toEqual([null, null]);
+  shared.dispose();
+  cleanup();
+  expect([counted(reports, 'board_side'), counted(reports, 'board_dimension')]).toEqual([1, 0]);
 });
 
 it("in 3D Flip turns the camera over, and its icon is the side the camera is on: turned by Flip, by ⇧F or by hand, and after a reload on a camera below the board", async () => {

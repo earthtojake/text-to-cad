@@ -1,6 +1,6 @@
 """What a document weighs, as its robot description weighs it: ``inspect``'s masses, so that a part or an assembly
 declared to weigh ``grams`` (``declarations.mass``) and the point masses a part declares (``point_mass``) read
-the same in ``cad <type> inspect`` as in the MJCF or URDF written of it.
+the same in ``cad inspect`` as in the MJCF or URDF written of it.
 
 The rule is the description's (``describe``'s **Mass**), here over the engine's facts of each part -- its volume,
 mm^3, by its prototype's key -- with no kernel: each instance belongs to its innermost declared node; innermost

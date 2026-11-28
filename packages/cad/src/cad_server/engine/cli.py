@@ -2,23 +2,23 @@
 ordinary Python scripts call decorated models explicitly.
 
     cad run SCRIPT.py                                the models the script explicitly calls
-    cad <type> export SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
+    cad export SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]   (the options: a
         model's, an xbf's, a STEP's)
-    cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
-        [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
-        [--size-profile P] [--json]
-    cad serve DOC [--port N]
+    cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
+        [--preview] [--pose NAME|NAME@SECONDS|JSON] [--annotation FILE|JSON|-] [--measurements FILE] [--width N]
+        [--height N] [--size-profile P] [--json]
+    cad snapshot --job PACKET|JSON|- [SRC] [--out DIR] [the same flags]
     cad server status [--json] | stop [--json]      (``cad_server.cli.server``, which starts it too)
-    cad delete DOC [DOC ...] [--dry-run] [--yes] [--json]   documents deleted: record, cached document, the
-                                                  engine's copy; asked first, or --yes
-    cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
+    cad inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
 
-SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad xbf``, ``cad step``, ...), or a
-model's document id (``ids``), for ``cad model``: the id ``cad run SCRIPT.py`` prints for it. A script is never
-a source: no verb imports or builds one.
+SRC and DOC are an on-disk CAD file's path, its type by its suffix (``cad_server.cli.verbs``), or a model's
+document id (``ids``), the id ``cad run SCRIPT.py`` prints for it, or the ``.xbf`` file a model is saved as. A
+script is never a source: no verb imports or builds one. Wherever a verb takes a document -- SRC, DOC, a packet's
+input, a ref's FILE -- a share's link names this computer's copy of it (``linked``: ``sharing.local``).
 
 The ``cad`` command runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
-``python -m cad_server.engine VERB ...``, takes the same verbs as subcommands (``main``). A verb's failure
+``python -m cad_server.engine VERB ...``, takes the same verbs as subcommands (``main``), and ``serve``, a
+document served over HTTP and its URL printed. A verb's failure
 is said once where its command ends (``answered``), by the ``cad`` command's one failure contract
 (``cad_server._internal.cli_errors``): its class sets the exit status with ``--json`` and without -- 2 for
 a request refused by name before anything ran, 1 for one that failed --, and under ``--json`` it is
@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -37,21 +38,21 @@ from typing import Any, Callable
 from cad.engine import said as _said
 from cad_server._internal.cli_errors import Failure
 
-__all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", "run",
+__all__ = ["VERBS", "Failed", "answered", "build_parser", "linked", "main", "parser_for", "run",
            "inspect_main", "inspect_parser"]
 
 
 def _source_help(document_type: str | None, generic: str) -> str:
-    """What a type's command takes as its source: a model's document id for ``model``, a file of its own
+    """What a type's command takes as its source: a model's document id for ``xbf``, a file of its own
     kind for every other type (``generic`` for the engine's own command, which takes any)."""
     if document_type is None:
         return generic
     from cad.registry import DOCUMENT_TYPES
 
     entry = DOCUMENT_TYPES[document_type]
-    if not entry.has_file:
-        return ("a model's document id, which cad run SCRIPT.py prints: the document the engine holds of it, "
-                "never built")
+    if entry.held:
+        return ("the .xbf file a model is saved as: the build the engine holds while the file is the one that build "
+                "wrote, else the file as it is")
     return f"the {' or '.join(entry.extensions)} file"
 
 
@@ -64,31 +65,51 @@ def _meshes(document_type: str | None) -> bool:
     return DOCUMENT_TYPES[document_type].view == "mesh"
 
 
+def _one_destination(parsed: argparse.Namespace) -> None:
+    """``cad export`` writes one file, like ``cp``: a second DST is the command line's mistake, said by name."""
+    destinations = list(getattr(parsed, "destinations", None) or [])
+    if len(destinations) > 1:
+        raise Failure(f"cad export writes one file, DST: run it once for each of {', '.join(destinations)}", "usage")
+
+
 def _export_arguments(export: argparse.ArgumentParser, document_type: str | None = None) -> None:
     export.add_argument("source", metavar="SRC", help=_source_help(
-        document_type, "an .xbf, a .step, a document id (a model's, which cad run SCRIPT.py prints), or a mesh "
-                       "file (.glb, .stl, .3mf), which exports to the other two mesh kinds"))
+        document_type, "an .xbf, a .step, or a mesh file (.glb, .stl, .3mf), which exports to the other two mesh "
+                       "kinds") + _LINKED)
+    if hasattr(export, "checks"):
+        export.checks.append(_one_destination)
+    export.usage = ("%(prog)s SRC DST [--as KIND] [--json]" if _meshes(document_type)
+                    else "%(prog)s SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]")
+    from cad._internal.verbs import MODEL_KINDS
+
     if _meshes(document_type):
         export.add_argument("destinations", nargs="+", metavar="DST",
-                            help="the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries")
+                            help="one of the other mesh kinds (.glb, .stl, .3mf), holding what its format carries: "
+                                 "one file, named (never a folder)")
+        export.add_argument("--as", dest="as_", choices=tuple(MODEL_KINDS), metavar="KIND",
+                            help="the kind DST is (glb, stl, 3mf): DST says it, and the two must agree")
         export.add_argument("--json", action="store_true", help="print what was written as JSON")
         return
     export.add_argument("destinations", nargs="+", metavar="DST",
-                        help=".xbf (from a STEP), .step, .glb, .stl, .3mf, .dxf (of a planar document), .xml "
-                             "(MJCF, its meshes in assets/ beside it) or .urdf (its meshes in meshes/ "
-                             "beside it): the document as its code built it. Every one is checked, a DXF's drawing "
-                             "too, before any is written: a refused export writes none")
+                        help="the file to write, its format by its suffix: .step (or .stp), .glb, .stl, .3mf, .dxf (of "
+                             "a planar document), .xbf (a copy of the document, never over its own file), .xml (MJCF, "
+                             "its meshes in assets/ beside it) or .urdf (its meshes in meshes/ beside it): one file, "
+                             "named (never a folder), the document as its code built it, checked (a DXF's drawing "
+                             "too) before it is written: a refused export writes nothing")
+    export.add_argument("--as", dest="as_", choices=tuple(MODEL_KINDS), metavar="KIND",
+                        help="the kind DST is (step, glb, stl, 3mf, dxf, xbf, mjcf, urdf): DST says it, and the two "
+                             "must agree")
     from cad.engine.export import MAX_ANGLE, MIN_ANGLE, MIN_TOLERANCE
 
     export.add_argument("--tolerance", type=float, metavar="MM",
                         help=f"mesh a .glb, an .stl or a .3mf to within this absolute tolerance, in mm (at least "
                              f"{MIN_TOLERANCE:g}), where it is finer than the viewer's quarter per cent of a part: "
-                             "for a print whose fits are finer, or a picture whose curves are. Every destination is "
-                             "then a .glb, an .stl or a .3mf: export a .step or any other file in a command of its own")
+                             "for a print whose fits are finer, or a picture whose curves are: DST a .glb, an .stl or "
+                             "a .3mf")
     export.add_argument("--angle", type=float, metavar="DEG",
                         help=f"mesh a .glb, an .stl or a .3mf to within this angular deflection, in degrees ("
-                             f"{MIN_ANGLE:g} to {MAX_ANGLE:g}, the viewer's own): small radii drawn in more segments. "
-                             "Every destination is then a .glb, an .stl or a .3mf")
+                             f"{MIN_ANGLE:g} to {MAX_ANGLE:g}, the viewer's own): small radii drawn in more segments; "
+                             "DST a .glb, an .stl or a .3mf")
     export.add_argument("--zero", metavar="STATE",
                         help="take an .xml (MJCF) or a .urdf at this mechanism state: every body posed there and each "
                              "joint's value there its zero, its limits and the other states around it (as built "
@@ -98,7 +119,7 @@ def _export_arguments(export: argparse.ArgumentParser, document_type: str | None
 
 
 def _serve_arguments(serve: argparse.ArgumentParser) -> None:
-    serve.add_argument("document", help="an .xbf, a STEP, or a document id")
+    serve.add_argument("document", help="an .xbf, a STEP, or any file the viewer opens")
     serve.add_argument("--port", type=int, default=0)
 
 
@@ -108,19 +129,6 @@ def _status_arguments(status: argparse.ArgumentParser) -> None:
 
 def _stop_arguments(stop: argparse.ArgumentParser) -> None:
     stop.add_argument("--json", action="store_true", help="what was stopped as JSON")
-
-
-def _delete_arguments(delete: argparse.ArgumentParser) -> None:
-    from cad_server._internal.consent import add_yes
-
-    delete.add_argument("documents", nargs="+", metavar="DOC",
-                        help="a document's id, a model's script (every document recorded of it), or a CAD file "
-                             "a page opened; your own files -- a script, its declared files, an opened file -- "
-                             "are never touched")
-    delete.add_argument("--dry-run", action="store_true",
-                        help="say which documents would be deleted, and how many, and delete nothing")
-    add_yes(delete, "delete them")
-    delete.add_argument("--json", action="store_true", help="what was deleted (or would be) as JSON")
 
 
 def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> None:
@@ -134,8 +142,9 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
                         help="without REF, the summary (or the structure) and the closure as one JSON object (a "
                              "REF's answer is JSON)")
     parser.add_argument("document", help=_source_help(
-        document_type, "an .xbf, a STEP, or a document id; a GLB says its nodes, meshes and animations"))
-    parser.add_argument("ref", nargs="?", help="[FILE#][OWNER/]ELEMENT or [FILE#]OWNER (cad.engine.refs): OWNER a "
+        document_type, "an .xbf or a STEP; a GLB says its nodes, meshes and animations") + _LINKED)
+    parser.add_argument("ref", nargs="?", help="[FILE#][OWNER/]ELEMENT or [FILE#]OWNER (cad.engine.refs; FILE a "
+                                               "share's link too): OWNER a "
                                                "part's or an assembly's label, or its occurrence path (hand/finger.2); "
                                                "ELEMENT an element name (f:..., e:..., v:...) or face N (edge, vertex). "
                                                "An element answers what the kernel measures of it, placed where its "
@@ -145,24 +154,65 @@ def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | Non
                                                "parameters and declared files), then its build closure")
 
 
+# Wherever a verb takes a document, a share's link names this computer's copy of it (``linked``).
+_LINKED = ("; or a share's link (https://cad.fun/<id>): this computer's copy of it, the file it shared or the copy "
+           "in the folder cad import wrote it into")
+
+
+# A key as JSON with its double quotes taken out spells one: bare, after an object's opening or a comma.
+_BARE_KEY = re.compile(r"[{,]\s*[A-Za-z_][A-Za-z0-9_]*\s*:")
+
+
+def _unquoted(prog: str) -> Callable[[list[str]], None]:
+    """The screen of a snapshot's words (``cli_parser``'s ``screens``): a packet given to ``--job`` or
+    ``--annotation`` as JSON whose double quotes a shell took out -- Windows PowerShell 5.1 takes them out of
+    every argument it passes a program, so ``--job '<packet>'`` arrives as ``{input:...}``, cut at its spaces --
+    refused in one line saying so, and to pipe it in instead (``-``: standard input, which no shell rewrites so)."""
+
+    def screen(tokens: list[str]) -> None:
+        for at, token in enumerate(tokens):
+            flag, equals, value = token.partition("=")
+            if flag not in ("--job", "--annotation"):
+                continue
+            text = (value if equals else tokens[at + 1] if at + 1 < len(tokens) else "").strip()
+            if not text.startswith(("{", "[")) or '"' in text or not _BARE_KEY.search(text):
+                continue
+            try:
+                json.loads(text)
+            except ValueError:
+                rest = "" if flag == "--job" else " SRC OUT.png"
+                raise Failure(f"{flag} got JSON with its double quotes taken out: Windows PowerShell 5.1 removes them "
+                              f"from a program's arguments. Pipe the packet in instead: '<packet>' | {prog}{rest} "
+                              f"{flag} -", "invalid_argument") from None
+
+    return screen
+
+
 def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> argparse.ArgumentParser:
     from cad.engine import snapshot
 
-    parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
+    if hasattr(parser, "screens"):
+        parser.screens.append(_unquoted(parser.prog))
+    parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [--out DIR] [options]"
     parser.add_argument("document", metavar="SRC", nargs="?", help=_source_help(
         document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .srdf), "
-                       "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a "
-                       "model's, which cad run SCRIPT.py prints: drawn from what the engine holds)")
-        + "; with --job, drawn in place of every job's input")
+                       "a drawing (.dxf), or a KiCad board (.kicad_pcb) or schematic (.kicad_sch)")
+        + _LINKED + "; with --job, drawn in place of every job's input")
     parser.add_argument("out", metavar="OUT.png", nargs="?",
                         help="the .png to write, or a folder (one that is there, or a path ending in a separator) to "
                              "write <SRC's stem>_<UTC time>.png into")
     parser.add_argument("--job", metavar="PACKET",
-                        help="a Quick Edit packet (the .snapshot.json the viewer writes), a job or a list of jobs, as "
-                             "JSON or a file of it: every picture its outputs name drawn, each job's view as it was -- "
-                             "its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
+                        help="a Quick Edit packet, a job or a list of jobs: its JSON, a file of it, or - to read it "
+                             "from standard input. Every picture its outputs name is drawn, each job's view as it was "
+                             "-- its camera, display, hidden and isolated parts, pose -- with the packet's ink and "
                              "dimensions, at its output settings (padding, tightFrame, transparent, background, "
-                             "renderScale, sizeProfile); the other flags override every job")
+                             "renderScale, sizeProfile), each output at its path or, naming none, in --out; its input "
+                             "(or a job's) may be a share's link, which names this computer's copy of it; the other "
+                             "flags override every job")
+    parser.add_argument("--out", metavar="DIR", dest="out_folder",
+                        help="with --job, the folder each output that names no path is written into, as <its input's "
+                             "stem>-<its label>.png (-2, -3 after it where two would share a name); the current "
+                             "folder by default")
     parser.add_argument("--display", help="a mode (solid, shaded, parts, xray, hidden-line, wireframe), exploded=AMOUNT "
                                           "(the parts moved apart, 0 to 1; with a mode: hidden-line,exploded=0.6), edges=CLASS "
                                           "(the edges of one class alone: feature, tangent or seam; edges=feature "
@@ -193,9 +243,10 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
                                        "values as JSON ('{\"elbow\": 45}', '{\"curl\": 0.6}'; degrees, and a slide in "
                                        "the file's unit: a document's mm, a robot's m): the mechanism posed there; as "
                                        "built without it (a robot where the viewer opens it)")
-    parser.add_argument("--annotation", metavar="FILE", help="the viewer's annotation file, or the Quick Edit packet "
-                                                              "(.snapshot.json) that carries it: its ink drawn over the "
-                                                              "model, on the parts it was drawn on")
+    parser.add_argument("--annotation", metavar="FILE", help="the viewer's annotation, or the Quick Edit packet that "
+                                                              "carries it -- its JSON, a file of it, or - to read it "
+                                                              "from standard input --: its ink drawn over the model, "
+                                                              "on the parts it was drawn on")
     parser.add_argument("--measurements", metavar="FILE", help="Measure's dimensions (a JSON list of {start, end, label, "
                                                                 "color}; the points in the viewer's scene coordinates, "
                                                                 "as --camera's lengths), drawn over the model")
@@ -203,13 +254,18 @@ def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | No
     return parser
 
 
-def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> int:
-    """``cad <type> snapshot``: the verb run from its parsed flags (``snapshot.snapshot`` through ``api.snapshot``); a
+def _snapshot(args: argparse.Namespace, prog: str = "cad snapshot") -> int:
+    """``cad snapshot``: the verb run from its parsed flags (``snapshot.snapshot`` through ``api.snapshot``); a
     failure raised as ``Failed``, which the command says (``answered``)."""
     from cad.engine import snapshot
 
+    _standard_input(args)
+    args.document = linked(args.document)
     if args.job is not None:
         return _snapshot_job(args, prog)
+    if getattr(args, "out_folder", None) is not None:
+        raise Failed(f"--out names the folder --job writes the pictures that name no path into; a snapshot of SRC "
+                     f"writes OUT.png: give the folder as OUT ({os.path.join(args.out_folder, '')})", 2, "usage")
     if args.document is None or args.out is None:
         raise Failed("the following arguments are required: SRC, OUT.png (or --job PACKET)", 2, "usage")
     if snapshot.by_id(args.document):
@@ -243,7 +299,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
 def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) -> dict[str, Any] | None:
     """A picture the engine could not draw for want of an OpenGL context (``snapshot.no_gl``: on Linux, a daemon
     with no X display), drawn instead by the installation's base -- the environment that holds the kernel --
-    run from this process, so on this process's display (``xvfb-run cad urdf snapshot ...``): the same snapshot,
+    run from this process, so on this process's display (``xvfb-run cad snapshot ...``): the same snapshot,
     which there, the engine failing it again, is drawn by that process itself (``snapshot.drawable_here``). None
     where it is no such failure, where this process carries the kernel (the library drew here already, or could
     not), or where it has no display to lend (Linux with no ``DISPLAY``): the engine's failure stands. What it
@@ -262,7 +318,8 @@ def _drawn_elsewhere(error: BaseException, args: argparse.Namespace, prog: str) 
 
     document = str(args.document) if is_id(str(args.document)) else str(Path(args.document).expanduser().resolve())
     entry = None if is_id(document) else type_of(document)
-    document_type = "model" if is_id(document) else entry.id if entry is not None else None
+    # The type whose function draws it: an xbf's, for a model's id and for its .xbf.
+    document_type = "xbf" if is_id(document) else entry.id if entry is not None else None
     if document_type is None:
         return None
     options = {"display": args.display, "camera": args.camera, "grid": bool(args.grid), "preview": bool(args.preview),
@@ -292,7 +349,7 @@ def _lends_display() -> bool:
 
 
 def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
-    """``cad model snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
+    """``cad snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
     memory of the worker holding it (``api.snapshot``); nothing is built."""
     from cad.engine import api, snapshot
 
@@ -319,20 +376,29 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
 
 def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
-    """``cad <type> snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
-    a line each; with ``--json``, ``{"ok": true, "pictures": [what each drew]}``."""
+    """``cad snapshot --job PACKET [SRC] [--out DIR]``: every picture the job names (``api.snapshot(job=)``),
+    each one that names no path in ``--out``, a line each saying the file it wrote; with ``--json``, ``{"ok": true,
+    "pictures": [what each drew, its "output" the file]}``. The packet's input, and each job's, that is a share's link
+    is this computer's copy of it (``_linked_inputs``), where no SRC is drawn in their place."""
     import time
 
     from cad.engine import api, snapshot
 
     if args.out is not None:
-        raise Failed(f"--job writes the pictures its outputs name, so it takes no OUT ({args.out})", 2, "usage")
+        raise Failed(f"--job writes the pictures its outputs name, so it takes no OUT ({args.out}); --out DIR is the "
+                     "folder of those that name no path", 2, "usage")
+    try:
+        job = snapshot.parse_job(args.job)
+    except snapshot.SnapshotRefused as error:
+        raise _refusal(error) from None
+    if args.document is None:
+        job = _linked_inputs(job)
     started = time.perf_counter()
     try:
-        drawn = api.snapshot(args.document, job=args.job, display=args.display, camera=args.camera, grid=args.grid,
-                                 preview=args.preview, pose=args.pose, width=args.width, height=args.height,
-                                 size_profile=args.size_profile, annotation=args.annotation,
-                                 measurements=args.measurements)
+        drawn = api.snapshot(args.document, job=job, folder=getattr(args, "out_folder", None), display=args.display,
+                             camera=args.camera, grid=args.grid, preview=args.preview, pose=args.pose,
+                             width=args.width, height=args.height, size_profile=args.size_profile,
+                             annotation=args.annotation, measurements=args.measurements)
     except snapshot.SnapshotRefused as error:
         raise _refusal(error) from None
     except ConnectionError:
@@ -350,6 +416,92 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
+def linked(text: str | None, *, ref: bool = False) -> str | None:
+    """``text`` -- a document's name, or with ``ref`` a ref's -- with the share's link it starts with in the name of
+    this computer's copy of that share (``sharing.local``), a ``#<selector>`` after it kept; refused in one line where
+    this computer has none (``not_found``, with the command that makes one). So with the link to a page of this
+    server, the ``view:`` of a run, its document's id (``_own_page``). Any other text, and None, as it is."""
+    if text is None:
+        return None
+    from cad_server import sharing
+    from cad_server._internal.cli_errors import Failure
+
+    try:
+        named = sharing.local(str(text), ref=ref)
+    except sharing.NoCopy as missing:
+        raise Failure(str(missing), "not_found", next=missing.next) from None
+    return named if named != str(text) else _own_page(named)
+
+
+def _own_page(text: str) -> str:
+    """``text`` as the id it names where it is a link to a page of THIS server -- ``http://127.0.0.1:<port>/<id>?token=...``,
+    the ``view:`` a run prints -- with a ``#<selector>`` kept; any other text, and any other link, as it is. The link's
+    token is never read, kept or said: the id is what is taken, and the server says whether it holds a document by it.
+    The server is asked its address only of a link of this computer's loopback with a document's id for its path, and
+    never started for one: with none running, the link is no page of it."""
+    from urllib.parse import urlsplit
+
+    from cad.engine.ids import is_id
+
+    head, hashed, selector = text.strip().partition("#")
+    try:
+        parts = urlsplit(head)
+        port = parts.port
+    except ValueError:
+        return text
+    ident = parts.path.strip("/")
+    if parts.scheme not in ("http", "https") or parts.hostname not in ("127.0.0.1", "localhost", "::1") or port is None \
+            or not is_id(ident):
+        return text
+    from cad.engine.client import request
+
+    try:
+        answer = request({"op": "http"}, start=False)
+    except OSError:  # no server answering, or one of another release: no page of it, and the verb says which
+        return text
+    served = urlsplit(str((answer or {}).get("url") or ""))
+    if (served.scheme, served.port) != (parts.scheme, port):
+        return text
+    return f"{ident}#{selector}" if hashed else ident
+
+
+def _linked_inputs(found: Any) -> Any:
+    """A packet, a job or a list of jobs (``snapshot.parse_job``) with its input, and each job's, that is a share's link
+    named by this computer's copy of it (``linked``)."""
+
+    def named(item: Any) -> Any:
+        if isinstance(item, dict) and isinstance(item.get("input"), str):
+            return {**item, "input": linked(item["input"])}
+        return item
+
+    if isinstance(found, list):
+        return [named(job) for job in found]
+    found = named(found)
+    if isinstance(found, dict) and isinstance(found.get("jobs"), list):
+        found = {**found, "jobs": [named(job) for job in found["jobs"]]}
+    return found
+
+
+def _standard_input(args: argparse.Namespace) -> None:
+    """``--job -`` or ``--annotation -``: the JSON standard input holds, read once (UTF-8), in its place."""
+    asked = [name for name in ("job", "annotation") if getattr(args, name, None) == "-"]
+    if not asked:
+        return
+    if len(asked) > 1:
+        raise Failed("standard input is read once: give - to --job or to --annotation, not both", 2, "usage")
+    flag, stream = f"--{asked[0]} -", sys.stdin
+    if stream is None:
+        raise Failed(f"{flag}: this command has no standard input to read", 2, "usage")
+    data = stream.buffer.read() if hasattr(stream, "buffer") else stream.read().encode("utf-8")
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise Failed(f"{flag}: standard input is not UTF-8 text", 2) from None
+    if not text.lstrip().startswith(("{", "[")):
+        raise Failed(f"{flag}: standard input holds no JSON" + ("" if text.strip() else ": it is empty"), 2)
+    setattr(args, asked[0], text)
+
+
 def build_parser(prog: str = "python -m cad_server.engine") -> argparse.ArgumentParser:
     """The engine's own command: its verbs as subcommands, each with its options."""
     from cad_server._internal.cli_parser import parser as command_parser
@@ -362,7 +514,7 @@ def build_parser(prog: str = "python -m cad_server.engine") -> argparse.Argument
 
 
 def parser_for(verb: str, prog: str | None = None, *, document_type: str | None = None) -> argparse.ArgumentParser:
-    """One verb's parser, as a command of its own (``cad <type> export``, ``cad <type> snapshot``, ...): for
+    """One verb's parser, as a command of its own (``cad export``, ``cad snapshot``, ...): for
     ``document_type``, its source said as that type's (a model's id, or a file of its kind), and a mesh's
     export without ``--tolerance`` or ``--angle``."""
     help_text, arguments, _runner = VERBS[verb]
@@ -454,26 +606,26 @@ def told_state(source: Any, doing: str) -> None:
 def state_notice(model: dict[str, Any], doing: str) -> str | None:
     """The words ``told_state`` says of a model document (``model_info``'s record), or None when its
     last run did not fail."""
-    from cad.engine.records import rerun
-
     name = (model.get("source") or {}).get("name") or model.get("id")
     if model.get("state") == "failed":
         program = (model.get("source") or {}).get("script")  # the script that defines it, never a caller
-        fix = (f"; fix it and run `{rerun(program, model.get('python'), model.get('with'))}` to update it"
-               if program else "")
+        fix = f"; fix {program} and run it again" if program else ""
         return f"the last run of {name} failed; {doing} its previous good build{fix}"
     return None
 
 
 def _export(args: argparse.Namespace, prog: str) -> int:
-    """``cad <type> export SRC DST...``: an ``.xbf``, a ``.step``, a document id or a mesh file written
-    to each destination (``api.export`` refuses any other source); with ``--json``, what was written
+    """``cad export SRC DST``: an ``.xbf``, a ``.step``, a document id or a mesh file written
+    to its destination (``api.export`` refuses any other source); with ``--json``, what was written
     as one JSON object."""
+    from cad._internal.verbs import one_file
     from cad.engine import api
     from cad.engine.addresses import key
     from cad.engine.export import ExportRefused
 
     try:
+        for destination in args.destinations:
+            one_file(destination, getattr(args, "as_", None))
         written = api.export(args.source, *args.destinations, tolerance=getattr(args, "tolerance", None),
                              angle=getattr(args, "angle", None), zero=getattr(args, "zero", None),
                              log=lambda text: print(text, file=sys.stderr))
@@ -504,13 +656,13 @@ def _serve(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
-def inspect_parser(prog: str = "cad <type> inspect") -> argparse.ArgumentParser:
-    """``cad <type> inspect``'s parser: a document, and a ref into it or none."""
+def inspect_parser(prog: str = "cad inspect") -> argparse.ArgumentParser:
+    """``cad inspect``'s parser: a document, and a ref into it or none."""
     return parser_for("inspect", prog)
 
 
-def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect") -> int:
-    """``cad xbf inspect DOC``: the build closure the xbf holds; ``cad model inspect ID REF``: what the
+def inspect_main(argv: list[str] | None = None, prog: str = "cad inspect") -> int:
+    """``cad inspect FILE.xbf``: the build closure the xbf holds; ``cad inspect ID REF``: what the
     kernel measures of the elements a ref names, and what made each (``made_by``, null for a model's
     document no live worker built; none of a file, which names no model)."""
     return run("inspect", argv, prog)
@@ -520,6 +672,8 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
     from cad.engine import api
     from cad.engine.addresses import parts
 
+    # A share's link, as DOC or as a ref's FILE: this computer's copy of it, a selector after it the same there.
+    args.document, args.ref = linked(args.document), linked(args.ref, ref=True)
     referred = args.ref is not None or parts(str(args.document))[1] is not None  # REF, or a FILE#REF's
     query = args.query or (None if referred else "summary")
     try:
@@ -541,8 +695,7 @@ def _inspect(args: argparse.Namespace, prog: str) -> int:
         print(summary_text(found["summary"]))
         path = Path(str(found["summary"]["state"].get("path") or ""))
         if found["closure"] is None and path.suffix.lower() in (".step", ".stp"):
-            print("closure     none: a STEP file carries none, only an .xbf does (a model's document, inspected by its "
-                  "id, has one)")
+            print("closure     none: a STEP file carries none, only an .xbf does (a model's .xbf, inspected, has one)")
         elif found["closure"] is None:
             print("closure     none: no build of cad's wrote this document")
         else:
@@ -588,7 +741,7 @@ def _parts(paths: list[str]) -> str:
 
 
 # Why a parameter cannot be set, in a line's words (``cad.engine.parameters.REASONS``).
-_NOT_WRITABLE = {"file": "read-only: a file's", "no_worker": "read-only until its script runs again",
+_NOT_WRITABLE = {"no_worker": "read-only until its script runs again",
                  "shared": "read-only: declared in another file",
                  "expression": "read-only: no plain number of its own in the code"}
 
@@ -612,7 +765,7 @@ def parameter(row: dict[str, Any]) -> str:
 
 
 def summary_text(summary: dict[str, Any]) -> str:
-    """``cad xbf inspect DOC``'s first screen (``api._summary``): a line per fact the document
+    """``cad inspect DOC``'s first screen (``api._summary``): a line per fact the document
     holds, its lists one item per line under it; a fact it has none of says so. A line naming parts
     names a few and counts the rest (``_parts``; the JSON names every one). A structure
     (``--query structure``) has no measured line: no bounds, volume or masses."""
@@ -624,9 +777,6 @@ def summary_text(summary: dict[str, Any]) -> str:
         said = f"file {state.get('path')}"
     else:
         said = state["state"]
-        if state.get("held"):
-            said += f" (in {state['held']})"
-        said += ", cached" if state.get("cached") else ", not cached"
         if state.get("builtAt"):
             said += f", built {_span(time.time() - state['builtAt'])} ago"
     lines.append(f"state       {said}")
@@ -776,98 +926,6 @@ def _stop(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
-def planned(documents: Any) -> list[dict[str, Any]]:
-    """What ``cad delete`` of ``documents`` deletes, read and nothing deleted: ``{"id", "name", "kind"}`` each,
-    in the order named, from the records (``delete``). One that names nothing recorded is refused
-    (``Failed``, ``not_found``), naming each."""
-    from cad_server.engine import registry as registering
-    from cad.engine.ids import canonical, file_id, is_id
-
-    held = registering.current()
-    rows: list[dict[str, Any]] = []
-    unknown: list[str] = []
-    listed: list[dict[str, Any]] | None = None
-    for named in [str(document) for document in documents]:
-        found: list[str] = []
-        if held is not None and is_id(named):
-            found = [named] if held.get(named) is not None else []
-        elif held is not None:
-            path = canonical(os.path.abspath(os.path.expanduser(named)))
-            record = held.get(file_id(path))
-            if record is not None and record.get("kind") == "file":
-                found = [record["id"]]
-            else:
-                listed = held.list() if listed is None else listed
-                found = sorted(row["id"] for row in listed if row.get("kind") != "file"
-                               and canonical(registering.home(held, row)) == path)
-        if not found:
-            unknown.append(named)
-        for ident in found:  # found only where a registry is
-            if held is not None and ident not in [row["id"] for row in rows]:
-                record = held.get(ident) or {}
-                name = record.get("entry") or os.path.basename(str(record.get("home") or "")) or ident
-                rows.append({"id": ident, "name": name, "kind": record.get("kind")})
-    if unknown:
-        raise Failed(f"no document is recorded for {', '.join(unknown)}: name a document's id, a model's "
-                     "script or a CAD file a page opened (`cad status` lists the documents); nothing "
-                     "was deleted", 2, "not_found")
-    return rows
-
-
-def delete(documents: Any) -> list[dict[str, Any]]:
-    """``cad delete``: documents deleted, each by the one deletion the home's Delete is too
-    (``models.delete``): what the engine holds of it, when one runs (never started for it), then its
-    record and its document in the engine's cache. Each of ``documents`` is a document's id, a model's
-    script or a shape's home (every document recorded of it), or a CAD file's path a page opened; the
-    person's own files are never touched. One that names nothing recorded is refused (``planned``),
-    naming each, before anything is deleted. What was deleted, ``{"id", "name", "kind"}`` each, in
-    the order named."""
-    from cad_server.engine import registry as registering
-    from cad.engine.api import EngineError
-    from cad.engine.client import request
-    from cad_server.engine.models import delete as deleting
-
-    idents = [row["id"] for row in planned(documents)]
-    answer = request({"op": "delete", "ids": idents}, start=False)
-    if answer is not None:
-        if not answer.get("ok"):
-            raise EngineError(str(answer.get("failed") or answer.get("error") or answer))
-        return list(answer.get("deleted") or [])
-    held = registering.current()
-    return [found for found in (deleting(held, ident) for ident in idents) if found is not None]
-
-
-def _delete(args: argparse.Namespace, prog: str) -> int:
-    """``cad delete``: its plan said (``planned``), asked (``cad_server._internal.consent``), then done; with
-    ``--dry-run`` the plan alone, as the answer."""
-    from cad_server._internal.consent import confirm, retry
-
-    rows = planned(args.documents)
-    count = f"{len(rows)} document{'' if len(rows) == 1 else 's'}"
-    if args.dry_run:
-        if args.json:
-            print(json.dumps({"ok": True, "dryRun": True, "planned": rows}, indent=2))
-            return 0
-        print(f"would delete {count}: each one's record, its document in the engine's cache and what the engine "
-              "holds of it (your own files stay)")
-        for row in rows:
-            print(f"  {row['name']} {row['id']}")
-        return 0
-    confirm(f"deleting {count}", f"Delete {'it' if len(rows) == 1 else 'them'}?", yes=bool(args.yes),
-            as_json=bool(args.json), command=retry(prog, [*map(str, args.documents), *(["--json"] if args.json else [])]),
-            preview=[f"{prog} deletes {count}: each one's record, its document in the engine's cache and what the "
-                     "engine holds of it; your own files -- a script, its declared files, an opened file -- stay, and "
-                     "a model's next run makes its document again:", *(f"  {row['name']} {row['id']}" for row in rows)])
-    deleted = delete(args.documents)
-    if args.json:
-        print(json.dumps({"ok": True, "deleted": deleted}, indent=2))
-        return 0
-    # A line per document deleted, for a person or an agent; JSON only under ``--json``.
-    for row in deleted:
-        print(f"deleted {row['name']} {row['id']}")
-    return 0
-
-
 def main(argv: list[str] | None = None, prog: str = "python -m cad_server.engine") -> int:
     """The engine's own command: ``VERB [args]``, every verb of ``VERBS``."""
     args = build_parser(prog).parse_args(argv)
@@ -905,30 +963,22 @@ def _port(serving: dict[str, Any]) -> str:
                    "handed": "the port pages were on before this server started"}.get(source, f"not the default {default}") + ")"
 
 
-def cache_text(root: Any, documents: Any, size: Any) -> str:
-    """The engine's document cache as ``cad status`` and ``cad doctor`` say it, after the word
-    ``cache``: its folder, and the documents and bytes it keeps, which stay until a person deletes
-    them (no cap)."""
-    return (f"{root}: {documents or 0} document{'' if documents == 1 else 's'} · {_said.size(size)}, "
-            "kept until deleted")
-
-
 def workers_text(answer: dict[str, Any]) -> str:
-    """The workers against their count cap, as ``cad status`` (and ``cad doctor``) says them:
+    """The workers against their count cap, as ``cad server status`` (and ``cad doctor``) says them:
     the standby holds a slot of the cap, counted with the workers, never one of them."""
     counted = len(answer.get("workers") or []) + (1 if answer.get("standby") else 0)
     return f"workers {counted}/{answer.get('cap')}" + (" with the standby" if answer.get("standby") else "")
 
 
 def status_text(answer: dict[str, Any]) -> str:
-    """``cad status``: the server and its pool's rules -- its workers against their count cap,
+    """``cad server status``: the server and its pool's rules -- its workers against their count cap,
     their memory against its cap -- a line per worker -- busy or idle, its script, process, builds
     and memory after its last build, where a busy one's build is (its last progress frame), how long
     it has been busy or idle, and the Python it runs where that is its script's own, not the server's --
     the standby's line (its process and memory: no script), the making of
     the CAD kernel environment while the engine makes it, the builds waiting for a worker, the last
     retirements, what it serves and holds under its memory budget,
-    and each model document's state, with the command that builds again one not held."""
+    and each model document a worker holds, with its state."""
     import time
 
     workers = answer.get("workers") or []
@@ -1011,32 +1061,18 @@ def status_text(answer: dict[str, Any]) -> str:
                      + (f" · {_gb(held / 2**20)} of {_gb(memory['budget'] / 2**20)} held" if memory.get("budget") else ""))
         # What this engine's start said: a move of its port.
         lines.extend(f"  {said}" for said in (serving.get("portNotice") or "").splitlines())
-    cache = answer.get("cache") or {}
-    if cache.get("enabled"):
-        failures = cache.get("failures") or []
-        lines.append("cache " + cache_text(cache.get("root"), cache.get("documents"), cache.get("bytes"))
-                     + (f" · last save failed: {failures[0]['error']}" if failures else ""))
-    elif cache:
-        lines.append("cache off: no cache folder")
-    identity = answer.get("identity")
-    if identity:
-        # What this engine's start brought to namespace/name identity (``identity.migrate``).
-        skipped = identity.get("skipped") or []
-        lines.append(f"identity migration at start: filled {identity.get('filled', 0)}, moved {identity.get('moved', 0)}, "
-                     f"skipped {len(skipped)}" + (f" ({skipped[0]}{', ...' if len(skipped) > 1 else ''})" if skipped else ""))
+    if answer.get("library"):
+        # What this engine's start carried of an earlier release's records (``library.Library.migrate``).
+        from cad_server.engine.library import said
+
+        lines.append(said(answer["library"]))
     models = answer.get("models") or []
     if models:
-        # Each model document, its state, and for one not held the command that builds it again.
+        # Each model document a worker holds, and its state.
         width = max(len(str(row.get("name"))) for row in models)
         lines.append("documents:")
         for row in models:
             line = f"  {row.get('state', ''):<8}  {str(row.get('name')):<{width}}  {row.get('id')}"
-            if row.get("held"):
-                line += f"  {row['held']}"  # where: memory, disk (the cache), or both
-            if row.get("rebuild"):
-                line += f"  run `{row['rebuild']}`"
-            elif row.get("kind") == "shape":
-                line += "  a shape handed over: no script to rerun"
             if row.get("state") == "failed":
                 line += "  serving its previous good build"
             lines.append(line)
@@ -1059,8 +1095,6 @@ VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, st
     "status": ("the cad server's workers, what each is building, and its served documents", _status_arguments,
                _status),
     "stop": ("stop the cad server", _stop_arguments, _stop),
-    "delete": ("delete documents: each one's record and its document in the engine's cache, and what the engine "
-               "holds of it; never a file of yours", _delete_arguments, _delete),
 }
 
 

@@ -5,7 +5,7 @@ file of ``kind`` (``KINDS``: ``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, `
 document: a ``Source`` -- the document a build made, held in the worker's memory
 (``Source.built``), or one read from an ``.xbf`` or a ``.step`` (``Source.read``), or a mesh
 file's triangles (``.glb``, ``.stl``, ``.3mf``: ``export/mesh_file.py``). A
-derived file a decorator declares and a file ``cad <type> export`` asks for are the same
+derived file a decorator declares and a file ``cad export`` asks for are the same
 call, so the same document writes the same bytes.
 
 A GLB, an STL or a 3MF is meshed at the engine's one tolerance, the viewer's, from the one mesh
@@ -727,11 +727,13 @@ def prepare(document: Any, kind: str | None, path: Any, tolerance: float | None 
     why = refused(source.path, path) if source.mesh and source.path is not None else None
     if why:
         raise ExportRefused(why)
-    if kind == "xbf" and not source.foreign and source.path is not None and source.path.suffix.lower() == ".xbf":
-        if source.migration is None:
-            raise ExportRefused("an xbf is not written from another xbf: the document already is one")
-        if path.resolve() == source.path.resolve():
-            raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
+    # A file read: an .xbf to another .xbf is a copy of its document (``cad export a.xbf b.xbf``), never over its
+    # own file. A build's own document (``live``), whose path is the .xbf its model saves it as, is written as any
+    # export of it is, as its held bytes are once its worker is gone.
+    if (kind == "xbf" and not source.live and not source.foreign and source.path is not None
+            and source.path.suffix.lower() == ".xbf" and source.migration is not None
+            and path.resolve() == source.path.resolve()):
+        raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
     if (tolerance is not None or angle is not None) and source.mesh:
         raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance or angle "
                             "meshes it again")

@@ -1,0 +1,26 @@
+{
+ "project": {"id": "3b2f6a0e-5c1d-5e7a-9b40-2f8e1c6d4a10", "name": "gearbox", "root": "/home/me/work/gearbox",
+             "created": 1764000000.0, "opened": 1764000100.0, "missing": false},
+ "path": "housing/v3",
+ "folders": [
+  {"name": "drawings", "path": "housing/v3/drawings"},
+  {"name": "fixtures", "path": "housing/v3/fixtures"}
+ ],
+ "documents": [
+  {"id": "0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31", "kind": "xbf", "record": "file", "api": "/api/v1/documents/xbf/0d6a2c1e-7f3b-5a49-8e12-6c4b9d0f2a31",
+   "path": "/home/me/work/gearbox/housing/v3/housing.xbf", "name": "housing.xbf",
+   "folder": "/home/me/work/gearbox/housing/v3", "namespace": "/home/me/work/gearbox/housing/v3",
+   "opened": 1764000100.0, "updated": 1764000050.0, "created": 1764000000.0,
+   "pinned": false, "missing": false,
+   "thumbnail": "1764000100500", "pictured": 1764000100.5,
+   "size": 20480, "parts": 3, "project": "3b2f6a0e-5c1d-5e7a-9b40-2f8e1c6d4a10"},
+  {"id": "9a1e4b7c-2d3f-5c60-8a71-4e5f6a7b8c9d", "kind": "step", "record": "file", "api": "/api/v1/documents/step/9a1e4b7c-2d3f-5c60-8a71-4e5f6a7b8c9d",
+   "path": "/home/me/work/gearbox/housing/v3/lid.step", "name": "lid.step",
+   "folder": "/home/me/work/gearbox/housing/v3", "namespace": "/home/me/work/gearbox/housing/v3",
+   "opened": null, "updated": 1763990000.0, "created": null,
+   "pinned": false, "missing": false,
+   "thumbnail": null, "pictured": null,
+   "size": 81920, "parts": null, "project": "3b2f6a0e-5c1d-5e7a-9b40-2f8e1c6d4a10"}
+ ],
+ "truncated": false
+}

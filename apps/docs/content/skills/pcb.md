@@ -10,19 +10,19 @@ There is no separate text-to-cad board model. The skill edits the native files i
 ## What it makes
 
 - Your project's own files, changed in place.
-- Fabrication files in the folder you choose: Gerbers, Excellon drill files, a placement CSV, a BOM CSV, ODB++, IPC-2581, PDFs, and a DXF of the outline and holes. The BOM comes from the schematic, so a change goes in its fields and the BOM is exported again.
+- Fabrication files where you choose, the file you name or a folder or a `.zip` of several: Gerbers, Excellon drill files, a placement CSV, a BOM CSV, ODB++, IPC-2581, PDFs, and a DXF of the outline and holes. The BOM comes from the schematic, so a change goes in its fields and the BOM is exported again.
 - A STEP or GLB of the board and its parts, for enclosure design. A part without a 3D model is named in the result and left out. The GLB also holds copper, mask and silkscreen.
 - A pre-order review of the board, with each finding marked pass, fail, review or unverified.
 
-In the [viewer](/docs/viewer), a board shows in 2D and 3D with layers, selection, Measure and annotations, and a schematic shows one sheet at a time with a parts, nets and hierarchy panel.
+In the [viewer](/docs/viewer), a board shows in 2D and 3D with layers, selection, Measure and annotations, and a schematic shows one sheet at a time with a parts, nets and hierarchy panel. A board shared with `cad share` shows in 2D; for its 3D, your agent exports the board's GLB and shares that.
 
 ## How it works
 
 The work starts from the saved parts, nets, outline and constraints, and from the schematic. Each sheet is checked with ERC (electrical rules check, KiCad's check of a schematic) and a snapshot:
 
 ```bash
-cad kicad_sch erc board.kicad_sch
-cad kicad_sch snapshot board.kicad_sch tmp/sheet.png --sheet /Power/
+cad kicad erc board.kicad_sch
+cad snapshot board.kicad_sch tmp/sheet.png --sheet /Power/
 ```
 
 Parts and footprints are checked against the datasheet: pad numbering, pitch, polarity, connector mating side.
@@ -44,8 +44,8 @@ with kicad_pcb.edit("board.kicad_pcb") as b:
 Every step is followed by DRC (design rule check, KiCad's check of a board against its own rules) and a picture:
 
 ```bash
-cad kicad_pcb drc board.kicad_pcb
-cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement
+cad kicad drc board.kicad_pcb
+cad snapshot board.kicad_pcb tmp/placement.png --display placement
 ```
 
 DRC exits 1 on errors or unconnected items. The warnings are read too, because a fab's CAM engineer flags them.
@@ -55,10 +55,11 @@ Before you order, the board is reviewed against the fab's capability page for yo
 Exports come from the revision that was checked, and only the files you asked for:
 
 ```bash
-cad kicad_pcb export board.kicad_pcb --to gerbers -o fab/gerbers
+cad export board.kicad_pcb fab/gerbers/ --as gerbers
+cad export board.kicad_pcb board.step
 ```
 
-The `--to` kinds are `gerbers`, `drill`, `pos`, `bom`, `step`, `glb`, `odb`, `ipc2581`, `pdf` and `dxf`. A schematic exports `pdf`, `svg`, `netlist` and `bom` with `cad kicad_sch export`.
+The destination says what is written. A file is written by its suffix: `.step`, `.glb`, `.dxf` (the outline), `.xml` (IPC-2581) or `.csv` (`--as pos` for the placement, `--as bom` for the BOM). The Gerbers, the drill files, the ODB++ and the PDF are several files each, so they go into a folder (a path ending in `/`) or a `.zip`, and `--as gerbers`, `drill`, `odb` or `pdf` says which. A schematic exports a `.pdf` of every sheet, its `.net` netlist, a `.csv` BOM, or its SVGs into a folder or a `.zip`.
 
 ## What it needs
 

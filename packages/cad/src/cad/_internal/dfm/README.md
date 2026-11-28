@@ -1,6 +1,6 @@
 # The manufacturing checks
 
-`cad.<type>.dfm(source, process=...)` and `cad <type> dfm SRC --process cnc|sheet|molding|printing`:
+`cad.dfm(source, process=...)` and `cad dfm SRC --process cnc|sheet|molding|printing`:
 whether a part can be made by a process, and what to change where it cannot. This is the mechanism; the
 library README's **Manufacturing checks** says what the check is for and how it is called.
 
@@ -123,7 +123,7 @@ its limits follow, what no rule judges, and its findings of fact.
 
 `--process` names the check, one of the type's: `cnc`, `sheet`, `molding` or `printing` for a model, an xbf
 and a STEP; `printing` for an STL, a 3MF and a GLB, its default (the others are offered and refused with the
-reason and the fix: check the STEP or the model); `sheet` for a DXF, its default, so `cad dxf dfm cut.dxf`
+reason and the fix: check the STEP or the model); `sheet` for a DXF, its default, so `cad dfm cut.dxf`
 alone checks the cut file. Each type's signature (`manufacturing.dfm_for`) holds its processes'
 options alone: the command's choices and flags are the type's, and a mesh's help offers no `--axes`. Given
 none, an xbf or a model is checked for the process its parts declare (a STEP keeps no process: its parts'
@@ -236,7 +236,7 @@ read out of its message:
 made); `op` is `min` (the figure is at least the limit) or `max`; `location` is the feature's most specific
 ref -- an item's `edge` (or `vertex`) before its `location`, so a corner is its edge and two corners of one
 face are two findings -- and `refs` every ref the item names, `location` first, then the rest (`rules._refs`:
-any field that holds a ref or a list of them). A ref is one element, as `cad step inspect DOC REF` takes it:
+any field that holds a ref or a list of them). A ref is one element, as `cad inspect DOC REF` takes it:
 words that name several (`plate/face 3 and plate/face 4`, a figure written out for the message) are none, nor
 is an element named without its part (`face 6`) beside one named with it. Failures of one rule at one feature are one finding, the
 worst (`and N more at this ref`, each in `items`: `value`, `xyz`). Past eight features of one rule, one more
@@ -269,9 +269,9 @@ of its item in its family's `items`, and its `limit` is there where it is the it
 findings count them -- those past the eight shown too, a failure another finding implies left out: the one
 count a summary says.
 
-- **Locations.** On exact geometry an item's `location` is a ref in `cad xbf inspect`'s grammar -- the
+- **Locations.** On exact geometry an item's `location` is a ref in `cad inspect`'s grammar -- the
   part's canonical owner and the face's ordinal (`plate/face 7`, `kit/pin.2/face 3`) -- read with the
-  engine's own loader, so `cad step inspect FILE REF` and `cad xbf inspect DOC REF` resolve it to the very
+  engine's own loader, so `cad inspect FILE REF` and `cad inspect DOC REF` resolve it to the very
   face; a feature of several faces lists them in `faces`. On a mesh it is `x, y, z` in millimetres.
 - **Every part, every way it stands.** An assembly's every part is measured, and a part used several times
   -- one geometry, several occurrences: a document's instances of one prototype, a live shape's leaves that
@@ -445,11 +445,11 @@ count a summary says.
   and turns every place back, or rests its verdicts on what no sample turns (molding's floors: a broad wall's
   own thickness, a wall's draft against its depth).
 
-The Python functions: `cad.<type>.dfm(path_or_id, process=..., ...)`; on a live shape
-`cad.build123d.dfm(shape, process=..., ...)` -- the same options, the same `CheckResult`, refs as the engine
-would name its document, with no process the one its parts declare (`cnc`, `sheet_metal`, `molding` and
-`printing` are its four processes by name) -- and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program holds
-`cad.trimesh.printing(mesh)`, `orientations` (the report as data).
+The Python functions: `cad.dfm(source, process=..., ...)`, of a file, a model's handle or a live build123d shape
+-- a shape in the process that holds it, with the same options, the same `CheckResult`, refs as the engine would
+name its document, with no process the one its parts declare (`cad.build123d`'s `cnc`, `sheet_metal`, `molding`
+and `printing` check one by a process each) -- and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program
+holds `cad.trimesh.printing(mesh)`, `orientations` (the report as data).
 
 ## CNC machining
 
@@ -902,7 +902,7 @@ costs with the edges of the face it crosses (a plate of 576 holes takes most of 
 ## Sheet metal
 
 A STEP, an xbf or a live shape (`cad.build123d.sheet_metal(shape)`) is measured on its exact B-rep
-(`cad.build123d._dfm_sheet`); a DXF cut file (`cad dxf dfm FILE --process sheet`) with ezdxf
+(`cad.build123d._dfm_sheet`); a DXF cut file (`cad dfm FILE --process sheet`) with ezdxf
 (`cad.build123d._dfm_dxf`). A mesh is refused (a sheet's radii and thickness are not on a mesh). Options:
 `--thickness` (the stock's, compared with the measured; a mismatch is `sheet.thickness_mismatch`; without it
 each part's rules scale by its own measured thickness),
@@ -1254,7 +1254,7 @@ only Hubs's flange height is unstated, read from the outside mold line (the rule
 
 ## Injection molding
 
-`cad <type> dfm SRC --process molding [--pull z|-y|x,y,z] [--wall-limit 45] [--zero-tol 0.05]
+`cad dfm SRC --process molding [--pull z|-y|x,y,z] [--wall-limit 45] [--zero-tol 0.05]
 [--cavities N] [--material abs|pc|...] [--candidates]`
 
 A STEP, an xbf or a model's document is measured on its B-rep (`cad.build123d._dfm_molding`, its geometry's
@@ -1343,7 +1343,7 @@ their fillets, ribs and bosses unrecognised.
 Beside the families: `projection`, `scale`, `pull_given` (false where no `--pull` was given and the
 default, z, was measured) and, of an assembly, `pulls` (each part's `axis` and whether it is its `own`). A ray
 the kernel cannot intersect with a face loses that crossing alone, and the faces it cost are the family's
-`unmeasured_faces`. Every finding names whole refs (`refs`: each resolves with `cad step inspect`), a fact
+`unmeasured_faces`. Every finding names whole refs (`refs`: each resolves with `cad inspect`), a fact
 finding as a rule's does. Fact findings: `zero_draft_walls` and
 `undercut_candidates` (both **info**: sums of what the rules judge per face and per feature, each naming the
 rule that judges it; the second counts the part's side actions by direction),
@@ -1456,7 +1456,7 @@ half of a 107-part check's 1.9 GB.
 
 ### The check
 
-`cad <type> dfm --process printing` (`cad.step.dfm(..., process="printing")`,
+`cad dfm --process printing` (`cad.dfm(..., process="printing")`,
 `cad.build123d.printing(shape, ...)`) measures a part as it stands on the plate (its lowest point, Z up) for one
 technology: `--technology fdm|sls|sla|mjf|pbf` (default `fdm`; `pbf` is metal powder bed fusion, DMLS/SLM).
 Options: `--build-volume XxYxZ` (mm, the printer's; default a typical machine of the technology's, assumed), `--angle-limit` (deg from
@@ -1467,7 +1467,7 @@ metal powder bed fusion (`pbf`) prints a metal, the others a plastic (`--materia
 `pbf`), as molding refuses a metal.
 
 A STEP, an xbf or a document id is measured on its exact geometry (B-rep), every item at a face ref
-(`bracket/face 7`, resolved by `cad xbf inspect`); an STL, a 3MF or a GLB as triangles, every item at `x, y, z`.
+(`bracket/face 7`, resolved by `cad inspect`); an STL, a 3MF or a GLB as triangles, every item at `x, y, z`.
 The powder processes (SLS, MJF) need no support: their overhangs are facts, never verdicts, and trapped powder is.
 
 ### Families (`measurements.<family>`)

@@ -27,7 +27,7 @@ from unittest import mock
 from cad.engine import client, places
 from cad_server._internal import arrival, auto_update, install_script, installations, tool_install
 from cad_server.cli import setup
-from cad_server.engine.registry import Folder
+from cad_server.engine.state import Folder
 
 OLD, Y = "0.11.10", "0.12.1"
 REFUSED = ("the install command online is not yet this release's, so nothing was installed: run the install command "

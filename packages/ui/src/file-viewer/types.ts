@@ -30,17 +30,34 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-/** A document of the host's library, as the name menu's Recent lists it (`@cad/ui/library`'s rows). */
-export interface RecentDocument {
-  /** A file's absolute path, a model's id: what `navigation.openFile` opens. */
+/** A file of the folder the document on screen is in (`@cad/ui/library`'s rows): what `[` and `]` move through. */
+export interface ProjectDocument {
+  /** The file's absolute path: what `navigation.openFile` opens. */
   path: string;
+  /** Its document's id, where the host names one: the document on screen is found by it too. */
+  id?: string;
   name: string;
-  /** `model` or `shape` for a document built from code; a file otherwise. */
-  kind?: string;
-  /** When a page last opened it, and when it was last updated, in seconds. */
-  opened?: number | null;
-  updated?: number | null;
+  /** Its folder, `/`-separated. */
+  folder?: string;
   missing?: boolean;
+}
+/**
+ * The project the document on screen is in (`FileViewerProps.project`): its name before the document's in the navbar,
+ * which goes to the host's home at the document's folder of it (`onShow`), and that folder's files, in its page's
+ * order, the previous and next of which `[` and `]` and the file menu show (`projectKeys.js`) -- null while they are
+ * read, with `missing` where its folder is gone, `error` where they could not be read.
+ */
+export interface FileProject {
+  id: string;
+  name: string;
+  /** Its folder, `/`-separated. */
+  root: string;
+  documents: readonly ProjectDocument[] | null;
+  missing?: boolean;
+  error?: string | null;
+  onShow(): void;
+  /** Its page's own address, where the host has one (`navigation.hrefOf`): the navbar's project name is then a link. */
+  href?: string | null;
 }
 /**
  * One app Open in offers for a file: its id (what `openApp` names) and its name, as drawn (a KiCad's says its
@@ -67,21 +84,17 @@ export interface FileActions {
    * Open in's apps, where the host can open a document's files in this computer's apps: the files
    * and their apps for the document on screen (asked as its file menu opens, never before; null or a
    * failure, and the menu is as without), and one opened in one of them -- `app` an app's id, or
-   * `"default"`, the OS's own handler. Both or neither.
+   * `"default"`, the OS's own handler. Both or neither. A file the host listed is named by the id it listed it with
+   * (`id`): a folder's file that is no document has no other name.
    */
-  apps?: (entry: Pick<FileEntry, "path" | "kind">, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
-  openApp?: (entry: Pick<FileEntry, "path" | "kind">, target: string, app: string) => void | Promise<void>;
+  apps?: (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
+  openApp?: (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }, target: string, app: string) => void | Promise<void>;
 }
-/**
- * The files a view reads, by absolute path (`/`-separated): one file's metadata, one folder's
- * subfolders and files, and a search under a folder that says when it stopped early.
- */
+/** The files a view reads, by absolute path (`/`-separated): one file's metadata. */
 export interface FileSource {
   /** Stable identity: what a document's key is named by. */
   id: string;
   stat: (path: string, options: { signal: AbortSignal }) => Promise<FileMetadata>;
-  list?: (directory: string, options: { signal: AbortSignal }) => Promise<readonly FileEntry[]>;
-  search?: (directory: string, query: string, options: { signal: AbortSignal }) => Promise<{ paths: readonly string[]; truncated: boolean }>;
 }
 export interface FileViewerState {
   /**
@@ -168,7 +181,7 @@ export interface AppSetting {
   onCheckedChange: (checked: boolean) => void;
 }
 /**
- * The person's colour scheme: System, Light or Dark, in the app menu over every file. The host keeps
+ * The person's colour scheme: System, Light or Dark, in the app menu. The host keeps
  * it and resolves System (the web against the OS, the CAD app against its host's theme).
  */
 export interface ColorSchemeSetting {
@@ -269,42 +282,54 @@ export interface FileViewerProps {
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
   onStateChange: (next: FileViewerState) => void;
-  /** The person's colour scheme, its rows in the app menu the navbar's logo opens over every file. */
+  /** The person's colour scheme, its row in the app menu (Settings' cog, in the sidebar's foot; the navbar's logo's where the host has no home). */
   colorScheme?: ColorSchemeSetting;
-  /** The person's language, its row in the app menu over every file (Automatic, or one they chose). */
+  /** The person's language, its row in the app menu (Automatic, or one they chose). */
   language?: LanguageSetting;
   /**
-   * The person's on/off settings, in the app menu the navbar's logo opens over every file, with
-   * the host's links (`host.links`).
+   * The person's on/off settings, in the app menu: the menu Settings' cog opens in the sidebar's foot (`PanelFoot.jsx`,
+   * where the host's links, `host.links`, are icons), or, where the host has no home, the navbar's logo's.
    */
   appSettings?: readonly AppSetting[];
   /** The view's own history, where the host keeps one: Back and Forward after the navbar's logo, over a file and on the home. */
   history?: ViewerHistory;
   /**
-   * The host's library (a CAD host's Home), where it has one: the name menu's Models tab lists its
-   * models, by last activity, and a row opens its model through `navigation.openFile`.
+   * The project the document on screen is in, where it is in one: its name before the document's in the navbar, and
+   * its documents, the previous and next of which `[` and `]` and the file menu open through `navigation.openFile`.
    */
-  recent?: { list(): Promise<readonly RecentDocument[]> };
+  project?: FileProject | null;
   /**
-   * Where the name menu's Files starts for a document with no file of its own (a model's): the folder
-   * the explorer was last in, else the person's home folder. Never the script it was built from. A
-   * file's Files starts in its own folder.
+   * The search of every document, where the host has one (`@cad/ui`'s `search/DocumentSearch.tsx`, which `CadViewer`
+   * mounts): ⌘K (Ctrl+K) anywhere outside Preview, and Search documents in a document's ⋯.
    */
-  explorerFolder?: string | null;
-  /** The folder the explorer is in, each time it changes: the host keeps it for `explorerFolder`. */
-  onExplorerFolderChange?(folder: string): void;
+  onSearch?: (() => void) | null;
+  /**
+   * Import its folder as a project, from the ⋯ of a document in no project, where the host can (`project` none): the
+   * host's chooser, starting at the document's folder.
+   */
+  onImportFolder?: (() => void) | null;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**
-   * The viewer's layout pinned, for a viewer that is not the page's own (a picture drawn out of sight,
-   * `OffscreenPicture.tsx`): neither measured nor said to the page, so its size never changes the page's.
+   * The host has seen the file on screen go (deleted or moved while it was shown): it is opened again, so the page says
+   * what became of it as it does for a file that will not open (`presentation.error`, `missing`), whatever its renderer
+   * watches. Said once each time it goes; the error page's `reload` opens it again once it is back.
+   */
+  gone?: boolean;
+  /**
+   * The viewer's layout pinned, for a viewer that is not the page's own (one drawn small, or out of sight): neither
+   * measured nor said to the page, so its size never changes the page's.
    * Unset (the page's viewer): measured from its own width (`responsive.js`), and its root carries
    * `data-viewer-layout`, which the page's stylesheet reads (a phone's type a step up: `styles/globals.css`).
    */
   layout?: "desktop" | "mobile";
   onError?: (error: Error) => void;
   presentation?: {
-    /** The host's home, shown with no file: a page of its own under the navbar, which has only its logo's menu, Back and Forward and the host's actions there. */
+    /**
+     * The host's home, shown with no file: a page of its own under the navbar, which has there the logo, its sidebar's
+     * toggle (which the home says, `panelToggles.js`), Back and Forward and the host's actions. The host's links
+     * and the app's menu are the panel's foot's (`PanelFoot.jsx`), which the home's sidebar ends in.
+     */
     home?: ReactNode;
     loading?: ReactNode;
     /**

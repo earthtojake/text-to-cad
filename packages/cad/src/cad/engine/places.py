@@ -4,9 +4,9 @@ Every process reads this: a model's script and its worker, in the CAD kernel env
 library is installed; the engine's server; each client of it. So each finds the same folders, the same
 engine and the same installation by the same rules, from the standard library alone and with no kernel.
 
-- **The user's folders**: the state folder (``state_dir``: settings, the documents' records, Recents, the
-  installations' records, the page token) and the cache folder (``cache_dir``: each model document's
-  bytes, the bytecode the engine's processes compile, the kernel environment). One of each a user, whatever
+- **The user's folders**: the state folder (``state_dir``: settings, the library, the
+  installations' records, the page token) and the cache folder (``cache_dir``: what the engine derived of each
+  file, the bytecode the engine's processes compile, the kernel environment). One of each a user, whatever
   release of cad runs: the layout of 0.11.11 and earlier, kept as it was.
 - **The engine folder** (``engine_dir``): the device's one engine's door (a named pipe; on Windows a
   port file), lock, failure note and pages note, in a folder only this user can write (``folder_refusal``), each named
@@ -38,12 +38,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
+__all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
            "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation",
            "kernel", "lock", "lock_path", "make_engine_dir", "outside_package", "packaged", "port_path", "registered",
-           "run_with", "state_dir", "tidy_handoff", "windowless"]
+           "state_dir", "tidy_handoff", "used", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -124,7 +124,7 @@ def _appdata() -> Path:
 def state_dir() -> Path:
     """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it): ``cad`` in the platform's
     place for state (``_local_state``). Every release of cad reads and writes the same one: settings, the
-    documents' records, Recents, the page token and port, the telemetry spool, the version feed's cache, the
+    library, the page token and port, the telemetry spool, the version feed's cache, the
     installations' records."""
     override = os.environ.get("CAD_STATE_DIR")
     if override:
@@ -235,15 +235,28 @@ def _said_no(settings: Path) -> dict[str, Any] | None:
 
 
 def cache_dir() -> Path:
-    """Where cad caches what it can make again -- documents' bytes (``documents/<id>/document.xbf``), hulls,
-    MJCF assets, integrations' homes, the kernel environments, the engine's bytecode --: the platform's cache
-    location, which the system and the person treat as disposable -- wiping it loses no state, the records
-    stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made absolute once, and written back, so
+    """Where cad caches what it can make again -- what it derived of a document (``documents/<id>/...``, a shared
+    file's last view bundle among it), hulls, MJCF assets, integrations' homes, the kernel environments, the engine's
+    bytecode --: the platform's cache location, which the system and the person treat as disposable -- wiping it
+    loses no state, the library and the shares' records stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a
+    relative one made absolute once, and written back, so
     a worker after a ``chdir`` names the same folder), else ``$XDG_CACHE_HOME/cad`` when set, else
     ``~/.cache/cad`` -- on Windows too, out of the local application data an app package virtualizes
     (``APPDATA_STATE``). An earlier release's cache (named for cadgen, or 0.10.0's on Windows) is not read: it
     is a cache."""
     return _cache_dir(CACHE, appdata=False)
+
+
+def used(path: str | os.PathLike) -> None:
+    """A file of the cache folder read: its access time set to now, its modification time kept, so that what goes
+    first where the cache is held to a size is what was used longest ago -- the later of its last read and its last
+    write (``cad cache prune``: the meshes kept by the geometry they are of) -- while what tells a file written again
+    by its modification time (a view bundle's writer) still can. Two calls that write no byte of the file; one that
+    cannot be touched (gone meanwhile, another user's) keeps its times."""
+    try:
+        os.utime(path, ns=(time.time_ns(), os.stat(path).st_mtime_ns))
+    except OSError:
+        pass
 
 
 def earlier_cache_dir() -> Path:
@@ -525,29 +538,6 @@ EXTRAS: tuple[str, ...] = extras()
 # scripts name their Python, which the engine builds them in (``contract.interpreter``), whatever it holds --
 # packages of its own, other integrations of cad's, another Python.
 SEPARATE: bool = separate()
-# How ``cad run`` named the packages of the environment it runs a program in, which it hands the program as
-# JSON (``run_with``): what a document's record says builds it again (``contract.interpreter``).
-RUN_WITH = "CAD_RUN_WITH"
-
-
-def run_with() -> dict[str, Any]:
-    """How ``cad run`` named this process's packages (``RUN_WITH``): the requirements its ``--with`` was given
-    (``with``), and the script whose inline metadata named the rest (``script``) with them (``header``),
-    normalized; each empty with none."""
-    try:
-        found = json.loads(os.environ.get(RUN_WITH) or "{}")
-    except ValueError:
-        found = {}
-    found = found if isinstance(found, dict) else {}
-
-    def strings(value: Any) -> list[str]:
-        return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
-
-    script = found.get("script")
-    return {"with": strings(found.get("with")), "script": script if isinstance(script, str) else None,
-            "header": strings(found.get("header"))}
-
-
 def installation_record(data: bytes | None) -> dict[str, Any] | None:
     """An installation's record (``installations/<version>.json``) as its bytes hold it, or None for one
     that is no record: ``version``, the absolute paths of its ``python`` and its console script

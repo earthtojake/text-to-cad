@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 from math import cos, hypot, sin, tau
 
@@ -350,7 +350,7 @@ def _make_hub_shell():
     )
 
 
-@model
+@xbf
 def six_blade_open_propeller():
     parts = [_make_hub_shell()]
 

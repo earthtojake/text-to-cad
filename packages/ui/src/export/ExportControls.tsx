@@ -114,6 +114,18 @@ function ExportToaster() {
 }
 
 /**
+ * The ⋯ menu's Download files, on a shared document's page alone (`ViewerHost.sharedFiles`): a link to the share's
+ * zip of the files that made it, which the service sends as an attachment, so the browser saves it and the page stays.
+ */
+export function SharedFilesItem({ url }: { url: string }) {
+  const { t } = useI18n();
+  const usage = useControlUsage();
+  return <DropdownMenuItem asChild>
+    <a href={url} download data-share-files="" onClick={() => usage.used('file_download_files')}>{t('file.downloadFiles')}</a>
+  </DropdownMenuItem>;
+}
+
+/**
  * Export, for the document on screen: `menu`, a submenu of the formats its kind writes, which the
  * view puts in the file's ⋯ menu (`FileViewerProps.fileMenuItems`), and `overlay`, the exports'
  * toasts. Both need the host's downloads and the client's exports; neither is there without them.

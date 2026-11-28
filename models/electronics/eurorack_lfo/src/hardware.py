@@ -10,7 +10,7 @@ Run: cad run src/hardware.py"""
 import math
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib.twin_orbit import JACK_SPACER_T
 
@@ -56,22 +56,22 @@ def washer(od, id_, thick, label, color):
     return w
 
 
-@model
+@xbf
 def knob():
     return knob_body()
 
 
-@model
+@xbf
 def jack_nut():
     return hex_nut(8.0, 2.0, 6.05, "jack_nut")
 
 
-@model
+@xbf
 def pot_nut():
     return hex_nut(10.0, 2.0, 7.05, "pot_nut")
 
 
-@model
+@xbf
 def jack_spacer():
     return washer(8.6, 6.3, JACK_SPACER_T, "jack_spacer", "#3a3a3a")
 

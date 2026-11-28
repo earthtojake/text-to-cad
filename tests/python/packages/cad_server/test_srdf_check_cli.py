@@ -7,13 +7,13 @@ import tempfile
 import unittest
 
 
-from cad_server.cli import srdf as _command
+from cad_server.cli import inspect_ as _command
 
 
-class cli:  # noqa: N801 - ``cad srdf validate``, as the old module's ``main`` was called
+class cli:  # noqa: N801 - ``cad inspect ROBOT.srdf``: a robot description's check
     @staticmethod
     def main(argv):
-        return _command.main(["validate", *argv])
+        return _command.main(list(argv))
 
 
 SAMPLE_URDF = """\
@@ -129,7 +129,8 @@ class SrdfValidateCliTests(unittest.TestCase):
         path = self._write("robot.txt", SAMPLE_SRDF)
         exit_code, output = self._run(str(path))
         self.assertEqual(exit_code, 2)  # the command line's: a file of no type, before anything is read
-        self.assertIn("is not a srdf file: cad srdf takes .srdf", output)
+        self.assertIn("robot.txt is not a file cad inspect takes: it takes .xbf, .step, .stp, .glb, .urdf, .srdf, "
+                      ".kicad_pcb or .kicad_sch", output)
 
     def test_missing_file_fails(self) -> None:
         exit_code, output = self._run(str(self.temp_root / "absent.srdf"))

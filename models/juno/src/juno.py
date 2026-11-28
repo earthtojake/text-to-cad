@@ -43,7 +43,7 @@ and every other call is a new placement of its result.
 
 from __future__ import annotations
 
-from cad import memo, model
+from cad import memo, xbf
 from cad.ap242 import configuration_sequence, mechanism_state
 
 import build123d as bd
@@ -146,7 +146,7 @@ def _attach(parent, child, name, origin, axis, xref, angle):
     revolute_attach(parent, child, name, origin, axis, xref, (0, 0, 0), axis, xref, angle, RANGES[name])
 
 
-@model
+@xbf
 def juno():
     link = links()
     for name, shape in link.items():
@@ -208,142 +208,142 @@ def juno():
 # --- the URDF's link meshes: each link alone, in its part-local frame -------------------------
 
 
-@model
+@xbf
 def pelvis():
     return links()["pelvis"]
 
 
-@model
+@xbf
 def torso():
     return links()["torso"]
 
 
-@model
+@xbf
 def neck_collar():
     return links()["neck_collar"]
 
 
-@model
+@xbf
 def head():
     return links()["head"]
 
 
-@model
+@xbf
 def hip_bracket_left():
     return links()["hip_bracket_left"]
 
 
-@model
+@xbf
 def hip_carrier_left():
     return links()["hip_carrier_left"]
 
 
-@model
+@xbf
 def thigh_left():
     return links()["thigh_left"]
 
 
-@model
+@xbf
 def shin_left():
     return links()["shin_left"]
 
 
-@model
+@xbf
 def ankle_link_left():
     return links()["ankle_link_left"]
 
 
-@model
+@xbf
 def foot_left():
     return links()["foot_left"]
 
 
-@model
+@xbf
 def shoulder_pod_left():
     return links()["shoulder_pod_left"]
 
 
-@model
+@xbf
 def yaw_housing_left():
     return links()["yaw_housing_left"]
 
 
-@model
+@xbf
 def bicep_left():
     return links()["bicep_left"]
 
 
-@model
+@xbf
 def forearm_left():
     return links()["forearm_left"]
 
 
-@model
+@xbf
 def wrist_carrier_left():
     return links()["wrist_carrier_left"]
 
 
-@model
+@xbf
 def hand_left():
     return links()["hand_left"]
 
 
-@model
+@xbf
 def hip_bracket_right():
     return links()["hip_bracket_right"]
 
 
-@model
+@xbf
 def hip_carrier_right():
     return links()["hip_carrier_right"]
 
 
-@model
+@xbf
 def thigh_right():
     return links()["thigh_right"]
 
 
-@model
+@xbf
 def shin_right():
     return links()["shin_right"]
 
 
-@model
+@xbf
 def ankle_link_right():
     return links()["ankle_link_right"]
 
 
-@model
+@xbf
 def foot_right():
     return links()["foot_right"]
 
 
-@model
+@xbf
 def shoulder_pod_right():
     return links()["shoulder_pod_right"]
 
 
-@model
+@xbf
 def yaw_housing_right():
     return links()["yaw_housing_right"]
 
 
-@model
+@xbf
 def bicep_right():
     return links()["bicep_right"]
 
 
-@model
+@xbf
 def forearm_right():
     return links()["forearm_right"]
 
 
-@model
+@xbf
 def wrist_carrier_right():
     return links()["wrist_carrier_right"]
 
 
-@model
+@xbf
 def hand_right():
     return links()["hand_right"]
 

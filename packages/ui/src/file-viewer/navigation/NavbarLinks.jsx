@@ -1,12 +1,15 @@
+import { MessageCircle } from "lucide-react";
 import { useI18n } from "@cad/ui/i18n";
 
+import { useControlUsage } from "../../usage/controls.js";
+import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
 import { issueUrl } from "./links.js";
 
 /**
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
- * them. The app menu (`AppMenu.jsx`) holds Send feedback (`feedbackUrl`), GitHub and Discord, and
- * in its footer the version (its release notes) and "Made by @…" (`MadeBy`, the host's X account),
- * over a file and on the home alike. Every link opens the host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
+ * them: Send feedback (`feedbackUrl`), GitHub and Discord (`useOutwardLinks`), which are icons in the panel's foot
+ * (`../PanelFoot.jsx`: the bottom of the sidebar, on the home and over a document) and, in a host with no home, items
+ * of the app menu the logo opens (`AppMenu.jsx`); and in the app menu's footer the version (its release notes). Every link opens the host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser).
  */
 
@@ -37,13 +40,24 @@ export function feedbackUrl(links, platform) {
 }
 
 /**
- * Who made it: "Made by @handle", the host's X account, in the app menu's footer.
- * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
+ * The host's links out, each as whatever draws it needs: its name, its address, its mark and what a press does (the
+ * link followed the host's way, `useFollow`; Send feedback counted, `feedback`). One definition for the app menu's
+ * items and the icons in the panel's foot, so both do the same thing. Each null where the host gives no
+ * such link.
+ * @param {import("../../host/types.js").ViewerLinks | undefined} links
+ * @param {string} [platform] The host's `environment.platform`, which Send feedback names.
+ * @returns {Record<"github" | "discord" | "feedback", { id: string, label: string, href: string,
+ *   Icon: import("react").ComponentType<any>, onClick(event: import("react").MouseEvent): void } | null>}
  */
-export function MadeBy({ links, onError }) {
+export function useOutwardLinks(links, platform) {
   const { t } = useI18n();
-  const follow = useFollow(links, onError);
-  const handle = String(links.x || "").replace(/\/+$/, "").split("/").pop();
-  if (!links.x || !handle) return null;
-  return <a href={links.x} target="_blank" rel="noreferrer" onClick={follow} className="text-muted-foreground underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline" data-link="made-by">{t("menu.madeBy", { handle })}</a>;
+  const follow = useFollow(links);
+  const usage = useControlUsage();
+  const link = (id, label, href, Icon) => (href ? { id, label, href, Icon,
+    onClick: event => { if (id === "feedback") usage.used("feedback"); follow?.(event); } } : null);
+  return {
+    github: link("github", "GitHub", links?.github, GitHubMark),
+    discord: link("discord", "Discord", links?.discord, DiscordMark),
+    feedback: link("feedback", t("menu.feedback"), links ? feedbackUrl(links, platform) : "", MessageCircle),
+  };
 }

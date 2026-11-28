@@ -61,7 +61,7 @@ class ChoosingTest(unittest.TestCase):
     def test_a_program_that_uses_blender_is_made_an_environment_of_cad_s_on_python_3_13(self) -> None:
         self.write("scene.py", "import bpy\n")
         self.write("render.py", "import scene\nimport json\n")  # bpy through a helper beside it
-        self.write("both.py", "import build123d as bd\nfrom cad import model\nfrom cad.blender import load\n")
+        self.write("both.py", "import build123d as bd\nfrom cad import xbf\nfrom cad.blender import load\n")
         spec = self.prepared("render.py").spec
         self.assertEqual((spec.integrations, spec.python, spec.python_options),
                          (("blender",), "3.13", ("--managed-python",)))
@@ -85,13 +85,11 @@ class ChoosingTest(unittest.TestCase):
         # An engine on that line already makes it on its own Python, as it makes any other.
         own = self.prepared("both.py", engine=OWN).spec
         self.assertEqual((own.integrations, own.python, own.python_options), (("blender", "build123d"), None, ()))
-        self.assertEqual(self.prepared("both.py", engine=OWN).given, [], "nothing to say again but the script")
-        self.assertEqual(self.prepared("both.py").given, [], "the line is the integration's, not the command line's")
 
     def test_a_python_named_on_the_command_line_is_taken_on_its_line_and_refused_on_another(self) -> None:
         self.write("render.py", "import bpy\n")
         named = self.prepared("--python", "3.13.5", "render.py")
-        self.assertEqual((named.spec.python, named.spec.python_options, named.given), ("3.13.5", (), ["--python=3.13.5"]))
+        self.assertEqual((named.spec.python, named.spec.python_options), ("3.13.5", ()))
         path = self.prepared("--python", "/opt/py/bin/python3", "render.py").spec
         self.assertEqual((path.python, path.python_options),  # absolute against the caller's folder; its version is
                          (extras.absolute("/opt/py/bin/python3", os.getcwd()), ()))  # read once it is made

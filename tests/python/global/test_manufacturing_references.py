@@ -28,7 +28,7 @@ PAGES = (*REFERENCES, Path(repo_path("skills/cad/SKILL.md")),
          Path(repo_path("packages/cad/README.md")),
          Path(repo_path("packages/cad/src/cad/_internal/dfm/README.md")))
 #: The types that answer ``dfm``: a B-rep's, a mesh's, a cut file's.
-TYPES = ("model", "step", "xbf", "stl", "threemf", "glb", "dxf")
+TYPES = ("xbf", "step", "stl", "threemf", "glb", "dxf")
 
 FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*")
 #: ``cnc.hole_depth`` in code: a whole backticked name, or one of several a backticked run lists.
@@ -37,9 +37,11 @@ CODE = re.compile(r"`([^`\n]+)`")
 
 
 def _flags() -> set[str]:
+    from cad.registry import DOCUMENT_TYPES
+
     found: set[str] = set()
     for document_type in TYPES:
-        parser = cli.build_parser_for(f"{document_type} dfm")
+        parser = cli.build_parser_for("dfm", [f"part{DOCUMENT_TYPES[document_type].suffix}"])
         found.update(option for action in parser._actions for option in action.option_strings)
     return found
 
@@ -64,7 +66,7 @@ class ManufacturingReferences(unittest.TestCase):
             for flag in sorted(set(FLAG.findall(path.read_text(encoding="utf-8")))):
                 named += 1
                 with self.subTest(page=path.name, flag=flag):
-                    self.assertIn(flag, flags, f"{path.name} names {flag}, which no `cad <type> dfm` takes")
+                    self.assertIn(flag, flags, f"{path.name} names {flag}, which no file's `cad dfm` takes")
         self.assertGreater(named, 20, "the sweep matched nothing")
 
     def test_every_rule_and_code_a_page_names_is_one(self) -> None:

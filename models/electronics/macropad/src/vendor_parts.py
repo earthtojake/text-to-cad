@@ -17,7 +17,7 @@ The socket and the encoder each declare the STEP the project's footprints name
     cad run src/vendor_parts.py
 """
 import build123d as bd
-from cad import model, step
+from cad import xbf, step
 
 SOCKET_H = 1.85  # body height (Kailh CPG151101S11 drawing: 1.8 mm nominal)
 
@@ -80,7 +80,7 @@ def mx_switch_body():
     return housing, stem
 
 
-@model
+@xbf
 def mx_switch():
     housing, stem = mx_switch_body()
     # pins, in the assembly's frame (y up): KiCad's (2.54, -5.08) and (-3.81, -2.54) are (2.54, 5.08), (-3.81, 2.54)

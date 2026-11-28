@@ -92,9 +92,9 @@ class TheReasons(unittest.TestCase):
                 self.assertEqual(found.next, ("cad server start",) if isinstance(error, (NotRunning, OtherRelease)) else ())
 
     def test_the_document_carries_what_a_person_must_do(self) -> None:
-        self.assertEqual(document(Failure("asked", "usage", next=["cad status --json"], user_action=True)),
+        self.assertEqual(document(Failure("asked", "usage", next=["cad server status --json"], user_action=True)),
                          {"ok": False, "error": "asked", "reason": "usage", "userActionRequired": True,
-                          "next": ["cad status --json"]})
+                          "next": ["cad server status --json"]})
         self.assertEqual(document(Failure("boom")), {"ok": False, "error": "boom", "reason": "failed"})
 
 
@@ -124,6 +124,22 @@ class TheParser(unittest.TestCase):
         self.assertTrue(err.startswith("usage: cad sample") and err.endswith(
             "cad sample: error: the following arguments are required: source\n"), err)
 
+    def test_what_a_subcommand_does_not_take_is_refused_under_its_own_json(self) -> None:
+        # `cad cache prune --bogus --json`: argparse finds the extra word above the subcommand, whose --json it is.
+        made = parser("cad sample")
+        commands = made.add_subparsers(dest="command", required=True)
+        commands.add_parser("plain")
+        commands.add_parser("sub").add_argument("--json", action="store_true")
+        found, out, err = _parse(made, ["sub", "--bogus", "--json"])
+        self.assertEqual((found, err), (2, ""))
+        self.assertEqual(json.loads(out), {"ok": False, "error": "unrecognized arguments: --bogus", "reason": "usage"})
+        found, out, err = _parse(made, ["sub", "--jsn"])
+        self.assertEqual((found, out), (2, ""))
+        self.assertTrue(err.endswith("cad sample: error: unrecognized arguments: --jsn (did you mean --json?)\n"), err)
+        found, out, err = _parse(made, ["plain", "--json"])  # a subcommand that takes no --json answers in none
+        self.assertEqual((found, out), (2, ""))
+        self.assertTrue(err.endswith("cad sample: error: unrecognized arguments: --json\n"), err)
+
     def test_a_check_s_failure_is_the_command_line_s_with_its_status(self) -> None:
         def check(parsed) -> None:
             raise Failure(f"{parsed.source} is a glb, not a stl", "wrong_type")
@@ -140,9 +156,10 @@ class TheParser(unittest.TestCase):
                 if "_runtime" not in path.relative_to(PACKAGE).parts  # the bundled plugin: skills, not the server
                 and re.search(r"\bArgumentParser\(", path.read_text(encoding="utf-8"))]
         self.assertEqual(made, [])
-        for name in ("status", "delete", "xbf export", "mujoco check", "kicad_pcb inspect", "setup", "telemetry"):
-            with self.subTest(command=name):
-                found = cli.build_parser_for(name)
+        for name, argv in (("server", None), ("export", ["a.xbf", "a.step"]), ("mujoco check", None),
+                           ("inspect", ["board.kicad_pcb"]), ("inspect", None), ("setup", None), ("telemetry", None)):
+            with self.subTest(command=name, argv=argv):
+                found = cli.build_parser_for(name, argv)
                 self.assertIsInstance(found, Parser)
                 self.assertFalse(found.allow_abbrev)
 
@@ -154,26 +171,28 @@ class Consent(unittest.TestCase):
     def test_a_yes_a_question_or_the_command_that_says_yes(self) -> None:
         from cad_server._internal import consent
 
-        self.assertEqual(consent.retry("cad delete", ["a b", "--yes", "--json"]), "cad delete 'a b' --json --yes")
-        consent.confirm("deleting 1 document", "Delete it?", yes=True, as_json=True, command="unused")
+        self.assertEqual(consent.retry("cad server", ["a b", "--yes", "--json"]), "cad server 'a b' --json --yes")
+        consent.confirm("replacing the page token", "Replace it?", yes=True, as_json=True, command="unused")
         with mock.patch.object(consent, "interactive", return_value=False), self.assertRaises(Failure) as asked:
-            consent.confirm("deleting 1 document", "Delete it?", yes=False, as_json=False, command="cad delete X --yes")
+            consent.confirm("replacing the page token", "Replace it?", yes=False, as_json=False,
+                            command="cad server --rotate-token --yes")
         self.assertEqual(document(asked.exception), {
-            "ok": False, "reason": "confirmation_required", "userActionRequired": True, "next": ["cad delete X --yes"],
-            "error": "deleting 1 document needs a yes, and no one can be asked here (no terminal, or --json): nothing "
-                     "was changed; `cad delete X --yes` says yes"})
+            "ok": False, "reason": "confirmation_required", "userActionRequired": True,
+            "next": ["cad server --rotate-token --yes"],
+            "error": "replacing the page token needs a yes, and no one can be asked here (no terminal, or --json): nothing "
+                     "was changed; `cad server --rotate-token --yes` says yes"})
         for answer, goes_on in (("y\n", True), ("YES\n", True), ("n\n", False), ("\n", False), ("", False)):
             with self.subTest(answer=answer), mock.patch.object(consent, "interactive", return_value=True), \
                     mock.patch.object(sys, "stdin", io.StringIO(answer)), contextlib.redirect_stderr(io.StringIO()) as err:
                 try:
-                    consent.confirm("deleting 1 document", "Delete it?", yes=False, as_json=False, command="x",
+                    consent.confirm("replacing the page token", "Replace it?", yes=False, as_json=False, command="x",
                                     preview=["the plan"])
                     went = True
                 except Failure as failure:
                     self.assertEqual((failure.reason, failure.status), ("declined", 1))
                     went = False
                 self.assertEqual(went, goes_on)
-                self.assertEqual(err.getvalue(), "the plan\nDelete it? (y/N) ")
+                self.assertEqual(err.getvalue(), "the plan\nReplace it? (y/N) ")
 
     def test_no_one_is_asked_under_json_or_in_ci(self) -> None:
         from cad_server._internal import consent
@@ -194,11 +213,11 @@ class TheDispatcher(unittest.TestCase):
     def test_a_crash_under_json_is_its_document_and_no_traceback(self) -> None:
         with mock.patch.object(cli, "_run_module", side_effect=RuntimeError("boom")), \
                 mock.patch.object(cli, "_report"), mock.patch.object(cli, "_tell"):
-            code, out, err = _cad(["status", "--json"])
+            code, out, err = _cad(["server", "status", "--json"])
             self.assertEqual((code, err), (1, ""))
             self.assertEqual(json.loads(out), {"ok": False, "error": "RuntimeError: boom", "reason": "internal_error"})
             with self.assertRaises(RuntimeError):  # without --json, its traceback the person's
-                _cad(["status"])
+                _cad(["server", "status"])
 
     def test_a_failure_s_words_are_on_stderr_and_stdout_keeps_the_answers(self) -> None:
         # A choice that could not be kept is the work's failure (exit 1), said on stderr as every command's is.
@@ -211,8 +230,8 @@ class TheDispatcher(unittest.TestCase):
 
     def test_an_interrupt_is_canceled_with_the_shell_s_status(self) -> None:
         with mock.patch.object(cli, "_main", side_effect=KeyboardInterrupt):
-            self.assertEqual(_cad(["status"]), (130, "", "cad: canceled\n"))
-            code, out, _err = _cad(["status", "--json"])
+            self.assertEqual(_cad(["server", "status"]), (130, "", "cad: canceled\n"))
+            code, out, _err = _cad(["server", "status", "--json"])
             self.assertEqual((code, json.loads(out)["reason"]), (130, "canceled"))
 
 
@@ -233,18 +252,18 @@ class MissingInputs(unittest.TestCase):
             (root / "board.kicad_sch").write_text("(kicad_sch (version 20231120))\n", encoding="utf-8")
             gone, out = str(root / "gone.json"), str(root / "out.png")
             for argv, said in (
-                    (["srdf", "validate", str(root / "robot.srdf"), "--urdf", str(root / "gone.urdf")],
+                    (["inspect", str(root / "robot.srdf"), "--urdf", str(root / "gone.urdf")],
                      f"--urdf {root / 'gone.urdf'}: no such file"),
-                    (["stl", "snapshot", str(root / "part.stl"), out, "--annotation", gone], f"--annotation {gone}: no such file"),
-                    (["stl", "snapshot", "--job", gone], f"--job {gone}: no such file"),
-                    (["kicad_sch", "snapshot", str(root / "board.kicad_sch"), out, "--sheet", "/", "--display", gone],
+                    (["snapshot", str(root / "part.stl"), out, "--annotation", gone], f"--annotation {gone}: no such file"),
+                    (["snapshot", "--job", gone], f"--job {gone}: no such file"),
+                    (["snapshot", str(root / "board.kicad_sch"), out, "--sheet", "/", "--display", gone],
                      f"--display {gone}: no such file")):
                 with self.subTest(argv=argv[:2]), mock.patch.object(cli, "_tell"):
                     code, stdout, stderr = _cad([*argv, "--json"])
                     self.assertEqual((code, stderr), (2, ""))
                     self.assertEqual(json.loads(stdout), {"ok": False, "error": said, "reason": "not_found"})
             self.assertFalse(os.path.exists(out), "nothing was drawn")
-            code, stdout, _ = _cad(["kicad_sch", "snapshot", str(root / "board.kicad_sch"), out, "--border", "--display",
+            code, stdout, _ = _cad(["snapshot", str(root / "board.kicad_sch"), out, "--border", "--display",
                                     "{not json", "--json"])
             self.assertEqual((code, json.loads(stdout)["reason"]), (2, "invalid_argument"))
 
@@ -256,8 +275,9 @@ class EndToEnd(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_STATE_DIR": os.path.join(folder, "state"),
                    "CAD_CACHE_DIR": os.path.join(folder, "cache"), "CAD_ENGINE_DIR": os.path.join(folder, "engine")}
-            for argv, reason in ((["stl", "snapshot", "part.glb", "out.png", "--json"], "wrong_type"),
-                                 (["xbf", "export", "--json"], "usage"), (["stats", "--json"], "usage")):
+            for argv, reason in ((["dfm", "robot.urdf", "--json"], "wrong_type"),
+                                 (["export", "--json"], "usage"), (["stats", "--json"], "usage"),
+                                 (["xbf", "export", "a.xbf", "a.step", "--json"], "usage")):
                 with self.subTest(argv=argv):
                     done = subprocess.run([sys.executable, "-m", "cad_server.cli", *argv], cwd=folder, env=env,
                                           capture_output=True, text=True, encoding="utf-8", timeout=120)

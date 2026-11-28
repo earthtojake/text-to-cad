@@ -344,15 +344,22 @@ def _catch_up() -> tuple[str, str]:
 
 
 def _cache() -> tuple[str, str]:
-    """The cache folder, and what ``cad cache prune`` would remove there and free."""
+    """The cache folder, and what ``cad cache prune`` would remove there and free: the folders of other releases, the
+    documents' folders no file needs, the meshes past their cap."""
     from cad_server.cli import cache
 
     going, _kept = cache.prunable()
-    if not going:
+    documents = cache.documents()
+    over, _held = cache.meshes(path for path, _what, _kind in documents)
+    said = [f"{count} {one if count == 1 else many}" for count, one, many in (
+        (len(going), "folder of other releases", "folders of other releases"),
+        (len(documents), "document's folder no file needs", "documents' folders no file needs"),
+        (len(over), "mesh past the cap", "meshes past the cap")) if count]
+    if not said:
         return INFO, f"{cache.folder()}: nothing for `cad cache prune` to remove"
-    return INFO, (f"{cache.folder()}: `cad cache prune` would remove {len(going)} "
-                  f"{'folder' if len(going) == 1 else 'folders'} of other releases and free "
-                  f"{cache.size(cache.freed(path for path, _what in going))}")
+    space = cache.freed(path for path, _what, _kind in [*going, *documents]) + sum(disk for _path, disk in over)
+    listed = said[0] if len(said) == 1 else f"{', '.join(said[:-1])} and {said[-1]}"
+    return INFO, f"{cache.folder()}: `cad cache prune` would remove {listed} and free {cache.size(space)}"
 
 
 def _server() -> tuple[str, str]:

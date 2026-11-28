@@ -23,7 +23,7 @@ from pathlib import Path
 
 import build123d as bd
 from bd_materials import plastics
-from cad import kicad_pcb, model, xbf
+from cad import kicad_pcb, xbf
 from cad.build123d import animation
 
 HERE = Path(__file__).resolve().parent
@@ -270,13 +270,13 @@ def labelled(shape, label, material, color):
     return shape
 
 
-@model
+@xbf
 def baffle():
     g = Board()
     return labelled(baffle_body(g, board_parts(g)), "baffle", plastics.pla(), "#1b1c1f")
 
 
-@model
+@xbf
 def diffuser():
     g = Board()
     d = labelled(diffuser_body(g), "diffuser", plastics.petg(), "#f2f0ea")
@@ -285,7 +285,7 @@ def diffuser():
     return d
 
 
-@model
+@xbf
 def stand():
     g = Board()
     return labelled(stand_body(g, board_parts(g)), "stand", plastics.pla(), "#26272b")
@@ -299,7 +299,7 @@ def on_plate(shape):
     return bd.Pos(0, 0, -turned.bounding_box().min.Z) * turned
 
 
-@model
+@xbf
 def diffuser_print():
     """The diffuser as it prints: its face on the plate, its pegs up."""
     d = on_plate(diffuser().shape)
@@ -307,7 +307,7 @@ def diffuser_print():
     return d
 
 
-@model
+@xbf
 def front_print():
     """The diffuser and the baffle as ONE two-material print (a printer with two filaments): the natural PETG
     face on the plate, the black baffle printed onto it, the pegs in their holes."""
@@ -319,7 +319,7 @@ def front_print():
     return bd.Compound(children=[d, b], label="front")
 
 
-@model
+@xbf
 def pcb():
     g = Board()
     tree = board_parts(g)
@@ -327,7 +327,7 @@ def pcb():
     return tree
 
 
-@model
+@xbf
 def orbit():
     g = Board()
     T = placement(g)

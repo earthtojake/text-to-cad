@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 from math import cos, radians, sin, tau
 
 import build123d as bd
@@ -556,7 +556,7 @@ def _make_decorative_hex_fasteners():
     return parts
 
 
-@model
+@xbf
 def robotic_hand_end_effector():
     """Return a labeled cybernetic robotic hand end-effector assembly."""
     parts = [

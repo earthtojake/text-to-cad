@@ -6,14 +6,14 @@ screws, jewels, wheels, heart cam) before it is spent on real parts.
 """
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import finishing as F
 from lib import materials as M
 from lib import spec as S
 
 
-@model
+@xbf
 def finishing_sampler():
     parts = []
 

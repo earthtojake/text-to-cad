@@ -1,6 +1,5 @@
 /** Package-owned contracts for the shared navigation primitives. */
 import type { ComponentType, ReactNode } from "react";
-import type { FileSource } from "../types.js";
 
 /* -------------------------------------------------------------------- */
 /* The file menu                                                         */
@@ -29,31 +28,14 @@ export type OpenInEntry = { action: EntryAction | "app"; label: string; enabled:
 export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string, params?: Record<string, unknown>) => string,
   state?: { sourceMissing?: boolean; files?: import("../types.js").OpenInFiles | null }): OpenInEntry[];
 export function fileManagerName(platform: Platform, t?: (key: string) => string): string;
-
-/* -------------------------------------------------------------------- */
-/* The explorer                                                          */
-/* -------------------------------------------------------------------- */
-
 /**
- * The file explorer the navbar's file name opens: one folder at a time from the open file's folder,
- * its subfolders opening inline (a double-click opens one in their place), a breadcrumb to climb (an
- * ellipsis for the folders above the crumbs that fit), and a search under the folder it is in. A
- * pick is `onOpen`.
+ * Open in's entries for a file that is no document: the apps the host lists for it (`files`' one target), Default app
+ * unless the host says it is not offered, then the file manager by its name where `capabilities` asks for it.
  */
-export const FolderExplorer: ComponentType<{
-  source: Pick<FileSource, "list" | "search">;
-  /** The open file, by its absolute path (a document with no file of its own: its id). */
-  file: string;
-  /** Where it starts: the open file's folder unless given (a model's: where the explorer was last, else home). */
-  folder?: string | null;
-  onOpen: (path: string) => void;
-  /** The folder it is in, each time it changes (its first included). */
-  onFolderChange?: (folder: string) => void;
-}>;
-/** The folders from the top of `path`'s filesystem down to it, `/`-separated. */
-export function folderTrail(path: string): { name: string; path: string }[];
-/** The folder holding `path`. */
-export function parentFolder(path: string): string;
+export function fileOpenMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string, params?: Record<string, unknown>) => string,
+  state?: { files?: import("../types.js").OpenInFiles | null }): OpenInEntry[];
+/** What a press on a file that is no document opens it with: the OS's handler where offered, else the host's first app; null for neither. */
+export function fileOpener(files: import("../types.js").OpenInFiles | null | undefined): { target: string; app: string } | null;
 
 /** The one status screen, used by every full-area state in both apps: quiet, a 22rem column centred in the area. */
 export const EmptyState: ComponentType<{
@@ -71,17 +53,26 @@ export function fuzzyMatch(
 ): { score: number; indices: number[] } | null;
 
 /**
- * The one navbar, over a file and over a host's home (with no file, history or Back to home). Left: the logo, which opens the app's menu
- * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
- * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯ (Copy path, Open in, then
- * the host's own items: the viewer's Export). Over a file with a panel, the panel's toggle comes
- * first, before the logo. Right: `trailing` (the file's actions), then `actions`, then `update`, outermost.
- * Back and Forward are a desktop row's alone: a phone's has no room for them.
+ * The one navbar, over a file and over a host's home (with no file). Left: the panel's toggle, over a file with a panel
+ * and over the home, whose sidebar is the same panel; the logo, the way home where the host has a home (`onHome`: a
+ * link where the home has an address, `homeHref`) and the app's menu's button (`AppMenu`, `menu`) where it has none;
+ * Back and Forward where the host keeps the view's history (`history`), the project the document is in
+ * (`project`: its name, muted, then a slash, which goes to the home at it: a link where it has an address; a folder tile
+ * in a narrow row and on a phone), the open file's name, with no glyph, and its ⋯ (Copy path, Copy link, Open in new tab,
+ * Open in, the host's own items: the viewer's Export, then Search documents, Previous and Next in project and, for a
+ * document in no project, Import its folder as a project). Right: `trailing` (the
+ * file's actions), then `actions`, then `update`, outermost. Back and Forward are a desktop row's alone: a phone's has
+ * no room for them.
  */
 export const ViewerNavbar: ComponentType<{
-  /** The host's home, where it has one: the app menu's Back to home. */
+  /** The host's home, where it has one: the logo goes to it (Recents), with a hint saying so, and opens no menu. */
   onHome?: () => void;
-  /** The rest of the app's menu: the host's links and the person's settings. */
+  /** The home's own address, where the host gives it one: the logo is then a real link (a modified click is the browser's). */
+  homeHref?: string | null;
+  /**
+   * The app's menu (the host's links and the person's settings), which the logo opens where the host has no home. A
+   * host with a home keeps it in the panel's foot (`../PanelFoot.jsx`), at the bottom of the sidebar.
+   */
   menu?: { links?: import("../../host/types.js").ViewerLinks; appSettings?: readonly import("../types.js").AppSetting[]; colorScheme?: import("../types.js").ColorSchemeSetting; language?: import("../types.js").LanguageSetting; platform?: string } | null;
   /** The view's own history, where the host keeps one: Back and Forward, each disabled where there is nowhere to go. */
   history?: import("../types.js").ViewerHistory | null;
@@ -89,45 +80,58 @@ export const ViewerNavbar: ComponentType<{
   file?: string | null;
   /** The document's name where its path does not give it (a model's). */
   name?: string;
-  /** What the open document is: a model (built from code) or a file. Its glyph before the name, and the name menu's first tab. */
-  kind?: "model" | "file";
-  /** The name menu's Files: the explorer, rooted at `folder` where given (a model's: where it was last, else home). */
-  explorer?: { source: Pick<FileSource, "list" | "search">; folder?: string | null; onOpen: (path: string) => void; onFolderChange?: (folder: string) => void } | null;
-  /** The name menu's Recent: the host's library, in the explorer's style, a row opening its document. */
-  recent?: { list(): Promise<readonly import("../types.js").RecentDocument[]>; onOpen: (path: string) => void } | null;
+  /**
+   * The project the document is in: its name before the document's, which goes to the home at it (`onOpen`), a real
+   * link where it has an address (`href`): a plain click is `onOpen`, a modified one the browser's.
+   */
+  project?: { name: string; href?: string | null; onOpen: () => void } | null;
   /**
    * The ⋯ after the name: Copy path, then Open in (Browser, and the file manager by its name), each
-   * where `capabilities` has it, then `items` (the host's own: the viewer's Export submenu). None
-   * where it would be empty.
+   * where `capabilities` has it, then `items` (the host's own: the viewer's Export submenu), then Import its folder as
+   * a project where `onImportFolder` is given. None where it would be empty.
    */
   fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; sourceMissing?: boolean;
     /** The host's apps for the document's files, asked each time the menu opens. */
     apps?: (options: { signal: AbortSignal }) => Promise<import("../types.js").OpenInFiles | null>;
-    onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => void; items?: ReactNode } | null;
+    onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => void; items?: ReactNode;
+    /** Import its folder as a project: a document in no project. */
+    onImportFolder?: (() => void) | null;
+    /** Open in new tab (or Open in browser): the document on screen beside this view, `label` the item's words. */
+    beside?: { label: string; onSelect(): void } | null;
+    /** Previous and Next in project, each null at its end: a document in a project of more than one. */
+    neighbours?: { previous: (() => void) | null; next: (() => void) | null } | null;
+    /** Search documents, the first of the last group, its key (`shortcut`) at the right: where the host has the search. */
+    search?: { onSelect(): void; shortcut?: string } | null } | null;
   trailing?: ReactNode;
   /** The host's own actions (the CAD app's Full size, inline). */
   actions?: ReactNode;
   /** The host's update button (`@cad/ui/update`), last and outermost. */
   update?: ReactNode;
   /**
-   * The view's panel toggle (`../panelToggles.js`, said by its frame): the row's first control, before the logo, the
-   * same neutral button open or shut (`aria-expanded` says which).
+   * The panel's toggle (`../panelToggles.js`, said by its frame: a file's view's, or the home's sidebar's): the row's
+   * control right after the logo, the same neutral button open or shut (`aria-expanded` says which).
    */
   panels?: import("../panelToggles.js").PanelToggles | null;
-  /** Over the home: the two places its controls go ("Recent" and its count; the search and Open), on the grid's column (`../navbarSlots.js`). */
-  homeSlots?: { left(element: HTMLElement | null): void; right(element: HTMLElement | null): void } | null;
+  /** Over the home: where its controls go (the search and Import), at the row's right end (`../navbarSlots.js`). */
+  homeSlots?: { right(element: HTMLElement | null): void } | null;
   viewSlot?: ((element: HTMLElement | null) => void) | null;
   className?: string;
 }>;
 
 /**
- * The app's menu, from the navbar's logo: Back to home (`onHome`), the
- * person's settings (`appSettings`), Send feedback, GitHub and Discord, then the version and who
- * made it. `trigger` is the button that opens it.
+ * The app's menu: the person's settings (Language, `appSettings`, Theme), Send feedback, GitHub and Discord (unless
+ * `outward` is false), then the version and who made it. `trigger` is the button that opens it: the cog in the panel's
+ * foot (`../PanelFoot.jsx`), which opens it upward (`side: "top"`) with the settings alone (the links are icons beside
+ * it), or the navbar's logo where the host has no home.
  */
 export const AppMenu: ComponentType<{
   trigger: import("react").ReactElement;
-  onHome?: () => void;
+  side?: "top" | "bottom";
+  align?: "start" | "end";
+  /** The menu's name, where its trigger names it ("Settings"); "Menu" without. */
+  label?: string;
+  /** Whether it lists the links out (Send feedback, GitHub, Discord); false where they are drawn beside its trigger. */
+  outward?: boolean;
   links?: import("../../host/types.js").ViewerLinks;
   appSettings?: readonly import("../types.js").AppSetting[];
   colorScheme?: import("../types.js").ColorSchemeSetting;

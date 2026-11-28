@@ -18,16 +18,16 @@ from unittest import mock
 from cad.engine import build as engine_build
 from cad.engine import said
 from cad.engine import document
-from tests.python.support import engine_cache
+from tests.python.support import engine_restart
 
 KIT = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import paint, step, xbf
+from cad.engine import paint, step, model
 from bd_materials import metals
 
 
-@xbf("XBF/kit.xbf")
+@model("XBF/kit.xbf")
 @step("kit.step")
 def kit():
     base = bd.Box(10, 10, 5)
@@ -39,7 +39,7 @@ def kit():
     return bd.Compound(children=[base, peg, other], label="kit")
 
 
-@xbf("XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base, arm = bd.Box(100, 60, 20), bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
     base.label, arm.label = "base", "arm"
@@ -53,22 +53,22 @@ def hinge():
 USE = """
 from pathlib import Path
 
-from cad.engine import read_step, read_xbf, xbf
+from cad.engine import read_step, read_xbf, model
 
 HERE = Path(__file__).resolve().parent
 
 
-@xbf("XBF/from_step.xbf")
+@model("XBF/from_step.xbf")
 def from_step():
     return read_step(HERE / "kit.step")
 
 
-@xbf("XBF/from_xbf.xbf")
+@model("XBF/from_xbf.xbf")
 def from_xbf():
     return read_xbf(HERE / "XBF/converted.xbf")
 
 
-@xbf("XBF/twice.xbf")
+@model("XBF/twice.xbf")
 def twice():
     first = read_step(HERE / "kit.step")
     second = read_step(HERE / "kit.step").moved(__import__("build123d").Location((0, 0, 50)))
@@ -76,7 +76,7 @@ def twice():
     return __import__("build123d").Compound(children=[first, second, third], label="twice")
 
 
-@xbf("XBF/hinge_copy.xbf")
+@model("XBF/hinge_copy.xbf")
 def hinge_copy():
     return read_xbf(HERE / "XBF/hinge.xbf")
 """
@@ -168,23 +168,23 @@ from OCP.BRepTools import BRepTools
 from OCP.gp import gp_Pnt
 from OCP.Poly import Poly_Triangle, Poly_Triangulation
 from OCP.TopoDS import TopoDS_Face, TopoDS_Shape
-from cad.engine import model, read_mesh, xbf
+from cad.engine import model, read_mesh
 
 HERE = Path(__file__).resolve().parent
 
 
-@xbf("XBF/enclosure.xbf")
+@model("XBF/enclosure.xbf")
 def enclosure():
     pcb = read_mesh(HERE / "scans" / "pcb.stl").bounding_box()
     return bd.Box(pcb.size.X + 6, pcb.size.Y + 6, pcb.size.Z + 4)
 
 
-@xbf("XBF/by_import_stl.xbf")
+@model("XBF/by_import_stl.xbf")
 def by_import_stl():
     return bd.Box(*bd.import_stl(HERE / "scans" / "pcb.stl").bounding_box().size)
 
 
-@xbf("XBF/by_import_step.xbf")
+@model("XBF/by_import_step.xbf")
 def by_import_step():
     return bd.import_step(HERE / "part.step")
 
@@ -194,14 +194,14 @@ def by_import_brep():
     return bd.import_brep(HERE / "part.brep")
 
 
-@xbf("XBF/by_occt.xbf")
+@model("XBF/by_occt.xbf")
 def by_occt():
     shape = TopoDS_Shape()
     BRepTools.Read_s(shape, str(HERE / "part.brep"), BRep_Builder())
     return bd.Solid(shape)
 
 
-@xbf("XBF/mesh_face.xbf")
+@model("XBF/mesh_face.xbf")
 def mesh_face():
     mesh = read_mesh(HERE / "scans" / "pcb.stl")
     triangulation = Poly_Triangulation(len(mesh.vertices), len(mesh.triangles), False)
@@ -223,12 +223,12 @@ SIZED = """
 from pathlib import Path
 
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 HERE = Path(__file__).resolve().parent
 
 
-@xbf("XBF/sized.xbf")
+@model("XBF/sized.xbf")
 def sized():
     scan = bd.import_stl(HERE / "cube.stl")
     return bd.Box(*scan.bounding_box().size)
@@ -260,11 +260,11 @@ class ReadsTest(unittest.TestCase):
         bd.export_stl(bd.Box(length, 30, 2), str(self.stl))
 
     def restart(self) -> None:
-        """What a new worker holds: nothing but what the engine's cache kept (``engine_cache``)."""
-        engine_cache.restart(self.folder / "cache")
+        """What a new worker holds: nothing but the models' .xbf files (``engine_restart``)."""
+        engine_restart.restart()
 
     def built(self, name: str) -> dict:
-        (report,) = engine_build.build(self.folder / "reads.py", [name], cwd=self.folder, cache=str(self.folder / "cache"))
+        (report,) = engine_restart.build(self.folder / "reads.py", [name], cwd=self.folder)
         self.assertTrue(report["ok"], report)
         return report
 
@@ -362,12 +362,13 @@ class ReadsTest(unittest.TestCase):
             self.assertIsNotNone(closure["key"], name)
             self.assertIn(f"../{path}", [row[1] for row in closure["inputs"]], name)
             self.restart()
-            self.assertEqual(self.built(name)["cache"], {"used": True, "from": "cache"}, name)
+            self.assertEqual(self.built(name)["cache"], {"used": True, "from": "xbf"}, name)
 
-    def test_a_model_reading_its_inputs_beside_it_restarts_from_the_cache_wherever_it_is_copied(self) -> None:
+    def test_a_model_reading_its_inputs_beside_it_restarts_from_its_xbf_wherever_it_is_copied(self) -> None:
         # tom reads vendor parts past the engine (import_brep) from beside its sources: copied
-        # elsewhere with them, it is another document (its id is its script's), built once there;
-        # then a restart with nothing changed takes the document, and an edited input builds it.
+        # elsewhere with them and its .xbf, it is another document (its id is its .xbf's), taken there
+        # from the file that came with it (its closure's paths are relative to it), and an edited input
+        # builds it.
         self.built("by_occt")
         moved = Path(tempfile.mkdtemp(prefix="engine-reads-moved-")).resolve() / "copy"
         self.addCleanup(shutil.rmtree, moved.parent, ignore_errors=True)
@@ -375,12 +376,10 @@ class ReadsTest(unittest.TestCase):
         self.restart()
 
         def build() -> dict:
-            (report,) = engine_build.build(moved / "reads.py", ["by_occt"], cwd=moved, cache=str(self.folder / "cache"))
+            (report,) = engine_restart.build(moved / "reads.py", ["by_occt"], cwd=moved)
             return report
 
-        self.assertEqual(build()["cache"]["reason"], "the engine's cache holds none of it", "a copy is a document of its own")
-        self.restart()
-        self.assertEqual(build()["cache"], {"used": True, "from": "cache"})
+        self.assertEqual(build()["cache"], {"used": True, "from": "xbf"})
         import build123d as bd
 
         bd.export_brep(bd.Box(12, 10, 10), str(moved / "part.brep"))

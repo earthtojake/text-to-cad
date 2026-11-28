@@ -23,29 +23,26 @@ assembly left untouched by an edit is measured again with the rest: a check meas
 findings, build volume and rules are the document's), so per-part reuse would be a second, finer key, not
 this one.
 
-**On disk** (``Disk``): each kept result is written beside the engine's model cache, under its document's
-folder there as every view derived from a document is (``<cache>/documents/<id>/checks/``: a model's id, a
-file's document id, ``ids.file_id``), so deleting the document removes them with it
-(``registry.Registry.delete``), and a restarted engine answers the same check of the same document from it.
+**On disk** (``Disk``): each kept result is written in the engine's cache folder, under its document's
+folder there as every view derived from a document is (``<cache>/documents/<id>/checks/``: a document's id,
+``ids.file_id``, a model's its ``.xbf``'s), beside the file's note (``library.Notes``), and a restarted engine
+answers the same check of the same document from it; Remove forgets no result, which is the file's bytes'.
 Its version there is one that outlives the engine: a model's revision (its build closure's key, the same code
-and inputs the same revision in any process: the key its cache file is kept by; a build with no key has none,
+and inputs the same revision in any process; a build with no key has none,
 and keeps nothing on disk), a file's bytes' digest. A file's name is the digest of that version and of the
-check; it holds both, the result and what measured it. Each is written whole (``registry.Folder.write``), a
+check; it holds both, the result and what measured it. Each is written whole (``state.Folder.write``), a
 document keeps one version's (a result of another version is removed as one of the new is written), and the
 whole store is held to ``DISK_LIMIT`` results and ``DISK_BYTES``, the least recently used (by its time on disk,
 set again by each read) going first. One that does not read -- not JSON, not the shape written, another
 version's or check's under its name -- is removed, never served, and a document's ``checks/`` folder left empty
 goes with its last. The files are listed once, at the store's first use (the half-written ones a stopped engine
-left, ``*.json.*.tmp``, swept then); one found gone since -- its folder wiped, or removed with its document's
-unreadable cache file -- leaves the list as it is asked for. A cache folder that cannot be written keeps nothing
-on disk: each result kept tries its own write, and nothing is remembered of the failure. A result is written
-under the registry's lock of its document (``Registry.lock``), which its deletion holds, and a document deleted
-since its check began (``Checks.deleted``, told by ``Registry.delete``) keeps nothing.
+left, ``*.json.*.tmp``, swept then); one found gone since -- its folder wiped -- leaves the list as it is asked
+for. A cache folder that cannot be written keeps nothing
+on disk: each result kept tries its own write, and nothing is remembered of the failure.
 """
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import os
@@ -82,8 +79,7 @@ def digest(path: Path) -> str | None:
 
 class Disk:
     """The kept results on disk (the module's **On disk**), in ``folder()``'s ``documents/``: the engine's
-    registry, whose cache folder holds them and whose lock of a document each write holds (``Registry.lock``),
-    or a ``registry.Folder`` alone (a test's); None: nothing is kept on disk."""
+    cache folder (a ``state.Folder``); None: nothing is kept on disk."""
 
     def __init__(self, folder: Callable[[], Any], limit: int = DISK_LIMIT, budget: int = DISK_BYTES) -> None:
         self.folder, self.limit, self.budget = folder, limit, budget
@@ -94,16 +90,6 @@ class Disk:
         self.root: Any = None
         self.bytes = 0
 
-    def _held(self) -> tuple[Any, Any]:
-        """The cache folder and the lock of a document's writes there (``Registry.lock``; none for a folder
-        alone), or ``(None, None)``."""
-        found = self.folder()
-        if found is None:
-            return None, None
-        if hasattr(found, "lock") and hasattr(found, "cache"):
-            return found.cache, found.lock
-        return found, None
-
     @staticmethod
     def _name(version: str, check: str) -> tuple[str, str]:
         found = [hashlib.blake2b(text.encode("utf-8"), digest_size=10).hexdigest() for text in (version, check)]
@@ -112,7 +98,7 @@ class Disk:
     @staticmethod
     def _inside(ident: str, name: str = "") -> str:
         from cad.engine.ids import is_id
-        from cad_server.engine.registry import DOCUMENTS
+        from cad_server.engine.library import DOCUMENTS
 
         if not is_id(ident):
             raise ValueError(f"{ident!r} is not a document id")
@@ -125,7 +111,7 @@ class Disk:
         if self.index is not None and root == self.root:
             return self.index
         from cad.engine.ids import is_id
-        from cad_server.engine.registry import DOCUMENTS
+        from cad_server.engine.library import DOCUMENTS
 
         self.index, self.bytes, self.root = {}, 0, root
         for ident in held.names(DOCUMENTS):
@@ -168,7 +154,7 @@ class Disk:
     def get(self, ident: str, version: str, check: str) -> tuple[dict[str, Any], Any] | None:
         """The result kept on disk of ``check`` of document ``ident`` at ``version`` and what measured it
         (``by``), or None; a file that does not read as one is removed, and one gone leaves the index."""
-        held, _locks = self._held()
+        held = self.folder()
         if held is None:
             return None
         _prefix, name = self._name(version, check)
@@ -199,13 +185,11 @@ class Disk:
                 index[inside] = (index[inside][0], now)
             return found["result"], found["by"]
 
-    def keep(self, ident: str, version: str, check: str, result: dict[str, Any], by: Any = None,
-             still: Callable[[], bool] = lambda: True) -> None:
-        """``result`` written as ``check``'s of document ``ident`` at ``version``, measured ``by``, whole, under
-        the registry's lock of the document -- unless ``still()``, asked under it, says the document was deleted
-        meanwhile; the document's results of any other version removed, the store held to its bounds. A folder
-        that cannot be written keeps nothing."""
-        held, locks = self._held()
+    def keep(self, ident: str, version: str, check: str, result: dict[str, Any], by: Any = None) -> None:
+        """``result`` written as ``check``'s of document ``ident`` at ``version``, measured ``by``, whole; the
+        document's results of any other version removed, the store held to its bounds. A folder that cannot be
+        written keeps nothing."""
+        held = self.folder()
         if held is None:
             return
         prefix, name = self._name(version, check)
@@ -214,9 +198,7 @@ class Disk:
         if len(data) > self.budget:
             return
         inside = self._inside(ident, name)
-        with (locks(ident) if locks is not None else contextlib.nullcontext()), self.lock:
-            if not still():
-                return  # deleted since the check began: its folder is gone, and stays gone
+        with self.lock:
             index = self._indexed(held)
             for other in held.names(self._inside(ident)):
                 if other.endswith(".json") and not other.startswith(f"{prefix}-"):
@@ -230,15 +212,6 @@ class Disk:
             self.bytes += len(data)
             while index and (len(index) > self.limit or self.bytes > self.budget):
                 self._remove(held, min(index, key=lambda place: index[place][1]))
-
-    def deleted(self, ident: str) -> None:
-        """Document ``ident``'s entries dropped from the index: its folder went with it (``Registry.delete``)."""
-        with self.lock:
-            if self.index is None:
-                return
-            mine = f"{self._inside(ident)}/"
-            for inside in [inside for inside in self.index if inside.startswith(mine)]:
-                self._remove_entry(inside)
 
     def status(self) -> dict[str, Any]:
         with self.lock:
@@ -258,8 +231,6 @@ class Checks:
         self.restored = 0
         self.read = 0
         self.waited = 0
-        # How many times each document id was deleted (``deleted``): a check that began before one keeps nothing.
-        self.deletions: dict[str, int] = {}
         # The results on disk, in the engine's cache folder (``folder()``), or none.
         self.disk = Disk(folder) if folder is not None else None
 
@@ -306,27 +277,14 @@ class Checks:
             self.restored += 1
         return result
 
-    def epoch(self, ident: str | None) -> int:
-        """How many times document ``ident`` was deleted so far: what ``keep``'s ``since`` names."""
-        with self.lock:
-            return self.deletions.get(ident or "", 0)
-
     def keep(self, document: str, version: str, check: str, result: dict[str, Any],
-             durable: tuple[str, str] | None = None, since: int | None = None, by: Any = None) -> None:
+             durable: tuple[str, str] | None = None, by: Any = None) -> None:
         """``result`` kept as ``check``'s of ``document`` at ``version``, measured ``by`` (the measuring process's
         ``contract.measuring``), the store held to its bounds; on disk too under ``durable`` (``get``'s), where
-        one is given. ``since``: the document's ``epoch`` as its check began -- deleted since (``deleted``),
-        nothing is kept."""
-        ident = durable[0] if durable is not None else None
-
-        def still() -> bool:
-            return since is None or self.epoch(ident) == since
-
-        if not still():
-            return
-        self._memory(document, version, check, result, ident, by)
+        one is given."""
+        self._memory(document, version, check, result, durable[0] if durable is not None else None, by)
         if durable is not None and self.disk is not None:
-            self.disk.keep(durable[0], durable[1], check, result, by, still)
+            self.disk.keep(durable[0], durable[1], check, result, by)
 
     def _memory(self, document: str, version: str, check: str, result: dict[str, Any], ident: str | None,
                 by: Any = None) -> None:
@@ -353,23 +311,6 @@ class Checks:
         """One check that waited for the same one running, measuring nothing."""
         with self.lock:
             self.waited += 1
-
-    def forget(self, document: str) -> None:
-        """Every result of ``document`` dropped from memory (it was deleted: its folder, and the results on
-        disk in it, went with it)."""
-        with self.lock:
-            self._drop(document)
-
-    def deleted(self, ident: str) -> None:
-        """Document id ``ident`` deleted (``Registry.delete``, told under its lock): its results dropped from
-        memory and from the disk's index, and a check of it that began before keeps nothing (``epoch``)."""
-        with self.lock:
-            self.deletions[ident] = self.deletions.get(ident, 0) + 1
-            for held in [held for held, (_version, _text, kept, _by) in self.kept.items()
-                         if kept == ident or held[0] == f"model:{ident}"]:
-                self.bytes -= len(self.kept.pop(held)[1])
-        if self.disk is not None:
-            self.disk.deleted(ident)
 
     def status(self) -> dict[str, Any]:
         with self.lock:

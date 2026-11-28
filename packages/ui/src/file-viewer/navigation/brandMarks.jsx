@@ -1,4 +1,4 @@
-/** The Discord and GitHub marks, as the app menu draws them: one colour, the text's. */
+/** The GitHub and Discord marks, as the app menu and the home's sidebar's foot draw them: one colour, the text's. */
 
 export function GitHubMark(props) {
   return (
@@ -15,3 +15,4 @@ export function DiscordMark(props) {
     </svg>
   );
 }
+

@@ -1,6 +1,6 @@
-"""``cad <type> snapshot`` where the engine has no OpenGL context (``snapshot.NO_GL``) and this command carries no
+"""``cad snapshot`` where the engine has no OpenGL context (``snapshot.NO_GL``) and this command carries no
 kernel: the same snapshot is run by the installation's base from this process, so on its display (``xvfb-run cad
-urdf snapshot ...``); with no display to lend, a kernel here, or any other failure, the engine's failure stands. The
+snapshot robot.urdf ...``), by the function of the file's type; with no display to lend, a kernel here, or any other failure, the engine's failure stands. The
 engine's refusal is injected and the base's run recorded: nothing is drawn."""
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ class DrawnByTheBase(unittest.TestCase):
                 mock.patch.object(integration_env, "call", called), redirect_stderr(io.StringIO()):
             if not display:
                 os.environ.pop("DISPLAY", None)
-            return cli._drawn_elsewhere(error, _args(document), "cad urdf snapshot"), called
+            return cli._drawn_elsewhere(error, _args(document), "cad snapshot"), called
 
     def test_the_base_draws_a_file_and_a_held_document_on_this_display(self) -> None:
         found, called = self.elsewhere(_no_gl(), "robot.urdf")
@@ -51,7 +51,7 @@ class DrawnByTheBase(unittest.TestCase):
         self.assertTrue(source.endswith("robot.urdf") and os.path.isabs(source))
         self.assertEqual({"camera": "iso", "pose": '{"elbow": 30}'}, options)
         _found, called = self.elsewhere(_no_gl(), ID)
-        self.assertEqual(("model", [ID, "robot.png"]), called.call_args.args[1:4:2])
+        self.assertEqual(("xbf", [ID, "robot.png"]), called.call_args.args[1:4:2])
 
     def test_the_engine_s_failure_stands_otherwise(self) -> None:
         for name, error, options in (("another failure", api.EngineError("MemoryError"), {}),

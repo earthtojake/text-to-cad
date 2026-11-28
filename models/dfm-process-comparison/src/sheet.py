@@ -2,11 +2,11 @@
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from lib.tray_geometry import tray
 
 
-@model
+@xbf
 def sheet():
     part = tray("sheet")
     # 5052-H32 sheet (README): the catalogue's generic aluminium

@@ -92,6 +92,51 @@ test('an engine document (a STEP\'s renderer) has its Model tab from the first f
   }
 });
 
+// A pick puts the keyboard in Quick Edit's note, for the person to write about it; until they do, `[` and `]` still
+// step to the folder's previous and next document, as they do anywhere in the view. Once they have written in the note,
+// or pressed in it themselves, a bracket is what they type.
+test('after a pick, [ and ] still step through the folder until the person writes in the note or presses in it', async (t) => {
+  const harness = await serveXbfHarness(t);
+  const { page, pane, errors } = await harness.open({ project: true });
+  const controller = 'window.cadHarness.a.controller';
+  await page.waitForFunction(`${controller}?.readState().loading === false`);
+  // Straight down, the camera set from outside: the plate's top (z = 2) at (5, 6), where a press picks it.
+  await page.evaluate(`${controller}.setCamera(${JSON.stringify({ position: [0, 0, 100], target: [0, 0, 0], up: [0, 1, 0], orthographicHalfHeight: 20, projection: 'orthographic' })})`);
+  const box = await pane.locator('canvas').first().boundingBox();
+  const plate = { x: box.x + box.width / 2 + 5 * box.height / 40, y: box.y + box.height / 2 - 6 * box.height / 40 };
+  const note = pane.locator('[data-quick-edit-note]');
+  const noteFocused = () => page.waitForFunction(() => document.activeElement?.matches('[data-quick-edit-note]'));
+  const opened = () => page.evaluate(() => window.cadHarness.opened.slice());
+  // A press on the plate, nothing selected before it.
+  const pick = async () => {
+    await page.mouse.move(plate.x, plate.y);
+    await page.mouse.click(plate.x, plate.y);
+    await page.waitForFunction(`${controller}.readState().selection.length === 1`);
+    await noteFocused();
+  };
+
+  // The pick takes the keyboard into the note; ] and [ are still the folder's, and nothing is written.
+  await pick();
+  await page.keyboard.press(']');
+  await page.keyboard.press('[');
+  assert.deepEqual([await opened(), await note.textContent()], [['/models/after.step', '/models/before.step'], '']);
+  // Once the person writes, a bracket is theirs.
+  await page.keyboard.type('Round [it]');
+  assert.deepEqual([await opened(), await note.textContent()], [['/models/after.step', '/models/before.step'], 'Round [it]']);
+
+  // A press in the note is the person's too, empty or not: after a pick, a press in it and a bracket is typed.
+  await page.keyboard.press('ControlOrMeta+KeyA');
+  await page.keyboard.press('Backspace');
+  // Escape in the emptied note is the view's too: the selection goes, and the next press picks afresh.
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(`${controller}.readState().selection.length === 0`);
+  await pick();
+  await note.click();
+  await page.keyboard.type('[');
+  assert.deepEqual([await opened(), await note.textContent()], [['/models/after.step', '/models/before.step'], '[']);
+  assert.deepEqual(errors, []);
+});
+
 // A part picked in an assembly gets a bar just above it (`SelectionActionBar.jsx`): Isolate and Hide. Isolate keeps the
 // pick, its button pressed, and a second press leaves isolation; Hide takes the part away. A desktop has no row under
 // the strip for it: its panel says what is hidden.

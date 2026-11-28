@@ -1,4 +1,4 @@
-import type { PromptContextPort } from '@cad/core/prompt';
+import type { PromptContextPort, ResourceRef } from '@cad/core/prompt';
 import type { FileActions, FileSource } from '../file-viewer/types.js';
 import type { ControlCount } from '../usage/controls.js';
 
@@ -14,22 +14,22 @@ export interface ClipboardPort {
   writeImage(image: Blob | Promise<Blob>): Promise<void>;
 }
 /**
- * A Quick Edit's .snapshot.json, made at Copy/Queue/Send: shared input, inline annotation
- * and measurements, with one job per drawn view (`cad <type> snapshot --annotation PACKET --camera authored` draws each),
- * and, from a board, the references the prompt names in it (`references`: its selectors, which `--job` lights).
- * `create` returns compact inline JSON up to 1024 UTF-8 bytes, otherwise writes it and answers its path; `read` fetches it. `createHttpPromptFiles` (`@cad/core/client`) is the
+ * How a host's Quick Edit names the files on this computer (a Quick Edit's snapshot packet is the page's own, made
+ * for every host alike: `@cad/core/prompt`'s `snapshotPacket`). `createHttpPromptFiles` (`@cad/core/client`) is the
  * viewer server's.
  */
 export interface PromptFiles {
-  create(request: {
-    name: string; input: string;
-    views: Array<Record<string, unknown> & { label: string }>;
-    annotation: Record<string, unknown> | null;
-    references?: string[];
-  }): Promise<{ snapshot: string; inline?: never } | { inline: string; snapshot?: never }>;
-  read(path: string): Promise<Blob>;
   /** The folders a Quick Edit's message names its files by (`displayPath`): the workspace and the home. */
-  folders?(): Promise<{ start?: string; home?: string }>;
+  folders(): Promise<{ start?: string; home?: string }>;
+}
+/**
+ * What this host's prompts name the document on screen by, where an agent reading them could not reach it as the
+ * view names it (a shared model, whose page is on another computer than the agent): `resource` stands for it in a
+ * Quick Edit's and a screenshot's prompt, as its file, in each reference into it, which keeps its target, and in its
+ * snapshot packet's `input`, and in what Copy Reference and a chip copy.
+ */
+export interface PromptSubject {
+  resource?: ResourceRef;
 }
 /**
  * What the app menu links to — the running version (its release notes), the source and the
@@ -44,7 +44,6 @@ export interface ViewerLinks {
   version: string;
   /** The release notes of the release it is, or a custom build was built on. */
   release: string;
-  x: string;
   github: string;
   discord: string;
   /**
@@ -71,14 +70,30 @@ export interface DownloadPort {
   /** Keeps the exports under way, for `restore` after a reload; never a file. */
   remember?(value: ExportRecord[]): void;
 }
+/**
+ * A place on the host's home: the documents opened lately across every project (`recents`), the starred ones
+ * (`pinned`), or one project's page, by the project's id: one folder of it, `path` below its root (`/`-separated; none,
+ * or `""`, its root).
+ */
+export type HomeLocation = { view: 'recents' | 'pinned' } | { view: 'project'; project: string; path?: string };
+/** What a link or Open in new tab names: a document, by its id (one whose row carries none: its path), or a place on the home. */
+export type NavigationTarget = { document: string } | { home: HomeLocation };
 export interface ViewerHost {
   downloads?: DownloadPort;
   files: FileSource;
   fileActions?: FileActions;
   clipboard: ClipboardPort;
   promptContext: PromptContextPort;
-  /** Makes a Quick Edit's views and annotation as one snapshot JSON file. Absent: a prompt carries none of them. */
+  /** How a Quick Edit's message names this computer's files: from the workspace, else `~/`. Absent: each by its absolute path. */
   promptFiles?: PromptFiles;
+  /** What a prompt names the document on screen by. Absent: as the view names it. */
+  promptSubject?: PromptSubject;
+  /**
+   * The files that made the document on screen, where a share holds them: its files' link (a share's
+   * `<origin>/<id>.zip`, of the page's own origin), which the document's ⋯ offers as Download files. Absent: no item,
+   * as on every page an engine serves, where the files are the person's own.
+   */
+  sharedFiles?: { url: string };
   /**
    * Show a file, by its absolute path, in this view: a pick in the explorer, a renderer's link.
    * `home` shows the host's home in this view: its recent models, what it shows with no file. A
@@ -88,9 +103,25 @@ export interface ViewerHost {
    */
   navigation: {
     openFile?(path: string): void;
-    home?(): void;
+    /** The home, at a place on it where one is named (a project's page: the navbar's project name). */
+    home?(location?: HomeLocation): void;
+    /**
+     * A target's own address in this host, for a real link (`<a href>`): a person opens it in a new tab with ⌘ or Ctrl
+     * and a click, a middle click, or the link's own menu, and a plain click shows it in this view. Null for a target
+     * with no address. A host whose pages have no address of their own (a page in a sandboxed frame) has none of this,
+     * and every row is a button.
+     */
+    hrefOf?(target: NavigationTarget): string | null;
+    /**
+     * Open a target beside this view, which stays as it is: the item every document's and project's menu offers.
+     * `kind` says where, which is the item's words: `"tab"`, a new tab of this browser (the web page: "Open in new
+     * tab"), or `"browser"`, the person's browser (a page in an app's frame: "Open in browser"). Absent: no item.
+     * `places: false`: the host opens a document beside the view but not a place on the home (the CAD app, whose
+     * server opens a document's page by its name and nothing else): a project's menu then has no such item.
+     */
+    openBeside?: { kind: 'tab' | 'browser'; places?: boolean; open(target: NavigationTarget): void | Promise<void> };
   };
-  /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */
+  /** The navbar's links: the version, Discord, GitHub and new issues. A host with none gets none. */
   links?: ViewerLinks;
   /**
    * What the person used, for the host to count: its telemetry, never what they made. Absent, nothing is
@@ -102,7 +133,7 @@ export interface ViewerHost {
   /**
    * `platform` names the keyboard's modifiers (⌘ on `darwin`, Ctrl elsewhere); `reducedMotion` is
    * the app's own motion setting, honoured beside the system's `prefers-reduced-motion`. `compact`
-   * is a view drawn with no chrome (the library's picture of a model, drawn out of sight): a
+   * is a view drawn with no chrome (a small inline view): a
    * renderer draws the model alone — not its tools, its view's controls, its cube or its Quick
    * Edit — and the view has no navbar. `locale` is the language the view reads in, as the host
    * resolved it (`@cad/ui/i18n`'s `useLanguage`: the person's choice, else what the context

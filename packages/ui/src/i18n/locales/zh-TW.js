@@ -193,12 +193,32 @@ export default {
   "app.engine.linkReplaced": "此連結已失效。",
   "app.engine.openNewLink": "請讓你的代理程式再次開啟該模型，然後使用新連結。",
   "app.engine.reload": "重新載入",
+  "share.gone.title": "這個共享模型已過期或已被刪除。",
+  "share.gone.detail": "共享模型會在最後一次共享後保留 7 天。共享者可以再次共享。",
+  "share.damaged.title": "這個共享模型已損毀。",
+  "share.damaged.detail": "請讓共享者重新共享。",
+  "share.unsupported.title": "無法在這裡開啟這個共享模型。",
+  "share.failed.title": "無法開啟這個共享模型。",
+  "share.retry": "重試",
+  "share.delete.title": "要刪除這個共享模型嗎？",
+  "share.delete.detail": "連結將對所有人失效。",
+  "share.delete.action": "刪除",
+  "share.delete.deleting": "正在刪除…",
+  "share.deleted.title": "這個共享模型已刪除。",
+  "share.deleted.detail": "任何人都無法再透過連結開啟它。",
+  "share.delete.gone.title": "這個共享模型已不存在。",
+  "share.delete.gone.detail": "它已過期或已被刪除。",
+  "share.delete.refused.title": "這個刪除連結與這個共享模型不符。",
+  "share.delete.refused.detail": "請使用共享時收到的刪除連結。",
+  "share.delete.damaged.title": "這個刪除連結不完整或已損毀。",
+  "share.delete.damaged.detail": "請開啟收到的完整刪除連結，包括 # 之後的所有內容。",
+  "share.delete.failed.title": "無法刪除這個共享模型。",
+  "share.delete.pageTitle": "刪除共享模型",
 
   "file.opening": "正在開啟…",
   "file.missing": "檔案不存在",
-  "file.notHeld": "此模型已不再保留",
-  "file.notSaved": "此模型未儲存",
-  "file.detached": "此模型的指令碼已不存在",
+  "file.notKnown": "未知的文件",
+  "file.notKnownDetail": "這台電腦上沒有此 ID 的文件：連結可能來自另一台電腦。",
   "file.openFailed": "無法開啟這個檔案",
   "file.displayFailed": "無法顯示這個檔案",
   "file.goHome": "回到首頁",
@@ -212,6 +232,7 @@ export default {
 
   "file.copyPath": "複製路徑",
   "file.copyLink": "複製連結",
+  "file.downloadFiles": "下載檔案",
   "file.revealFinder": "在 Finder 中顯示",
   "file.revealExplorer": "在檔案總管中顯示",
   "file.revealFileManager": "在檔案管理員中顯示",
@@ -219,17 +240,16 @@ export default {
   "file.browser": "瀏覽器",
   "file.fileExplorer": "檔案總管",
   "file.fileManager": "檔案管理員",
-  "file.sourceMissing": "來源檔案已被移動或刪除。",
+  "file.sourceMissing": "來源檔案已被移動或已不存在。",
   "file.kicadBoardTooNew": "{app} 無法開啟此電路板：它由較新版本的 KiCad 儲存。",
   "file.kicadSchematicTooNew": "{app} 無法開啟此電路圖：它由較新版本的 KiCad 儲存。",
   "file.defaultApp": "預設應用程式",
 
-  "menu.backToHome": "回到首頁",
   "menu.theme": "主題",
   "menu.language": "語言",
   "menu.languageAutomatic": "自動（{language}）",
   "menu.feedback": "提供意見回饋",
-  "menu.madeBy": "由 @{handle} 製作",
+  "menu.settings": "設定",
 
   "consent.shareUsage": "遙測",
   "consent.shareUsageEnvironment": "遙測（由你的環境設定）",
@@ -245,64 +265,188 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "資料夾",
-  "explorer.foldersAbove": "上層資料夾",
-  "explorer.filterLabel": "篩選檔案",
-  "explorer.filterPlaceholder": "篩選檔案…",
-  "explorer.loading": "載入中…",
-  "explorer.searching": "搜尋中…",
-  "explorer.readFailed": "無法讀取這個資料夾",
-  "explorer.searchFailed": "無法搜尋這個資料夾",
-  "explorer.noCadFiles": "沒有 CAD 檔案",
-  "explorer.noCadFilesHere": "這裡沒有 CAD 檔案",
-  "explorer.noMatches": "沒有符合的檔案",
-  "explorer.noMatchesYet": "目前沒有符合的檔案。繼續輸入以縮小搜尋範圍。",
-  "explorer.stoppedEarly": "搜尋已提前停止。繼續輸入以縮小範圍。",
-  "explorer.models": "模型",
-  "explorer.files": "檔案",
-  "explorer.noModels": "還沒有模型",
-  "explorer.modelsFailed": "無法讀取模型",
-  "explorer.filterModelsLabel": "篩選模型",
-  "explorer.filterModelsPlaceholder": "篩選模型…",
-  "explorer.noModelsMatch": "沒有符合的模型",
 
-  "home.recentFiles": "最近",
+  "project.importFolder": "將其資料夾匯入為專案…",
+  "project.openNewTab": "在新分頁中開啟",
+  "project.openBrowser": "在瀏覽器中開啟",
+  "project.previous": "專案中的上一個",
+  "project.next": "專案中的下一個",
+  "search.menu": "搜尋文件",
+  "search.title": "搜尋文件",
+  "search.label": "搜尋文件",
+  "search.placeholder": "搜尋所有文件…",
+  "search.results": "文件",
+  "search.inProject": "在 {name} 中",
+  "search.otherProjects": "其他專案",
+  "search.recent": "最近",
+  "search.kindPart": "零件",
+  "search.kindAssembly": "組合件",
+  "search.current": "正在檢視",
+  "search.reading": "正在讀取文件…",
+  "search.failed": "無法讀取文件。",
+  "search.nothingFound": "沒有符合「{query}」的項目",
+  "search.empty": "還沒有文件。",
+  "search.more": "顯示 {total} 個中的 {shown} 個：輸入以縮小範圍",
+  "search.openNewTab": "在新分頁中開啟",
+  "search.openBrowser": "在瀏覽器中開啟",
+  "search.keyMove": "移動",
+  "search.keyOpen": "開啟",
+  "search.keyClose": "關閉",
+
+
+  "home.title": "首頁",
+
+
+  "home.import": "匯入",
+
+
+  "home.importFile": "檔案…",
+
+
+  "home.importFolder": "資料夾…",
+
+
+  "home.importFileButton": "匯入檔案",
+
+
+  "home.importFolderButton": "匯入資料夾",
+
+
+
+
+  "home.projectActionsAria": "專案 {name} 的操作",
+
+
+  "home.projectRemove": "從 CAD 移除",
+
+
+  "home.projectRemoved": "已移除 {name}。磁碟上的內容沒有變更。",
+
+
+  "home.projectMade": "{name} 現在是一個專案。沒有寫入任何內容到該資料夾。",
+
+
+  "home.projectAgain": "{name} 已經是一個專案。",
+
+
+  "home.projectInside": "{name} 位於已經是專案的 {project} 中。",
+
+
+  "home.projectEmpty": "此資料夾是空的。",
+  "home.folderFailed": "無法讀取此資料夾。它可能已被移動或重新命名。",
+
+
+  "home.projectMissing": "此專案的資料夾已不存在。請移除它，或將資料夾放回原處。",
+
+
+  "home.projectTruncated": "未列出全部檔案：此資料夾中的檔案超出一次可列出的數量。",
+
+
+  "home.place.recents": "最近",
+
+
+  "home.place.starred": "已加星號",
+
+
+  "home.project": "專案",
+
+
+  "home.projects": "專案",
+
+
+  "home.placesAria": "位置",
+  "home.sidebar": "側邊欄",
+
+
+  "home.addProject": "將資料夾開啟為專案",
+
+
+  "home.loadingProjects": "正在載入專案",
+
+
+  "home.projectsEmpty": "還沒有專案。",
+
+
+  "home.projectsFailed": "無法讀取專案。",
+
+
+  "home.projectGone": "此專案已不在 CAD 中。重新開啟它的資料夾即可恢復。",
+
+
+  "home.recentsEmpty": "最近沒有開啟過任何內容。",
+
+
+  "home.starredEmpty": "還沒有加星號的內容。替一個檔案加星號，它就會留在這裡。",
+
+
+
+
+
+
+  "home.sortAria": "排序",
+
+
+  "home.sortByAria": "排序：{sort}",
+
+
+  "home.sort.activity": "最近活動",
+
+
+  "home.sort.name": "名稱",
+  "home.sort.viewed": "上次檢視",
+  "home.sort.edited": "上次編輯",
+
+
+
+
+  "home.openNewTab": "在新分頁中開啟",
+
+
+  "home.openBrowser": "在瀏覽器中開啟",
+
+
+  "home.backTo": "返回 {name}",
+  "home.parentFoldersAria": "上層資料夾",
+
+
+
+
+
+
+  "home.emptyTitle": "這裡還沒有內容",
+
+
+  "home.emptyBody": "匯入一個檔案或資料夾，或請你的代理程式製作一個模型。",
+
+
   "home.searchAria": "搜尋模型",
   "home.searchPlaceholder": "搜尋",
   "home.layout": "版面配置",
-  "home.open": "開啟",
   "home.grid": "格狀",
   "home.list": "清單",
   "home.openAria": "開啟 {name}",
-  "home.emptyTitle": "尚未開啟任何檔案",
-  "home.emptyBody": "開啟一個 CAD 檔案，或請你的代理程式製作一個模型。",
-  "home.openFile": "開啟檔案",
-  "home.formatModel": "模型",
-  "home.noMatchingModels": "沒有符合的模型。",
+  "home.noAppOpens": "這台電腦上沒有可開啟 {name} 的應用程式。",
+  "format.xbf": "XBF",
+  "home.formatPart": "零件",
+  "home.formatAssembly": "組合件",
+  "home.noMatchingModels": "沒有符合的項目。",
   "home.filesAria": "檔案",
+  "home.foldersAria": "資料夾",
+  "home.otherFilesAria": "其他檔案",
+  "home.recent": "最近",
+  "home.allFiles": "所有檔案",
   "home.loadingFiles": "正在載入檔案",
   "home.modelsAria": "CAD 模型",
   "home.fileUnavailable": "無法使用檔案",
   "home.actionsAria": "{name} 的動作",
   "home.menuOpen": "開啟",
-  "home.pin": "釘選",
-  "home.unpin": "取消釘選",
-  "home.delete": "刪除",
-  "home.deleteModelTitle": "刪除 {name}?",
-  "home.deleteModelBody": "刪除引擎的記錄及其儲存的建置。指令碼和任何匯出的檔案仍保留在磁碟上。執行指令碼即可重新建置。",
-  "home.deleteFileTitle": "從檢視器中刪除 {name}?",
-  "home.deleteFileBody": "刪除引擎對此檔案的記錄。檔案本身仍保留在磁碟上。",
-  "home.cancel": "取消",
-  "home.kindsAria": "顯示",
-  "home.kind.all": "全部",
-  "home.kind.models": "模型",
-  "home.kind.files": "檔案",
-  "home.kindAria": "顯示：{kind}",
+  "home.star": "加星號",
+  "home.unstar": "取消星號",
   "home.columnName": "名稱",
-  "home.columnKind": "類型",
-  "home.columnSize": "大小",
-  "home.columnUpdated": "更新",
-  "home.columnCreated": "建立",
+  "home.columnType": "類型",
+  "home.columnViewed": "上次檢視",
+  "home.columnEdited": "上次編輯",
+  "home.folderType": "資料夾",
   "home.openingAria": "正在開啟 {name}",
   "home.ageNow": "剛剛",
   "home.ageEdited": "{age}編輯",
@@ -715,7 +859,6 @@ export default {
   "parameters.error.build_failed": "這些值無法建置。",
   "parameters.error.preview_build_failed": "這些值無法建置。",
   "parameters.error.preview_failed": "無法顯示這些值。",
-  "parameters.reason.file": "請在腳本中編輯。",
   "parameters.reason.no_worker": "請重新執行腳本後再編輯。",
   "parameters.reason.shared": "在另一個檔案中設定。",
   "parameters.reason.sharedIn": "在 {source} 中設定。",

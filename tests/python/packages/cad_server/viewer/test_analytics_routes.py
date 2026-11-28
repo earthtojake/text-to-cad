@@ -142,20 +142,21 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertNotIn(".stl", json.dumps(self.sent))
 
     def test_a_models_page_is_counted_apart_from_an_xbf_file_once_a_day(self) -> None:
-        # A model and an actual XBF file are counted separately, each once a day, and never as builds.
-        from cad.engine.ids import model_id
-        from cad_server.engine.registry import Registry
+        # A model a live worker holds and an actual XBF file are counted separately, each once a day, and never
+        # as builds.
+        from cad.engine.ids import file_id
 
-        script = self.root / "parts.py"
-        script.write_text("", encoding="utf-8")
-        ident = model_id(script, "cube")
-        Registry(self.tmp / "state").put({"id": ident, "kind": "model", "root": str(self.root), "home": "parts.py",
-                                          "entry": "cube", "revision": "r1", "built": 1.0})
+        saved = self.root / "cube.xbf"
+        saved.write_bytes(b"its document")
+        ident, gone = self.app.remember(saved), file_id(self.root / "gone.xbf")  # its .xbf, as a run's page knows it
         self.request("PUT", "/api/v1/settings", {"telemetry": {"share": True}})
-        for _ in range(2):  # shown, then again: a reload, the home's card
-            self.assertEqual(self.request("PATCH", "/api/v1/documents", {"action": "open", "path": ident})[0], 200)
-        # An id no document has is no page shown.
-        self.assertEqual(self.request("PATCH", "/api/v1/documents", {"action": "open", "path": model_id(script, "gone")})[0], 200)
+        held = mock.patch("cad_server.viewer.model_catalog.request", side_effect=lambda ask, start: (
+            {"model": {"source": {"name": "cube"}}} if ask["id"] == ident else {"failed": "not held"}))
+        with held:
+            for _ in range(2):  # shown, then again: a reload, the home's card
+                self.assertEqual(self.request("PATCH", "/api/v1/documents", {"action": "open", "path": ident})[0], 200)
+            # An id no document has is no page shown.
+            self.assertEqual(self.request("PATCH", "/api/v1/documents", {"action": "open", "path": gone})[0], 400)
         path = self.root / "exported.xbf"
         path.write_bytes(b"file fixture")
         for _ in range(2):

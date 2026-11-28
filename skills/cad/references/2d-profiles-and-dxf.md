@@ -14,18 +14,18 @@ existing `.dxf`. Whether a cut file is ready for a shop is the sheet-metal revie
 
 ## A drawing is a model
 
-A drawing is a `@model` that returns build123d 2D geometry on z=0 (a sketch, a face, wires or
+A drawing is a `@xbf` that returns build123d 2D geometry on z=0 (a sketch, a face, wires or
 edges). Exporting its document to a `.dxf` runs the drawing checks and writes the file, which is
-the one the viewer and `cad dxf snapshot` draw and a cutting service gets.
+the one the viewer and `cad snapshot` draw and a cutting service gets.
 
 ```python
 import build123d as bd
-from cad import model
+from cad import xbf
 
 HOLE_D = 4.5
 
 
-@model
+@xbf
 def gasket():
     with bd.BuildSketch() as cut:
         bd.Rectangle(60, 40)
@@ -38,8 +38,8 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run src/gasket.py                     # prints id: and view:
-cad model export "$ID" DXF/gasket.dxf     # runs the drawing checks, then writes
+cad run src/gasket.py                              # saves src/gasket.xbf
+cad export src/gasket.xbf DXF/gasket.dxf     # runs the drawing checks, then writes
 ```
 
 - **One shape is one layer, `CUT`.** For more than one CAM operation, return a `Compound` of
@@ -58,7 +58,7 @@ cad model export "$ID" DXF/gasket.dxf     # runs the drawing checks, then writes
   name may not hold any of `<>/\":;?*|=` or a backtick, and an unlabelled child is a cut layer
   of its own (`part2`).
 - **Planar means 2D, on z=0, at 1:1, in millimetres** (`$INSUNITS` is set for you). The export
-  refuses a document holding a solid (`bracket is 3D: a DXF is drawn from 2D geometry a model
+  refuses a document holding a solid (`bracket.xbf is 3D: a DXF is drawn from 2D geometry a model
   returns`) and an edge with any point off z=0, by its element name. A face taken from a solid
   sits at that solid's height: move it down (`bd.Pos(0, 0, -z) * face`).
 - **Text** is `bd.Text(...)`, written as outlines on a marking layer, never a DXF `TEXT` entity:
@@ -69,9 +69,8 @@ cad model export "$ID" DXF/gasket.dxf     # runs the drawing checks, then writes
 
 A drawing gets a script of its own beside the geometry it derives from, with its own stem
 (`bracket_drawing.py` beside `bracket.py`), and composes models, never the reverse. `exports.py`
-and the `@dxf("../DXF/gasket.dxf")` decorator write a drawing's file as they write any other
-([exports](exports.md#standing-deliverables-exportspy)). An existing `.dxf` needs no model: hand
-it straight to a snapshot or the viewer.
+writes a drawing's file as it writes any other ([exports](exports.md#standing-deliverables-exportspy)).
+An existing `.dxf` needs no model: hand it straight to a snapshot or the viewer.
 
 ## Flat patterns, kerf and curves
 
@@ -83,7 +82,7 @@ only when there is no reliable 3D topology. The calls are build123d's own, with
 """Flat patterns of plate.py and bracket.py: their geometry reused, not redrawn."""
 
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import unfold
 
 from bracket import bracket        # the models: importing builds nothing
@@ -92,13 +91,13 @@ from plate import plate
 KERF = 0.1                         # how far each edge moves: half the cut's width
 
 
-@model
+@xbf
 def plate_drawing():               # a flat plate: its top face, laid on z=0
     top = plate().shape.faces().filter_by(bd.Axis.Z).sort_by(bd.Axis.Z)[-1]
     return bd.offset(bd.Pos(0, 0, -top.center().Z) * top, amount=KERF)
 
 
-@model
+@xbf
 def bracket_drawing():             # a bent part, unrolled, its bend lines on a layer of their own
     return unfold(bracket().shape, k_factor=0.4, bend_lines=True)
 
@@ -128,9 +127,9 @@ if __name__ == "__main__":
 
 | The change | Check it with |
 | --- | --- |
-| Any drawing | `cad model export`: the drawing checks run on the document it is about to write |
+| Any drawing | `cad export`: the drawing checks run on the document it is about to write |
 | A dimension the person gave | A targeted `ezdxf` read of the exported `.dxf` (below): extents, a circle's radius, counts by layer |
-| Layout, layers, marking | `cad dxf snapshot` of the exported file ([below](#see-a-drawing)) |
+| Layout, layers, marking | `cad snapshot` of the exported file ([below](#see-a-drawing)) |
 | A file from elsewhere | `validate_dxf_file` (below), then the same reads |
 
 Every DXF export runs the drawing checks, and an error refuses the file, naming the check
@@ -139,7 +138,7 @@ units are set, nothing is drawn twice (an exact duplicate is a double cut), no e
 length, every cut profile closes (polylines, circles, and chains of lines, arcs and splines), and
 something is drawn.
 
-`cad dxf` has no `inspect`: read a `.dxf` with `ezdxf`, which comes with the build123d
+`cad inspect` takes no `.dxf`: read one with `ezdxf`, which comes with the build123d
 integration, in a script run by `cad run`. Such a script gets that integration by importing
 build123d or, as here, by naming it in its header; one that imports `ezdxf` alone runs without
 it (`No module named 'ezdxf'`):
@@ -170,10 +169,10 @@ overlapping or partly coincident curves, small features, kerf and the shop's rul
 ## See a drawing
 
 ```bash
-cad dxf snapshot DXF/gasket.dxf tmp/gasket.png
+cad snapshot DXF/gasket.dxf tmp/gasket.png
 ```
 
-`cad dxf snapshot` draws a drawing the way the viewer does: whole, from above,
+`cad snapshot` draws a drawing the way the viewer does: whole, from above,
 fitted with a margin, in the pens the file declares (an entity with no pen of its own takes the
 paper's ink), on white paper. `--size-profile`, `--width` and `--height` size it; `--camera`
 takes a plan view (`{"position": [x, y, d], "target": [x, y, 0], "up": [0, 1, 0],
@@ -192,6 +191,6 @@ its INSERT). Its packet's views are plan-view cameras and its ink is in drawing 
 the sheet. Draw what the person saw, each view with their ink on it, before editing:
 
 ```bash
-cad dxf snapshot --job tmp/panel.snapshot.json            # every view, into the paths its jobs name
-cad dxf snapshot DXF/panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
+cad snapshot --job '<packet>'                          # every view, each with the ink
+cad snapshot DXF/panel.dxf tmp/view.png --annotation '<packet>' --camera authored
 ```

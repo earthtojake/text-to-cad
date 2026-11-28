@@ -146,7 +146,7 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
       <DropdownMenuTrigger asChild>
         <button type="button" tabIndex={-1} aria-hidden="true" className="pointer-events-none fixed size-px opacity-0" style={style} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="bottom" sideOffset={4} className={cn(FLOATING_SURFACE_CLASS, "w-44")}
+      <DropdownMenuContent align="start" side="bottom" className={cn(FLOATING_SURFACE_CLASS, "w-44")}
         onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
         {open.items.map(item => (
           <div key={item.id} className="contents">

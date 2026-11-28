@@ -13,7 +13,7 @@ robot_state_publisher), an SRDF beside it for MoveIt's planning semantics, and a
 There are two routes to one:
 
 - **Generate it from CAD.** A text-to-cad model that holds the mechanism, materials and named frames
-  is the source of truth: `cad model export` writes the URDF or MJCF, with frames, limits, masses,
+  is the source of truth: `cad export` writes the URDF or MJCF, with frames, limits, masses,
   inertias and meshes exact from the kernel. The file is regenerated, never edited.
 - **Author it by hand.** A robot with no CAD model here, an SRDF (always), a MuJoCo scene, or a file
   that already exists: the XML is the source of truth. The risk is not XML syntax but frames, axis
@@ -24,18 +24,18 @@ There are two routes to one:
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| A URDF or MJCF from a CAD model | The model's declarations, then `cad model export <id> robot.xml` or `.urdf` | [Generate from CAD](#generate-from-cad), [from CAD](references/from-cad.md) |
+| A URDF or MJCF from a CAD model | The model's declarations, then `cad export robot.xbf robot.xml` or `.urdf` | [Generate from CAD](#generate-from-cad), [from CAD](references/from-cad.md) |
 | Collision shapes, joint dynamics, actuators for MuJoCo | A MuJoCo function, run with `cad run` | [The MuJoCo function](#the-mujoco-function), [MuJoCo environment](references/mujoco-environment.md) |
 | A robot from a vendor's STEP | Read it, group parts into links, find each axis, declare, export | [From a vendor STEP](references/from-a-vendor-step.md) |
 | A MuJoCo scene: several robots, objects, a world | `spec()` for each piece, composed with MuJoCo's own `MjSpec` | [MuJoCo environment](references/mujoco-environment.md#the-scene-in-code) |
 | Tune a MuJoCo model's physics | `cad mujoco check`'s model-health findings, one parameter at a time | [Tuning](references/mujoco-environment.md#tuning), [MJCF checks](references/mjcf-checks.md) |
-| A URDF by hand | The `.urdf` and its ledger, then `cad urdf validate` | [Authoring](references/urdf-authoring.md) (frames and signs, the ledger), [checks](references/urdf-checks.md) |
-| MoveIt groups, end effectors, states, collision pairs | A `.srdf` beside the URDF, then `cad srdf validate` | [Authoring](references/srdf-authoring.md) (end effectors, disabled collisions, the ledger), [checks](references/srdf-checks.md) |
+| A URDF by hand | The `.urdf` and its ledger, then `cad inspect robot.urdf` | [Authoring](references/urdf-authoring.md) (frames and signs, the ledger), [checks](references/urdf-checks.md) |
+| MoveIt groups, end effectors, states, collision pairs | A `.srdf` beside the URDF, then `cad inspect robot.srdf` | [Authoring](references/srdf-authoring.md) (end effectors, disabled collisions, the ledger), [checks](references/srdf-checks.md) |
 | An MJCF by hand | `robot.xml` and a `scene.xml` that includes it, then `cad mujoco check` | [Authoring](references/mjcf-authoring.md), [checks](references/mjcf-checks.md) |
 | Link meshes for a hand-written file | One mesh per link, in the link's frame | [Meshes](references/meshes.md) |
 | Mass, centre of mass, inertia | Materials on the CAD parts; else a formula or a script, never intuition | [Inertials](references/inertials.md) |
 | A four-bar in the viewer | `<tcad:four_bar>` on the derived URDF joint | [Four-bar](references/urdf-four-bar.md) |
-| See the robot or a pose | `cad urdf snapshot`, `cad srdf snapshot`; an MJCF in MuJoCo Studio | [Snapshots](references/snapshots.md) |
+| See the robot or a pose | `cad snapshot robot.urdf`, `cad snapshot robot.srdf`; an MJCF in MuJoCo Studio | [Snapshots](references/snapshots.md) |
 | Work across formats, or convert a URDF to MJCF | Which file owns what | [Interoperability](references/interoperability.md) |
 
 ## Setup
@@ -83,13 +83,13 @@ free(root)                             # on a mobile base: not bolted to the wor
 ```
 
 ```bash
-cad run src/gripper.py
-cad model ranges "$ID"                                       # stops where the parts meet, to write into the joints
-cad model export "$ID" sim/gripper.xml
-cad model export "$ID" description/gripper.urdf --zero home
+cad run src/gripper.py                                       # saves the model as src/gripper.xbf
+cad inspect src/gripper.xbf --ranges                         # stops where the parts meet, to write into the joints
+cad export src/gripper.xbf sim/gripper.xml
+cad export src/gripper.xbf description/gripper.urdf --zero home
 ```
 
-`$ID` is the `id:` line the run printed; the suffix picks the format, and meshes are written beside
+Each command takes the model's `.xbf`; the suffix picks the format, and meshes are written beside
 the file. Each export says what it wrote (links, joints, total mass, couplings, frames, keys) with a
 warning for anything left out: read it first, since a mass of 0 or a missing joint is a model to fix.
 An MJCF export also writes a `scene.xml` beside it once (floor, light), which is yours to edit.
@@ -99,7 +99,7 @@ An MJCF export also writes a `scene.xml` beside it once (floor, light), which is
 - **Never edit a generated file.** A frame, limit, mass or mesh is changed in the model; a collision
   shape, damping or actuator in the MuJoCo function; a floor or solver setting in the scene.
 - **The kernel cannot know intent**: check that each joint's positive motion is the one meant
-  (`cad model snapshot "$ID" out.png --pose <state>`) and that the collision shapes suit the physics.
+  (`cad snapshot src/gripper.xbf out.png --pose <state>`) and that the collision shapes suit the physics.
 
 ### The MuJoCo function
 
@@ -140,7 +140,7 @@ cad mujoco check sim/scene.xml
 ```
 
 `spec`, `fit`, `decompose`, `collisions`, `parts` and `save` are the only helpers; they name a part by
-its label path, as `cad model inspect` prints it. Everything else is MuJoCo's API. `save` writes the
+its label path, as `cad inspect` prints it. Everything else is MuJoCo's API. `save` writes the
 file with its meshes, and a `scene.xml` where there is none, then prints the check's warnings, what
 the model collides as and its contact excludes: read them against the choices the function made. This
 file replaces the plain export ([MuJoCo environment](references/mujoco-environment.md#the-mujoco-function)).
@@ -171,7 +171,7 @@ What holds for every format:
   datasheet, a measurement, a formula or script), never from prose or how a picture looks. An
   assumption is stated as one ([guardrails](references/guardrails.md)).
 - Names are shared identifiers: SRDF groups, controllers and TF read the URDF's link and joint names,
-  so a rename updates every consumer in the same task, and any URDF edit re-runs `cad srdf validate`
+  so a rename updates every consumer in the same task, and any URDF edit re-runs `cad inspect`
   on the SRDF beside it.
 
 The trap in each format, and where its contract is:
@@ -192,25 +192,25 @@ The trap in each format, and where its contract is:
 ## Check each change
 
 ```bash
-cad urdf validate path/to/robot.urdf
-cad urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
-cad srdf validate path/to/robot.srdf --strict
+cad inspect path/to/robot.urdf
+cad inspect path/to/robot.urdf --packages robot_description=/path/to/pkg
+cad inspect path/to/robot.srdf --strict
 cad mujoco check path/to/scene.xml
 cad mujoco check path/to/scene.xml --strict --json
-cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30}'
-cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
+cad snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30}'
+cad snapshot path/to/robot.srdf review.png --pose arm/ready
 cad run mujoco-studio --model path/to/scene.xml
 ```
 
 | Change | Check it with |
 | --- | --- |
-| A CAD model's mechanism or declarations | Run it, export again (or run its MuJoCo function again), validate the file; `cad model snapshot` at each mechanism state first, where the joint signs show |
+| A CAD model's mechanism or declarations | Run it, export again (or run its MuJoCo function again), validate the file; `cad snapshot` at each mechanism state first, where the joint signs show |
 | A MuJoCo function or a scene script | Run it and read what `save` printed, then `cad mujoco check` on the scene |
-| Any `.urdf` | `cad urdf validate` until clean; `check_urdf` when installed; `cad srdf validate` on an SRDF beside it |
+| Any `.urdf` | `cad inspect robot.urdf` until clean; `check_urdf` when installed; `cad inspect robot.srdf` on an SRDF beside it |
 | A joint origin, axis, sign or limit | Every movable joint moved through its limits, in the viewer or in snapshots at `--pose` values. Only this catches a flipped sign |
 | A mesh, its scale or placement | A snapshot: about 1000x too large or small is a `scale` bug |
 | An inertial | The [sanity gates](references/inertials.md#sanity-gates) |
-| Any `.srdf` | `cad srdf validate`, which cross-checks every name, chain, state and pair against the URDF; named states in a snapshot |
+| Any `.srdf` | `cad inspect robot.srdf`, which cross-checks every name, chain, state and pair against the URDF; named states in a snapshot |
 | Any MJCF | `cad mujoco check`: MuJoCo's own compile, the model-health checks, what collides and the contact excludes |
 | MuJoCo physics | One parameter changed, checked, and run in MuJoCo Studio against the baseline ([tuning](references/mujoco-environment.md#tuning)) |
 | A ROS or MoveIt consumer | Its own load where available: RViz, the TF tree, MoveIt Setup Assistant |
@@ -231,18 +231,24 @@ cad run mujoco-studio --model path/to/scene.xml
 
 Show the person each model you create or change as soon as its first run succeeds, and any model
 or file they ask to see. A model's page is the `view:` line its run prints, and a file's is the `url`
-that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Show it with
-the first of these you have:
+that `cad viewer --json FILE [FILE ...]` prints for it (never guess the port). Once per project,
+before the first page you show from it, run `cad viewer --json FOLDER` with the project's folder: it
+opens that folder as a project, so the person reaches its other models and files from any one of
+them. Show a page with the first of these you have:
 
-1. `cad_show` among your tools (your host may prefix it): call it with the model's id or the file's
-   absolute path; its description says the rest.
+1. `cad_show` among your tools (your host may prefix it): call it with the absolute path of the model's
+   `.xbf` or of the file; its description says the rest.
 2. A tool that opens a page in the app's own browser pane, not in the person's own browser (in the
    Claude desktop app, the Browser pane's `preview_start` with the page's `url`, or its `navigate`):
    open the page there yourself, and give the person the link as well.
-3. Neither: give the person the link, to open in their browser.
+3. Neither, and the person is at this computer: give them the link, to open in their browser.
+4. They are not (you run in a cloud sandbox, or they are on a phone): share it, `cad share FILE` (a
+   model's `.xbf`), and give them the view link it prints; share it again after each change. The first
+   share on a computer is refused until the person agrees: pass on what it says, and run it again with
+   `--yes` once they have.
 
 The page follows every run of the model. A file you export is a download: give its path. Showing is
-for the person: to check your own work, review with `cad <type> snapshot`, never a screenshot
+for the person: to check your own work, review with `cad snapshot`, never a screenshot
 of the page. If it fails to launch, say so.
 
 An MJCF is the exception: the viewer and `cad_show` do not open one. Show the person the CAD

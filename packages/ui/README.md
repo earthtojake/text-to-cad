@@ -2,12 +2,13 @@
 
 The shared React interface for text-to-cad. `FileViewer` is the complete file view:
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
-app), or the host's home with none, under a navbar — the logo that opens the app's
-menu, the file's name and the name menu it opens (Models and Files), the file menu — with the file's
+app), or the host's home with none, under a navbar — the logo that leads home, the
+panel's toggle, the project the file is in and the file's name, the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
 `CadViewer` (`@cad/ui/cad-viewer`) is the viewer every app shows:
-FileViewer over a CAD client, with the six CAD renderers, the home (the model
-library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
+FileViewer over a CAD client, with the six CAD renderers, the home (the projects and the
+documents opened before), the search of every document (⌘K) and the standard loading and
+missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
 The viewer's tools, panel, settings, tooltips and keyboard follow two binding documents, the same in
@@ -17,17 +18,16 @@ that chrome changes them first. The CAD app's surrounding host controls
 remain its own.
 
 **The viewer is read-only, with one exception.** It writes no document's content and no file of
-one (an export is a download of a new file; the home's Delete removes the engine's record and cache
-of a document, never its file). Changing a design belongs to the agent and the code, and every
+one (an export is a download of a new file, and nothing in the viewer deletes a file). Changing a design belongs to the agent and the code, and every
 viewer tool (Select, Measure, Draw, Quick Edit, the filters and displays) exists to show the
 person the design and to give the agent feedback. The exception is a model's **Params** tab
 ([Parameters](docs/viewer-ux.md#parameters)): its Save asks the engine to set the named numbers
-the model's script declares (`client.setModelParameters`, `POST /api/v1/documents/model/<id>/parameters`),
+the model's script declares (`client.setModelParameters`, `POST /api/v1/documents/xbf/<id>/parameters`),
 the one way the engine writes them. The engine, not the page, rewrites each number in
 the script where its last run recorded it, after checking the script is the one that ran, and builds
 the model again; the page then reads the rebuilt document as it reads any new version. Before a Save,
 the view draws the model at the drafts (`client.previewModelParameters`,
-`POST /api/v1/documents/model/<id>/preview`): the engine builds it for this page alone and writes
+`POST /api/v1/documents/xbf/<id>/preview`): the engine builds it for this page alone and writes
 nothing, and the preview is never the document (what Export, a snapshot, another page or the agent
 reads). Nothing else in the viewer changes a design: no other control writes a script, a document or a
 file, and a document read from a file (an `.xbf`) shows its parameters read-only. A host whose client
@@ -77,10 +77,8 @@ scene's colours written once), the chrome in the app's ([the palette](docs/desig
 [the viewport's scheme](docs/design-system.md#the-viewports-scheme)).
 Every control's label is `FieldLabel` (muted), its value the foreground.
 
-File-tab chrome uses normal-weight type. The navbar's file name, the explorer's and
-the model tree's rows, and filter matches use muted/primary text color for emphasis,
-never bold weight. The explorer's rows are compact 24px lines in 12px text, the size of
-the section titles and the filter above them, a folder opening inline under itself; the
+File-tab chrome uses normal-weight type. The navbar's file name, the panel's rows, and
+filter matches use muted/primary text color for emphasis, never bold weight. The
 view's panel's lists — every one of them, the Model, the Links, the Parts, the Nets, the Hierarchy,
 the Layers — share the STEP/xbf Model tree's base components (`primitives/tree-row.jsx`'s row, slot,
 name, detail and heading, `primitives/tree-filter.jsx`'s search highlight and count, `VirtualRows`),
@@ -88,10 +86,13 @@ never a view's own, in the panel's 12px text, one glyph slot a row
 ([the panel's trees](docs/viewer-ux.md#trees)). Both inset
 row backgrounds 5px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
-The name menu is a popover under the navbar's file name: Models and Files as stock Tabs over
-the explorer's rows (`ModelList.jsx`, `FolderExplorer.jsx`),
-17.5rem wide, no taller than 28rem or the room below it, with no resize handle. It
-floats over the view and never resizes it or moves its tools. A file's controls are
+Moving between documents is the navbar's, the keys' and the search's, never the panel's: a document in a project
+has the project's name before its own in the navbar, which goes to the project's page on the home at the document's
+folder (a link, where the host gives it an address); `[` and `]` step to the previous and next file of that folder
+(`file-viewer/projectKeys.js`), in the order its page listed them as the person came to them, held while they stay
+among them (`cad-viewer/CadViewer.tsx`); and ⌘K (Ctrl+K) searches the project on screen and every document of the library
+(`search/DocumentSearch.tsx`). The browser's tabs are the
+viewer's tabs: a document or a project opens in a new one from its link, Open in new tab, or ⌘Enter. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
 under it, and the one panel docked at its left, the canvas the narrower for it while it pushes it aside (a mouse
 resting on its collapsed toggle peeks it over the view instead, a floating card pushing nothing, pinned only by the toggle).
@@ -111,11 +112,12 @@ src/
   annotation/        the drawing tool's (Draw: freehand and shapes) session, toolbar and ink geometry (its 3D ink is renderers/kit/tools/annotate)
   cad-viewer/        CadViewer (FileViewer + the six CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
-    navigation/     the navbar, the app menu and its links, the folder explorer, the file menu
-  library/           a host's home: the models opened before, to open again, and their pictures
+    navigation/     the navbar, the app menu and its links, the file menu
+  library/           a host's home: its places (Recents, Starred, each project) and their documents, to open again, and their pictures
+  search/            the search of every document (⌘K), over a document and the home
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
-    xbf/            an engine document (.xbf) and a STEP: model tree, Params, Joints
+    xbf/            the xbf renderer (id `xbf`): a model, held or its .xbf, and a STEP: model tree, Params, Joints
     robot/          URDF and SRDF: Links and Joints
     glb/, mesh/     GLB, and STL/3MF triangle meshes
     dxf/            2D drawings
@@ -143,9 +145,8 @@ This package ships the viewer renderers. A renderer only one app registers is
 that app's own, built on the same public `defineFileRenderer` contract (see
 [renderers](docs/renderers.md)).
 
-File listing is independent of renderer matching: the explorer shows every entry
-the host's source lists. A host that opens arbitrary files registers a
-fallback renderer (`fallback: true`) for the types nothing else matches.
+A host that opens arbitrary files registers a fallback renderer (`fallback: true`) for the
+types nothing else matches.
 
 ```tsx
 import { FileViewer } from '@cad/ui/file-viewer';
@@ -264,12 +265,12 @@ A document is what a person reviews: a file in a format the viewer reads, or a m
 code. The viewer exists so that a person can review an agent's subjective output and answer it through the
 tools, annotate, select and quick edit; every renderer serves that review.
 
-A STEP opens in the engine document's renderer (`renderers/xbf`), as an `.xbf` does: the page
+A STEP opens in the model renderer (`renderers/xbf`), as a model's `.xbf` does: the page
 reads what the engine serves of it through the viewer (`client.engineDocument`,
 `/api/v1/documents/<kind>/<id>`) — its structure and one buffer per part — and reads no source or sidecar. A
 rebuild reaches the view as the engine's next version, and only the parts the edit changed are
 fetched. Both the tools view and its independent Preview draw the engine's meshes.
-The Model tab's tree shares the explorer's row and filter primitives. Its rows are the
+The Model tab's tree shares the panel's row and filter primitives. Its rows are the
 document's assemblies and parts, a part a leaf whose faces and edges the viewport picks;
 its expansion controls viewport selection, and its filter searches
 names without expanding anything. See [the engine document renderer](docs/cad-renderer.md#engine-document-renderer)
@@ -303,8 +304,12 @@ resting on its toggle peeks it over the model, a floating card 4px in from the e
 panel's is, pushing nothing, kept nowhere and pinned only by the toggle (`kit/shell/usePanelPeek.js`); until the
 person opens or closes it on a file, it follows the view, collapsed where it would leave the model under 640px, never
 written, and after that their choice holds on that file at any width (`kit/shell/sidebars.js`); it is 232px wide
-(budgeted for three tabs) until its grip sets another width, from 200 to 480px at any window width, its toggle the navbar's first control, before the logo (`file-viewer/panelToggles.js`; ⌘\); on a
-phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`).
+(budgeted for three tabs) until its grip sets another width, from 200 to 480px at any window width, its toggle the navbar's, right after the logo (`file-viewer/panelToggles.js`; ⌘\); on a
+phone the toggle opens it as a sheet from the left (`primitives/sheet.jsx`). How it shares the page is one frame
+(`file-viewer/panelFrame.jsx`, on `file-viewer/PanelSurface.jsx`), which the home's sidebar mounts too: the same
+panel over the home, holding its places (`library/LibrarySidebar.jsx`). Both end in one foot
+(`file-viewer/PanelFoot.jsx`), where the host has a home: under a full-width rule, the host's links as icons (GitHub,
+Discord, Send feedback) and Settings, a cog.
 Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model's rows and search box; see
@@ -344,28 +349,39 @@ Authored material color, finish and opacity are read-only in every style. There
 is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
 [loading](docs/loading.md).
 
-The navbar leads, over a file with a panel, with the panel's toggle, then the logo (the C mark, over the
-home and over a document alike), which opens the app's menu: Back to home where the host
-has a home, the person's settings (Language, Telemetry, Theme), Send feedback
-(a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
-gray, the version and who made it. Where the host keeps the view's own history (the CAD
+The navbar leads, on every page, with the logo (the C mark, over the home and over a document alike), which is the
+way home wherever the host has a home: a link to it where the host gives it an address, a button otherwise, with a
+hint saying so. The panel's toggle follows it, over a file with a panel and over the home, so the logo never moves. The app's links — GitHub, Discord and Send
+feedback (a new issue titled "Feedback: " where the host has a tracker) — are icons in the panel's foot, the row at
+the bottom of the sidebar on the home and over a document, beside Settings, a cog whose menu holds the person's
+settings (Language, Telemetry, Theme) and, in gray, the version and who made it. A host with no home (a view
+that shows one file alone) has no foot, and there the logo opens the app's menu with all of it. Where the host keeps the view's own history (the CAD
 app's views), Back and Forward follow on a desktop (a phone has no room for them), disabled where they have nowhere to go. It names the
-file (no glyph) — the name opens Models and Files — and offers its ⋯ menu (Copy path; Open in,
+project the file is in (a folder tile on a phone) and the file (no glyph), and offers its ⋯ menu (Copy path; Open in new
+tab where the host can open a page beside; Open in,
 a submenu of Browser where the host has one and Finder, File Explorer or File manager; then
-Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
-pointer is on them or their menu is open, with no tooltip. At the right is only what a host
+Export, a submenu of the formats; then Search documents (⌘K) where the host has a library, Previous and Next in
+project, `[` and `]`, or for a document in no project
+Import its folder as a project; a model's Copy path and file manager act on its script). They share one look: transparent until the
+pointer is on them or their menu is open, with no tooltip but the logo's "Home". At the right is only what a host
 or a file adds: a dismissed alert's icon, the host's actions (the
 CAD app's Full size), after the view's own, which it portals into the navbar's view slot (Display, then a 3D view's
 or a board's Preview). The navbar is there in every host; only Preview, which draws its own bar, and a compact view
 are without it. With no
-file a view shows the host's home, the model library, under the same navbar (its logo and menu,
-without Back to home, Back and Forward where the host keeps the view's history, and the host's
-actions): one control row (Recent; the type filter, the search, grid or list),
-then the library alone: the documents opened or built before, pinned first, as Figma-style
-tiles with their pictures or as a table of rows, each with its pin and a ⋯ menu ending in
-Delete, which asks first. A file that
+file a view shows the host's home under the same navbar (the logo, which goes to Recents, its sidebar's toggle,
+Back and Forward where the host keeps the view's history, and the host's
+actions, and the home's own search and Import, a file or a folder opened as a project; the place's title, not the navbar, says where the person is): a
+sidebar of places (Recents, Starred, each project, over the panel's foot), which is the viewer's panel
+over the home (pinned, collapsed, peeking, a phone's sheet), and the place on screen (a project's: one folder of it,
+its subfolders then its files, under the folder's path), its
+documents as Figma-style tiles with their pictures or as a table of rows, shown, sorted and laid
+out from its heading row, each with its star and a ⋯ menu (Open, Open in new tab, ending in Star or Unstar; nothing
+deletes or forgets a file); a card is a real link where the host gives documents an address
+([the home](docs/viewer-ux.md#the-home)). A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
-"Could not open that file" and why, each with Go home where the host has a home. A
+"Could not open that file" and why, each with Go home where the host has a home; a file that goes while it is shown
+says the same within the catalog's next read (`CadViewer`'s `gone`, FileViewer opening it again), its project's name
+kept, and opens again once it is back. A
 renderer's loading and update status is its own, in its viewport. An error appears as a
 card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own

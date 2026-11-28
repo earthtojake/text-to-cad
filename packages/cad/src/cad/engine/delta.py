@@ -2,7 +2,7 @@
 
 A build's worker says what its tree holds (``facts``): its part occurrences, its world bounds --
 each part's box in its own frame, kept by the part's geometry key, so a part a build hands back
-unchanged is not measured again, placed where each occurrence stands, as ``cad <type> inspect``
+unchanged is not measured again, placed where each occurrence stands, as ``cad inspect``
 places its exact boxes -- and its mechanism's joints, configuration sequences and warnings.
 
 The bounds are measured where they decide the model's, to within each part's mesh tolerance, and
@@ -21,7 +21,7 @@ what the walk found. A cold walk of tom (221 parts, 628 occurrences, 27,445 face
 free-form) lists 5 parts and measures no element; of juno (246 parts, 570 free-form faces), 41
 and 12. Measuring every part exactly took 5.5 s on tom and 8.2 s on juno.
 
-The daemon keeps each document's facts beside its record, and in the registry's, and says the
+The daemon keeps each document's facts in its book while a worker holds it, and says the
 build's against the last (``delta``): each fact now, and what it was when it changed; a first build
 has nothing to compare. The CLI prints it under the run line (``cli._describe``).
 An edit that keeps every one of those -- a hole's size, a thickness, a fillet -- is still said: the

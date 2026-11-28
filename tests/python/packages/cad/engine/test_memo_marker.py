@@ -86,13 +86,13 @@ def jitter():
 
 ROOT = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 from parts import faces, jitter, offset, plate, tagged, through
 
 HOLE = {hole}
 
 
-@xbf("XBF/root.xbf")
+@model("XBF/root.xbf")
 def root():
     a = plate({length})
     a.label = "a"
@@ -131,7 +131,7 @@ def stage_two(base, depth):
     return cut
 
 
-@xbf("XBF/staged.xbf")
+@model("XBF/staged.xbf")
 def staged():
     one = stage_one(12)
     two = stage_two(one, 4).moved(bd.Location((20, 0, 0)))
@@ -283,7 +283,7 @@ class MemoTest(MemoCase):
         import io
 
         from cad.engine import api
-        from cad.engine.model import xbf
+        from cad.engine.model import model
 
         self.build()
         self.write("size.bin", "xx")
@@ -293,15 +293,15 @@ class MemoTest(MemoCase):
         os.chdir(self.folder)
         self.addCleanup(os.chdir, here)
         # A model calling the model: a verifying build of it runs the called model's bodies again too.
-        self.write("caller.py", "from cad.engine import xbf\nfrom root import root\n\n\n"
-                                "@xbf(\"XBF/caller.xbf\")\ndef caller():\n    return root().shape\n")
+        self.write("caller.py", "from cad.engine import model\nfrom root import root\n\n\n"
+                                "@model(\"XBF/caller.xbf\")\ndef caller():\n    return root().shape\n")
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             report = api.build_script(self.folder / "caller.py", ["caller"], verify=True, daemon=False)
         self.assertTrue(report.ok, report.models)
         found = report.models[0]["verify"]
         self.assertEqual(found["mismatches"], ["parts.py::jitter"], found)
 
-        @xbf("XBF/probe.xbf")
+        @model("XBF/probe.xbf")
         def probe():
             return None
 
@@ -315,23 +315,21 @@ class MemoTest(MemoCase):
             probe.build(verify=True)
         self.assertEqual([message["verify"] for message in asked], [True, False, True])
 
-    def test_the_restart_cache_folds_a_memo_function_into_the_model_key(self) -> None:
-        from tests.python.support import engine_cache
-
-        cache = self.folder / "cache"
+    def test_a_restart_s_take_keys_a_memo_function_into_the_model_key(self) -> None:
+        from tests.python.support import engine_restart
 
         def build() -> dict:
-            report = engine_build.build(self.folder / "root.py", None, cwd=self.folder, cache=str(cache))[-1]
+            report = engine_restart.build(self.folder / "root.py", None, cwd=self.folder)[-1]
             self.assertTrue(report["ok"], report)
             return report
 
         build()
-        engine_cache.restart(cache)
+        engine_restart.restart()
         report = build()
-        self.assertEqual(report["cache"], {"used": True, "from": "cache"})
+        self.assertEqual(report["cache"], {"used": True, "from": "xbf"})
         self.assertEqual(report["memo"]["bodies_loaded"], 6)
         self.write("parts.py", PARTS.format(thickness=3))
-        engine_cache.restart(cache)
+        engine_restart.restart()
         report = build()
         self.assertEqual(report["cache"]["reason"], "../parts.py: plate changed")
 
@@ -404,7 +402,7 @@ class MemoNativeTest(MemoCase):
 
 class MemoNamesTest(MemoCase):
     def stage(self, marker: str, spare: float = 1.0) -> None:
-        imports = "from cad.engine import memo, xbf" if marker else "from cad.engine import xbf"
+        imports = "from cad.engine import memo, model" if marker else "from cad.engine import model"
         self.write("staged.py", STAGES.format(import_line=imports, marker=marker, spare=spare))
 
     def names(self) -> dict:
@@ -436,7 +434,7 @@ class MemoNamesTest(MemoCase):
         self.assertEqual(self.measured(plain), replayed)
 
     def measured(self, names: dict) -> list:
-        """What `cad <type> inspect` measures of each named face of stage two, by its ref."""
+        """What `cad inspect` measures of each named face of stage two, by its ref."""
         from cad.engine import api
 
         xbf = self.folder / "XBF" / "staged.xbf"

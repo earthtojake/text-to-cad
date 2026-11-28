@@ -27,21 +27,21 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 # ``bad``, which fails once the script says so. cadgen is imported first, so its lazy kernel binds
 # ``build123d`` (an editable install has no ``.pth`` to do it sooner).
 SCRIPT = """
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
 FAIL = {fail}
 
 
-@model
+@xbf
 def box():
     link = bd.Pos(30, 5, 0) * bd.Rot(0, 0, 90) * bd.Box(4, 8, 2)
     link.label = "link"
     return bd.Compound(children=[link], label="box")
 
 
-@model
+@xbf
 def bad():
     assert not FAIL, "blade count must be positive"
     return bd.Box(1, 1, 1)
@@ -74,12 +74,13 @@ class VerbsTest(unittest.TestCase):
         built = cls.run_("parts.py")
         assert built.returncode == 0, built.stderr
         cls.box, cls.bad = [line.split()[1] for line in built.stdout.splitlines() if line.strip().startswith("id:")]
+        cls.views = [line.split()[1] for line in built.stdout.splitlines() if line.strip().startswith("view:")]
         assert cls.run_("-m", "cad_server.engine", "inspect", cls.bad).returncode == 0
         script.write_text(textwrap.dedent(SCRIPT.format(fail=True)), encoding="utf-8")
         cls.failed = cls.run_("parts.py")
         with script.open("a", encoding="utf-8") as handle:
             handle.write("# an edit\n")
-        cls.command = f"cad run {script}"
+        cls.script = script
 
     @classmethod
     def run_(cls, *args: str):
@@ -114,7 +115,7 @@ class VerbsTest(unittest.TestCase):
 
     def test_a_document_whose_last_run_failed_is_said_to_be_its_previous_good_build(self) -> None:
         self.said(self.bad, "bad", f"the last run of bad failed; {{doing}} its previous good build; "
-                                   f"fix it and run `{self.command}` to update it")
+                                   f"fix {self.script} and run it again")
         self.assertTrue(self.status_line(self.bad).endswith("serving its previous good build"))
 
     def test_a_failed_run_prints_the_models_frames_once_then_the_line_naming_it(self) -> None:
@@ -163,17 +164,53 @@ class VerbsTest(unittest.TestCase):
             else:  # a model's picture says its display as a file's does
                 self.assertRegex(done.stdout, r"\(64x48, solid\) in ", done.stdout)
 
+    def test_the_page_link_a_run_prints_names_its_document_and_no_other_link_does(self) -> None:
+        """The ``view:`` of a run -- this server's page of a document, its token in the query -- is the document's id
+        wherever a verb takes a document, a generated parser's (``dfm``) too; a link to another address, to a page of
+        this server that is no document's, and one of a document it holds none of, are refused in one line, none of
+        them saying the token."""
+        link = self.views[0]
+        self.assertRegex(link, rf"^http://127\.0\.0\.1:\d+/{self.box}\?token=\S+$")
+        token = link.partition("token=")[2]
+
+        def command(verb: str, *args: str):
+            done = self.run_("-m", "cad_server.cli", verb, *args)
+            self.assertNotIn(token, done.stdout + done.stderr, f"cad {verb} {args[:1]} says the token")
+            return done
+
+        out = self.folder / "linked.glb"
+        done = command("export", link, str(out))
+        self.assertEqual((done.returncode, out.is_file()), (0, True), done.stderr)
+        done = command("inspect", link + "#box/link")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('"path": "box/link"', done.stdout)
+        done = command("dfm", link, "--process", "cnc", "--json")
+        self.assertEqual(json.loads(done.stdout)["path"], self.box, done.stderr)
+        port = link.split(":")[2].split("/")[0]
+        other = {"another address": link.replace(f":{port}/", ":9/"),
+                 "a web page": f"http://example.com/{self.box}?token={token}",
+                 "a page of this server that is no document's": f"http://127.0.0.1:{port}/?token={token}"}
+        for what, text in other.items():
+            with self.subTest(what):
+                done = command("export", text, str(self.folder / "refused.glb"))
+                self.assertEqual((done.returncode, done.stdout), (2, ""))
+                self.assertRegex(done.stderr, r"^cad export: http://[^?\s]+ is a web link, not a file cad export takes: it takes "
+                                              r".xbf, [^\n]*\n$")
+        unheld = "01234567-89ab-cdef-0123-456789abcdef"
+        done = command("export", link.replace(self.box, unheld), str(self.folder / "refused.glb"))
+        self.assertEqual((done.returncode, done.stderr), (2, f"cad export: no document {unheld} is held\n"))
+
     def test_a_step_cadgen_exported_holds_no_closure_because_the_format_carries_none(self) -> None:
         self.assertEqual(self.cli("export", self.box, str(self.folder / "box.step")).returncode, 0)
         closure = self.cli("inspect", "box.step", "--query", "closure")
         self.assertEqual(closure.returncode, 1)
         self.assertEqual(closure.stderr, "python -m cad_server.engine inspect: box.step holds no build closure: a STEP file "
-                                         "carries none, only an .xbf does; inspect the model's document by its id for "
-                                         "its closure, or name a ref in the file (cad step inspect box.step REF)\n")
+                                         "carries none, only an .xbf does; inspect the model's .xbf for its closure, or "
+                                         "name a ref in the file (cad inspect box.step REF)\n")
         summary = self.cli("inspect", "box.step")
         self.assertEqual(summary.returncode, 0, summary.stderr)
         self.assertEqual(summary.stdout.splitlines()[-1], "closure     none: a STEP file carries none, only an .xbf "
-                                                          "does (a model's document, inspected by its id, has one)")
+                                                          "does (a model's .xbf, inspected, has one)")
 
     def test_an_xbf_file_summary_shows_the_same_closure_as_the_closure_query(self) -> None:
         xbf = self.folder / "inspect-box.xbf"
@@ -194,7 +231,7 @@ class VerbsTest(unittest.TestCase):
 
         def inspect(*options: str):
             return self.run_("-c", "from cad_server.cli import main; raise SystemExit(main())",
-                             "xbf", "inspect", str(xbf), *options)
+                             "inspect", str(xbf), *options)
 
         closure = inspect("--query", "closure", "--json")
         self.assertEqual(closure.returncode, 0, closure.stderr or closure.stdout)
@@ -252,7 +289,7 @@ class MeshTest(unittest.TestCase):
                                          "ref to name and no build closure (only an .xbf carries one); inspect reads "
                                          "nothing more of it: `cad viewer rotor.stl` shows it, and the document it "
                                          "was exported from, inspected, tells the rest\n")
-        self.assertIn("`cad glb inspect rotor.glb` alone tells its nodes, meshes and animations",
+        self.assertIn("`cad inspect rotor.glb` alone tells its nodes, meshes and animations",
                       inspect("rotor.glb", "rotor").stderr)
 
 

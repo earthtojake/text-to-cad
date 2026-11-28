@@ -163,10 +163,10 @@ class MeshContractTest(unittest.TestCase):
 
 TURNED = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/turned.xbf")
+@model("XBF/turned.xbf")
 def turned():
     return bd.Rot(0, 0, 33) * bd.Box(4, 3, 2) + bd.Rot(17, 29, 41) * bd.Cylinder(1, 3)
 """
@@ -195,10 +195,10 @@ class OneKeyOneMeshTest(unittest.TestCase):
 
 MODEL = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/plate.xbf")
+@model("XBF/plate.xbf")
 def plate():
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakePolygon
     from OCP.gp import gp_Pnt
@@ -280,10 +280,10 @@ class FactsTest(unittest.TestCase):
 
 SOLIDS = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/solids.xbf")
+@model("XBF/solids.xbf")
 def solids():
     parts = []
     for at, (label, shape) in enumerate((("cylinder", bd.Cylinder(1, 2)), ("sphere", bd.Sphere(2)),

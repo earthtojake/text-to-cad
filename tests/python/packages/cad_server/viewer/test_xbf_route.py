@@ -33,6 +33,7 @@ from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
 from cad_server.viewer.scanner import catalog_entry
 from cad_server.viewer.documents import EngineDocuments
+from cad.engine.ids import file_id
 from tests.python.support import engine_daemon
 from tests.python.support.paths import add_sources
 
@@ -40,16 +41,16 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import step, xbf
+from cad.engine import step, model
 from bd_materials import metals
 
 
-@xbf("XBF/block.xbf")
+@model("XBF/block.xbf")
 def block():
     return bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
 
 
-@xbf("XBF/pair.xbf")
+@model("XBF/pair.xbf")
 @step(out="pair.step")
 def pair():
     plate = bd.Box(10, 6, 4) - bd.Cylinder(1, 10)
@@ -63,6 +64,50 @@ if __name__ == "__main__":
     pair()
 """
 
+# A model whose document an export writes as another .xbf, a file of its own.
+TRIO = """
+import build123d as bd
+from cad import xbf
+
+
+@xbf
+def trio():
+    return bd.Compound(children=[bd.Pos(20 * at, 0, 0) * bd.Box(5, 5, 5) for at in range(3)], label="trio")
+
+if __name__ == "__main__":
+    trio()
+"""
+
+
+# A model whose build saves it as the .xbf beside its script.
+ARM = """
+import build123d as bd
+from cad import xbf
+
+
+@xbf("arm.xbf")
+def arm():
+    return bd.Box(4, 4, 20)
+
+if __name__ == "__main__":
+    arm()
+"""
+
+
+# A model whose .xbf is its default, hub.xbf beside its script, which the person exports as another xbf too.
+HUB = """
+import build123d as bd
+from cad import xbf
+
+
+@xbf
+def hub():
+    return bd.Compound(children=[bd.Box(6, 6, 2), bd.Pos(0, 0, 4) * bd.Cylinder(2, 6)], label="hub")
+
+if __name__ == "__main__":
+    hub()
+"""
+
 
 class XbfRouteTest(unittest.TestCase):
     @classmethod
@@ -73,7 +118,7 @@ class XbfRouteTest(unittest.TestCase):
         # The daemon this test starts is its own: its own socket folder, one part meshed at a time.
         os.environ.update({"CAD_ENGINE_DIR": str(cls.state), "CAD_ENGINE_MESH": "inline"})
         (cls.base / "models.py").write_text(textwrap.dedent(MODEL), encoding="utf-8")
-        env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC)}, cls.addClassCleanup)
+        env = cls.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC)}, cls.addClassCleanup)
         # Built as a script runs: through this test's own engine daemon.
         done = engine_daemon.run([sys.executable, "models.py"], cwd=cls.base, env=env)
         assert done.returncode == 0, done.stderr
@@ -199,13 +244,55 @@ finally:
         self.assertEqual(status, 200, answer)
         return answer["documents"][0]["held"]
 
-    def test_an_xbf_is_served_by_the_engine_and_read_through_the_viewer(self) -> None:
+    def test_an_xbf_is_a_model_served_by_the_engine_and_read_through_the_viewer(self) -> None:
+        # The row's format is its file's; the document is a model's, opened from an .xbf: a copy of a model's, a file
+        # of its own.
         self.assertEqual(catalog_entry(str(self.document))["kind"], "xbf")
-        served = self.open(self.document)
+        copied = self.base / "copied" / "block.xbf"
+        copied.parent.mkdir(exist_ok=True)
+        shutil.copyfile(self.document, copied)
+        served = self.open(copied)
         self.assertEqual(served, {"id": served["id"], "kind": "xbf", "api": f"/api/v1/documents/xbf/{served['id']}"})
-        # Its envelope says what it is and where its reads are.
+        # Its envelope says what it is and where its reads are: a model's file, which exports itself as its original.
         status, envelope = self.get(f"/api/v1/documents/{served['id']}")
         self.assertEqual((status, envelope["kind"], envelope["api"], envelope["held"]), (200, "xbf", served["api"], True))
+        self.assertEqual((envelope["source"]["type"], envelope["producers"], envelope["exports"][-1]),
+                         ("file", [], "original"))
+        # Its row in Recents, and the list of one kind, say xbf; the kind 0.11 named a held model by, model, answers as xbf's.
+        status, listed = self.get(f"/api/v1/documents?path={quote(str(copied), safe='')}")
+        self.assertEqual((status, [row["kind"] for row in listed["documents"]]), (200, ["xbf"]))
+        for kind in ("xbf", "model"):
+            status, listed = self.get(f"/api/v1/documents/{kind}?path={quote(str(copied), safe='')}")
+            self.assertEqual((status, [row["id"] for row in listed["documents"]]), (200, [served["id"]]))
+        # A model's own .xbf opened by its path is the model, live while its worker holds the build: its id is the
+        # file's, its source the script, its parameters the model's to set.
+        own = self.open(self.document)
+        self.assertEqual(own["id"], file_id(self.document))
+        status, envelope = self.get(f"/api/v1/documents/{own['id']}")
+        self.assertEqual((status, envelope["kind"], envelope["state"], envelope["source"]["type"],
+                          envelope["source"]["path"]), (200, "xbf", "live", "script", (self.base / "models.py").as_posix()))
+        self.assertNotEqual(self.post(own["api"] + "/parameters", {"values": {}})[0], 404)
+        status, server = self.get("/api/v1/server")
+        self.assertEqual((status, "model" in server["kinds"]["reads"], "xbf" in server["kinds"]["reads"],
+                          server["kinds"]["exports"]["xbf"][-1], server["kinds"]["exports"]["model"][-1]),
+                         (200, True, True, "original", "xbf"))
+        # The route 0.11 read a held model at, documents/model/<id>, still answers: the same bodies as the xbf's (what the meshing
+        # still running says of each part aside, which either read may meet).
+        older = f"/api/v1/documents/model/{served['id']}"
+
+        def settled(route: str) -> tuple[int, dict]:
+            status, found = self.get(route)
+            for prototype in found.get("prototypes", ()):
+                for said in ("unmeshed", "unmeshedCheck"):
+                    prototype.pop(said, None)
+            return status, found
+
+        self.assertEqual(settled(older + "/structure"), settled(served["api"] + "/structure"))
+        self.assertEqual(self.request(older + "/source")[::2], (200, copied.read_bytes()))
+        self.assertEqual(self.request(older + "/measure")[0], 200)
+        # A copied .xbf is a model's no live worker holds: its parameters are refused as any such model's are.
+        status, refused = self.post(served["api"] + "/parameters", {"values": {}})
+        self.assertEqual((status, refused["code"]), (409, "no_worker"))
         # The structure, a part and the look, all under the viewer's origin: a page from it reads
         # them as its own (the engine's loopback-only answer is never relayed to it).
         status, headers, body = self.request(served["api"] + "/structure", {"Origin": "http://example.test"})
@@ -223,7 +310,7 @@ finally:
         status, refused = self.get(f"/api/v1/documents/step/{served['id']}/structure")
         self.assertEqual((status, refused["error"]), (404, f"{served['id']} is a xbf"))
         # Asked again, the same document.
-        self.assertEqual(self.open(self.document), served)
+        self.assertEqual(self.open(copied), served)
 
     def test_a_step_is_read_by_the_engine_with_its_names_colours_and_materials(self) -> None:
         entry = catalog_entry(str(self.step))
@@ -264,6 +351,131 @@ finally:
         self.assertEqual(again["read"], first["read"], "the same bytes are not parsed again")
         self.assertEqual([p["key"] for p in again["prototypes"]], [p["key"] for p in first["prototypes"]],
                          "nor meshed again: a part's key is made from the file's bytes")
+
+    def test_a_row_says_how_many_parts_its_document_holds_once_the_engine_knows(self) -> None:
+        # A model's, from its build: one part, and a pair of two.
+        rows = {row["name"]: row for row in self.get("/api/v1/documents")[1]["documents"]}
+        self.assertEqual((rows["block.xbf"]["parts"], rows["pair.xbf"]["parts"]), (1, 2))
+        # An xbf the engine wrote -- a model's own; an export, a file of its own -- counted from the document it wrote
+        # it from: never read for it, and no page has opened it.
+        (self.base / "trio.py").write_text(textwrap.dedent(TRIO), encoding="utf-8")
+        done = engine_daemon.run([sys.executable, "trio.py"], cwd=self.base, env=self.env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [trio] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "trio.xbf"]
+        exported = self.base / "out" / "trio.xbf"
+        exported.parent.mkdir()
+        done = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "export", trio, str(exported)],
+                                 cwd=self.base, env=self.env)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        for folder, name, parts in ((self.base / "XBF", "pair.xbf", 2), (exported.parent, "trio.xbf", 3)):
+            status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})
+            self.assertEqual(status, 201, project)
+            [row] = [row for row in self.get(f"/api/v1/projects/{project['project']['id']}")[1]["documents"]
+                     if row["name"] == name]
+            self.assertEqual((row["record"], row["parts"], row["opened"]), ("file", parts, None), folder)
+        self.assertFalse(self.held(exported), "the engine never read it")
+        self.assertNotIn(str(exported).replace(os.sep, "/"), [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]],
+                         "counted, not opened: not in Recents")
+        # Any other xbf, once the engine has read it for a page: one a page opened, its entry made before the read.
+        folder = self.base / "counted"
+        folder.mkdir()
+        opened, pictured = folder / "opened.xbf", folder / "pictured.xbf"
+        for copy in (opened, pictured):
+            shutil.copyfile(self.base / "XBF" / "pair.xbf", copy)
+        self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "open", "path": str(opened)})[0], 200)
+        self.assertIsNone(self.row(opened)["parts"], "not read yet: no count")
+        self.open(opened)
+        self.assertEqual(self.row(opened)["parts"], 2)
+        # A project's file no page opened, read by the engine: its count is the cache's note, with no entry, and
+        # so is its picture.
+        status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})
+        self.assertEqual(status, 201, project)
+        listed = lambda: {row["name"]: row for row in self.get(f"/api/v1/projects/{project['project']['id']}")[1]["documents"]}
+        self.assertIsNone(listed()["pictured.xbf"]["parts"], "no read: no count")
+        self.open(pictured)
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16).decode("ascii")
+        self.send("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(pictured), "png": png})
+        row = listed()["pictured.xbf"]
+        self.assertEqual((row["parts"], row["opened"], row["thumbnail"] is not None, listed()["opened.xbf"]["parts"]),
+                         (2, None, True, 2))
+        self.assertEqual(self.request(f"/api/v1/documents/{row['id']}/thumbnail")[0], 200)
+        # Removed from Recents, a file keeps its note: its folder's row has its count and its picture still.
+        self.send("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": str(opened), "png": png})
+        self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "remove", "path": str(opened)})[0], 200)
+        self.assertNotIn(str(opened), [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]])
+        self.assertEqual((listed()["opened.xbf"]["parts"], listed()["opened.xbf"]["thumbnail"] is not None), (2, True))
+        # Written since: its count and its picture are of another version, so none until the engine reads it again.
+        later = time.time_ns() + 5_000_000_000
+        os.utime(pictured, ns=(later, later))
+        self.assertEqual((listed()["pictured.xbf"]["parts"], listed()["pictured.xbf"]["thumbnail"]), (None, None))
+        self.assertEqual(self.request(f"/api/v1/documents/{row['id']}/thumbnail")[0], 404)
+
+    def test_a_model_is_its_xbf_one_card_and_an_export_or_a_copy_is_a_card_of_its_own(self) -> None:
+        folder = self.base / "cards"
+        folder.mkdir()
+        (folder / "arm.py").write_text(textwrap.dedent(ARM), encoding="utf-8")
+        (folder / "hub.py").write_text(textwrap.dedent(HUB), encoding="utf-8")
+        run = lambda *words: engine_daemon.run([sys.executable, *words], cwd=folder, env=self.env)
+        for script in ("arm.py", "hub.py"):
+            done = run(script)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        arm, hub, exported = folder / "arm.xbf", folder / "hub.xbf", folder / "share" / "hub-v1.xbf"
+        exported.parent.mkdir()
+        [ident] = [row["id"] for row in self.get("/api/v1/documents")[1]["documents"] if row["name"] == "hub.xbf"]
+        self.assertEqual(ident, file_id(hub), "a model's id is its .xbf's")
+        # The person's exports of a model, an .xbf and a STEP, and a copy of a model's own .xbf.
+        for target in (exported, folder / "hub.step"):
+            done = run("-m", "cad_server.cli", "export", ident, str(target))
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        shutil.copyfile(arm, folder / "arm-copy.xbf")
+        status, project = self.send("POST", "/api/v1/projects", {"path": str(folder)})
+        self.assertEqual(status, 201, project)
+
+        def listed(path: str = "") -> dict:
+            """The folder's documents: its CAD files (it lists its scripts too, which are none)."""
+            found = self.get(f"/api/v1/projects/{project['project']['id']}?path={path}")[1]
+            return {row["name"]: row for row in found["documents"] if row["kind"] is not None}
+
+        posix = lambda path: str(path).replace(os.sep, "/")
+        self.assertEqual(sorted(listed()), ["arm-copy.xbf", "arm.xbf", "hub.step", "hub.xbf"],
+                         "each model once, its .xbf its row; a copied .xbf is a file of its own")
+        self.assertEqual((listed()["arm.xbf"]["id"], listed()["arm.xbf"]["path"], listed()["arm.xbf"]["parts"]),
+                         (file_id(arm), posix(arm), 1))
+        self.assertEqual((listed()["hub.xbf"]["kind"], listed()["hub.xbf"]["parts"]), ("xbf", 2))
+        self.assertEqual((listed("share")["hub-v1.xbf"]["kind"], listed("share")["hub-v1.xbf"]["parts"]), ("xbf", 2),
+                         "an exported .xbf too, in its own folder")
+        # Opened on a page, a model's .xbf is the one row it has in Recents: one card there as well.
+        for path in (arm, hub, exported):
+            self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "open", "path": str(path)})[0], 200)
+        recents = [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]]
+        self.assertEqual([recents.count(str(path)) for path in (arm, hub, exported)], [1, 1, 1])
+        # Edited by hand: still its row, its count no longer known; the next run takes it by its key and counts
+        # nothing, and a run that builds it counts it again.
+        later = time.time_ns() + 5_000_000_000
+        os.utime(arm, ns=(later, later))
+        self.assertEqual((sorted(listed()), listed()["arm.xbf"]["parts"]),
+                         (["arm-copy.xbf", "arm.xbf", "hub.step", "hub.xbf"], None))
+        # Removed from the home's lists: its .xbf stays on disk, and its folder lists it as before.
+        self.assertEqual(self.send("PATCH", "/api/v1/documents", {"action": "remove", "path": listed()["arm.xbf"]["id"]})[0], 200)
+        self.assertNotIn(str(arm), [row["path"] for row in self.get("/api/v1/documents")[1]["documents"]])
+        self.assertEqual(sorted(listed()), ["arm-copy.xbf", "arm.xbf", "hub.step", "hub.xbf"])
+        self.assertTrue(arm.is_file())
+
+    def row(self, path: Path) -> dict:
+        """Recents' row of the file at ``path``."""
+        [found] = [row for row in self.get("/api/v1/documents")[1]["documents"] if row["path"] == str(path).replace(os.sep, "/")
+                   or row["path"] == str(path)]
+        return found
+
+    def send(self, method: str, target: str, payload: dict) -> tuple[int, dict]:
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=300)
+        try:
+            connection.request(method, target, body=json.dumps(payload).encode(),
+                               headers={"Authorization": "Bearer " + self.token, "x-cad-viewer": "1"})
+            response = connection.getresponse()
+            return response.status, json.loads(response.read())
+        finally:
+            connection.close()
 
     def test_document_routes_keep_authentication_and_do_not_relay(self):
         served = self.open(self.document)

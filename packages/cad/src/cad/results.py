@@ -1,10 +1,10 @@
 """The operations' shared result types: what every check returns, typed.
 
-Every check -- ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``,
-``cad.kicad_pcb.drc``, ...) -- answers with a ``CheckResult`` (a stress study's, ``FeaResult``, one with its setup and
+Every check -- ``dfm``, ``solve``, ``drc``, ``erc`` and ``validate`` (``cad.dfm``, ``cad.fea``, ``cad.kicad.drc``,
+``cad.inspect`` of a URDF, ...) -- answers with a ``CheckResult`` (a stress study's, ``FeaResult``, one with its setup and
 the files its solve wrote) -- whether it passed, the file, its findings, each with a severity, a code
 and a location, and what it measured, where it measures -- rather than a loose dict, so the library call
-and the CLI carry the SAME shape: ``cad <type> dfm --json`` is ``dataclasses.asdict`` of the value the library returned.
+and the CLI carry the SAME shape: ``cad dfm FILE --json`` is ``dataclasses.asdict`` of the value the library returned.
 A check has three states (``CheckResult.status``): ``ok``, ``failed`` and ``not_checked`` -- it did not judge
 what it was asked to, which is never a pass; ``ok`` is true for the first alone.
 ``ValidationResult`` and ``ValidationIssue``, their 0.10 names, are aliases that take the 0.10 call shapes
@@ -177,9 +177,9 @@ class CheckResult:
 
 @dataclass(frozen=True)
 class ExportResult:
-    """The outcome of an ``export`` that writes files of its own kinds (``cad.kicad_pcb.export``): the
-    source, what it was exported as, the files written, and what was said beside (a part without its 3D
-    model), one line each."""
+    """The outcome of an ``export`` that writes files of its own kinds (a KiCad file's, ``cad.export(board, dst,
+    as_=...)``): the source, the kind it was exported as (``to``, what ``as_`` names), the files written, and what
+    was said beside (a part without its 3D model), one line each."""
 
     path: Path
     to: str
@@ -192,7 +192,7 @@ class ExportResult:
 
 @dataclass(frozen=True)
 class FeaFace:
-    """One B-rep face of a part, as a stress study's setup lists it (``cad <type> solve`` with no study): the ref a
+    """One B-rep face of a part, as a stress study's setup lists it (``cad fea`` with no study): the ref a
     study names it by, and enough geometry to pick it from a description."""
 
     #: The face's ref (``bracket/face 17``), as the viewer copies it.
@@ -277,7 +277,7 @@ def _check_lines(s: dict) -> list[str]:
 
 @dataclass(frozen=True)
 class FeaResult(CheckResult):
-    """The outcome of a stress study (``cad.<type>.solve``, ``cad <type> solve``; ``result.json`` in the folder a solve
+    """The outcome of a stress study (``cad.fea``, ``cad fea``; ``result.json`` in the folder a solve
     writes holds it): a check, so ``ok``, the document
     (``path``), its findings and ``measurements`` are every check's, and ``--json`` is this whole result.
 

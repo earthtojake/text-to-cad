@@ -1,6 +1,6 @@
-"""The joint stops every document type with a mechanism shares: ``cad.<type>.ranges(source)``.
+"""The joint stops every document type with a mechanism shares: ``cad.inspect(source, ranges=True)``.
 
-``model``, ``xbf`` and ``step`` each answer ``ranges`` with the same function, made for the type here (``ranges_for``):
+``model`` and ``step`` each answer ``ranges`` with the same function, made for the type here (``ranges_for``):
 its signature takes a source of the type and plain values alone, so it is the type's (the signature rule), and what it
 runs is the kernel's -- the document read and described as a robot (``engine.describe``) and its joints swept against
 its parts' surfaces (``engine.ranges``) -- imported when it runs. A model, which the engine holds with no
@@ -90,8 +90,7 @@ def ranges_for(document_type: str) -> Any:
         parts meet past each, every part tested against every other on its own surface. The model is not
         changed: adopt the numbers into its joints' ranges. --json carries every number.
 
-        source: the document: a .step or .xbf, or a model's document id the engine holds (cad model ranges), or
-          the handle its call returns.
+        source: the document: a .xbf, .step or .stp, or (in Python) the handle a model's call returns.
         step: the sweep's step: degrees for a turning joint, millimetres for a sliding one; default 1.
         clearance: how near two parts' surfaces come before they count as touching, in millimetres; default 0.3,
           the least (where they all but touch): a larger one stops each joint where its parts first come that near;
@@ -106,7 +105,7 @@ def ranges_for(document_type: str) -> Any:
         options(step=step, clearance=clearance, joint=joints)
         from cad._internal.document_type import refuse_other
 
-        refuse_other(document_type, source)
+        of = refuse_other(document_type, source)
         try:
             from cad.engine.describe import describe
             from cad.engine.export import Source
@@ -120,7 +119,7 @@ def ranges_for(document_type: str) -> Any:
         started = time.perf_counter()
         if verbose:
             say(f"reading {source} and meshing its parts")
-        with _readable(document_type, source) as (target, label):
+        with _readable(of, source) as (target, label):
             description = describe(Source.read(target).view())
         try:
             unknown(description, joints)
@@ -265,7 +264,9 @@ class _readable:
         self.folder: tempfile.TemporaryDirectory | None = None
 
     def __enter__(self) -> tuple[Path, Path | None]:
-        if self.document_type != "model":
+        from cad._internal.document_type import is_file
+
+        if is_file(self.source):
             return Path(self.source).expanduser(), None
         from cad.engine.api import export
 

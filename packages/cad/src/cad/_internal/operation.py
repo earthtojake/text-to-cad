@@ -7,8 +7,9 @@ installed with; an operation that needs another (a 3D type's ``dfm``: a mesh's t
 a STEP's, an xbf's, a model's and a DXF's build123d's; a board's ``drc``, the kicad integration's) runs
 here instead, in the environment the server made for that integration (``cad[<integration>]`` at its own
 release). It reads one request on stdin -- ``{"type", "operation", "args", "kwargs"}``, plain JSON -- calls
-``cad.<type>.<operation>(*args, **kwargs)`` (``type`` an integration's name for an operation of its own:
-``cad.mujoco.check``) and writes one line on stdout: ``{"result": ...}``, the result
+the type's operation (``cad._internal.verbs.operation``, what ``cad.<type>.<operation>`` is an alias of, saying
+nothing of being deprecated) or an integration's own (``type`` its name: ``cad.mujoco.check``) with
+``(*args, **kwargs)``, and writes one line on stdout: ``{"result": ...}``, the result
 dataclass as data (a ``Path`` as text), or ``{"error": ...}``, the exception's words, with ``"reason"``
 where the exception is the caller's mistake rather than the work's (``REASONS``: an argument refused by name
 ``invalid_argument``, a document the engine does not hold ``not_found``), so the server's command says it
@@ -31,6 +32,7 @@ REASONS: dict[tuple[str, str], str] = {
     ("cad._internal.refused", "ArgumentRefused"): "invalid_argument",
     ("cad.engine.serve", "NotHeld"): "not_found",
     ("cad.engine.snapshot", "NoSuchFile"): "not_found",
+    ("cad.engine.document", "NoXbf"): "invalid_argument",
 }
 
 
@@ -58,7 +60,14 @@ def _answer(request: dict[str, Any]) -> dict[str, Any]:
     entry = DOCUMENT_TYPES.get(str(document_type)) or INTEGRATIONS.get(str(document_type))
     if entry is None or operation not in entry.operation_names:
         return {"error": f"no operation {operation!r} of a document type or an integration {document_type!r}"}
-    function = getattr(importlib.import_module(f"cad.{document_type}"), str(operation))
+    if str(document_type) in DOCUMENT_TYPES:
+        # The type's operation itself (``verbs.operation``), never its alias, ``cad.<type>.<operation>``: this module
+        # runs as ``__main__``, no module of the library's by its name, so the alias would say it is deprecated.
+        from cad._internal.verbs import operation as of_type
+
+        function = of_type(str(document_type), str(operation))
+    else:
+        function = getattr(importlib.import_module(f"cad.{document_type}"), str(operation))
     try:
         result = function(*request.get("args") or [], **request.get("kwargs") or {})
     except Exception as error:  # noqa: BLE001 - the server's command reports it, as its own call would

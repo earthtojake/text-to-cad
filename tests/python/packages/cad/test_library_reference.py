@@ -25,26 +25,33 @@ COPY = repo_path("apps", "docs", "src", "lib", "docs", "library-reference.genera
 class TheCopyIsTheLibrary(unittest.TestCase):
     def test_the_docs_site_reads_the_librarys_declarations(self) -> None:
         self.assertEqual(reference.as_docs_json(), COPY.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad._internal.reference --docs "
-                         "> apps/docs/src/lib/docs/library-reference.generated.json")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_every_declared_name_is_in_it(self) -> None:
         import cad
         from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
 
         docs = reference.as_docs()
-        self.assertEqual([entry["name"] for entry in docs["documentTypes"]], list(DOCUMENT_TYPES))
+        # Each type by its id; an alias (``model``, of ``xbf``) is listed nowhere.
+        spelled = list(DOCUMENT_TYPES)
+        self.assertEqual([entry["name"] for entry in docs["documentTypes"]], spelled)
+        xbf = next(entry for entry in docs["documentTypes"] if entry["name"] == "xbf")
+        self.assertIn("read", [member["name"] for member in xbf["members"]])
         # A deprecated integration is left out, as `cad --help` leaves it out.
         self.assertEqual([entry["name"] for entry in docs["integrations"]],
                          [name for name, entry in INTEGRATIONS.items() if not entry.deprecated])
-        self.assertEqual({entry["name"] for entry in docs["names"]} | set(DOCUMENT_TYPES), set(cad.__all__))
+        self.assertEqual({entry["name"] for entry in docs["names"]} | set(spelled), set(cad.__all__))
+        # A type is its decorator, its reader and its edit; what it does for a verb is the verb's (``cad.export``,
+        # ``cad.dfm``: the root's names), and its own spelling of one an alias, listed nowhere.
+        for verb in ("export", "inspect", "snapshot", "dfm", "fea", "save"):
+            self.assertIn(verb, {entry["name"] for entry in docs["names"]})
         for entry in docs["documentTypes"]:
             with self.subTest(type=entry["name"]):
                 registry = DOCUMENT_TYPES[entry["name"]]
-                names = {member["name"] for member in entry["members"] if member["kind"] != "decorator"}
-                self.assertLessEqual(set(registry.operation_names), names)
-                self.assertEqual(any(member["kind"] == "decorator" for member in entry["members"]),
-                                 registry.decorator)
+                members = entry.get("members", [])
+                names = {member["name"] for member in members if member["kind"] != "decorator"}
+                self.assertEqual(set(), set(registry.operation_names) & names)
+                self.assertEqual(any(member["kind"] == "decorator" for member in members), registry.decorator)
         for entry in docs["integrations"]:
             with self.subTest(integration=entry["name"]):
                 module = __import__(entry["module"], fromlist=["__all__"])

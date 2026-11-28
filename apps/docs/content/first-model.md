@@ -17,11 +17,11 @@ You do not name a skill. The agent picks the [cad skill](repo:skills/cad/SKILL.m
 
 ## What the agent writes
 
-The agent writes a Python script. A model is a function with no parameters, marked `@model`, that returns a build123d shape. Units are millimetres, with +Z up. A script such as `src/bracket.py` looks like this:
+The agent writes a Python script. A model is a function with no parameters, marked `@xbf`, that returns a build123d shape. Units are millimetres, with +Z up. A script such as `src/bracket.py` looks like this:
 
 ```python
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
 def bracket_body(width, thickness, bore):
@@ -33,7 +33,7 @@ def bracket_body(width, thickness, bore):
     return body
 
 
-@model
+@xbf
 def bracket():
     return bracket_body(40, 6, 8)
 
@@ -52,14 +52,15 @@ The agent builds the script with the `cad` command:
 cad run src/bracket.py
 ```
 
-`cad run` works like `uv run`, so the script's own packages come from its header. It needs the server running, which your agent starts with `cad server start`. It prints how the model built, then two lines that matter to you:
+`cad run` works like `uv run`, so the script's own packages come from its header. It needs the server running, which your agent starts with `cad server start`. It prints how the model built, then the lines that matter to you:
 
 ```text
+  src/bracket.xbf (written, 11.8 KB)
   id: 0dc50a92-a21f-5895-a245-ebdeb5352f3b
   view: http://127.0.0.1:54360/0dc50a92-a21f-5895-a245-ebdeb5352f3b?token=...
 ```
 
-The `id:` names the model's document. It comes from the script's path and the function's name, so it is the same on every run. The `view:` line is its page in the viewer. Your port and token will differ.
+`src/bracket.xbf` is the model's document, which the run saves beside the script: the same file on every run, and the one every `cad` command takes (`cad snapshot src/bracket.xbf bracket.png`). The `view:` line is its page in the viewer, and the `id:` the name that page has. Your port and token will differ.
 
 > [!NOTE]
 > The first build downloads the CAD kernel, about 240 MB, and a first model waits for it. It is made once, in a cache folder, and every later build reuses it. [What it needs](/docs/install#what-it-needs) has the sizes, and [Removing](/docs/install#removing) says where the folders are.
@@ -80,19 +81,19 @@ The agent edits the numbers and runs `cad run src/bracket.py` again. The page yo
 
 ## Export a file
 
-A run writes no files. A model is a document the server holds, and files are made when you ask:
+A run writes one file, `src/bracket.xbf` beside the script: the model's own document, which the server holds too. Other formats are made when you ask:
 
 ```text
 Export the bracket as a STEP file and an STL.
 ```
 
-The agent runs `cad model export` with the model's id:
+The agent runs `cad export` on that file:
 
 ```bash
-cad model export "$ID" STEP/bracket.step STL/bracket.stl
+cad export src/bracket.xbf STEP/bracket.step STL/bracket.stl
 ```
 
-`$ID` is the `id:` line from the run. The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's **⋯** menu, beside the file's name, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.
+The format comes from the file's suffix, and `GLB` and `3MF` work the same way. You can also use Export in the viewer's **⋯** menu, beside the file's name, which hands you a browser download. An STL for printing a part with fits takes a tolerance, which [exports](repo:skills/cad/references/exports.md) explains.
 
 ## Where to go next
 

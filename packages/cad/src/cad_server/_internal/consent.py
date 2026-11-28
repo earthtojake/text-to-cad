@@ -1,7 +1,7 @@
-"""Consent for a command that destroys: ``cad delete`` and ``cad server --rotate-token``
+"""Consent for a command that destroys: ``cad server --rotate-token``
 (``cad setup`` asks nothing: installing is what was asked).
 
-Each says its plan first -- what it removes, with counts -- and then:
+It says its plan first -- what it removes -- and then:
 
 - **where a person can be asked** (``interactive``: no ``--json``, stdin and stderr terminals, not CI), the
   question on stderr, ``... (y/N)``, and their answer read from stdin: ``y`` or ``yes`` goes on, anything

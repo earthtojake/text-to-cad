@@ -1,4 +1,5 @@
-"""The explorer's order (``folders.py``): a reproduction of
+"""A project's order (``projects.py``: its files, its folders, its models' names) and a folder's (``folders.py``): a
+reproduction of
 
     localeCompare(a, b, undefined, {numeric: true, sensitivity: "base"})
 

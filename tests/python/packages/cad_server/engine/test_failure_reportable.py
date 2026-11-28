@@ -16,27 +16,27 @@ from cad_server.engine import daemon
 
 SCRIPT = """
 import build123d as bd
-from cad import dxf, model
+from cad import dxf, xbf
 
 
-@model
+@xbf
 def asserted():
     part = bd.Box(1, 1, 1) + bd.Box(1, 1, 1).moved(bd.Location((5, 0, 0)))
     assert len(part.solids()) == 1, ("disconnected", len(part.solids()))
     return part
 
 
-@model
+@xbf
 def zero():
     return bd.Box(0, 60, 5)
 
 
-@model
+@xbf
 def rounded():
     return bd.fillet(bd.Box(10, 10, 10).edges(), 20)
 
 
-@model
+@xbf
 def mistyped():
     return bd.Box(10, 10, 10).fillet(1, "edges")
 
@@ -46,7 +46,7 @@ def solid_drawing():
     return bd.Box(10, 10, 10)
 
 
-@model
+@xbf
 def plate():
     return bd.Box(10, 10, 2)
 """

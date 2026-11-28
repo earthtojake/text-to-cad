@@ -1,24 +1,27 @@
-"""``cad <integration> <operation> [FILE]``: an integration's operations on its tool's own files.
+"""``cad <integration> <operation> [<file>]``: an integration's operations on its tool's own files.
 
-A document type is a file cad shows; its commands are ``cad <type> <operation>``
-(``cad_server.cli.document_types``). Some files are a tool's own and no document type: cad writes one and
-asks the tool about it, and the tool's own app shows it (a MuJoCo model, which MuJoCo Studio opens). What
-cad does with such a file is the integration's operation (``cad.registry``: an integration's ``operations``
-and the ``files`` they take), one to one with ``cad.<integration>.<operation>``: ``cad mujoco check
-robot.xml`` is ``cad.mujoco.check``. A file that has a document type has its operations there, never here.
-Where the tool's own files are found by name in its own folders, an operation takes the names and no FILE:
-OrcaSlicer's presets (``cad orcaslicer presets machine``, ``cad orcaslicer complete --printer ...``).
+A file cad shows has a document type, and the verbs take it (``cad export``, ``cad inspect``, ...:
+``cad_server.cli.verbs``). What a tool does to its own files is the integration's operation (``cad.registry``: an
+integration's ``operations`` and the ``files`` they take), one to one with ``cad.<integration>.<operation>``: a
+file of no document type, which cad writes and asks the tool about and the tool's own app shows (``cad mujoco check
+robot.xml`` is ``cad.mujoco.check``), and a tool's own checks of a document type's file, by the tool's name
+(KiCad's: ``cad kicad drc board.kicad_pcb``, ``cad kicad erc sheet.kicad_sch``, ``cad.kicad.drc``,
+``cad.kicad.erc``). A deprecated integration has no command: its command line answers with what to do instead
+(``cad_server.cli``'s hints).
 
 An operation's options are its function's signature (``cad_server._internal.cli_from_function``). It runs
 in this process where this environment holds the integration (a checkout's; always, for an integration with no
 extra, whose code is the library's own), else in the integration's
 environment (``cad[<integration>]`` at this installation's release, made on first need:
-``cad_server._internal.integration_env``), through the library's runner of one operation.
+``cad_server._internal.integration_env``), through the library's runner of one operation; KiCad's checks where
+this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode here), as the KiCad files' exports do
+(``cad_server.cli.document_types``).
 """
 
 from __future__ import annotations
 
 import argparse
+import inspect as _inspect
 import os
 import sys
 from collections.abc import Callable, Sequence
@@ -44,24 +47,29 @@ def build_parser(integration: str, operation: str, prog: str | None = None) -> a
 
 
 def _refuse_other_file(integration: str, operation: str, source: str) -> None:
-    """A file that is not the tool's own, refused by name before anything runs: a document type's file
-    (``wrong_type``, naming its own command), any other file, and one that is not there (``not_found``)."""
+    """A file the operation does not take, refused by name before anything runs: a file the integration's other
+    operation takes (``wrong_type``, naming that one), a document type's file (naming the verb that checks it), any
+    other file, and one that is not there (``not_found``)."""
     from cad_server._internal.cli_errors import Failure
-    from cad_server.cli.document_types import OPERATIONS as TYPE_OPERATIONS
-    from cad_server.cli.document_types import operations_of as type_operations
 
     entry = INTEGRATIONS[integration]
+    takes = entry.files_of(operation)
     suffix = Path(source).suffix.lower()
-    if suffix not in entry.files:
+    if suffix not in takes:
+        other = next((name for name in entry.operation_names if suffix in entry.files_of(name)), None)
+        if other is not None:
+            raise Failure(f"{source} is not a file cad {integration} {operation} takes ({' or '.join(takes)}): "
+                          f"cad {integration} {other} checks it", "wrong_type")
         found = by_extension(suffix) if suffix else None
         if found is not None:
-            checks = [name for name in type_operations(found.id) if name in ("validate", "drc", "erc", "dfm")]
-            use = (f": use cad {found.id} {checks[0]}" if checks and (found.id, checks[0]) in TYPE_OPERATIONS
-                   else f"; cad {found.id} takes {', '.join(type_operations(found.id))}")
+            from cad.registry import operation_for
+
+            check = "inspect" if operation_for("inspect", found.id) == "validate" else \
+                "dfm" if operation_for("dfm", found.id) else "inspect" if operation_for("inspect", found.id) else None
             raise Failure(f"{source} is a {found.id}, not a file cad {integration} {operation} takes "
-                          f"({' or '.join(entry.files)}){use}", "wrong_type")
+                          f"({' or '.join(takes)})" + (f": cad {check} takes it" if check else ""), "wrong_type")
         raise Failure(f"{source} is not a file cad {integration} {operation} takes: it takes "
-                      f"{' or '.join(entry.files)}", "wrong_type")
+                      f"{' or '.join(takes)}", "wrong_type")
     if not os.path.exists(os.path.expanduser(source)):
         raise Failure(f"no such file: {source}", "not_found")
 
@@ -75,9 +83,10 @@ def _run(integration: str, operation: str) -> Callable[[list[str], str], int]:
 
         verb = _verb((f"cad.{integration}", operation))
         parser = build_parser(integration, operation, prog)
+        named = next(iter(_inspect.signature(verb).parameters))
 
         def check(parsed: argparse.Namespace) -> None:
-            source = getattr(parsed, "path", None)
+            source = getattr(parsed, named, None)
             if source is not None:
                 _refuse_other_file(integration, operation, str(source))
 
@@ -105,9 +114,19 @@ def _run(integration: str, operation: str) -> Callable[[list[str], str], int]:
     return run
 
 
-#: ``(integration, operation) -> run(argv, prog)``: each integration's operations, its registry entry's.
+def _kicad(operation: str) -> Callable[[list[str], str], int]:
+    """KiCad's own check (``cad kicad drc``, ``cad kicad erc``), as the KiCad files' exports run: where this process
+    runs KiCad, else in the environment of ``cad[kicad]`` (``document_types.kicad_rules``)."""
+    from cad_server.cli.document_types import kicad_rules
+
+    return kicad_rules(operation, lambda source: _refuse_other_file("kicad", operation, source))
+
+
+#: ``(integration, operation) -> run(argv, prog)``: each integration's operations, its registry entry's; a deprecated
+#: integration's none (its command line is answered with what to do instead: ``cad_server.cli``).
 OPERATIONS: dict[tuple[str, str], Callable[[list[str], str], int]] = {
-    (entry.name, name): _run(entry.name, name) for entry in INTEGRATIONS.values() for name in entry.operation_names}
+    (entry.name, name): _kicad(name) if entry.name == "kicad" else _run(entry.name, name)
+    for entry in INTEGRATIONS.values() if not entry.deprecated for name in entry.operation_names}
 
 
 def integration_usage(integration: str) -> str:
@@ -133,8 +152,6 @@ def integration_main(integration: str, argv: Sequence[str] | None = None, prog: 
         sys.stderr.write(f"{prog}: {problem}\n\n" + integration_usage(integration))
         return 2
     operation, rest = argv[0], argv[1:]
-    if INTEGRATIONS[integration].deprecated and not wants_json(rest):
-        sys.stderr.write(f"{prog}: deprecated and will be removed: {INTEGRATIONS[integration].deprecated}\n")
     run = OPERATIONS.get((integration, operation))
     if run is None:
         from cad_server._internal.cli_parser import suggest

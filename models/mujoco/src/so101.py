@@ -42,7 +42,7 @@ from pathlib import Path
 
 import build123d as bd
 import numpy as np
-from cad import model, step
+from cad import xbf, step
 from cad.build123d import frame, limits
 
 from lib.step_links import (Printed, assign, centroid, cylinder_axes, leaves, mesh, nearest_link, printed_density,
@@ -171,7 +171,7 @@ def _material(part, finished) -> None:
     part.color = color
 
 
-@model
+@xbf
 def so101():
     from bd_materials import plastics
 

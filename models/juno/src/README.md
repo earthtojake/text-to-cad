@@ -15,11 +15,11 @@ Build from this folder: `python juno.py` builds all 29. `../juno.urdf` and
 URDF.
 
 ```
-python juno.py                                    # prints each model's id: and view:
+python juno.py                                    # saves each model as its .xbf, printing its view:
 python exports.py                                # the URDF's link meshes, 3MF/<link>.3mf
-cad model snapshot "$ID" juno.png --pose wave_right         # ID: the juno model's id: line
-cad urdf snapshot ../juno.urdf urdf.png
-cad model export "$ID" GLB/juno.glb                  # the seven motions as clips
+cad snapshot juno.xbf juno.png --pose wave_right
+cad snapshot ../juno.urdf urdf.png
+cad export juno.xbf GLB/juno.glb                # the seven motions as clips
 ```
 
 ## How it is built
@@ -103,6 +103,6 @@ jump's crouch to -41.1°, below the URDF's -30. The model's `ankle_pitch_*` trav
 
 ## Not ported
 
-- Per-link STEP files. `cad <type> export` writes one of a link model on demand.
+- Per-link STEP files. `cad export` writes one of a link model on demand.
 - The 28 one-link scripts. Each link is a model of `juno.py` now, so no model
   calls another.

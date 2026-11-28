@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect } from "react";
 
-// The view's panel toggle lives in the navbar (`navigation/ViewerNavbar.jsx`), its first control, before the logo. The
-// panel is the renderer's (`renderers/kit/shell/ViewFrame.jsx`), the navbar the file viewer's, so the frame says what
-// its toggle is through this context and `FileViewer` hands it to the navbar. A frame drawn outside a file viewer (no
+// The panel's toggle lives in the navbar (`navigation/ViewerNavbar.jsx`), right after the logo. The
+// panel is the renderer's (`renderers/kit/shell/ViewFrame.jsx`) or, over the home, the home's sidebar
+// (`library/LibrarySidebar.jsx`); the navbar is the file viewer's, so the panel's frame (`panelFrame.jsx`) says what its
+// toggle is through this context and `FileViewer` hands it to the navbar. A frame drawn outside a file viewer (no
 // context) has no toggle but its key.
 //
 // Importing this module has no environmental effects.
@@ -35,19 +36,27 @@ export const PanelTogglesContext = createContext(/** @type {((toggles: PanelTogg
  */
 export const PanelFrameContext = createContext(/** @type {(() => void) | null} */ (null));
 
+/** The toggle's key, as its tooltip shows it: ⌘\ on a Mac (the host's `environment.platform`), Ctrl+\ elsewhere. */
+export const panelShortcut = platform => (platform === "darwin" ? "⌘\\" : "Ctrl+\\");
+
 /**
- * Says the view's toggle to the navbar while the frame is mounted, again whenever it changes, and none once it goes.
- * `toggles` should be memoised by its caller: a new object says them again.
+ * Says the panel's toggle to the navbar while the frame is mounted, again whenever it changes, and none once it goes.
+ * `toggles` should be memoised by its caller: a new object says them again. `early`: said before the frame's first
+ * paint (the home's sidebar, which has no stand-in toggle drawn for it while it loads: its toggle is in the navbar's
+ * first frame, so nothing after it moves).
  * @param {PanelToggles | null} toggles
+ * @param {{ early?: boolean }} [options]
  */
-export function usePanelToggles(toggles) {
+export function usePanelToggles(toggles, { early = false } = {}) {
   const publish = useContext(PanelTogglesContext);
   useContext(PanelFrameContext)?.();
-  useEffect(() => {
+  const say = () => {
     if (!publish) return undefined;
     publish(toggles);
     return () => publish(null);
-  }, [publish, toggles]);
+  };
+  useLayoutEffect(() => (early ? say() : undefined), [publish, toggles, early]);
+  useEffect(() => (early ? undefined : say()), [publish, toggles, early]);
 }
 
 // Where the view's panel is open, and how wide (`renderers/kit/shell/sidebars.js`, which re-exports these and says the
@@ -92,11 +101,21 @@ export function sidebarLayout({ frameWidth, choice, has }) {
   return { mode: open ? "push" : "closed", auto };
 }
 
+/**
+ * A press on the panel's toggle (its button, its key, a peek's pin): the person's choice, kept from now on whatever
+ * the frame's width: open where the panel is shut, shut where it is open.
+ * @param {Parameters<typeof sidebarLayout>[0]} state
+ * @returns {{ open: boolean }}
+ */
+export function toggleSidebar(state) {
+  return { open: sidebarLayout(state).mode !== "push" };
+}
+
 /** A width as the panel draws it: the person's (or the default), within the fixed bounds, whatever was stored. */
 export const clampPanelWidth = (width, minWidth = MIN_PANEL_WIDTH) =>
   Math.round(Math.min(MAX_PANEL_WIDTH, Math.max(minWidth, Number(width) || DEFAULT_PANEL_WIDTH)));
 
-// The panel surface's metrics the file viewer's stand-in for it needs too (`renderers/kit/shell/PanelSurface.jsx` and
+// The panel surface's metrics the file viewer's stand-in for it needs too (`PanelSurface.jsx` and
 // `FlatPanel.jsx` use these): drawn before any view is up, it stands exactly where the view's loading panel will.
 
 /** The panel's vertical step: 8px over the head's row, 8px under it to its rule, and 8px from the rule to the body's first row. */

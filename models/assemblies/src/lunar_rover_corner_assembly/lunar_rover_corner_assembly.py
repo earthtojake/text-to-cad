@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 import math
 from collections.abc import Iterable, Sequence
@@ -524,7 +524,7 @@ def fasteners() -> bd.Compound:
     return group("fasteners", parts, "fastener_steel")
 
 
-@model
+@xbf
 def lunar_rover_corner_assembly():
     upper_arm, lower_arm = control_arms()
     chassis_plate, support_blocks = chassis_bulkhead()

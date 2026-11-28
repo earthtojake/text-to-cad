@@ -20,7 +20,7 @@ from unittest import mock
 
 from cad_mcp.shim import initialize_params
 from cad_server.mcp.protocol import RequestContext
-from cad_server.viewer.recents import RecentStore
+from cad_server.engine.library import Library
 from cad_server.mcp.server import Server
 from cad_server.mcp.ui import AppPage
 
@@ -40,7 +40,7 @@ def converse(tmp: Path) -> dict:
     page = tmp / "app"
     page.mkdir()
     (page / "shell.html").write_text("<!doctype html><head><title>CAD</title></head>", encoding="utf-8")
-    server = Server(page=AppPage(page), recents=RecentStore(tmp / "state"))
+    server = Server(page=AppPage(page), library=Library(tmp / "state"))
 
     def call(name: str, arguments: dict | None = None, meta: dict | None = None) -> dict:
         context = RequestContext(1, {"threadId": "t", **(meta or {})})
@@ -75,7 +75,7 @@ def converse(tmp: Path) -> dict:
             result["_meta"]["dev.texttocad/httpToken"] = "<app-token>"
         launch = (result.get("structuredContent") or {}).get("launch")
         if isinstance(launch, dict):  # this run's install and machine, not the contract
-            launch.update({key: f"<{key}>" for key in ("version", "platform", "pick") if key in launch})
+            launch.update({key: f"<{key}>" for key in ("version", "platform", "pick", "pickAny", "reveal") if key in launch})
     text = json.dumps(record, indent=1, sort_keys=True).replace(str(tmp), "<tmp>")
     return json.loads(re.sub(r"ui://cad/[0-9A-Za-z.+_-]+/[0-9a-f]{16}/", "ui://cad/<release>/<build>/", text))
 
@@ -94,7 +94,7 @@ class CodexContractTest(unittest.TestCase):
         # They advertise no UI extension; being Codex, they still get Codex's catalog, not the text one.
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
-        server = Server(page=AppPage(tmp), recents=RecentStore(tmp / "state"))
+        server = Server(page=AppPage(tmp), library=Library(tmp / "state"))
         server.handle("initialize", initialize_params({**CODEX_INITIALIZE, "capabilities": {"elicitation": {"form": {}, "url": {}}}}), None)
         names = [tool["name"] for tool in json.loads(CONTRACT.read_text(encoding="utf-8"))["tools"]]
         self.assertEqual([tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]], names)

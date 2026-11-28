@@ -2,11 +2,11 @@
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from lib.tray_geometry import tray
 
 
-@model
+@xbf
 def cnc():
     part = tray("cnc")
     # 6061-T6 billet (README): the catalogue's generic aluminium

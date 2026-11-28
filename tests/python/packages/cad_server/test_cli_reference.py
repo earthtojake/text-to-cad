@@ -20,28 +20,35 @@ COPY = repo_path("apps", "docs", "src", "lib", "docs", "cli-reference.generated.
 class TheCopyIsTheCommand(unittest.TestCase):
     def test_the_docs_site_reads_the_commands_parsers(self) -> None:
         self.assertEqual(reference.as_docs_json(), COPY.read_text(encoding="utf-8"),
-                         "regenerate: python -m cad_server._internal.cli_reference --docs "
-                         "> apps/docs/src/lib/docs/cli-reference.generated.json")
+                         "regenerate: scripts/generated/regenerate.py")
 
     def test_every_command_cad_help_lists_is_in_it(self) -> None:
-        from cad.registry import INTEGRATIONS
-        from cad_server.cli.document_types import OPERATIONS
+        from cad.registry import types_for
         from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
+        from cad_server.cli.verbs import VERBS
 
         docs = reference.as_docs()
-        listed = {command["command"] for group in (*docs["documentTypes"], *docs["integrations"])
-                  for command in group["operations"]} | {command["command"] for command in docs["commands"]}
-        # A deprecated integration still answers, and `cad --help` no longer lists it: nor does the reference.
-        deprecated = {name for name, entry in INTEGRATIONS.items() if entry.deprecated}
+        verbs = {entry["command"]: entry for entry in docs["verbs"]}
+        self.assertEqual(list(verbs), [f"cad {verb}" for verb in VERBS])
+        for verb in VERBS:
+            self.assertEqual(verbs[f"cad {verb}"]["types"], list(types_for(verb)))
+        # Every type's options of a verb are in its entry: an SRDF's --urdf and a ranges' --joint are inspect's.
+        options = {flag for option in verbs["cad inspect"]["options"] for flag in option["flags"]}
+        self.assertLessEqual({"--query", "--interference", "--pose", "--fit", "--ranges", "--joint", "--strict",
+                              "--packages", "--urdf"}, options)
+        listed = {command["command"] for group in docs["integrations"] for command in group["operations"]} | {
+            command["command"] for command in docs["commands"]} | set(verbs)
         answered = {f"cad {name}" for name in set(cli._COMMANDS) - cli._UNLISTED} | {
-            f"cad {owner} {operation}" for owner, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS)
-            if owner not in deprecated}
+            f"cad {owner} {operation}" for owner, operation in INTEGRATION_OPERATIONS}
         self.assertLessEqual(answered, listed)
-        self.assertFalse({command for command in listed if command.split()[1] in deprecated})
+        # No spelling the command had is listed, nor a deprecated integration.
+        self.assertFalse({command for command in listed if command.split()[1] in
+                          ("xbf", "step", "urdf", "kicad_pcb", "orcaslicer", "status", "stop", "serve")})
         # What else is there is a command's subcommand, after it: `cad server start` follows `cad server`.
         for command in sorted(listed - answered):
             self.assertIn(command.rsplit(" ", 1)[0], listed, command)
-        self.assertLessEqual({"cad server start", "cad update auto", "cad plugin update auto"}, listed)
+        self.assertLessEqual({"cad server start", "cad update auto", "cad plugin update auto", "cad kicad drc",
+                              "cad kicad erc"}, listed)
 
 
 class OneCommandsEntry(unittest.TestCase):

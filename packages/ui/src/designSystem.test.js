@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_PANEL_WIDTH } from "./file-viewer/panelToggles.js";
 
 // The viewer's chrome follows `docs/design-system.md`, "Two scales": type from the token scale (text-tiny,
 // text-xs, text-ui, text-heading), and layout from the ONE viewer breakpoint (useViewerMobile)
@@ -10,7 +11,7 @@ import { fileURLToPath } from "node:url";
 // (markdown, code) keeps its own content styles and is not chrome.
 const root = fileURLToPath(new URL(".", import.meta.url));
 const CHROME = ["file-viewer", "host", "primitives", "loading", "annotation", "library", "cad-viewer", "renderers/kit", "renderers/glb", "renderers/mesh", "renderers/dxf",
-  "renderers/board", "renderers/workspace"];
+  "renderers/board", "renderers/workspace", "search"];
 const sources = dir => readdirSync(dir).flatMap(name => {
   const path = join(dir, name);
   if (statSync(path).isDirectory()) return name === "__fixtures__" ? [] : sources(path);
@@ -31,13 +32,14 @@ test("viewer chrome uses the type scale and the viewer breakpoint, never window 
 
 // Every scroll region of the chrome is the one ScrollArea primitive (`primitives/scroll-area.jsx`):
 // thin overlay bars in the theme's colours, never the platform's scrollbar. The home (the model
-// library) is a page, not chrome: it scrolls as a page does, with the platform's own scrollbar. A
+// library) is a page, not chrome: the place on screen scrolls as a page does, with the platform's own scrollbar, and
+// its sidebar, which is chrome (the panel's surface, `file-viewer/PanelSurface.jsx`), in the panel's ScrollArea. A
 // strip that scrolls with no bar at all (the panel's tabs, `FlatPanel.jsx`: its scrollbar hidden,
 // `[scrollbar-width:none]`, its clipped edge faded instead) shows no scrollbar to style.
 const NATIVE_SCROLLER = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/;
 const PAGES = ["library/ModelLibrary.tsx"];
-const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "file-viewer/navigation/FolderExplorer.jsx", "primitives/dropdown-menu.jsx",
-  "renderers/kit/status/ViewerAlertCard.jsx"];
+const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "primitives/dropdown-menu.jsx", "renderers/kit/status/ViewerAlertCard.jsx",
+  "search/DocumentSearch.tsx", "file-viewer/PanelSurface.jsx"];
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {
   const found = [];
@@ -51,33 +53,32 @@ test("every scroll region in the viewer's chrome is the ScrollArea primitive, ne
   for (const file of SCROLL_REGIONS) assert.match(readFileSync(join(root, file), "utf8"), /<ScrollArea\b/, `${file} scrolls in a ScrollArea`);
 });
 
-// The Home (`library/`) is the chrome's type scale (`docs/design-system.md`, "The type scale"): the controls text-ui (13/20), the
-// heading, Recent, the one larger text (15/20 semibold), a name 12/16 (text-xs) and its facts, the count, a
-// format's badge and the table's header 11/16 (text-tiny); a tile's glyph 16px.
-test("the Home is the chrome's type scale: the heading 15/20, names 12/16, facts 11/16, and 16px glyphs", () => {
+// The Home (`library/`) is three sizes of the chrome's type scale (`docs/design-system.md`, "The type scale"), as Figma's
+// file browser is: the title (`text-heading`, always with a weight of its own, as its token's semibold is not the
+// title's), the body (`text-ui`) for everything else, and a card's format at the chip's own step, which the chip
+// primitive sets (`primitives/badge.jsx`). No `text-tiny` and no other step is written in the Home's files, and no size
+// in its stylesheet rules, which hold only a card's marks and the navbar's search. Its sidebar is the panel's surface,
+// left out of the panel's one size by the rule that sets it. What each text is drawn at, on a desktop and a phone, is
+// the browser spec's (`library/ModelLibrary.browser.test.mjs`).
+test("the Home's type is three sizes: the title's heading step at a weight of its own, the body's text-ui and the chip's step, with no size of its stylesheet's own", () => {
   // Its rules, without the comments that stand before them.
   const css = readFileSync(join(root, "styles/globals.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const sizes = [...css.matchAll(/([^{}]*\.cad-library[^{}]*)\{([^}]*)\}/g)].flatMap(([, selector, body]) => {
-    const size = body.match(/font-size:\s*([^;]+);/)?.[1].trim();
-    return size ? [[selector.trim().replace(/\s+/g, " "), size]] : [];
-  });
-  assert.deepEqual(sizes, [
-    [".cad-library-heading", "var(--cad-text-heading)"],
-    [".cad-library-count", "var(--cad-text-tiny)"],
-    // In the navbar (a host's home under it), Recent is the navbar's 13/20.
-    ["[data-navbar-home] .cad-library-heading", "var(--cad-text-ui)"],
-    [".cad-library-format", "var(--cad-text-tiny)"],
-    [".cad-library-card .cad-library-label", "var(--cad-text-xs)"],
-    [".cad-library-status", "var(--cad-text-tiny)"],
-    [".cad-library-columns", "var(--cad-text-tiny)"],
-    [".cad-library-row .cad-library-label", "var(--cad-text-xs)"],
-    [".cad-library-welcome-title", "var(--cad-text-heading)"],
-    [".cad-library-welcome-formats", "var(--cad-text-tiny)"],
-  ]);
-  assert.match(css, /\.cad-library-glyph \{[^}]*width: 16px; height: 16px;/);
+  const sized = [...css.matchAll(/([^{}]*\.cad-(?:library|home)[^{}]*)\{([^}]*)\}/g)].filter(([, , body]) => /font(?:-size|-weight)?:|line-height:/.test(body))
+    .map(([, selector]) => selector.trim());
+  assert.deepEqual(sized, [], "no Home rule sets a font");
+  for (const file of ["library/ModelLibrary.tsx", "library/LibraryPlaces.jsx", "library/LibrarySidebar.jsx"]) {
+    const text = readFileSync(join(root, file), "utf8");
+    const steps = new Set([...text.matchAll(/(?<![\w-])text-(tiny|xs|ui|sm|base|lg|xl|heading)(?![\w-])/g)].map(([name]) => name));
+    for (const step of steps) assert.ok(["text-ui", "text-heading"].includes(step), `${file}: ${step} is not a step of the Home's`);
+    for (const [found] of text.matchAll(/"[^"]*(?<![\w-])text-heading(?![\w-])[^"]*"/g)) assert.match(found, /\bfont-(?:medium|normal)\b/, `${file}: ${found} sets no weight of its own`);
+  }
   const page = readFileSync(join(root, "library/ModelLibrary.tsx"), "utf8");
-  assert.deepEqual([...page.matchAll(/\btext-(tiny|xs)\b/g)].map(([name]) => name), []);
-  assert.match(page, /className="cad-library h-full overflow-y-auto text-ui"/);
+  assert.match(page, /className="cad-library flex size-full flex-col bg-background text-ui"/);
+  // Its sidebar keeps the body's size: the panel's one size is every panel's surface's but the Home's sidebar's.
+  assert.match(css, /:is\(\[data-panel-surface\]:not\(\[data-library-sidebar\]\), \[data-detail-card\]\) \{\s*--cad-text-tiny: var\(--cad-text-panel\);/);
+  // The place on screen is the page: it alone scrolls with the platform's scrollbar.
+  assert.match(page, /<main className="@container [^"]*\boverflow-y-auto\b/);
+  assert.equal(page.match(/\boverflow(?:-[xy])?-(?:auto|scroll)\b/g).length, 1);
 });
 
 // THE type scale (`docs/design-system.md`, "The type scale"): three interface sizes and one heading, each on a fixed
@@ -90,7 +91,7 @@ test("the type scale is three sizes and a heading on fixed line heights, a phone
   const vars = text => Object.fromEntries([...text.matchAll(/--cad-(text|leading)-(\w+):\s*([^;]+);/g)].map(([, kind, name, value]) => [`${kind}-${name}`, value.trim()]));
   assert.deepEqual(vars(block(":root")), { "text-tiny": "0.6875rem", "text-xs": "0.75rem", "text-ui": "0.8125rem", "text-heading": "0.9375rem",
     "text-panel": "0.75rem", "leading-tiny": "1rem", "leading-xs": "1rem", "leading-ui": "1.25rem", "leading-heading": "1.25rem", "leading-panel": "1rem" });
-  assert.deepEqual(vars(block(':root:has([data-viewer-layout="mobile"]:not([data-offscreen-picture] *))')), { "text-tiny": "13px", "text-xs": "14px", "text-ui": "15px", "text-heading": "17px",
+  assert.deepEqual(vars(block(':root:has([data-viewer-layout="mobile"])')), { "text-tiny": "13px", "text-xs": "14px", "text-ui": "15px", "text-heading": "17px",
     "text-panel": "14px", "leading-tiny": "18px", "leading-xs": "20px", "leading-ui": "20px", "leading-heading": "22px", "leading-panel": "20px" });
   for (const name of ["tiny", "xs", "ui", "heading"]) assert.match(tokens, new RegExp(`--text-${name}--line-height: var\\(--cad-leading-${name}\\);`));
   assert.match(tokens, /--text-heading--font-weight: 600;/);
@@ -109,7 +110,7 @@ test("the type scale is three sizes and a heading on fixed line heights, a phone
 test("menus are the xs step on the row and tooltips the tiny step, from the primitives alone", () => {
   for (const file of ["primitives/dropdown-menu.jsx", "primitives/context-menu.jsx"]) {
     const text = readFileSync(join(root, file), "utf8");
-    assert.match(text, /bg-popover (p-1 )?text-xs text-popover-foreground/, `${file} draws its menu at text-xs`);
+    assert.match(text, /bg-popover p-1\.5 text-xs text-popover-foreground/, `${file} draws its menu at text-xs, 6px in`);
     for (const item of text.matchAll(/"[^"]*\bpy-1\.5\b[^"]*"/g)) assert.match(item[0], /min-h-row .*text-xs/, `${file}: ${item[0].slice(0, 60)}`);
     assert.doesNotMatch(text, /leading-4/, `${file}: no fixed line height`);
   }
@@ -117,13 +118,48 @@ test("menus are the xs step on the row and tooltips the tiny step, from the prim
   assert.doesNotMatch(readFileSync(join(root, "renderers/kit/shell/ViewportContextMenu.jsx"), "utf8"), /DropdownMenuItem className="text-/);
 });
 
-// The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the navbar's 8px, the logo centred in its 28px tile (6px)
-// and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
-// column of its own, 1128px at most on 24px gutters, 20px under the navbar, its tiles 232px at least.
-test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
+// A menu stands 6px from its trigger and is padded 6px (`docs/design-system.md`, "Menus"), its separators running its
+// full width: the primitives say so once, and a picker on the primitive takes their gap rather than one of its own.
+test("a menu stands 6px from its trigger, padded 6px, from the primitives alone", () => {
+  const menu = readFileSync(join(root, "primitives/dropdown-menu.jsx"), "utf8");
+  assert.match(menu, /export const MENU_GAP_PX = 6;/);
+  assert.match(menu, /sideOffset = MENU_GAP_PX,/);
+  for (const file of ["primitives/dropdown-menu.jsx", "primitives/context-menu.jsx"]) {
+    const text = readFileSync(join(root, file), "utf8");
+    assert.doesNotMatch(text, /bg-popover p-1 /, `${file}: no 4px padding left`);
+    assert.match(text, /"-mx-1\.5 my-1 h-px bg-border"/, `${file}: a separator runs the padded menu's width`);
+  }
+  // The value dropdown, the strip's pickers and Draw's pickers keep the primitive's gap.
+  for (const file of ["primitives/value-dropdown.jsx", "annotation/toolbar.jsx", "renderers/kit/tools/ToolModeMenu.jsx",
+    "renderers/kit/tools/model-effects/ModelViewControls.js", "renderers/kit/tools/FloatingToolBar.js", "renderers/kit/tools/playbar/PreviewPlaybar.jsx"]) {
+    assert.doesNotMatch(readFileSync(join(root, file), "utf8"), /<DropdownMenuContent[^>]*sideOffset=/, `${file} sets no gap of its own`);
+  }
+});
+
+// The logo stands on the page's gutter (`docs/viewer-ux.md`, "The navbar"): the row's first control on every page, the navbar's 8px,
+// the logo centred in its 28px tile (6px) and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page,
+// with a panel's toggle after it or none. The Home itself is full width:
+// its sidebar the viewer's panel (its surface, its 232px default width) with its content on the panel's 16px inset and
+// Settings pinned at its foot, and the place on screen padded by that same inset on every side, at every width (no
+// narrow home's gutters), its cards' columns 200px at least (the panel's narrowest).
+test("the navbar's logo's drawn mark stands 16px in, and the Home is the panel's sidebar beside the place on its own gutters", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8");
-  assert.match(css, /\.cad-library-content \{[^}]*max-width: 1128px; margin: 0 auto; padding: 20px 24px /);
-  assert.match(css, /\.cad-library-grid \{[^}]*minmax\(232px, 1fr\)/);
+  // The sidebar is the panel's surface, never a rule of the Home's own: its width, rule and colour are the panel's.
+  assert.doesNotMatch(css, /\.cad-library-sidebar \{/);
+  const sidebar = readFileSync(join(root, "library/LibrarySidebar.jsx"), "utf8");
+  assert.match(sidebar, /<PanelSurface mode="push"/);
+  assert.match(sidebar, /width: clampPanelWidth\(record\.width\)/);
+  assert.equal(DEFAULT_PANEL_WIDTH, 232);
+  // It ends in the panel's foot, the one a document's panel ends in: its rule the panel's full width, its tiles on the inset.
+  assert.match(sidebar, /const foot = <PanelFoot \/>;/);
+  assert.match(readFileSync(join(root, "file-viewer/PanelFoot.jsx"), "utf8"), /border-t border-border" style=\{FOOT_STYLE\} data-app-foot=""/);
+  assert.match(readFileSync(join(root, "library/LibraryPlaces.jsx"), "utf8"), /"flex flex-col gap-4 px-\(--panel-inset\) pt-2"/);
+  const page = readFileSync(join(root, "library/ModelLibrary.tsx"), "utf8");
+  const place = page.match(/<main className="([^"]*)"/)[1];
+  assert.match(place, /(?:^| )p-\(--panel-inset\)(?: |$)/);
+  assert.doesNotMatch(place, /max-w-/);
+  assert.doesNotMatch(css + page, /data-library-narrow/);
+  assert.match(page, /const GRID_CLASS = "[^"]*grid-cols-\[repeat\(auto-fill,minmax\(200px,1fr\)\)\]/);
   const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
   // The row the control and 12px (40px), the tool strip's height, its icon buttons the strip's tile (the control, 28px):
   // THE scale's (a phone's from the same tokens).
@@ -133,13 +169,14 @@ test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1
   assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "relative border-border /);
   assert.match(navbar, /"cad-navbar-logo w-control justify-start px-\[calc\(\(var\(--cad-control\)-16px\)\/2\)\]"/);
   assert.match(navbar, /const NAV_ITEM_CLASS = "flex h-control /);
+  // The logo first, then the toggle edge to edge with it, no offset of its own.
+  assert.match(navbar, /\{onHome \|\| menu \? <Logo [^\n]*\n\s*\{panels\?\.left \? <span className="flex shrink-0 items-center"><PanelToggleButton /);
 });
 
 // The panel's rows have ONE owner of their horizontal geometry (`docs/design-system.md`, "Spacing and the panel inset"): the row
 // primitive pads a row by its `depth` and draws its guides, and the view's panel sets the lines. No
-// list pads a row, nor brings its own glyph column or chevron: only the primitive and the explorer
-// (which pads its own rows) read the old constants.
-const ROW_OWNERS = ["primitives/tree-row.jsx", "file-viewer/navigation/FolderExplorer.jsx", "file-viewer/navigation/ModelList.jsx"];
+// list pads a row, nor brings its own glyph column or chevron: only the primitive reads the old constants.
+const ROW_OWNERS = ["primitives/tree-row.jsx"];
 const ROW_CONSTANTS = /\b(TREE_ROW_INSET_PX|TREE_INDENT_PX|LAYER_ROW_INSET_PX|TreeRowGuides)\b/;
 const ROW_PADDING = /padding(?:Left|Right|Inline|InlineStart|InlineEnd)?\b|(?<![\w-])p[lrxse]?-/;
 // The opening tag at `from`, to its closing `>`: braces and quotes skipped.

@@ -1,7 +1,7 @@
-"""The manufacturing check of exact geometry: what ``cad.<type>.dfm(source, process=...)`` runs for a
+"""The manufacturing check of exact geometry: what ``cad.dfm(source, process=...)`` runs for a
 STEP, an xbf or a document the engine holds, once its options are resolved (``cad._internal.manufacturing``)
 -- in one of the engine's checks processes (``held``), or in this process where no engine can be reached
-(``measure``) -- and what ``cad.build123d.dfm(shape, process=...)`` runs for a live shape.
+(``measure``) -- and what ``cad.dfm(shape, process=...)`` runs for a live shape, in the process that holds it.
 
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
@@ -289,7 +289,7 @@ def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidate
         if process is None:
             # A live shape keeps its parts' materials, as a model's document does (a STEP does not): read as a
             # model's.
-            manufacturing.options("model", None, given, candidates=candidates)
+            manufacturing.options("xbf", None, given, candidates=candidates)
             document = _dfm_brep.parts_of(shape, name=name)
             label = Path(document.name or "shape")
             try:
@@ -313,10 +313,10 @@ def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidate
 
 def dfm(shape: Any, *, process: str | None = None, candidates: bool = False, strict: bool = False,
         **options: Any) -> Any:
-    """The manufacturing check of a live build123d ``shape`` (a part, or an assembly's every part), as
-    ``cad.step.dfm`` checks a file: ``process`` is ``cnc``, ``sheet``, ``molding`` or ``printing`` -- with
-    none, the one the parts declare (``part.material = metals.aluminum(process=machined())``) -- and the
-    options are that process's, by the names ``cad.step.dfm`` takes (``tools=[3, 6]``, ``pull="z"``,
+    """The manufacturing check of a live build123d ``shape`` (a part, or an assembly's every part), what
+    ``cad.dfm(shape, ...)`` runs, in this process: ``process`` is ``cnc``, ``sheet``, ``molding`` or ``printing``
+    -- with none, the one the parts declare (``part.material = metals.aluminum(process=machined())``) -- and the
+    options are that process's, by the names ``cad.dfm`` takes (``tools=[3, 6]``, ``pull="z"``,
     ``technology="sla"``); ``candidates`` ranks molding's pulls or printing's orientations instead, and
     ``strict`` fails the check on a warning too. A ``CheckResult``: its ``status`` (``ok``, ``failed``,
     ``not_checked``), its findings at refs (``plate/face 7``), each rule's verdict with its figure and its

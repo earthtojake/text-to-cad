@@ -316,8 +316,9 @@ function RobotSurface({ view, data }) {
   // What is selected, for Quick Edit: each link (an object by its link) as a reference into the
   // description, and as a chip whose card says what the description says of it.
   const describe = useRobotDescribe({ robot: robot?.robot || null, components: robot?.components, selectLink: selection.selectLink });
+  const host = useViewerHost();
   const { references, chips: referenceChips } = useRobotReferences({ robot: robot?.robot || null, components: robot?.components,
-    selection, resource: shell.frame.resource, describe });
+    selection, resource: shell.frame.resource, describe, subject: host.promptSubject });
 
   // A link pasted into Quick Edit's note, by its name and the solid's glyph (as its chip shows it),
   // where it is one of this file's.
@@ -327,12 +328,11 @@ function RobotSurface({ view, data }) {
 
   // The view's menu, under Select (`kit/tools/select/sceneMenu.js`): over a link or an object its
   // reference (the link's name), Select or Deselect, Hide, then the framing; over empty space the framing.
-  const host = useViewerHost();
   const viewportRef = useRef(null);
   const pickedIds = () => [...selectionRef.current.selectedLinkNames.map(name => `link:${name}`), ...selectionRef.current.selectedComponentIds];
   const contextMenuItems = scene && !shell.previewing && toolMode === ROBOT_TOOL.SELECT ? press => sceneMenuEntries({
     press, viewport: viewportRef.current, scene, selected: pickedIds(), t,
-    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selectedLinkNames, hit.linkName].filter(Boolean))]),
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selectedLinkNames, hit.linkName].filter(Boolean))], host.promptSubject),
     onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
     onSelect: (hit, selected) => (hit.componentId ? selection.select(hit.componentId, { multiSelect: selected }) : selection.selectLink(hit.linkName, { multiSelect: selected })),
     viewer: () => shellRef.current?.frame.viewerRef.current || null,

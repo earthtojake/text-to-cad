@@ -55,8 +55,8 @@ switches' plastic) and a few short hops.
 | Parts | 73 footprints: 63 to assemble (all SMD on the bottom; the encoder is through-hole), 6 M2 holes, 4 test pads |
 | Nets | 46 connected (KiCad adds 21 more, one on each unconnected pin) |
 | Routing | 371 tracks, 1384 mm of copper, 81 vias; 0 unconnected |
-| ERC | clean, 0 warnings (`cad kicad_sch erc macropad.kicad_sch`) |
-| DRC | clean: 0 errors, 0 warnings (`cad kicad_pcb drc macropad.kicad_pcb` on the built board) |
+| ERC | clean, 0 warnings (`cad kicad erc macropad.kicad_sch`) |
+| DRC | clean: 0 errors, 0 warnings (`cad kicad drc macropad.kicad_pcb` on the built board) |
 | Rules | JLCPCB standard 2-layer, read 2026-11-04 from the pcb skill's table of jlcpcb.com/capabilities: 0.15 mm space (fab 0.10), 0.2 mm signal tracks, 0.3/0.6 mm vias, 0.3 mm copper to edge (0.2 at the LEDs' own cut-outs, the fab's limit) |
 
 Hierarchical schematic: the root (`macropad.kicad_sch`) and three sheets, `usb_power` (USB-C, CC,
@@ -149,24 +149,25 @@ cad run build.py                           # about 20 s: the steps below, in ord
 cad run src/vendor_parts.py                # macropad.3dshapes/: the hot-swap socket and the EC11
 
 # check the board
-cad kicad_sch erc macropad.kicad_sch
-cad kicad_pcb drc macropad.kicad_pcb
+cad kicad erc macropad.kicad_sch
+cad kicad drc macropad.kicad_pcb
 cad run check_macropad.py                  # prints nothing when the board is clean
 
 # fabrication files
-for k in gerbers drill pos bom pdf; do cad kicad_pcb export macropad.kicad_pcb --to $k -o fab/$k; done
-cad kicad_sch export macropad.kicad_sch --to pdf -o fab/schematic
-cad kicad_pcb export macropad.kicad_pcb --to dxf -o DXF     # the outline and drilled holes
-cad kicad_pcb export macropad.kicad_pcb --to glb -o GLB     # the board with its parts, to look at
+for k in gerbers drill pdf; do cad export macropad.kicad_pcb fab/$k/ --as $k; done
+for k in pos bom; do cad export macropad.kicad_pcb fab/$k.csv --as $k; done
+cad export macropad.kicad_sch fab/schematic.pdf
+cad export macropad.kicad_pcb DXF/macropad-outline.dxf   # the outline and drilled holes
+cad export macropad.kicad_pcb GLB/macropad.glb           # the board with its parts, to look at
 
 # the case, read from the board: its STEP with every part, converted once to an xbf
-cad kicad_pcb export macropad.kicad_pcb --to step -o STEP   # STEP/macropad.step
-cad step export STEP/macropad.step XBF/macropad.xbf
+cad export macropad.kicad_pcb STEP/macropad.step
+cad export STEP/macropad.step XBF/macropad.xbf
 cad run src/case.py                        # tray, plate, keycap, knob and their print orientations
 cad run src/assembly.py                    # nine (with its explode) and nine_exploded
 cad run src/check_fit.py                   # overlap volumes and clearances against the board's STEP
 cad run src/exports.py                     # 3MF/ and STEP/ of each printed part, STEP/nine.step, GLB/nine.glb
-cad threemf dfm 3MF/tray.3mf --process printing --angle-limit 45 --samples 20000   # and plate, keycap, knob
+cad dfm 3MF/tray.3mf --process printing --angle-limit 45 --samples 20000   # and plate, keycap, knob
 ```
 
 `gen_footprints.py`, `gen_schematic.py` and `step0_rules.py` write the same files on every run; the layout steps
@@ -182,7 +183,7 @@ rests on the tray's bosses (distance 0) with 0.4 mm to the tray's walls; the tra
 3.59 mm above the bare board (MX: 3.5 plus the copper); each keycap is 1.2 mm clear of its switch;
 the knob's D-bore sits on the EC11's shaft with the bore turned to the encoder's rotation.
 
-**Printing** (`cad threemf dfm 3MF/<part>.3mf --process printing --angle-limit 45 --samples 20000`; FDM limits
+**Printing** (`cad dfm 3MF/<part>.3mf --process printing --angle-limit 45 --samples 20000`; FDM limits
 from the cad skill's printing reference: 1.2 mm supported wall, 45 degrees, 10 mm bridge):
 
 | Part | Overhangs under 45 deg | Walls min / p05 | Support | Result |
@@ -219,7 +220,7 @@ the agent runs the skills. Pre-build everything once the day before so each shot
 | 9 | "Does it fit? Any interference with the board?" | Check output: 0 overlap volume over every pair, clearances listed | 10 s | A measured fit, not a picture |
 
 Shot 7, how to do it live: set `Y1` in `scripts/board_common.py` from 131.0 to 137.0, run
-`cad run scripts/step2_place.py`, `cad run scripts/route.py`, `cad kicad_pcb drc macropad.kicad_pcb`,
+`cad run scripts/step2_place.py`, `cad run scripts/route.py`, `cad kicad drc macropad.kicad_pcb`,
 export the STEP and the xbf again, `cad run src/assembly.py`. The tray and plate grow from 89.1 to
 95.1 mm and DRC stays clean. Set it back to 131.0 afterwards. (Moving the USB receptacle or a key is
 what the case reads too, but the hand routing is laid out around their places, so a move needs

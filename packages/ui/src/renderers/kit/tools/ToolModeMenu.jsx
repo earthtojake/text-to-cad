@@ -32,7 +32,7 @@ export function ToolSettingsMenu({ label, triggerLabel = label, disabled = false
       </button>
     </DropdownMenuTrigger>
     {/* Closes with no exit animation, so a quick second press always reaches the button. */}
-    <DropdownMenuContent align={chevron ? "start" : "end"} sideOffset={chevron ? 6 : 4} collisionPadding={8} aria-label={label}
+    <DropdownMenuContent align={chevron ? "start" : "end"} collisionPadding={8} aria-label={label}
       className={cn(FLOATING_SURFACE_CLASS, "w-40 data-[state=closed]:animate-none!", contentClassName)}>
       {children}
     </DropdownMenuContent>

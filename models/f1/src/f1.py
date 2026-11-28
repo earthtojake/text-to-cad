@@ -37,7 +37,7 @@ GLB, exported on demand, carries those three and the two motions, `drs` and
 
 from __future__ import annotations
 
-from cad import model
+from cad import xbf
 from cad.ap242 import configuration_sequence, mechanism_state
 from cad.gltf import animation
 
@@ -487,7 +487,7 @@ def _teardown_animation(car, name: str, duration: float, pose_at) -> None:
         show.channel(refs, path="translation", keys=keys, interpolation="LINEAR")
 
 
-@model
+@xbf
 def f1():
     parts = {**front_end(), **survival_cell(), **sidepods(), **engine_bodywork(), **underbody(),
              "power_unit": power_unit(), "drivetrain": drivetrain(), **rear_aero(), **front_suspension(),

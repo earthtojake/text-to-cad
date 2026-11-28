@@ -4,13 +4,12 @@ An id is a lower-case canonical UUID string, made by one formula (``derived_id``
 
     uuid5(NAMESPACE, canonical(scope) + "::" + name)
 
-``scope`` is a path and ``name`` a name in it: a model's script and its function's name
-(``model_id``), an opened file's path and no name (``file_id``: inside the engine only -- a file's
-public name stays its path), a shape handed over (``model(shape, name=...)``) the calling script, or
-the working folder where there is none, and the name it is given. Any process that knows the scope
-and the name knows the id without asking the engine. An explicit ``name=`` uses the script's
-folder as its scope instead: a name within that namespace, independent of the declaring file. Whether a text is an id is ``is_id``; what an id names is the
-engine's to say, never the uuid's version.
+``scope`` is a path and ``name`` a name in it: a file's path and no name (``file_id``). A model's document is
+its ``.xbf``, so a model's id is that file's (``Model.id``: its ``.xbf`` at ``@xbf``'s path, else ``<name>.xbf``
+beside its script), and so is a shape handed over's (``xbf(shape, name=...)``: its ``.xbf`` at the path given,
+else ``<name>.xbf`` beside the calling script, or in the working folder where there is none). Any process that
+knows the path knows the id without asking the engine. Whether a text is an id is ``is_id``; what an id names is
+the engine's to say, never the uuid's version.
 
 ``canonical`` is the one spelling of a path the engine and the viewer key by: ``realpath``,
 then, on macOS, each name as the file system spells it (``getattrlist``, which opens nothing), so
@@ -31,7 +30,7 @@ import sys
 import uuid
 from typing import Any
 
-__all__ = ["NAMESPACE", "canonical", "check_name", "derived_id", "file_id", "is_id", "model_id"]
+__all__ = ["NAMESPACE", "canonical", "check_name", "derived_id", "file_id", "is_id"]
 
 # cadgen's namespace for derived ids: written once, never changed.
 NAMESPACE = uuid.UUID("ad198b15-841c-4d1f-81be-6aa78d2737c0")
@@ -114,13 +113,8 @@ def derived_id(scope: str | os.PathLike, name: str = "") -> str:
 
 
 def file_id(path: str | os.PathLike) -> str:
-    """An opened file's document id: its canonical path, with no name."""
+    """A file's document id: its canonical path, with no name. A model's is its ``.xbf``'s."""
     return derived_id(path)
-
-
-def model_id(script: str | os.PathLike, function: str, name: str | None = None) -> str:
-    """A model's id: script/function by default, folder/explicit name when given."""
-    return derived_id(os.path.dirname(canonical(script)), check_name(name)) if name is not None else derived_id(script, function)
 
 
 def check_name(name: object, what: str = "name") -> str:

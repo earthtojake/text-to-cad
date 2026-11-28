@@ -1,4 +1,4 @@
-"""`cad <type> snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
+"""`cad snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
 reported, and what an engine document's view does not offer refused by name before anything
 renders, with OUT untouched; the document's own mesh exports drawn by OCCT too, read by their
 readers (`engine/formats`, and `test_formats.py` for every kind), in this process and through the
@@ -32,10 +32,10 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 MODEL = """
 import build123d as bd
-from cad.engine import paint, xbf
+from cad.engine import paint, model
 
 
-@xbf("XBF/stand.xbf")
+@model("XBF/stand.xbf")
 def stand():
     plate = bd.Box(40, 20, 4) - bd.Cylinder(4, 10)
     plate = paint(plate, plate.faces().sort_by(bd.Axis.Z)[-1], "#ffa500")
@@ -45,7 +45,7 @@ def stand():
     return bd.Compound(children=[plate, bd.Pos(12, 0, 8) * peg, bd.Pos(-12, 0, 8) * peg], label="stand")
 
 
-@xbf("XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     return bd.Cylinder(3, 12)
 """
@@ -221,19 +221,20 @@ class SnapshotTest(unittest.TestCase):
         self.assertNotEqual(pictures["pair"], pictures["iso"])
 
     def test_what_a_model_does_not_offer_is_refused_by_the_model_s_own_name(self) -> None:
-        # A model's document no file holds is drawn under a name made from OUT; its refusals name the document as
-        # its code labels it, never that stand-in (they once said "review.xbf places 1 part").
+        # A refusal names the document by its own name: a function declared by its STEP alone, which writes no .xbf,
+        # by its name; never by the stand-in made from OUT (they once said "review.xbf places 1 part").
         from cad.engine import api
 
         folder = Path(tempfile.mkdtemp(prefix="engine-named-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         script = folder / "plate.py"
-        script.write_text("import build123d as bd\nfrom cad import model\n\n\n@model\ndef plate():\n"
+        # Declared by its STEP alone: no .xbf.
+        script.write_text("import build123d as bd\nfrom cad import step\n\n\n@step\ndef plate():\n"
                           "    return bd.Box(10, 10, 2)\n", encoding="utf-8")
         with self.assertRaises(SnapshotRefused) as refused:
             api.snapshot(_model(script, "plate"), folder / "review.png", display="parts", daemon=False)
-        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate places 1 part. "
-                                                 "Use solid.")
+        self.assertEqual(str(refused.exception), "display.mode parts colours each placed part apart; plate places 1 "
+                                                 "part. Use solid.")
         self.assertFalse((folder / "review.png").exists())
 
     def test_a_snapshot_draws_a_whole_document_and_says_how_to_draw_a_part_alone(self) -> None:
@@ -396,8 +397,8 @@ class SnapshotTest(unittest.TestCase):
 
     def test_the_authored_view_is_read_from_the_quick_edit_packet(self) -> None:
         """A mark names its view by label; the view -- camera, size, projection -- is a job of the
-        packet the viewer writes (``cad_server.viewer``'s prompt files), given as --annotation or beside
-        the annotation file. None, or no view: refused by name."""
+        Quick Edit packet, given as --annotation or saved beside the annotation file. None, or no view:
+        refused by name."""
         folder = Path(tempfile.mkdtemp(prefix="engine-authored-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         camera = {"position": [80, -60, 50], "target": [0, 0, 4], "up": [0, 0, 1], "orthographicHalfHeight": 25}
@@ -422,7 +423,7 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotRefused, "give --annotation"):
             authored("authored", None, None, self.document)
         # A packet beside the file that draws another document, or no packet: refused, naming what it lacks.
-        with self.assertRaisesRegex(SnapshotRefused, "no Quick Edit packet .* beside stand-2.annotation.json holds "
+        with self.assertRaisesRegex(SnapshotRefused, "no Quick Edit packet beside stand-2.annotation.json holds "
                                                      "that view of peg.xbf"):
             authored("authored", annotation, str(file), self.single)
         with self.assertRaisesRegex(SnapshotRefused, "'view 2'"):
@@ -470,16 +471,20 @@ class SnapshotTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="engine-job-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         packet, _camera = self.packet(folder)
-        path = folder / "stand-1.snapshot.json"
-        path.write_text(json.dumps(packet), encoding="utf-8")
-        done = subprocess.run([sys.executable, "-m", "cad_server.engine", "snapshot", "--job", str(path)],
+        # As a message carries it, on standard input, with an output that names no path: written into --out.
+        first = packet["jobs"][0]
+        sent = {**packet, "jobs": [{**first, "outputs": [*first["outputs"], {"label": "view 1", "width": 120,
+                                                                            "height": 90}]}, *packet["jobs"][1:]]}
+        done = subprocess.run([sys.executable, "-m", "cad_server.engine", "snapshot", "--job", "-", "--out",
+                               str(folder / "named")], input=json.dumps(sent),
                               env={**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_MESH": "inline"},
                               capture_output=True, text=True, timeout=300)
         self.assertEqual(done.returncode, 0, done.stderr)
         [top] = (folder / "tops").iterdir()
         self.assertRegex(top.name, r"^stand_j2_1_\d{8}T\d{6}Z\.png$")
         self.assertEqual([line.split(" (")[0] for line in done.stdout.splitlines()],
-                         [f"wrote {found}" for found in (folder / "view-1.png", top, folder / "front.png")])
+                         [f"wrote {found}" for found in (folder / "view-1.png", folder / "named" / "stand-view-1.png",
+                                                         top, folder / "front.png")])
 
         def rgba(found: Path) -> np.ndarray:
             with Image.open(found) as image:
@@ -588,17 +593,136 @@ class SnapshotTest(unittest.TestCase):
         import contextlib
         import io
 
+        from unittest import mock
+
         path = folder / "packet.json"
         path.write_text(json.dumps(packet), encoding="utf-8")
-        for argv, said in ((["--job", str(path), str(self.document), str(folder / "out.png")], "takes no OUT"),
-                           ([str(self.document)], "required: SRC, OUT.png")):
+        ink = {"marks": [{"kind": "stroke", "points": [0, 0, 0, 1, 1, 1], "color": "#ff2d55", "touches": [7]}]}
+        # Each refused by name, the JSON a flag reads on standard input (-) read first: one flag's, and once.
+        for argv, given, said, reason in (
+                (["--job", str(path), str(self.document), str(folder / "out.png")], "", "takes no OUT", "usage"),
+                ([str(self.document)], "", "required: SRC, OUT.png", "usage"),
+                ([str(self.document), str(folder / "out.png"), "--out", str(folder)], "", "--out names the folder",
+                 "usage"),
+                (["--job", "-"], json.dumps({**packet, "colour": 1}), "--job has no colour", "invalid_argument"),
+                (["--job", "-"], "", "standard input holds no JSON: it is empty", "invalid_argument"),
+                ([str(self.document), str(folder / "out.png"), "--annotation", "-"], json.dumps(ink),
+                 r"marks[0].touches lists what it was drawn over", "invalid_argument"),
+                (["--job", "-", "--annotation", "-"], "{}", "standard input is read once", "usage")):
             with self.subTest(argv=argv):
                 printed = io.StringIO()
-                with contextlib.redirect_stdout(printed):
+                with contextlib.redirect_stdout(printed), mock.patch("sys.stdin", io.StringIO(given)):
                     self.assertEqual(cli.main(["snapshot", *argv, "--json"]), 2)  # the command line's, as without --json
                 found = json.loads(printed.getvalue())
-                self.assertEqual(found["reason"], "usage")
+                self.assertEqual(found["reason"], reason)
                 self.assertIn(said, found["error"])
+        self.assertEqual(stale.read_bytes(), b"an earlier run's")
+        # Windows PowerShell 5.1 takes the double quotes out of every argument it passes a program, and cuts the rest at
+        # its spaces: such a packet is refused in one line, before anything is read, saying to pipe it in instead. Piped,
+        # the page's packet is ASCII alone (every other character its \u escape, as Windows PowerShell 5.1 pipes ASCII by
+        # default), and reads whole.
+        for argv in (["--job", "{input:a.xbf,jobs:[{camera:iso,outputs:[{label:view", "1}]}]}"],
+                     [str(self.document), str(folder / "out.png"), "--annotation={units:mm,marks:[]}"]):
+            with self.subTest(argv=argv):
+                printed = io.StringIO()
+                with contextlib.redirect_stdout(printed), self.assertRaises(SystemExit) as exited:
+                    cli.main(["snapshot", *argv, "--json"])
+                found = json.loads(printed.getvalue())
+                flag = "--job" if argv[0] == "--job" else "--annotation"
+                self.assertEqual((exited.exception.code, found["reason"]), (2, "invalid_argument"))
+                self.assertEqual(found["error"], f"{flag} got JSON with its double quotes taken out: Windows PowerShell "
+                                                 "5.1 removes them from a program's arguments. Pipe the packet in instead: "
+                                                 "'<packet>' | python -m cad_server.engine snapshot"
+                                                 f"{'' if flag == '--job' else ' SRC OUT.png'} {flag} -")
+        done = subprocess.run([sys.executable, "-m", "cad_server.cli", "snapshot", "--job", "{input:x}"],
+                              env={**os.environ, "PYTHONPATH": str(SRC)}, capture_output=True, text=True, timeout=120)
+        self.assertEqual((done.returncode, done.stdout, len(done.stderr.splitlines())), (2, "", 1), done.stderr)
+        self.assertIn("Pipe the packet in instead: '<packet>' | cad snapshot --job -", done.stderr)
+        named = {**packet, "jobs": [{**packet["jobs"][0], "outputs": [{"label": "vue \u00e9 \u4e2d", "colour": 1}]}]}
+        text = json.dumps(named, separators=(",", ":"))  # ensure_ascii: as the page writes it
+        self.assertEqual(text.encode("ascii").decode("ascii"), text)
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed), mock.patch("sys.stdin", io.StringIO(text)):
+            self.assertEqual(cli.main(["snapshot", "--job", "-", "--json"]), 2)
+        self.assertIn("has no colour", json.loads(printed.getvalue())["error"])
+
+    def test_a_packet_as_a_message_carries_it_is_read_and_its_unnamed_outputs_named(self) -> None:
+        """A packet as a Quick Edit's message carries it: its outputs name no path, each written into the folder given
+        (--out; the current folder by default) as <its input's stem>-<its label>.png, -2 after a name another output
+        has, view-<n> for the n-th job's with no label; its marks shortened -- no id, opacity, closed or triangles, an
+        area's points its outline alone, what each was drawn over its refs -- and an earlier packet's whole ones, with
+        their output paths, read alike."""
+        from cad.engine.snapshot import job_pictures
+
+        folder = Path(tempfile.mkdtemp(prefix="engine-named-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        camera = {"position": [80, -60, 50], "target": [0, 0, 4], "up": [0, 0, 1], "orthographicHalfHeight": 25}
+        outline = [-15, -8, 2, 15, -8, 2, 15, 8, 2, -15, 8, 2]
+        short = {"units": "mm", "marks": [
+            {"kind": "stroke", "points": [-10, 0, 2, 10, 0, 2], "color": "#ff2d55", "width": 3, "widths": [1, 0.5],
+             "view": "view 1", "touches": ["plate/face 1", "peg.1"]},
+            {"kind": "area", "points": outline, "color": "#ff2d55", "opacity": 0.5, "view": "view 1"}]}
+        packet = {"input": str(self.document), "annotation": short, "jobs": [
+            {"camera": camera, "output": {"padding": 0, "tightFrame": False},
+             "outputs": [{"label": "view 1", "width": 240, "height": 180}]},
+            {"camera": "iso", "outputs": [{"label": "View 1"}, {}]}]}
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(folder)
+        for given, into in ((None, folder), (folder / "pictures", folder / "pictures")):
+            pictures = job_pictures(packet, folder=given)
+            self.assertEqual([out for _document, out, _still in pictures],
+                             [into / "stand-view-1.png", into / "stand-view-1-2.png", into / "stand-view-2.png"])
+            self.assertEqual({str(document) for document, _out, _still in pictures}, {str(self.document)})
+            self.assertEqual([still.annotation for _document, _out, still in pictures], [short] * 3)
+        self.assertEqual(pictures[0][2].size, (240, 180))
+        # A packet of before: each mark whole, the parts it touched as objects, each output at its own path.
+        whole = {"units": "mm", "parts": {}, "marks": [
+            {**short["marks"][0], "id": "m1", "opacity": 1, "closed": False,
+             "touches": [{"part": "i0", "ref": f"{self.document}#plate/face 1"}, {"part": "i1"}]},
+            {**short["marks"][1], "id": "m2", "points": [*outline, 0, 0, 2], "outline": 4,
+             "triangles": [0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4]}]}
+        earlier = {**packet, "annotation": whole, "jobs": [{**packet["jobs"][0], "outputs": [
+            {"path": str(folder / "old" / "stand-1-view-1.png"), "label": "view 1"}]}]}
+        [(_document, out, still)] = job_pictures(earlier, folder=folder / "pictures")
+        self.assertEqual((out, still.annotation), (folder / "old" / "stand-1-view-1.png", whole))
+        (folder / "a file").write_text("", encoding="utf-8")
+        for broken, said in (({**packet, "jobs": [{**packet["jobs"][1], "outputs": [{"label": 1}]}]}, "label is the view's"),
+                             ({**packet, "annotation": {"marks": [{**short["marks"][1], "outline": 9}]}},
+                              "outline counts the points of an area's outline: 1 to its 4"),
+                             ({**packet, "annotation": {"marks": [{**short["marks"][0], "opacity": 2}]}},
+                              "opacity is a number from 0 to 1")):
+            with self.subTest(said=said), self.assertRaisesRegex(SnapshotRefused, said):
+                job_pictures(broken)
+        with self.assertRaisesRegex(SnapshotRefused, "is a file: it names the folder"):
+            job_pictures(packet, folder=folder / "a file")
+
+    def test_a_shortened_mark_draws_as_the_whole_one(self) -> None:
+        """The marks a packet carries shortened -- no id, no opacity of 1 or closed of false, no triangles, an area's
+        points its outline alone, its touches refs -- draw the picture their whole marks draw, pixel for pixel."""
+        import numpy as np
+        from PIL import Image
+
+        gl()
+        folder = Path(tempfile.mkdtemp(prefix="engine-short-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        camera = {"position": [80, -60, 50], "target": [0, 0, 4], "up": [0, 0, 1], "orthographicHalfHeight": 25}
+        stroke = {"kind": "stroke", "points": [-10, 0, 2, 0, 6, 2, 10, 0, 2], "color": "#ff00ff", "width": 4,
+                  "widths": [1, 0.5, 1], "view": "view 1"}
+        area = {"kind": "area", "color": "#00aaff", "view": "view 1"}
+        outline = [-15, -8, 2, 15, -8, 2, 15, 8, 2, -15, 8, 2]
+        whole = {"units": "mm", "parts": {}, "marks": [
+            {**stroke, "id": "m1", "opacity": 1, "closed": False, "touches": [{"part": "i0", "ref": "plate/face 1"}]},
+            {**area, "id": "m2", "points": [*outline, 0, 0, 2], "outline": 4, "opacity": 1,
+             "triangles": [0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4]}]}
+        short = {"units": "mm", "marks": [{**stroke, "touches": ["plate/face 1"]}, {**area, "points": outline}]}
+        drawn = []
+        for name, ink in (("whole", whole), ("short", short)):
+            out = folder / f"{name}.png"
+            snapshot(self.document, out, camera=camera, size=(240, 180), daemon=False, annotation=parse_annotation(ink))
+            with Image.open(out) as image:
+                drawn.append(np.asarray(image.convert("RGBA")).astype(int))
+        self.assertEqual(int(np.abs(drawn[0] - drawn[1]).max()), 0)
+        self.drawn(folder / "short.png", (240, 180))
 
     def drawn(self, path: Path, size: tuple[int, int]) -> None:
         """A picture of something: the size asked, and more than a backdrop."""
@@ -640,10 +764,10 @@ class SnapshotTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="engine-drawn-")).resolve()
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         script = folder / "stand.py"
-        # No @xbf: the picture is drawn from the document the worker holds. The build writes what the
+        # No .xbf declared: the picture is drawn from the document the worker holds. The build writes what the
         # model declares (law 10), its GLB; the snapshot, no file but the picture.
-        script.write_text(textwrap.dedent(MODEL).replace("@xbf(\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
-                          .replace("import paint, xbf", "import glb, paint, xbf"), encoding="utf-8")
+        script.write_text(textwrap.dedent(MODEL).replace("@model(\"XBF/stand.xbf\")\ndef stand", "@glb(\"stand.glb\")\ndef stand")
+                          .replace("import paint, model", "import glb, paint, model"), encoding="utf-8")
         drawn = api.snapshot(_model(script, "stand"), folder / "stand.png", display="xray", camera="iso", width=200,
                              height=150, daemon=False)
         self.assertEqual((drawn.width, drawn.height), (200, 150))

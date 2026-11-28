@@ -1,41 +1,26 @@
-"""The daemon's book of the model documents it has built, each by its id (``ids.model_id``).
+"""The daemon's book of the model documents a live worker holds, each by its id: its ``.xbf``'s
+(``ids.file_id``).
 
-Only metadata lives here: a document's structure and shape bytes are the server's
-(``serve.Server``). Opening a document asks its worker for them; registration never meshes or
-materializes an unviewed model. A document outlives its worker: before a worker is retired
-(``supervisor``), the daemon takes from it every document of it the server does not hold yet
-(``drain``), and the record stays with no worker (``held``). A ``shape`` document, a
-shape a program handed over (``hand_over``), has no worker from the start: it is held as a drained
-document is, and no command builds it again. A document held nowhere is never built here: whoever
-asks for it is told the command that builds it again (``missing``), and the engine runs nothing.
-The book is process memory. So are the rows a build's report gives of its model's parameters -- where
-each is spelled in the code -- which the book keeps beside the record while the worker that recorded them
-is live (``live``), and never writes or sends on (``parameters``).
+A model's document is its ``.xbf``: every run writes it (law 10), and the engine's live build is what makes
+the page live while a worker holds it. Only metadata lives here: a document's structure and shape bytes are
+the server's (``serve.Server``), asked of the worker that built it (``load``); registration never meshes or
+materializes an unviewed model. A worker retired (``drain``) or gone (``prune``) takes its rows with it, and
+its documents are their files from then on: the server reads each ``.xbf`` as it reads any file (``release``),
+and so does a verb by its id (``locate``); so is a document whose ``.xbf`` another process wrote since its run
+(``held``). A document whose file is gone names nothing (``not_held``), and
+the engine runs nothing to bring it back. The book is process memory. So are the rows a build's report gives
+of its model's parameters -- where each is spelled in the code -- which the book keeps while the worker that
+recorded them is live (``live``), and never writes or sends on (``parameters``).
 
-What outlives the process is the registry's (``registry``): each ``model`` and ``shape`` document
-is recorded there as it is registered (``record``, ``hand_over``), synchronously, so after a restart
-its id is known -- ``held`` from its cache file, or ``unsaved`` with the command that builds it
-again (none for a shape) when the cache holds no file of it, or
-``detached`` once its script is gone -- and nothing is run to bring it back. An explicit ``name=`` claims its id
-for one declaration within its script folder: another declaration is refused, naming both
-locations (``identity.claimed``), until the claiming file is gone or a run of it declares the name
-no more (``identity.released``). A served
-document's generation (``version``, what a page shows and the viewer's export compares) is a token
-of its build's own, never a counter that starts again, so an id and a generation never name two
-documents across a restart; a run of the same closure in the worker holding the last build keeps it
-(nothing ran, nothing changed: no page fetches it again); its record's ``revision`` is its build closure's key (``revision``),
-with the parameters its document records where it records any, the same for the same code and the same
-record, so a build that changed nothing rewrites no record, and one whose script declares other values --
-which its closure need not reach: a sibling model's parameter -- is a new revision.
-
-What a restart opens at once is the cache's (``cache``): each ``model`` and ``shape`` document's
-bytes, saved in its registry folder once it has been idle (and at its drain, and at shutdown). A
-document with a cache file is ``held`` -- the engine answers it without a worker -- in memory, on
-disk, or both (``where``): after a restart its id is taken up (``adopt``) from its record the first
-time anything names it, and its bytes are read through the documents worker when a verb needs them
-(``load``). It is the last built state, never a rerun: the engine knows the document of its last
-run, never whether the code on disk has changed since; when to run the code again is the agent's
-call.
+Nothing of a document is recorded: what outlives the process is its file. A run's first build of an ``.xbf``
+adds the file to the library (``library.Library.know``), so its id answers after a restart wherever the file
+is, and its count is noted in the cache (``library.Notes.count``). A served document's generation
+(``version``, what a page shows and the viewer's export compares) is a token of its build's own, never a counter
+that starts again, so an id and a generation never name two documents across a restart; a run of the same
+closure in the worker holding the last build keeps it (nothing ran, nothing changed: no page fetches it again);
+a row's ``revision`` is its build closure's key (``revision``), with the parameters its document records
+where it records any, the same for the same code and the same record, and one whose script declares other
+values -- which its closure need not reach: a sibling model's parameter -- is a new revision.
 """
 from __future__ import annotations
 
@@ -48,54 +33,22 @@ import time
 from pathlib import Path
 from typing import Any
 
-# A document's states, as ``cad status`` lists them (``state``).
-STATES = ("live", "held", "building", "failed", "unsaved", "detached")
+from cad_server.engine.state import file_version
+
+# A document's states, as ``cad server status`` lists them (``state``).
+STATES = ("live", "held", "building", "failed")
 
 
-def unsaved(name: str, ident: str, command: str | None, shown: str | None = None) -> str:
-    """Why a model document is ``unsaved`` -- held by no worker and in no memory, its file missing from
-    the engine's cache (deleted by hand, or the cache could not be written when it was to be saved),
-    which nothing else empties -- in the words every surface says: with the command that builds it
-    again, or, for a shape handed over (``shown``, the words its record keeps), the program that
-    handed it over."""
-    said = f"{name} ({ident}) is not saved: the engine's cache holds no file of its last "
-    if command is None:
-        return said + f"hand-over, and it is {shown}; run that program again to hand it over again"
-    return said + f"build; run `{command}` to build it again"
+def _saving(path: Any) -> Path | None:
+    """The ``.xbf`` a shape handed over is saved as (``hand_over``'s ``saved``), canonical; None for none."""
+    if not isinstance(path, str) or not path.lower().endswith(".xbf") or not os.path.isabs(path):
+        return None
+    from cad.engine.ids import canonical
 
-
-def delete(held: Any, ident: str, book: "Models | None" = None) -> dict[str, Any] | None:
-    """Delete document ``ident``: the one deletion, which ``cad delete`` and the home's Delete both
-    are. What the engine holds of it goes first, where an engine runs (``book``: ``Models.forget``),
-    then its record and its document in the engine's cache (``held``, the registry:
-    ``Registry.delete``). Never a file of the person's: a model's script and its declared files, and a
-    file a page opened, stay where they are. What was deleted, ``{"id", "name", "kind"}``, or None for
-    an id nothing records or holds."""
-    record = held.get(ident) if held is not None else None
-    row = book.forget(ident) if book is not None else None
-    if held is not None:
-        held.delete(ident)
-    if record is not None:
-        name = record.get("entry") or os.path.basename(str(record.get("home") or "")) or ident
-        return {"id": ident, "name": name, "kind": record.get("kind")}
-    if row is not None:
-        return {"id": ident, "name": row["source"]["name"], "kind": row["kind"]}
-    return None
-
-
-def _given(given: list[str], header: dict[str, Any], script: Any) -> list[str]:
-    """The requirements a model's record says ``cad run --with`` again (its ``with``): those ``--with`` gave
-    its run, and those the inline metadata of the script ``cad run`` ran named (``header``) but where that
-    script is the model's own, whose header ``cad run`` reads again -- a check script's are not."""
-    named = [item for item in header.get("with") or [] if isinstance(item, str)]
-    theirs = header.get("script")
-    if not named or not isinstance(theirs, str) or not isinstance(script, str):
-        return list(given)
-
-    def same(path: str) -> str:
-        return os.path.normcase(os.path.realpath(path))
-
-    return list(given) if same(theirs) == same(script) else sorted(set(given) | set(named))
+    try:
+        return Path(canonical(path))
+    except (OSError, ValueError):
+        return None
 
 
 def revision(report: dict[str, Any], parameters: Any = None) -> str:
@@ -103,8 +56,7 @@ def revision(report: dict[str, Any], parameters: Any = None) -> str:
     any process), else a token of this build's own (``durable``: false). A document that records parameters
     (``parameters``: the report's rows, ``cad.engine.parameters.rows``) is that key with its record
     (``parameters.record``), digested: a model whose key a parameter does not reach -- one its body never
-    reads -- holds the record all the same, so a record changed is a new revision, a new generation and a
-    cache file saved again. A document with none keeps its key alone, as before parameters were recorded."""
+    reads -- holds the record all the same, so a record changed is a new revision and a new generation. A document with none keeps its key alone, as before parameters were recorded."""
     key = (report.get("closure") or {}).get("key")
     if not key:
         return f"{_TOKEN}{secrets.token_hex(8)}"
@@ -131,10 +83,9 @@ class Models:
         self.daemon = daemon
         self.records: dict[str, dict[str, Any]] = {}
         self.lock = threading.RLock()
-        self.identity_lock = threading.RLock()
-        from cad_server.engine.cache import Cache
+        from cad_server.engine.library import Library, Notes
 
-        self.cache = Cache(self)
+        self.library, self.notes = Library(), Notes()
 
     def register(self, worker: Any, answer: dict) -> None:
         done = answer.get("done")
@@ -142,15 +93,6 @@ class Models:
         if not isinstance(reports, list):
             return
         program = answer.get("program")
-        # How its run was made, which builds its documents again: the Python a run in its own builds with
-        # (``Daemon.caller``), or how ``cad run`` named its packages (``given``, ``_given``); neither, the
-        # base's, which ``cad run`` reaches.
-        python = answer.get("python") if isinstance(answer.get("python"), str) else None
-        given = [item for item in answer.get("with") or [] if isinstance(item, str)]
-        header = answer.get("header") if isinstance(answer.get("header"), dict) else {}
-        # Per script of the run: the explicit names it declares now, and those its models' records
-        # say it declared before (None: no record says), to give up what it declares no more.
-        declared: dict[str, tuple[list[str], set[str] | None]] = {}
         for root in reports:
             if not root.get("ok") and root.get("id") and self.held(root["id"]) is not None:
                 root["previous"] = True  # the failed run's line says its previous good build is served
@@ -160,29 +102,16 @@ class Models:
                 # (``cad.engine.parameters.rows``): kept here, in memory alone, while that worker lives (``live``),
                 # and never sent on.
                 rows = report.pop("parameters", None)
+                if not report.get("ok") and ident:
+                    self._failed(ident, worker)
                 if not report.get("ok") or not ident or not source:
                     continue
                 recorded = revision(report, rows)
-                facts, before = self.facts(ident, report, recorded)
-                try:
-                    if source.get("explicit_name") is not None:
-                        from cad.engine.identity import claimed
-
-                        held = self.registry()
-                        if held is not None:
-                            claimed(held, source, source["explicit_name"])
-                    mine = _given(given, header, source.get("script"))
-                    had = self.record(report, recorded, facts, python, mine)
-                    if isinstance(source.get("declares"), list):
-                        _now, was = declared.get(source["script"], (source["declares"], None))
-                        if isinstance(had.get("declares"), list):
-                            was = (was or set()) | set(had["declares"])
-                        declared[source["script"]] = (source["declares"], was)
-                except ValueError as error:  # a name another declaration holds: the build is refused, by name
-                    report["ok"], report["error"] = False, f"{source['name']}: {error}"
-                    root["ok"] = False
-                    root.setdefault("error", report["error"])
+                if not source.get("xbf"):
+                    self.unsaved(report)
                     continue
+                facts, before = self.facts(ident, report, recorded)
+                self.noted(source["xbf"], (facts or {}).get("parts"))
                 with self.lock:
                     old = self.records.get(ident)
                     # This build's generation. A document is what its last run made: a run of the same
@@ -193,9 +122,12 @@ class Models:
                     same = (old is not None and old.get("worker") is worker and old.get("revision") == recorded
                             and durable(recorded))
                     version = old["version"] if same else secrets.token_hex(8)
+                    # The version of the .xbf this run left (``state.file_version``): written, or taken whole and kept.
+                    # Another one there later is another process's file, the document from then on (``_holds``).
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
+                                           "written": file_version(source["xbf"]),
                                            "program": program or (old or {}).get("program") or source["script"],
-                                           "kind": "model", "python": python, "with": mine,
+                                           "kind": "xbf",
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
                                            "facts": facts, "parameters": rows if isinstance(rows, list) else None}
@@ -209,210 +141,115 @@ class Models:
                 self.daemon.builders[ident] = worker
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
-                if (report.get("cache") or {}).get("unreadable"):
-                    self.cache.remove(ident)  # this build found its cache file broken: the idle save writes it again
-                self.cache.touch(ident)
-        held = self.registry() if declared else None
-        if held is not None:
-            from cad.engine.identity import claims, released
 
-            for script, (now, was) in declared.items():
-                # What the script's records said it declared, else -- none of this run's models had a
-                # record saying it -- the claims the registry holds of it, read once.
-                released(held, script, (was if was is not None else claims(held, script)) - set(now))
+    def _failed(self, ident: str, worker: Any) -> None:
+        """A run of ``worker``'s document ``ident`` that failed: the row stays the build before, and the ``.xbf`` the
+        run left is the engine's own (one it wrote before a declared file failed), never another process's. A new
+        row, so that a judgement of the one before (``held``) lets go of nothing."""
+        with self.lock:
+            row = self.records.get(ident)
+            if row is not None and row["worker"] is worker:
+                self.records[ident] = {**row, "written": file_version(row["source"]["xbf"])}
 
-    def reattach(self, sources: list[dict[str, Any]], pid: int | None = None) -> list[str]:
-        """A worker's models with nothing to take up (``build._reattach``: each its ``source``), each
-        re-attached to the record of its script moved (``identity.reattach``) before the worker reads
-        its cache: a document this engine holds live and has not saved yet is saved first, from the
-        bytes the server holds or the worker that holds it (never the asking worker, ``pid``, busy
-        building), so its cache file moves with its record; what the book holds of an old id is
-        dropped. The lines that say what was re-attached."""
-        from cad.engine.identity import reattach
+    def unsaved(self, report: dict[str, Any]) -> None:
+        """A function with file decorators alone, built: no ``.xbf``, so no model document -- no row, no
+        page of its own. Its page is its first file's, served as that file (a STEP opened as a file)."""
+        from cad.engine.delta import delta
+        from cad.engine.ids import file_id
 
-        held = self.registry()
-        if held is None:
-            return []
-        lines: list[str] = []
-
-        def save(record):
-            row = self.row(record["id"])
-            if row is None or self.cache.current(record["id"], row["revision"]):
-                return
-            try:
-                data = self.held_bytes(record["id"], row["version"])
-                worker = row.get("worker")
-                if data is None and worker is not None and worker.pid != pid:
-                    _structure, _shapes, data = self.load(record["id"], worker, whole=True)
-                if data:
-                    self.cache._write(record["id"], row["revision"], data)
-            except Exception as error:  # noqa: BLE001 - its record moves all the same, with what its cache holds
-                self.cache.failed(record["id"], f"{type(error).__name__}: {error}")
-
-        with self.identity_lock:
-            moved = [(old, new) for old, new in reattach(held, sources, before=save, log=lines.append) if old != new]
-            for old, _new in moved:
-                self.forget(old)
-            if moved:
-                with self.cache.lock:
-                    self.cache.indexed = False  # the moved cache files: indexed again when next asked
-        return lines
+        facts = report.pop("facts", None)
+        if facts is not None:
+            report["delta"] = delta(facts, None)
+        first = next((path for path in report.get("files") or {}), None)
+        if first is None:
+            return
+        server = self.daemon.serve({})
+        server.remember(first)
+        report["url"] = self.url(server, file_id(first))
 
     def facts(self, ident: str, report: dict[str, Any], recorded: str) -> tuple[dict | None, dict | None]:
         """A build's facts (``delta.facts``) and the last build's, of document ``ident``: the
-        worker's, else -- a model taken from its key, nothing built -- the ones its record holds
-        for this revision; the last from the book, else the registry (after a restart). None
-        where there are none."""
+        worker's, else -- a model taken from its key, nothing built -- the ones its row holds
+        for this revision; the last from the book. None where there are none."""
         now = report.pop("facts", None)
         with self.lock:
             row = self.records.get(ident) or {}
         kept, at = row.get("facts"), row.get("revision")
-        if kept is None:
-            held = self.registry()
-            record = held.get(ident) if held is not None else None
-            kept, at = (record or {}).get("facts"), (record or {}).get("revision")
         if now is None and at == recorded:
             now = kept
         return now, kept
 
-    # --- the registry ------------------------------------------------------------------------
+    def noted(self, xbf: Any, parts: Any) -> None:
+        """A model's ``.xbf`` the engine wrote or kept, as the home lists it from now on: the library knows the
+        file (a write the first time alone), and the cache notes its part occurrences where they are in hand.
+        A state folder that cannot be written keeps nothing, and fails no build."""
+        try:
+            self.library.know(xbf)
+        except OSError:
+            pass
+        if type(parts) is int:
+            self.notes.count(xbf, parts)
 
-    @staticmethod
-    def registry() -> Any:
-        from cad_server.engine import registry
-
-        return registry.current()
-
-    def record(self, report: dict[str, Any], recorded: str, facts: dict[str, Any] | None = None,
-               python: str | None = None, given: list[str] | None = None) -> dict[str, Any]:
-        """The registry's record of a document a build made (``registry``), written when it changed;
-        the record it had (``{}``: none). ``python``: the Python a run in its own built it with, which
-        its record names (``python``: absent, the base's); ``given``: the requirements ``cad run --with``
-        was given (``with``). Nothing with no registry."""
-        from cad_server.engine import registry as registering
-
-        held = self.registry()
-        if held is None:
-            return {}
-        ident, source = report["id"], report["source"]
-        script = Path(source["script"])
-        old = held.get(ident) or {}
-        root = str(script.parent)
-        # What a restart needs of it and no more: what it is (``id``, ``kind``, ``key``), where its
-        # code is (``root``, ``home``, ``entry``: the command that builds it again is ``cad run``
-        # of its home -- or, built in a Python of its own, that Python of its home: ``python``), the
-        # revision the cache and the delta compare, when it was built (the
-        # home's order) and when it was first built (``created``, the home's Created: kept from the
-        # record it had; a record from before the time was kept stays without one). The closure is
-        # its document's own (``previous``); which files it declared is no one's: they are exports.
-        found: dict[str, Any] = {
-            "id": ident, "kind": "model", "root": root, "home": registering.relative(script, root),
-            "entry": source["name"], "namespace": root, "name": source.get("explicit_name") or source["name"],
-            "revision": recorded, "fingerprint": source.get("fingerprint"), "module": source.get("module"),
-            "built": old["built"] if old.get("revision") == recorded and old.get("built") else time.time()}
-        if not old:
-            found["created"] = found["built"]
-        elif "created" in old:
-            found["created"] = old["created"]
-        if python is not None:
-            found["python"] = python  # absent: built in the base, which ``cad run`` reaches
-        if given:
-            found["with"] = list(given)  # ``cad run --with`` builds it again
-        if source.get("explicit_name") is not None:
-            found["line"] = source["line"]  # its claim of the name in its folder (``identity.claimed``)
-        if isinstance(source.get("declares"), list):
-            found["declares"] = source["declares"]  # the explicit names its script declared at this run
-        if facts is not None:
-            found["facts"] = facts
-        for key in ("opened", "pinned", "preview", "cache", "relocated"):  # the home's and the cache's, kept across builds
-            if key in old:
-                found[key] = old[key]
-        if not (report.get("cache") or {}).get("used"):
-            found.pop("relocated", None)  # a fresh document has paths at its new home
-        held.put(found)
-        return old
+    def exported(self, answer: dict[str, Any]) -> None:
+        """An export's answer (``worker._export``'s files): each .xbf it wrote counted (its document's parts'
+        occurrences) in the cache's note of the file as it now is (``library.Notes.count``): its row says Part
+        or Assembly without the file ever being read. An ``.xbf`` exported is a file of its own, another model:
+        its own id, its own card once a page opens it."""
+        done = answer.get("done")
+        for row in (done.get("files") or []) if isinstance(done, dict) else []:
+            if isinstance(row, dict) and row.get("kind") == "xbf" and type(row.get("parts")) is int \
+                    and isinstance(row.get("path"), str):
+                self.notes.count(row["path"], row["parts"])
 
     def hand_over(self, request: dict[str, Any]) -> dict[str, Any]:
         """A shape a program handed over (``api.hand_over``): its document's bytes read through the
-        documents worker -- checked, and made the structure the server serves -- then held as a
-        drained document is (``server.keep``, and the cache), its page registered, and recorded as a
-        ``kind: "shape"``, with the ``program`` that handed it over where there is one: the engine did
-        not run it, so nothing builds it again. Refused (``ValueError``) for bytes that are no
-        document, and under the id of a model a script declares (``identity.handed``). The answer
+        documents worker -- checked, and its parts counted -- then written as its ``.xbf`` (``_save``), a file the
+        library knows from then on (``noted``): the engine did not run it, so nothing builds it again. Its page
+        is its file's, read as any file is. Refused (``ValueError``) for bytes that are no document. The answer
         carries its page."""
-        import hashlib
+        from cad.engine.ids import file_id, is_id
 
-        from cad_server.engine import registry as registering
-        from cad.engine.ids import is_id
-
-        ident, name, scope = str(request.get("id")), str(request.get("name")), str(request.get("scope"))
-        if not is_id(ident):
-            raise ValueError(f"{ident!r} is not a document id")
-        held = self.registry()
-        if held is not None:
-            from cad.engine.identity import handed
-
-            handed(held, ident, scope, name)  # one id is one document: a model's is not a shape's
-        source = {"script": scope, "name": name}
+        name = str(request.get("name"))
+        saving = _saving(request.get("saved"))
+        if saving is None:
+            raise ValueError(f"{name}: a shape handed over is saved as its .xbf, and names its path")
+        ident = file_id(saving)
+        if str(request.get("id")) != ident or not is_id(ident):
+            raise ValueError(f"{request.get('id')!r} is not the id of {saving}")
         data = base64.b64decode(request.get("xbf") or "")
         replies: list[dict[str, Any]] = []
-        self.daemon._call({"source": {"document": ident, "held": ident}, "cwd": request.get("cwd")},
+        # Read by the documents worker in its caller's environment, as a file's or an .xbf's bytes are: a worker
+        # started in none would lack what its interpreter needs to start (on Windows, the user's home).
+        self.daemon._call({"source": {"document": ident}, "cwd": request.get("cwd"), "env": request.get("env")},
                           {"id": 1, "op": "result", "document": True, "name": name}, replies.append, data)
         answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
         if "done" not in answer:
             raise ValueError(f"{name}: the shape handed over is no document: {answer.get('failed')}")
-        payload = base64.b64decode(answer.get("payload", ""))
-        done = answer["done"]
-        shapes, at = {}, 0
-        for key, size in done["shapes"]:
-            shapes[key] = payload[at:at + size]
-            at += size
-        from cad.engine.export.viewer import fingerprint
-
-        version = secrets.token_hex(8)
-        recorded = "h" + hashlib.blake2b(data, digest_size=16).hexdigest()
-        structure = {**done["structure"], "exportRevision": fingerprint(done["structure"]), "path": ident,
-                     "id": ident, "closure": None, "version": version}
-        program = request.get("program")
-        with self.lock:
-            old = self.records.get(ident)
-            self.records[ident] = {"id": ident, "source": source, "worker": None, "program": program,
-                                   "kind": "shape", "builtAt": time.time(), "version": version, "files": [],
-                                   "revision": recorded}
-        if old is not None and old.get("worker") is not None and self.daemon.builders.get(ident) is old["worker"]:
-            del self.daemon.builders[ident]
-        held = self.registry()
-        if held is not None:
-            root = scope if os.path.isdir(scope) else str(Path(scope).parent)
-            previous = held.get(ident) or {}
-            found: dict[str, Any] = {
-                "id": ident, "kind": "shape", "root": root,
-                "home": registering.relative(scope, root), "entry": name, "namespace": root, "name": name,
-                "revision": recorded,
-                "built": previous["built"] if previous.get("revision") == recorded and previous.get("built")
-                else time.time()}
-            if not previous:  # first handed over now; an older record keeps what it has (``record``)
-                found["created"] = found["built"]
-            elif "created" in previous:
-                found["created"] = previous["created"]
-            if program:
-                found["program"] = registering.relative(program, root)  # what its words name (``shown``)
-            for key in ("opened", "pinned", "preview", "cache"):
-                if key in previous:
-                    found[key] = previous[key]
-            held.put(found)
-        server = self.register_page(ident)
-        server.keep(ident, structure, shapes, version, data)
-        self.cache.keep(ident, recorded, data)
-        self.cache.touch(ident)
-        return {"done": {"id": ident, "url": self.url(server, ident)}}
+        parts = len(answer["done"]["structure"].get("instances") or [])
+        written = self._save(saving, data)
+        if written:
+            self.noted(saving, parts)
+        server = self.daemon.serve({})
+        self.drop(ident)  # a model's page at this id before: the file is the document now
+        server.remember(saving)
+        done: dict[str, Any] = {"id": ident, "url": self.url(server, ident)}
+        if written:
+            done["saved"] = True
+        return {"done": done}
 
     @staticmethod
-    def shown(program: str | None) -> str:
-        """What a shape's record says of where it came from: the program, which the engine did not run."""
-        return (f"a shape handed over by {program}, a program the engine did not run: no script to rerun, and no "
-                "command builds it again" if program else "a shape handed over from a Python session the engine did "
-                "not run: no script to rerun, and no command builds it again")
+    def _save(found: Path, data: bytes) -> bool:
+        """A shape handed over is saved as its ``.xbf`` (``api.hand_over``: law 10), which the engine writes, as a
+        build's own ``.xbf`` is, only where it differs or is missing. Whether it was written or kept: a folder that
+        refuses it is the caller's to write, which says why (``hand_over``'s answer has no ``saved``)."""
+        from cad.engine.atomic_replace import put
+
+        try:
+            found.parent.mkdir(parents=True, exist_ok=True)
+            put(found, lambda temporary: temporary.write_bytes(data), compare=True)
+        except OSError:
+            return False
+        return True
 
     @staticmethod
     def url(server: Any, ident: str) -> str:
@@ -426,7 +263,8 @@ class Models:
         with self.lock:
             record = self.records[ident]
             record["opened"] = True
-            version, name = record["version"], record["source"]["name"]
+            version, name, xbf = record["version"], record["source"]["name"], record["source"]["xbf"]
+        server.remember(xbf)  # its file, which the server's route looks at (a model whose .xbf is gone is not held)
         server.register_model(ident, name, lambda: self.load(ident), version)
         return server
 
@@ -438,16 +276,18 @@ class Models:
                     and (name is None or row["source"]["name"] == name)]
 
     def held(self, ident: str) -> dict[str, Any] | None:
-        """The record of the model document ``ident`` while the engine holds it -- a live worker
-        does, the server holds its bytes, or its cache file is at its revision (``where``) -- else None."""
-        self.adopt(ident)
-        with self.lock:
-            record = self.records.get(ident)
-        if record is None:
-            return None
-        if self._working(record["worker"]):
-            return record
-        return record if self.where(ident) else None
+        """The row of the model document ``ident`` while a live worker holds it and its ``.xbf`` is the one its run
+        left (``_holds``), else None: its file is the document then (``locate``), and the row is let go (``release``):
+        a file another process wrote is read as the file it is, and an id whose file is gone names nothing, whatever
+        the worker holds. The server asks it before it serves a model from its worker (``serve.Server.model_held``).
+        Only the row judged is let go: one a run's answer put in its place meanwhile is judged in turn."""
+        while True:
+            with self.lock:
+                record = self.records.get(ident)
+            if record is None or self._holds(record):
+                return record
+            if self.release(ident, row=record):
+                return None
 
     def live(self, ident: str, version: Any = None) -> dict[str, Any] | None:
         """What the worker that built model document ``ident`` recorded of its parameters while it is live
@@ -467,161 +307,101 @@ class Models:
         return {"script": record["source"]["script"], "name": record["source"]["name"], "rows": record["parameters"],
                 "worker": worker}
 
-    def _working(self, worker: Any) -> bool:
-        """Whether ``worker`` holds its documents still: live in the supervisor, or out of it and
-        alive -- being retired, and drained (``drain``) before it goes."""
-        return worker is not None and (self.daemon.supervisor.holds(worker) or worker.alive())
+    def _holds(self, row: dict[str, Any]) -> bool:
+        """Whether ``row``'s worker holds its document still -- live in the supervisor, or out of it and alive --
+        and its ``.xbf`` is the one its last run left (``written``), or one the worker may be writing now: a request
+        of it is under way (its lease, from before the request is sent until its answer gave the row the version
+        its run left, ``register``), which the daemon knows before any of the run's progress reaches it. A document
+        whose file is gone is gone, and one whose file another process wrote is that file, whoever holds its
+        build. The file is looked at before the lease: a version the worker wrote and a lease let go since mean
+        the answer is in, and the row judged is another's (``held``). A rewrite of the same size within one tick
+        of the file's clock keeps its version (``mtime_ns-size``), and is not seen."""
+        worker = row["worker"]
+        if worker is None or not (self.daemon.supervisor.holds(worker) or worker.alive()):
+            return False
+        found = file_version(row["source"]["xbf"])
+        if found is None or found == row.get("written"):
+            return found is not None
+        return bool(getattr(worker, "leased", False))
 
-    def rebuild(self, ident: str) -> dict[str, Any] | None:
-        """What the engine knows of a model document it does not hold: its state (``unsaved``), the
-        command that builds it again -- ``cad run`` and the script that defines it -- and why, in
-        words (the page's ``error``). None for a document it holds or never built. The engine never
-        runs the command."""
-        self.adopt(ident)
+    def locate(self, ident: str) -> Path | None:
+        """The file of document ``ident`` where it is now, with no record of it: the ``.xbf`` its row names
+        (a model a live worker holds), else the one the server finds by its id (``serve.Server.locate``: a file it
+        was named since it started, the library's, a project folder's). While nothing is served, the library's;
+        and where the library has none and holds a project, the server is started to look in its folder. None
+        for an id that names no file that is there."""
         with self.lock:
-            found = self.records.get(ident)
-        if found is not None and self.held(ident) is not None:
-            return None
-        if found is None:
-            return self.recorded(ident)
-        command = self.command(ident)
-        name = found["source"]["name"]
-        if found["kind"] == "shape":
-            known = self.recorded(ident) if found.get("program") is None else None
-            if known is not None:
-                return known  # taken up after a restart (``adopt``): its record's words name the program
-            return {"error": unsaved(name, ident, None, self.shown(found.get("program"))), "state": "unsaved",
-                    "rebuild": None}
-        if not Path(found["source"]["script"]).is_file():
-            return {"error": f"{name} ({ident}) is detached: {found['source']['script']} is gone, and nothing "
-                             "builds it again; delete it from the home", "state": "detached", "rebuild": None}
-        return {"error": unsaved(name, ident, command), "state": "unsaved", "rebuild": command}
+            row = self.records.get(ident)
+        found = row["source"].get("xbf") if row is not None else None
+        if not (found and os.path.isfile(found)):
+            server = self.daemon.server
+            found = server.locate(ident) if server is not None else self.library.path_of(ident)
+            if server is None and not (found and os.path.isfile(found)) and self.library.read()["projects"]:
+                found = self.daemon.serve({}).locate(ident)
+        return Path(found) if found and os.path.isfile(found) else None
 
-    def command(self, ident: str) -> str | None:
-        """The command that builds model document ``ident`` again: ``cad run`` and the script that
-        defines its model -- never a program that imported it and called it -- or, for one its last run
-        built in a Python of its own, that Python and the script; from this process's book or the
-        registry's record. None for an id the engine never built."""
-        with self.lock:
-            found = self.records.get(ident)
-        if found is None:
-            known = self.recorded(ident)
-            return known["rebuild"] if known is not None else None
-        if found["kind"] == "shape":
-            return None  # handed over by a program the engine did not run: nothing builds it again
-        from cad_server.engine.registry import rerun
-
-        return rerun(found["source"]["script"], found.get("python"), found.get("with"))
-
-    def recorded(self, ident: str) -> dict[str, Any] | None:
-        """What the registry knows of a model document this process never built (one built before a
-        restart) whose cache file is not there: ``unsaved``, with the command that builds it again, or
-        ``detached`` when its script
-        is gone. None for an id it has no model's record of. Nothing is run."""
-        from cad_server.engine import registry as registering
-
-        held = self.registry()
-        found = held.get(ident) if held is not None else None
-        if found is None or found.get("kind") not in ("model", "shape"):
-            return None
-        name = found.get("entry") or ident
-        if found["kind"] == "shape":
-            program = registering.program(held, found)
-            return {"error": unsaved(name, ident, None, self.shown(str(program) if program else None)), "state": "unsaved",
-                    "rebuild": None}
-        if registering.detached(held, found):
-            return {"error": f"{name} ({ident}) is detached: {registering.home(held, found)} is gone, and nothing "
-                             "builds it again; delete it from the home", "state": "detached", "rebuild": None}
-        command = registering.command(held, found)
-        return {"error": unsaved(name, ident, command), "state": "unsaved", "rebuild": command}
-
-    def missing(self, ident: str) -> str:
-        """Why no document ``ident`` is here, with the command that builds it again where the
-        engine built it before: the engine never runs it."""
-        found = self.rebuild(ident)
-        return found["error"] if found is not None else f"no document {ident} is held"
-
-    def not_held(self, ident: str) -> Exception:
-        """The refusal for a model document the engine does not hold (``serve.NotHeld``)."""
+    @staticmethod
+    def not_held(ident: str) -> Exception:
+        """The refusal for an id that names no document (``serve.NotHeld``)."""
         from cad.engine.serve import NotHeld
 
-        found = self.rebuild(ident)
-        if found is None:
-            return NotHeld(self.missing(ident), "unsaved", None)
-        return NotHeld(found["error"], found["state"], found["rebuild"])
+        return NotHeld(f"no document {ident} is held")
 
     def drain(self, worker: Any) -> None:
-        """Before ``worker`` is retired: every document of it the server does not hold
-        whole at its version is taken from it -- its ``result``, never meshed, with the whole
-        document as xbf bytes (``document.to_bytes``, its animations' record with it) -- so it outlives
-        the worker and answers every verb as an on-disk xbf does, and a GLB of it as the build's GLB. A
-        worker that is gone (a crash) drains nothing: its documents the server and the cache lack are
-        ``unsaved``."""
-        server = self.daemon.server
-        if server is None or not worker.alive():
-            return
-        from cad_server.engine.supervisor import Gone
+        """Before ``worker`` is retired: each document of it is its ``.xbf`` from now on (``release``), which its
+        build wrote. Nothing is taken from the worker: the file is the document."""
+        for ident in self.paths(worker):
+            self.release(ident, worker)
 
+    def release(self, ident: str, worker: Any = None, *, row: dict[str, Any] | None = None) -> bool:
+        """Model document ``ident`` held by no worker now (``worker``, where one is named: its row, unless a build
+        since gave it another; ``row``, where one is named: that row, unless an answer since put another in its
+        place): its row dropped, and its page its ``.xbf``'s, read as any file is. Whether a row was dropped."""
+        judged = row
         with self.lock:
-            owed = [(ident, row["version"], row["revision"]) for ident, row in self.records.items()
-                    if row["worker"] is worker]
-        for ident, version, recorded in owed:
-            if server.has(ident, version, whole=True):
-                self.cache.keep(ident, recorded, self.held_bytes(ident, version) or b"")
-                continue
-            try:
-                structure, shapes, whole = self.load(ident, worker, whole=True)
-            except Gone:
-                return
-            except (OSError, ValueError, KeyError):
-                continue
-            with self.lock:
-                record = self.records.get(ident)
-                current = record is not None and record["version"] == version
-            if current:  # a build of it since, by another worker, is newer
-                server.keep(ident, structure, shapes, version, whole)
-                self.cache.keep(ident, recorded, whole)  # the cache's, at retirement (``cache``)
+            row = self.records.get(ident)
+            if row is None or (worker is not None and row["worker"] is not worker) or (
+                    judged is not None and row is not judged):
+                return False
+            del self.records[ident]
+            if self.daemon.builders.get(ident) is row["worker"]:
+                self.daemon.builders.pop(ident, None)
+        server = self.daemon.server
+        if server is not None:
+            server.forget_model(ident)
+            if os.path.isfile(row["source"].get("xbf") or ""):
+                server.remember(row["source"]["xbf"])
+        return True
 
     def serve(self, ident: str) -> tuple[Any, str]:
-        """The server and the id of the model document ``ident`` the engine holds; refused
-        (``not_held``), naming its state and the command that builds it again, when it does not.
-        Nothing is built."""
+        """The server and the id of the model document ``ident`` a live worker holds; refused
+        (``not_held``) when none does. Nothing is built."""
         if self.held(ident) is None:
             raise self.not_held(ident)
         return self.register_page(ident), ident
 
-    def load(self, ident: str, leaving: Any = None, whole: bool = False) -> tuple:
-        """A model document's structure and shape bytes, asked of the worker that holds it -- through
-        a lease, or of ``leaving``, a worker being retired (``drain``), directly, and then
-        (``whole``) with the whole document's xbf bytes third. ``serve.NotHeld`` when no worker holds
-        it: nothing is built to bring it back. One no worker holds whose cache file is at its revision
-        is read from it, through the documents worker (``from_disk``), its xbf bytes third."""
+    def load(self, ident: str) -> tuple:
+        """A model document's structure and shape bytes, asked of the worker that holds it, through a lease.
+        ``serve.NotHeld`` when no worker holds it: its file is the document then (``release``), and nothing is
+        built to bring it back."""
         with self.lock:
             record = self.records.get(ident)
             if record is None:
                 raise self.not_held(ident)
             source, version = record["source"], record["version"]
-            worker = leaving or record["worker"]
-        if worker is None or not worker.alive():
-            if leaving is None and self.cache.current(ident, record["revision"]):
-                return self.from_disk(ident)
+            worker = record["worker"]
+        if worker is None or not self.daemon.supervisor.holds(worker):
+            self.prune()
             raise self.not_held(ident)
-        if leaving is None:
-            self.cache.touch(ident)  # a read: its idle timer starts again
         order = {"op": "result", "script": source["script"], "name": source["name"]}
-        if leaving is None and not whole and self.daemon.supervisor.holds(worker):
-            replies = []
-            # Asked of the worker that built it (``via``, in the Python it runs): a child model's is its
-            # parent's script's.
-            held = getattr(worker, "python_key", None)
-            self.daemon.handle({**order, "env": worker.environment, "via": worker.label, "held": ident,
-                                **({"python_key": held} if held else {})}, replies.append)
-            answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
-            payload = base64.b64decode(answer.get("payload", ""))
-        else:
-            # Out of the supervisor and still alive: being retired, and asked before it goes.
-            answer = worker.request({"id": 1, **order, "whole": whole}, lambda _message: None)
-            payload = answer.pop("payload", b"")
+        replies: list[dict[str, Any]] = []
+        # Asked of the worker that built it (``via``, in the Python it runs): a child model's is its
+        # parent's script's.
+        held = getattr(worker, "python_key", None)
+        self.daemon.handle({**order, "env": worker.environment, "via": worker.label, "held": ident,
+                            **({"python_key": held} if held else {})}, replies.append)
+        answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
+        payload = base64.b64decode(answer.get("payload", ""))
         if "failed" in answer:
             raise ValueError(answer["failed"])
         done = answer["done"]
@@ -633,71 +413,39 @@ class Models:
 
         structure = {**done["structure"], "exportRevision": fingerprint(done["structure"]), "path": ident,
                      "id": ident, "closure": done.get("closure"), "version": version}
-        if whole:
-            return structure, shapes, payload[at:at + int(done.get("xbf") or 0)]
         return structure, shapes
 
     def prune(self) -> None:
-        """Each record whose worker is gone keeps its document, with no worker (``drain`` took it
-        first)."""
+        """Each row whose worker is gone, or whose ``.xbf`` is, is released: its document is its ``.xbf``
+        (``release``), or nothing: each the row judged, never one an answer put in its place since."""
         with self.lock:
-            for ident, row in list(self.records.items()):
-                worker = row["worker"]
-                if worker is None or worker.alive() or self.daemon.supervisor.holds(worker):
-                    continue  # a worker out of the supervisor but alive is being retired: drained first
-                if self.daemon.builders.get(ident) is worker:
-                    del self.daemon.builders[ident]
-                row["worker"] = None
-                row["parameters"] = None  # where its parameters are was the worker's to say (``live``)
+            gone = [(ident, row) for ident, row in self.records.items() if not self._holds(row)]
+        for ident, row in gone:
+            self.release(ident, row=row)
 
     def listing(self) -> list[dict[str, Any]]:
-        """The model documents, each with its ``state`` (``STATES``), and for one not held the command
-        that builds it again. One that declares files is listed like any other: they are exports."""
+        """The model documents a live worker holds, each with its ``state`` (``STATES``). One that declares files
+        is listed like any other: they are exports."""
         self.prune()
-        for ident in self.cache.documents():  # what the cache holds, listed after a restart too
-            self.adopt(ident)
         with self.lock:
-            found = []
-            for row in self.records.values():
-                ident = row["id"]
-                entry = {"id": ident, "script": row["source"]["script"],
-                         "name": row["source"]["name"], "builtAt": row["builtAt"], "version": row["version"],
-                         "kind": row["kind"], "state": self.state(ident)}
-                if entry["state"] == "held":
-                    entry["held"] = self.where(ident)
-                lost = self.rebuild(ident) if entry["state"] in ("unsaved", "detached") else None
-                if lost is not None and lost["rebuild"]:
-                    entry["rebuild"] = lost["rebuild"]
-                found.append(entry)
-            return found
+            rows = list(self.records.values())
+        return [{"id": row["id"], "script": row["source"]["script"], "name": row["source"]["name"],
+                 "builtAt": row["builtAt"], "version": row["version"], "kind": row["kind"],
+                 "state": self.state(row["id"])} for row in rows]
 
-    def state(self, ident: str) -> str:
-        """``live`` (a live worker holds it), ``held`` (the server holds its bytes; no worker),
-        ``building``, ``failed`` (its last build), ``unsaved`` (neither, nor its file in the engine's
-        cache: deleted by hand, or never written -- the cache could not be written, its worker crashed
-        first -- the registry knows it), or ``detached`` (not held, and its script is
-        gone). ``held`` is in memory, on disk -- the cache's -- or both (``where``)."""
-        self.adopt(ident)
-        with self.lock:
-            record = self.records.get(ident)
+    def state(self, ident: str) -> str | None:
+        """``live`` (a live worker holds it), ``building``, ``failed`` (its last build), ``held`` (no worker: its
+        file is the document); None for an id that names nothing: one whose file is gone, whatever its last build."""
+        live = self.held(ident) is not None
+        if not live and self.locate(ident) is None:
+            return None
         server = self.daemon.server
         build = server.build_of(ident) if server is not None else {}
         if build.get("building"):
             return "building"
         if build.get("failed"):
             return "failed"
-        if record is None:
-            known = self.recorded(ident)
-            return known["state"] if known is not None else "unsaved"
-        if self._working(record["worker"]):
-            return "live"
-        if self.where(ident):
-            return "held"
-        if record["kind"] == "shape":
-            return "unsaved"  # nothing builds it again, and nothing of it goes missing
-        return "unsaved" if Path(record["source"]["script"]).is_file() else "detached"
-
-    # --- the cache (``cache``) ----------------------------------------------------------------
+        return "live" if live else "held"
 
     def row(self, ident: str) -> dict[str, Any] | None:
         """This process's book's row of document ``ident`` (a copy of it), else None."""
@@ -705,27 +453,17 @@ class Models:
             found = self.records.get(ident)
             return dict(found) if found is not None else None
 
-    def where(self, ident: str) -> str | None:
-        """Where the engine holds a model document no worker does: ``memory`` (the server holds its
-        bytes at its generation), ``disk`` (its cache file is at its revision), ``memory and disk``,
-        or None (neither)."""
-        with self.lock:
-            record = self.records.get(ident)
-        if record is None:
-            return None
-        server = self.daemon.server
-        memory = server is not None and server.has(ident, record["version"])
-        disk = self.cache.current(ident, record.get("revision"))
-        return "memory and disk" if memory and disk else "memory" if memory else "disk" if disk else None
+    def forget(self, ident: str) -> None:
+        """Document ``ident`` forgotten (the home's Remove): what this engine holds of it (``drop``) and its
+        library entry. Never a file, nor what the cache derived of it (its note, its kept checks: facts of the
+        file's bytes, whether or not it is in Recents): the document is its file still, and a project's folder
+        lists it as before, with its count and its picture."""
+        self.drop(ident)
+        self.library.forget(ident)
 
-    def delete(self, ident: str) -> dict[str, Any] | None:
-        """``delete`` with this engine's book: what it holds of document ``ident`` dropped first."""
-        return delete(self.registry(), ident, self)
-
-    def forget(self, ident: str) -> dict[str, Any] | None:
+    def drop(self, ident: str) -> dict[str, Any] | None:
         """What this engine holds of document ``ident``, dropped: its row in the book (a live
-        document's too: its next run registers it again), the server's copy and its page, the cache's
-        index and timer of it. Its record and its cache file are ``delete``'s. The row as it was, or
+        document's too: its next run registers it again), the server's copy and its page. The row as it was, or
         None."""
         with self.lock:
             row = self.records.pop(ident, None)
@@ -734,119 +472,4 @@ class Models:
         server = self.daemon.server
         if server is not None:
             server.forget_model(ident)
-        self.cache.forget(ident)
         return row
-
-    def leaving(self, ident: str, version: Any, data: bytes) -> None:
-        """Document ``ident``'s xbf bytes at generation ``version``, leaving the server's memory for
-        its budget (``serve.Server.trim``): kept by the cache when it does not hold that revision yet,
-        so the document is read again from there. Bytes of a generation the book no longer holds (a
-        build since made a newer one) are dropped: that build's save follows."""
-        with self.lock:
-            record = self.records.get(ident)
-            revision = record["revision"] if record is not None and record["version"] == version else None
-        if revision is not None:
-            self.cache.keep(ident, revision, data)
-
-    def adopt(self, ident: str) -> None:
-        """A model document this process never built whose cache file is there (after a restart),
-        taken into the book from its record: held on disk, no worker, a generation of its own, its
-        page registered where the server runs. Nothing is read but its record, nothing is run."""
-        from cad.engine.ids import is_id
-
-        if not is_id(ident):
-            return
-        with self.lock:
-            if ident in self.records:
-                return
-        found = self.cache.found(ident)
-        if found is None:
-            return
-        from cad_server.engine import registry as registering
-
-        record, meta = found
-        held = self.registry()
-        program = registering.program(held, record)
-        row = {"id": ident, "source": {"script": str(registering.home(held, record)), "name": record["entry"]},
-               "worker": None, "program": str(program) if program else None, "kind": record["kind"],
-               "builtAt": record.get("built"), "version": secrets.token_hex(8),
-               "files": [], "revision": meta["revision"]}
-        with self.lock:
-            if ident in self.records:
-                return
-            self.records[ident] = row
-        if self.daemon.server is not None:
-            self.register_page(ident)
-
-    def attach(self, server: Any) -> None:
-        """The daemon's server, started after documents were taken up from the cache: each is
-        registered with it."""
-        with self.lock:
-            idle = [ident for ident, row in self.records.items() if row["worker"] is None]
-        for ident in idle:
-            row = self.row(ident)
-            if row is not None and self.cache.current(ident, row.get("revision")):
-                server.register_model(ident, row["source"]["name"], lambda ident=ident: self.load(ident), row["version"])
-
-    def held_bytes(self, ident: str, version: str) -> bytes | None:
-        """The whole document's xbf bytes the server holds of document ``ident`` at ``version``, else None."""
-        server = self.daemon.server
-        if server is None:
-            return None
-        with server.load_lock:
-            doc = server.served.get(ident)
-            return doc.xbf if doc is not None and server.model_versions.get(ident) == version else None
-
-    def unreadable(self, ident: str, why: str) -> Exception:
-        """Document ``ident``'s held bytes did not read (``build.Unreadable``, ``why``): its cache file
-        removed, with its record's ``cache`` (``Cache.remove``), so it is no longer held on disk and its
-        next build writes it again -- rather than every restart offering the same bytes and failing
-        on them. The refusal to answer with: that, and the command that builds it again."""
-        from cad.engine.serve import NotHeld
-
-        self.cache.remove(ident)
-        said = f"the engine's cache of {ident} does not read ({why}), and is removed"
-        found = self.rebuild(ident)
-        if found is None:
-            return NotHeld(said, "unsaved", self.command(ident))
-        return NotHeld(f"{said}: {found['error']}", found["state"], found["rebuild"])
-
-    def disk_bytes(self, ident: str) -> bytes | None:
-        """The bytes of document ``ident``'s cache file when it is at the revision the book holds, its
-        read noted (its idle timer and its recency); else None."""
-        with self.lock:
-            record = self.records.get(ident)
-        if record is None or not self.cache.current(ident, record.get("revision")):
-            return None
-        data = self.cache.read(ident)
-        if data is not None:
-            self.cache.touch(ident)
-        return data
-
-    def from_disk(self, ident: str) -> tuple:
-        """Document ``ident`` read from its cache file through the documents worker, as a held
-        document's bytes are (``worker._result``): its structure, its shape bytes and its xbf bytes.
-        ``serve.NotHeld`` when the file is gone."""
-        data = self.disk_bytes(ident)
-        with self.lock:
-            record = self.records.get(ident)
-        if data is None or record is None:
-            raise self.not_held(ident)
-        replies: list[dict[str, Any]] = []
-        name = record["source"]["name"]
-        self.daemon._call({"source": {"document": ident, "held": ident}},
-                          {"id": 1, "op": "result", "document": True, "name": name}, replies.append, data)
-        answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
-        if "done" not in answer:
-            raise ValueError(answer.get("failed") or f"{name} ({ident}): its cache file could not be read")
-        payload = base64.b64decode(answer.get("payload", ""))
-        done = answer["done"]
-        shapes, at = {}, 0
-        for key, size in done["shapes"]:
-            shapes[key] = payload[at:at + size]
-            at += size
-        from cad.engine.export.viewer import fingerprint
-
-        structure = {**done["structure"], "exportRevision": fingerprint(done["structure"]), "path": ident,
-                     "id": ident, "closure": done.get("closure"), "version": record["version"]}
-        return structure, shapes, data

@@ -123,6 +123,43 @@ class LauncherTest(unittest.TestCase):
                                                 r'HttpOnly; SameSite=Strict$')
         return {'Cookie': headers['set-cookie'].split(';')[0]}
 
+    def test_a_folder_named_opens_as_a_project_on_the_home(self):
+        work = self.root / 'work'
+        (work / 'STL').mkdir(parents=True)
+        (work / 'STL' / 'tag.stl').write_bytes(b'solid t\nendsolid t\n')
+        launched = self.launch('work')
+        [project] = launched['projects']
+        # Its page is the home at the project (`?project=<id>`, which the client reads), not the home itself, and the
+        # link signs it as it signs any page.
+        page = f"{launched['apiUrl']}/?project={project['id']}&token={launched['token']}"
+        self.assertEqual((project['name'], project['made'], launched['url'], project['url'], launched['documents']),
+                         ('work', True, page, page, []))
+        self.assertNotEqual(launched['url'], launched['home'])
+        status, _, body = self.get(launched, page[len(launched['apiUrl']):], token=False)
+        self.assertEqual((status, body), (200, b'<html>viewer</html>'))
+        # Without --json, the same page is the line printed, after each file's.
+        done = subprocess.run([sys.executable, '-m', 'cad_server.viewer', '--no-open', '--dist', str(self.dist),
+                               'work', 'work/STL/tag.stl'], env=self.env, cwd=self.root, capture_output=True, text=True,
+                              timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [file_page, project_page] = done.stdout.splitlines()
+        self.assertRegex(file_page, r'^http://127\.0\.0\.1:\d+/[0-9a-f-]{36}\?token=')
+        self.assertEqual(project_page, page)
+        status, _, body = self.get(launched, '/api/v1/projects')
+        [listed] = json.loads(body)['projects']
+        self.assertEqual((status, listed['id'], listed['name']), (200, project['id'], 'work'))
+        folder = json.loads(self.get(launched, f"/api/v1/projects/{project['id']}?path=STL")[2])
+        self.assertEqual([row['name'] for row in folder['documents']], ['tag.stl'])
+        # Again, from inside it: the same project; a file in it is its page, as any file's is.
+        again = self.launch('.', 'tag.stl', cwd=work / 'STL')
+        self.assertEqual((again['projects'][0]['id'], again['projects'][0]['made']), (project['id'], False))
+        self.assertEqual(again['url'], again['documents'][0]['url'])
+        # The home folder is no project, and says what to open instead; nothing named beside it is opened.
+        other = self.root / 'other'
+        other.mkdir()
+        self.assertIn('home folder', self.launch('other', str(Path.home()), ok=False, reason='invalid_argument'))
+        self.assertEqual([listed['name'] for listed in json.loads(self.get(launched, '/api/v1/projects')[2])['projects']], ['work'])
+
     def test_launches_reuse_one_engine_which_keeps_the_latest_launch_s_folder(self):
         b, c = self.root / 'b', self.root / 'c'
         b.mkdir()

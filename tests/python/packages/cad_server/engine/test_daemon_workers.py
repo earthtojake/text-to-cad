@@ -23,12 +23,12 @@ from tests.python.support.daemon_fixtures import MODEL, SRC
 
 CUT = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 SIZE = {size}
 
 
-@xbf("XBF/cut.xbf")
+@model("XBF/cut.xbf")
 def cut():
     peg = bd.Cylinder(2, 10)
     plate = bd.Box(10, 10, 4) - bd.Pos(SIZE / 10, 0, 0) * peg
@@ -45,18 +45,18 @@ if __name__ == "__main__":
 
 LOADS = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 with open("loads.txt", "a", encoding="utf-8") as handle:  # one line per load of the script
     handle.write("load\\n")
 
 
-@xbf("XBF/block.xbf")
+@model("XBF/block.xbf")
 def block():
     return bd.Box(3, 2, 1)
 
 
-@xbf("XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     return bd.Cylinder(1, 3)
 """

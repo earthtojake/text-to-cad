@@ -464,7 +464,7 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
     """The URDF whose robot an SRDF plans for, or a refusal naming the search.
 
     An SRDF carries planning semantics only. It pairs with the same-folder ``.urdf``
-    whose ``<robot name>`` matches -- the rule ``cad srdf validate`` and the viewer
+    whose ``<robot name>`` matches -- the rule ``cad inspect`` and the viewer
     use -- and exactly one may match.
     """
     from cad.srdf._validation import find_paired_urdf
@@ -473,7 +473,7 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
     robot_name = _robot_name_of(srdf_path)
     rule = (
         "An SRDF renders the geometry of the same-folder .urdf whose <robot name> "
-        "matches its own, and exactly one may match (check with `cad srdf validate`)."
+        f"matches its own, and exactly one may match (check with `cad inspect {srdf_path.name}`)."
     )
     if not robot_name:
         raise RobotReadError(f"{srdf_path.name} has no readable <robot name>, so its URDF cannot be found. {rule}")

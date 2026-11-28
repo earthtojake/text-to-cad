@@ -23,11 +23,17 @@ class CompactStdoutTests(unittest.TestCase):
         "packages/cad/src/cad_server/cli/requirement.py",
         # `cad doctor --json`: each check of the report.
         "packages/cad/src/cad_server/cli/doctor.py",
+        # `cad cache prune --json`: what it removed and freed, by kind, and what it kept and why.
+        "packages/cad/src/cad_server/cli/cache.py",
         # Every command's failure under --json: the contract's one document.
         "packages/cad/src/cad_server/_internal/cli_errors.py",
         # The checks' Result dataclasses.
         "packages/cad/src/cad/results.py",
-        # A document type's operation refused before it ran (`cad stl export part.glb --json`).
+        # `cad share --json`: a share's links and what travelled; `status`, `on`, `off` and `delete`'s answers.
+        "packages/cad/src/cad_server/cli/share.py",
+        # `cad import --json`: the files it wrote, the script that builds them, and what built them.
+        "packages/cad/src/cad_server/cli/import_.py",
+        # A manufacturing check refused before it ran (`cad dfm part.stl --process cnc --json`).
         "packages/cad/src/cad_server/cli/document_types.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result
         # here rather than in its own module, so one entry covers all of them.

@@ -7,4 +7,4 @@ src/arm.py is a CAD model of a two-joint arm (base, upper arm, forearm). I need 
 
 ## Expect
 
-Materials on all three parts, `link(base, "base_link")`, `limits(..., effort=2.9, velocity=4.7)` on both joints, `mass(forearm, 85)`, a frame at the forearm's tip (`bd.Pos(0, 0, 100)` in its own frame). `cad urdf validate` and `cad mujoco check` both OK; total mass 0.3673 kg; neither file edited by hand.
+Materials on all three parts, `link(base, "base_link")`, `limits(..., effort=2.9, velocity=4.7)` on both joints, `mass(forearm, 85)`, a frame at the forearm's tip (`bd.Pos(0, 0, 100)` in its own frame). `cad inspect` and `cad mujoco check` both OK; total mass 0.3673 kg; neither file edited by hand.

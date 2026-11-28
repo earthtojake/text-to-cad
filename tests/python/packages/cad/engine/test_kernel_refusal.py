@@ -15,15 +15,15 @@ from cad.engine import said
 
 SCRIPT = """
 import build123d as bd
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def plate():
     return bd.Box(0, 60, 5)
 
 
-@model
+@xbf
 def rounded():
     box = bd.Box(10, 10, 10)
     return bd.fillet(box.edges(), 20)

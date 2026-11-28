@@ -13,7 +13,7 @@ Run: cad run src/assembly.py"""
 from pathlib import Path
 
 import build123d as bd
-from cad import model, step
+from cad import xbf, step
 from cad.build123d import animation
 
 from hardware import hex_nut, knob_body, washer
@@ -26,14 +26,14 @@ NUT_T = 2.0
 KNOB_LIFT = 1.3                      # the knob clears its pot nut and the bushing (10 + 5 mm above the board)
 
 
-@model
+@xbf
 def board():
     pcb = step.read(BOARD_STEP)
     pcb.label = "board"
     return pcb
 
 
-@model
+@xbf
 def twin_orbit_assembly():
     parts = panel_parts()
     knobs, nuts, spacers = [], [], []

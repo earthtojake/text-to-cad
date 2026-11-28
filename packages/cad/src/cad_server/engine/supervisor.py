@@ -1195,8 +1195,8 @@ class Supervisor:
         self.starting.add((ticket.service.name, ticket.key))
 
     def stop(self) -> None:
-        """Every process and standby stopped, never drained: the daemon is stopping (its documents
-        saved first, ``cache.Cache.final``). A child still being started is killed: it reads nothing
+        """Every process and standby stopped, never drained: the daemon is stopping (its documents are their
+        ``.xbf`` files). A child still being started is killed: it reads nothing
         until it is ready (a standby loading the kernel), and would outlive the daemon until then."""
         with self.lock:
             self.stopped = True

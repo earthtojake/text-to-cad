@@ -4,7 +4,7 @@ from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
 
-from cad import model
+from cad import xbf
 
 from math import sqrt
 
@@ -249,7 +249,7 @@ def _mate(fixed, fixed_frame: str, fixed_at: bd.Location, moving, moving_frame: 
     fixed.joints[fixed_frame].connect_to(moving.joints[moving_frame])
 
 
-@model
+@xbf
 def basic_shape_mating_test_fixture():
     base = _make_base()
     peg = _make_peg()

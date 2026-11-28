@@ -21,19 +21,8 @@
 // Importing this module has no environmental effects.
 
 // The rule itself (`MIN_MODEL_WIDTH`, `DEFAULT_PANEL_WIDTH`, `MAX_PANEL_WIDTH`, `sidebarCollapsed`, `sidebarLayout`,
-// `clampPanelWidth`) is the file viewer's (`file-viewer/panelToggles.js`), re-exported here: its toggle and the panel's
-// empty frame before the view is up follow the one rule the view's frame then follows.
-import { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_MODEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth, sidebarCollapsed, sidebarLayout }
+// `toggleSidebar`, `clampPanelWidth`) is the file viewer's (`file-viewer/panelToggles.js`), re-exported here: its toggle
+// and the panel's empty frame before the view is up follow the one rule the view's frame then follows, and so does the
+// home's sidebar, the same panel over another page (`file-viewer/panelFrame.jsx`).
+export { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_MODEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth, sidebarCollapsed, sidebarLayout, toggleSidebar }
   from "../../../file-viewer/panelToggles.js";
-
-export { DEFAULT_PANEL_WIDTH, MAX_PANEL_WIDTH, MIN_MODEL_WIDTH, MIN_PANEL_WIDTH, clampPanelWidth, sidebarCollapsed, sidebarLayout };
-
-/**
- * A press on the panel's toggle (its button, its key, a peek's pin): the person's choice, kept for the file from now
- * on whatever the view's width — open where the panel is shut, shut where it is open.
- * @param {Parameters<typeof sidebarLayout>[0]} state
- * @returns {{ open: boolean }}
- */
-export function toggleSidebar(state) {
-  return { open: sidebarLayout(state).mode !== "push" };
-}

@@ -9,11 +9,13 @@ status-code assertion.
 
 from __future__ import annotations
 
+import base64
 import http.client
 import json
 import os
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -24,6 +26,7 @@ from urllib.parse import quote
 import cad_server
 from cad_server._internal.picker import FilePicker, PickerFailed
 from cad_server.viewer import handler as handler_module
+from cad_server.viewer import reveal
 from cad_server.viewer.http_app import create_cad_app, host_is_allowed, hostname_only
 
 
@@ -225,17 +228,22 @@ class ServerInfo(HttpLayerTestCase):
         # Where the explorer starts with nowhere else to: the person's home folder, spelled with "/".
         self.assertEqual(info["home"], os.path.expanduser("~").replace(os.sep, "/"))
         self.assertIsInstance(info["pick"], bool)
+        # One chooser of a file or a folder (a Mac's), where the computer has a chooser: Import is then one button.
+        self.assertEqual(info["pickAny"], info["pick"] and sys.platform == "darwin")
+        # Whether it has a file manager Reveal can open: the page offers Reveal only where it does.
+        self.assertEqual(info["reveal"], reveal.available())
         # The release the engine runs: a page that reconnects to another reloads into it.
         self.assertEqual(info["release"], cad_server.__version__)
         self.assertEqual(list(info), ["app", "release", "identityToken", "platform", "user", "home",
-                                      "start", "pick", "port", "pid", "instance", "cadUpdate", "cadNotices", "kinds"])
+                                      "start", "pick", "reveal", "pickAny", "port", "pid", "instance", "cadUpdate", "cadNotices",
+                                      "kinds"])
         self.assertEqual(headers["cache-control"], "no-store")
         # This start of the engine: a page that sees another one reloads. One per process, so it is
         # the same at every ask.
         self.assertRegex(info["instance"], r"^[0-9a-f]{16}$")
         self.assertEqual(json.loads(self.fixture.request("GET", "/api/v1/server")[2])["instance"], info["instance"])
         # The kinds of documents it reads, with what each exports.
-        self.assertEqual(info["kinds"]["reads"], ["model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch"])
+        self.assertEqual(info["kinds"]["reads"], ["xbf", "model", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "kicad_pcb", "kicad_sch"])
         self.assertEqual(info["kinds"]["exports"]["xbf"], ["step", "stl", "threemf", "glb", "dxf", "original"])
         self.assertEqual(info["kinds"]["exports"]["dxf"], [])
 
@@ -290,7 +298,9 @@ class Documents(HttpLayerTestCase):
         self.assertEqual(envelope["exports"], ["threemf", "glb"])
         entry = envelope["entry"]
         self.assertEqual(entry["file"], str(part).replace(os.sep, "/"))
-        self.assertEqual(list(entry), ["file", "kind", "url", "hash", "bytes", "id"])
+        # The project it is in, none here (``projects.py``).
+        self.assertEqual(list(entry), ["file", "kind", "url", "hash", "bytes", "id", "project"])
+        self.assertIsNone(entry["project"])
         self.assertEqual((entry["id"], envelope["version"]), (ident, entry["hash"]))
         # By its id: the same document, its row as the engine keys it (its canonical path).
         status, _, body = self.fixture.request("GET", f"/api/v1/documents/{ident}")
@@ -308,10 +318,26 @@ class Documents(HttpLayerTestCase):
             with self.subTest(file=missing):
                 self.assertEqual(self.by_path(missing)[1]["documents"], [])
 
-    def test_a_model_by_its_id_is_its_envelope_at_the_build_held_and_one_not_held_names_its_state(self):
+    def test_the_id_of_a_file_that_went_says_which_file_it_was(self):
+        part = Path(self.fixture.root, "gone.stl")
+        part.write_bytes(b"solid p\nendsolid p\n")
+        [envelope] = self.by_path(part)[1]["documents"]
+        part.unlink()
+        # A page that showed it says that file is not there, by its path, not that an id names nothing.
+        status, _, body = self.fixture.request("GET", f"/api/v1/documents/{envelope['id']}")
+        # The file is said by its name in its folder, which a system may spell two ways (a short name on Windows).
+        said = json.loads(body)["path"]
+        self.assertEqual((status, os.path.basename(said)), (404, "gone.stl"))
+        self.assertTrue(os.path.samefile(os.path.dirname(said), part.parent), said)
+        # An id nothing here ever named has none.
+        status, _, body = self.fixture.request("GET", "/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ff")
+        self.assertEqual((status, "path" in json.loads(body)), (404, False))
+
+    def test_a_model_by_its_id_is_its_envelope_at_the_build_held_and_one_not_held_names_nothing(self):
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
         script = os.path.join(self.fixture.root, "parts", "cube.py")
-        answers = {"model_info": {"model": {"source": {"name": "cube", "script": script}, "version": "v1",
+        xbf = os.path.join(self.fixture.root, "parts", "cube.xbf")
+        answers = {"model_info": {"model": {"source": {"name": "cube", "script": script, "xbf": xbf}, "version": "v1",
                                             "builtAt": 12.5, "state": "held"}}}
         app = self.fixture.app
 
@@ -327,23 +353,26 @@ class Documents(HttpLayerTestCase):
             self.assertEqual(status, 200)
             row = found["entry"]
             self.assertEqual((row["id"], row["file"], row["sourcePath"], row["hash"]), (ident, ident, None, "model:v1"))
-            self.assertEqual((found["kind"], found["name"], found["version"], found["state"], found["held"]),
-                             ("model", "cube", "v1", "held", True))
+            # Named by its .xbf's file name, as its card is and as the same file read from disk is; the function's
+            # name is its source's.
+            self.assertEqual((found["kind"], found["name"], row["name"], found["version"], found["state"], found["held"]),
+                             ("xbf", "cube.xbf", "cube.xbf", "v1", "held", True))
             # Its script, and whether it is there now: one named but gone (or never kept) is not.
-            self.assertEqual(found["source"], {"type": "script", "path": script, "function": "cube", "present": False})
+            self.assertEqual(found["source"], {"type": "script", "path": script.replace(os.sep, "/"), "function": "cube",
+                                              "present": False})
             os.makedirs(os.path.dirname(script), exist_ok=True)
             Path(script).write_text("", encoding="utf-8")
             self.assertEqual(envelope()[1]["source"]["present"], True)
             self.assertEqual(found["producers"], [{"tool": "cad", "release": None, "at": 12.5}])
-            self.assertEqual((found["api"], found["exports"]), (f"/api/v1/documents/model/{ident}",
+            self.assertEqual((found["api"], found["exports"]), (f"/api/v1/documents/xbf/{ident}",
                                                                 ["step", "stl", "threemf", "glb", "dxf", "xbf"]))
             answers["model_info"] = {"model": {"source": {"name": "cube"}, "version": "v2"}}
             self.assertEqual(envelope()[1]["entry"]["hash"], "model:v2")
-            # One it does not hold says why, in the engine's words, and its state.
-            answers["model_info"] = {"failed": f"cube ({ident}) is not saved: run `cad run /m/cube.py`", "state": "unsaved"}
-            status, answer = envelope()
-            self.assertEqual((status, answer["state"], set(answer)), (404, "unsaved", {"error", "hint", "state"}))
-            self.assertIn("is not saved", answer["error"])
+            # One no worker holds, with no file: the id names nothing.
+            answers["model_info"] = {"failed": f"no document {ident} is held"}
+            self.assertEqual(envelope(), (404, {
+                "error": f"no document {ident} is held",
+                "hint": "run the model's script again, or open the file from where it is now"}))
 
     def test_an_id_no_document_has_and_a_word_that_is_no_id_are_404s_that_say_so(self):
         status, _, body = self.fixture.request("GET", "/api/v1/documents/not-an-id")
@@ -415,8 +444,9 @@ class Documents(HttpLayerTestCase):
                                             "state": "reading", "retryMs": 1500, "building": frame})
 
 
-class ExplorerRoutes(HttpLayerTestCase):
-    """The explorer's two reads (``folders.py``) over HTTP: a folder by its absolute path."""
+class FolderRoutes(HttpLayerTestCase):
+    """A folder's two reads of the v1 API (``folders.py``) over HTTP, by its absolute path: no view reads them now, and
+    v1 keeps every route it has."""
 
     def read(self, route, path, **query):
         target = f"/api/v1/local/{route}?path={quote(str(path), safe='')}" + "".join(f"&{k}={quote(v)}" for k, v in query.items())
@@ -442,12 +472,57 @@ class ExplorerRoutes(HttpLayerTestCase):
 
 
 class Pick(HttpLayerTestCase):
-    """The home's Open: the desktop's chooser, held for the page (and never opened by a test)."""
+    """The home's Import: the desktop's chooser, held for the page (and never opened by a test)."""
 
-    def pick(self, **behaviour):
-        with mock.patch.object(FilePicker, "choose", **behaviour):
-            status, _, body = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cad-viewer": "1"})
+    def pick(self, payload=None, **behaviour):
+        with mock.patch.object(FilePicker, "choose", **behaviour) as choose:
+            status, _, body = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cad-viewer": "1"},
+                                                   body=None if payload is None else json.dumps(payload).encode())
+        self.asked = choose.call_args
         return status, json.loads(body)
+
+    def test_a_folder_is_chosen_where_the_page_says_and_anything_else_says_why(self):
+        folder = os.path.join(self.fixture.root, "arm")
+        os.makedirs(folder)
+        self.assertEqual(self.pick({"folder": True, "start": self.fixture.root}, return_value=folder),
+                         (200, {"path": folder.replace(os.sep, "/")}))
+        self.assertEqual(self.asked, mock.call(folder=True, start=self.fixture.root, either=False))
+        # A folder gone since the page named it: the chooser starts where it would.
+        self.pick({"folder": True, "start": os.path.join(self.fixture.root, "gone")}, return_value=None)
+        self.assertEqual(self.asked, mock.call(folder=True, start=None, either=False))
+        part = os.path.join(self.fixture.root, "part.step")
+        Path(part).write_bytes(b"x")
+        status, answer = self.pick({"folder": True}, return_value=part)
+        self.assertEqual((status, answer["error"]), (400, f"{part} is not a folder"))
+        for payload in ({"folder": "yes"}, {"folder": True, "start": "relative"}, {"file": True}, []):
+            with self.subTest(payload=payload):
+                self.assertEqual(self.pick(payload, return_value=None)[0], 400)
+        status, answer = self.pick({"folder": True}, side_effect=PickerFailed("no chooser here"))
+        self.assertEqual((status, answer["hint"]), (500, "open it with `cad viewer <folder>` instead"))
+
+    def test_each_desktops_chooser_is_asked_for_a_folder_where_it_starts(self):
+        from cad_server._internal import picker
+
+        start = os.path.join(self.fixture.root, "it's ok; $(no)")
+        found = {"zenity": "/usr/bin/zenity", "kdialog": None, "powershell.exe": "C:/ps.exe", "pwsh.exe": None}
+        with mock.patch.object(picker.executables, "find", side_effect=found.get), \
+                mock.patch.dict(os.environ, {"DISPLAY": ":0"}):
+            with mock.patch.object(picker.sys, "platform", "darwin"):
+                argv, _, structured = picker._command(True, start)
+                self.assertEqual((argv[-2:], structured), (["folder", start], True))
+                self.assertEqual(picker._command()[0][-2:], ["file", ""])
+            with mock.patch.object(picker.sys, "platform", "linux"):
+                argv, _, structured = picker._command(True, start)
+                self.assertEqual((argv[1:], structured), (["--file-selection", "--title=Import folder", "--directory",
+                                                           f"--filename={os.path.join(start, '')}"], False))
+                found.update(zenity=None, kdialog="/usr/bin/kdialog")
+                self.assertEqual(picker._command(True, start)[0][1:], ["--title", "Import folder", "--getexistingdirectory", start])
+            with mock.patch.object(picker.sys, "platform", "win32"):
+                script = picker._command(True, start)[0][-1]
+                # The folder rides as base64: no character of it is PowerShell's to read.
+                self.assertNotIn(start, script)
+                self.assertIn(base64.b64encode(start.encode("utf-8")).decode("ascii"), script)
+                self.assertIn("FolderBrowserDialog", script)
 
     def test_a_cad_file_is_its_path_and_anything_else_says_why(self):
         chosen = os.path.join(self.fixture.root, "part.step")
@@ -459,6 +534,57 @@ class Pick(HttpLayerTestCase):
         status, answer = self.pick(side_effect=PickerFailed("no chooser here"))
         self.assertEqual((status, answer["error"]), (500, "no chooser here"))
         self.assertEqual(self.fixture.request("POST", "/api/v1/local/pick")[0], 403, "a page from another site cannot open it")
+
+    def test_one_chooser_of_either_answers_a_folder_or_a_cad_file_and_says_which_where_the_desktop_has_one(self):
+        folder = os.path.join(self.fixture.root, "gearbox")
+        os.makedirs(folder)
+        part = os.path.join(self.fixture.root, "gear.step")
+        Path(part).write_bytes(b"x")
+        with mock.patch("cad_server._internal.picker.takes_either", return_value=True):
+            self.assertEqual(self.pick({"any": True}, return_value=folder), (200, {"path": folder.replace(os.sep, "/"), "folder": True}))
+            self.assertEqual(self.asked, mock.call(folder=False, start=None, either=True))
+            self.assertEqual(self.pick({"any": True}, return_value=part), (200, {"path": part.replace(os.sep, "/"), "folder": False}))
+            self.assertEqual(self.pick({"any": True}, return_value=None), (200, {"cancelled": True}))
+            # A file is checked as the file chooser's answer is: a kind CAD opens.
+            status, answer = self.pick({"any": True}, return_value=os.path.join(self.fixture.root, "notes.txt"))
+            self.assertEqual((status, answer["hint"]), (400, "choose a CAD file, or a folder"))
+            self.assertIn("notes.txt is not one", answer["error"])
+            status, answer = self.pick({"any": True}, side_effect=PickerFailed("no chooser here"))
+            self.assertEqual((status, answer["hint"]), (500, "open it with `cad viewer <file>` or `cad viewer <folder>` instead"))
+            # Either, or a folder: never both; and a flag is a flag.
+            for payload in ({"any": True, "folder": True}, {"any": "yes"}, {"any": 1}):
+                with self.subTest(payload=payload):
+                    self.assertEqual(self.pick(payload, return_value=part)[0], 400)
+            # The other two forms are as they were.
+            self.assertEqual(self.pick({}, return_value=part), (200, {"path": part.replace(os.sep, "/")}))
+            self.assertEqual(self.pick({"folder": True, "any": False}, return_value=folder), (200, {"path": folder.replace(os.sep, "/")}))
+            self.assertEqual(self.asked, mock.call(folder=True, start=None, either=False))
+        # Where the desktop's choosers take one or the other (Windows', Linux's), there is no chooser of either: said,
+        # and none is opened.
+        with mock.patch("cad_server._internal.picker.takes_either", return_value=False):
+            status, answer = self.pick({"any": True}, return_value=part)
+            self.assertEqual((status, answer["error"]), (400, "This computer's chooser takes a file or a folder, not either in one."))
+            self.assertIsNone(self.asked)
+
+    def test_only_a_macs_chooser_takes_either_and_the_others_refuse_to_be_asked(self):
+        from cad_server._internal import picker
+
+        found = {"zenity": "/usr/bin/zenity", "kdialog": None, "powershell.exe": "C:/ps.exe", "pwsh.exe": None}
+        with mock.patch.object(picker.executables, "find", side_effect=found.get), \
+                mock.patch.dict(os.environ, {"DISPLAY": ":0"}):
+            with mock.patch.object(picker.sys, "platform", "darwin"):
+                self.assertTrue(picker.takes_either())
+                argv, _, structured = picker._command(either=True)
+                self.assertEqual((argv[-2:], structured), (["either", ""], True))
+                # One open panel that takes a file or a folder, titled Import.
+                self.assertIn("mode === 'either' ? 'Import'", argv[-3])
+                self.assertIn("panel.canChooseDirectories = mode !== 'file';", argv[-3])
+                self.assertIn("panel.canChooseFiles = mode !== 'folder';", argv[-3])
+            for platform in ("linux", "win32"):
+                with self.subTest(platform=platform), mock.patch.object(picker.sys, "platform", platform):
+                    self.assertFalse(picker.takes_either())
+                    with self.assertRaises(PickerFailed):
+                        picker._command(either=True)
 
     def test_a_second_open_while_one_is_up_says_so(self):
         opened, release, answers = threading.Event(), threading.Event(), []
@@ -488,10 +614,18 @@ class StaticDistAndSpa(HttpLayerTestCase):
         self.assertEqual(headers["content-type"], "text/html; charset=utf-8")
         self.assertIn(b"<!doctype html>", body)
 
-    def test_unknown_path_falls_back_to_the_spa(self):
-        status, _, body = self.fixture.request("GET", "/Users/someone/models")
+    def test_unknown_path_falls_back_to_the_spa_at_the_root_only(self):
+        status, _, body = self.fixture.request("GET", "/some-page")
         self.assertEqual(status, 200)
         self.assertIn(b"<!doctype html>", body)
+        # Below the root the page's relative scripts (./assets/) name a folder that is not there: a blank page.
+        # It is a 404 that says so instead.
+        for path in ("/Users/someone/models", "/documents/model/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab",
+                     "/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/extra", "/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/"):
+            with self.subTest(path=path):
+                status, headers, body = self.fixture.request("GET", path)
+                self.assertEqual((status, headers["content-type"]), (404, "text/plain; charset=utf-8"))
+                self.assertEqual(body, b"Not found: the viewer's pages are / and /<document id>")
 
     def test_existing_asset_is_served_with_its_type(self):
         status, headers, body = self.fixture.request("GET", "/assets/app.js")
@@ -590,12 +724,16 @@ class Streaming(unittest.TestCase):
                 for via_tunnel in (False, True):
                     with self.subTest(length=len(payload), tunnel=via_tunnel):
                         model.write_bytes(b"original contents")
+                        served = threading.Event()
 
                         def replace(response, path, stat_result, *args):
                             pending = Path(path).with_suffix(".pending")
                             pending.write_bytes(payload)
                             os.replace(pending, path)
-                            return original(response, path, stat_result, *args)
+                            try:
+                                return original(response, path, stat_result, *args)
+                            finally:
+                                served.set()
 
                         with mock.patch.object(Response, "stream_file", replace):
                             if via_tunnel:
@@ -609,6 +747,9 @@ class Streaming(unittest.TestCase):
                                     status, headers, body = reply.status, dict(reply.getheaders()), reply.read()
                                 finally:
                                     conn.close()
+                                # The body can arrive before the server's thread closes the file it streamed, and
+                                # the next subtest replaces that file, which Windows refuses while a handle holds it.
+                                self.assertTrue(served.wait(5), "the server finished streaming the file")
                         self.assertEqual((status, int(headers["content-length"]), body), (200, len(payload), payload))
         finally:
             fixture.close()

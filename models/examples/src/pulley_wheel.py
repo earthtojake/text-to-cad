@@ -3,13 +3,13 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 # Prompt: Pulley wheel with a central hub, outer groove, and circular through-bore.
 
 from lib.simple_model_library import make_pulley_wheel
 
 
-@model
+@xbf
 def pulley_wheel():
     part = make_pulley_wheel()
     authored_color = part.color

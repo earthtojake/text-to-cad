@@ -1,4 +1,4 @@
-"""A manufacturing check's result (``cad <type> dfm``, ``cad.<type>.dfm``) as the engine's checks processes
+"""A manufacturing check's result (``cad dfm``, ``cad.<type>.dfm``) as the engine's checks processes
 measure it (``checks_runner.Runner``, ``worker._check``): a STEP's and an xbf's from its file, a model's from
 the bytes the engine holds of it. It equals the one the same document gets read from a file in a process of its
 own, for every process, with no process given and ranking candidates; the same check of an unchanged document
@@ -55,28 +55,30 @@ class SameResultTest(unittest.TestCase):
             api.export(ident, exported, progress=False)
             for process in PROCESSES:
                 with self.subTest(model=ident, process=process):
-                    held = cad.model.dfm(ident, process=process)
-                    self.assertEqual(_plain(held), _plain(_today("model", exported, Path(ident), process)))
+                    held = cad.xbf.dfm(ident, process=process)
+                    self.assertEqual(_plain(held), _plain(_today("xbf", exported, Path(ident), process)))
                     for finding in [f for f in held.findings if f.location and "/" in f.location][:2]:
-                        self.assertIn(cad.model.inspect(ident, finding.location)["kind"], ("face", "edge"))
+                        self.assertIn(cad.xbf.inspect(ident, finding.location)["kind"], ("face", "edge"))
         plate = fixture.ids[0]
         exported = fixture.folder / f"{plate}.xbf"
         for process in ("molding", "printing"):
             with self.subTest(candidates=process):
-                self.assertEqual(_plain(cad.model.dfm(plate, process=process, candidates=True)),
-                                 _plain(_today("model", exported, Path(plate), process, candidates=True)))
+                self.assertEqual(_plain(cad.xbf.dfm(plate, process=process, candidates=True)),
+                                 _plain(_today("xbf", exported, Path(plate), process, candidates=True)))
         step = fixture.folder / "part.step"
         bd.export_step(bd.Box(30, 20, 6) - bd.Pos(5, 0, 0) * bd.Cylinder(2, 6), str(step))
         xbf = fixture.folder / f"{fixture.ids[1]}.xbf"
         # A file's reader is what differs from a model's, not its process (every process was compared above):
-        # each file type by two processes, each process by one file.
-        for document_type, path, processes in (("step", step, ("cnc", "molding")), ("xbf", xbf, ("sheet", "printing"))):
+        # each file type by two processes, each process by one file. The .xbf a model is saved as is cad.xbf's,
+        # checked as the file it is.
+        for document_type, of, path, processes in (("step", cad.step, step, ("cnc", "molding")),
+                                                   ("xbf", cad.xbf, xbf, ("sheet", "printing"))):
             for process in processes:
                 with self.subTest(file=path.name, process=process):
-                    held = getattr(cad, document_type).dfm(path, process=process)
+                    held = of.dfm(path, process=process)
                     self.assertEqual(_plain(held), _plain(_today(document_type, path, path.resolve(), process)))
                     for finding in [f for f in held.findings if f.location and "face " in f.location][:1]:
-                        self.assertEqual(getattr(cad, document_type).inspect(path, finding.location)["kind"], "face")
+                        self.assertEqual(of.inspect(path, finding.location)["kind"], "face")
 
     def test_a_declared_process_and_material_read_as_the_file_reads_them(self) -> None:
         """No process given: the part's declared process and material, read from the engine's document as from
@@ -87,25 +89,25 @@ class SameResultTest(unittest.TestCase):
 
         fixture = Fixture(self, DECLARED)
         (block,) = fixture.ids
-        exported = fixture.folder / "block.xbf"
+        exported = fixture.folder / "exported.xbf"  # not block.xbf: the file its model writes
         api.export(block, exported, progress=False)
-        self.assertEqual(api.check(block, {"type": "model", "process": None, "resolved": None, "candidates": False,
+        self.assertEqual(api.check(block, {"type": "xbf", "process": None, "resolved": None, "candidates": False,
                                            "given": {}})["measured_in"], api.IN_ENGINE)
-        held = cad.model.dfm(block)
-        today = _today("model", exported, Path(block), None)
+        held = cad.xbf.dfm(block)
+        today = _today("xbf", exported, Path(block), None)
         self.assertEqual(_plain(held), _plain(today))
         self.assertEqual(held.measurements["process"], "cnc")
         self.assertTrue({"process_declared", "material_declared"} <= {f.code for f in held.findings})
         self.assertEqual(_plain(cad.xbf.dfm(exported)), _plain(_today("xbf", exported, exported.resolve(), None)))
-        before = _restarted()  # its worker gone: the restarted engine answers from the result it kept on disk
-        self.assertEqual(_plain(cad.model.dfm(block)), _plain(today))
-        self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 1))
-        # Other checks: measured by the restarted engine from the bytes its cache holds, read once for both.
+        before = _restarted()  # its worker gone: the restarted engine measures its .xbf, the file it is now
+        self.assertEqual(_plain(cad.xbf.dfm(block)), _plain(today))
+        self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"] + 1, before["restored"]))
+        # Other checks: measured by the restarted engine from the same file, read once for all three.
         for process in ("cnc", "sheet"):
             with self.subTest(process=process):
-                self.assertEqual(_plain(cad.model.dfm(block, process=process, material="steel")),
-                                 _plain(_today("model", exported, Path(block), process, material="steel")))
-        self.assertEqual((_counts()["measured"], _counts()["read"]), (before["measured"] + 2, before["read"] + 1))
+                self.assertEqual(_plain(cad.xbf.dfm(block, process=process, material="steel")),
+                                 _plain(_today("xbf", exported, Path(block), process, material="steel")))
+        self.assertEqual((_counts()["measured"], _counts()["read"]), (before["measured"] + 3, before["read"] + 1))
 
 
 class KeptResultTest(unittest.TestCase):
@@ -140,24 +142,24 @@ class KeptResultTest(unittest.TestCase):
 
         fixture = Fixture(self, MODELS)
         plate = fixture.ids[0]
-        first = cad.model.dfm(plate, process="cnc", material="aluminum")
+        first = cad.xbf.dfm(plate, process="cnc", material="aluminum")
         # The runner answers a check's caller and then lets the check go: asked again before it has, the same
         # check is joined, not read from what was kept. So the first is awaited gone before the second is asked.
         _until(self, lambda: _counts()["asked"] == 0, "the first check is let go")
         before = _counts()
-        again = cad.model.dfm(plate, process="cnc", material="aluminum")
+        again = cad.xbf.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_plain(again), _plain(first))
         self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"], before["reused"] + 1))
 
-        cad.model.dfm(plate, process="cnc", material="steel")  # other options: measured
+        cad.xbf.dfm(plate, process="cnc", material="steel")  # other options: measured
         self.assertEqual(_counts()["measured"], before["measured"] + 1)
 
         fixture.build()  # the same code run again in the worker that holds it: the same version, kept
-        cad.model.dfm(plate, process="cnc", material="aluminum")
+        cad.xbf.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_counts()["measured"], before["measured"] + 1)
 
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(44, 30, 10)"))  # an edit: a new version
-        edited = cad.model.dfm(plate, process="cnc", material="aluminum")
+        edited = cad.xbf.dfm(plate, process="cnc", material="aluminum")
         self.assertEqual(_counts()["measured"], before["measured"] + 2)
         self.assertNotEqual(edited.measurements["bodies"][0]["bbox_mm"], first.measurements["bodies"][0]["bbox_mm"])
 
@@ -212,16 +214,17 @@ class KeptResultTest(unittest.TestCase):
         plate = fixture.ids[0]
         read = _counts()["read"]
         for process in ("cnc", "sheet"):
-            cad.model.dfm(plate, process=process)
+            cad.xbf.dfm(plate, process=process)
         self.assertEqual(_counts()["read"], read + 1)
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(42, 30, 10)"))
-        edited = cad.model.dfm(plate, process="cnc")
+        edited = cad.xbf.dfm(plate, process="cnc")
         self.assertEqual(_counts()["read"], read + 2)
         self.assertAlmostEqual(edited.measurements["bodies"][0]["bbox_mm"][0], 42.0, delta=1e-6)
 
     def test_a_kept_result_outlives_the_engine(self) -> None:
-        """Kept on disk beside the engine's cache: after a restart the same check of the same file or model
-        measures nothing; another file's bytes, an edited model or an entry that does not read measure again."""
+        """Kept on disk beside the engine's cache: after a restart the same check of the same file, or of the same
+        model once a worker holds it again, measures nothing; another file's bytes, an edited model or an entry that
+        does not read measure again."""
         import build123d as bd
 
         import cad
@@ -230,10 +233,11 @@ class KeptResultTest(unittest.TestCase):
         step = fixture.folder / "kept.step"
         bd.export_step(bd.Box(30, 20, 6), str(step))
         first = cad.step.dfm(step, process="printing")
-        model = cad.model.dfm(plate, process="cnc", tools="11")
+        model = cad.xbf.dfm(plate, process="cnc", tools="11")
         before = _restarted()
+        fixture.build()  # taken from its .xbf by its key: a worker holds it at the revision the result was kept at
         self.assertEqual(_plain(cad.step.dfm(step, process="printing")), _plain(first))
-        self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
+        self.assertEqual(_plain(cad.xbf.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"], before["restored"] + 2),
                          "the restarted engine measured none")
 
@@ -241,7 +245,8 @@ class KeptResultTest(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         kept[0].write_bytes(b"{not json")
         before = _restarted()
-        self.assertEqual(_plain(cad.model.dfm(plate, process="cnc", tools="11")), _plain(model))
+        fixture.build()
+        self.assertEqual(_plain(cad.xbf.dfm(plate, process="cnc", tools="11")), _plain(model))
         self.assertEqual(_counts()["measured"], before["measured"] + 1, "an entry that does not read is measured again")
         self.assertEqual(json.loads(kept[0].read_text(encoding="utf-8"))["result"]["measured"]["process"], "cnc")
 
@@ -249,13 +254,13 @@ class KeptResultTest(unittest.TestCase):
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(46, 30, 10)"))
         before = _restarted()
         cad.step.dfm(step, process="printing")
-        cad.model.dfm(plate, process="cnc", tools="11")
+        cad.xbf.dfm(plate, process="cnc", tools="11")
         self.assertEqual((_counts()["measured"], _counts()["restored"]), (before["measured"] + 2, before["restored"]),
                          "other bytes, another build")
 
     def test_the_disk_store_holds_one_version_and_its_bounds_and_drops_what_does_not_read(self) -> None:
         from cad_server.engine.checks import Disk
-        from cad_server.engine.registry import Folder
+        from cad_server.engine.state import Folder
 
         folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-disk-"))
         self.addCleanup(shutil.rmtree, folder.root, True)
@@ -291,34 +296,25 @@ class KeptResultTest(unittest.TestCase):
             store.keep(f"file:{name}", "d", "cnc", {"x": name})
         self.assertEqual((store.status()["held"], store.get("file:one", "d", "cnc")), (2, None))
 
-    def test_a_deleted_document_keeps_nothing_and_its_entries_leave_the_index(self) -> None:
-        """Deleting a document (``Registry.delete``) drops its results from memory and from the disk's index, and a
-        check of it that began before keeps nothing. The half-written files a stopped engine left are swept as the
-        folder is listed; a result gone since (its folder wiped) leaves the index as it is asked for; and a folder
-        that takes no write keeps nothing, with nothing remembered of it."""
-        from cad_server.engine import registry
+    def test_a_wiped_or_sealed_cache_folder_keeps_nothing_and_says_nothing(self) -> None:
+        """The half-written files a stopped engine left are swept as the folder is listed; a result gone since (its
+        folder wiped) leaves the index as it is asked for; and a folder that takes no write keeps nothing, with
+        nothing remembered of it."""
         from cad_server.engine.checks import Checks, Disk
-        from cad_server.engine.registry import Folder, Registry
+        from cad_server.engine.state import Folder
 
-        root = Path(tempfile.mkdtemp(prefix="engine-dfm-deleted-"))
+        root = Path(tempfile.mkdtemp(prefix="engine-dfm-wiped-"))
         self.addCleanup(shutil.rmtree, root, True)
-        held = Registry(root / "state", cache=root / "cache")
-        store = Checks(folder=lambda: held)
-        registry.FORGOTTEN.append(store.deleted)
-        self.addCleanup(registry.FORGOTTEN.remove, store.deleted)
+        cache = Folder(root / "cache")
+        store = Checks(folder=lambda: cache)
         a, b = str(uuid.uuid4()), str(uuid.uuid4())
         store.keep(f"model:{a}", "v", "cnc", {"x": 1}, (a, "r"))
         store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"))
         self.assertEqual(store.status()["disk"]["held"], 2)
-        since = store.epoch(b)
-        held.delete(b)
-        self.assertEqual((store.status()["held"], store.status()["disk"]["held"]), (1, 1), "its entries went")
-        store.keep("file:2:3", "d", "cnc", {"x": 2}, (b, "d"), since)
-        self.assertEqual(held.cache.names(f"documents/{b}"), [], "a check that began before its deletion keeps nothing")
-        self.assertIsNone(store.get("file:2:3", "d", "cnc"))
 
-        shutil.rmtree(held.cache.path("documents"))  # a person wiping the cache folder
+        shutil.rmtree(cache.path("documents"))  # a person wiping the cache folder
         self.assertIsNone(store.disk.get(a, "r", "cnc"))
+        self.assertIsNone(store.disk.get(b, "d", "cnc"))
         self.assertEqual(store.status()["disk"]["held"], 0, "gone with its folder: out of the index as it is asked for")
 
         sealed = {"on": True}

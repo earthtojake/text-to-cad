@@ -17,10 +17,10 @@ from unittest import mock
 import cad_server
 from cad_server import updates
 from cad_server._internal import auto_update
+from cad_server.engine.library import Library
 from cad_server.mcp import server as mcp
 from cad_server.mcp.protocol import RequestContext
 from cad_server.mcp.ui import AppPage
-from cad_server.viewer.recents import RecentStore
 
 RECEIPT = '[tool]\nrequirements = [{ name = "cad" }]\nentrypoints = [{ name = "cad" }]\n'
 NOTICE = {"id": "install-moved", "below": "0.2.0", "text": "cad now installs another way: run the install command again.",
@@ -109,7 +109,7 @@ class ChannelTest(Case):
         page = self.tmp / "app"
         page.mkdir(exist_ok=True)
         (page / "shell.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
-        return mcp.Server(page=AppPage(page), recents=RecentStore(self.state))
+        return mcp.Server(page=AppPage(page), library=Library(self.state))
 
     def greet(self, server: mcp.Server) -> dict:
         launcher = {"host": "codex app-server", "renders": True, "command": "codex app-server"}

@@ -39,13 +39,15 @@ no route, fallback or crash report ever answers a socket nobody is reading.
 
 from __future__ import annotations
 
+import email.utils
 import hashlib
+import io
 import json
 import os
 import re
 from typing import Any, Iterable
 
-__all__ = ["Request", "Response", "STREAM_CHUNK_BYTES"]
+__all__ = ["Captured", "Request", "Response", "STREAM_CHUNK_BYTES"]
 
 STREAM_CHUNK_BYTES = 64 * 1024
 _BYTE_RANGE = re.compile(r"bytes=([0-9]{1,16})-([0-9]{1,16})")
@@ -87,6 +89,33 @@ class Request:
     @property
     def body_was_read(self) -> bool:
         return self._body is not None
+
+
+class Captured:
+    """The slice of ``BaseHTTPRequestHandler`` a ``Response`` writes to, for a request answered in
+    process: its ``status``, its ``headers`` (names lower-case) and its body (``wfile``) kept, not sent."""
+
+    def __init__(self) -> None:
+        self.status = 500
+        self.headers: dict[str, str] = {}
+        self.wfile = io.BytesIO()
+        self.close_connection = False
+        self.connection = self
+
+    def send_response_only(self, status: int, message: str | None = None) -> None:
+        self.status = status
+
+    def send_header(self, name: str, value: str) -> None:
+        self.headers[name.lower()] = value
+
+    def date_time_string(self) -> str:
+        return email.utils.formatdate(usegmt=True)
+
+    def end_headers(self) -> None:
+        pass
+
+    def shutdown(self, how: int) -> None:
+        pass
 
 
 class Response:

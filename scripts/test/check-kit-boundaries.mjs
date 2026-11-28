@@ -171,7 +171,8 @@ export const VIEW_FRAME_PARTS = [
   ['renders ViewerLoadingOverlay', /<ViewerLoadingOverlay\b/],
   ['renders HoverTip', /<HoverTip\b/],
   ['draws the strip\'s column (data-cad-tool-groups)', /data-cad-tool-groups=/],
-  ['says its panel toggle to the navbar (usePanelToggles)', /\busePanelToggles\s*\(/],
+  // Through the panel's frame (`file-viewer/panelFrame.jsx`'s `usePanelFrame`, which the home's sidebar mounts too), or itself.
+  ['says its panel toggle to the navbar (usePanelFrame, usePanelToggles)', /\busePanel(?:Frame|Toggles)\s*\(/],
   ['calls useFlatPanelState', /(?<!function\s+)\buseFlatPanelState\s*\(/],
 ];
 

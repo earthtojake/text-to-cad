@@ -5,7 +5,7 @@ import { UpdateButton, updateAlert } from "../../update/index.js";
 import { hostAlertSlot } from "../../cad-viewer/hostAlert.js";
 import { english } from "../../i18n/index.js";
 import { ModelLibrary, type LibraryModel } from "../../library/index.js";
-import type { FileActions, FileEntry, FileMetadata, FileRendererProps, FileSource, FileViewerState, JsonValue } from "../types.js";
+import type { FileActions, FileMetadata, FileProject, FileRendererProps, FileSource, FileViewerState, JsonValue } from "../types.js";
 
 const events: string[] = [];
 // Every file the viewer asked its host to show: the host contract under test.
@@ -23,22 +23,11 @@ const FOLDER = "/work";
  * searches; the renderer reads a file's text as it prepares it (`read`).
  */
 function memorySource(id: string) {
-  const files = new Map<string, string>(["notes", "next", "slow"].map(name => [`${FOLDER}/${name}.txt`, `${id} ${name}`]));
+  const files = new Map<string, string>(["notes", "next", "slow", "an-enclosure-with-a-long-name"].map(name => [`${FOLDER}/${name}.txt`, `${id} ${name}`]));
   const metadata = (path: string): FileMetadata => ({ path, name: path.split("/").pop()!, kind: "file", extension: "txt", size: 20, mediaType: "text", revision: files.get(path) });
   const source: FileSource = {
     id,
     stat: async (path) => { if (!files.has(path)) throw new Error(`File does not exist: ${path}`); return metadata(path); },
-    // One folder: the folders and files directly in it.
-    list: async (directory) => {
-      const prefix = directory.endsWith("/") ? directory : `${directory}/`;
-      const entries = new Map<string, FileEntry>();
-      for (const path of [...files.keys()].filter(path => path.startsWith(prefix)).sort()) {
-        const [name, ...below] = path.slice(prefix.length).split("/");
-        entries.set(name, { path: `${prefix}${name}`, name, kind: below.length ? "directory" : "file" });
-      }
-      return [...entries.values()].sort((left, right) => (left.kind === right.kind ? 0 : left.kind === "directory" ? -1 : 1));
-    },
-    search: async (directory, query) => ({ paths: [...files.keys()].filter(path => path.startsWith(`${directory}/`) && path.includes(query)).sort(), truncated: false }),
   };
   const read = async (path: string, signal: AbortSignal) => {
     if (path.endsWith("/slow.txt")) await new Promise<void>((resolve, reject) => {
@@ -74,7 +63,7 @@ const renderer = defineFileRenderer({
     dispose: () => { events.push(`${source.id}:${file.path}:disposed`); } }),
 });
 const renderers = [renderer];
-// The host's home (`harness.open(null)`): a library of two models and Open, its controls in the navbar on the grid's column.
+// The host's home (`harness.open(null)`): a library of two models and Import, its controls at the navbar's right end.
 const shelf: LibraryModel[] = ["bracket.step", "plate.step"].map(name => ({ path: `${FOLDER}/${name}`, name, folder: FOLDER, opened: 1,
   updated: 1, created: 1, pinned: false, missing: false, thumbnail: null, pictured: null }));
 const presentation = { home: <ModelLibrary library={{ list: async () => shelf, change: async () => shelf, thumbnail: async () => null,
@@ -90,16 +79,19 @@ export function App() {
   const [second, setSecond] = useState(false);
   const [state, setState] = useState<FileViewerState>({});
   const [otherState, setOtherState] = useState<FileViewerState>({});
-  // A viewer drawn out of sight at a library picture's size, as `OffscreenPicture.tsx` draws one: its layout pinned
-  // (`"pinned"`, as it is), or measured (`"measured"`, a viewer that forgot to pin it), or none.
-  const [picture, setPicture] = useState<"none" | "pinned" | "measured">("none");
+  // A viewer that is not the page's own, drawn out of sight at 480 × 360, its layout pinned (`"pinned"`), or none.
+  const [picture, setPicture] = useState<"none" | "pinned">("none");
   const [pictureState, setPictureState] = useState<FileViewerState>({});
+  // The project the file on screen is in, where a spec names one: its name before the file's in the navbar.
+  const [project, setProject] = useState<FileProject | null>(null);
+  const showProject = (named: Omit<FileProject, "onShow"> | null) =>
+    setProject(named ? { ...named, onShow: () => { events.push(`project:${named.id}`); } } : null);
   // The host's update button, as a host hands it: none, offered (its click shows the ring), the server restarting
   // (the spinner), as `useUpdate` does; and an update that failed, as the viewer's alert (`CadViewer`'s `alert`), on
   // screen or put away.
   const [update, setUpdate] = useState<"none" | "behind" | "working" | "restarting" | "failed" | "put away">("none");
   Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, renders, cleanupWrites, state, open: setFile,
-    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture, update: setUpdate } });
+    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture, project: showProject, update: setUpdate } });
   const updateButton = update === "none" ? null : <UpdateButton
     state={{ version: "0.9.0", latest: "0.9.1", state: update === "failed" || update === "put away" ? "failed" : "idle" }}
     phase={update === "restarting" ? { phase: "restarting" } : update === "working" ? { phase: "working", done: 0, total: 3 } : { phase: "idle" }}
@@ -113,14 +105,14 @@ export function App() {
   return <div style={{ width: "1000px", height: "650px" }}>
     <section data-testid="primary" style={{ height: "400px", display: "flex", flexDirection: "column" }}>
       {/* A host that shows one file at a time: a pick moves this view to the file. */}
-      <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} update={updateButton} alert={updateFailed}
-        presentation={presentation} />
+      <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} project={project}
+        update={updateButton} alert={updateFailed} presentation={presentation} />
     </section>
     {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file={`${FOLDER}/notes.txt`} host={host(b, () => {})} renderers={renderers} state={otherState} onStateChange={setOtherState} /></section> : null}
-    {picture === "none" ? null : <div aria-hidden="true" data-offscreen-picture="" data-testid="picture"
+    {picture === "none" ? null : <div aria-hidden="true" data-testid="picture"
       style={{ position: "fixed", left: 0, top: 0, width: 480, height: 360, opacity: 0, pointerEvents: "none", zIndex: -1, overflow: "hidden" }}>
       <FileViewer file={`${FOLDER}/notes.txt`} host={host(b, () => {})} renderers={renderers} state={pictureState} onStateChange={setPictureState}
-        layout={picture === "pinned" ? "mobile" : undefined} />
+        layout="mobile" />
     </div>}
   </div>;
 }

@@ -26,8 +26,14 @@ export interface Launch {
   platform?: string;
   /** The home's library as it stood, so the home draws its cards without asking first. */
   recents?: Recent[];
-  /** Whether this computer has a file chooser for the home's Open. */
+  /** The projects as they stood (`GET /api/v1/projects`'s): the home's sidebar, at once. */
+  projects?: { id: string; name: string; root: string; created: number | null; opened: number | null; missing: boolean }[];
+  /** Whether this computer has a chooser for the home's Import (a file, a folder). */
   pick?: boolean;
+  /** Whether one chooser there takes a file or a folder (a Mac's): the home's Import is then one button. */
+  pickAny?: boolean;
+  /** Whether this computer has a file manager Reveal can open: the file menus offer it only where it does. */
+  reveal?: boolean;
   /** What the update button shows, as the server last knew it (`auto_update.button`), so it draws with the card; null where cad cannot update itself. */
   cadUpdate?: CadUpdateState | null;
   /**
@@ -43,10 +49,10 @@ export interface Launch {
   order?: { createdAt: number; seq: number };
 }
 /**
- * A model in the library every CAD view shares, as `GET /api/v1/documents` lists it: its document's
- * `id`, `kind` and `api`, its record's kind as `record` (the home hands it on as the library's, `libraryRow`).
+ * A document in the library every CAD view shares, as `GET /api/v1/documents` lists it: its document's
+ * `id`, `kind` and `api`, its record's kind as `record`, always `file` (the home hands it on as the library's, `libraryRow`).
  */
-export type Recent = Omit<LibraryModel, 'kind'> & { id: string; kind: string; record: LibraryModel['kind']; api?: string };
+export type Recent = LibraryModel & { id: string; kind: string; record: 'file'; api?: string };
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
   | { seq: number; type: 'capture'; requestId: string };

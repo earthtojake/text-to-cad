@@ -57,7 +57,6 @@ import itertools
 import threading
 import time
 import uuid
-from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -85,8 +84,8 @@ _RESOURCE_NOT_FOUND = -32002
 # The formats every surface opens, as the agent is told them and as a host's file handler offers them: a
 # cadgen engine document (XBF) among them, and a KiCad board and schematic.
 EXTENSIONS = sorted(set(VIEWER_EXTENSIONS))
-# File formats alone: a model, the one type with no file, is shown by its document id.
-FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.has_file)
+# File formats alone, by their own names: a model's file is an XBF.
+FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values())
 
 # How long a call that reads a view (cad_view, cad_screenshot) waits for one the agent just opened (a tab from
 # cad_open, a card from an inline cad_show) to sync for the first time: the host loads the page, then the page its
@@ -102,14 +101,14 @@ _MOUNTING_KEPT = 64
 _ASKED_KEPT = 16
 
 # What no tool does: the `cad` command's, which every host's agent runs in its shell.
-COMMANDS = ("To export a model, inspect it or snapshot it for yourself, run `cad model export <id> <file>`, "
-            "`cad model inspect <id>` or `cad model snapshot <id> out.png` in a shell (a file: `cad <type> ...` with "
-            "its path, as `cad step inspect part.step`).")
+COMMANDS = ("To export a model, inspect it or snapshot it for yourself, run `cad export model.xbf model.step`, "
+            "`cad inspect model.xbf` or `cad snapshot model.xbf out.png` in a shell, with the model's .xbf or any "
+            "CAD file's path (`cad inspect part.step`).")
 
 INSTRUCTIONS = (
     f"CAD shows local CAD models ({FORMATS}) in a viewer tab beside the chat. "
-    "To show a model, call cad_show with its document id (running its script prints it) or a CAD file's absolute "
-    "path: it switches an open viewer and never opens a tab. "
+    "To show a model, call cad_show with the absolute path of its .xbf (running its script writes it) or of any CAD "
+    "file: it switches an open viewer and never opens a tab. "
     "Only when cad_show reports no open viewer, call cad_open, once. "
     "Viewers follow every rebuild of a model and every save of a file, so never reopen after a rebuild. "
     "cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see. " + COMMANDS
@@ -117,7 +116,7 @@ INSTRUCTIONS = (
 
 INLINE_INSTRUCTIONS = (
     f"CAD shows local CAD models ({FORMATS}) in interactive viewers in the chat. "
-    "Call cad_show with a model's document id (running its script prints it) or a CAD file's absolute path to "
+    "Call cad_show with the absolute path of a model's .xbf (running its script writes it) or of any CAD file to "
     "show it: each call adds a viewer and pauses the earlier ones. "
     "Viewers follow every rebuild of a model and every save of a file, so never show a model again after a rebuild. "
     "cad_view reports what the user is looking at and has selected in a viewer, and cad_screenshot returns "
@@ -153,20 +152,6 @@ ICON = {
 }
 
 
-def _say_not_held(named: Any) -> None:
-    """A document id the engine knows but holds no more (unsaved, detached): refused with the command
-    that builds it again, which nothing here runs."""
-    from cad.engine.ids import is_id
-
-    if not is_id(named):
-        return
-    from cad.engine.client import request
-
-    answer = request({"op": "state", "id": named}, start=False) or {}
-    if answer.get("error"):
-        raise ToolFailed(f"{answer['error']}. Nothing runs it for you; once it is run, show {named} again.", "no_file")
-
-
 class ToolFailed(Exception):
     """A tool call that fails the way its caller should read: as the tool's result. ``reason`` is why, in
     telemetry's words (``cad_server.analytics.FAILURES``), named where it is raised: never read from the message."""
@@ -187,7 +172,7 @@ def _object(properties: dict[str, Any] | None = None, required: list[str] | None
 
 
 # What names a model, the one argument name every tool that takes one gives it (cad_show, cad_open).
-_SOURCE = {"type": "string", "description": "A CAD file's absolute path, or a document id (a model's, which running its script prints)."}
+_SOURCE = {"type": "string", "description": "A CAD file's absolute path: a model's .xbf, which running its script writes, or any CAD file."}
 # The tools the agent calls with a model or a view, whose arguments are checked against what they take
 # (``_arguments``): the host's own surfaces (``cad_file``, ...) are called with what the host sends.
 _AGENT_TOOLS = ("cad_open", "cad_show", "cad_view", "cad_screenshot")
@@ -212,15 +197,19 @@ _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform, whether
-    this computer has a file chooser for the home's Open, and what the update button shows
-    (``auto_update.button``, from the feed as last read: a launch never waits on the network)."""
+    this computer has a file chooser for the home's Import, whether one chooser takes a file or a folder there (a
+    Mac's: Import is then one button), whether it has a file manager Reveal can open, and what the update button shows (``auto_update.button``, from the feed as
+    last read: a launch never waits on the network)."""
     from cad_server import __version__
     from cad_server._internal import auto_update
-    from cad_server._internal.picker import available
+    from cad_server._internal.picker import available, takes_either
+    from cad_server.viewer.reveal import available as reveal_available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
+    launch["pickAny"] = launch["pick"] and takes_either()
+    launch["reveal"] = reveal_available()
     update = auto_update.button()
     if update is not None:  # none where cad cannot update itself: no button
         launch["cadUpdate"] = update
@@ -272,15 +261,14 @@ def _attention_block(lines: list[str]) -> str:
 # listed (``tools``); counted as any call naming no tool of cadgen's (``_refused``). Goes at the next minor release.
 _REMOVED_TOOLS = {
     "cad_export": "The cad_export tool was removed in cad 0.11.10. Export with the cad command instead: "
-                  "`cad model export <id> <file>...` for a model's document id, or `cad <type> export <file> <file>...` "
-                  "for a CAD file (type: step, xbf, stl, glb or threemf); `cad --help` gives the details.",
+                  "`cad export <file> <out>` for a CAD file, a model by its .xbf, its format by <out>'s suffix; "
+                  "`cad export --help` gives the details.",
     "cad_snapshot": "The cad_snapshot tool was removed in cad 0.11.10. Draw a PNG with the cad command instead: "
-                    "`cad model snapshot <id> <out.png>` for a model's document id, `cad <type> snapshot <file> <out.png>` "
-                    "for a CAD file, or `cad model snapshot --job <packet>` for a Quick Edit packet; `cad --help` gives "
-                    "the details.",
+                    "`cad snapshot <file> <out.png>` for a CAD file, a model by its .xbf, or `cad snapshot --job "
+                    "<packet>` for a Quick Edit packet; `cad snapshot --help` gives the details.",
     "cad_inspect": "The cad_inspect tool was removed in cad 0.11.10. Inspect with the cad command instead: "
-                   "`cad model inspect <id> [ref]` for a model's document id, or `cad <type> inspect <file> [ref]` for a "
-                   "CAD file (type: step, xbf or glb); `cad --help` gives the details.",
+                   "`cad inspect <file> [ref]` for a CAD file, a model by its .xbf; `cad inspect --help` gives the "
+                   "details.",
 }
 
 
@@ -304,7 +292,7 @@ def _unreached(page: str | None) -> str:
             "person to allow it, or be collapsed or scrolled away), or the chat drew it but carries none of its calls back "
             "to CAD (the Claude app's Code tab draws cards so), and CAD can neither read nor capture it. Ask the person "
             f"whether they see the model; if the card says this chat can't connect, {instead}. To see the model yourself, "
-            "render it headless with `cad <type> snapshot`.")
+            "render it headless with `cad snapshot`.")
 
 
 def _unavailable(error: BaseException) -> str:
@@ -380,7 +368,7 @@ def _data(structured: dict[str, Any]) -> dict[str, Any]:
 
 
 class Server:
-    def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None, browser_opener=None,
+    def __init__(self, *, page: AppPage | None = None, library=None, tunnel=None, viewer_url=None, browser_opener=None,
                  sidebar_views=None, analytics=None, sync_document=lambda path: None, warm=lambda: None,
                  in_browser=lambda model: False, browser_opened=lambda model: None, engine_origin: str | None = None,
                  app_token: str | None = None) -> None:
@@ -393,7 +381,8 @@ class Server:
         self.sync_document = sync_document
         self.warm = warm  # the engine's meshing pool, started when a view is launched (``Server.warm``)
         self.views = ViewRegistry()
-        self._recents = recents
+        # The library its views read and write (``cad_server.engine.library``); None: the state folder's.
+        self.library = library
         self._tunnel = tunnel
         self._sidebar_views = sidebar_views
         self._model: str | None = None  # what this thread last opened or showed
@@ -434,14 +423,6 @@ class Server:
     # -- lazily built parts ----------------------------------------------------
 
     @property
-    def recents(self):
-        if self._recents is None:
-            from cad_server.viewer.recents import RecentStore
-
-            self._recents = RecentStore()
-        return self._recents
-
-    @property
     def sidebar_views(self):
         """The CAD sidebar's views, which every process reaches (``sidebar.py``)."""
         if self._sidebar_views is None:
@@ -460,7 +441,7 @@ class Server:
             from cad_server.settings import FILE
 
             # The settings beside the model library (the state folder, by default): shared by its every process.
-            path = Path(self._recents.root).parent / FILE if self._recents is not None else None
+            path = self.library.state.root / FILE if self.library is not None else None
             self._analytics = Recorder(path=path)
         return self._analytics
 
@@ -471,7 +452,7 @@ class Server:
         if self._tunnel is None:
             from .tunnel import ViewerTunnel
 
-            self._tunnel = ViewerTunnel(recents=self.recents, analytics=self.analytics)
+            self._tunnel = ViewerTunnel(library=self.library, analytics=self.analytics)
         return self._tunnel
 
     # -- the protocol ----------------------------------------------------------
@@ -760,7 +741,7 @@ class Server:
         optional = [key for key in schema["properties"] if key not in required]
         takes = (f"{name} takes {' and '.join(required) or 'nothing'}"
                  + (f", optionally {' and '.join(optional)}" if optional else "")
-                 + ("; source is a document id (running a model's script prints it) or a CAD file's absolute path"
+                 + ("; source is a CAD file's absolute path (a model's .xbf, which running its script writes)"
                     if "source" in schema["properties"] else "") + ".")
         said = _refusal(name, missing, unknown, takes)
         if "source" in missing:
@@ -783,15 +764,17 @@ class Server:
         return _stamped(launch)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
-        """The launch that shows the home: the models opened before, which come with it so its cards
-        draw at once -- each row as ``GET /api/v1/documents`` lists it (``Recent.row``: its document's
-        id, by which its picture is read) -- and Open with the desktop's chooser."""
+        """The launch that shows the home: the projects and the documents opened before, which come with
+        it so its cards draw at once -- as ``GET /api/v1/projects`` and ``GET /api/v1/documents`` list them
+        (each row its document's id, by which its picture is read, and its project's) -- and Import with
+        the desktop's chooser."""
         try:
-            recents = [row for row in (entry.row() for entry in self.recents.list()) if row is not None]
+            app = self.tunnel.app
+            recents, projects = app.documents({})["documents"], app.project_list()["projects"]
         except Exception:  # the home opens whatever the library says
-            LOG.exception("could not read recents")
-            recents = []
-        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
+            LOG.exception("could not read the home's documents and projects")
+            recents, projects = [], []
+        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents, "projects": projects}
         if surface:
             launch["surface"] = surface
         return _stamped(launch)
@@ -837,8 +820,8 @@ class Server:
         """An existing CAD file, from the absolute path a caller named; or a document the engine holds,
         from its id: a model's id stays itself, a file's is its path. Nothing is built."""
         if not isinstance(value, str) or not value.strip():
-            raise ToolFailed('Name the model in "source": a document id (running a model\'s script prints it) or a '
-                             "CAD file's absolute path.", "no_path")
+            raise ToolFailed('Name the model in "source": a CAD file\'s absolute path (a model\'s .xbf, which running '
+                             "its script writes).", "no_path")
         from cad.engine.ids import is_id
 
         if is_id(value):
@@ -942,10 +925,6 @@ class Server:
         return views
 
     def _tool_cad_show(self, arguments, context):
-        _say_not_held(arguments.get("source"))
-        return self._show(arguments, context)
-
-    def _show(self, arguments, context):
         if self._no_app(context):
             return self._show_in_browser(self._model_path(arguments.get("source")))
         if not self.tabs:
@@ -1122,7 +1101,7 @@ class Server:
     def _tool_cad_screenshot(self, arguments, context):
         deadline = time.monotonic() + CAPTURE_SECONDS
         if self._no_app(context):
-            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cad <type> snapshot`.", "no_view")
+            raise ToolFailed("This app shows no CAD view to capture: render one headless with `cad snapshot`.", "no_view")
         if self.tabs:
             view = self._target(context, arguments.get("view"), needs_model=True)
             if view is None and self._opened is not None and time.monotonic() - self._opened < _OPENED_WITHIN:
@@ -1134,7 +1113,7 @@ class Server:
             raise ToolFailed("That viewer shows no model yet.", "no_view")
         if view is None:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
-                             "or render headless with `cad <type> snapshot`.", "no_view")
+                             "or render headless with `cad snapshot`.", "no_view")
         if isinstance(view, SidebarView):
             reply = self.sidebar_views.ask(view.id, timeout=max(1.0, deadline - time.monotonic()))
             if reply is None:

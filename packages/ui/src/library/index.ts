@@ -1,4 +1,5 @@
-export { ModelLibrary, filterModels, wantsPicture } from "./ModelLibrary.js";
+export { ModelLibrary, RECENTS, below, filterModels, placeKey, samePlace, sortDocuments } from "./ModelLibrary.js";
+export { LibraryFrame } from "./LibrarySidebar.jsx";
 export { ageLabel, lastActivity } from "../lib/age.js";
-export type { LibraryModel, ModelLibrarySource } from "./ModelLibrary.js";
+export type { ImportedFileOrProject, ImportedProject, LibraryFolder, LibraryFolderRef, LibraryListing, LibraryModel, LibraryNavigation, LibraryOrigin, LibraryPanel, LibraryProject, ModelLibrarySource } from "./ModelLibrary.js";
 export { THUMBNAIL_SIZE, useModelThumbnail } from "./thumbnails.js";

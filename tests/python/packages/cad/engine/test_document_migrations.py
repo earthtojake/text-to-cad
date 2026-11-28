@@ -239,8 +239,12 @@ class DocumentMigrationsTest(unittest.TestCase):
         })
         with self.assertRaisesRegex(export.ExportRefused, "different XBF path"):
             export.translate(source, "xbf", self.path)
-        with self.assertRaisesRegex(export.ExportRefused, "already is one"):
-            export.translate(export.Source.read(target), "xbf", self.folder / "unnecessary.xbf")
+        # An xbf to another xbf is a copy of its document, as cp makes one (`cad export a.xbf b.xbf`).
+        copy = self.folder / "copy.xbf"
+        export.translate(export.Source.read(target), "xbf", copy)
+        copied = document.Loaded(copy)
+        self.assertEqual(document_state(copied.doc), document_state(reloaded.doc))
+        self.assertEqual(copied.closure, EXPECTED["closure"], "its build closure with it")
         self.assert_original_untouched()
 
     def test_unsupported_version_and_invalid_old_data_leave_document_and_file_unchanged(self):

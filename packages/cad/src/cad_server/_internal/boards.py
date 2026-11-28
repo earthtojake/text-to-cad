@@ -6,14 +6,14 @@ The engine holds no kicode of its own; KiCad runs in the environment of ``cad[ki
 is kept by the board's key (``cad.engine.formats.kicad.poured.key``: its bytes, its project's and rules',
 and the plotting code's), beside the board's document in the engine's document cache,
 ``<cache>/documents/<the board's document id>/kicad/<key>/`` (``poured.folder``), so a changed file is a new
-key and nothing stale is ever read, and deleting the document (``cad delete``, the home's Delete) deletes
+key and nothing stale is ever read, and forgetting the document (the home's Remove) removes
 them with it:
 
 * ``refill``: KiCad's refill of a copy's zones (``cad.kicad._refill``), which ``poured.payload`` plots the
   pours from (``CAD_KICAD_REFILL=0`` turns it off: the pours as saved, and no kicode fetched to draw a board;
-  the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the viewer's board page and ``cad kicad_pcb
+  the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the viewer's board page and ``cad
   snapshot`` both draw (``prepare`` keeps it before a snapshot's render process reads it).
-* ``drc``: ``cad.kicad_pcb.drc`` of the saved board, the ``CheckResult`` ``cad kicad_pcb drc --json``
+* ``drc``: ``cad.kicad.drc`` of the saved board, the ``CheckResult`` ``cad kicad drc --json``
   prints, as data (``drc.json``).
 * ``exported``: an export's download kept by its kind (``exports/<kind>/``), for the kinds a function of
   the key alone (not ``step`` and ``glb``, whose 3D models are files of their own, outside it; nor a BOM,
@@ -83,7 +83,7 @@ def prepare(board: Path) -> None:
 
 
 def drc(board: Path, board_key: str) -> dict[str, Any]:
-    """KiCad's DRC of the saved board, as ``cad kicad_pcb drc --json`` prints it: kept for ``board_key``."""
+    """KiCad's DRC of the saved board, as ``cad kicad drc --json`` prints it: kept for ``board_key``."""
     from cad.engine.formats.kicad.poured import folder
 
     kept = folder(board, board_key) / "drc.json"

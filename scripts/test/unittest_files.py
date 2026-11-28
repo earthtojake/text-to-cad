@@ -28,8 +28,8 @@ ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
 folder holding nothing but
 this run's interpreter registered as its current installation (``engine_daemon.register``: the
 installation whose engine a client starts, where with none it starts none), so
-nothing a test starts reaches a developer's cadgen 0.7 store, their registry of documents, their
-installations or their ``cadgen`` command; a record that this run's cadgen writes in the
+nothing a test starts reaches a developer's cadgen 0.7 store, their library, their
+installations or their ``cadgen`` command; a record or a library's entry that this run's cadgen writes in the
 developer's own state folder anyway, or that command written, fails the run, named with the test
 that was running (``person_places``, ``the_run_s``). The run's files share one bytecode folder
 (``PYTHONPYCACHEPREFIX``), so the CAD kernel's libraries are compiled once a run, not once a file.
@@ -92,7 +92,7 @@ HEARTBEAT_SECONDS = 60
 # would likely hang too and each would wait out its guard.
 HUNG_EXIT = 3
 # A file's engine daemon goes when the file ends (``stop_engine``): an engine never stops on a
-# timer, so one a killed run leaves behind runs until it is stopped (``cad stop`` with its
+# timer, so one a killed run leaves behind runs until it is stopped (``cad server stop`` with its
 # folder) or its folder is removed (an engine whose door is gone stops).
 
 # Stopping a file's daemon waits for its workers to exit.
@@ -158,20 +158,39 @@ def load_file(loader: unittest.TestLoader, path: str, top: str) -> unittest.Test
     return loader.loadTestsFromModule(module)
 
 
-# What a person's cadgen registers in its state folder (``cad_server.engine.registry``,
-# ``cad_server._internal.installations``): documents' records, engines' records and the page token,
-# installations' records. A name ending ``.tmp`` is a write in flight (``registry.Folder``).
-REGISTERED = ("documents", "engines", "installations")
+# What a person's cadgen registers in its state folder: engines' records and the page token
+# (``cad_server.engine.state``) and installations' records (``cad_server._internal.installations``), a file
+# each, and the library's entries (``cad_server.engine.library``: a project's folder, a file opened, pinned or
+# built), each one named ``<state>/library.json#<section>/<id>``. A name ending ``.tmp`` is a write in flight
+# (``state.Folder``).
+REGISTERED = ("engines", "installations")
+LIBRARY = "library.json"
+# The library's sections, each with the field of an entry that says where it is on disk.
+_LIBRARY_SECTIONS = {"projects": "root", "files": "path"}
 # A file's line naming what appeared in the developer's own places while one of its tests ran.
 OUTSIDE = "OUTSIDE"
 _OUTSIDE = re.compile(rf"^{OUTSIDE}\t([^\t\n]*)\t([^\t\n]*)\n?", re.M)
 
 
+def library_entries(state: str) -> dict[str, dict]:
+    """The entries of the library in the state folder ``state``, each by ``<section>/<id>``; none where there
+    is no library, or it does not read."""
+    try:
+        with open(os.path.join(state, LIBRARY), encoding="utf-8") as file:
+            said = json.load(file)
+        return {f"{section}/{ident}": entry for section in _LIBRARY_SECTIONS
+                for ident, entry in (said.get(section) or {}).items()}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
 def registered(states: list[str], commands: list[str]) -> dict[str, tuple[int, int] | None]:
-    """Each entry registered in the state folders ``states``, by its path, and each of ``commands``
-    that exists, by its path with when it was written and its size."""
+    """Each entry registered in the state folders ``states``, by its path (a library's entry by the
+    library's path, ``#`` and the entry), and each of ``commands`` that exists, by its path with when it
+    was written and its size."""
     marks: dict[str, tuple[int, int] | None] = {}
     for state in states:
+        marks.update((f"{os.path.join(state, LIBRARY)}#{entry}", None) for entry in library_entries(state))
         for folder in REGISTERED:
             try:
                 names = os.listdir(os.path.join(state, folder))
@@ -366,21 +385,25 @@ def _within(path: str, folders: list[str]) -> bool:
 def the_run_s(where: str, engine: str, top: str) -> bool:
     """Whether what appeared at ``where`` says it is this run's cadgen's, not another one the
     developer ran meanwhile: an engine's record named as this run's engines name theirs (``engine``),
-    and the page token; an installation's or a document's record that names a folder of this run's
-    -- its interpreter's environment, its temporary folder, the checkout (but ``models/``, which no
+    and the page token; an installation's record, or a library's entry, that names a folder of this
+    run's -- its interpreter's environment, its temporary folder, the checkout (but ``models/``, which no
     test reads, and the worktrees in ``.claude/``); the ``cadgen`` command, and anything that says
     nothing of itself."""
+    library, _, entry = where.partition("#")
     folder, name = os.path.split(where)
     kind = os.path.basename(folder)
-    if kind == "engines":
-        return name in (f"{engine}.json", "token")
-    if kind not in ("documents", "installations"):
-        return True
     try:
-        with open(os.path.join(where, "document.json") if kind == "documents" else where, encoding="utf-8") as record:
-            said = json.load(record)
-        named = [os.path.realpath(path) for path in ([said["root"]] if kind == "documents"
-                                                     else [said["prefix"], said["python"]])]
+        if entry and os.path.basename(library) == LIBRARY:
+            said = library_entries(os.path.dirname(library))[entry]
+            named = [os.path.realpath(said[_LIBRARY_SECTIONS[entry.partition("/")[0]]])]
+        elif kind == "engines":
+            return name in (f"{engine}.json", "token")
+        elif kind != "installations":
+            return True
+        else:
+            with open(where, encoding="utf-8") as record:
+                said = json.load(record)
+            named = [os.path.realpath(path) for path in (said["prefix"], said["python"])]
     except (OSError, ValueError, TypeError, KeyError):
         return True
     ours = [os.path.realpath(tempfile.gettempdir()), os.path.realpath(sys.prefix), top]
@@ -574,8 +597,8 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             futures = {}
             for index, path in enumerate(files):
-                # A state folder and a command folder of its own too: the engine's registry of
-                # documents (and Recents), the installations and the ``cadgen`` command are the
+                # A state folder and a command folder of its own too: the library (its projects
+                # and Recents), the installations and the ``cadgen`` command are the
                 # developer's, never a test's. Its state folder registers the file's interpreter as its
                 # current installation, as an installation registers itself: a client starts no engine
                 # with none.

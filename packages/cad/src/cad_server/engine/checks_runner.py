@@ -81,7 +81,7 @@ class State(enum.Enum):
 
 # The states a check can be stopped in: once it is in any other, it has ended.
 LIVE = (State.ASKED, State.WAITING, State.STARTING, State.MEASURING)
-STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad stop` stops it): "
+STOPPED = ("the CAD server stopped while it measured the manufacturing check (an update or `cad server stop` stops it): "
            "run the check again")
 SUPERSEDED = ("the document changed while its manufacturing check ran, so nothing of that check is kept or "
               "answered: run the check again")
@@ -214,6 +214,10 @@ class Runner:
             told({"failed": refusal, "kind": "builtins:ValueError"})
             return
         spec, check = request["source"], request["check"]
+        # A model, as 0.12's library names its type while it is held, is an xbf (``cad.registry.ALIASES``).
+        from cad.registry import resolve
+
+        check = {**check, "type": resolve(check["type"])}
         measures = request.get("measures")
         nobody = {"done": {"reports": [], "files": [], "release": release()}}
         if not isinstance(measures, dict) or request.get("caller") != release():
@@ -244,7 +248,6 @@ class Runner:
             except ValueError as error:
                 told(_refused(error))
                 return
-            since = self.store.epoch(durable[0] if durable is not None else ident)
             same = (document, before, key) if before is not None else None
             with self.lock:
                 # Under one lock with a check's end (which keeps its result, then leaves ``running``) and with
@@ -317,7 +320,7 @@ class Runner:
                         answer = {"failed": SUPERSEDED, "reason": "superseded"}
                     by = measured.get("measures")
                     if "done" in answer and before is not None and current and _clean(measured) and serves(by):
-                        self.store.keep(document, before, key, _result(measured), durable, since, by)
+                        self.store.keep(document, before, key, _result(measured), durable, by)
                 if answer.get("reason") == State.SUPERSEDED.value:
                     reads += 1
                     if reads < READS and not asked.abandoned():
@@ -465,7 +468,7 @@ class Runner:
                     self.running.pop(asked.same)
 
     def halt(self) -> None:
-        """Every check stopped as the engine stops (an update's drain, ``cad stop``): those waiting leave the
+        """Every check stopped as the engine stops (an update's drain, ``cad server stop``): those waiting leave the
         queue, the checks processes measuring are killed, all at once -- they hold nothing of anyone's, so nothing
         is waited for -- and their callers are told to run the check again (``api.Stopped``)."""
         with self.lock:
@@ -529,9 +532,10 @@ def _refusal(request: dict[str, Any]) -> str | None:
 
     spec, check = request.get("source"), request.get("check")
     if not isinstance(spec, dict) or not ("id" in spec or "path" in spec):
-        return "a check reads a document the engine holds, or a STEP's or an xbf's file"
-    if not isinstance(check, dict) or check.get("type") not in ("model", "step", "xbf"):
-        return "the engine measures a manufacturing check of a model, a STEP or an xbf"
+        return "a check reads a document the engine holds, or a STEP's or a model's .xbf file"
+    # ``model``: a held model, as an earlier library names its type (``cad.registry.ALIASES``).
+    if not isinstance(check, dict) or check.get("type") not in ("xbf", "step", "model"):
+        return "the engine measures a manufacturing check of a model, its .xbf or a STEP"
     process = check.get("process")
     if process is None:
         return None if isinstance(check.get("given", {}), dict) else "a check's given options are a table"

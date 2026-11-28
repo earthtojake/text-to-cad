@@ -1,5 +1,6 @@
-"""The ``cad`` command's reference, read off its parsers: every command, each document type's and each
-integration's operations, with its usage line, its description, its arguments and its options.
+"""The ``cad`` command's reference, read off its parsers: every command, the verbs on a file (each with every
+type's options and the types that take it) and each integration's operations, with its usage line, its
+description, its arguments and its options.
 
 ``python -m cad_server._internal.cli_reference --docs`` prints it as the JSON the documentation site reads; a test
 holds the site's copy to it, so the reference cannot drift from the command. Nothing here describes a
@@ -131,7 +132,7 @@ def _choices(action: argparse.Action) -> list[str] | None:
 
 
 def command_reference(parser: argparse.ArgumentParser, command: str, summary: str | None = None) -> dict[str, Any]:
-    """One command's entry, read off its parser: ``command`` (``cad xbf export``), the ``summary`` it is listed
+    """One command's entry, read off its parser: ``command`` (``cad export``), the ``summary`` it is listed
     by, its ``usage`` line, ``description`` and ``epilog``, its positional ``arguments`` and its ``options``."""
     arguments: list[dict[str, Any]] = []
     options: list[dict[str, Any]] = []
@@ -194,39 +195,39 @@ def _no_parser(name: str, summary: str) -> dict[str, Any]:
 
 
 def as_docs() -> dict[str, Any]:
-    """The whole command: its ``usage``, each document type's operations (``documentTypes``), each
-    integration's (``integrations``), and the other ``commands``, as ``cad --help`` lists them, each followed
-    by its subcommands; their descriptions and help in ``texts``, each once (``_shared``)."""
-    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
+    """The whole command: its ``usage``, the verbs on a file (``verbs``: each its parser's entry, every type's options
+    in one, and the ``types`` it takes), each document type's ``verbs`` (``documentTypes``), each integration's
+    operations (``integrations``), and the other ``commands``, as ``cad --help`` lists them, each followed by its
+    subcommands; their descriptions and help in ``texts``, each once (``_shared``)."""
+    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS, operation_for, types_for
     from cad_server import cli
-    from cad_server.cli import document_types, integrations
+    from cad_server.cli import integrations, verbs
 
     def operation(owner: Any, name: str, parser: argparse.ArgumentParser, group: str) -> dict[str, Any]:
         found = owner.operation(name)
         return command_reference(parser, f"cad {group} {name}", found.summary if found is not None else None)
 
-    types = [{
-        "name": entry.id, "summary": entry.title,
-        "usage": f"cad {entry.id} <operation> {'FILE' if entry.has_file else 'ID'} [options]",
-        "operations": [operation(entry, name, document_types.build_parser(entry.id, name), entry.id)
-                       for name in document_types.operations_of(entry.id)],
-    } for entry in DOCUMENT_TYPES.values()]
+    verb_entries = [{**command_reference(verbs.build_parser(verb), f"cad {verb}", verbs.SUMMARIES[verb]),
+                     "types": list(types_for(verb))} for verb in verbs.VERBS]
+    types = [{"name": entry.id, "summary": entry.title,
+              "verbs": [verb for verb in verbs.VERBS if operation_for(verb, entry.id) is not None]}
+             for entry in DOCUMENT_TYPES.values()]  # as `cad --help` lists them
     tools = [{
         "name": name, "summary": INTEGRATIONS[name].summary,
         "usage": f"cad {name} <operation> FILE [options]",
         "operations": [operation(INTEGRATIONS[name], op, integrations.build_parser(name, op), name)
                        for op in integrations.operations_of(name)],
-    } for name in cli.INTEGRATION_COMMANDS if not INTEGRATIONS[name].deprecated]  # as `cad --help` lists them
+    } for name in cli.INTEGRATION_COMMANDS]  # as `cad --help` lists them
     commands = []
-    # The dispatcher's own table, in its --help order, without the commands its --help never lists.
-    for name in sorted(set(cli._COMMANDS) - cli._UNLISTED):  # noqa: SLF001
+    # The dispatcher's own table, in its --help order, without the verbs (above) and the commands its --help never lists.
+    for name in sorted(set(cli._COMMANDS) - cli._UNLISTED - set(cli.VERB_COMMANDS)):  # noqa: SLF001
         summary = cli._COMMANDS[name][1]  # noqa: SLF001
         parser = cli.build_parser_for(name)
         commands.extend([_no_parser(name, summary)] if parser is None
                         else _with_subcommands(parser, f"cad {name}", summary))
     head = cli._USAGE_HEAD.removeprefix("usage:")  # noqa: SLF001
-    return _shared({"usage": " ".join(head.split()), "documentTypes": types, "integrations": tools,
-                    "commands": commands})
+    return _shared({"usage": " ".join(head.split()), "verbs": verb_entries, "documentTypes": types,
+                    "integrations": tools, "commands": commands})
 
 
 # The fields whose words many commands share (every type's snapshot takes the same options): each is said

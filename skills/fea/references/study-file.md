@@ -90,7 +90,7 @@ a pin or bolt load.
 
 ## Faces
 
-A face ref is the one the setup lists, the viewer copies and `cad <type> inspect` resolves:
+A face ref is the one the setup lists, the viewer copies and `cad inspect` resolves:
 `bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part document), and a
 face the document names goes by its name (`bracket/f:plate.relief.3`). A ref copied from the
 viewer comes after its document's path (`/work/bracket.step#bracket/face 17`), which must name the
@@ -102,7 +102,7 @@ names nothing. A number is a position in the saved document, which an edit moves
 ## Assemblies
 
 A document of several parts is solved as one, bonded where its parts touch; the setup
-(`cad step solve assembly.step`) lists the parts and the pairs. This one is a `base`, two posts
+(`cad fea assembly.step`) lists the parts and the pairs. This one is a `base`, two posts
 and a `beam` across them:
 
 ```json

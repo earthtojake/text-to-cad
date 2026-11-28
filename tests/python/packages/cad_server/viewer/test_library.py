@@ -16,7 +16,7 @@ from unittest import mock
 
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
-from cad_server.viewer.recents import RecentStore
+from cad_server.engine.library import Library
 
 STL = b"solid t\nendsolid t\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
@@ -63,11 +63,16 @@ class LibraryTest(unittest.TestCase):
         self.assertEqual((status, [entry["path"] for entry in answer["documents"]]), (200, [str(self.model)]))
         status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
         [entry] = answer["documents"]
-        # The record's row, its document named: its id, its kind and where its reads are; the record's
-        # own kind is ``record`` -- a file's row: removed from the list, its file untouched.
+        # Its row, its document named: its id, its kind and where its reads are, its file as it is on disk, and
+        # the project it is in, none (``projects.py``).
         ident = file_id(self.model)
-        self.assertEqual(entry, {**RecentStore().list()[0].public(), "id": ident, "kind": "stl", "record": "file",
-                                 "api": f"/api/v1/documents/stl/{ident}"})
+        self.assertEqual(entry, {
+            "id": ident, "kind": "stl", "record": "file", "api": f"/api/v1/documents/stl/{ident}",
+            "path": str(self.model), "name": "a.stl", "folder": str(self.model.parent),
+            "namespace": str(self.model.parent), "opened": entry["opened"], "updated": self.model.stat().st_mtime,
+            "created": entry["opened"], "pinned": False, "missing": False,
+            "thumbnail": str(round(entry["pictured"] * 1000)), "pictured": entry["pictured"], "size": len(STL),
+            "parts": None, "project": None})
         # Its size on disk, which the home shows beside its age.
         self.assertEqual(entry["size"], len(STL))
         self.assertTrue(self.change("pin", str(self.model))[1]["documents"][0]["pinned"])
@@ -86,7 +91,7 @@ class LibraryTest(unittest.TestCase):
         status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
         entry = answer["documents"][0]
         # Filtered by kind, searched by name or path, at most a number.
-        for query, found in (("?kind=stl", 1), ("?kind=model", 0), ("?q=A.ST", 1), ("?q=nothing", 0), ("?limit=1", 1)):
+        for query, found in (("?kind=stl", 1), ("?kind=xbf", 0), ("?q=A.ST", 1), ("?q=nothing", 0), ("?limit=1", 1)):
             with self.subTest(query=query):
                 self.assertEqual(len(json.loads(self.request("GET", "/api/v1/documents" + query)[1])["documents"]), found)
         self.assertEqual(json.loads(self.request("GET", "/api/v1/documents/stl")[1])["documents"], [entry])
@@ -116,48 +121,40 @@ class LibraryTest(unittest.TestCase):
                                     ("thumbnail", str(self.model), {"png": base64.b64encode(b"GIF89a").decode("ascii")})):
             with self.subTest(action=action, path=path):
                 self.assertEqual(self.change(action, path, **extra)[0], 400)
-        self.assertEqual(RecentStore().list(), [])
+        self.assertEqual(Library().read()["files"], {})
+        # A picture is the cache's, of any CAD file that is there: it makes no entry.
+        self.assertEqual(self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii")),
+                         (200, {"documents": []}))
+        self.assertEqual(Library().read()["files"], {})
 
-    def test_a_built_model_is_listed_by_its_id_pinned_and_deleted_by_it(self) -> None:
-        from cad.engine.ids import model_id
-        from cad_server.engine.registry import Registry
+    def test_a_models_xbf_is_listed_as_its_file_and_opened_pinned_and_removed_by_its_id(self) -> None:
+        from cad.engine.ids import file_id
 
-        script = self.tmp / "parts.py"
-        script.write_text("", encoding="utf-8")
-        ident = model_id(script, "cube")
-        Registry(self.tmp / "state").put({"id": ident, "kind": "model", "root": str(self.tmp),
-                                          "home": "parts.py", "entry": "cube", "revision": "r1", "built": 1.0})
+        saved = self.tmp / "cube.xbf"
+        saved.write_bytes(b"not read here")
+        os.utime(saved, (1_700_000_000, 1_700_000_000))
+        ident = file_id(saved)
+        Library().know(saved)  # as its run does
         status, body = self.request("GET", "/api/v1/documents")
         [entry] = json.loads(body)["documents"]
         self.assertEqual((status, entry["path"], entry["id"], entry["kind"], entry["record"], entry["name"]),
-                         (200, ident, ident, "model", "model", "cube"), "the home opens it by its id: /<id>")
-        self.assertEqual((entry["updated"], entry["opened"]), (1.0, None), "updated is its run's; no page opened it yet")
+                         (200, str(saved), ident, "xbf", "file", "cube.xbf"), "the home opens it by its id: /<id>")
+        self.assertEqual((entry["updated"], entry["opened"]), (1_700_000_000, None), "no page opened it yet")
         [entry] = self.change("open", ident)[1]["documents"]
-        self.assertEqual(entry["updated"], 1.0)
-        self.assertGreater(entry["opened"], 1.0, "a page's open of its id says when")
+        self.assertGreater(entry["opened"], 1_700_000_000, "a page's open of its id says when")
         self.assertTrue(self.change("pin", ident)[1]["documents"][0]["pinned"])
-        cached = self.tmp / "cache" / "documents" / ident / "document.xbf"
-        cached.parent.mkdir(parents=True)
-        cached.write_bytes(b"its document")
-        self.assertEqual(self.change("remove", ident)[0], 400, "a model is deleted, never removed: the word is Delete")
-        self.assertEqual(self.change("delete", ident), (200, {"documents": []}))
-        self.assertIsNone(Registry(self.tmp / "state").get(ident))
-        self.assertFalse(cached.parent.exists(), "its document in the engine's cache goes with its record")
-        self.assertTrue(script.is_file(), "its script stays")
-
-    def test_a_document_forgotten_by_its_id_leaves_its_file(self) -> None:
-        from cad.engine.ids import file_id
-
-        self.change("open", str(self.model))
-        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
-        try:
-            connection.request("DELETE", f"/api/v1/documents/{file_id(self.model)}", headers={"x-cad-viewer": "1"})
-            response = connection.getresponse()
-            self.assertEqual((response.status, response.read()), (204, b""))
-        finally:
-            connection.close()
-        self.assertEqual(self.request("GET", "/api/v1/documents"), (200, b'{"documents":[]}'))
-        self.assertTrue(self.model.is_file(), "forgetting a file's document leaves the file")
+        self.change("thumbnail", ident, png=base64.b64encode(PNG).decode("ascii"))
+        noted = self.tmp / "cache" / "documents" / ident
+        self.assertEqual(sorted(os.listdir(noted)), ["note.json", "picture.png"])
+        self.assertEqual(self.change("delete", ident)[0], 400, "one word forgets an entry: remove")
+        self.assertEqual(self.change("remove", ident), (200, {"documents": []}))
+        self.assertEqual(Library().read()["files"], {})
+        self.assertEqual(sorted(os.listdir(noted)), ["note.json", "picture.png"], "the cache's note is the file's: it stays")
+        self.assertTrue(saved.is_file(), "its file stays")
+        # Pinned again by its path, with no entry: the pin makes it. No route deletes a document.
+        self.assertTrue(self.change("pin", str(saved))[1]["documents"][0]["pinned"])
+        status, body = self.request("DELETE", f"/api/v1/documents/{ident}", {})
+        self.assertEqual((status, json.loads(body)["error"]), (405, f"DELETE is not allowed on /api/v1/documents/{ident}"))
 
     def test_only_a_documents_own_picture_is_read(self) -> None:
         for ident in ("x", "..%2Frecents.jsonl", "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"):

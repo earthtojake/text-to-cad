@@ -12,6 +12,11 @@ import { FLOATING_SURFACE_CLASS } from "../lib/floatingSurface.js";
 export const VALUE_DROPDOWN_TRIGGER_CLASS = "flex h-control min-w-24 max-w-full items-center justify-between gap-1.5 justify-self-end rounded-md border border-input bg-transparent px-2 "
   + "text-left text-ui shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/45 aria-expanded:bg-accent disabled:cursor-not-allowed disabled:opacity-50 "
   + "dark:bg-input/30 dark:hover:bg-input/50";
+/**
+ * The list a value dropdown opens: the popups' surface, at least its trigger's width, and no exit animation, so a quick
+ * second tap reaches what is under it. A list of values opened from a control of its own (the Home's Sort) is this too.
+ */
+export const VALUE_DROPDOWN_LIST_CLASS = cn(FLOATING_SURFACE_CLASS, "min-w-(--radix-dropdown-menu-trigger-width) data-[state=closed]:animate-none!");
 
 /**
  * @typedef {{ value: unknown, label: import("react").ReactNode, Icon?: import("react").ComponentType<any> | null, disabled?: boolean }} ValueOption
@@ -45,8 +50,7 @@ export function ValueDropdown({ value, options, onChange, label, disabled = fals
         <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden="true" />
       </button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align={align} sideOffset={4} collisionPadding={8} aria-label={label}
-      className={cn(FLOATING_SURFACE_CLASS, "min-w-(--radix-dropdown-menu-trigger-width) data-[state=closed]:animate-none!")}>
+    <DropdownMenuContent align={align} collisionPadding={8} aria-label={label} className={VALUE_DROPDOWN_LIST_CLASS}>
       <DropdownMenuRadioGroup value={active ? String(active.value) : ""} onValueChange={next => {
         const option = options.find(entry => String(entry.value) === next);
         if (option && option.value !== value) onChange(option.value);

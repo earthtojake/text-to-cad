@@ -3,8 +3,7 @@
 Outside `cad_server/viewer/`, `cad_server/mcp/` and the commands that start them (`cli/viewer.py`,
 `cli/mcp.py`, which the CLI registry names by string), no module of the server's
 imports either (the library imports nothing of the server's at all: test_core_imports)
--- except the injected `_internal/engine_host.py` composition root
-and `cad_server.viewer.recents`, the state directory's one definition.
+-- except the injected `_internal/engine_host.py` composition root.
 """
 from __future__ import annotations
 
@@ -15,7 +14,6 @@ from tests.python.support.paths import REPO_ROOT
 
 SERVER = REPO_ROOT / "packages/cad/src/cad_server"
 SHELLS = {"cli/viewer.py"}
-ALLOWED = {"cad_server.viewer.recents"}
 
 
 def inside(relative: str) -> bool:
@@ -23,8 +21,6 @@ def inside(relative: str) -> bool:
 
 
 def leaf(name: str) -> bool:
-    if any(name == allowed or name.startswith(allowed + ".") for allowed in ALLOWED):
-        return False
     return name in ("cad_server.viewer", "cad_server.mcp") or name.startswith(("cad_server.viewer.", "cad_server.mcp."))
 
 

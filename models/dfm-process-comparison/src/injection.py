@@ -2,11 +2,11 @@
 from bd_materials import FinishedMaterial, plastics
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from lib.tray_geometry import tray
 
 
-@model
+@xbf
 def injection():
     part = tray("injection")
     # moulded: ABS, the common injection-moulding resin

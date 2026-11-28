@@ -44,7 +44,7 @@ Vercel, not this repo) must point at `apps/docs`.
 
 The hero is one GLB, `public/hero/planetary.glb`: the planetary gear model
 (`models/assemblies/src/planetary_gear_assembly/`) exported from its document by
-`cad model export`, its parts, colours and its `meshCycle` motion, which the export bakes
+`cad export`, its parts, colours and its `meshCycle` motion, which the export bakes
 into a clip. It is committed as a PLAIN file (never LFS: Vercel serves it statically
 with no backend), one of the few CAD files Git holds
 (`tests/python/global/test_no_cad_assets_tracked.py` lists it, with a size cap). The page
@@ -53,7 +53,7 @@ with its hidden lines removed, and plays the clip slowed to a background's pace.
 checks read only that committed file;
 nothing in the docs app's build or `npm run check` reads the sample corpus. Refresh it
 by hand after changing the model: run its script, which prints its document id, then
-`cad model export <id> apps/docs/public/hero/planetary.glb`. Preserve the `meshCycle`
+`cad export <id> apps/docs/public/hero/planetary.glb`. Preserve the `meshCycle`
 clip and verify playback before committing the refreshed GLB.
 
 ## The shape of the app
@@ -93,15 +93,17 @@ page, and its contents at the right, in the site's tokens and primitives.
   document type or an integration, testing) are written for whoever changes the repository, an agent
   as often as a person: the Contributing page links them on GitHub.
 - **The registry's copy.** The document types, their operations and the integrations are the
-  library's registry (`cad.registry`): `src/lib/docs/registry.generated.json` is that table
-  (`python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`), held to it by
+  library's registry (`cad.registry`): `src/lib/docs/registry.generated.json` is that table, held to it by
   `tests/python/packages/cad/test_registry.py`, and `src/lib/docs/registry.ts` reads it.
+- **Every generated file, one command.** `scripts/generated/regenerate.py` makes each file this site reads from
+  the code again (the registry's copy and the two references below), and @cad/core's table of document types and
+  copy of the engine's look, from this checkout's sources; `--check` writes nothing and names the stale ones. Run it after changing the
+  registry, a command or a public name of the library.
 - **The Reference is generated.** `/docs/reference/cli` (the `cad` command) and
   `/docs/reference/library` (the `cad` library) are made as the site builds from two generated files
   of their own, a page `source` of kind `generated` in the map: `src/lib/docs/cli-reference.generated.json`,
-  the command line's parser (`python -m cad_server._internal.cli_reference --docs >` it), and
-  `src/lib/docs/library-reference.generated.json`, the library's public names and docstrings
-  (`python -m cad._internal.reference --docs >` it), each held to its source by its test
+  the command line's parser, and `src/lib/docs/library-reference.generated.json`, the library's public names and
+  docstrings, each made by `scripts/generated/regenerate.py` and held to its source by its test
   (`test_cli_reference.py`, `test_library_reference.py`). `src/lib/docs/reference/` turns them into
   Markdown (every command with its usage, arguments and options; every name with its signature and
   docstring, a heading id its dotted path, `#cad.step.export`), so the contents, the `.md` page, the

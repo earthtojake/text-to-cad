@@ -142,7 +142,7 @@ function TouchStrip({ tools }) {
               <Ellipsis aria-hidden="true" />
             </ToolbarButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={6} collisionPadding={8} aria-label={t("toolbar.more")}
+          <DropdownMenuContent align="end" collisionPadding={8} aria-label={t("toolbar.more")}
             className={cn(FLOATING_SURFACE_CLASS, "data-[state=closed]:animate-none!")}>
             {hidden.map(tool => <DropdownMenuCheckboxItem key={tool.id} checked={tool.active === true} disabled={tool.disabled}
               onSelect={() => tool.onSelect()}>

@@ -18,13 +18,14 @@ export interface XbfRendererOptions {
 export interface PreparedXbfDocument extends PreparedWorkspaceEntry {
   services: Omit<XbfRendererOptions, 'client'> & { preferences: CadPreferenceSource };
 }
-/** What the engine reads and serves as a document: its own, and a STEP. */
+/** What the engine reads and serves as a document: an `.xbf` (a model's), and a STEP. */
 export const ENGINE_DOCUMENT_FILE = /\.(?:xbf|step|stp)$/i;
 
 /**
- * An `.xbf` or a STEP is drawn from what the engine serves of it (its structure and one
- * buffer per part), read by the page through the viewer (`client.engineDocument`). Registers
- * without loading three.js, a viewport or a backend connection.
+ * The xbf renderer: the engine's own document -- a model's, held by the engine by its id, or its `.xbf` opened
+ * from disk -- and a STEP, drawn from what the engine serves of it (its structure and one buffer per part), read by
+ * the page through the viewer (`client.engineDocument`). Registers without loading three.js, a viewport or a
+ * backend connection.
  */
 export function createXbfRenderer({ client, ...options }: XbfRendererOptions) {
   const services = { ...options, preferences: options.preferences || createCadPreferences() };

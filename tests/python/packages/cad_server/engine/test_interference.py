@@ -1,4 +1,4 @@
-"""``cad <type> interference``: the interference check asked of a real engine -- measured in a checks process,
+"""``cad inspect --interference``: the interference check asked of a real engine -- measured in a checks process,
 answered again from the result the engine keeps, its verdict the command's status (0 clear, 1 parts share
 volume), an option the document does not answer refused by name, and the same from Python by the model's handle."""
 
@@ -20,11 +20,11 @@ SRC = add_sources()
 
 KIT = """
 import build123d as bd
-from cad import model
+from cad import xbf
 from cad.build123d import mechanism_state
 
 
-@model
+@xbf
 def kit():
     def part(label, shape):
         shape.label = label
@@ -65,7 +65,7 @@ class CommandTest(unittest.TestCase):
         return engine_daemon.run([sys.executable, *args], cwd=self.folder, env=self.env)
 
     def check(self, *args: str):
-        return self.run_("-m", "cad_server.cli", "model", "interference", self.ident, *args)
+        return self.run_("-m", "cad_server.cli", "inspect", self.ident, "--interference", *args)
 
     def test_the_command_s_status_is_its_verdict_and_the_same_check_is_answered_from_what_was_kept(self) -> None:
         (self.folder / "kit.py").write_text(textwrap.dedent(KIT), encoding="utf-8")
@@ -120,8 +120,8 @@ class CommandTest(unittest.TestCase):
 
         # A script asks the same of the handle its model call returns.
         (self.folder / "ask.py").write_text(
-            "import json\nfrom cad import model\nfrom kit import kit\n"
-            "found = model.interference(kit(), fits=[('press', 'base')], poses=['down'])\n"
+            "import json\nfrom cad import xbf\nfrom kit import kit\n"
+            "found = xbf.interference(kit(), fits=[('press', 'base')], poses=['down'])\n"
             "print(json.dumps([found.status, [finding.refs for finding in found.findings if finding.code == "
             "'overlapping_parts']]))\n", encoding="utf-8")
         asked = self.run_("ask.py")

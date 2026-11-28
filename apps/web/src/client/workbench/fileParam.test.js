@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { readDocumentId, writeDocumentId } from "./fileParam.js";
+import { pageAddress, readDocumentId, readHomePlace, writeDocumentId } from "./fileParam.js";
 
 const ID = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab";
 
@@ -33,4 +33,63 @@ test("the URL is /<id> for a document and / for the home, a step pushed for each
   } finally {
     globalThis.window = originalWindow;
   }
+});
+
+test("the home's query names its place: a project's page or Starred, and Recents for anything else", () => {
+  assert.deepEqual(readHomePlace(""), { view: "recents" });
+  assert.deepEqual(readHomePlace("?view=pinned&token=1.mac"), { view: "pinned" });
+  assert.deepEqual(readHomePlace("?token=1.mac&project=p1"), { view: "project", project: "p1" });
+  // A view the home does not have, an old link's query, and a place the home no longer has (Standalone, whose
+  // documents are Recents' and the search's) are Recents.
+  assert.deepEqual(readHomePlace("?view=trash&file=a.step"), { view: "recents" });
+  assert.deepEqual(readHomePlace("?view=standalone&token=1.mac"), { view: "recents" });
+});
+
+test("each place and each document has its own address, beside what the page's address carries", () => {
+  const carried = { search: "?view=pinned&debug=1&token=1800000000.mac", hash: "" };
+  assert.equal(pageAddress({}, carried), "/?debug=1&token=1800000000.mac");
+  assert.equal(pageAddress({ place: { view: "recents" } }, carried), "/?debug=1&token=1800000000.mac");
+  assert.equal(pageAddress({ place: { view: "project", project: "p 1" } }, carried), "/?project=p+1&debug=1&token=1800000000.mac");
+  // A document's page names no place, whatever the address it is linked from does.
+  assert.equal(pageAddress({ id: ID, place: { view: "pinned" } }, { search: "?project=p1&token=1800000000.mac", hash: "" }), `/${ID}?token=1800000000.mac`);
+  assert.equal(pageAddress({ place: { view: "pinned" } }, { search: "", hash: "" }), "/?view=pinned");
+  // What it writes is what it reads.
+  assert.deepEqual(readHomePlace(pageAddress({ place: { view: "project", project: "p 1" } }, carried).slice(1)), { view: "project", project: "p 1" });
+});
+
+test("a place on the home is a step in the history, and leaving for a document drops it from the address", () => {
+  const originalWindow = globalThis.window;
+  const calls = [];
+  const at = (pathname, search) => { window.location = { pathname, search, hash: "" }; };
+  globalThis.window = { location: { pathname: "/", search: "?token=1.mac", hash: "" },
+    history: { pushState: (...args) => calls.push(["push", args[2]]), replaceState: (...args) => calls.push(["replace", args[2]]) } };
+  try {
+    writeDocumentId("", { place: { view: "project", project: "p1" } });
+    at("/", "?project=p1&token=1.mac");
+    writeDocumentId("", { place: { view: "project", project: "p1" } });  // already there: nothing is written
+    writeDocumentId("", { place: { view: "pinned" }, history: "replace" });
+    at("/", "?view=pinned&token=1.mac");
+    writeDocumentId(ID);
+    at(`/${ID}`, "?token=1.mac");
+    writeDocumentId("");
+    assert.deepEqual(calls, [["push", "/?project=p1&token=1.mac"], ["replace", "/?view=pinned&token=1.mac"], ["push", `/${ID}?token=1.mac`], ["push", "/?token=1.mac"]]);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test("a folder of a project has an address", () => {
+  const carried = { search: "?project=old&path=gone&token=1800000000.mac", hash: "" };
+  const deep = { view: "project", project: "p1", path: "housing/v 3" };
+  const address = pageAddress({ place: deep }, carried);
+  assert.equal(address, "/?project=p1&path=housing%2Fv+3&token=1800000000.mac");
+  // What it writes is what it reads; the project's top names no folder.
+  assert.deepEqual(readHomePlace(address.slice(1)), deep);
+  assert.deepEqual(readHomePlace("?project=p1&path="), { view: "project", project: "p1" });
+  assert.deepEqual(readHomePlace("?project=p1&path=/housing/"), { view: "project", project: "p1", path: "housing" });
+  assert.equal(pageAddress({ place: { view: "project", project: "p1" } }, carried), "/?project=p1&token=1800000000.mac");
+  // Pinned carries none, nor a document's page.
+  assert.equal(pageAddress({ place: { view: "pinned" } }, carried), "/?view=pinned&token=1800000000.mac");
+  assert.equal(pageAddress({ id: ID }, carried), `/${ID}?token=1800000000.mac`);
+  assert.deepEqual(readHomePlace("?view=pinned&path=housing"), { view: "pinned" });
 });

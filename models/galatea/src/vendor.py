@@ -70,7 +70,7 @@ def main(arguments):
             shutil.copyfile(source, step)
             if hashlib.sha256(step.read_bytes()).hexdigest() != checksum:
                 revised.append(f"{model} ({source.name})")
-            subprocess.run(["cad", "step", "export", str(step), str(converted)], check=True)
+            subprocess.run(["cad", "export", str(step), str(converted)], check=True)
             print(f"{model}: {source.name} -> {converted.relative_to(VENDOR.parent)}", flush=True)
     if revised:
         print("RobStride has revised " + ", ".join(revised) + " since lib/dims.py's numbers were measured on them: "

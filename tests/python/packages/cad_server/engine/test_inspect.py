@@ -1,4 +1,4 @@
-"""``cad xbf inspect DOC`` without a ref: what the document holds, on one screen, before its build
+"""``cad inspect DOC`` without a ref: what the document holds, on one screen, before its build
 closure -- its state, parts, bounds, volume, materials, joints, states, sequences and declared
 files -- read from the document the engine holds, and nothing built; ``--json`` the same as data;
 ``--query structure`` the same lists with nothing measured. Measuring is lazy: a build no inspection
@@ -25,14 +25,14 @@ SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 HINGE = """
 import pathlib
 import build123d as bd
-from cad import model
+from cad import xbf
 from bd_materials import metals
 from cad.build123d import configuration_sequence, mechanism_state
 
 pathlib.Path(__file__).with_suffix(".ran").write_text("ran", encoding="utf-8")
 
 
-@model
+@xbf
 def hinge():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -109,8 +109,8 @@ class SummaryTest(unittest.TestCase):
         # A script asks the same of the handle its model call returns, as every verb takes one: each
         # material's density and parts, no solid transferred to it.
         (self.folder / "ask.py").write_text(
-            "import json\nfrom cad import model\nfrom hinge import hinge\n"
-            "print(json.dumps(model.inspect(hinge(), query='structure')['summary']['materials']))\n", encoding="utf-8")
+            "import json\nfrom cad import xbf\nfrom hinge import hinge\n"
+            "print(json.dumps(xbf.inspect(hinge(), query='structure')['summary']['materials']))\n", encoding="utf-8")
         asked = self.run_("ask.py")
         self.assertEqual(asked.returncode, 0, asked.stderr)
         self.assertEqual(json.loads(asked.stdout.splitlines()[-1]), structure["materials"])
@@ -122,7 +122,7 @@ class SummaryTest(unittest.TestCase):
         lines = shown.stdout.splitlines()
         self.assertEqual(lines[0], f"hinge  {ident}")
         self.assertTrue(lines[1].startswith("state       live, "), lines[1])
-        self.assertEqual(lines[2:19], [
+        self.assertEqual(lines[2:20], [
             "parts       2 in hinge",
             "bounds      210 x 60 x 30 mm, from (-50, -30, 0)",
             "volume      144,000 mm^3",
@@ -138,10 +138,11 @@ class SummaryTest(unittest.TestCase):
             "  cycle  2.5 s",
             "animations  none",
             "parameters  none",
-            "declared files none",
+            "declared files",
+            f"  {self.folder / 'hinge.xbf'}",
             "closure",
         ])
-        self.assertEqual(json.loads("\n".join(lines[19:]))["source"]["function"], "hinge")
+        self.assertEqual(json.loads("\n".join(lines[20:]))["source"]["function"], "hinge")
 
         data = self.run_("-m", "cad_server.engine", "inspect", ident, "--json")
         self.assertEqual(data.returncode, 0, data.stderr)
@@ -345,10 +346,10 @@ WEIGHED = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import mass, point_mass
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/robot.xbf")
+@model("XBF/robot.xbf")
 def robot():
     base = bd.Box(100, 60, 20, align=bd.Align.MIN)
     base.label, base.material = "base", metals.aluminum()

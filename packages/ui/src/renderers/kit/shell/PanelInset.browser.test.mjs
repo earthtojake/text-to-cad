@@ -5,14 +5,15 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
+import { ENGINE_LOOK } from '@cad/core/lib/xbf/look.generated.js';
 import { harnessBundle } from '../../harness/bundle.mjs';
 import { chromium } from 'playwright';
 
 // The view's panel's one horizontal line (`--panel-inset`, `styles/globals.css`): in a real layout, every tab of a STEP
 // assembly with Parameters, Position and its Motion, a board, a DXF and a GLB, every piece of content's left edge (a
 // text's first glyph, an icon, a control's box, a slider's track) stands on the inset, or a tree level's step past it,
-// and every right-hand value, switch and slider ends the inset from the panel's right; the navbar's panel toggle's
-// icon stands on the same column.
+// and every right-hand value, switch and slider ends the inset from the panel's right; the navbar's first glyph, the
+// logo's drawn mark, stands on the same column (the panel's toggle comes after it).
 const require = createRequire(import.meta.url);
 const XBF = join(dirname(require.resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const GLB = join(dirname(require.resolve('@cad/core/lib/render/glbMeshData.js')), 'fixtures');
@@ -24,7 +25,7 @@ HINGE.parameters = [
 ];
 HINGE.kinematics.motions = { swing: { ease: 'cubic', keys: [{ t: 0, configuration: 'flat' }, { t: 1, configuration: 'raised' }] } };
 const STRUCTURE = JSON.stringify(HINGE);
-const LOOK = readFileSync(join(XBF, 'look.json'));
+const LOOK = JSON.stringify(ENGINE_LOOK);
 const ENVIRONMENT = Buffer.concat([Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), Buffer.from([255, 255, 255, 128])]);
 const BOARD = readFileSync(new URL('../../board/__fixtures__/board.plot.json', import.meta.url));
 const DRAWING = readFileSync(new URL('../../dxf/__fixtures__/layered.drawing.json', import.meta.url));
@@ -258,12 +259,6 @@ for (const file of Object.keys(FILES)) {
       assert.equal(clientWidth, 231, `${file}, ${tab}: the 232px panel, inside its 1px rule`);
       assert.deepEqual(offInset({ clientWidth, items }), [], `${file}, ${tab}: every piece on the inset`);
     }
-    // The navbar's panel toggle's icon, over the panel, on the same line.
-    const toggle = await page.evaluate(() => {
-      const icon = document.querySelector('[data-testid="one"] [data-navbar-panel="left"] svg').getBoundingClientRect();
-      return icon.left - document.querySelector('[data-testid="one"] [data-flat-panel]').getBoundingClientRect().left;
-    });
-    assert.ok(Math.abs(toggle - INSET) <= 0.5, `${file}: the navbar's toggle's icon at ${toggle}px`);
     // Opening the search (its icon, or /) and closing it move nothing under the head: the body's top, the open tab's
     // first row and the scroll stay at their pixel, in a single title's row (the drawing) and the tabs' (the model, its
     // last tab open: not one the search covers).
@@ -447,4 +442,80 @@ test('a file whose tabs arrive after its title: the head gains the tabs\' rule a
   assert.deepEqual([loaded.head, loaded.body], [loading.head + 9, loading.body + 9], `the head and the body's top: ${JSON.stringify({ loading, loaded })}`);
   // The first row stands at the body's top and its 8px.
   assert.equal(loaded.row, loaded.body + 8);
+});
+
+// The panel's foot (`file-viewer/PanelFoot.jsx`: the host's links and Settings), where the host has a home: the one the
+// home's sidebar ends in, pinned at the panel's bottom under a rule its full width, on the panel's own lines. A tab's
+// sticky actions row (Params' Reset and Save) stays in the scroller, flush against it wherever the tab is scrolled.
+test('a document\'s panel ends in the panel\'s foot: under a full-width rule, on the inset, a tab\'s own actions flush against it; in the peek and a phone\'s sheet too', async t => {
+  const rect = locator => locator.evaluate(node => { const { x, y, right, bottom, width, height } = node.getBoundingClientRect(); return { x, y, right, bottom, width, height }; });
+  const tilesOf = foot => foot.locator('a, button').evaluateAll(nodes => nodes.map(node => { const { x, y, right, bottom, width, height } = node.getBoundingClientRect();
+    return { name: node.getAttribute('aria-label'), x, y, right, bottom, width, height }; }));
+  // A short window, so the Params tab has more than fits and its actions row is stuck at the scroller's bottom.
+  const { page, pane, errors } = await open(t, 'hinge.step&home=1&links=1', { width: 1280, height: 220 });
+  const panel = pane.locator('[data-flat-panel]');
+  const foot = panel.locator('[data-app-foot]');
+  await foot.waitFor();
+  const side = await rect(panel), at = await rect(foot);
+  // Pinned at the panel's bottom, its rule a hairline from the panel's left edge to its own right rule.
+  assert.deepEqual([at.x - side.x, at.right - side.x, at.bottom], [0, 231, side.bottom]);
+  assert.equal(await foot.evaluate(node => getComputedStyle(node).borderTopWidth), '1px');
+  // The links and the cog: the control's 28px, 8px under the rule and over the panel's bottom, the first glyph and the
+  // cog's on the panel's two lines (16px in), as in the home's sidebar.
+  const tiles = await tilesOf(foot);
+  assert.deepEqual(tiles.map(({ name, width, height, y, bottom }) => [name, width, height, y, bottom]),
+    ['GitHub', 'Discord', 'Send feedback', 'Settings'].map(name => [name, 28, 28, at.y + 9, side.bottom - 8]));
+  const glyphs = await foot.locator('svg').evaluateAll(nodes => nodes.map(node => { const { x, right } = node.getBoundingClientRect(); return { x, right }; }));
+  assert.deepEqual([glyphs[0].x - side.x, glyphs.at(-1).right - side.x], [INSET, 231 - INSET]);
+  // The navbar's first glyph over the panel, the logo's drawn mark (its artwork 2px inside its image), on the same line;
+  // the panel's toggle after it.
+  const mark = await rect(pane.locator('[data-viewer-navbar] [data-navbar-logo] img'));
+  assert.equal(mark.x + 2 - side.x, INSET);
+  assert.ok((await rect(pane.locator('[data-viewer-navbar] [data-navbar-panel="left"]'))).x >= mark.right, 'the toggle after the logo');
+  // Params: its Reset and Save stay over the foot, in the scroller, flush against the foot's rule at the top of the
+  // scroll, on the way and at its end.
+  await chooseTab(page, pane, 'parameters');
+  await settle(page);
+  const scroller = panel.locator('[data-flat-panel-scroller]');
+  const actions = panel.locator('[data-parameters-foot]');
+  assert.ok(await scroller.evaluate(node => node.scrollHeight > node.clientHeight + 8), 'the tab has more than fits');
+  assert.equal(await actions.evaluate((node, scroller) => scroller.contains(node), await scroller.elementHandle()), true);
+  const flush = async () => [Math.round((await rect(actions)).bottom), Math.round((await rect(foot)).y)];
+  assert.deepEqual(await flush(), [at.y, at.y], 'flush at the top of the scroll');
+  await scroller.evaluate(node => { node.scrollTop = 12; });
+  assert.deepEqual(await flush(), [at.y, at.y], 'flush on the way');
+  await scroller.evaluate(node => { node.scrollTop = node.scrollHeight; });
+  await settle(page);
+  assert.deepEqual(await flush(), [at.y, at.y], 'flush at the end, with no jump');
+  // The cog's menu opens upward: the settings left of the app's menu, no links.
+  await foot.getByRole('button', { name: 'Settings' }).click();
+  const menu = page.getByRole('menu', { name: 'Settings' });
+  await menu.waitFor();
+  assert.deepEqual([await menu.getAttribute('data-side'), await menu.locator('[data-link]:not([data-link="made-by"])').count()], ['top', 0]);
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
+  // Collapsed, the peek has the same foot, inside its card.
+  const toggle = pane.locator('[data-navbar-panel="left"]');
+  await toggle.click();
+  await panel.waitFor({ state: 'hidden' });
+  await page.mouse.move(900, 200);
+  await toggle.hover();
+  await pane.locator('aside[data-flat-panel][data-panel-peek]').waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] aside[data-panel-peek]').getAnimations().every(animation => animation.playState === 'finished'));
+  const card = await rect(pane.locator('[data-panel-peek-card]'));
+  const peeked = await tilesOf(foot);
+  assert.deepEqual(peeked.map(({ name }) => name), ['GitHub', 'Discord', 'Send feedback', 'Settings']);
+  assert.ok(peeked.every(tile => tile.x >= card.x && tile.right <= card.right && tile.bottom <= card.bottom && tile.y === tiles[0].y), `the foot's tiles in the card, where the pinned panel's stand: ${JSON.stringify(peeked)}`);
+  assert.deepEqual(errors, []);
+  // A phone's sheet: the foot at its bottom, its tiles a finger's 36px.
+  const phone = await open(t, 'hinge.step&home=1&links=1', { width: 390, height: 700 });
+  const sheet = phone.page.locator('[data-panel-sheet]');
+  const sheetFoot = sheet.locator('[data-app-foot]');
+  await sheetFoot.waitFor();
+  await phone.page.waitForFunction(() => document.querySelector('[data-panel-sheet]').getAnimations().every(animation => animation.playState === 'finished'));
+  const place = await rect(sheet), low = await rect(sheetFoot);
+  assert.deepEqual([low.x, Math.round(low.bottom), Math.round(place.bottom)], [0, 700, 700]);
+  assert.deepEqual((await tilesOf(sheetFoot)).map(({ name, height, bottom }) => [name, height, Math.round(bottom)]),
+    ['GitHub', 'Discord', 'Send feedback', 'Settings'].map(name => [name, 36, 700 - 8]));
+  assert.deepEqual(phone.errors, []);
 });

@@ -6,7 +6,7 @@ engine's daemon runs the core.
 
 uv is reached through a wrapper where uv's installer puts it (``UV_INSTALL_DIR``) that logs what it is
 asked. The engine is this file's own (the runner's ``CAD_ENGINE_DIR``), the core registered as its state folder's current installation,
-started by the core's ``cad server start`` -- with the core's Python -- and stopped by its ``cad stop``. The fake-uv
+started by the core's ``cad server start`` -- with the core's Python -- and stopped by its ``cad server stop``. The fake-uv
 contracts (keys, commands, refusals) are test_base.py's.
 """
 
@@ -95,7 +95,7 @@ class CoreAndBaseTest(unittest.TestCase):
 
         api.stop()
         subprocess.run([cls.cadgen, "server", "start"], env=cls.env, check=True, capture_output=True)
-        cls.addClassCleanup(lambda: subprocess.run([cls.cadgen, "stop"], env=cls.env, capture_output=True))
+        cls.addClassCleanup(lambda: subprocess.run([cls.cadgen, "server", "stop"], env=cls.env, capture_output=True))
 
     def run_cadgen(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:
         return engine_daemon.run([self.cadgen, *args], env=self.env, cwd=str(cwd))
@@ -137,14 +137,14 @@ class CoreAndBaseTest(unittest.TestCase):
         again = self.run_cadgen("run", "model.py", cwd=project)
         self.assertEqual((again.returncode, self.caller(again)), (0, made), again.stderr)
         self.assertEqual(self.asked(["venv", "pip"]), ["venv", "pip"], "made once: nothing asked of uv again")
-        status = json.loads(self.run_cadgen("status", "--json", cwd=project).stdout)
+        status = json.loads(self.run_cadgen("server", "status", "--json", cwd=project).stdout)
         self.assertEqual(Path(status["prefix"]).resolve(), self.core.resolve(), "the engine runs the core")
 
         # The engine's own kernel processes: the documents worker exports a file, the pool measures it.
-        exported = self.run_cadgen("xbf", "export", "XBF/part.xbf", "out.stl", cwd=project)
+        exported = self.run_cadgen("export", "XBF/part.xbf", "out.stl", cwd=project)
         self.assertEqual(exported.returncode, 0, exported.stderr)
         self.assertGreater((project / "out.stl").stat().st_size, 0)
-        inspected = self.run_cadgen("xbf", "inspect", "XBF/part.xbf", "--json", cwd=project)
+        inspected = self.run_cadgen("inspect", "XBF/part.xbf", "--json", cwd=project)
         self.assertEqual(inspected.returncode, 0, inspected.stdout + inspected.stderr)  # --json says a failure on stdout
         self.assertAlmostEqual(json.loads(inspected.stdout)["summary"]["volume"], 120.0, places=3)
 

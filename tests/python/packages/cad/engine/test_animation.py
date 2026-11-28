@@ -387,10 +387,10 @@ class HarvestTest(_Folder):
         source = textwrap.dedent("""
             import build123d as bd
             from cad.build123d import animation
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf("XBF/bot.xbf")
+            @model("XBF/bot.xbf")
             def bot():
                 def part(label, x):
                     solid = bd.Pos(x, 0, 0) * bd.Box(10, 10, 10)
@@ -519,7 +519,7 @@ class KeysTest(unittest.TestCase):
 
 
 class GlbTest(_Folder):
-    def test_a_restart_takes_an_animated_model_from_the_cache_and_its_glb_is_the_cold_builds(self) -> None:
+    def test_a_restart_takes_an_animated_model_from_its_xbf_and_its_glb_is_the_cold_builds(self) -> None:
         from cad.engine import export
         from cad.engine.kernel import memo
 
@@ -540,13 +540,12 @@ class GlbTest(_Folder):
         """
         self.build(source, "pair")
         self.assertNotIn("animations", document.Loaded(self.folder / "XBF/pair.xbf").closure, "the record is its own")
-        from tests.python.support import engine_cache
+        from tests.python.support import engine_restart
 
-        cache = self.folder / "cache"
-        engine_cache.restart(cache)  # a fresh worker: no memo, no document in memory, the engine's cache
-        (again,) = engine_build.build(self.folder / "model.py", ["pair"], cwd=self.folder, cache=str(cache))
-        self.assertEqual(again["cache"], {"used": True, "from": "cache"})
-        self.assertEqual(again["memo"]["bodies_run"], 0, "taken from the engine's cache: nothing ran")
+        engine_restart.restart()  # a fresh worker: no memo, no document in memory, its .xbf as the engine wrote it
+        (again,) = engine_restart.build(self.folder / "model.py", ["pair"], cwd=self.folder)
+        self.assertEqual(again["cache"], {"used": True, "from": "xbf"})
+        self.assertEqual(again["memo"]["bodies_run"], 0, "taken from its .xbf: nothing ran")
         out = self.folder / "again.glb"
         export.translate(engine_build.held(self.folder / "model.py", "pair"), None, out)
         self.assertEqual([clip["name"] for clip in _glb(out)[0]["animations"]], ["slide"])

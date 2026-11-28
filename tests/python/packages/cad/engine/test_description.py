@@ -42,10 +42,10 @@ HINGE = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import frame, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -67,10 +67,10 @@ def hinge():
 BACKWARDS = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/backwards.xbf")
+@model("XBF/backwards.xbf")
 def backwards():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -88,10 +88,10 @@ def backwards():
 LIFT = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/lift.xbf")
+@model("XBF/lift.xbf")
 def lift():
     base = bd.Box(80, 80, 10)
     base.label = "base"
@@ -119,12 +119,12 @@ def lift():
 FINGER = """
 import build123d as bd
 from cad.build123d import gear_pair, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 CURL = {"knuckle": 90, "middle": 100, "tip": 70}
 
 
-@xbf("XBF/finger.xbf")
+@model("XBF/finger.xbf")
 def finger():
     bones, x = [], 0
     for name, length in (("palm", 30), ("proximal", 40), ("medial", 25), ("distal", 20)):
@@ -146,10 +146,10 @@ def finger():
 PAIR = """
 import build123d as bd
 from bd_materials import metals
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/pair.xbf")
+@model("XBF/pair.xbf")
 def pair():
     left = bd.Box(10, 20, 30)
     left.label = "left"
@@ -162,10 +162,10 @@ def pair():
 # Two revolute joints on one axis between the same two parts: a loop.
 LOOP = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/loop.xbf")
+@model("XBF/loop.xbf")
 def loop():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -188,7 +188,7 @@ import math
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 A, B, C, D = (0, 0), (15, 26), (55, 50), (80, 0)  # mm, in the XZ plane
 
@@ -210,7 +210,7 @@ def hinge(name, holder, child, at, connect=True):
         joint.connect_to(child.joints[name], angle=0)
 
 
-@xbf("XBF/four_bar.xbf")
+@model("XBF/four_bar.xbf")
 def four_bar():
     base = bd.Pos(40, -20, -10) * bd.Box(100, 10, 10)
     base.label = "base"
@@ -228,10 +228,10 @@ def four_bar():
 # rod slides in, the slide paired last by label, so the loop closes at a slide.
 CYLINDER = """
 import build123d as bd
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/cylinder.xbf")
+@model("XBF/cylinder.xbf")
 def cylinder():
     base = bd.Box(140, 10, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MAX))
     base.label = "base"
@@ -256,10 +256,10 @@ def cylinder():
 GRIPPER = """
 import build123d as bd
 from cad.build123d import mechanism_state, rack_and_pinion_pair
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/gripper.xbf")
+@model("XBF/gripper.xbf")
 def gripper():
     palm = bd.Box(80, 20, 20)
     palm.label = "palm"
@@ -283,10 +283,10 @@ import build123d as bd
 from bd_materials import FinishedMaterial
 from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/foam.xbf")
+@model("XBF/foam.xbf")
 def foam():
     block = bd.Box(10, 10, 10)
     block.label = "block"
@@ -534,10 +534,10 @@ BODIES = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import body, limits
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/bodies.xbf")
+@model("XBF/bodies.xbf")
 def bodies():
     base = bd.Box(100, 60, 20)
     base.label = "base"
@@ -622,10 +622,10 @@ LINKED = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import limits
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/linked.xbf")
+@model("XBF/linked.xbf")
 def linked():
     base = bd.Box(100, 60, 20, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
     arm = bd.Pos(40, 0, 20) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
@@ -663,10 +663,10 @@ MASSES = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import mass, point_mass
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/masses.xbf")
+@model("XBF/masses.xbf")
 def masses():
     housing = bd.Box(40, 20, 10)
     housing.label = "housing"
@@ -771,10 +771,10 @@ class MassTest(_Folder):
 TURNED = """
 import build123d as bd
 from bd_materials import metals
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/turned.xbf")
+@model("XBF/turned.xbf")
 def turned():
     anchor = bd.Location((5, -10, 20), (0, 0, 1), 90) * bd.Box(4, 4, 4)
     anchor.label = "anchor"
@@ -838,10 +838,10 @@ class InertiaRotationTest(_Folder):
 MOVED = """
 import build123d as bd
 from cad.build123d import body, frame, free, link, mass
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/moved.xbf")
+@model("XBF/moved.xbf")
 def moved():
     block = bd.Box(10, 20, 30)
     block.label = "block"
@@ -953,10 +953,10 @@ TWO = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import free, link, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/two.xbf")
+@model("XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -1036,8 +1036,8 @@ class BaseAndZeroTest(_Folder):
                                                       "'upper' by joint 'elbow'"):
             self.described("two", TWO.format(declare="free(fore)", root="pass"))
         with self.assertRaisesRegex(DescriptionError, "link 'pair' holds parts declared to be link 'a' and link 'b'"):
-            self.described("pair", PAIR.replace("from cad.engine import xbf", "from cad.build123d import link\n"
-                                                "from cad.engine import xbf").replace(
+            self.described("pair", PAIR.replace("from cad.engine import model", "from cad.build123d import link\n"
+                                                "from cad.engine import model").replace(
                 '    return bd.Compound(children=[left, right], label="pair")',
                 '    link(left, "a"); link(right, "b")\n'
                 '    return bd.Compound(children=[bd.Compound(children=[left, right], label="pair")], label="top")'))

@@ -8,7 +8,7 @@ what `cad` reads of a URDF, and the conventions that keep a hand-written one aud
 ## What cad reads
 
 - **Joints**: `fixed`, `revolute`, `continuous` and `prismatic`. A `floating` or `planar` joint is
-  refused by `cad urdf validate`, by the snapshot and by the viewer. A base that moves stays the
+  refused by `cad inspect`, by the snapshot and by the viewer. A base that moves stays the
   root link, and its freedom is the SRDF's `<virtual_joint>`
   ([srdf-authoring.md](srdf-authoring.md#elements)).
 - **Geometry**: one `box`, `cylinder`, `sphere` or `mesh` in each `<visual>` and `<collision>`, and

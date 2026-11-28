@@ -11,7 +11,7 @@ import {
 import { buildGlbDocumentFromBuffer, disposeGlbDocument } from "@cad/core/lib/render/glbMeshData.js";
 
 // The hero's backdrop: the planetary gear as one GLB, exported from the model's document by
-// `cad model export` (apps/docs/README.md): its parts and the `meshCycle` motion, which the export
+// `cad export` (apps/docs/README.md): its parts and the `meshCycle` motion, which the export
 // baked into a clip. The page reads it the way the viewer reads any GLB
 // (`buildGlbDocumentFromBuffer`) and plays the clip the way the viewer does (`glbAnimationRuntime`):
 // no gear math of the site's own. It is drawn as a technical drawing with its hidden lines removed:

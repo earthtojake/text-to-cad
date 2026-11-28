@@ -18,7 +18,7 @@ import viewerPackage from "../../package.json";
 // (`@cad/ui/build-id`), and the version then reads `<version>-dev.<build>` (`0.8.0-dev.<build>`).
 const BUILD = typeof __CAD_BUILD__ === "string" ? __CAD_BUILD__ : "";
 
-/** This Viewer's `ViewerHost.links`: the version it runs, X, its build's GitHub (and new issues there) and Discord. */
+/** This Viewer's `ViewerHost.links`: the version it runs, its build's GitHub (and new issues there) and Discord. */
 export function useViewerLinks() {
   const version = viewerPackage.version;
   const github = normalizeViewerGithubUrl(import.meta.env?.VIEWER_GITHUB_URL);

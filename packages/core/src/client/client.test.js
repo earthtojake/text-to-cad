@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { createCadClient, isMissingFileError } from './client.js';
 
 function json(value) { return { ok: true, json: async () => value }; }
 // A file's envelope as `GET /api/v1/documents?path=` answers it (the API's), its catalog row inside.
 function docs(entries) { return json({ documents: entries.map(entry => ({ id: entry.id, entry, revision: entry.hash ?? '' })) }); }
 // A document the engine does not hold, as `GET /api/v1/documents/<id>` refuses it.
-function missing(error, state) {
-  return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error, hint: 'run the model\'s script again', ...(state ? { state } : {}) }) };
+function missing(error) {
+  return { ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error, hint: 'run the model\'s script again, or open the file from where it is now' }) };
 }
 function deferred() { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; }
 
@@ -133,20 +134,49 @@ test('a file the server does not have is a missing file, said so', async (t) => 
   assert.equal(isMissingFileError(new Error('offline')), false);
 });
 
-test('a folder is read one at a time, and a search under it asks the server with its query', async (t) => {
+test('projects are read, opened by a folder and removed', async (t) => {
   const calls = [];
-  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
-    calls.push(new URL(url));
-    return json(!new URL(url).searchParams.has('q') ? { path: '/m', entries: [{ name: 'arm', kind: 'directory' }], truncated: false }
-      : { path: '/m', results: ['/m/arm/link.step'], truncated: true });
+  const project = { id: 'p1', name: 'tag', root: '/m/tag', created: 1, opened: 2, missing: false };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    calls.push([path, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    if (path === '/api/v1/projects' && options.method === 'POST') return json({ project, made: false });
+    if (path === '/api/v1/projects/p1' && options.method === 'DELETE') return json({ projects: [] });
+    return json({ projects: [project] });
   } });
   t.after(() => client.dispose());
-  assert.deepEqual((await client.folder('/m')).entries, [{ name: 'arm', kind: 'directory' }]);
-  assert.deepEqual(await client.search('/m', 'link'), { path: '/m', results: ['/m/arm/link.step'], truncated: true });
-  assert.deepEqual(calls.map((url) => [url.origin, url.pathname, Object.fromEntries(url.searchParams)]), [
-    ['http://one.test', '/api/v1/local/folder', { path: '/m' }],
-    ['http://one.test', '/api/v1/local/folder', { path: '/m', q: 'link' }],
+  assert.deepEqual(await client.projects(), [project]);
+  assert.deepEqual(await client.openProject('/m/tag/sub'), { project, made: false });
+  assert.deepEqual(await client.removeProject('p1'), []);
+  assert.deepEqual(calls, [
+    ['/api/v1/projects', 'GET', null, null], ['/api/v1/projects', 'POST', '1', { path: '/m/tag/sub' }], ['/api/v1/projects/p1', 'DELETE', '1', null],
   ]);
+});
+
+test("a project's folder is asked by its path and its words, and its rows are the library's", async (t) => {
+  const listing = JSON.parse(await readFile(new URL('./__fixtures__/projectFolder.json', import.meta.url), 'utf8'));
+  const search = JSON.parse(await readFile(new URL('./__fixtures__/projectSearch.json', import.meta.url), 'utf8'));
+  const asked = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
+    const { pathname, searchParams } = new URL(url);
+    asked.push([pathname, Object.fromEntries(searchParams)]);
+    return json(searchParams.has('q') ? search : listing);
+  } });
+  t.after(() => client.dispose());
+  const id = listing.project.id;
+  const folder = await client.projectFolder(id, { path: 'housing/v3' });
+  assert.deepEqual(Object.keys(folder), ['project', 'path', 'folders', 'documents', 'truncated']);
+  assert.deepEqual([folder.project, folder.path, folder.folders, folder.truncated], [listing.project, 'housing/v3', listing.folders, false]);
+  // A row as the library reads it: the record's kind as `kind`, the document's as `documentKind`; the rest as answered.
+  assert.deepEqual(folder.documents, listing.documents.map((row) => ({ ...row, kind: 'file', documentKind: row.kind })));
+  assert.deepEqual(folder.documents.map((row) => [row.documentKind, row.opened, row.thumbnail]), [['xbf', 1764000100.0, '1764000100500'], ['step', null, null]]);
+  const found = await client.projectFolder(id, { path: 'housing', q: '  plan ' });
+  assert.deepEqual([found.folders, found.documents.map((row) => row.path)], [[], search.documents.map((row) => row.path)]);
+  // The root, with nothing typed: neither is sent.
+  await client.projectFolder(id, { path: '', q: '   ' });
+  await client.projectFolder(id);
+  const route = `/api/v1/projects/${id}`;
+  assert.deepEqual(asked, [[route, { path: 'housing/v3' }], [route, { path: 'housing', q: 'plan' }], [route, {}], [route, {}]]);
 });
 
 test('polling reads the files on screen again, and only those', async (t) => {
@@ -372,6 +402,24 @@ test('a drawing refused by the server raises the classified failure an alert is 
   client.dispose();
 });
 
+test('a change to a document the engine holds no more is the library as it now is, never a failure; any other refusal is told', async (t) => {
+  const calls = [];
+  const row = { id: 'd2', path: '/models/kept.step', kind: 'step', record: 'file' };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    calls.push([options.method || 'GET', body?.action ?? null]);
+    if (options.method !== 'PATCH') return Response.json({ documents: [row] });
+    // The file is gone: the engine holds no document by that name.
+    if (body.path === '/models/gone.step') return Response.json({ error: 'no document 4f0c is held' }, { status: 400 });
+    return Response.json({ error: 'unknown action' }, { status: 400 });
+  } });
+  t.after(() => client.dispose());
+  const listed = [{ ...row, kind: 'file', documentKind: 'step' }];
+  for (const action of ['pin', 'open', 'thumbnail']) assert.deepEqual(await client.changeRecents({ action, path: '/models/gone.step' }), listed, action);
+  assert.deepEqual(calls, [['PATCH', 'pin'], ['GET', null], ['PATCH', 'open'], ['GET', null], ['PATCH', 'thumbnail'], ['GET', null]]);
+  await assert.rejects(client.changeRecents({ action: 'spin', path: '/models/kept.step' }), /unknown action/);
+});
+
 test('Open in reads a document\'s files and their apps by its id, and opens one with the guarded POST', async (t) => {
   const calls = [];
   const answer = { targets: [{ target: 'source', kind: 'script', name: 'bracket.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }] }], fileManager: 'finder' };
@@ -379,6 +427,8 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
     const parsed = new URL(url);
     calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
     if (parsed.pathname === '/api/v1/local/open-in') return Response.json(answer);
+    if (options.body?.includes('refused')) return Response.json({ error: 'cad does not open .sh files.', hint: 'Show it in the file manager instead.' }, { status: 400 });
+    if (options.body?.includes('unstarted')) return Response.json({ error: 'the app could not be started: xdg-open is not installed', hint: 'open the file from the file manager instead' }, { status: 500 });
     return options.body?.includes('gone') ? Response.json({ error: 'That file is not there.' }, { status: 404 }) : new Response(null, { status: 204 });
   } });
   t.after(() => client.dispose());
@@ -386,11 +436,16 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
   await client.openIn('d1', 'source', 'vscode');
   await client.openIn('d1', 'export:step', 'default');
   await assert.rejects(client.openIn('gone', 'source', 'default'), /not there/);
+  // A refusal says what the server says, and what it says to do about it.
+  await assert.rejects(client.openIn('refused', 'source', 'default'), { message: 'cad does not open .sh files. Show it in the file manager instead.' });
+  await assert.rejects(client.openIn('unstarted', 'source', 'default'), { message: 'the app could not be started: xdg-open is not installed; open the file from the file manager instead' });
   assert.deepEqual(calls, [
     ['/api/v1/local/open-in?id=d1', 'GET', null, null],
     ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'source', app: 'vscode' }],
     ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'export:step', app: 'default' }],
     ['/api/v1/local/open', 'POST', '1', { id: 'gone', target: 'source', app: 'default' }],
+    ['/api/v1/local/open', 'POST', '1', { id: 'refused', target: 'source', app: 'default' }],
+    ['/api/v1/local/open', 'POST', '1', { id: 'unstarted', target: 'source', app: 'default' }],
   ]);
 });
 
@@ -436,12 +491,14 @@ test('the person\'s settings are read once by all that read them, until one chan
 test('the library, Open, Reveal and the person\'s settings are guarded requests to the viewer\'s routes, as any host reaches them', async (t) => {
   const calls = [];
   const thumbnail = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  // The one chooser of either's answers, in turn: a folder, a cancel, a file.
+  const either = [{ path: '/models/arm', folder: true }, { cancelled: true }, { path: '/models/picked.step', folder: false }];
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
     const path = new URL(url).pathname;
     calls.push([path, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
     if (path.endsWith('/thumbnail')) return new Response(path.includes('/d1/') ? thumbnail : null, { status: path.includes('/d1/') ? 200 : 404 });
     if (path === '/api/v1/local/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
-    if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
+    if (path === '/api/v1/local/pick') return Response.json(JSON.parse(options.body).any ? either.shift() : { path: '/models/picked.step' });
     if (path === '/api/v1/local/link') return Response.json({ link: '1700000000.mac', expires: 1700000000 });
     if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file', size: 2048 }] });
     if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
@@ -458,6 +515,10 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   assert.equal(await client.thumbnail({ id: 'd1', thumbnail: 'a.png' }), 'data:image/png;base64,iVBORw==');
   assert.equal(await client.thumbnail({ id: 'd2', thumbnail: 'none.png' }), null);
   assert.equal(await client.pick(), '/models/picked.step');
+  assert.equal(await client.pick({ folder: true, start: '/models' }), '/models/picked.step');
+  // The one chooser of a file or a folder (a Mac's): whichever was chosen, and whether it is a folder; null for a cancel.
+  assert.deepEqual([await client.pick({ any: true }), await client.pick({ any: true }), await client.pick({ any: true })],
+    [{ path: '/models/arm', folder: true }, null, { path: '/models/picked.step', folder: false }]);
   await client.reveal('/models/a.step');
   await assert.rejects(client.reveal('/models/gone.step'), /no longer there/);
   assert.deepEqual(await client.consent(), { share: true }, 'the settings\' telemetry');
@@ -476,7 +537,8 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/documents', 'PATCH', '1', { action: 'open', path: '/models/a.step' }],
     ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
     ['/api/v1/documents/d1/thumbnail', 'GET', null, null], ['/api/v1/documents/d2/thumbnail', 'GET', null, null],
-    ['/api/v1/local/pick', 'POST', '1', null],
+    ['/api/v1/local/pick', 'POST', '1', {}], ['/api/v1/local/pick', 'POST', '1', { folder: true, start: '/models' }],
+    ...[0, 1, 2].map(() => ['/api/v1/local/pick', 'POST', '1', { any: true }]),
     ['/api/v1/local/reveal', 'POST', '1', { path: '/models/a.step' }], ['/api/v1/local/reveal', 'POST', '1', { path: '/models/gone.step' }],
     ['/api/v1/settings', 'GET', null, null],
     ['/api/v1/settings', 'PUT', '1', { telemetry: { share: true } }], ['/api/v1/settings', 'PUT', '1', { telemetry: { share: false } }],
@@ -513,22 +575,12 @@ test('an id the engine does not hold is missing, in the engine\'s words', async 
   const calls = [];
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
     calls.push(String(url));
-    return missing(`no document ${id} is held: run \`python /m/parts.py\` to build it again`);
+    return missing(`no document ${id} is held`);
   } });
   const failure = await client.resolveEntry(id).catch((error) => error);
   assert.equal(isMissingFileError(failure), true);
-  assert.match(failure.message, /run `python \/m\/parts.py` to build it again/);
+  assert.equal(failure.message, `no document ${id} is held`);
   assert.equal(new URL(calls[0]).pathname, `/api/v1/documents/${id}`, 'a document id is asked for by id: its envelope');
-  assert.equal(failure.state, undefined, 'the engine named no state');
-  client.dispose();
-});
-
-test('an id the engine does not hold carries the state the engine names for it', async () => {
-  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
-  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => missing(
-    `cube (${id}) is detached: /m/parts.py is gone, and nothing builds it again; delete it from the home`, 'detached') });
-  const failure = await client.resolveEntry(id).catch((error) => error);
-  assert.deepEqual([isMissingFileError(failure), failure.state], [true, 'detached']);
   client.dispose();
 });
 
@@ -536,7 +588,7 @@ test("a model's row carries the script that builds it and whether it is on disk 
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   let present = true;
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => (String(url).includes(id)
-    ? json({ id, kind: 'model', source: { type: 'script', path: '/m/parts.py', function: 'cube', present }, entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
+    ? json({ id, kind: 'xbf', source: { type: 'script', path: '/m/parts.py', function: 'cube', present }, entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
     : json({ documents: [{ id: 'f', kind: 'step', source: { type: 'file', path: '/m/a.step', present: true }, entry: { id: 'f', file: '/m/a.step' }, revision: 'r2' }] })) });
   const model = await client.resolveEntry(id);
   assert.deepEqual([model.script, model.sourcePresent], ['/m/parts.py', true]);
@@ -552,14 +604,45 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   let held = true;
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => (held
-    ? json({ id, kind: 'model', entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
-    : missing(`no document ${id} is held`, 'unsaved')) });
+    ? json({ id, kind: 'xbf', entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
+    : missing(`no document ${id} is held`)) });
   assert.equal((await client.resolveEntry(id)).id, id);
-  held = false;  // `cad delete`
+  held = false;  // its file deleted
   await client.refresh({ file: id });
   assert.equal(client.entryOf(id), null, 'its row is gone');
   const failure = await client.resolveEntry(id).catch((error) => error);
-  assert.deepEqual([isMissingFileError(failure), failure.state], [true, 'unsaved']);
+  assert.deepEqual([isMissingFileError(failure), failure.message], [true, `no document ${id} is held`]);
+  client.dispose();
+});
+
+test('a file deleted or moved while it is on screen leaves the catalog, asked by its path or its id, and is missing by its path', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ac';
+  let there = true;
+  const entry = { id, file: '/m/part.stl', name: 'part.stl' };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
+    const asked = new URL(url);
+    if (asked.searchParams.has('path')) return json({ documents: there ? [{ id, kind: 'stl', entry, revision: 'r1' }] : [] });
+    // The server names the file an id was, where it knows it.
+    return there ? json({ id, kind: 'stl', entry, revision: 'r1' }) : Response.json({ error: `no document ${id} is held`, hint: '', path: '/m/part.stl' }, { status: 404 });
+  } });
+  assert.equal((await client.resolveEntry(id)).id, id);
+  await client.refresh({ file: '/m/part.stl' });
+  there = false;
+  // Read again by its path, as a view reading a file is: no document there, so its row goes.
+  await client.refresh({ file: '/m/part.stl' });
+  assert.deepEqual([client.entryOf(id), client.entryOf('/m/part.stl')], [null, null], 'its row is gone');
+  const byPath = await client.resolveEntry('/m/part.stl').catch((error) => error);
+  assert.deepEqual([isMissingFileError(byPath), byPath.path], [true, '/m/part.stl']);
+  const byId = await client.resolveEntry(id).catch((error) => error);
+  assert.deepEqual([isMissingFileError(byId), byId.path], [true, '/m/part.stl']);
+  // An id nothing named: missing, with no path.
+  const unknown = await createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => missing('no document is held') })
+    .resolveEntry('6f1c2a4e-1b2c-5d3e-8f4a-0123456789ad').catch((error) => error);
+  assert.deepEqual([isMissingFileError(unknown), unknown.path], [true, '']);
+  // Back where it was: its row again.
+  there = true;
+  await client.refresh({ file: id });
+  assert.equal(client.entryOf(id)?.id, id);
   client.dispose();
 });
 
@@ -576,7 +659,7 @@ test("a model's parameters are saved by one guarded POST of names and numbers, a
   } });
   t.after(() => client.dispose());
   assert.deepEqual(await client.setModelParameters(id, { wall: 2.5, holes: 8 }), saved);
-  assert.deepEqual(calls, [[`/api/v1/documents/model/${id}/parameters`, 'POST', '1', 'application/json', { values: { wall: 2.5, holes: 8 } }]]);
+  assert.deepEqual(calls, [[`/api/v1/documents/xbf/${id}/parameters`, 'POST', '1', 'application/json', { values: { wall: 2.5, holes: 8 } }]]);
   // A refusal is the engine's own sentence, with its code, its hint and (a parameter that cannot be written) its reason.
   refusal = { error: 'bracket.py changed since it last ran', hint: 'run the script first', code: 'script_changed' };
   const changed = await client.setModelParameters(id, { wall: 3 }).catch(error => error);
@@ -607,8 +690,8 @@ test("a model's preview is one guarded POST of names, numbers and the page's tok
   } });
   t.after(() => client.dispose());
   const shown = await client.previewModelParameters(id, { wall: 3 }, { page: 'page-1' });
-  assert.deepEqual(calls, [[`/api/v1/documents/model/${id}/preview`, 'POST', '1', { values: { wall: 3 }, page: 'page-1' }]]);
-  assert.equal(shown.preview.url, `http://one.test/api/v1/documents/model/${encodeURIComponent(held)}`, 'read as a document is');
+  assert.deepEqual(calls, [[`/api/v1/documents/xbf/${id}/preview`, 'POST', '1', { values: { wall: 3 }, page: 'page-1' }]]);
+  assert.equal(shown.preview.url, `http://one.test/api/v1/documents/xbf/${encodeURIComponent(held)}`, 'read as a document is');
   assert.equal(shown.preview.version, '0123456789abcdef');
   // The document's own values (`{}` too: Reset) let the page's previews go; a request a newer one replaced is said so.
   answer = { id, preview: null };

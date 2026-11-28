@@ -24,6 +24,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import cad  # noqa: E402
 from cad import kicad_pcb, kicad_sch  # noqa: E402
 from kicode.board_types import BoardCircle, BoardPolygon, BoardSegment, BoardText, Track, Via, Zone  # noqa: E402
 from kicode.geometry import Angle, PolygonWithHoles, PolyLine, PolyLineNode, Vector2  # noqa: E402
@@ -90,7 +91,7 @@ def setup(b):
     if not [s for s in b.get_shapes() if s.layer == BL.BL_Edge_Cuts]:
         make_outline(b)
     with tempfile.TemporaryDirectory() as tmp:
-        (netlist,) = kicad_sch.export(str(SCHEMATIC), "netlist", tmp).written
+        (netlist,) = cad.export(str(SCHEMATIC), Path(tmp) / "pinball.net").written
         result = b.import_netlist(str(netlist))
         print("netlist: new footprints", result.new_footprint_count, "errors", result.error_count)
         if result.error_count:

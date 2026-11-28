@@ -3,7 +3,7 @@
 Three properties that only hold if something checks them:
 
 * **The manifest.** Exactly the declared names are public on each robot description's document
-  type (``cad.urdf``, ...), and every public verb is fully annotated -- annotation is what makes a CLI derivable, so an unannotated
+  type (``cad.urdf``, ...), and every check is fully annotated -- annotation is what makes a CLI derivable, so an unannotated
   parameter is a silently undispatchable flag.
 * **Signature sync.** For every command, the parser's options ARE the function's parameters
   (a mirror, generated from it) or exactly what the command declares (an adapter, whose parser
@@ -19,6 +19,7 @@ import contextlib
 import importlib
 import io
 import inspect
+import json
 import subprocess
 import sys
 import unittest
@@ -27,48 +28,54 @@ import warnings
 from cad_server import cli
 from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, NotDerivable, cli_from_function, function_parameters, parser_dests)
 
-# The manifest: robot namespace -> exactly the verbs it exports. A robot description is an
-# authored file, so there is nothing to declare; each format's snapshot is the engine's.
+# The manifest: robot namespace -> exactly the names it exports. A robot description is an authored file, so there
+# is nothing to declare; its check is ``cad.inspect``'s (``cad.<type>.validate`` an alias, kept out of ``__all__``),
+# and its snapshot the engine's.
 PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
-    "cad.urdf": ("validate",),
-    "cad.srdf": ("validate",),
+    "cad.urdf": (),
+    "cad.srdf": (),
 }
+# The robot descriptions' checks, what ``cad inspect`` of each runs: fully annotated, the SRDF's derivable (a
+# mirror's), the URDF's not (an adapter's: ``--packages NAME=PATH`` repeats).
+CHECKS: dict[tuple[str, str], bool] = {("cad.urdf._check", "validate"): False, ("cad.srdf._check", "validate"): True}
+
+# The file each verb's command lines below name, by type: the verb's runner is its type's.
+FILE = {"xbf": "part.xbf", "step": "part.step", "stl": "part.stl", "glb": "part.glb", "threemf": "part.3mf",
+        "dxf": "part.dxf", "urdf": "robot.urdf", "srdf": "robot.srdf", "kicad_pcb": "board.kicad_pcb",
+        "kicad_sch": "sheet.kicad_sch"}
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
-# the parser has no independent existence.
+# the parser has no independent existence. A verb's is named for the verb and its file's type (``dfm step``),
+# a mode's with its flag too (``inspect step --ranges``), which the parser takes beside the signature.
 MIRRORS: dict[str, tuple[str, str]] = {
     # The mujoco integration's check of a MuJoCo model's file, which is no document type: run here, or where
     # mujoco is not installed, in cad[mujoco]'s environment (``cad_server.cli.integrations``).
     "mujoco check": ("cad.mujoco", "check"),
-    # The orcaslicer integration's presets, found by name in OrcaSlicer's own folders, listed and written complete:
-    # standard library alone, so always run here.
-    "orcaslicer presets": ("cad.orcaslicer", "presets"),
-    "orcaslicer complete": ("cad.orcaslicer", "complete"),
-    "srdf validate": ("cad.srdf", "validate"),
-    # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
-    "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
-    # KiCad's electrical rules check of a saved schematic: the document type's, run by the kicad integration's kicad-cli.
-    "kicad_sch erc": ("cad.kicad_sch", "erc"),
+    # KiCad's own checks: its design rule check of a saved board and its electrical rules check of a schematic, the
+    # kicad integration's, run by its kicad-cli.
+    "kicad drc": ("cad.kicad", "drc"),
+    "kicad erc": ("cad.kicad", "erc"),
+    "inspect srdf": ("cad.srdf._check", "validate"),
     # A 3D type's manufacturing check, and a DXF's as a sheet's cut file: one signature for every type.
-    **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf")},
+    **{f"dfm {document_type}": (f"cad.{document_type}", "dfm")
+       for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf")},
     # A B-rep type's stress study: the calculix integration's, one signature for every B-rep type.
-    **{f"{document_type} solve": (f"cad.{document_type}", "solve") for document_type in ("model", "xbf", "step")},
+    **{f"fea {document_type}": (f"cad.{document_type}", "solve") for document_type in ("xbf", "step")},
     # The joint stops of a document with a mechanism: the kernel's, one signature for every B-rep type.
-    **{f"{document_type} ranges": (f"cad.{document_type}", "ranges") for document_type in ("model", "xbf", "step")},
+    **{f"inspect {document_type} --ranges": (f"cad.{document_type}", "ranges") for document_type in ("xbf", "step")},
 }
 
-# The engine snapshot's options (``cad.engine.snapshot``).
-SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "preview", "camera", "width", "height",
-                      "size_profile", "pose", "annotation", "measurements", "json"})
+# The engine snapshot's options (``cad.engine.snapshot``): ``out_folder`` is ``--out DIR``, a job's folder.
+SNAPSHOT = frozenset({"document", "out", "job", "out_folder", "display", "grid", "preview", "camera", "width",
+                      "height", "size_profile", "pose", "annotation", "measurements", "json"})
 
 # Commands with a HAND-WRITTEN parser, and the option surface each one owns. An adapter has no
 # generated parser to compare against a signature, so the declaration IS the contract, and a
 # flag or subcommand that appears without being declared here fails.
 ADAPTERS: dict[str, frozenset[str]] = {
-    # The one validator that cannot be a mirror: `--packages NAME=PATH` is repeatable, and a
+    # The one robot check that cannot be a mirror: `--packages NAME=PATH` is repeatable, and a
     # repeatable key/value map is outside the derivable set.
-    "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
+    "inspect urdf": frozenset({"path", "strict", "packages", "verbose"}),
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
     # cad updated now to the newest release of its major, by the server that runs; or `auto`, whether cad updates
@@ -77,36 +84,31 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The install command run now (`update`), or (`update auto`) whether cad's automatic update runs it after it; and
     # the hidden --refresh the updater of 0.11.10 runs, which does nothing.
     "plugin": frozenset({"command", "install", "update", "refresh"}),
-    # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
-    # A document's export (a model's, an xbf's, a STEP's) meshes a GLB, an STL or a 3MF to a tolerance and an
-    # angle, and takes a robot description's joints from a zero state; a mesh's, to the other mesh kinds, does
-    # neither.
-    **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "angle", "zero", "json"})
-       for document_type in ("model", "xbf", "step")},
-    **{f"{document_type} export": frozenset({"source", "destinations", "json"})
+    # The engine's verbs (cad_server.engine.cli), each type's: a document's export (a model's, a STEP's) meshes a GLB,
+    # an STL or a 3MF to a tolerance and an angle, and takes a robot description's joints from a zero state; a
+    # mesh's, to the other mesh kinds, does neither. Each names the kind it writes (--as), agreeing with its file's.
+    **{f"export {document_type}": frozenset({"source", "destinations", "as_", "tolerance", "angle", "zero", "json"})
+       for document_type in ("xbf", "step")},
+    **{f"export {document_type}": frozenset({"source", "destinations", "as_", "json"})
        for document_type in ("stl", "glb", "threemf")},
-    **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf")},
-    # A B-rep type's interference check: its poses and fits repeat, lists no signature derives.
-    **{f"{document_type} interference": frozenset({"document", "pose", "fit", "min_volume"})
-       for document_type in ("model", "xbf", "step")},
+    **{f"snapshot {document_type}": SNAPSHOT
+       for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf")},
+    # A B-rep type's interference check: its poses and fits repeat, lists no signature derives; its flag picked it.
+    **{f"inspect {document_type} --interference": frozenset({"document", "interference", "pose", "fit", "min_volume"})
+       for document_type in ("xbf", "step")},
     # A KiCad board's still: the engine's snapshot with the box of the board to frame.
-    "kicad_pcb snapshot": SNAPSHOT | {"window"},
-    # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
-    "kicad_pcb export": frozenset({"board", "to", "out"}),
-    "kicad_pcb inspect": frozenset({"board"}),
+    "snapshot kicad_pcb": SNAPSHOT | {"window"},
+    # A KiCad board's exports, kicad-cli's, from a fixed list, to a file, a folder or a .zip (--as naming the kind
+    # where it cannot); and its summary, the library's.
+    "export kicad_pcb": frozenset({"board", "dst", "as_"}),
+    "inspect kicad_pcb": frozenset({"board"}),
     # A KiCad schematic's: its exports, kicad-cli's; its summary and what a reference names; its still, the
     # engine's snapshot with the sheet to draw and its page's edge.
-    "kicad_sch export": frozenset({"schematic", "to", "out"}),
-    "kicad_sch inspect": frozenset({"schematic", "ref"}),
-    "kicad_sch snapshot": SNAPSHOT | {"sheet", "border"},
-    **{f"{document_type} inspect": frozenset({"document", "ref", "query", "json"})
-       for document_type in ("model", "xbf", "step", "glb")},
-    "serve": frozenset({"document", "port"}),
-    "status": frozenset({"json"}),
-    "stop": frozenset({"json"}),
-    # A command that destroys asks first, or takes --yes (cad_server._internal.consent); a delete says its plan alone.
-    "delete": frozenset({"documents", "dry_run", "yes", "json"}),
+    "export kicad_sch": frozenset({"schematic", "dst", "as_"}),
+    "inspect kicad_sch": frozenset({"schematic", "ref"}),
+    "snapshot kicad_sch": SNAPSHOT | {"sheet", "border"},
+    **{f"inspect {document_type}": frozenset({"document", "ref", "query", "json"})
+       for document_type in ("xbf", "step", "glb")},
     # The server's commands (start, stop, status), and the page token replaced, asking first.
     "server": frozenset({"command", "start", "stop", "status", "port", "rotate_token", "yes"}),
     # This version installed on this computer (and the hidden flag the updaters of 0.10.0 to 0.11.11 run).
@@ -120,6 +122,11 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The viewer launcher: the launch contract (reuse, replace or start on its one port, the --json announce
     # line) is not a function signature to mirror.
     "viewer": frozenset({"files", "host", "port", "json", "no_open", "dist", "api_only"}),
+    # A file shared by its link, or the words status, on, off and delete with the file or link it deletes: the
+    # person's agreement (--yes, which a delete asks too) and an upload this process makes mirror no function.
+    "share": frozenset({"target", "link", "yes", "json"}),
+    # A share's files written into a folder: a download this process makes, and a folder it writes, mirror no function.
+    "import": frozenset({"link", "folder", "json"}),
 }
 
 # Commands that own their command line outright and mirror no function.
@@ -139,18 +146,35 @@ def _verb(target: tuple[str, str]):
 
 
 def _commands() -> set[str]:
-    """Every command the dispatcher answers: each document type's operations, each integration's on its tool's
-    own files, and the rest."""
-    from cad_server.cli.document_types import OPERATIONS
+    """Every command the dispatcher answers: each verb's runner of each type (``dfm step``, a mode's with its flag:
+    ``inspect step --ranges``), each integration's operation on its tool's own files, and the rest."""
+    from cad.registry import MODES, operation_for, types_for
     from cad_server.cli.integrations import OPERATIONS as INTEGRATION_OPERATIONS
+    from cad_server.cli.verbs import VERBS
 
-    return {*cli._COMMANDS, *(f"{name} {operation}" for name, operation in (*OPERATIONS, *INTEGRATION_OPERATIONS))}
+    found = {name for name in cli._COMMANDS if name not in VERBS}
+    for verb in VERBS:
+        for mode in (None, *(MODES if verb == "inspect" else ())):
+            found.update(f"{verb} {document_type}" + (f" --{mode}" if mode else "") for document_type in
+                         types_for(verb, mode) if mode is None or operation_for(verb, document_type, mode) == MODES[mode])
+    return {*found, *(f"{name} {operation}" for name, operation in INTEGRATION_OPERATIONS)}
+
+
+def _parser(name: str):
+    """A command's parser, as the dispatcher reads its command line: a verb's of its type's file, with a mode's
+    flag (``inspect step --ranges``)."""
+    words = name.split()
+    from cad_server.cli.verbs import VERBS
+
+    if words[0] in VERBS:
+        return cli.build_parser_for(words[0], [FILE[words[1]], *words[2:]])
+    return cli.build_parser_for(name)
 
 
 def _adapter_surface(name: str) -> frozenset[str]:
     """One adapter command's real option surface, read off the command itself: its destinations
     plus its subcommand names, which is where a subcommand tree's meaning lives."""
-    parser = cli.build_parser_for(name)
+    parser = _parser(name)
     names = set(parser_dests(parser)) - {JSON_FLAG_DEST}
     for action in parser._actions:  # noqa: SLF001 - argparse exposes no public view
         if action.nargs == argparse.PARSER:
@@ -167,40 +191,42 @@ class Manifest(unittest.TestCase):
                 for verb in verbs:
                     self.assertTrue(callable(getattr(module, verb)))
 
-    def test_every_public_verb_is_fully_annotated_and_derivable(self):
-        for module_name, verbs in PUBLIC_SURFACE.items():
-            for verb in verbs:
-                with self.subTest(verb=f"{module_name}.{verb}"):
-                    func = _verb((module_name, verb))
-                    signature = inspect.signature(func)
-                    unannotated = [name for name, parameter in signature.parameters.items()
-                                   if parameter.annotation is parameter.empty]
-                    self.assertEqual([], unannotated)
-                    self.assertIsNot(signature.return_annotation, signature.empty)
-                    # Derivability is the CLASSIFICATION: a mirror's parser is generated from this
-                    # signature, and an adapter exists precisely because its verb cannot be.
-                    if (module_name, verb) in set(MIRRORS.values()):
+    def test_every_check_is_fully_annotated_and_derivable(self):
+        for target, derivable in CHECKS.items():
+            with self.subTest(check=".".join(target)):
+                func = _verb(target)
+                signature = inspect.signature(func)
+                unannotated = [name for name, parameter in signature.parameters.items()
+                               if parameter.annotation is parameter.empty]
+                self.assertEqual([], unannotated)
+                self.assertIsNot(signature.return_annotation, signature.empty)
+                # Derivability is the CLASSIFICATION: a mirror's parser is generated from this
+                # signature, and an adapter exists precisely because its verb cannot be.
+                if derivable:
+                    cli_from_function(func, prog="probe")
+                else:
+                    with self.assertRaises(NotDerivable):
                         cli_from_function(func, prog="probe")
-                    else:
-                        with self.assertRaises(NotDerivable):
-                            cli_from_function(func, prog="probe")
 
     def test_the_retired_commands_are_gone(self):
-        # No backwards compatibility: a retired command has no entry and no module, so it gets the
-        # same answer as any unknown command.
+        # A retired command has no entry and no module: it gets the answer of any unknown command, or, for a spelling
+        # the skills of 0.11 used, the one line naming the spelling it has now (``test_cli``).
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
-                        "store", "daemon", "daemon status", "where", "install", "export", "snapshot", "inspect",
+                        "store", "daemon", "daemon status", "where", "install", "serve", "status", "stop",
                         "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
                         "kicad_sch check", "pcb drc", "mjcf validate", "mjcf snapshot", "mjcf", "uninstall",
-                        "sdf", "sdf validate", "sdf snapshot"):
+                        "sdf", "sdf validate", "sdf snapshot", "xbf export", "step export", "urdf validate",
+                        "kicad_pcb drc", "kicad_sch erc", "model export", "orcaslicer presets"):
             self.assertNotIn(command, _commands())
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.store", "cadgen.daemon",
-                       "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.export", "cad_server.cli.snapshot",
-                       "cad_server.cli.inspect", "cad_server.cli.urdf_validate", "cad_server.cli.sdf_validate",
-                       "cad_server.cli.srdf_validate", "cad_server.kicad.schematic", "cad_server.cli.mjcf", "cad.mjcf",
-                       "cad.engine.mjcf_source", "cad_server.cli.retired", "cad_server._internal.leftovers",
-                       "cad_server.cli.sdf", "cad.sdf", "cad.engine.sdf_source"):
+                       "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.inspect", "cad_server.cli.urdf_validate",
+                       "cad_server.cli.sdf_validate", "cad_server.cli.srdf_validate", "cad_server.kicad.schematic",
+                       "cad_server.cli.mjcf", "cad.mjcf", "cad.engine.mjcf_source", "cad_server.cli.retired",
+                       "cad_server._internal.leftovers", "cad_server.cli.sdf", "cad.sdf", "cad.engine.sdf_source",
+                       "cad_server.cli.xbf", "cad_server.cli.step", "cad_server.cli.urdf", "cad_server.cli.model",
+                       "cad_server.cli.serve", "cad_server.cli.status", "cad_server.cli.stop",
+                       "cad_server.cli.orcaslicer"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError), warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)  # cadgen's deprecation, not this test's subject
                 importlib.import_module(module)
@@ -214,42 +240,52 @@ class Manifest(unittest.TestCase):
             code = cli.main(list(argv))
         return code, out.getvalue(), err.getvalue()
 
-    def test_a_known_format_with_a_wrong_verb_lists_that_formats_verbs(self):
-        for noun, verbs in {"urdf": ("validate", "snapshot"), "srdf": ("validate", "snapshot")}.items():
-            for rest in (("bogus",), ()):
-                with self.subTest(noun=noun, rest=rest):
-                    code, out, err = self._dispatch(noun, *rest)
-                    self.assertEqual(2, code)
-                    self.assertEqual("", out)
-                    # The NOUN is right: it is never reported as the unknown thing.
-                    self.assertNotIn(f"unknown command {noun!r}", err)
-                    # Its verbs and no other: in the one line said of a verb it does not have, which points at
-                    # the type's help, never prints it; in that help after a command line that names none.
-                    listed = (err.partition("; it has ")[2].partition(";")[0] if rest
-                              else err.split("operations:")[1])
-                    for verb in verbs:
-                        self.assertIn(verb, listed)
-                    self.assertNotIn("export", listed)
-                    if rest:
-                        self.assertNotIn("usage:", err)
-                        self.assertIn(f"'cad {noun} --help' says what each does", err)
-                    else:
-                        self.assertIn(f"usage: cad {noun} <operation>", err)
+    def test_a_file_whose_type_lacks_the_verb_is_refused_naming_the_types_that_have_it(self):
+        for argv, line in (
+                (("export", "robot.urdf", "robot.step"),
+                 "robot.urdf is a urdf, which has no export: cad export takes xbf, step, stl, glb, threemf, kicad_pcb "
+                 "and kicad_sch files"),
+                (("dfm", "robot.urdf"), "robot.urdf is a urdf, which has no dfm: cad dfm takes xbf, step, stl, glb, "
+                                        "threemf and dxf files"),
+                (("fea", "part.stl"), "part.stl is an stl, which has no fea: cad fea takes xbf and step files"),
+                (("inspect", "part.stl"), "part.stl is an stl, which has no inspect: cad inspect takes xbf, step, glb, "
+                                          "urdf, srdf, kicad_pcb and kicad_sch files"),
+                (("inspect", "part.glb", "--ranges"), "part.glb is a glb, which has no inspect --ranges: cad inspect "
+                                                      "--ranges takes xbf and step files"),
+                (("dfm", "board.kicad_pcb"), "board.kicad_pcb is a kicad_pcb: cad dfm checks that a part can be made; "
+                                             "KiCad's own check of it is cad kicad drc"),
+                (("dfm", "sheet.kicad_sch"), "sheet.kicad_sch is a kicad_sch: cad dfm checks that a part can be made; "
+                                             "KiCad's own check of it is cad kicad erc")):
+            with self.subTest(argv=argv):
+                code, out, err = self._dispatch(*argv)
+                self.assertEqual((2, ""), (code, out))
+                self.assertEqual(f"cad {argv[0]}: {line}\n", err)
+                code, out, err = self._dispatch(*argv, "--json")
+                self.assertEqual((2, ""), (code, err))
+                self.assertEqual({"ok": False, "error": line, "reason": "wrong_type"}, json.loads(out))
 
-    def test_a_formats_help_lists_its_verbs_and_exits_zero(self):
-        code, out, err = self._dispatch("urdf", "--help")
+    def test_a_verbs_help_says_its_forms_and_every_types_options_and_exits_zero(self):
+        code, out, err = self._dispatch("inspect", "--help")
         self.assertEqual((0, ""), (code, err))
-        self.assertIn("\n  validate ", out)
-        self.assertNotIn("export", out.split("operations:")[1])
+        for form in ("cad inspect FILE [REF]", "cad inspect FILE --interference", "cad inspect FILE --ranges",
+                     "cad inspect ROBOT.urdf", "cad inspect ROBOT.srdf"):
+            self.assertIn(form, out)
+        for flag in ("--query", "--interference", "--pose", "--fit", "--ranges", "--joint", "--strict", "--packages",
+                     "--urdf"):
+            self.assertIn(flag, out)
 
     def test_an_unknown_noun_names_it_and_where_the_commands_are(self):
         # Never the whole list: the word, at most one suggestion, and the help that lists them.
         code, out, err = self._dispatch("frobnicate", "export")
         self.assertEqual((2, ""), (code, out))
         self.assertEqual("cad: unknown command 'frobnicate'; 'cad --help' lists the commands\n", err)
-        code, out, err = self._dispatch("stauts")
+        # A command a release took away is one more unknown word, with no note about history.
+        code, out, err = self._dispatch("delete", "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab", "--yes")
+        self.assertEqual((2, ""), (code, out))
+        self.assertTrue(err.startswith("cad: unknown command 'delete'"), err)
+        code, out, err = self._dispatch("expotr")
         self.assertEqual(2, code)
-        self.assertEqual("cad: unknown command 'stauts' (did you mean 'status'?); 'cad --help' lists the commands\n",
+        self.assertEqual("cad: unknown command 'expotr' (did you mean 'export'?); 'cad --help' lists the commands\n",
                          err)
 
     def test_a_name_that_is_not_a_verb_raises_the_plain_attribute_error(self):
@@ -261,15 +297,19 @@ class Manifest(unittest.TestCase):
         self.assertNotIn("deleted", str(caught.exception))
 
     def test_the_engines_verbs_are_commands_of_their_own(self):
-        # One parser per verb, the engine's (cad_server.engine.cli), named by the command that runs it.
-        for verb in ("xbf export", "stl snapshot", "serve", "step inspect", "status", "stop", "delete", "server"):
+        # One parser per verb, named by the command that runs it: every type's options (cad_server.cli.verbs), and
+        # the server's process control (cad_server.engine.cli).
+        for verb in ("export", "snapshot", "inspect", "dfm", "fea", "server"):
             with self.subTest(verb=verb):
                 self.assertEqual(cli.build_parser_for(verb).prog, f"cad {verb}")
+        for argv in (["part.step", "part.glb"], ["part.stl", "out.png"], ["part.step"]):
+            with self.subTest(argv=argv):
+                self.assertTrue(cli.build_parser_for("export", argv).prog.startswith("cad export"))
 
     def test_every_verb_goes_through_the_engine(self):
         # No command runs a build or a verb in its own process: --no-daemon is an unrecognized argument like any
         # other. daemon=False is the Python functions' seam for tests and debugging alone.
-        for argv in (("xbf", "export", "a.xbf", "a.stl", "--no-daemon"), ("xbf", "snapshot", "a.xbf", "a.png", "--no-daemon")):
+        for argv in (("export", "a.xbf", "a.stl", "--no-daemon"), ("snapshot", "a.xbf", "a.png", "--no-daemon")):
             with self.subTest(argv=argv):
                 err = io.StringIO()
                 with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()), \
@@ -292,7 +332,9 @@ class SignatureSync(unittest.TestCase):
     def test_a_mirrors_parser_is_exactly_its_signature(self):
         for command, target in MIRRORS.items():
             with self.subTest(command=command):
-                dests = set(parser_dests(cli.build_parser_for(command))) - {JSON_FLAG_DEST}
+                # A mode's flag (--ranges) picked the runner: the parser takes it beside the signature.
+                flags = {word.removeprefix("--") for word in command.split() if word.startswith("--")}
+                dests = set(parser_dests(_parser(command))) - {JSON_FLAG_DEST} - flags
                 self.assertEqual(set(function_parameters(_verb(target))), dests)
 
     def test_an_adapters_option_surface_is_exactly_what_it_declares(self):
@@ -318,8 +360,13 @@ class ImportBudget(unittest.TestCase):
         code = (
             "import sys\n"
             "from cad_server import cli\n"
+            f"files = {FILE!r}\n"
+            f"verbs = {('export', 'inspect', 'snapshot', 'dfm', 'fea')!r}\n"
             f"for name in {commands!r}:\n"
-            "    cli.build_parser_for(name).format_help()\n"
+            "    words = name.split()\n"
+            "    parser = (cli.build_parser_for(words[0], [files[words[1]], *words[2:]]) if words[0] in verbs\n"
+            "              else cli.build_parser_for(name))\n"
+            "    parser.format_help()\n"
             f"    woke = [x for x in {HEAVY!r} if x in sys.modules]\n"
             "    if woke:\n"
             "        print(f'WOKE {name}: {woke}')\n"

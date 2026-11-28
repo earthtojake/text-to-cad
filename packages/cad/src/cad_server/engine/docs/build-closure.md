@@ -3,8 +3,8 @@
 A page of [the engine's documentation](../README.md). A name in bold in parentheses, such as (**Kinematics**), is another page or a named paragraph of one: the index says which.
 
 A model's document is its own cache, as a FreeCAD document is: opened, it is what was last
-computed, and only what changed is computed again. It is kept in the engine's cache (**The
-cache**), and written as the model's xbf where one is declared, the same bytes. Its main label names what
+computed, and only what changed is computed again. It is the model's `.xbf`, which every run writes (law 10),
+and the engine keeps no other copy (**The store**). Its main label names what
 wrote it (`cadgen.engine xbf/9 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
 closure (`previous.py`, a `TDataStd_AsciiString` beside the writer's, schema `cadgen.engine
 closure/2`), pointers and digests only (law 1), and nothing of a version control's -- the engine calls
@@ -31,7 +31,7 @@ Beside it on the main label, a document whose build made an `animation()` holds 
 tracks as a second build record (**Animations**); the closure neither counts nor keys them: they
 are what the code the key covers made.
 
-Every path is relative to the xbf's folder (the script's, for a model that declares none). `modules` lists each first-party module the
+Every path is relative to the xbf's folder. `modules` lists each first-party module the
 script's load imported or the model reaches, with a digest of what the model reaches in it: its
 functions' code objects with no line tables or docstrings, its classes, the values its bindings
 hold (a path value inside the script's folder relative to it), and, for a module that falls back
@@ -40,7 +40,7 @@ blank line changes no digest; a module the model loads and does not reach holds 
 `inputs` lists every file a body read -- through the engine (`file`: `step.read`, `xbf.read`,
 `stl.read`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
-null (**Body retention**). `cad xbf inspect DOC` prints the closure, `cad.inspect(doc)` and
+null (**Body retention**). `cad inspect DOC` prints the closure, `cad.inspect(doc)` and
 `document.Loaded.closure` read it.
 
 **When the toolchain or the format moves.** The key covers the document format
@@ -76,53 +76,44 @@ supported set are refused with a clear error.
 The conversion is idempotent. It leaves the original build closure and toolchain provenance
 unchanged: metadata conversion does not mean the geometry was built by the current kernel.
 A separate migration record identifies the conversion (`Loaded.migration`, `Source.migration`)
-without replacing that provenance. Opening a file never rewrites its bytes. A cached snapshot
-is read the same way without rewriting its bytes, changing its record or advancing its revision.
-An unsupported or failed conversion preserves the original bytes and cache record.
+without replacing that provenance. Opening a file never rewrites its bytes. An unsupported or failed
+conversion preserves the original bytes.
 
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
 ```bash
-cad xbf export saved-v8.xbf upgraded-v9.xbf
+cad export saved-v8.xbf upgraded-v9.xbf
 ```
 
 This serializes the complete upgraded XCAF document, including its separate migration record,
 and replaces the destination atomically only after success. Export back to the source path is
 refused. The migration record retains the original file path and its closure's relative-path
 base, so saving in a different directory does not silently rebase the original build provenance.
-A cached document exported by id to XBF writes the upgraded document too, preserving its known
-document id and source script. Historical caches did not record the declared XBF folder: their
-closure base is explicitly unknown, never guessed from the export destination. Export over the
-engine's original cache file is refused. The existing
-refusal of ordinary current-format XBF-to-XBF translation remains. The viewer's `original`
+The existing refusal of ordinary current-format XBF-to-XBF translation remains. The viewer's `original`
 download of an opened XBF file returns its original bytes, even when the displayed document was
 converted in memory; use the explicit export above to persist the conversion.
 
 Saved-document access is separate from build reuse. Explicit source execution compares the
 current format, material libraries and other build inputs with the original build key and
 builds normally when they differ. No build closure is restamped to manufacture a cache hit.
-The JSON identity migration (**Identity migration**) is independent of document contents, and
-this data conversion restores no retired Python authoring API or class.
+This data conversion restores no retired Python authoring API or class.
 
 Before a body runs or is replayed, the build makes the closure again -- the script loaded,
 its modules digested, each input hashed again -- and compares its key with the one the model's
 document holds: this worker's own, the document it last built or took (`"from": "memory"`), else
-the engine's cache file of it (`"from": "cache"`, **The cache**), every model alike. The same key,
-in a cache file written by this engine that reads whole, and the body is not run: the report says
-`cache: {"used": true, "from": "cache"}`, `memo.bodies_loaded` the bodies the document is, `bodies`
-the root `loaded`, `timings` the key (`key`) and the read (`read`). A later build in the same worker
-takes it from memory without reading it: one taken, or one this worker built, so an unchanged warm
-build costs what a restart's second build does, the key alone (the w16: 59 s replaying, against
-under a second), and the declared files' translation and compare. Its bodies' memo entries count as
-used by that build, as a replay's do, so an edit after any number of them still replays what it
-leaves alone. The key alone decides: a declared file, the model's xbf among them, is never read to
-take the model, and one moved, deleted or edited by hand changes nothing of it -- a model taken writes
-its declared files after, exactly as `cad <type> export` would (**Exports**), so that file is written
-again from the document, and every file `written: false` where each holds its bytes already.
-Anything else builds as before, and `cache.reason` says why: the cache holds none of it, written
-by another engine or program, a cache file that does not read, no key in it, or what changed, by
-name (`cache.changed`, each change; the CLI prints `rebuilt: ../src/lib/arm_parts.py changed`): a
-module changed, is new or is no longer imported, an input changed or is missing, the format, a
+the model's `.xbf` (`"from": "xbf"`, **The store**), every model alike, whoever wrote the file last. The same
+key, in an `.xbf` this engine's format wrote that reads whole, and the body is not run: the report says `cache: {"used": true, "from": "xbf"}`,
+`memo.bodies_loaded` the bodies the document is, `bodies` the root `loaded`, `timings` the key (`key`) and the read
+(`read`). A later build in the same worker takes it from memory without reading it: one taken, or one this worker
+built, so an unchanged warm build costs what a restart's second build does, the key alone (the w16: 59 s
+replaying, against under a second), and the declared files' translation and compare. Its bodies' memo entries
+count as used by that build, as a replay's do, so an edit after any number of them still replays what it leaves
+alone. A model taken writes its other declared files after, exactly as `cad export`
+would (**Exports**), so one deleted or edited is written again from the document, and every file `written: false`
+where each holds its bytes already. Anything else builds as before, and `cache.reason` says why: it has no `.xbf`,
+written by another engine or program, one that does not read, no key in
+it, or what changed, by name (`cache.changed`, each change; the CLI prints `rebuilt: ../src/lib/arm_parts.py
+changed`): a module changed, is new or is no longer imported, an input changed or is missing, the format, a
 library, the system, the architecture or the source moved.
 `CAD_ENGINE_MEMO=0` and `CAD_ENGINE_BODIES=0` turn it off with the rest of retention.
 

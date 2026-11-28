@@ -1,5 +1,5 @@
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 import math
 from collections.abc import Sequence
@@ -312,7 +312,7 @@ def _make_ground_shadow() -> bd.Compound:
     return _group("subtle_ground_shadow", [front_pad, rear_pad])
 
 
-@model
+@xbf
 def pelican_riding_bicycle() -> bd.Compound:
     bicycle = _make_bicycle()
     pelican = _make_pelican()

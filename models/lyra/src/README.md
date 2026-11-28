@@ -15,11 +15,11 @@ Build from this folder: `python lyra.py` builds all 18. `../lyra.urdf` and
 URDF.
 
 ```
-python lyra.py                                    # prints each model's id: and view:
+python lyra.py                                    # saves each model as its .xbf, printing its view:
 python exports.py                                # the URDF's link meshes, 3MF/<link>.3mf
-cad model snapshot "$ID" lyra.png --pose fist         # ID: the lyra model's id: line
-cad urdf snapshot ../lyra.urdf urdf.png
-cad model export "$ID" GLB/lyra.glb                  # the five motions, baked as clips
+cad snapshot lyra.xbf lyra.png --pose fist
+cad snapshot ../lyra.urdf urdf.png
+cad export lyra.xbf GLB/lyra.glb                # the five motions, baked as clips
 ```
 
 ## How it is built
@@ -62,7 +62,7 @@ way. Their key orders are the ones `lib/clearance.py` checks.
 
 ## Not ported
 
-- Per-link STEP files. `cad <type> export` writes one of a link model on demand.
+- Per-link STEP files. `cad export` writes one of a link model on demand.
 - The 17 one-link scripts. Each link is a model of `lyra.py` now, so no model
   calls another.
 - The clips' display labels ("Pose tour", ...): a motion has its name alone.

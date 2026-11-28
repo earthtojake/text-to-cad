@@ -11,7 +11,7 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
   expect(TAB_RECORD_VERSION).toBe(2);
   expect(readTabRecord(undefined)).toEqual(defaultTabRecord());
   expect(defaultTabRecord()).toEqual({ version: 2, settings: {
-    toolStack: { panels: {}, collapsed: {} }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid' }, explorer: { folder: null },
+    toolStack: { panels: {}, collapsed: {} }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid', sort: 'activity' },
   }, files: {} });
   // A record of the version before (a file tree's width, views under a root) is the defaults.
   for (const raw of [null, 'x', [], { version: 1, settings: { appearance: 'dark', fileTree: { width: 300 } } }, { version: 3, settings: { appearance: 'dark' } }]) {
@@ -23,17 +23,27 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
     orbit: { speed: 99 }, playback: { autoplay: true }, appearance: 'cinematic', library: { layout: 'shelf' }, explorer: { folder: 3 },
   }, files: { [tabFileKey('/models/a.step', 'step')]: view(1), '["root","b.step","step"]': view(2), 'junk': view(3), [tabFileKey('/models/c.step', 'step')]: 'not a view' } });
   expect(record.settings).toEqual({
-    toolStack: { panels: { tree: { width: 164 } }, collapsed: { tree: true } }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid' }, explorer: { folder: null },
+    toolStack: { panels: { tree: { width: 164 } }, collapsed: { tree: true } }, appearance: 'system', viewportBackground: 'light', library: { layout: 'grid', sort: 'activity' },
   });
-  expect(readTabRecord({ version: 2, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list' });
+  expect(readTabRecord({ version: 2, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list', sort: 'activity' });
+  // The home's order is kept with its layout; one that is not an order is the default.
+  expect(readTabRecord({ version: 2, settings: { library: { sort: 'edited' } }, files: {} }).settings.library).toEqual({ layout: 'grid', sort: 'edited' });
+  // The order by kind is gone with the kinds: a stored one reads as the default.
+  expect(readTabRecord({ version: 2, settings: { library: { sort: 'kind' } }, files: {} }).settings.library).toEqual({ layout: 'grid', sort: 'activity' });
+  expect(readTabRecord({ version: 2, settings: { library: { layout: 'list', sort: 'size' } }, files: {} }).settings.library).toEqual({ layout: 'list', sort: 'activity' });
+  // The home's sidebar, kept as a file's panel is: its choice and its width where they are what they should be, no tab, and no field with neither.
+  const library = (panel: unknown) => readTabRecord({ version: 2, settings: { library: { layout: 'list', panel } }, files: {} }).settings.library;
+  expect(library({ open: false, width: 304.4, tab: 'parts', right: true })).toEqual({ layout: 'list', sort: 'activity', panel: { open: false, width: 304 } });
+  expect(library({ open: true })).toEqual({ layout: 'list', sort: 'activity', panel: { open: true } });
+  expect([library({ open: 'yes', width: -3 }), library('wide'), library(undefined)]).toEqual(Array(3).fill({ layout: 'list', sort: 'activity' }));
   // The viewport's Background, the person's: Light or Dark; anything else Light, the old Follow theme ("theme") too.
   for (const value of ['light', 'dark'] as const) expect(readTabRecord({ version: 2, settings: { viewportBackground: value }, files: {} }).settings.viewportBackground).toBe(value);
   for (const value of ['theme', 'cinematic']) expect(readTabRecord({ version: 2, settings: { viewportBackground: value }, files: {} }).settings.viewportBackground).toBe('light');
   const store = createTabStore(memoryTabRecord());
   store.settings.update({ viewportBackground: 'dark' });
   expect([store.settings.getSnapshot().viewportBackground, store.getSnapshot().settings.viewportBackground]).toEqual(['dark', 'dark']);
-  // The folder the explorer was last in, this tab: where a model's Files starts.
-  expect(readTabRecord({ version: 2, settings: { explorer: { folder: '/home/me/parts' } }, files: {} }).settings.explorer).toEqual({ folder: '/home/me/parts' });
+  // The folder an earlier release's explorer was last in is read as nothing: projects replaced the explorer.
+  expect(readTabRecord({ version: 2, settings: { explorer: { folder: '/home/me/parts' } }, files: {} }).settings).not.toHaveProperty('explorer');
   expect(Object.keys(record.files)).toEqual([tabFileKey('/models/a.step', 'step')]);
 });
 

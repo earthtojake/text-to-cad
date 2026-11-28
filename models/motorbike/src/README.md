@@ -1,7 +1,7 @@
 # motorbike models
 
-`motorbike.py` is the assembly (`@model`; a run writes nothing). Every other `.py`
-directly under `src/` is one part of it, a `@model` of its own, as the original's parts
+`motorbike.py` is the assembly (`@xbf`; a run writes nothing). Every other `.py`
+directly under `src/` is one part of it, a `@xbf` of its own, as the original's parts
 each were: the assembly calls it (`frame()`, `seat()`, …), so it builds in the
 assembly's run as a child, and running its own script (`python seat.py`) shows it alone,
 on a page of its own. A part called twice is one prototype placed twice. No part is a
@@ -125,5 +125,5 @@ carries each old mate now (`steering` is `head_tube_axis`, `engine_swing`
 
 One motion is in the model's code: `steer`, `head_tube_axis` from -20 to 20 degrees
 over 2 s and back over 2 s, as out-and-back waypoints (a motion has no loop or
-pingpong; a player repeats it). The document keeps it as a definition; `cad <type> export
-<id> GLB/motorbike.glb` bakes it into a glTF clip named `steer`.
+pingpong; a player repeats it). The document keeps it as a definition; `cad export
+motorbike.xbf GLB/motorbike.glb` bakes it into a glTF clip named `steer`.

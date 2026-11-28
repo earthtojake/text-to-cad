@@ -89,7 +89,7 @@ def lasting(path: str) -> str:
 
 def state():
     """The user's state folder (``cad.engine.places.state_dir``), as its ``Folder``."""
-    from cad_server.engine.registry import Folder
+    from cad_server.engine.state import Folder
     from cad.engine.places import state_dir
 
     return Folder(state_dir())

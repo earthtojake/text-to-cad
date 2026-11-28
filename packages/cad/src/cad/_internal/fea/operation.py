@@ -1,6 +1,6 @@
-"""The stress study every B-rep document type shares: ``cad.<type>.solve(source, study=..., out=...)``.
+"""The stress study every B-rep document type shares: ``cad.fea(source, study=..., out=...)``.
 
-``model``, ``xbf`` and ``step`` each answer ``solve`` with the same function, made for the type here (``solve_for``):
+``model`` and ``step`` each answer ``solve`` with the same function, made for the type here (``solve_for``):
 its signature takes a source of the type and plain values alone, so it is the type's (the signature rule), and what
 it runs is the integrations' -- the kernel reads the part, netgen meshes it (``cad.netgen``), CalculiX solves it
 (``cad.calculix``) -- imported when it runs. A model, which the engine holds with no file, is written to an ``.xbf`` in
@@ -81,8 +81,7 @@ def solve_for(document_type: str) -> Any:
         or misses a check fails it, its results written all the same; a study whose answer would be wrong (a part
         nothing holds, a load no face takes) is refused. --json carries every number.
 
-        source: the part or the assembly: a .step or .xbf, or a model's document id the engine holds (cad model
-          solve), or the handle its call returns.
+        source: the part or the assembly: a .xbf, .step or .stp, or (in Python) the handle a model's call returns.
         study: the study: a JSON file path, inline JSON, or (a library caller) a dict: the fixed faces, the
           loads (forces, pressures, gravity, acceleration), a material where the model has none, an
           assembly's parts and connections and the checks to judge. Without it, the setup.
@@ -95,14 +94,14 @@ def solve_for(document_type: str) -> Any:
         options(study=study, out=out, occurrence=occurrence, deck=deck)
         from cad._internal.document_type import refuse_other
 
-        refuse_other(document_type, source)
+        of = refuse_other(document_type, source)
         try:
             from cad._internal.fea import run
             from cad._internal.fea.mesh import require_fea_stack
         except ModuleNotFoundError as error:
             _missing(error)
             raise
-        with _readable(document_type, source) as (target, label):
+        with _readable(of, source) as (target, label):
             if study is None:
                 return run.setup(target, occurrence=occurrence, verbose=verbose, label=label)
             try:
@@ -128,7 +127,9 @@ class _readable:
         self.folder: tempfile.TemporaryDirectory | None = None
 
     def __enter__(self) -> tuple[Path, Path | None]:
-        if self.document_type != "model":
+        from cad._internal.document_type import is_file
+
+        if is_file(self.source):
             return Path(self.source), None
         from cad.engine.api import export
 

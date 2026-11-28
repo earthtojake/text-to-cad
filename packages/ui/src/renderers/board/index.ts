@@ -40,7 +40,8 @@ export const BOARD_FILE = /\.kicad_pcb$/i;
  * Layers in the view's panel, its Side, 2D/3D and the rest of Display in the navbar; 2D/3D shows the same view in 3D
  * (`Board3dView.jsx`, a chunk of its own, loaded only then), and Preview, as a 3D file's, the board as it is made,
  * lit, in a view of its own (`BoardPreviewView.jsx`, a chunk of its own too, loaded as Preview is first entered).
- * Registering loads no three.js, no viewport and no backend connection; a board drawn in 2D loads none either.
+ * Registering loads no three.js, no viewport and no backend connection; a board drawn in 2D loads none either. A
+ * client with no 3D models table (a view bundle's: a share's) has the board in 2D alone, with no 2D/3D and no Preview.
  *
  * It still opens a render session it never draws from, as a DXF does: that session is what
  * registers the file as OPEN with the client, which is how a rewritten board reaches this tab.

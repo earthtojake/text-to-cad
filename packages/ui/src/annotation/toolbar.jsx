@@ -191,7 +191,7 @@ function StyleMenu({ label, options, value, glyph, icon, onChange, disabled, bar
       {/* Its name on a hover (Stroke width: a button of lines, named by it). */}
       <ToolbarButton label={label} disabled={disabled}>{icon ?? glyph(value)}</ToolbarButton>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" sideOffset={4} collisionPadding={8} aria-label={label}
+    <DropdownMenuContent align="start" collisionPadding={8} aria-label={label}
       className={cn(FLOATING_SURFACE_CLASS, bare ? 'w-auto min-w-0' : 'w-40', 'data-[state=closed]:animate-none!')}>
       {bare ? null : menuHeading(label)}
       <DropdownMenuRadioGroup value={String(value)} onValueChange={next => onChange(options.find(option => String(option.value) === next).value)}>
@@ -246,7 +246,7 @@ function ColorMenu({ value, colors, onChange, disabled }) {
       <DropdownMenuTrigger asChild>
         <ToolbarButton tooltip={false} label={t('annotate.colour')} disabled={disabled}>{colorGlyph(value)}</ToolbarButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={4} collisionPadding={8} aria-label={t('annotate.colour')}
+      <DropdownMenuContent align="start" collisionPadding={8} aria-label={t('annotate.colour')}
         className={cn(FLOATING_SURFACE_CLASS, 'w-auto min-w-0 p-1.5 data-[state=closed]:animate-none!')}>
         <div className="grid grid-cols-3 gap-1">
           {colors.map(option => <DropdownMenuItem key={option.value} aria-label={option.key ? t(option.key) : option.label} data-color={option.value}

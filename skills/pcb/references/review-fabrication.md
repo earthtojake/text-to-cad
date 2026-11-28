@@ -26,7 +26,7 @@ at 0.09 mm clearance and ordered from a 0.10 mm service has proved nothing about
 
 ## Review
 
-Run `cad kicad_pcb drc board.kicad_pcb`. Its types are KiCad's; how the review reads the ones whose fix is
+Run `cad kicad drc board.kicad_pcb`. Its types are KiCad's; how the review reads the ones whose fix is
 not in their name:
 
 | Type | Read it as |

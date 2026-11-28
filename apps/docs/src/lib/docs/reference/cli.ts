@@ -1,8 +1,9 @@
 /**
  * /docs/reference/cli, "The cad command": the command line's own description of itself
- * (`cli-reference.generated.json`, `python -m cad_server._internal.cli_reference --docs`) set as one
- * Markdown page, so the table of contents, the page's Markdown, the search and /llms.txt read it as
- * they read any page. Nothing here is written by hand but the introduction and the groups below:
+ * (`cli-reference.generated.json`, `python -m cad_server._internal.cli_reference --docs`, which
+ * `scripts/generated/regenerate.py` writes) set as one Markdown page, so the table of contents, the page's
+ * Markdown, the search and /llms.txt read it as they read any page. Nothing here is written by hand but the
+ * introduction and the groups below:
  * every command the JSON has is on the page, a command no group names under "Other".
  */
 import generated from "../cli-reference.generated.json";
@@ -29,7 +30,16 @@ export type CliCommand = {
   options?: Option[];
 };
 type CliGroup = { name: string; summary: string; usage: string; operations: CliCommand[] };
-type CliReference = { usage: string; documentTypes: CliGroup[]; integrations: CliGroup[]; commands: CliCommand[]; texts: string[] };
+type CliVerb = CliCommand & { types: string[] };
+type CliType = { name: string; summary: string; verbs?: string[] };
+type CliReference = {
+  usage: string;
+  verbs: CliVerb[];
+  documentTypes: CliType[];
+  integrations: CliGroup[];
+  commands: CliCommand[];
+  texts: string[];
+};
 
 export const cli = generated as unknown as CliReference;
 
@@ -50,7 +60,7 @@ const GROUPS: { title: string; intro: string; commands: string[] }[] = [
   {
     title: "Running and viewing",
     intro: "",
-    commands: ["cad run", "cad viewer", "cad delete"],
+    commands: ["cad run", "cad viewer"],
   },
 ];
 // A group's commands, each followed by its subcommands (`cad server start` after `cad server`), as the JSON orders them.
@@ -62,7 +72,7 @@ const text = (index: number | string | undefined) =>
 const help = { flags: true, dashes: true } as const;
 const cell = { flags: true, dashes: true, table: true } as const;
 
-/** The heading id GitHub gives `cad step export`: what a link to a command names. */
+/** The heading id GitHub gives `cad export`: what a link to a command names. */
 export const commandId = (command: string) => command.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s/g, "-");
 
 function argumentsTable(args: Argument[]) {
@@ -125,29 +135,27 @@ export function cliPage(libraryIds: Set<string>) {
   };
   const out: string[] = [
     "`cad` is the command your agent runs, and you can run it yourself. The install command installs it as a uv tool (`uv tool install cad`) and puts its folder on your PATH. One text-to-cad server runs on your computer, which keeps its workers warm between calls.",
-    "`cad --help` lists every command, `cad <type> --help` a document type's operations, and `cad <command> --help` a command's options. This page is that help, generated from the same parser.",
+    "`cad --help` lists every command, `cad <verb> --help` a verb's forms and every file type's options, and `cad <command> --help` a command's options. This page is that help, generated from the same parser.",
     "```text nocopy\n" + cli.usage.split(" | ").join("\n") + "\n```",
   ];
 
-  // The matrix: each document type's operations, each a link to its command below.
-  const operations = registry.operations.filter((op) =>
-    cli.documentTypes.some((type) => type.operations.some((cmd) => cmd.command === `cad ${type.name} ${op}`)),
-  );
+  // The matrix: each document type's verbs, each a link to its command below.
+  const verbs = cli.verbs.map((verb) => verb.command.replace(/^cad /, ""));
   out.push(
-    "## Operations by document type",
-    "A document type is a kind of file text-to-cad builds, shows or checks. Each has the operations that make sense for it, with one pattern: `cad <document_type> <operation> <file>`. A `model` is a model the server holds, named by its id; every other type takes a file.",
+    "## Verbs by document type",
+    "Each command is a verb and a file: `cad <verb> <file>`. The file's suffix says its type, and each type takes the verbs that make sense for it; a verb its type lacks is refused, naming the types that take it. A model is its `.xbf`, the file its run saves.",
     table(
-      ["Type", ...operations.map((op) => codeSpan(op, true))],
+      ["Type", ...verbs.map((verb) => codeSpan(verb, true))],
       cli.documentTypes.map((type) => [
-        `[${codeSpan(type.name, true)}](#${commandId(`cad ${type.name}`)})`,
-        ...operations.map((op) => {
-          const cmd = `cad ${type.name} ${op}`;
-          return type.operations.some((each) => each.command === cmd) ? `[✓](#${commandId(cmd)})` : "";
-        }),
+        codeSpan(type.name, true),
+        ...verbs.map((verb) => ((type.verbs ?? []).includes(verb) ? `[✓](#${commandId(`cad ${verb}`)})` : "")),
       ]),
-      ["left", ...operations.map(() => "center" as const)],
+      ["left", ...verbs.map(() => "center" as const)],
     ),
+    "## Verbs",
+    "Each verb's forms, then every option any type takes: a file's type takes its own, and refuses the rest by name.",
   );
+  for (const verb of cli.verbs) out.push(command(verb, 3, libraryOf(verb)));
 
   const groups = GROUPS.map((group) => ({ ...group, cmds: group.commands.flatMap(within) }));
   const placed = new Set(groups.flatMap((group) => group.cmds));
@@ -165,25 +173,15 @@ export function cliPage(libraryIds: Set<string>) {
     for (const cmd of group.cmds) out.push(command(cmd, cmd.command.split(" ").length > 2 ? 4 : 3));
   }
 
-  const kinds: [string, string, CliGroup[]][] = [
-    ["Document types", "Each type's operations, as `cad <document_type> <operation>`. A file of another type is refused by name, and a check prints its findings, or with `--json` one JSON document.", cli.documentTypes],
-    ["Integrations", "An integration is a tool text-to-cad runs for you. For a file of its tool's own that is no document type, it has operations of its own, as `cad <integration> <operation>`.", cli.integrations],
-  ];
-  for (const [title, intro, list] of kinds) {
-    if (!list.length) continue;
-    out.push(`## ${title}`, intro);
-    for (const group of list) {
-      const known = registry.documentTypes.find((type) => type.id === group.name);
+  if (cli.integrations.length) {
+    out.push(
+      "## Integrations",
+      "An integration is a tool text-to-cad runs for you. Its own operations on its tool's files are `cad <integration> <operation> <file>`: KiCad's design rule and electrical rules checks, and MuJoCo's compile of a model.",
+    );
+    for (const group of cli.integrations) {
       const integration = registry.integrations.find((each) => each.name === group.name);
       out.push(`### ${codeSpan(`cad ${group.name}`)}`);
-      if (known) {
-        out.push(
-          `${known.title}: ${inline(sentence(known.summary), help)}` +
-            (known.extensions.length ? ` Files: ${known.extensions.map((ext) => codeSpan(ext)).join(", ")}.` : ""),
-        );
-      } else {
-        out.push(sentence(inline(integration?.summary ?? group.summary, help)));
-      }
+      out.push(sentence(inline(integration?.summary ?? group.summary, help)));
       out.push("```text nocopy\n" + group.usage + "\n```");
       const library = libraryIds.has(`cad.${group.name}`) ? `cad.${group.name}` : undefined;
       if (library) out.push(`In Python: [${codeSpan(library)}](/docs/reference/library#${library}).`);
@@ -194,7 +192,7 @@ export function cliPage(libraryIds: Set<string>) {
   return {
     title: "The cad command",
     description:
-      "Every command of the cad command line, generated from its own help: updates and the installation, the server, running and viewing, and each document type's and integration's operations.",
+      "Every command of the cad command line, generated from its own help: the verbs on a file, updates and the installation, the server, running and viewing, and each integration's operations.",
     markdown: out.join("\n\n") + "\n",
   };
 }

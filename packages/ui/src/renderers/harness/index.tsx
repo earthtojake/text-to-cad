@@ -14,12 +14,14 @@ import { createRobotRenderer } from '@cad/ui/renderers/robot';
 import { createXbfRenderer } from '@cad/ui/renderers/xbf';
 import { createHarnessRenderer } from '@cad/ui/renderers/shell-harness';
 import type { ViewerHost } from '@cad/ui/host';
+import { viewerLinks } from '@cad/ui/links';
 import type { LiveViewController } from '@cad/ui/renderers/xbf';
 import type { ViewerCommands as CadCommands } from '@cad/ui/renderers/workspace';
 // The module the built renderers publish their export view through (the viewer's ExportControls
 // provides it): the same built file, so this harness's provider is the one they reach.
 import { ExportContext } from '../../../dist/export/context.js';
-import { ModelLibrary } from '@cad/ui/library';
+import { ModelLibrary, useModelThumbnail } from '@cad/ui/library';
+import { createLiveRegistry } from '@cad/ui/host';
 // `?file=home`: no file, the host's home (the library), as the web viewer's is, for a look at the home page.
 const showHome = new URLSearchParams(location.search).get('file') === 'home';
 const HOME_MODELS = ['bracket.step', 'hinge.step', 'blinky.kicad_pcb', 'layered.dxf', 'arm.urdf', 'pair.glb'].map((name, index) => ({
@@ -32,6 +34,10 @@ const homePresentation = showHome ? { home: <ModelLibrary library={homeLibrary a
 // default mesh) is `/models/arm.urdf`.
 const requested = new URLSearchParams(location.search).get('file') || 'part.stl';
 const file = requested.startsWith('/') ? requested : `/models/${requested}`;
+// `?project=1`: the first pane's file is in a project, between two other documents of its folder, as a host's is,
+// so `[` and `]` have somewhere to go (the host records the file asked for in `opened`).
+const project = new URLSearchParams(location.search).get('project') === '1' ? { id: 'harness', name: 'harness', root: '/models', onShow() {},
+  documents: [{ path: '/models/before.step', name: 'before.step' }, { path: file, name: file.split('/').pop()! }, { path: '/models/after.step', name: 'after.step' }] } : null;
 // The host's theme: dark, as the viewer opens, unless `?scheme=light` asks for the light one.
 const colorScheme = new URLSearchParams(location.search).get('scheme') === 'light' ? 'light' as const : 'dark' as const;
 // The language the panes read in (`?locale=ja`): English unless asked.
@@ -90,8 +96,7 @@ function workspace(id: string, store: TabStore) {
   const capture = () => request({ captureRequest: { key: Date.now() } });
   const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
   const client = createCadClient({ origin: `${location.origin}/${id}`, pollIntervalMs: 0 });
-  // The pane's files: the one it shows, which is also all its explorer lists and finds.
-  const name = file.split('/').pop() || file;
+  // The pane's files: the one it shows.
   const source: FileSource = {
     id,
     // A spec may hold the file's stat back (`window.__cadHoldStat`, a promise): the page's own phase, before any view is up.
@@ -99,14 +104,15 @@ function workspace(id: string, store: TabStore) {
       await (window as unknown as { __cadHoldStat?: Promise<void> }).__cadHoldStat;
       return { path, name: path.split('/').pop() || path, kind: 'file', size: 400, extension: path.split('.').pop() || '' };
     },
-    list: async () => [{ path: file, name, kind: 'file' }],
-    search: async () => ({ paths: [file], truncated: false })
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
   // `?home=1`: a host with a home and the file's ⋯ (Copy path), as the web viewer is, so the navbar's left end is whole.
+  // `&links=1`: with its links too, as the web viewer has them, so the panel ends in its foot (the links and Settings).
   const homed = new URLSearchParams(location.search).get('home') === '1';
+  const linked = homed && new URLSearchParams(location.search).get('links') === '1';
   const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); }, ...(homed ? { home() {} } : null) },
-    ...(homed ? { fileActions: { platform: keyboardPlatform, perform: { 'copy-path': async () => {} } } } : null), environment: { colorScheme, platform: keyboardPlatform, locale },
+    ...(homed ? { fileActions: { platform: keyboardPlatform, perform: { 'copy-path': async () => {} } } } : null),
+    ...(linked ? { links: viewerLinks({ version: '0.7.4' }) } : null), environment: { colorScheme, platform: keyboardPlatform, locale },
     clipboard: { writeText: async text => { promptMessages.push(await text); }, writeImage: async () => {} },
     promptFiles: createHttpPromptFiles({ origin: `${location.origin}/${id}` }),
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {
@@ -115,27 +121,36 @@ function workspace(id: string, store: TabStore) {
       return { status: 'added', partIds: context.parts.map(part => part.id) };
     } }
   };
-  let controller: LiveViewController | null = null;
-  const live = { bind(next: LiveViewController) { controller = next; return () => { controller = null; }; } };
+  const registry = createLiveRegistry<LiveViewController>();
+  const live = registry.binding;
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences: store.settings, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
   const renderers = [createBoardRenderer(services), createSchematicRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createXbfRenderer(services), createHarnessRenderer(services)];
-  return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
+  return { client, source, host, renderers, commands, capture, selectReference, registry, get controller() { return registry.current(); } };
 }
 const a = workspace('one', tabStore), b = workspace('two', otherTabStore);
 // Each client's catalog is read before a renderer mounts, as a host's first read of it is.
 await Promise.all([a.client.refresh(), b.client.refresh()]);
+// `?pictures=1`: the pane keeps a picture of its file as the library does (`useModelThumbnail`), each handed to a
+// list the spec reads (`cadHarness.pictures`).
+const keepPictures = new URLSearchParams(location.search).get('pictures') === '1';
+const pictures: Blob[] = [];
+function Pictures() {
+  useModelThumbnail(a.registry, keepPictures ? file : null, 'harness', async png => { pictures.push(png); });
+  return null;
+}
 function App() {
   // Two panes, two viewers, two tabs: each viewer keeps its own record, settings and file view.
   const { state, onStateChange } = useTabViewerState(tabStore);
   const { state: otherState, onStateChange: onOtherStateChange } = useTabViewerState(otherTabStore);
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
-  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
+  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, tabStore, record: tabStore.getSnapshot(), captures, pictures, promptMessages, opened, exportViews, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
   return <div className="dark" style={{ display: 'flex', width: '1200px', height: '720px' }}>
+    <Pictures />
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} presentation={homePresentation} /></ExportContext.Provider>}
+      {mounted && <ExportContext.Provider value={publishExportView}><FileViewer file={showHome ? null : file} host={a.host} renderers={a.renderers} state={state} onStateChange={onStateChange} presentation={homePresentation} project={project} /></ExportContext.Provider>}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={onOtherStateChange} />

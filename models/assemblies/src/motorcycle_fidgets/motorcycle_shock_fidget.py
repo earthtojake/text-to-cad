@@ -21,7 +21,7 @@ Parts (z map)
 """
 
 from __future__ import annotations
-from cad import model
+from cad import xbf
 
 from math import cos, sin, tau
 
@@ -192,7 +192,7 @@ def _make_parts():
     return parts
 
 
-@model
+@xbf
 def motorcycle_shock_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_shock_fidget"

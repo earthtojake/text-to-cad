@@ -360,11 +360,11 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertIn("post ↔ base · 100 mm² · bonded", result.human_lines())
 
     def test_it_says_each_stage_at_default_verbosity(self):
-        from cad_server.cli.step import main
+        from cad_server.cli.fea import main
 
         err = io.StringIO()
         with redirect_stderr(err), redirect_stdout(io.StringIO()):
-            main(["solve", str(_write_assembly(self.tmp))])
+            main([str(_write_assembly(self.tmp))])
         lines = err.getvalue().splitlines()
         self.assertTrue(any(line.endswith("reading the parts") for line in lines), lines)
         self.assertTrue(any("read 2 parts" in line for line in lines), lines)
@@ -412,11 +412,11 @@ class FeaPartsVerbTest(unittest.TestCase):
         self.assertEqual([pair.type for pair in result.pairs], ["bonded"])
 
     def test_json_output(self):
-        from cad_server.cli.step import main
+        from cad_server.cli.fea import main
 
         out = io.StringIO()
         with redirect_stdout(out), quiet():
-            code = main(["solve", str(_write_assembly(self.tmp)), "--json"])
+            code = main([str(_write_assembly(self.tmp)), "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertTrue(payload["ok"])
@@ -733,9 +733,9 @@ class SolveAssemblyTest(unittest.TestCase):
         # A part on its own is its own model, and the mesh's size is the study's: no option sizes a mesh,
         # refused as any argument the command never had (law 14), and the setup's --occurrence, which lists one
         # part's faces, is refused beside a study by name, before anything is read.
-        from cad_server.cli.step import main
+        from cad_server.cli.fea import main
 
-        solve = ["solve", str(self.step), "--study", json.dumps(self.alone), "--out", str(self.tmp / "cli")]
+        solve = [str(self.step), "--study", json.dumps(self.alone), "--out", str(self.tmp / "cli")]
         with redirect_stderr(io.StringIO()) as said, self.assertRaises(SystemExit):
             main([*solve, "--mesh-size", "2"])
         self.assertIn("unrecognized arguments: --mesh-size", said.getvalue())
@@ -805,7 +805,7 @@ class SolveAssemblyTest(unittest.TestCase):
     def test_a_result_that_stopped_before_the_solve_serializes_through_the_cli(self):
         from unittest import mock
 
-        from cad_server.cli.step import main
+        from cad_server.cli.fea import main
 
         step = _write_assembly(self.tmp, far_block=20.0, name="stopped")
         study = {
@@ -815,7 +815,7 @@ class SolveAssemblyTest(unittest.TestCase):
         }
         out = io.StringIO()
         with mock.patch("cad._internal.fea.solve.solve_linear_static", side_effect=AssertionError("solved")), redirect_stdout(out), quiet():
-            code = main(["solve", str(step), "--study", json.dumps(study), "--out", str(self.tmp / "stopped"), "--json"])
+            code = main([str(step), "--study", json.dumps(study), "--out", str(self.tmp / "stopped"), "--json"])
         self.assertEqual(code, 1)
         payload = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertFalse(payload["ok"])

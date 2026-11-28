@@ -1,9 +1,9 @@
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
 
-@model
+@xbf
 def floor_positions():
     parts = []
     for label, x, z, color in [

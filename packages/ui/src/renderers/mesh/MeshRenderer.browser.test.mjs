@@ -115,7 +115,7 @@ after(async () => {
 });
 
 // `width`: the view's. `clock`: the page's timers Playwright's, to run forward (`page.clock`).
-async function open(t, file, { width = 800, clock = false } = {}) {
+async function open(t, file, { width = 800, clock = false, query = '' } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 500 }, deviceScaleFactor: 1 });
   if (clock) await page.clock.install();
   t.after(() => page.close());
@@ -128,7 +128,7 @@ async function open(t, file, { width = 800, clock = false } = {}) {
       Object.defineProperty(window, name, { get() { throw new Error(`Renderer accessed ${name}`); } });
     }
   });
-  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}&width=${width}`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}&width=${width}${query}`);
   return { page, errors, pane: page.getByTestId('one') };
 }
 
@@ -520,4 +520,32 @@ test('a corrupt mesh raises the viewer\'s load alert, an empty one says there is
   await sliced.pane.getByRole('alert').waitFor();
   assert.match(await sliced.pane.getByRole('alert').innerText(), /A print file, not a model[\s\S]*plate\.gcode\.3mf[\s\S]*G-code/);
   assert.equal(await sliced.pane.getByRole('alert').getByRole('button', { name: 'Retry', exact: true }).count(), 0);
+});
+
+test('a model\'s picture for the library is taken at 3:2, the model filling it, and is small', async (t) => {
+  const { page, pane, errors } = await open(t, 'part.stl', { query: '&pictures=1' });
+  await ready(pane);
+  await page.waitForFunction(() => window.cadHarness.pictures.length > 0);
+  const encoded = await page.evaluate(async () => {
+    const blob = window.cadHarness.pictures[0];
+    const data = new Uint8Array(await blob.arrayBuffer());
+    let binary = ''; for (const byte of data) binary += String.fromCharCode(byte);
+    return { type: blob.type, size: blob.size, base64: btoa(binary) };
+  });
+  assert.equal(encoded.type, 'image/png');
+  const picture = PNG.sync.read(Buffer.from(encoded.base64, 'base64'));
+  // Measured from the image: 3:2, two cards' worth of pixels, never 4:3 (480 × 360).
+  assert.deepEqual([picture.width, picture.height], [480, 320]);
+  assert.ok(encoded.size < 100 * 1024, `a picture stays small: ${encoded.size} bytes`);
+  // The model, drawn on transparency, fills the picture: its pixels reach most of the width or of the height, and sit in the middle.
+  let [left, top, right, bottom] = [picture.width, picture.height, -1, -1];
+  for (let y = 0; y < picture.height; y += 1) for (let x = 0; x < picture.width; x += 1) {
+    if (picture.data[(y * picture.width + x) * 4 + 3] > 0) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); }
+  }
+  assert.ok(right >= left, 'the model is drawn');
+  const [spanX, spanY] = [(right - left + 1) / picture.width, (bottom - top + 1) / picture.height];
+  assert.ok(Math.max(spanX, spanY) > 0.85, `the model fills the picture: ${spanX.toFixed(2)} of its width, ${spanY.toFixed(2)} of its height`);
+  assert.ok(Math.abs((left + right) / 2 / picture.width - 0.5) < 0.05 && Math.abs((top + bottom) / 2 / picture.height - 0.5) < 0.05, 'centred');
+  assert.equal(picture.data[3], 0, 'nothing behind the model: the corner is clear');
+  assert.deepEqual(errors, []);
 });

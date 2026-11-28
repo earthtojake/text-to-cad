@@ -1,9 +1,9 @@
-from cad import model
+from cad import xbf
 
 from lib.logo_shape import make_logo
 
 
-@model
+@xbf
 def logo_c():
     return make_logo("C")
 

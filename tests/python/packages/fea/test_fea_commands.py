@@ -1,6 +1,6 @@
-"""``cad step solve``, ``cad xbf solve`` and ``cad model solve`` are the library's operation, run where its integrations
-are: in the command's own process when its environment holds the kernel, netgen and ccx, else by the library's runner
-of one operation (``cad._internal.operation``) in the environment of ``cad[build123d,calculix,netgen]`` the engine
+"""``cad fea FILE`` is the library's operation, a STEP's or an xbf's ``solve``, run where its integrations are: in the
+command's own process when its environment holds the kernel, netgen and ccx, else by the library's runner of one
+operation (``cad._internal.operation``) in the environment of ``cad[build123d,calculix,netgen]`` the engine
 makes. Here this Python
 stands in for that environment, so the runner's real subprocess runs the study, and what comes back is the result
 the operation returned, as its own type; a study's options are refused before any environment is made."""
@@ -22,7 +22,7 @@ from tests.python.support.paths import SOURCE_PATH
 
 from cad.results import FeaResult  # noqa: E402
 from cad_server._internal import integration_env  # noqa: E402
-from cad_server.cli import step  # noqa: E402
+from cad_server.cli import fea  # noqa: E402
 
 
 @contextlib.contextmanager
@@ -45,7 +45,7 @@ class SolveElsewhereTest(unittest.TestCase):
         out = io.StringIO()
         with tempfile.TemporaryDirectory() as tmp, elsewhere(made), contextlib.redirect_stdout(out), \
                 contextlib.redirect_stderr(io.StringIO()):
-            code = step.main(["solve", str(_write_assembly(Path(tmp))), "--json"])
+            code = fea.main([str(_write_assembly(Path(tmp))), "--json"])
         self.assertEqual(code, 0, out.getvalue())
         # The calculix integration's environment, which holds the kernel and netgen beside it (the registry's
         # ``alongside``).
@@ -68,9 +68,43 @@ class SolveElsewhereTest(unittest.TestCase):
                     contextlib.redirect_stderr(io.StringIO()) as err, contextlib.redirect_stdout(io.StringIO()):
                 part = _write_assembly(Path(tmp))
                 argv = [str(part) if value == "PART" else value for value in argv]
-                self.assertEqual(step.main(["solve", str(part), *argv]), 2)
+                self.assertEqual(fea.main([str(part), *argv]), 2)
                 self.assertIn(said, err.getvalue())
         self.assertEqual(made, [])
+
+    def test_a_study_that_fails_its_own_validation_is_the_command_lines_mistake(self):
+        """A part with no material is refused by the study's own parse, which runs before anything is read: exit 2,
+        ``invalid_argument``, one line, with the command's own process and the runner's alike; not a failed solve."""
+        study = {"fixtures": [{"faces": ["face 1"]}],
+                 "loads": [{"faces": ["face 2"], "type": "force", "vector_N": [0, 0, -10]}],
+                 "parts": {"post": {}}}
+        said = "parts['post']: expected an object with a 'material'"
+        with tempfile.TemporaryDirectory() as tmp:
+            part, results = _write_assembly(Path(tmp)), Path(tmp) / "results"
+            argv = [str(part), "--study", json.dumps(study), "--out", str(results), "--json"]
+            made: list = []
+            for where in ("here", "elsewhere"):
+                with self.subTest(where=where), contextlib.ExitStack() as stack:
+                    if where == "elsewhere":
+                        stack.enter_context(elsewhere(made))
+                    out, err = io.StringIO(), io.StringIO()
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        code = fea.main(argv)
+                    self.assertEqual(code, 2, err.getvalue())
+                    answer = json.loads(out.getvalue().strip().splitlines()[-1])
+                    self.assertEqual((answer["ok"], answer["reason"], answer["error"]),
+                                     (False, "invalid_argument", said))
+                    self.assertFalse(results.exists(), "a refused study writes nothing")
+                    out, err = io.StringIO(), io.StringIO()
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        code = fea.main(argv[:-1])
+                    self.assertEqual((code, out.getvalue(), err.getvalue().strip().splitlines()),
+                                     (2, "", [f"cad fea: {said}"]))
+                    # and a study file that is not there, the same
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err := io.StringIO()):
+                        code = fea.main([str(part), "--study", str(Path(tmp) / "none.json"), "--out", str(results)])
+                    self.assertEqual((code, err.getvalue().strip()),
+                                     (2, f"cad fea: study file does not exist: {Path(tmp) / 'none.json'}"))
 
 
 if __name__ == "__main__":

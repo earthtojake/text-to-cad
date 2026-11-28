@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { CadViewer, createCadFileSource, normalizePath } from '@cad/ui/cad-viewer';
+import { CadViewer, createCadFileSource, normalizePath, type CadViewerProps } from '@cad/ui/cad-viewer';
 import { createCadFileActions } from '@cad/ui/catalog';
 import type { ModelLibrarySource } from '@cad/ui/library';
-import { createLiveRegistry, type ViewerHost } from '@cad/ui/host';
+import { createLiveRegistry, type HomeLocation, type NavigationTarget } from '@cad/ui/host';
+import { samePlace } from '@cad/ui/library';
 import type { TabStore, Appearance } from '@cad/ui/tab-store';
 import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@cad/core/client';
+import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { reloadWhenClean } from './host/reloadWhenClean.js';
@@ -15,11 +17,12 @@ import { useAnalyticsConsent } from '@cad/ui/consent';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { createBrowserDownloads } from './host/downloads';
+import { createNewTabOpener } from './host/newTab.js';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
 import { useViewerLinks } from './host/viewerLinks.js';
 import { EngineStopped } from './EngineStopped';
-import { readDefaultFileParam, readDocumentId, writeDocumentId } from './client/workbench/fileParam.js';
+import { pageAddress, readDefaultFileParam, readDocumentId, readHomePlace, writeDocumentId } from './client/workbench/fileParam.js';
 import { applyColorSchemeToDocument, resolveColorSchemeMode } from './client/ui/colorScheme.js';
 
 /** The keyboard the page is typed on — ⌘ on Apple devices, Ctrl elsewhere: the host's one platform answer. */
@@ -39,13 +42,15 @@ export function useTabAppearance(tabStore: TabStore): { preference: Appearance; 
   return { preference: settings.appearance, colorScheme: resolveColorSchemeMode(settings.appearance, { prefersDark }) as 'light' | 'dark' };
 }
 
-const DOCUMENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const RECENTS: HomeLocation = { view: 'recents' };
 
 /**
  * The viewer's page: one document at a time, by the id its URL's path names (`/<id>`: a model's,
- * or a file's, which the server registers when it is opened), or the home (`/`): the models opened
- * before. A file opened by its path (from Files, or the home's Open) is asked for its id first, and shown by it. The browser's own history is the way back:
- * showing a document or the home is a new entry.
+ * or a file's, which the server registers when it is opened), or the home (`/`) at the place its query names
+ * (`fileParam.js`: Recents, `?view=pinned` Starred, `?project=<id>&path=<folder>`). A file opened by its path (from the
+ * home's Open) is asked for its id first, and shown by it. The browser's own history is the way back: showing a
+ * document, the home or another place on it is a new entry, and every one of them has its own address, for a link
+ * and for Open in new tab.
  */
 export default function App({ client, server, tabStore, language: chosenLanguage = null }: { client: CadClient; server: CadServerInfo; tabStore: TabStore; language?: string | null }) {
   // Another process answering on this page's port: never loaded into the tab (a dev server's restart
@@ -61,12 +66,12 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
     (key, params) => sayRef.current(key, params)), []);
   // The file menu: the file's path to the clipboard, Reveal in the file manager of the machine the
-  // server runs on, labeled for its platform, Copy link, and Open in's apps there (the server's own table).
+  // server runs on, labeled for its platform, where it has one, Copy link, and Open in's apps there (the server's own table).
   const fileActions = useMemo(() => createCadFileActions({ platform: server.platform, clipboard: browserClipboard,
-    reveal: path => client.reveal(path), openIn: client,
+    ...(server.reveal !== false ? { reveal: (path: string) => client.reveal(path) } : {}), openIn: client,
     // Copy link: this page's own origin, and a fresh link from the server.
-    link: { origin: () => window.location.origin, client } }), [server.platform, client]);
-  // A copied Quick Edit's annotation, saved by the server beside it on this machine.
+    link: { origin: () => window.location.origin, client } }), [server.platform, server.reveal, client]);
+  // How a Quick Edit names this machine's files: from the folder the server was last launched in, else from `~/`.
   const promptFiles = useMemo(() => createHttpPromptFiles({ origin: client.origin }), [client]);
   // The view on screen, for the library's pictures of what was opened.
   const live = useMemo(() => createLiveRegistry(), []);
@@ -76,29 +81,39 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   const [file, setFile] = useState(() => readDocumentId() || '');
   const shownFile = useRef(file);
   shownFile.current = file;
+  // The place of the home the URL names: the home's own when it is on screen, and where it opens from a document.
+  const [place, setPlace] = useState<HomeLocation>(() => readHomePlace());
+  const shownPlace = useRef(place);
+  shownPlace.current = place;
   const asked = useRef(0);
-  /** Show a document by its id, a file by its absolute path (asked for its id), or the home (''): a
-   * new step in the browser's history, or this one's place (`history: 'replace'`). */
-  const show = useCallback(async (next: string, history: 'push' | 'replace' = 'push') => {
+  /** Show a document by its id, a file by its absolute path (asked for its id), or the home ('') at a place on it
+   * (`place`; Recents with none): a new step in the browser's history, or this one's place (`history: 'replace'`). */
+  const show = useCallback(async (next: string, { place: where = RECENTS, history = 'push' }: { place?: HomeLocation; history?: 'push' | 'replace' } = {}) => {
     const turn = ++asked.current;
     const wanted = normalizePath(next);
-    let id = !wanted || DOCUMENT_ID.test(wanted) ? wanted : '';
+    let id = !wanted || isDocumentId(wanted) ? wanted : '';
     if (wanted && !id) {
       id = await client.resolveEntry(wanted).then(entry => String(entry.id || ''), () => '');
       if (turn !== asked.current) return;
       if (!id) { setFile(wanted); return; }  // a file that is not there says so, by its path
     }
-    if (id === shownFile.current) return;
-    writeDocumentId(id, { history });
+    if (id === shownFile.current && (id || samePlace(where, shownPlace.current))) return;
+    writeDocumentId(id, { history, place: where });
     setFile(id);
+    if (!id) setPlace(where);
   }, [client]);
   useEffect(() => {
     if (!file) {
-      writeDocumentId('', { history: 'replace' });
+      writeDocumentId('', { history: 'replace', place });
       const fallback = readDefaultFileParam();  // a developer's build's default file
-      if (fallback) void show(fallback, 'replace');
+      if (fallback) void show(fallback, { history: 'replace' });
     }
-    const sync = () => { asked.current += 1; setFile(readDocumentId() || ''); };
+    // Back and Forward: the document, or the place on the home, the address now names.
+    const sync = () => {
+      asked.current += 1;
+      setFile(readDocumentId() || '');
+      setPlace(previous => { const named = readHomePlace(); return samePlace(named, previous) ? previous : named; });
+    };
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
@@ -114,12 +129,15 @@ export default function App({ client, server, tabStore, language: chosenLanguage
   const name = catalogName || names.current.get(file) || '';
   // The file the catalog has on screen, by its own path (a model's document by its id): `onShown`.
   const [shownPath, setShownPath] = useState<string | null>(null);
+  // The place of the home on screen, as the home names it ("Recents", a project's name): `onHomeShown`.
+  const [homeName, setHomeName] = useState('');
   // The page is named after it alone ("bracket.step", "juno"; a file with no name of its own, after its
-  // path's last segment); the home, or a document whose name is not known yet, is "text-to-cad".
+  // path's last segment); the home after its place ("Recents · text-to-cad", "gearbox · text-to-cad"), so a tab of
+  // each tells them apart; a document whose name is not known yet, or the home before it has said, is "text-to-cad".
   useEffect(() => {
-    const fileName = (path: string | null) => (path && !DOCUMENT_ID.test(path) ? normalizePath(path).split('/').pop() || '' : '');
-    document.title = name || fileName(shownPath) || fileName(file) || 'text-to-cad';
-  }, [name, shownPath, file]);
+    const fileName = (path: string | null) => (path && !isDocumentId(path) ? normalizePath(path).split('/').pop() || '' : '');
+    document.title = file ? name || fileName(shownPath) || fileName(file) || 'text-to-cad' : homeName ? `${homeName} · text-to-cad` : 'text-to-cad';
+  }, [name, shownPath, file, homeName]);
   // Once the catalog has the document, the library every CAD view
   // shares says it was opened now: a file joins it (counted, as a code, for analytics), and a model,
   // known by its id alone and in it since its run, has its opened time.
@@ -127,8 +145,10 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     setShownPath(path);
     if (path) void client.changeRecents({ action: 'open', path }).catch(() => {});
   }, [client]);
-  // The home: the library every CAD view shares, and Open with the desktop's chooser where the
-  // server's computer has one. A card's picture is the server's, by name.
+  // The home: the projects (a project's page is one folder of it, read from the server) and the library every CAD view
+  // shares, and Import with the desktop's chooser where the server's computer has one -- a file, shown, or a folder,
+  // opened as a project; where one chooser takes either (`pickAny`: a Mac's), that one too. A card's picture is the
+  // server's, by its token.
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
@@ -138,11 +158,30 @@ export default function App({ client, server, tabStore, language: chosenLanguage
       for (const key of [entry.id, normalizePath(entry.path)]) if (key && entry.name) names.current.set(key, entry.name);
       await show(entry.path);
     },
-    ...(server.pick ? { pick: async () => { const picked = await client.pick(); if (picked) await show(picked); } } : {}),
-  }), [client, server.pick, show]);
+    projects: () => client.projects?.() ?? Promise.resolve([]),
+    ...(client.projectFolder ? { folder: (project: string, options: { path?: string; q?: string }) => client.projectFolder!(project, options) } : {}),
+    removeProject: project => client.removeProject?.(project.id) ?? Promise.resolve([]),
+    ...(server.pick ? {
+      pick: async () => { const picked = await client.pick(); if (picked) await show(picked); },
+      importFolder: async (start?: string) => {
+        const folder = await client.pick({ folder: true, start });
+        if (!folder || !client.openProject) return null;
+        return { ...await client.openProject(folder), folder };
+      },
+    } : {}),
+    ...(server.pick && server.pickAny ? {
+      importAny: async () => {
+        const chosen = await client.pick({ any: true });
+        if (!chosen) return null;
+        if (!chosen.folder) { await show(chosen.path); return { file: chosen.path }; }
+        if (!client.openProject) return null;
+        return { ...await client.openProject(chosen.path), folder: chosen.path };
+      },
+    } : {}),
+  }), [client, server.pick, server.pickAny, show]);
   const appearance = useTabAppearance(tabStore);
   const changeColorScheme = useCallback((value: string) => tabStore.settings.update({ appearance: value as Appearance }), [tabStore]);
-  // The app menu's Theme row, over every file and on the home.
+  // The app menu's Theme row (the menu Settings' cog opens, in the sidebar's foot).
   const colorScheme = useMemo(() => ({ preference: appearance.preference, onPreferenceChange: changeColorScheme }), [appearance.preference, changeColorScheme]);
   useEffect(() => { applyColorSchemeToDocument(appearance.colorScheme, document.documentElement); }, [appearance.colorScheme]);
   // The person's language: inferred from the browser's languages until they choose one in the app menu,
@@ -199,14 +238,24 @@ export default function App({ client, server, tabStore, language: chosenLanguage
     window.addEventListener('keydown', touched, true);
     return () => { window.removeEventListener('pointerdown', touched, true); window.removeEventListener('keydown', touched, true); };
   }, [client]);
-  const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    downloads, files: source, fileActions, clipboard: browserClipboard, promptContext, promptFiles, links,
+  // What the page alone knows of navigation: every document and every place of the home has an address of its own in
+  // this origin (`pageAddress`: a document's by its id; one named by a path has none, and is asked for its id as it
+  // is opened), which the session cookie admits in a new tab as it admits a download; and Open in new tab, a tab of
+  // this browser.
+  const navigation = useMemo(() => {
+    const hrefOf = (target: NavigationTarget) => 'document' in target
+      ? (isDocumentId(target.document) ? pageAddress({ id: target.document }) : null) : pageAddress({ place: target.home });
+    return { hrefOf, openBeside: { kind: 'tab' as const, open: createNewTabOpener({ hrefOf,
+      resolve: path => client.resolveEntry(normalizePath(path)).then(entry => String(entry.id || '')) }) } };
+  }, [client]);
+  const host = useMemo<CadViewerProps['host']>(() => ({
+    downloads, files: source, fileActions, clipboard: browserClipboard, promptContext, promptFiles, links, navigation,
     // A Quick Edit copied, counted by this Viewer's server for its telemetry, as a touch is.
     usage: { used: feature => { if (feature === 'quickEdit') client.reportActivity({ quickEdit: true }); },
       // The controls a person used, and how long a tool was up, counted by the shared viewer.
       controls: counts => client.reportActivity({ controls: counts }) },
     environment: { colorScheme: appearance.colorScheme, locale, platform: keyboardPlatform() },
-  }), [downloads, client, source, fileActions, promptContext, promptFiles, links, appearance.colorScheme, locale]);
+  }), [downloads, client, source, fileActions, promptContext, promptFiles, links, navigation, appearance.colorScheme, locale]);
   // The engine gone under the page: said over it, which stays as it was for the engine's return.
   // An update's restart is the button's to say: the server going for it is no notice of its own.
   const engineGone = (useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineGone, () => false) && !updating) || foreign;
@@ -222,7 +271,8 @@ export default function App({ client, server, tabStore, language: chosenLanguage
         context of its own (`isolate`), so no layer of a view's (its tool strip and Quick Edit's bar stand at
         `z-50`, over the view's panels) paints over the notice. The view stays mounted under it, as it was. */}
     <div className="isolate min-h-0 flex-1" inert={engineGone || undefined} aria-hidden={engineGone || undefined}>
-    <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} name={name} onShow={next => { void show(next); }} onShown={shown}
+    <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} name={name} onShown={shown}
+      onShow={(next, where) => { void show(next, { place: where }); }} place={place} onHomeShown={(_place, shownAs) => setHomeName(shownAs)}
       library={library} onThumbnail={client.keepThumbnail} appSettings={appSettings}
       colorScheme={colorScheme} language={language}
       update={updater.shown ? <UpdateButton state={updater.state} phase={updater.phase} onUpdate={updater.update} /> : null}

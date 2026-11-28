@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import * as THREE from 'three';
+import { ENGINE_LOOK } from '@cad/core/lib/xbf/look.generated.js';
 import { loadXbfDocument } from '@cad/core/lib/xbf/xbfDocument.js';
 import { createXbfScene } from '@cad/core/lib/xbf/xbfScene.js';
 
@@ -18,7 +19,7 @@ const read = file => fs.readFileSync(path.join(FIXTURES, file));
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), 255, 255, 255, 128]).buffer;
 async function bracket() {
   const fetch = async (url) => {
-    if (url.endsWith('/api/v1/look')) return new Response(read('look.json'));
+    if (url.endsWith('/api/v1/look')) return new Response(JSON.stringify(ENGINE_LOOK));
     if (url.endsWith('/api/v1/look/environment')) return new Response(ENVIRONMENT);
     const part = /\/parts\/([^/]+)$/.exec(url);
     return new Response(part ? read(`bracket/${part[1]}.xbm`) : read('bracket/structure.json'));

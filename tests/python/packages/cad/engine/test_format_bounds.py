@@ -266,3 +266,45 @@ class StepReferenceTest(FolderTest):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Every read of an .xbf, in a process of its own: OCCT's reader ends its process on some input that is no document
+# (a crash is a failed test, not a failed run). Each file is read from its path and from its bytes; one line each,
+# ``refused`` with the words of the refusal, ``read`` for a document.
+_READ_EACH = """
+import sys
+from pathlib import Path
+from cad.engine import document
+
+for path in sys.argv[1:]:
+    for read in (lambda: document.Loaded(Path(path)), lambda: document.read_bytes(Path(path).read_bytes(), path)):
+        try:
+            read()
+            print("read")
+        except document.NoXbf as error:
+            print("refused", error)
+        sys.stdout.flush()
+"""
+
+
+class XbfWholeTest(FolderTest):
+    def test_an_xbf_cut_short_anywhere_or_of_another_file_is_refused_by_name_and_a_whole_one_reads(self) -> None:
+        import subprocess
+
+        whole = (Path(__file__).parent / "fixtures" / "xbf8_materials.xbf").read_bytes()
+        cases = {"garbage.xbf": b"garbage", "empty.xbf": b"", "step.xbf": b"ISO-10303-21;\nHEADER;\n",
+                 "whole.xbf": whole}
+        # Cut short in its header, its info section, its shapes and its last label: at every 61 bytes.
+        cases.update({f"cut{size}.xbf": whole[:size] for size in [*range(1, len(whole), 61), len(whole) - 1]})
+        for name, data in cases.items():
+            (self.folder / name).write_bytes(data)
+        done = subprocess.run([sys.executable, "-c", _READ_EACH, *(str(self.folder / name) for name in cases)],
+                              capture_output=True, text=True, timeout=600, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        said = done.stdout.splitlines()
+        self.assertEqual(len(said), 2 * len(cases), done.stdout)
+        for index, name in enumerate(cases):
+            why = ("read" if name == "whole.xbf" else
+                   f"refused {self.folder / name} is no .xbf cad wrote: it is "
+                   + ("another file" if name in ("garbage.xbf", "step.xbf") else "cut short"))
+            self.assertEqual(said[2 * index:2 * index + 2], [why, why], name)

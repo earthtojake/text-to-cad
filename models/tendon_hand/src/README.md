@@ -4,7 +4,7 @@
 project (24 joint degrees of freedom, 48 antagonistic tendon actuators; millimetres,
 fingers along +Y, palm side +Z, thumb on -X). The old project was 112 one-model
 scripts. The 56 that build from the project's code are models here, folded into five
-scripts by subsystem, each model keeping its name, a `@model` that writes nothing. The
+scripts by subsystem, each model keeping its name, a `@xbf` that writes nothing. The
 other 56 were reviews and clearance studies on frozen STEP snapshots and generated
 validation output, not the hand itself, and are not kept.
 
@@ -16,7 +16,7 @@ python phalanges.py
 python routing.py
 python guide_mounts.py
 python forearm.py
-cad model snapshot "$ID" fist.png --pose fist          # ID: anatomy_layout's id: line
+cad snapshot anatomy_layout.xbf fist.png --pose fist
 ```
 
 | Script | Models |
@@ -34,7 +34,7 @@ script: every model replays.
 
 ## The port
 
-- `@step(out="../STEP/x.step")` became `@model`; `build123d` is imported directly, `cadgen.srgb("#…")` is the hex itself, which
+- `@step(out="../STEP/x.step")` became `@xbf`; `build123d` is imported directly, `cadgen.srgb("#…")` is the hex itself, which
   a shape takes as it is, `cadgen.report` is gone (the engine names each body it runs) and
   `read_step` is the engine's. `lib/` holds the 56 factory
   modules these models reach, unchanged but for those imports, and the JSON data they

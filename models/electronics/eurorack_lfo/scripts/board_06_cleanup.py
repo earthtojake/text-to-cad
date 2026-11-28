@@ -2,7 +2,7 @@
 one layer only: the path crossed over it) is removed, and of two same-net vias too close together (hole_to_hole)
 the one no track ends at goes. Then the pours refill.
 Run after board_05_islands.py:
-    cad kicad_pcb drc twin_orbit.kicad_pcb --json > tmp/drc_before_cleanup.json
+    cad kicad drc twin_orbit.kicad_pcb --json > tmp/drc_before_cleanup.json
     cad run scripts/board_06_cleanup.py tmp/drc_before_cleanup.json"""
 import json
 import math

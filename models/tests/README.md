@@ -6,7 +6,7 @@ make their own small fixtures in fresh temporary directories.
 
 Agents may use these models for manual browser reviews, reproducing edge cases,
 checking exports and debugging new features. They are small and quick to rebuild.
-Each case is a `@model`; a run writes nothing, and prints the document's id and page.
+Each case is a `@xbf`; a run writes nothing, and prints the document's id and page.
 
 ## Cases
 
@@ -26,13 +26,13 @@ From each case's folder, with the engine's environment (the library on the path)
 export CAD_ENGINE_DIR="$(mktemp -d /tmp/cad-manual-engine.XXXXXX)"
 python source.py                     # render_floor/, viewer_concurrency/
 python annotation_fixture.py         # unified_annotations/
-cad model snapshot "$ID" /tmp/open.png --pose open     # ID: the id: line the run printed
-cad model export "$ID" /tmp/annotations.glb            # demo, baked as a clip
+cad snapshot annotation_fixture.xbf /tmp/open.png --pose open   # the .xbf the run saved
+cad export annotation_fixture.xbf /tmp/annotations.glb          # demo, baked as a clip
 ```
 
 ## The port
 
-- `@step(out=...)` -> `@model`: a case writes nothing; export a file of it on request.
+- `@step(out=...)` -> `@xbf`: a case writes nothing; export a file of it on request.
 - `unified_annotations`: the sidecar's `materials=` are `FinishedMaterial` values on the parts
   (native catalogue steel with the authored part colours, and the project's own blue
   paint); the `swing` mate is a build123d revolute joint and the `open` pose a
@@ -44,4 +44,4 @@ cad model export "$ID" /tmp/annotations.glb            # demo, baked as a clip
 
 - `joint_playground/joint_playground.urdf`: an authored URDF of primitives, no model,
   and no doc names it. It is kept in [`unported/`](unported/README.md), and the engine's snapshot draws it as
-  it is (`cad urdf snapshot models/tests/unported/joint_playground/joint_playground.urdf out.png`).
+  it is (`cad snapshot models/tests/unported/joint_playground/joint_playground.urdf out.png`).

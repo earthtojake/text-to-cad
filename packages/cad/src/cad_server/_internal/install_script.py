@@ -121,10 +121,11 @@ def environment(*, report: Path | None) -> dict[str, str]:
     as and a ``cad run``'s marks, with the person's own PATH (none of an environment that comes and goes,
     ``installations.lasting``), uv's installer told to leave shell profiles alone, cad's mark (``BY_CAD_ENV``), and the
     report's file named. The install command has no modes: an earlier build's update mode is never passed on."""
-    from cad.engine.places import INSTALLATION_ENV, RUN_WITH
+    from cad.engine.places import INSTALLATION_ENV
     from cad_server._internal.installations import lasting
 
-    dropped = ("PYTHONPATH", "PYTHONHOME", INSTALLATION_ENV, RUN_WITH, "CAD_UPDATE_PREPARE", REPORT_ENV, UPDATE_ENV)
+    # ``CAD_RUN_WITH``: a mark the ``cad run`` of 0.11.17 and earlier sets, which an install started under one drops.
+    dropped = ("PYTHONPATH", "PYTHONHOME", INSTALLATION_ENV, "CAD_RUN_WITH", "CAD_UPDATE_PREPARE", REPORT_ENV, UPDATE_ENV)
     found = {key: value for key, value in os.environ.items() if key not in dropped}
     found["PATH"] = lasting(os.environ.get("PATH", os.defpath))
     found["UV_NO_MODIFY_PATH"] = "1"

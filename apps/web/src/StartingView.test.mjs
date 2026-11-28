@@ -27,8 +27,8 @@ after(() => rm(temporary, { recursive: true, force: true }));
 
 const ID = '6f1c2a4e-1b2c-5d3e-8f4a-000000000001';
 
-/** The starting view at `url`, before the server has answered; what it asked the network, kept in `fetched`. */
-async function starting(url) {
+/** The starting view at `url`, before the server has answered; what it asked the network, kept in `fetched`. `kept`: the tab's record, where it has one. */
+async function starting(url, kept = null) {
   const { window } = new JSDOM('<div id="root"></div>', { url, pretendToBeVisual: true });
   const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
   window.matchMedia = matchMedia;
@@ -41,7 +41,9 @@ async function starting(url) {
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   }
   const root = createRoot(window.document.getElementById('root'));
-  await act(() => root.render(createElement(StartingView, { tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
+  const storage = sessionTabRecord(window.sessionStorage);
+  if (kept) storage.write(kept);
+  await act(() => root.render(createElement(StartingView, { tabStore: createTabStore(storage) })));
   return { document: window.document, fetched, unmount: () => act(() => root.unmount()) };
 }
 
@@ -55,14 +57,34 @@ test('the starting view is the app\'s frame before the server answers', async ()
     assert.ok(view.querySelector('header[data-viewer-navbar]'));
     assert.ok(view.querySelector('aside[data-panel-loading]'));
     assert.ok(view.querySelector('[data-loading-step]'));
+    // The logo first, the link home it will be, then the panel's toggle, as the app's row has them.
+    const row = [...view.querySelectorAll('header[data-viewer-navbar] nav > *')].slice(0, 2);
+    assert.deepEqual(row.map(node => node.getAttribute('data-navbar-logo') ?? node.querySelector('[data-navbar-panel="left"]')?.getAttribute('data-navbar-panel')), ['home', 'left']);
     assert.deepEqual(page.fetched, []);
   } finally { await page.unmount(); }
-  // The home's address: the home's navbar with its logo, no panel, and the indicator on the page's background.
+  // The home's address: the home's navbar with its logo first, the link home it will be, then its sidebar's toggle; the
+  // sidebar's stand-in (the panel's surface, placeholder rows where its places will be, Settings at its foot), and
+  // the indicator on the page's background beside it.
   const home = await starting('http://cad.local/');
   try {
-    assert.ok(home.document.querySelector('[data-starting-view] header[data-viewer-navbar] .cad-navbar-logo'));
+    const lead = [...home.document.querySelectorAll('[data-starting-view] header[data-viewer-navbar] nav > *')];
+    assert.deepEqual(lead.map(node => node.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded') ?? node.getAttribute('data-navbar-logo')), ['home', 'true']);
+    assert.deepEqual([lead[0].tagName, lead[0].getAttribute('href'), lead[0].classList.contains('cad-navbar-logo')], ['A', '/', true]);
+    const sidebar = home.document.querySelector('[data-starting-home] aside[data-library-sidebar]');
+    assert.deepEqual([sidebar.hidden, sidebar.style.width, Boolean(sidebar.querySelector('[data-tree-rows-loading]')), sidebar.querySelectorAll('[data-place]').length,
+      Boolean(sidebar.querySelector('[data-app-foot] [data-app-settings]'))], [false, '232px', true, 0, true]);
     assert.ok(home.document.querySelector('[data-starting-home] [data-loading-step]'));
     assert.equal(home.document.querySelector('aside[data-panel-loading]'), null);
     assert.deepEqual(home.fetched, []);
   } finally { await home.unmount(); }
+});
+
+// The home's sidebar stands as the tab kept it: shut where the person shut it, at the width they dragged it to.
+test('the starting view draws the home\'s sidebar as the tab kept it', async () => {
+  const kept = { version: 2, settings: { library: { layout: 'grid', sort: 'activity', panel: { open: false, width: 320 } } }, files: {} };
+  const page = await starting('http://cad.local/', kept);
+  try {
+    const sidebar = page.document.querySelector('[data-starting-home] aside[data-library-sidebar]');
+    assert.deepEqual([sidebar.hidden, sidebar.style.width, page.document.querySelector('[data-navbar-panel="left"]').getAttribute('aria-expanded')], [true, '320px', 'false']);
+  } finally { await page.unmount(); }
 });

@@ -81,8 +81,8 @@ class EngineTest(unittest.TestCase):
         fixture = Fixture(self, MODELS)
         plate = fixture.ids[0]
         before = _counts()
-        check, _pid = held_check(self, hold, lambda: cad.model.dfm(plate, process="cnc", tools="3"))
-        inspected = Checking(lambda: cad.model.inspect(plate))
+        check, _pid = held_check(self, hold, lambda: cad.xbf.dfm(plate, process="cnc", tools="3"))
+        inspected = Checking(lambda: cad.xbf.inspect(plate))
         inspected.start()
         self.assertNotIsInstance(inspected.result(self), Exception)
         fixture.build()  # the same code run again: the same version
@@ -92,11 +92,11 @@ class EngineTest(unittest.TestCase):
         # The runner answers a check's caller and then lets the check go: asked again before it has, the same
         # check is joined, not read from what was kept. So it is awaited gone before it is asked again.
         _until(self, lambda: _counts()["asked"] == 0, "the check is let go")
-        cad.model.dfm(plate, process="cnc", tools="3")
+        cad.xbf.dfm(plate, process="cnc", tools="3")
         self.assertEqual((_counts()["measured"], _counts()["reused"]), (before["measured"] + 1, before["reused"] + 1))
 
         hold.unlink()
-        check, pid = held_check(self, hold, lambda: cad.model.dfm(plate, process="cnc", tools="4"))
+        check, pid = held_check(self, hold, lambda: cad.xbf.dfm(plate, process="cnc", tools="4"))
         measured = _counts()["measured"]
         fixture.build(MODELS.replace("bd.Box(40, 30, 10)", "bd.Box(44, 30, 10)"))  # an edit, built under the check
         _until(self, lambda: pid not in _busy(), "the check of the version gone was stopped, still held at its seam")
@@ -105,27 +105,27 @@ class EngineTest(unittest.TestCase):
         edited = check.result(self)
         self.assertAlmostEqual(edited.measurements["bodies"][0]["bbox_mm"][0], 44.0, delta=1e-6)
         self.assertEqual(_counts()["measured"], measured + 1, "the version gone was never measured to its end")
-        again = cad.model.dfm(plate, process="cnc", tools="4")
+        again = cad.xbf.dfm(plate, process="cnc", tools="4")
         self.assertEqual((_plain(again), _counts()["measured"]), (_plain(edited), measured + 1), "and it is kept")
 
     def test_a_check_outlives_its_caller_and_the_next_call_reuses_its_result(self) -> None:
         """Its caller killed (a shell's time limit), a check runs to its end and keeps its result: the same call
         again measures nothing. A check waiting behind another says so (a pool of one checks process), and
-        `cad status` lists the one running; once that one's caller is gone, its process is killed for the one
+        `cad server status` lists the one running; once that one's caller is gone, its process is killed for the one
         waiting, which a fresh one measures, and it keeps nothing."""
         import cad
         from cad.engine import api
 
         env, hold = held_engine(self, {"CAD_ENGINE_CHECKS": "1"})
         fixture = Fixture(self, MODELS)
-        process, _pid = self.caller(f"cad.model.dfm({fixture.ids[0]!r}, process='cnc')", env, hold)
+        process, _pid = self.caller(f"cad.xbf.dfm({fixture.ids[0]!r}, process='cnc')", env, hold)
         process.kill()
         process.wait()
         before = _counts()
         hold.write_text("", encoding="utf-8")
         _until(self, lambda: _counts()["asked"] == 0, "the check of a caller gone ends")
         self.assertEqual(_counts()["measured"], before["measured"] + 1, "it ran to its end")
-        held = cad.model.dfm(fixture.ids[0], process="cnc")
+        held = cad.xbf.dfm(fixture.ids[0], process="cnc")
         self.assertEqual(_counts()["measured"], before["measured"] + 1, "and the next call reuses its result")
         self.assertEqual(_counts()["reused"], before["reused"] + 1)
         self.assertEqual(held.measurements["process"], "cnc")
@@ -161,7 +161,7 @@ class EngineTest(unittest.TestCase):
 
     def test_a_killed_command_s_check_is_seen_gone_and_gives_its_process_to_a_caller_memory_has_no_room_for(
             self) -> None:
-        """`cad step dfm` killed (SIGKILL, as a shell's or `subprocess.run`'s time limit kills it): `cad status`
+        """`cad dfm` killed (SIGKILL, as a shell's or `subprocess.run`'s time limit kills it): `cad server status`
         says at once that no caller of its check is there. A check whose caller is there, waiting with a slot of
         the pool free but no room in the engine's memory for another checks process (a cap of 1 MB), takes the
         abandoned check's place: its process killed, a fresh one measures the one waited for."""
@@ -169,7 +169,7 @@ class EngineTest(unittest.TestCase):
                                        "CAD_ENGINE_CHECK_RSS_MB": "0"})  # no limit of a check's own: the cap's alone
         reached = Path(f"{hold}.reached")
         steps = box(self, 6, 7)
-        command = subprocess.Popen([sys.executable, "-m", "cad_server.cli", "step", "dfm", str(steps[0]),
+        command = subprocess.Popen([sys.executable, "-m", "cad_server.cli", "dfm", str(steps[0]),
                                     "--process", "printing", "--json"], env=env, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL)
         self.addCleanup(command.wait)
@@ -219,8 +219,8 @@ class EngineTest(unittest.TestCase):
         env, hold = held_engine(self)
         fixture = Fixture(self, MODELS)
         before = _counts()
-        first, _pid = held_check(self, hold, lambda: cad.model.dfm(fixture.ids[0], process="cnc", tools="7"))
-        code = (f"import cad, dataclasses, json; found = cad.model.dfm({fixture.ids[0]!r}, process='cnc', tools='7'); "
+        first, _pid = held_check(self, hold, lambda: cad.xbf.dfm(fixture.ids[0], process="cnc", tools="7"))
+        code = (f"import cad, dataclasses, json; found = cad.xbf.dfm({fixture.ids[0]!r}, process='cnc', tools='7'); "
                 "print(json.dumps(dataclasses.asdict(found), default=str))")
         second = subprocess.Popen([sys.executable, "-c", code], env=env, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE, text=True)
@@ -430,7 +430,7 @@ class RunnerTest(unittest.TestCase):
         ``cad`` command, which names no library, and to the script again; a caller of another library's version
         is measured again, and its result serves the command from then on."""
         from cad_server.engine.checks import Checks
-        from cad_server.engine.registry import Folder
+        from cad_server.engine.state import Folder
 
         folder = Folder(tempfile.mkdtemp(prefix="engine-dfm-restart-"))
         self.addCleanup(shutil.rmtree, folder.root, True)

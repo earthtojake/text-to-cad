@@ -2,7 +2,7 @@
 
 | Script            | Model                                      | Description                                                   |
 |-------------------|--------------------------------------------|---------------------------------------------------------------|
-| qdd_actuator.py   | `qdd_actuator` (`@model`)                  | Quasi-direct-drive actuator, 4.5:1 planetary, 153 occurrences |
+| qdd_actuator.py   | `qdd_actuator` (`@xbf`)                  | Quasi-direct-drive actuator, 4.5:1 planetary, 153 occurrences |
 
 Build from this folder: `python qdd_actuator.py`.
 
@@ -46,9 +46,9 @@ The `drive` coupling is the gear train: one control in input revolutions,
 so the rotor, cages, carrier and planets turn only through it. Its range is
 the joints' limits over their rates, 0..4.5. The old `quarter_output` and
 `full_output` poses are configurations naming it (`rest` is as built):
-`cad model snapshot "$ID" q.png --pose '{"drive": 2.25}'` (ID: the id: line the run prints).
+`cad snapshot qdd_actuator.xbf q.png --pose '{"drive": 2.25}'`.
 
-The old `ANIMATION_JS` clips by name (`cad model export "$ID" GLB/qdd_actuator.glb` bakes
+The old `ANIMATION_JS` clips by name (`cad export qdd_actuator.xbf GLB/qdd_actuator.glb` bakes
 all three). The old clips looped; neither a motion nor an animation has a loop, and a
 player repeats it:
 

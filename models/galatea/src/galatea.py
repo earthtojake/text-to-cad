@@ -1,6 +1,6 @@
 """Galatea: a 1.76 m humanoid in pearl and black, on real drives. The whole robot, its mechanism and its poses."""
 
-from cad import model
+from cad import xbf
 from cad.build123d import memo
 
 from lib.arm import ARM_LINKS, build_arm
@@ -41,7 +41,7 @@ def assemble():
     return couple(group("galatea", list(nodes.values())))
 
 
-@model
+@xbf
 def galatea():
     return animate(assemble())
 

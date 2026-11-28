@@ -1,8 +1,8 @@
-"""cadgen's engine: ``@xbf`` models built in a warm worker, kept as XCAF documents.
+"""cadgen's engine: models built in a warm worker, kept as XCAF documents.
 
 A model is a parameterless function returning a build123d shape::
 
-    from cad.engine import xbf, step
+    from cad.engine import model, step
 
     @xbf("XBF/arm.xbf")
     @step("arm.step")
@@ -12,9 +12,10 @@ A model is a parameterless function returning a build123d shape::
 An explicit ``arm()`` call builds it, and the child models its body calls, in a warm worker whose
 kernel memo makes an edit cost what it changed; the document is written to
 ``XBF/arm.xbf`` beside the script, and the derived files it declares after it, each a
-translation of that document (``cad <type> export``). ``cad serve XBF/arm.xbf``
+translation of that document (``cad export``). ``cad viewer XBF/arm.xbf``
 shows it. Nothing but those files is written: every cache lives in a process's memory.
-The verbs as functions are ``cad.engine.api`` (``cadgen.export``, ``cadgen.snapshot``, ...).
+The verbs as functions are ``cad.engine.api``'s, which the library's own (``cad.export``,
+``cad.snapshot``, ...) run.
 
 A function worth replaying on a later build -- an assembly's part, a derivation's stage --
 is marked ``@memo``: it writes no file, and a build whose edit does not reach it replays it
@@ -72,8 +73,13 @@ def __getattr__(name: str) -> Any:
         import importlib
 
         declarations = importlib.import_module("cad.engine.model")
-        return declarations if name == "model" else getattr(declarations, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+        return declarations if name in ("model", "xbf") else getattr(declarations, name)
+    if name.startswith("__"):
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    # An earlier spelling, after its warning; else AttributeError.
+    from cad._internal.aliases import lookup
+
+    return lookup(__name__, name)
 
 
 def __dir__() -> list[str]:

@@ -335,7 +335,7 @@ class ChoosingTest(unittest.TestCase):
                                     "    return bd.Box(1, 1, 1)\n")
         self.write("boards.py", "from cad import kicad_pcb as board\n\nwith board.edit('b.kicad_pcb') as b:\n    pass\n")
         self.write("model.py", "import numpy\nfrom lib import plate\nimport boards\n")
-        self.write("plain.py", "import json\nfrom cad import model\n")
+        self.write("plain.py", "import json\nfrom cad import xbf\n")
         self.write("attribute.py", "import cad.kicad_pcb\n\nwith cad.kicad_pcb.edit('x.kicad_pcb') as b:\n    pass\n")
         self.write("schematic.py", "from cad.kicad_sch import edit\n\nwith edit('d.kicad_sch') as s:\n    pass\n")
         self.write("dynamic.py", "import importlib\nimportlib.import_module('build' + '123d')\n")
@@ -356,7 +356,7 @@ class ChoosingTest(unittest.TestCase):
         # cad's own namespace of an integration (the registry's) is that integration, however it is imported.
         for code, found in (("from cad.build123d import paint", {"build123d"}), ("from cad import build123d", {"build123d"}),
                             ("import cad.kicad._session", {"kicad"}), ("from cadgen.build123d import memo", {"build123d"}),
-                            ("from cad import step, model", set())):
+                            ("from cad import step, xbf", set())):
             with self.subTest(code=code):
                 self.assertEqual(scan.scan(code=code, cwd=self.folder), found)
         self.assertEqual(self.spec("model.py").integrations, ("build123d", "kicad"))
@@ -369,8 +369,8 @@ class ChoosingTest(unittest.TestCase):
         from cad_server._internal import scan
 
         for code, found in (
-                ("from cad import model, step\n@model\ndef h():\n    return step.read('p.step')\n", {"build123d"}),
-                ("from cad import model, read_step\n@model\ndef h():\n    return read_step('p.step')\n", {"build123d"}),
+                ("from cad import xbf, step\n@xbf\ndef h():\n    return step.read('p.step')\n", {"build123d"}),
+                ("from cad import xbf, read_step\n@xbf\ndef h():\n    return read_step('p.step')\n", {"build123d"}),
                 ("import cad.step\ncad.step.read('p.step')\n", {"build123d"}),
                 ("from cad.step import read\n", {"build123d"}),
                 ("import cad as c\nc.read_xbf('p.xbf')\n", {"build123d"}),
@@ -384,16 +384,39 @@ class ChoosingTest(unittest.TestCase):
                 # that reads the part and netgen that meshes it (the registry's alongside). The tool alone is
                 # calculix's, as is its command.
                 ("import cad\ncad.step.solve('p.step', study='s.json', out='r')\n", {"build123d", "calculix", "netgen"}),
-                ("from cad.model import solve\n", {"build123d", "calculix", "netgen"}),
+                ("from cad.xbf import solve\n", {"build123d", "calculix", "netgen"}),
                 ("import cad_ccx\ncad_ccx.run('job.inp')\n", {"calculix"}),
                 ("from cad.calculix import _program\n", {"calculix"}),
                 # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
                 ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
                 ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),
-                ("from cad import kicad_pcb\nkicad_pcb.read('b.kicad_pcb')\n", set())):
+                ("from cad import kicad_pcb\nkicad_pcb.read('b.kicad_pcb')\n", set()),
+                # A verb needs what it runs of its source's type, the suffix read where the call spells it; by its
+                # name alone, what every type it takes needs alike; a source the scan cannot read, nothing.
+                ("import cad\ncad.dfm('p.step', process='cnc')\n", {"build123d"}),
+                ("import cad\ncad.dfm('p.stl')\n", {"trimesh"}),
+                ("from pathlib import Path\nfrom cad import dfm\ndfm(Path('p.3mf'))\n", {"trimesh"}),
+                ("import cad\nHERE = None\ncad.dfm(HERE / 'p.glb')\n", {"trimesh"}),
+                ("import cad\nname = 'p'\ncad.dfm(f'{name}.dxf')\n", {"build123d"}),
+                ("import cad\nsource = None\ncad.dfm(source)\n", set()),
+                ("import cad\ncad.fea('p.step', study='s.json', out='r')\n", {"build123d", "calculix", "netgen"}),
+                ("from cad import fea\n", {"build123d", "calculix", "netgen"}),
+                ("import cad\nhandle = None\ncad.inspect(handle, ranges=True)\n", {"build123d"}),
+                ("import cad\ncad.inspect('p.step', interference=True)\n", set()),
+                ("import cad\ncad.inspect('p.step')\n", set()),
+                ("import cad\ncad.export('b.kicad_pcb', 'fab/', as_='gerbers')\n", {"kicad"}),
+                # A source the scan cannot read is a KiCad file's where the call says what its export alone does: a
+                # kind no model's export is, or one it cannot read; a folder; a .csv, a .net, a .pdf, a .zip.
+                ("import cad\nboard = out = kind = None\ncad.export(board, out, as_=kind)\n", {"kicad"}),
+                ("import cad\nboard = None\ncad.export(board, 'fab/pos.csv', 'pos')\n", {"kicad"}),
+                ("import cad\nboard = None\ncad.export(board, 'fab/')\n", {"kicad"}),
+                ("import cad\nboard = HERE = None\ncad.export(board, HERE / 'fab.zip', as_='gerbers')\n", {"kicad"}),
+                ("import cad\npart = None\ncad.export(part, 'part.step', as_='step')\n", set()),
+                ("import cad\npart = None\ncad.export(part, 'part.glb', as_=None)\n", set()),
+                ("import cad\ncad.snapshot('b.kicad_pcb', 'b.png')\n", set())):
             with self.subTest(code=code):
                 self.assertEqual(scan.scan(code=code, cwd=self.folder), found)
-        self.write("read.py", "from pathlib import Path\nfrom cad import model, step\n\n@model\ndef holder():\n"
+        self.write("read.py", "from pathlib import Path\nfrom cad import xbf, step\n\n@xbf\ndef holder():\n"
                               "    return step.read(Path(__file__).parent / 'part.step')\n")
         self.assertTrue(self.spec("read.py").default(), "a STEP read runs on the base: cad[build123d]")
 
@@ -589,10 +612,10 @@ def _wheel(folder: Path, width: int = 42, requires: tuple[str, ...] = (), versio
 
 
 PLATE = """{header}import localpkg
-from cad import model
+from cad import xbf
 
 
-@model
+@xbf
 def plate():
     import build123d as bd
 
@@ -653,52 +676,26 @@ class RunWithTest(unittest.TestCase):
                          r"^cad run: uv could not export .+uv\.lock: The lockfile at `uv\.lock` needs to be updated, "
                          r"but `--locked` was provided")
 
-    def rebuild(self, done: subprocess.CompletedProcess) -> str | None:
-        from cad.engine import records
-
-        ident = re.search(r"id: ([0-9a-f-]{36})", done.stdout).group(1)
-        return records.command(records.current(), records.current().get(ident))
-
     def test_a_local_package_through_with_and_through_the_header_in_one_environment_made_once(self) -> None:
-        from cad.engine.records import rerun
-
         (self.project / "plate.py").write_text(PLATE.format(header=""), encoding="utf-8")
         first = self.run_("--with", f"./{self.wheel.name}", "plate.py")
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         self.assertIn("cad run: making the environment of the model's packages, once: ", first.stderr)
         self.assertRegex(first.stdout, r"bounds 42\D+10\D+2 mm", "the model imported its package")
         self.assertNotIn("cad here is", first.stderr, "of one release with the server: no update notice")
-        self.assertEqual(self.rebuild(first), rerun(self.project / "plate.py", given=[str(self.wheel)]),
-                         "built with --with: cad run --with it again")
         again = self.run_("--with", str(self.wheel), "plate.py")
         self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
         self.assertNotIn("making", again.stderr, "made once, used again")
         self.assertIn("took plate.py::plate warm", again.stdout, "a warm worker of that environment's Python")
-        # Its header names the same package: the same environment, and `cad run` alone builds it again.
+        # Its header names the same package: the same environment.
         header = f"# /// script\n# dependencies = [{str(self.wheel)!r}]\n# ///\n".replace("'", '"')
         (self.project / "headed.py").write_text(PLATE.format(header=header), encoding="utf-8")
         headed = self.run_("headed.py")
         self.assertEqual(headed.returncode, 0, headed.stdout + headed.stderr)
         self.assertNotIn("making", headed.stderr)
-        self.assertEqual(self.rebuild(headed), rerun(self.project / "headed.py"))
         made = [path for path in (Path(os.environ["CAD_CACHE_DIR"]) / base.BASE).iterdir()
                 if (base.complete(path) or {}).get("with") == [str(self.wheel)]]
         self.assertEqual(len(made), 1, "one environment")
-
-    def test_a_program_s_header_names_the_packages_a_model_it_calls_is_built_again_with(self) -> None:
-        # The header is the check script's; the model is model_part.py's, whose own script names no package.
-        from cad.engine import records
-        from cad.engine.ids import model_id
-
-        (self.project / "model_part.py").write_text(PLATE.format(header=""), encoding="utf-8")
-        (self.project / "check.py").write_text(f"# /// script\n# dependencies = ['{self.wheel}']\n# ///\n"
-                                               "import model_part\n\nmodel_part.plate()\n", encoding="utf-8")
-        done = self.run_("check.py")
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        held = records.current().get(model_id(self.project / "model_part.py", "plate"))
-        self.assertEqual(records.command(records.current(), held),
-                         records.rerun(self.project / "model_part.py", given=[str(self.wheel)]),
-                         "cad run --with the program's packages and the model's own script")
 
     def test_an_edited_local_package_makes_its_environment_again_and_says_so(self) -> None:
         folder = self.project / "edited"

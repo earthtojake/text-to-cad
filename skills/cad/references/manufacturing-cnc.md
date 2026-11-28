@@ -60,8 +60,8 @@ sizes here.
 ## Check it
 
 ```bash
-cad model dfm "$ID" --process cnc --material aluminum --axes 5 --tools 3,6,10
-cad step dfm shaft.step --process cnc --turning --material stainless
+cad dfm bracket.xbf --process cnc --material aluminum --axes 5 --tools 3,6,10
+cad dfm shaft.step --process cnc --turning --material stainless
 ```
 
 - `--material`: a metal's or a plastic's wall limits; with none, a metal's (`cnc.material_assumed`).

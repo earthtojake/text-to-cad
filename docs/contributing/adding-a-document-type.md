@@ -26,28 +26,31 @@ guide records what the types so far needed, and is no template for the next.
       producer (`decorator`) or changed in place by an edit (`Edit`: `<type>.edit`, a `with` block),
       never both (law 29). `wire` only if a released protocol already spells it otherwise; a new type
       never needs one. `python -m cad.registry <id>` prints the entry's help.
-- [ ] **Regenerate the JavaScript**: `python -m cad.registry --js >
-      packages/core/src/lib/documentTypes.generated.js`, and the documentation site's copy,
-      `python -m cad.registry --docs > apps/docs/src/lib/docs/registry.generated.json`.
+- [ ] **Regenerate what is made from the code**: `scripts/generated/regenerate.py` writes the JavaScript
+      table of the types (`packages/core/src/lib/documentTypes.generated.js`) and the documentation site's
+      copy of the registry and its references again (`--check` names what is stale).
       `tests/python/packages/cad/test_registry.py` fails until you do.
 - [ ] **The type's package**, `packages/cad/src/cad/<id>/__init__.py`, ending in `_bind(__name__)`
       (`cad._internal.document_type.bind`), with the id added to `cad._TYPES`
       (`packages/cad/src/cad/__init__.py`). Put here only what takes paths, plain values or our own
-      types (the signature rule, law 24): its reader, its check (`validate`, `drc`, ...), its
+      types (the signature rule, law 24): its reader, its check (`validate`, ...), its
       standard's own vocabulary. It imports no third-party library; a helper that takes a tool's
       objects is that integration's. `tests/python/packages/cad_server/test_core_imports.py` holds
       both.
-- [ ] **Its operations.** Every operation it lists must run, as a function (`cad.<id>.<operation>`)
-      and as a command (`cad <id> <operation>`). `export`, `snapshot` and `inspect` of a file the
-      engine reads are the engine's verbs; a check is the type's own function, named for what it
-      checks (`validate`, `drc`, `erc`; a 3D type's `dfm` is the one manufacturing check every 3D type
-      shares), answering `cad.results.CheckResult` (findings with a severity, a code and a location). A
-      new operation name is a change to the closed set; a new shared one must be code-free, frequently
-      needed and meaningful across types (law 26).
-- [ ] **Its command module**, `packages/cad/src/cad_server/cli/<id>.py`: a copy of another type's
-      (`cli/step.py`) with the id changed. A check's options are generated from its function's
-      signature; an operation that needs a parser of its own gets one in
-      `cad_server/cli/document_types.py` (`_OWN`). Pin the command in
+- [ ] **Its operations.** Every operation it lists must run through the verb that runs it, as a
+      function (`cad.export`, `cad.inspect`, ...: `cad.registry.VERBS`) and as a command (`cad export
+      FILE ...`): the verbs read the type from the file's suffix and run what it does
+      (`operation_for`), so a new type needs no command of its own. `export`, `snapshot` and `inspect`
+      of a file the engine reads are the engine's verbs; a check is the type's own function, named for
+      what it checks (`validate`, which `cad inspect` runs of a robot description; a 3D type's `dfm` is
+      the one manufacturing check every 3D type shares), answering `cad.results.CheckResult` (findings
+      with a severity, a code and a location). A tool's own check of its files (KiCad's `drc` and
+      `erc`) is its integration's operation instead (`cad kicad drc`). A new operation name is a change
+      to the closed set; a new verb must be code-free, frequently needed and meaningful across types
+      (law 26).
+- [ ] **Its command line.** Each operation's runner is made in `cad_server/cli/document_types.py`
+      (`OPERATIONS`): a check's options are generated from its function's signature, and one that needs
+      a parser of its own gets one there. Pin the verbs' commands of the type in
       `tests/python/packages/cad_server/test_cli_commands.py`.
 - [ ] **The viewer.** A renderer for its view in `packages/ui/src/renderers/` (or an existing one's
       registration), listed in `cadRenderers` (`packages/ui/src/cad-viewer/OffscreenPicture.tsx`) and
@@ -93,12 +96,12 @@ The rules are the shared UI's documents. Read, in this order:
 The steps:
 
 1. **Pick the nearest existing view kind and compose it from the kit; never write a bespoke shell.**
-   A 3D mesh view (the `xbf`, `glb` and `mesh` renderers), a flat drawing (`dxf`), or a flat plot
+   A 3D mesh view (the model renderer, `renderers/xbf`, and the `glb` and `mesh` ones), a flat drawing (`dxf`), or a flat plot
    (`kicad_pcb`, on the kit's `FlatViewFrame` and `useFlatView`).
 2. **Support every standard tool that applies to the type**: Select (its picks are the type's refs,
    shown as chips), Draw, Measure, Display (the navbar's shared card, with the type's rows), and its panel's tabs (a
    tree, layers).
-3. **Keep parity with the server**: `cad <type> snapshot` draws the same view server-side, and the
+3. **Keep parity with the server**: `cad snapshot` draws the same view server-side, and the
    renderer listed in `cadRenderers` also draws the home's picture of a model, off screen
    (`OffscreenPicture`).
 4. **Say every string in all five locales** (`scripts/test/check-ui-strings.mjs` holds it).
@@ -139,9 +142,10 @@ runs KiCad's own command, `kicad-cli`. Where each item of the two checklists lan
    library's board renderer and summary. `drc`, `export` and `edit` hand the board to the `kicad`
    integration (`cad.kicad._check`, `_export`, `_session`), imported when they run, so the type's
    package still imports no third-party library.
-5. **The commands**: `cad kicad_pcb drc BOARD`, `cad kicad_pcb export BOARD --to
-   gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`, `cad kicad_pcb snapshot` and
-   `cad kicad_pcb inspect`, each with a parser of its own in `cli/document_types.py`.
+5. **The commands**: `cad kicad drc BOARD`, `cad export BOARD DST [--as
+   gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf]` (DST a file by its suffix, a folder or a
+   `.zip`: `cad/kicad/_destination.py`), `cad snapshot` and `cad inspect`, each with a parser of its
+   own in `cli/document_types.py`.
 6. **The external program and the edit**: `cad/kicad/_program.py` finds and runs `kicad-cli` through
    the library's one helper (`cad/_internal/programs.py`), and `cad/kicad/_session.py` is the edit;
    each module's docstring is its mechanism. Every rule that keeps a desktop app out holds and is
@@ -152,11 +156,12 @@ runs KiCad's own command, `kicad-cli`. Where each item of the two checklists lan
    made from an edited board is an explicit call after the block:
 
    ```python
+   import cad
    from cad import kicad_pcb
 
    with kicad_pcb.edit("board.kicad_pcb") as b:   # KiPy's open Board (kicode's); the file is the source
        ...
-   kicad_pcb.export("board.kicad_pcb", to="step", out="STEP")
+   cad.export("board.kicad_pcb", "STEP/board.step")
    ```
 7. **The viewer**: the board renderer (`packages/ui/src/renderers/board/`), the plot payload the
    server resolves (`cad_server/viewer/plots.py`), its icon, and the `plot` route of its kind.

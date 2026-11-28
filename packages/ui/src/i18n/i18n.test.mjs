@@ -33,9 +33,10 @@ test("each language is named in its own language, the same in every dictionary",
 
 test("Traditional Chinese is Taiwan's own words, not Simplified Chinese converted", () => {
   assert.equal(zhTW["file.missing"], "檔案不存在");
-  assert.equal(zhTW["explorer.folders"], "資料夾");
-  assert.equal(zhCN["explorer.folders"], "文件夹");
-  assert.equal(zhTW["explorer.searching"], "搜尋中…");
+  assert.equal(zhTW["home.importFolderButton"], "匯入資料夾");
+  assert.equal(zhCN["home.importFolderButton"], "导入文件夹");
+  assert.equal(zhTW["search.otherProjects"], "其他專案");
+  assert.equal(zhCN["search.otherProjects"], "其他项目");
 });
 
 test("normalizeLocale takes the exact locale, else the case-folded one, else nothing", () => {
@@ -77,8 +78,8 @@ test("a locale's translator fills braces, is one function per locale, and an unk
 });
 
 test("a locale that misses a key reads English; a key nobody has reads as itself", () => {
-  assert.equal(translateIn("zh-CN", "home.kind.all"), "全部");
-  assert.equal(translateIn("en", "home.kind.all"), "All");
+  assert.equal(translateIn("zh-CN", "home.sort.name"), "名称");
+  assert.equal(translateIn("en", "home.sort.name"), "Name");
   assert.equal(translateIn("zh-CN", "no.such.key"), "no.such.key");
   assert.equal(translateIn("fr", "file.missing"), "File does not exist", "an unsupported locale reads English");
 });
@@ -107,12 +108,12 @@ test("the words the viewer's tools once spelled in English are the dictionaries'
   }
 });
 
-test("every key is said in every language: a value left as English is a language's own name, or no words", () => {
+test("every key is said in every language: a value left as English is a language's own name, a format's, or no words", () => {
   // The guard that no view spells English itself is `scripts/test/check-ui-strings.mjs`, run with
   // every JS suite; this half holds the dictionaries to it, so a key copied across untranslated fails.
   for (const [locale, table] of Object.entries(TABLES)) {
     if (locale === DEFAULT_LOCALE) continue;
-    const untranslated = Object.keys(en).filter(key => table[key] === en[key] && !key.startsWith("language.")
+    const untranslated = Object.keys(en).filter(key => table[key] === en[key] && !key.startsWith("language.") && !key.startsWith("format.")
       && /[A-Za-z]{2,}/.test(String(en[key]).replace(/\{\w+\}/g, "").replace(/\bID\b/g, "")));
     assert.deepEqual(untranslated, [], `${locale} leaves these in English`);
   }

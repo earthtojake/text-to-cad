@@ -208,11 +208,13 @@ class IntegrationsTest(unittest.TestCase):
                     self.assertEqual(marker.count("sys_platform == "), 3, "macOS, Linux and Windows, each once")
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
-        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))
-        self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
         import cad
 
-        self.assertEqual(sorted(cad._TYPES), sorted(DOCUMENT_TYPES))
+        # A type's package is named for its id; an earlier id (``cad.xbf``) is a module alias, no package.
+        spelled = set(DOCUMENT_TYPES)
+        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*spelled, *INTEGRATIONS}))
+        self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
+        self.assertEqual(sorted(cad._TYPES), sorted(spelled))
         self.assertEqual(sorted(cad._INTEGRATIONS), sorted(INTEGRATIONS))
 
     def test_each_integration_imports_its_own_extras_dependencies_alone(self) -> None:
@@ -230,7 +232,8 @@ class IntegrationsTest(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES
 
         library = modules("cad")
-        for document_type in DOCUMENT_TYPES:
+        # Each type's package, by its id.
+        for document_type in sorted(DOCUMENT_TYPES):
             for name, path in library.items():
                 if of(f"cad.{document_type}", name):
                     with self.subTest(module=name):

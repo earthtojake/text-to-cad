@@ -9,6 +9,7 @@ import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenu
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 import { usePanelToggles } from '../../dist/file-viewer/panelToggles.js';
 import { PANEL_PEEK_DELAY_MS } from '../../dist/file-viewer/panelPeek.js';
+import { useProjectKey } from '../../dist/file-viewer/projectKeys.js';
 import { ModelLibrary } from '../../dist/library/ModelLibrary.js';
 import { readFileSync } from 'node:fs';
 
@@ -90,6 +91,24 @@ it('has the panel\'s toggle from a document page\'s first frame, in the state it
   expect(toggle()).toBeNull();
 });
 
+it("ends the stand-in panel in the panel's foot from a document page's first frame where the host has a home; a host with no home has none, and keeps the logo's menu", async () => {
+  const ID = '906f6bff-80e7-5331-b842-dd377b720a7b';
+  const links = viewerLinks({ version: '0.7.4' });
+  const pending = { ...host, links, files: { id: 'slow', stat: () => new Promise(() => {}) } };
+  const foot = () => document.querySelector<HTMLElement>('[data-app-foot]');
+  // A host with a home: the links and Settings at the stand-in's bottom, under its placeholder rows, where the view's
+  // panel will have them.
+  render(<FileViewer file={ID} host={{ ...pending, navigation: { openFile() {}, home() {} } } as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+  const frame = document.querySelector<HTMLElement>('aside[data-panel-loading]')!;
+  expect([foot()!.parentElement === frame, frame.lastElementChild === foot(), foot()!.previousElementSibling!.className.includes('flex-1'),
+    [...foot()!.querySelectorAll('[data-app-foot-links] a')].map(link => link.getAttribute('aria-label')), within(foot()!).getByRole('button', { name: 'Settings' }) !== null,
+    screen.queryByRole('button', { name: 'Menu' })]).toEqual([true, true, true, ['GitHub', 'Discord', 'Send feedback'], true, null]);
+  cleanup();
+  // No home: the same links are the logo's menu's, so the panel has no foot.
+  render(<FileViewer file={ID} host={pending as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+  expect([Boolean(document.querySelector('aside[data-panel-loading]')), foot(), screen.getByRole('button', { name: 'Menu' }) !== null]).toEqual([true, null, true]);
+});
+
 it('peeks the stand-in panel from a page\'s first frame, a mouse resting on the collapsed toggle, and a press there pins it as the view\'s toggle does', async () => {
   const ID = '906f6bff-80e7-5331-b842-dd377b720a7b';
   let answer = () => {};
@@ -126,7 +145,7 @@ it('peeks the stand-in panel from a page\'s first frame, a mouse resting on the 
   expect(last.renderers[JSON.stringify([ID, 'framed'])].panel).toEqual({ open: true });
 });
 
-it('draws the navbar over every file, named by its name, and over the home with only its menu, Back and Forward, the host\'s actions; never over a view shown small', async () => {
+it('draws the navbar over every file, named by its name, and over the home with only the logo, Back and Forward, the host\'s actions; never over a view shown small', async () => {
   open({});
   await screen.findByText('shown');
   // The name, as words where nothing can be browsed; no logo with no home, no ⋯ where the host can do nothing.
@@ -137,24 +156,25 @@ it('draws the navbar over every file, named by its name, and over the home with 
   await screen.findByText('shown');
   expect(navbar()).toBeNull();
   cleanup();
-  // The home has the same navbar: the logo's menu, Back and Forward where the host keeps the view's
+  // The home has the same navbar: the logo (the way to Recents), Back and Forward where the host keeps the view's
   // history, and the host's actions, as over a file; no file, no box for view controls.
-  const back = vi.fn();
-  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } }, file: null,
+  const back = vi.fn(), home = vi.fn();
+  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home } }, file: null,
     history: { canGoBack: true, canGoForward: false, back, forward() {} },
     navbarActions: <button type="button" aria-label="Full size" />,
     presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
   expect([labels(), document.querySelector('[data-file-name]'), document.querySelector('[data-navbar-view]')])
-    .toEqual([['Menu', 'Back', 'Forward', 'Full size'], null, null]);
+    .toEqual([['Home', 'Back', 'Forward', 'Full size'], null, null]);
   expect((screen.getByRole('button', { name: 'Forward' }) as HTMLButtonElement).disabled).toBe(true);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }));
   expect(back).toHaveBeenCalledOnce();
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Menu' }));
-  expect(screen.queryByRole('menuitem', { name: 'Back to home' })).toBeNull();
+  // Over the home the logo goes to Recents, and opens no menu: the app's menu is the home's (Settings, in its sidebar).
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Home' }));
+  expect([home.mock.calls.length, screen.queryByRole('menu')]).toEqual([1, null]);
 });
 
-it('draws the view\'s panel toggle first in the navbar, before the logo: the same neutral button open or shut, its state aria-expanded, its icon the sidebar\'s; none over the home', async () => {
+it('draws the view\'s panel toggle in the navbar right after the logo: the same neutral button open or shut, its state aria-expanded, its icon the sidebar\'s; none over a home that has no sidebar', async () => {
   const user = userEvent.setup();
   const left = vi.fn();
   // A view whose frame says its toggle, as `ViewFrame.jsx` does.
@@ -172,10 +192,10 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   await screen.findByText('shown');
   const toggle = () => navbar()!.querySelector<HTMLElement>('[data-navbar-panel="left"]')!;
   await waitFor(() => expect(toggle()).not.toBeNull());
-  // The toggle, then the logo, then the name and its ⋯; nothing of it at the row's right.
-  const order = [...navbar()!.querySelectorAll('[data-navbar-menu], [data-file-name], [data-testid="file-actions"], [data-navbar-panel], [aria-label="Full size"]')]
-    .map(node => node.getAttribute('data-navbar-panel') ?? (node.hasAttribute('data-navbar-menu') ? 'logo' : null) ?? node.getAttribute('aria-label') ?? (node.hasAttribute('data-file-name') ? 'name' : '?'));
-  expect(order).toEqual(['left', 'logo', 'name', 'File actions', 'Full size']);
+  // The logo, then the toggle, then the name and its ⋯; nothing of it at the row's right.
+  const order = [...navbar()!.querySelectorAll('[data-navbar-logo], [data-file-name], [data-testid="file-actions"], [data-navbar-panel], [aria-label="Full size"]')]
+    .map(node => node.getAttribute('data-navbar-panel') ?? (node.hasAttribute('data-navbar-logo') ? 'logo' : null) ?? node.getAttribute('aria-label') ?? (node.hasAttribute('data-file-name') ? 'name' : '?'));
+  expect(order).toEqual(['logo', 'left', 'name', 'File actions', 'Full size']);
   const look = () => [toggle().getAttribute('aria-label'), toggle().getAttribute('aria-expanded'), toggle().getAttribute('aria-pressed'), toggle().getAttribute('data-variant')];
   expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
   // Its icon: the sidebar's own (a rounded rectangle and a short line), not lucide's panel.
@@ -193,18 +213,36 @@ it('draws the view\'s panel toggle first in the navbar, before the logo: the sam
   expect(look()).toEqual(['Hide panel', 'true', null, 'ghost']);
   expect(left.mock.calls.length).toBe(1);
   cleanup();
-  // The home: no toggle.
+  // A home that says no panel of its own: no toggle.
   open({ host: { ...host, navigation: { openFile() {}, home() {} } }, file: null, presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
   expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull();
+  cleanup();
+  // A home that says its sidebar's toggle, as a view's frame says its panel's, has it from its first frame, after the
+  // logo; a document shown after it has its own, and the home's is gone with the home.
+  function Sided() {
+    const [shown, setShown] = React.useState(true);
+    usePanelToggles(React.useMemo(() => ({ left: { open: shown, label: shown ? 'Hide panel' : 'Show panel', shortcut: '⌘\\', toggle: () => setShown(value => !value) } }), [shown]), { early: true });
+    return <p>home</p>;
+  }
+  const homed = { ...host, navigation: { openFile() {}, home() {} } };
+  const page = (file: string | null) => <FileViewer file={file} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}} presentation={{ home: <Sided /> } as any} />;
+  const view = render(page(null));
+  expect([look(), navbar()!.querySelector('nav')!.firstElementChild!.getAttribute('data-navbar-logo'), toggle().compareDocumentPosition(screen.getByRole('button', { name: 'Home' })) & Node.DOCUMENT_POSITION_PRECEDING])
+    .toEqual([['Hide panel', 'true', null, 'ghost'], 'home', Node.DOCUMENT_POSITION_PRECEDING]);
+  await user.click(toggle());
+  expect(look()).toEqual(['Show panel', 'false', null, 'ghost']);
+  view.rerender(page(FILE));
+  await screen.findByText('shown');
+  await waitFor(() => expect(navbar()!.querySelector('[data-navbar-panel]')).toBeNull());
 });
 
-it('draws the home\'s own controls in its navbar on the grid\'s column: the logo, then Recent and its count, at the left, the search and Open at the right; the filter and the layout in a row over the grid', async () => {
+it('draws the home\'s own controls at its navbar\'s right end: the search and Import, and no name of the home\'s after the logo; the layout in a row of the place\'s own', async () => {
   const user = userEvent.setup();
   const models = [{ path: '/work/a.step', name: 'a.step', folder: '/work', opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null },
     { path: 'model-1', name: 'bracket', folder: null, opened: 1, updated: 1, created: null, pinned: false, missing: false, thumbnail: null, pictured: null, kind: 'model' }];
   const library = { list: async () => models, change: async () => models, thumbnail: async () => null, open: async () => {}, pick: async () => {} };
-  // A 1440px row: the grid's column is 1128px, centred, on 24px gutters.
+  // A 1440px row.
   const boxes = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     const width = this.hasAttribute('data-viewer-navbar') ? 1440 : this.matches('nav') ? 36 : 0;
     return { x: 0, y: 0, left: 0, top: 0, right: width, bottom: 40, width, height: 40, toJSON() {} } as DOMRect;
@@ -213,21 +251,22 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
     presentation: { home: <ModelLibrary library={library as any} onLayoutChange={() => {}} /> } } as any);
   await screen.findByText('a.step');
   const home = navbar()!.querySelector<HTMLElement>('[data-navbar-home]')!;
-  const left = home.querySelector('[data-navbar-home-left]')!, right = home.querySelector('[data-navbar-home-right]')!;
-  expect([left.querySelector('h1')!.textContent, right.querySelector('input')!.getAttribute('aria-label'), within(right as HTMLElement).getByRole('button', { name: 'Open' }) !== null])
-    .toEqual(['Recent2', 'Search models', true]);
-  // On the grid's column at 1440, (1440 − 1128) / 2 + 24 = 180px from either edge, the background full width: the
-  // logo's mark (16px into its row) at 180, "Recent" after it, and Open ending at 180 from the right: the row's left
-  // padding, and on the right the home's own margin past the row's 8px, so a trailing control keeps the row's end.
-  await waitFor(() => expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight, home.style.marginRight]).toEqual(['172px', '', '172px']));
+  const right = home.querySelector('[data-navbar-home-right]')!;
+  // Nothing names the home in the navbar: the place's title does, and the logo is the way home.
+  expect([home.querySelector('[data-navbar-home-left]'), navbar()!.querySelector('h1'), right.querySelector('input')!.getAttribute('aria-label'),
+    within(right as HTMLElement).getByRole('button', { name: 'Import' }) !== null]).toEqual([null, null, 'Search models', true]);
+  // The row over the home is the row over a file: its own padding, the logo first, never padded onto a centred column
+  // (the home under it is full width, its sidebar at the window's edge).
+  expect([navbar()!.style.paddingLeft, navbar()!.style.paddingRight]).toEqual(['', '']);
   const lead = navbar()!.querySelector('nav')!;
-  expect([lead.nextElementSibling === home, home.firstElementChild === left]).toEqual([true, true]);
-  // No panel toggles and no ⋯ on the home; the app menu is the logo's.
-  expect([navbar()!.querySelector('[data-navbar-panel]'), navbar()!.querySelector('[data-testid="file-actions"]')]).toEqual([null, null]);
-  // The page's own row: the filter at its left and the layout switch at its right, no heading, no search.
-  const row = document.querySelector<HTMLElement>('.cad-library-toolbar')!;
-  expect([row.getAttribute('data-library-toolbar'), row.querySelector('h1'), row.querySelector('input'), row.querySelector('.cad-library-kind')!.textContent,
-    within(row).getByRole('group', { name: 'Layout' }) !== null]).toEqual(['filters', null, null, 'All', true]);
+  expect([lead.nextElementSibling === home, home.firstElementChild === right]).toEqual([true, true]);
+  // The logo first, then the sidebar's toggle, and no ⋯ on the home; the app menu is the sidebar's Settings.
+  expect([lead.lastElementChild!.querySelector('[data-navbar-panel="left"]')?.getAttribute('aria-expanded'), lead.firstElementChild!.getAttribute('data-navbar-logo'),
+    navbar()!.querySelector('[data-testid="file-actions"]'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['true', 'home', null, null]);
+  // The page's own row: its title, the page's one h1, with Sort and the layout control at its right, no search, no tabs.
+  const row = document.querySelector<HTMLElement>('[data-library-toolbar]')!;
+  expect([row.parentElement?.querySelector('h1')?.textContent, row.querySelector('h1'), row.querySelector('input'), document.querySelector('[data-library-kinds]'),
+    within(row).getByRole('group', { name: 'Layout' }) !== null]).toEqual(['Recents', null, null, null, true]);
   // Under 700px of navbar the search is its icon until pressed, then the field with the keyboard in it.
   const css = readFileSync(`${process.cwd()}/src/styles/globals.css`, 'utf8');
   expect(css).toMatch(/@container cad-navbar \(max-width: 699px\) \{[^@]*\.cad-home-search:not\(\[data-open\]\) \.cad-library-search \{ display: none; \}/);
@@ -239,19 +278,19 @@ it('draws the home\'s own controls in its navbar on the grid\'s column: the logo
   boxes.mockRestore();
 });
 
-it('heads the home and a document with the one C mark, in one button that never changes', async () => {
+it('heads the home and a document with the one C mark, in one control that never changes', async () => {
   const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } };
   const view = (file: string | null) => <FileViewer file={file} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}}
     presentation={{ home: <p>home</p> } as any} />;
   const { rerender } = render(view(null));
   await screen.findByText('home');
-  const logo = screen.getByRole('button', { name: 'Menu' });
+  const logo = screen.getByRole('button', { name: 'Home' });
   // One mark, the C: no wordmark beside or behind it, and nothing that moves between the two.
   const images = () => [...logo.querySelectorAll('img')].map(image => image.getAttribute('src'));
   expect([logo.getAttribute('data-logo'), images()]).toEqual(['mark', [expect.stringMatching(/C(%20| )logo/)]]);
   rerender(view(FILE));
   await screen.findByText('shown');
-  expect(screen.getByRole('button', { name: 'Menu' })).toBe(logo);
+  expect(screen.getByRole('button', { name: 'Home' })).toBe(logo);
   expect([logo.getAttribute('data-logo'), images()]).toEqual(['mark', [expect.stringMatching(/C(%20| )logo/)]]);
   expect(document.querySelector('.cad-navbar-wordmark, .cad-navbar-logo-box')).toBeNull();
 });
@@ -286,7 +325,7 @@ it('draws Back and Forward between the logo and the file\'s name where the host 
   const view = render(<FileViewer file={FILE} host={homed as any} renderers={[renderer]} state={{}} onStateChange={() => {}}
     history={{ canGoBack: true, canGoForward: false, back, forward }} />);
   await screen.findByText('shown');
-  expect(left()).toEqual(['Menu', 'Back', 'Forward', 'name:a.step']);
+  expect(left()).toEqual(['Home', 'Back', 'Forward', 'name:a.step']);
   const [backButton, forwardButton] = [screen.getByRole('button', { name: 'Back' }), screen.getByRole('button', { name: 'Forward' })];
   expect([backButton.hasAttribute('disabled'), forwardButton.hasAttribute('disabled')]).toEqual([false, true]);
   act(() => { backButton.click(); forwardButton.click(); });
@@ -295,7 +334,7 @@ it('draws Back and Forward between the logo and the file\'s name where the host 
   // A host that keeps none (a browser's page has its own) gets neither.
   open({ host: homed });
   await screen.findByText('shown');
-  expect(left()).toEqual(['Menu', 'name:a.step']);
+  expect(left()).toEqual(['Home', 'name:a.step']);
   cleanup();
   // A phone's row has no room for them: a view under 600px wide draws neither, its history kept.
   const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 390, height: 700, top: 0, left: 0, right: 390, bottom: 700, x: 0, y: 0, toJSON() {} } as DOMRect);
@@ -303,35 +342,30 @@ it('draws Back and Forward between the logo and the file\'s name where the host 
     history={{ canGoBack: true, canGoForward: true, back, forward }} />);
   await screen.findByText('shown');
   await waitFor(() => expect(document.querySelector('[data-viewer-layout]')?.getAttribute('data-viewer-layout')).toBe('mobile'));
-  expect(left()).toEqual(['Menu', 'name:a.step']);
+  expect(left()).toEqual(['Home', 'name:a.step']);
   rect.mockRestore();
 });
 
-it('opens the app menu from the logo: Back to home where the host has a home, the person\'s settings and the host\'s links; its ⋯ offers what the host can do with the file', async () => {
+it("makes the logo the way home wherever the host has a home: a real link where the home has an address, a button otherwise, with a hint; no menu there, and its ⋯ offers what the host can do with the file", async () => {
   const user = userEvent.setup({ skipHover: true });
   const home = vi.fn();
-  const share = vi.fn();
   const perform = { 'copy-path': vi.fn(), reveal: vi.fn() };
   const links = viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x' });
-  open({ host: { ...host, links, environment: { colorScheme: 'light', platform: 'win32' }, navigation: { openFile() {}, home }, fileActions: { platform: 'win32', perform } },
-    appSettings: [{ id: 'analytics', label: 'Share anonymous usage data', checked: true, onCheckedChange: share }] } as any);
+  const homed = (navigation: object = {}) => ({ ...host, links, environment: { colorScheme: 'light', platform: 'win32' },
+    navigation: { openFile() {}, home, ...navigation }, fileActions: { platform: 'win32', perform } });
+  const settings = { appSettings: [{ id: 'analytics', label: 'Share anonymous usage data', checked: true, onCheckedChange() {} }] };
+  // A host whose pages have no address (an app's frame): a button, named Home.
+  open({ host: homed(), ...settings } as any);
   await screen.findByText('shown');
-  expect(labels()).toEqual(['Menu', 'File actions']);
-  await user.click(screen.getByRole('button', { name: 'Menu' }));
-  const menu = document.querySelector('[data-app-menu]')!;
-  expect([...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent)).toEqual(['Back to home', 'Share anonymous usage data', 'Send feedback', 'GitHub', 'Discord']);
-  expect(menu.querySelector('[data-menu-footer]')?.textContent).toContain('v0.7.4');
-  // Send feedback: a new issue on the project's tracker, begun "Feedback: ", for the person to
-  // finish, naming the version and the platform; no label: the project has none for feedback.
-  const feedback = new URL(screen.getByRole('menuitem', { name: 'Send feedback' }).getAttribute('href')!);
-  expect([`${feedback.origin}${feedback.pathname}`, feedback.searchParams.get('title'), feedback.searchParams.get('labels')])
-    .toEqual(['https://github.com/earthtojake/text-to-cad/issues/new', 'Feedback: ', null]);
-  expect(feedback.searchParams.get('body')).toMatch(/- CAD: 0\.7\.4\n- Platform: win32$/);
-  // A setting turns without closing the menu; Back to home goes home.
-  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Share anonymous usage data' }));
-  expect([share.mock.calls, Boolean(document.querySelector('[data-app-menu]'))]).toEqual([[[false]], true]);
-  await user.click(screen.getByRole('menuitem', { name: 'Back to home' }));
-  expect(home).toHaveBeenCalledOnce();
+  expect(labels()).toEqual(['Home', 'File actions']);
+  const button = screen.getByRole('button', { name: 'Home' });
+  expect([button.tagName, button.getAttribute('data-navbar-logo'), button.getAttribute('aria-haspopup'), navbar()!.querySelector('[data-navbar-menu]')]).toEqual(['BUTTON', 'home', null, null]);
+  // Its hint says where it goes.
+  await userEvent.setup().hover(button);
+  expect((await screen.findByRole('tooltip')).textContent).toBe('Home');
+  await user.click(button);
+  // It goes home, and opens no menu: the person's settings and the host's links are the home's (Settings).
+  expect([home.mock.calls.length, document.querySelector('[data-app-menu]'), screen.queryByRole('menu')]).toEqual([1, null, null]);
   await user.click(screen.getByRole('button', { name: 'File actions' }));
   // Copy path, then Open in: the file manager by its name (Windows': File Explorer), no Browser where the host has none.
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in']);
@@ -340,12 +374,63 @@ it('opens the app menu from the logo: Back to home where the host has a home, th
   await user.click(screen.getByRole('menuitem', { name: 'File Explorer' }));
   expect(perform.reveal).toHaveBeenCalledWith({ path: FILE, kind: 'file' });
   cleanup();
-  // A host with no home still has the menu, without Back to home; one that can only copy offers only that.
-  open({ host: { ...host, links, fileActions: { perform: { 'copy-path': perform['copy-path'] } } } });
+  // A host that gives the home an address (the web page): a real link to Recents. A plain click goes home in this
+  // view, the link's own navigation held back; ⌘ or Ctrl and a click, Shift, a middle click are the browser's.
+  const hrefOf = vi.fn((target: any) => ('home' in target ? `/?view=${target.home.view}` : null));
+  home.mockClear();
+  open({ host: homed({ hrefOf }), ...settings } as any);
   await screen.findByText('shown');
-  await user.click(screen.getByRole('button', { name: 'Menu' }));
-  expect(screen.queryByRole('menuitem', { name: 'Back to home' })).toBeNull();
+  const link = screen.getByRole('link', { name: 'Home' });
+  expect([link.getAttribute('href'), link.getAttribute('data-navbar-logo'), hrefOf.mock.calls.some(([target]) => JSON.stringify(target) === '{"home":{"view":"recents"}}')])
+    .toEqual(['/?view=recents', 'home', true]);
+  expect(fireEvent.click(link)).toBe(false);
+  expect(home).toHaveBeenCalledTimes(1);
+  for (const modifier of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { button: 1 }]) expect(fireEvent.click(link, modifier)).toBe(true);
+  expect(home).toHaveBeenCalledTimes(1);
+  cleanup();
+  // A page still loading, and one that failed, have the logo as the way home; counted as the way home always was.
+  const { ControlUsageProvider } = await import('../../dist/usage/controls.js');
+  const reports: { control: string; count: number }[][] = [];
+  home.mockClear();
+  const pending = { ...homed({ hrefOf }), files: { id: 'slow', stat: () => new Promise(() => {}) } };
+  const loading = render(<ControlUsageProvider report={counts => reports.push(counts)}>
+    <FileViewer file={FILE} host={pending as any} renderers={[renderer]} state={{}} onStateChange={() => {}} /></ControlUsageProvider>);
+  fireEvent.click(screen.getByRole('link', { name: 'Home' }));
+  loading.unmount();
+  const failing = { ...homed(), files: { id: 'gone', stat: async () => { throw new Error('No such file'); } } };
+  open({ host: failing });
+  await screen.findByText('No such file');
+  fireEvent.click(screen.getByRole('button', { name: 'Home' }));
+  expect([home.mock.calls.length, reports.flat()]).toEqual([2, [{ control: 'home', count: 1, seconds: 0 }]]);
+});
+
+it("keeps the app menu on the logo where the host has no home (a view that shows one file alone): the person's settings and the host's links, no way home", async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const share = vi.fn();
+  const perform = { 'copy-path': vi.fn() };
+  const links = viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x' });
+  open({ host: { ...host, links, environment: { colorScheme: 'light', platform: 'win32' }, fileActions: { perform } },
+    appSettings: [{ id: 'analytics', label: 'Share anonymous usage data', checked: true, onCheckedChange: share }] } as any);
+  await screen.findByText('shown');
+  expect(labels()).toEqual(['Menu', 'File actions']);
+  const logo = screen.getByRole('button', { name: 'Menu' });
+  expect([logo.getAttribute('data-navbar-logo'), logo.hasAttribute('data-navbar-menu'), screen.queryByRole('link', { name: 'Home' })]).toEqual(['menu', true, null]);
+  await user.click(logo);
+  const menu = document.querySelector('[data-app-menu]')!;
+  expect([menu.getAttribute('aria-label'), [...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent)])
+    .toEqual(['Menu', ['Share anonymous usage data', 'Send feedback', 'GitHub', 'Discord']]);
+  expect(menu.querySelector('[data-menu-footer]')?.textContent).toContain('v0.7.4');
+  // Send feedback: a new issue on the project's tracker, begun "Feedback: ", for the person to
+  // finish, naming the version and the platform; no label: the project has none for feedback.
+  const feedback = new URL(screen.getByRole('menuitem', { name: 'Send feedback' }).getAttribute('href')!);
+  expect([`${feedback.origin}${feedback.pathname}`, feedback.searchParams.get('title'), feedback.searchParams.get('labels')])
+    .toEqual(['https://github.com/earthtojake/text-to-cad/issues/new', 'Feedback: ', null]);
+  expect(feedback.searchParams.get('body')).toMatch(/- CAD: 0\.7\.4\n- Platform: win32$/);
+  // A setting turns without closing the menu.
+  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Share anonymous usage data' }));
+  expect([share.mock.calls, Boolean(document.querySelector('[data-app-menu]'))]).toEqual([[[false]], true]);
   await user.keyboard('{Escape}');
+  // One that can only copy offers only that.
   await user.click(screen.getByRole('button', { name: 'File actions' }));
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
 });
@@ -403,14 +488,14 @@ it('ends the app menu with the version the host runs, a link to its release note
     return shown;
   };
   const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.15';
-  expect(await footer(viewerLinks({ version: '0.7.15' }))).toEqual(['v0.7.15Made by @earthtojake', notes]);
-  expect(await footer(viewerLinks({ version: '0.7.15', build: 'b80844940-dirty' }))).toEqual(['v0.7.15-dev.b80844940-dirtyMade by @earthtojake', notes]);
-  // Its links are muted, 11/16, the foreground and underlined under the pointer or the keyboard: never the brand's blue.
+  expect(await footer(viewerLinks({ version: '0.7.15' }))).toEqual(['v0.7.15', notes]);
+  expect(await footer(viewerLinks({ version: '0.7.15', build: 'b80844940-dirty' }))).toEqual(['v0.7.15-dev.b80844940-dirty', notes]);
+  // Its one link is muted, 11/16, the foreground and underlined under the pointer or the keyboard: never the brand's blue.
   open({ host: { ...host, links: viewerLinks({ version: '0.7.15' }) } });
   await screen.findByText('shown');
   await user.click(screen.getByRole('button', { name: 'Menu' }));
   const links = [...document.querySelectorAll<HTMLElement>('[data-app-menu] [data-menu-footer] a')];
-  expect(links.length).toBe(2);
+  expect(links.length).toBe(1);
   for (const link of links) {
     expect(link.className).not.toMatch(/brand/);
     expect(['text-muted-foreground', 'hover:text-foreground', 'hover:underline', 'focus-visible:underline'].every(name => link.className.split(' ').includes(name))).toBe(true);
@@ -418,58 +503,188 @@ it('ends the app menu with the version the host runs, a link to its release note
   expect(document.querySelector('[data-app-menu] [data-menu-footer]')!.className).toContain('text-tiny');
 });
 
-it('opens the explorer from the file\'s name where the host\'s files can be browsed, and a pick there is shown through the host', async () => {
-  const user = userEvent.setup();
-  const opened: string[] = [];
-  const browsing = { ...host, navigation: { openFile: (path: string) => { opened.push(path); } }, files: { ...host.files,
-    list: async (folder: string) => folder === '/models/parts' ? [{ path: FILE, name: 'a.step', kind: 'file' }, { path: '/models/parts/b.step', name: 'b.step', kind: 'file' }] : [],
-    search: async () => ({ paths: [], truncated: false }) } };
-  open({ host: browsing });
-  await screen.findByText('shown');
-  expect(fileName().tagName).toBe('BUTTON');
-  await user.click(fileName());
-  await screen.findByText('b.step');
-  // It opens in the file's folder: the pick is the host's to show, and the explorer goes.
-  await user.click(document.querySelector<HTMLElement>('[data-file-explorer] [data-path="/models/parts/b.step"]')!);
-  expect([opened, document.querySelector('[data-file-explorer]')]).toEqual([['/models/parts/b.step'], null]);
-  cleanup();
-  // A source that lists but cannot search has no explorer: its name is a name.
-  open({ host: { ...host, files: { ...host.files, list: browsing.files.list } } });
-  await screen.findByText('shown');
-  expect(fileName().tagName).toBe('SPAN');
+// A document in a project: three of them, the one on screen the middle one, a model first (by its id).
+const MODEL_ID = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+const PROJECT = { id: 'p1', name: 'parts', root: '/models/parts', documents: [
+  { path: MODEL_ID, name: 'bracket', kind: 'model', folder: '/models/parts/src' },
+  { path: FILE, name: 'a.step', kind: 'file', folder: '/models/parts' },
+  { path: '/models/parts/STEP/b.step', name: 'b.step', kind: 'file', folder: '/models/parts/STEP' },
+] };
+// A view that keys as a CAD view's shell does (`useViewerShortcuts`, whose single keys reach `useProjectKey`).
+const keyed = defineFileRenderer({
+  id: 'keyed', priority: 1, matches: () => true, prepare: async () => ({ data: null }),
+  load: async () => ({ default: () => { const key = useProjectKey(); return <p tabIndex={-1} onKeyDown={event => { if (key(event.nativeEvent)) event.preventDefault(); }}>shown</p>; } }),
 });
 
-it('has no file menu on a document with no file of its own, which its name names, and no name menu where it has nothing to list', async () => {
+it("names the project before the document, which goes to the home at it; no panel of its own: [ and ] and the ⋯ move to the project's previous and next, the name kept on the way, counted", async () => {
+  const user = userEvent.setup();
+  const reports: { control: string; count: number }[][] = [];
+  const opened: string[] = [];
+  const onShow = vi.fn();
+  const { ControlUsageProvider } = await import('../../dist/usage/controls.js');
+  // A host that shows another document as asked, and names nothing until the document is read.
+  let answer = () => {};
+  const browsing = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } },
+    files: { id: 'one', stat: (path: string) => new Promise(resolve => {
+      const read = () => resolve({ path, name: path === MODEL_ID ? 'bracket' : path.split('/').pop()!, kind: 'file' as const, extension: 'step', size: 1 });
+      if (path === FILE) read(); else answer = read;
+    }) },
+    navigation: { openFile: (path: string) => { opened.push(path); }, home() {} } };
+  const view = (file: string, project: object | null = { ...PROJECT, onShow }) => <ControlUsageProvider report={counts => reports.push(counts)}>
+    <FileViewer file={file} host={browsing as any} renderers={[keyed]} state={{}} onStateChange={() => {}} project={project as any} /></ControlUsageProvider>;
+  const shown = render(view(FILE));
+  const page = await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'parts' }));
+  expect(onShow).toHaveBeenCalledTimes(1);
+  // The ⋯: Previous in project and Next in project, last.
+  await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.firstChild?.textContent)).toEqual(['Copy path', 'Previous in project', 'Next in project']);
+  await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: /Next in project/ })); });
+  // ] and [: the next and the previous, in the project's order.
+  fireEvent.keyDown(page, { key: ']' });
+  fireEvent.keyDown(page, { key: '[' });
+  expect(opened).toEqual(['/models/parts/STEP/b.step', '/models/parts/STEP/b.step', MODEL_ID]);
+  // Shown as the host shows it: a model, by its id, is named by the name it was moved to until it is read.
+  shown.rerender(view(MODEL_ID));
+  expect(fileName().textContent).toBe('bracket');
+  await act(async () => answer());
+  // At the project's start, [ does nothing and the key is left alone; ] goes on.
+  const first = await screen.findByText('shown');
+  expect(fireEvent.keyDown(first, { key: '[' })).toBe(true);
+  expect(fireEvent.keyDown(first, { key: ']' })).toBe(false);
+  expect(opened.at(-1)).toBe(FILE);
+  shown.unmount();
+  expect(reports.flat().filter(entry => entry.control.startsWith('project_'))).toEqual([{ control: 'project_crumb', count: 1, seconds: 0 },
+    { control: 'project_next', count: 3, seconds: 0 }, { control: 'project_previous', count: 1, seconds: 0 }]);
+});
+
+it("moves through nothing where the document is in no project, the project has no other, or the view shows its file alone", async () => {
+  const opened: string[] = [];
+  const browsing = { ...host, navigation: { openFile: (path: string) => { opened.push(path); } } };
+  const view = render(<FileViewer file={FILE} host={browsing as any} renderers={[keyed]} state={{}} onStateChange={() => {}} project={null} />);
+  fireEvent.keyDown(await screen.findByText('shown'), { key: ']' });
+  view.rerender(<FileViewer file={FILE} host={browsing as any} renderers={[keyed]} state={{}} onStateChange={() => {}}
+    project={{ ...PROJECT, documents: [PROJECT.documents[1]], onShow() {} } as any} />);
+  fireEvent.keyDown(screen.getByText('shown'), { key: ']' });
+  view.rerender(<FileViewer file={FILE} host={{ ...host, navigation: {} } as any} renderers={[keyed]} state={{}} onStateChange={() => {}}
+    project={{ ...PROJECT, onShow() {} } as any} />);
+  fireEvent.keyDown(screen.getByText('shown'), { key: ']' });
+  expect(opened).toEqual([]);
+});
+
+it("offers Open in new tab (or Open in browser) for the document on screen where the host can open it beside, never twice beside Open in's Browser", async () => {
+  const beside = vi.fn();
+  const menuOf = async (navigation: object, perform: object = { 'copy-path': async () => {} }) => {
+    cleanup();
+    render(<FileViewer file={FILE} host={{ ...host, fileActions: { platform: 'darwin', perform }, navigation: { openFile() {}, ...navigation } } as any}
+      renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+    await screen.findByText('shown');
+    await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+    return screen.findByRole('menu');
+  };
+  // A web page's: Open in new tab, after Copy path.
+  let menu = await menuOf({ openBeside: { kind: 'tab', open: beside } });
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in new tab']);
+  await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open in new tab' })); });
+  expect(beside).toHaveBeenCalledWith({ document: FILE });
+  // An app's frame: Open in browser, where Open in has no Browser of its own; none where it has.
+  menu = await menuOf({ openBeside: { kind: 'browser', open: beside } });
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in browser']);
+  menu = await menuOf({ openBeside: { kind: 'browser', open: beside } }, { 'copy-path': async () => {}, browser: async () => {} });
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in']);
+  // A host with neither: nothing.
+  menu = await menuOf({});
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
+});
+
+it("opens the search with ⌘K on a Mac and Ctrl+K elsewhere, from a field too, and from Search documents in the document's ⋯, its key at the right; never in Preview or over another dialog", async () => {
+  const onSearch = vi.fn();
+  let report: ((previewing: boolean) => void) | undefined;
+  const previewed = defineFileRenderer({ id: 'previewed', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
+    load: async () => ({ default: (props: any) => { report = props.onPreviewChange; return <input aria-label="note" />; } }) });
+  const homed = (platform: string) => ({ ...host, environment: { colorScheme: 'light', platform }, navigation: { openFile() {}, home() {} } });
+  const view = render(<FileViewer file={FILE} host={homed('darwin') as any} renderers={[previewed]} state={{}} onStateChange={() => {}} onSearch={onSearch} />);
+  const note = await screen.findByRole('textbox', { name: 'note' });
+  fireEvent.keyDown(note, { key: 'k', ctrlKey: true });
+  expect(onSearch).not.toHaveBeenCalled();
+  expect(fireEvent.keyDown(note, { key: 'k', metaKey: true })).toBe(false);
+  expect(onSearch).toHaveBeenCalledTimes(1);
+  // Held, it does not repeat.
+  fireEvent.keyDown(note, { key: 'k', metaKey: true, repeat: true });
+  expect(onSearch).toHaveBeenCalledTimes(1);
+  // In Preview, nothing.
+  act(() => report!(true));
+  fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+  act(() => report!(false));
+  // Over another dialog, nothing.
+  const dialog = document.body.appendChild(Object.assign(document.createElement('div'), { role: 'dialog' }));
+  dialog.setAttribute('role', 'dialog');
+  fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+  dialog.remove();
+  expect(onSearch).toHaveBeenCalledTimes(1);
+  // Off a Mac, Ctrl+K.
+  view.rerender(<FileViewer file={FILE} host={homed('win32') as any} renderers={[previewed]} state={{}} onStateChange={() => {}} onSearch={onSearch} />);
+  fireEvent.keyDown(document.body, { key: 'K', ctrlKey: true });
+  expect(onSearch).toHaveBeenCalledTimes(2);
+  // The document's ⋯: Search documents with its key, in a group of its own where the host can do nothing else with the file.
+  const fileMenu = async () => {
+    await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+    return screen.findByRole('menu');
+  };
+  let menu = await fileMenu();
+  expect([within(menu).getAllByRole('menuitem').map(item => item.textContent), within(menu).queryByRole('separator')]).toEqual([['Search documentsCtrl+K'], null]);
+  await act(async () => { fireEvent.click(within(menu).getByRole('menuitem', { name: /Search documents/ })); });
+  expect(onSearch).toHaveBeenCalledTimes(3);
+  cleanup();
+  // The first of the last group, before Previous and Next in project: every document where the host has the search,
+  // in a project of several or not.
+  const acting = { ...homed('darwin'), fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } } };
+  const shown = render(<FileViewer file={FILE} host={acting as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onSearch={onSearch}
+    project={{ ...PROJECT, onShow() {} } as any} />);
+  await screen.findByText('shown');
+  menu = await fileMenu();
+  expect([within(menu).getAllByRole('menuitem').map(item => item.firstChild?.nodeType === 1 ? item.textContent : item.firstChild?.textContent),
+    within(menu).getAllByRole('separator').length, within(menu).getByRole('menuitem', { name: /Search documents/ }).querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent])
+    .toEqual([['Copy path', 'Search documents⌘K', 'Previous in project', 'Next in project'], 1, '⌘K']);
+  fireEvent.keyDown(menu, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  // A standalone document: Search documents, then Import its folder as a project, one group.
+  shown.rerender(<FileViewer file={FILE} host={acting as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onSearch={onSearch} onImportFolder={() => {}} />);
+  menu = await fileMenu();
+  expect([within(menu).getAllByRole('menuitem').map(item => item.textContent), within(menu).getAllByRole('separator').length])
+    .toEqual([['Copy path', 'Search documents⌘K', 'Import its folder as a project…'], 1]);
+  cleanup();
+  // A host with no search has neither the key nor the item.
+  render(<FileViewer file={FILE} host={acting as any} renderers={[previewed]} state={{}} onStateChange={() => {}} />);
+  await screen.findByRole('textbox', { name: 'note' });
+  fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+  menu = await fileMenu();
+  expect([onSearch.mock.calls.length, within(menu).getAllByRole('menuitem').map(item => item.textContent)]).toEqual([3, ['Copy path']]);
+});
+
+it('has no file menu on a document with no file of its own, which its name names; a document in no project offers Import its folder as a project where the host can', async () => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
-  const list = vi.fn(async () => []);
-  const model = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } }, files: { id: 'one', list,
-    search: async () => ({ paths: [], truncated: false }),
+  const model = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } }, files: { id: 'one',
     stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, kind: 'file' as const, extension: 'xbf', size: 0 }) } };
   open({ host: model, file: id });
   await screen.findByText('shown');
-  // Its name is the model's, a name and no button; no file menu; nothing is listed.
+  // Its name is the model's, a name and no button; no file menu.
   expect([fileName().tagName, fileName().textContent]).toEqual(['SPAN', 'bracket']);
   expect(labels()).not.toContain('File actions');
-  expect(list).not.toHaveBeenCalled();
   cleanup();
-  // With the host's library and where the explorer was last: the name opens Models first, and Files
-  // lists that folder -- never the folder of the script the model was registered from -- and says
-  // each folder it is in, for the host to keep.
-  const user = userEvent.setup();
-  const registered = { ...model, navigation: { openFile: vi.fn() }, files: { ...model.files,
-    stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, kind: 'file' as const, extension: 'xbf', size: 0 }) } };
-  const rows = [{ path: id, name: 'bracket', kind: 'model', opened: null, updated: Date.now() / 1000 }];
-  const kept = vi.fn();
-  render(<FileViewer file={id} host={registered as any} renderers={[renderer]} state={{}} onStateChange={() => {}} recent={{ list: async () => rows }}
-    explorerFolder="/home/me/last" onExplorerFolderChange={kept} />);
+  // A file in no project: its ⋯ ends in Import its folder as a project, which the host does; in a project, it has none.
+  const onImportFolder = vi.fn();
+  const withMenu = { ...host, fileActions: { platform: 'darwin', perform: { 'copy-path': async () => {} } } };
+  const view = render(<FileViewer file={FILE} host={withMenu as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onImportFolder={onImportFolder} />);
   await screen.findByText('shown');
-  expect(fileName().tagName).toBe('BUTTON');
-  await user.click(fileName());
-  expect(screen.getByRole('tab', { name: 'Models' }).getAttribute('aria-selected')).toBe('true');
-  await user.click(screen.getByRole('tab', { name: 'Files' }));
-  await waitFor(() => expect(list).toHaveBeenCalledWith('/home/me/last', expect.anything()));
-  expect(kept).toHaveBeenCalledWith('/home/me/last');
-  expect(labels()).not.toContain('File actions');
+  await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  await act(async () => { fireEvent.click(await screen.findByRole('menuitem', { name: 'Import its folder as a project…' })); });
+  expect(onImportFolder).toHaveBeenCalledTimes(1);
+  view.rerender(<FileViewer file={FILE} host={withMenu as any} renderers={[renderer]} state={{}} onStateChange={() => {}} onImportFolder={onImportFolder}
+    project={{ id: 'p1', name: 'parts', root: '/models/parts', documents: [], onShow() {} }} />);
+  await act(async () => { fireEvent.pointerDown(screen.getByTestId('file-actions'), { button: 0, ctrlKey: false, pointerType: 'mouse' }); });
+  expect(within(await screen.findByRole('menu')).getAllByRole('menuitem').map(item => item.textContent)).not.toContain('Import its folder as a project…');
 });
 
 it('puts Open in › Browser and the host\'s own items (Export) in the file menu; a model\'s Copy path and file manager act on its script, disabled with the reason where it is gone', async () => {
@@ -523,7 +738,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   const openInRow = screen.getByRole('menuitem', { name: 'Open in' });
   expect([openInRow.getAttribute('aria-disabled'), openInRow.closest('[data-disabled-reason]')]).toEqual(['true', expect.anything()]);
   await user.hover(openInRow.closest('[data-disabled-reason]')!);
-  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved or deleted.');
+  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved, or is gone.');
   expect(screen.queryByRole('menu', { name: 'Open in' })).toBeNull();
   await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
   expect(perform['copy-path']).toHaveBeenLastCalledWith({ path: '/m/parts.py', kind: 'file' });
@@ -545,7 +760,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   // The pointer straight onto its row's wrapper: jsdom lays nothing out, so a pointer crossing from
   // Open in to its submenu would close it (a browser's pointer grace keeps it open).
   fireEvent.pointerMove(finder.closest('[data-disabled-reason]')!, { pointerType: 'mouse' });
-  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved or deleted.');
+  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved, or is gone.');
   const reveals = perform.reveal.mock.calls.length;
   await user.click(screen.getByRole('menuitem', { name: 'Browser' }));
   expect(perform.browser).toHaveBeenLastCalledWith({ path: id, kind: 'file' });
@@ -732,3 +947,4 @@ it('takes the keyboard as its file is shown, so a tool key works with no press f
   expect(document.activeElement).toBe(field);
   field.remove();
 });
+

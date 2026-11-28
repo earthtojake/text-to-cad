@@ -32,7 +32,7 @@ colours on the dark canvas, the same colours darkened to read on the light one.
 
 In 3D the board is a slab whose two faces are drawn as the 2D view draws them, each part standing
 on its 3D model. A pick there takes what the 2D view would take at that point of the face, or the
-part whose body is in front of it.
+part whose body is in front of it. A shared board's page has no 3D: it draws the board in 2D alone.
 
 A part's model is the STEP its footprint names, looked for only in these folders, in this order:
 
@@ -49,24 +49,24 @@ ones a project's library tables resolve to; otherwise the newest installed KiCad
 
 A part without a model stands as a block, and the viewer tells the person why:
 VRML only, not found, outside the folders above, too large, not a STEP, embedded in the board, or
-too many models. `cad kicad_pcb inspect board.kicad_pcb --json` reports each model the same way
-(`models`), and a STEP or GLB export (`cad kicad_pcb export --to step|glb`, `kicad_pcb.export`) holds
+too many models. `cad inspect board.kicad_pcb --json` reports each model the same way
+(`models`), and a STEP or GLB export (`cad export board.kicad_pcb board.step`, or `board.glb`) holds
 exactly the models found. `cad run kicad-cli` reads KiCad's library as KiCad does, where a `.wrl`
 name needs its `.wrl` file (KiCad 10's library ships STEP alone), so prefer the typed export.
 
 ## Board snapshots
 
-`cad kicad_pcb snapshot` draws a still, always on the light canvas whatever the viewer's theme.
+`cad snapshot` draws a still, always on the light canvas whatever the viewer's theme.
 Display modes are `board`, `copper`, `assembly` and `placement`, or JSON for the layers, the side and
 the active layer:
 
 ```bash
-cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
-cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
-cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
-cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
-cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"F.Cu","others":"hidden"}'
-cad kicad_pcb snapshot board.kicad_pcb tmp/u1.png --window 108,42,132,66 --width 1600
+cad snapshot board.kicad_pcb tmp/copper.png --display copper
+cad snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
+cad snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
+cad snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
+cad snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"F.Cu","others":"hidden"}'
+cad snapshot board.kicad_pcb tmp/u1.png --window 108,42,132,66 --width 1600
 ```
 
 `--window X0,Y0,X1,Y1` draws only that box of the board, filling the picture: two opposite corners in
@@ -87,15 +87,15 @@ part or a whole net from any sheet; a part on another sheet shows that sheet.
 Each pick arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
 `#wire:<uuid>`; [schematic](schematic.md#references) says what each names). Each sheet is on KiCad's
 default drawing sheet, as its schematic editor shows it, the title block filled from that sheet's own
-(a project's own `.kicad_wks` is not drawn). ERC findings are not drawn: run `cad kicad_sch erc`. The
+(a project's own `.kicad_wks` is not drawn). ERC findings are not drawn: run `cad kicad erc`. The
 person can export KiCad's PDF, SVGs, netlist and BOM from the viewer.
 
 A still is always on KiCad's light paper. A Quick Edit packet carries the sheet the view showed, on
 the whole drawing sheet (`border`); `"title": false` leaves the title block out:
 
 ```bash
-cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","border":true}'
-cad kicad_sch snapshot board.kicad_sch tmp/power-plain.png --sheet /Power/ --display '{"title":false}'
+cad snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","border":true}'
+cad snapshot board.kicad_sch tmp/power-plain.png --sheet /Power/ --display '{"title":false}'
 ```
 
 ## What the views approximate

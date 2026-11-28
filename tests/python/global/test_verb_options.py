@@ -1,8 +1,8 @@
 """The options `export` and `snapshot` take, pinned where one would be added.
 
-`export` takes a document and destinations, an STL's, a 3MF's or a GLB's mesh tolerance and angle, and a
-robot description's zero state: the parser `cad <type> export` runs and the Python signatures (`cad.export`,
-`Document.export`). `snapshot` takes the picture's options, the same on the verb and on a document's handle.
+`export` takes a document and one destination, the kind it is (`--as`, agreeing with the destination's suffix), an
+STL's, a 3MF's or a GLB's mesh tolerance and angle, and a robot description's zero state: the parser `cad export` runs of a document and the Python signatures (`cad.export`,
+the engine's `cad.engine.api.export`, `Document.export`). `snapshot` takes the picture's options, the same on the verb and on a document's handle.
 The verbs moved from the decorated function (`Model`) to the handle deliberately: the function is the
 declaration and its id; the document a call returns is what a verb reads. Nothing here needs the CAD kernel.
 """
@@ -25,7 +25,7 @@ from cad_server.cli.document_types import build_parser as _build_parser  # noqa:
 
 
 def build_parser():
-    """``cad xbf export``'s parser: the engine's export verb, which every type's export takes."""
+    """``cad export``'s parser of a model's ``.xbf``: the engine's export verb, which every document's export takes."""
     return _build_parser("xbf", "export")
 from cad.engine.api import Document  # noqa: E402
 from cad.engine.model import Model  # noqa: E402
@@ -36,12 +36,29 @@ class ExportTakesADocumentAndDestinations(unittest.TestCase):
         parser = build_parser()
         found = {(action.dest, tuple(action.option_strings), action.nargs) for action in parser._actions
                  if not isinstance(action, argparse._HelpAction)}
-        self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("tolerance", ("--tolerance",), None),
-                                 ("angle", ("--angle",), None), ("zero", ("--zero",), None), ("json", ("--json",), 0)},
-                         "`cad <type> export` takes SRC DST [DST ...] [--tolerance MM] [--angle DEG] [--zero STATE] "
-                         "[--json]")
+        self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("as_", ("--as",), None),
+                                 ("tolerance", ("--tolerance",), None), ("angle", ("--angle",), None),
+                                 ("zero", ("--zero",), None), ("json", ("--json",), 0)},
+                         "`cad export` takes SRC DST [--as KIND] [--tolerance MM] [--angle DEG] [--zero STATE] [--json]")
+        # One DST, like cp: a second is the command line's mistake, said by name (nargs="+" so it can be named).
+        with contextlib.redirect_stderr(io.StringIO()) as said, self.assertRaises(SystemExit) as refused:
+            parser.parse_args(["a.xbf", "a.step", "a.glb"])
+        self.assertEqual(refused.exception.code, 2)
+        self.assertIn("cad export writes one file, DST", said.getvalue())
 
-    def test_the_function_takes_a_source_destinations_and_its_seams(self) -> None:
+    def test_the_verb_takes_a_source_one_destination_and_its_format_s_options(self) -> None:
+        parameters = inspect.signature(cad.export).parameters.values()
+        self.assertEqual([(p.name, p.kind) for p in parameters], [
+            ("source", inspect.Parameter.POSITIONAL_OR_KEYWORD), ("dst", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            ("as_", inspect.Parameter.POSITIONAL_OR_KEYWORD), ("tolerance", inspect.Parameter.KEYWORD_ONLY),
+            ("angle", inspect.Parameter.KEYWORD_ONLY), ("zero", inspect.Parameter.KEYWORD_ONLY),
+            ("options", inspect.Parameter.VAR_KEYWORD)])
+        with self.assertRaisesRegex(TypeError, "give where to write it"):
+            cad.export("a.xbf")
+        with self.assertRaisesRegex(TypeError, "writes to one destination"):
+            cad.export("a.xbf", ["a.step", "a.glb"])
+
+    def test_the_engine_s_function_takes_a_source_destinations_and_its_seams(self) -> None:
         parameters = inspect.signature(cad.engine.api.export).parameters.values()
         self.assertEqual([(p.name, p.kind, p.default) for p in parameters], [
             ("source", inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.empty),
@@ -52,8 +69,8 @@ class ExportTakesADocumentAndDestinations(unittest.TestCase):
             ("log", inspect.Parameter.KEYWORD_ONLY, None),
             ("daemon", inspect.Parameter.KEYWORD_ONLY, True),
             ("progress", inspect.Parameter.KEYWORD_ONLY, None),
-        ], "cad.export is (source, *destinations, tolerance=None, angle=None, zero=None, log=None, daemon=True, "
-           "progress=None)")
+        ], "cad.engine.api.export is (source, *destinations, tolerance=None, angle=None, zero=None, log=None, "
+           "daemon=True, progress=None)")
 
     def test_a_handle_exports_its_document_to_destinations(self) -> None:
         parameters = inspect.signature(Document.export).parameters.values()
@@ -94,8 +111,9 @@ class SnapshotTakesThePicture(unittest.TestCase):
         self.assertEqual([(p.name, p.kind, p.default) for p in parameters[2:]],
                          [(name, inspect.Parameter.KEYWORD_ONLY, verb[name].default) for name in self.PICTURE],
                          "Document.snapshot(out, ...) spells out the snapshot verb's options")
-        self.assertEqual(set(verb) - {"source", "out", "job", "progress"}, set(self.PICTURE),
-                         "the verb takes no option Document.snapshot leaves out but its job and its progress seam")
+        self.assertEqual(set(verb) - {"source", "out", "job", "folder", "progress"}, set(self.PICTURE),
+                         "the verb takes no option Document.snapshot leaves out but its job, the job's pictures' "
+                         "folder and its progress seam")
         self.assertEqual(inspect.signature(cad.engine.api.inspect).parameters["progress"].default, None,
                          "inspect's progress is a seam about where the measurement is")
 

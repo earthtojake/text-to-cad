@@ -1,6 +1,6 @@
 # drawings
 
-The eight scripts of `models/drawings/src`, on cadgen 0.8: a drawing is a `@model`
+The eight scripts of `models/drawings/src`, on cadgen 0.8: a drawing is a `@xbf`
 whose body returns 2D build123d geometry, and `exports.py` writes the DXF of each, by
 build123d's own DXF exporter from the model's planar document: this corpus's example of
 DXF deliverables (flat patterns among them) kept current by an `exports.py`.
@@ -22,7 +22,7 @@ Build from this folder, any one, then write every DXF (`../DXF/`, gitignored):
 python gasket_plate.py
 python cabinet_panel_drawing.py
 python exports.py
-cad dxf snapshot ../DXF/cabinet_panel_drawing.dxf cabinet.png
+cad snapshot ../DXF/cabinet_panel_drawing.dxf cabinet.png
 ```
 
 Each bend fixture is there for a case:
@@ -44,7 +44,7 @@ geometry, which an engrave layer allows.
 
 The port:
 
-- `@dxf(out=...)` -> `@model`, the DXF written by `exports.py`; cadgen's build123d proxy
+- `@dxf(out=...)` -> `@xbf`, the DXF written by `exports.py`; cadgen's build123d proxy
   -> `import build123d as bd`. Each script's `__main__` calls its model.
 - Layers: the `{"CUT": ..., "BEND": ...}` dict becomes a compound of labelled children,
   a part per layer (`plate.label, bend.label = "CUT", "BEND"`); a layer of several

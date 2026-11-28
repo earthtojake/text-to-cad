@@ -8,14 +8,14 @@ script in the same task. A hand-written file's ledger says which, per link
 
 ## Generated From the CAD Model
 
-A description generated from a CAD model (`cad model export <id> robot.xml` or `.urdf`, or
+A description generated from a CAD model (`cad export robot.xbf robot.xml` or `.urdf`, or
 `cad.mujoco.spec`) takes every link's inertial from the kernel: its parts' exact solids at their
 materials' densities, with the masses the model declares ([from CAD](from-cad.md#mass)), as the
 centre of mass in the link frame and the tensor about it, in kilograms and kg·m². A number in it is
 changed in the model and exported again, never edited: the next two sections are cases of that, and
 the formulas, scripts and ledger lines after them are for a hand-written file.
 
-- **Weigh it before exporting.** `cad model inspect <id>` gives the total, each material's share,
+- **Weigh it before exporting.** `cad inspect robot.xbf` gives the total, each material's share,
   each declared mass and the parts with no material; with an assembly's label after the id, that
   assembly alone.
 - **A part with no material weighs nothing.** The export warns of a link whose inertial leaves a part
@@ -122,7 +122,7 @@ link's frame and each density in kg/mm³, returns the link's `.mass` (kg), `.cen
 `.inertia` about it (kg·mm²): multiply the centre by `1e-3` and the inertia by `1e-6` for the
 description. Parts in different materials each take their own density, and a bought part weighed at
 its maker's mass takes that mass over its solid's volume. A model's densities, without loading a
-solid, are `cad.model.inspect(handle, query="structure")["summary"]["materials"]`, in kg/m³: times
+solid, are `cad.inspect(handle, query="structure")["summary"]["materials"]`, in kg/m³: times
 `1e-9` for kg/mm³.
 
 **From the mesh**, where that is all there is, with `trimesh`:
@@ -160,7 +160,7 @@ Before accepting an inertial block, check:
 5. The off-diagonal terms are small beside the diagonal unless the part is skewed in the link frame:
    large `ixy`, `ixz` or `iyz` usually mean a tensor expressed in the wrong frame.
 
-Of these, `cad urdf validate` runs the first two, and the third only for a link whose geometry is one
+Of these, `cad inspect` runs the first two, and the third only for a link whose geometry is one
 primitive ([urdf-checks.md](urdf-checks.md)). `cad mujoco check` fails, in MuJoCo's words, a moving
 body with no mass and a tensor that breaks the triangle inequality, and checks no magnitude: its
 `mass_summary` line gives the moving mass to read. The rest are yours.

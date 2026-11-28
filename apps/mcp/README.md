@@ -57,8 +57,9 @@ to `host.presentation`, in one change.
   thread. Each connects to a separate engine session, so an unnamed view belongs to that thread.
 - **Inline (no app: the development switch alone).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
-  the whole viewer at card size, as a tab is: its navbar (the panel's toggle first, then the
-  logo, which opens the app menu; Back and Forward; the file name that opens the name menu; the ⋯,
+  the whole viewer at card size, as a tab is: its navbar (the logo first, which goes home (a
+  button: a page in an app's frame has no address), then the panel's toggle; Back and Forward; the project's name where the file is in one, then the file
+  name; the ⋯,
   the file menu: Copy path, Copy link (the engine's own page of the document,
   `<engine origin>/<id>?token=<link>`, the origin from the launch and the link asked through the
   tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
@@ -105,11 +106,11 @@ its tabs outside Codex, or no tools.
 **What a connecting app declared** is in the server's log, one line per session at `initialize`
 (`cad_server.mcp`, INFO): `client <name> <version>: <tabs views | inline views | no tools>, <why> (extensions:
 <declared>; launcher: <host>)`, and `a view called back: <app> shows CAD views` at its first call back. The
-log is the engine's (`cad server` in a terminal shows it; a started engine writes it to its log file).
+log is the engine's (`cad server start --foreground` in a terminal shows it; a started engine writes it to its log file).
 
 No tool exports, inspects or draws a picture for the agent: those are the `cad` command's, which the
-agent runs in its shell (`cad model export <id> <file>`, `cad model inspect <id>`, `cad model snapshot
-<id> out.png`; a file's, `cad <type> ...` with its path), and every presentation's instructions say so
+agent runs in its shell (`cad export model.xbf model.step`, `cad inspect model.xbf`, `cad snapshot
+model.xbf out.png`, a model by its `.xbf` and any other file by its path), and every presentation's instructions say so
 at initialize, an app offered no tools among them. The three tools
 0.11.10 removed (`cad_export`, `cad_snapshot`, `cad_inspect`) are never listed, but a call by one of those
 names, from a session that still lists it, answers with the `cad` command that replaced it. No tool builds
@@ -224,26 +225,41 @@ the launch's `_meta` first (`host/capability.ts`).
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`) and `model`, a
   file's absolute path, a model's document id, or none — and the page renders it: the shared
-  viewer showing that document, or the home. Agents name a file by its absolute path and a
-  model by the id its script printed (a script is never a document), and
+  viewer showing that document, or the home. Agents name a file by its absolute path, a model by its
+  `.xbf`'s (a script is never a document), and
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
-  `protocol`, `version` and `platform` — and the home's carries its `recents`,
+  `protocol`, `version` and `platform` — and the home's carries its `recents` and `projects` (as
+  `GET /api/v1/projects` lists them, with no documents: a project's page reads its folder through the tunnel),
   so the page asks nothing before it draws. A launch from another build (a tab
   the host restored after another release was installed, a past chat's card) says so: the page
   reads only its own protocol's.
-- **Every view but a file handler's has a home**: the library (the documents opened or built
-  before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
-  opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
-  model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward and Full size; no file, so no ⋯); it starts with its control
-  row, its links the app menu's.
-- **A view browses from its file's folder.** The file name in the navbar opens the name menu:
-  Models, and Files, the explorer, starting at the file's folder. A pick shows the file in
-  place. Nothing says where a view may browse: a tab, a card and the web viewer browse the
-  same way.
+- **Every view but a file handler's has a home**: the projects and the library (the documents opened or built
+  before, in any view or the web viewer). The navbar's logo goes to it (Recents), from a file and over the home.
+  The sidebar (`cad_home`) and a tab with nothing to show open on it; a
+  model opened from it is shown in place. The home has the same navbar (the logo, its sidebar's toggle, Back
+  and Forward and Full size; no file, so no ⋯). It shows one place at a time, from its
+  sidebar (Recents, Starred, each project), which is the viewer's panel over the home: pinned it pushes
+  the place, in a card or a narrow tab it is collapsed until its toggle (or ⌘\) opens it or a mouse resting there
+  peeks it, at a phone's width it is a sheet, and the person's choice and width are kept in the tab's own store. It
+  ends in the panel's foot, as a file's panel does: GitHub, Discord and Send feedback as icons, and **Settings**, a
+  cog whose menu holds Language, Telemetry, Theme and the version,
+  as the
+  web viewer's does ([the home](../../packages/ui/docs/viewer-ux.md#the-home)). A page in an app's frame has no
+  address of its own, so nothing on it is a link (every card and row is a button); where a launch carried a page, a
+  document's ⋯ has **Open in browser**, its page in the web viewer (`navigation.openBeside`, `kind: "browser"`,
+  over the same route as the file menu's Open in › Browser, below). The server opens a document's page by its name
+  and nothing else, so a project's page is not offered there (`places: false`).
+- **A view moves within its project.** A document in a project (a folder a person opened as one: the home's
+  Import › Folder, or a folder chosen in Import where it is one button, a Mac's, whose one chooser takes either; a
+  standalone document's Import its folder as a project; `cad viewer <folder>`) has the project's
+  name before its own in the navbar, which goes to that project's page on the home at the document's folder (the
+  document just left ringed there, Escape the way back), and `[` and `]` step through that folder's files; a press
+  shows the document in place. A tab, a card and the web viewer do the same, and
+  nothing browses the disk outside a project.
 - **A view keeps its own history.** As a browser keeps a tab's: every file a
-  view showed, and the home, in order, the agent's shows and the person's own
+  view showed, and each place of the home the person went to (Recents, Starred, a project's page: the
+  view has no address to keep one in; a project's page is one step a folder), in order, the agent's shows and the person's own
   moves alike (`ModelView.tsx`), handed to the viewer as `history`. The navbar's Back
   and Forward, after its logo, over a file and on the home, walk it, each disabled where it
   has nowhere to go. A move after a Back drops what was ahead, and a show of what is already
@@ -257,10 +273,11 @@ the launch's `_meta` first (`host/capability.ts`).
   chat are no room for a dialog, and a chat keeps several cards at once.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
   file the host handed over, and nothing else, for as long as it is open: no home
-  and no explorer (the host's own file tree is its navigation), no Back or Forward,
+  and no project (the host's own file tree is its navigation), no Back or Forward,
   and a renderer's link to another file (a robot's mesh) is plain text. It is drawn
   under the same 40px navbar as every other view, so the panel's toggle is there: first the
-  panel's toggle, then its logo and app menu, the file's name (no name menu) and its ⋯ (no Open in › Browser; File
+  logo, which opens the app menu there, links and all (a view with no home has no foot in its panel), then the
+  panel's toggle, the file's name and its ⋯ (no Open in › Browser; File
   info, the file's facts), then at the right the view's Display and Preview, then Full size where the host offers it,
   then the update button.
   Preview's bar hides the
@@ -316,9 +333,8 @@ the launch's `_meta` first (`host/capability.ts`).
   `updateModelContext`; a tab host is not asked: Codex forwards the method
   whether or not its frame declares it. **Send** (the person's message now,
   `ui/message`) needs `message`. Both actions capture the current view and distinct drawn views at the
-  press. Up to 1024 bytes of compact UTF-8 snapshot JSON goes into the text; larger
-  packets are written as `.snapshot.json` and named by saved path. Views share the annotation. No images or file bytes are attached,
-  even where the host accepts images. A host that takes neither gets Copy Prompt alone
+  press, and the page makes their snapshot packet, with the annotation, which goes inline in the text, whole,
+  as from every host. No images or file bytes are attached, even where the host accepts images. A host that takes neither gets Copy Prompt alone
   (`unavailablePromptContext`): Queue and Send are left out, not disabled. In
   Codex, Send from a thread's CAD tab posts into that thread; from the
   sidebar page it goes to the page's own chat tab.
@@ -333,9 +349,9 @@ the launch's `_meta` first (`host/capability.ts`).
   server travels this way, as the web page asks its own: the models -- a STEP's
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
   that serves them (`/api/v1/documents/<kind>/<id>/...`), a model's Parameters
-  Save among them (`POST /api/v1/documents/model/<id>/parameters`, one call held
+  Save among them (`POST /api/v1/documents/xbf/<id>/parameters`, one call held
   until the rebuild it starts has ended) and the preview of its drafts
-  (`POST /api/v1/documents/model/<id>/preview`, then the preview's reads) -- the
+  (`POST /api/v1/documents/xbf/<id>/preview`, then the preview's reads) -- the
   library and its pictures, Reveal, the person's analytics
   answer and language. One route is the server's own, not the
   viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows
@@ -403,7 +419,7 @@ the launch's `_meta` first (`host/capability.ts`).
     `tools/call` the card makes with its own error, "IPC not available for MCP tool call";
     the server never sees the view open, so `cad_view` and `cad_screenshot` answer that it has
     not reached CAD's server: not drawn yet, or drawn by a chat that carries none of its calls,
-    with the page the card links for the person and `cad <type> snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
+    with the page the card links for the person and `cad snapshot` for the agent's own look. The card knows its channel: at `ui/initialize` a host that declares
     `serverTools` carries calls (a tab host is trusted as before, whatever it declares), one
     that says nothing gets a single `GET /api/v1/server` before anything is drawn, and a call
     the host itself refuses (a JSON-RPC error: not a timeout, not the engine's answer) before
@@ -517,7 +533,7 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `server.ts` | typed calls to the page's three tools: its sync, its answer to a capture, and `cad_http` |
 | `capture.ts` | a capture once the view shows the model asked about, loaded and drawn (`captureSettled`, within `CAPTURE_SETTLE_MS`), and the PNG shrunk to fit one reply (`fitCapture`) |
 | `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time, and the CAD client over it (`App.tsx` makes one per view): the library, Open, Reveal and the person's settings among its requests |
-| `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
+| `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>`, its snapshot packet inline, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 | `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch and the opening result, and `reload`, the engine's app loaded again in place after an update); where neither way reaches the engine, the no-channel notice (`unconnected`) |
@@ -528,11 +544,11 @@ values have no reader and cannot hide it. Settings files need no conversion.
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@cad/ui/cad-viewer`,
 the one the web Viewer shows) showing the launch's model, with this host's ports — its
-tunnel (which also carries a Quick Edit's views and annotation to the server, which makes their files: `promptFiles`), the
-explorer's folders and search over it (`createCadFileSource`), its chat, its file menu
+tunnel (which also asks the server the folders a Quick Edit names this computer's files from: `promptFiles`), the
+file source over it (`createCadFileSource`), its chat, its file menu
 (copy path, Reveal), the app menu's links (its Send feedback and
 an alert's Report Issue open a new issue), followed through `ui/open-link`,
-and its home: the library. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
+and its home: the projects and the library. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
 its view — camera, Display settings, pose — through updates of it, and leaving it for
 another model or the home sets that view aside, in memory, until the model is shown again in the same view, as in
 the web Viewer. A view the
@@ -601,10 +617,9 @@ built by `scripts/bundle/bundle.sh`.
 ## Live models
 
 A model is shown by its document's id, as the web Viewer shows it: the view reads the document
-the engine holds and never builds or imports a script, and no folder lists one. It is in the
-library by the engine's record, which its run wrote, with its picture; its name menu opens on
-Models, and its Files lists the folder the explorer was last in this view, else the person's
-home folder: never the script's. Rebuilding the model updates the
+the engine holds and never builds or imports a script, and no project lists one. It is in the
+library by the engine's record, which its run wrote, with its picture, and in the project its script is in, where
+there is one. Rebuilding the model updates the
 same view through the document version stream.
 
 The stdio peer exits with its host session; it deletes only that MCP session.

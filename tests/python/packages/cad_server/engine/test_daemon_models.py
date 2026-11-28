@@ -21,10 +21,9 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
     """A model script's builds through the daemon, and what each verb reads of them."""
 
     def test_inspection_never_builds_a_missing_or_edited_script_model(self):
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
-        # The registry alone, a cache folder nothing can write: a restart is refused with the command
-        # (what the cache reopens is ``test_cache_restart``'s).
+        # A cache folder nothing can write: a model's store is its .xbf, which the cache never holds.
         self.own(CAD_CACHE_DIR=engine_daemon.unwritable(self.folder))
 
         marker = self.folder / "executed.txt"
@@ -33,7 +32,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
             'if __name__ == "__main__":',
             f'from pathlib import Path\nPath({str(marker)!r}).write_text("imported", encoding="utf-8")\n'
             f'if __name__ == "__main__":\n    Path({str(main)!r}).write_text("main", encoding="utf-8")'), encoding="utf-8")
-        ident = model_id(self.script, "block")
+        ident = model_id(self.script, "block", xbf="XBF/block.xbf")
         # An id nothing holds is refused, naming no build: the engine runs nothing.
         for options in ((), ("face 1",), ("--query", "build")):
             missing = self.cli("inspect", ident, *options)
@@ -53,26 +52,31 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         self.assertEqual((self.folder / "XBF/block.xbf").read_bytes(), saved)
         self.assertFalse(marker.exists())
         self._restart_daemon()
-        # After a restart the registry knows it: refused with the command that builds it again, run by no one.
+        # After a restart its .xbf is the document, read as it is: nothing builds it.
+        inspected = self.cli("inspect", ident, "face 1")
+        self.assertEqual(inspected.returncode, 0, inspected.stderr)
+        self.assertFalse(marker.exists())
+        # Its .xbf gone, its id names nothing: refused, and nothing runs to bring it back.
+        (self.folder / "XBF/block.xbf").rename(self.folder / "aside.xbf")
         missing = self.cli("inspect", ident, "face 1")
         self.assertEqual(missing.returncode, 2)
-        self.assertIn(f"block ({ident}) is not saved: the engine's cache holds no file of its last build; run "
-                      "`cad run ", missing.stderr)
+        self.assertIn(f"no document {ident} is held", missing.stderr)
         self.assertFalse(marker.exists())
+        (self.folder / "aside.xbf").rename(self.folder / "XBF/block.xbf")
         inspected = self.cli("inspect", str(self.folder / "XBF/block.xbf"), "--query", "build")
         self.assertEqual(inspected.returncode, 0, inspected.stderr)
         self.assertIsNone(json.loads(inspected.stdout)["live"])
 
-    def test_a_named_model_updates_one_address_and_after_a_restart_names_its_command(self) -> None:
+    def test_a_named_model_updates_one_address_and_after_a_restart_is_its_xbf(self) -> None:
         from urllib.parse import urlparse, parse_qs
 
         aside = Path(tempfile.mkdtemp(prefix="engine-daemon-cache-")).resolve()
         self.addCleanup(shutil.rmtree, aside, True)
-        self.own(CAD_CACHE_DIR=engine_daemon.unwritable(aside))  # nothing kept: ``test_cache_saving``'s
+        self.own(CAD_CACHE_DIR=engine_daemon.unwritable(aside))  # nothing in the cache: its store is its .xbf
 
         address = self._bare()
         first = self.built("bracket")
-        self.assertEqual(first["files"], {})
+        self.assertEqual(list(first["files"]), [str(self.folder / "bracket.xbf")], "bare @model: its .xbf beside the script")
         self.assertEqual(first["id"], address)
         self.assertNotIn("address", first, "a report names its document by its id alone")
         url = urlparse(first["url"])
@@ -83,7 +87,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         (self.folder / "bracket.py").write_text(textwrap.dedent(BARE.format(size=2)), encoding="utf-8")
         second = self.built("bracket")
         self.assertEqual(second["url"], first["url"], "one address, and the same link: the view line is the same text")
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
         self.assertEqual((first["id"], second["id"], doc), (model_id(self.folder / "bracket.py", "bracket"),) * 3,
                          "two builds of one function are one document, served by its id")
@@ -94,21 +98,23 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
         self.assertEqual(json.loads(measured.stdout)["kind"], "face")
         models = json.loads(self.cli("status", "--json").stdout)["models"]
         self.assertEqual([row["id"] for row in models], [address])
-        self.assertEqual([path.name for path in self.folder.iterdir()], ["bracket.py"],
-                         "no cache, document, or thumbnail on disk")
+        self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["bracket.py", "bracket.xbf"],
+                         "its .xbf, and no cache, document, or thumbnail on disk")
         self._restart_daemon()
+        measured = self.cli("inspect", f"{address}#face 1")
+        self.assertEqual(measured.returncode, 0, "after a restart, its .xbf: " + measured.stderr)
+        self.assertEqual(json.loads(self.cli("status", "--json").stdout)["models"], [],
+                         "a restart holds nothing live: status lists what this server's workers hold")
+        (self.folder / "bracket.xbf").unlink()
         missing = self.cli("inspect", f"{address}#face 1")
         self.assertEqual(missing.returncode, 2)
-        self.assertIn(f"bracket ({address}) is not saved: the engine's cache holds no file of its last build; "
-                      "run `cad run ", missing.stderr)
-        self.assertEqual(json.loads(self.cli("status", "--json").stdout)["models"], [],
-                         "a restart holds nothing: status lists what this server built")
+        self.assertIn(f"no document {address} is held", missing.stderr)
 
     def test_a_script_is_never_a_source_and_an_id_is_read_as_held(self) -> None:
         """No verb imports, runs or builds a script: ``x.py`` and ``x.py::f`` are refused as any file
         that is no document is. An id is the document the engine holds: exported after the script
         changed, it writes the same bytes, and nothing runs."""
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
         marker = self.folder / "ran.txt"
         self.script.write_text(textwrap.dedent(MODEL.format(size=3)).replace(
@@ -122,7 +128,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
                     self.assertRegex(refused.stderr, "is no document|is neither a document")
         self.assertEqual(sorted(path.name for path in self.folder.iterdir()), ["block.py"], "nothing ran, nothing was written")
         ident = self.built("block")["id"]
-        self.assertEqual(ident, model_id(self.script, "block"))
+        self.assertEqual(ident, model_id(self.script, "block", xbf="XBF/block.xbf"))
         marker.unlink()
         first = self.cli("export", ident, "first.step")
         self.assertEqual(first.returncode, 0, first.stderr)
@@ -136,7 +142,7 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
     def test_a_program_reports_every_model_its_calls_build_wherever_each_is_defined(self) -> None:
         from urllib.parse import urlsplit
 
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
         (self.folder / "parts.py").write_text(textwrap.dedent(BARE.format(size=1)).replace("bracket", "cube"),
                                               encoding="utf-8")
@@ -150,9 +156,9 @@ class DaemonModelTest(daemon_fixtures.DaemonCase):
 
     def test_main_calls_bare_and_file_models_in_order_and_keeps_its_arguments(self) -> None:
         self.script.write_text("""import sys
-from cad import model, step, xbf
+from cad import xbf, step
 import build123d as bd
-@model
+@xbf
 def bare(): return bd.Box(1, 2, 3)
 @step('saved.step')
 def saved(): return bd.Box(2, 2, 3)
@@ -176,10 +182,8 @@ if __name__ == '__main__':
         self.assertFalse((self.folder / 'XBF/bare.xbf').exists())
 
     def where(self, ref: str, doc: str = "XBF/block.xbf") -> dict:
-        from cad.engine.ids import is_id
-
-        kind = "model" if is_id(doc) else "xbf"
-        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", kind, "inspect", doc, ref], cwd=self.folder,
+        # ``cad inspect``: of a model's id, or of the .xbf it is saved as.
+        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "inspect", doc, ref], cwd=self.folder,
                                   env=self.env)
         self.assertEqual(found.returncode, 0, found.stderr)
         return json.loads(found.stdout)
@@ -197,24 +201,24 @@ if __name__ == '__main__':
         # By its element name, the same element.
         self.assertEqual(self.where(face["name"], ident)["ordinal"], 1)
         drop = ("made_by", "meshed")
-        # The xbf the run wrote is a file: it names no model, so its element answers no ``made_by``,
-        # the worker that wrote it live or not -- and every fact the kernel measures is the model's.
+        # The .xbf the run wrote is the model: by its path, while the worker holds the build, its element answers
+        # what made it, the same -- and every fact the kernel measures is the model's.
         declared = self.where("block/face 1")
-        self.assertNotIn("made_by", declared)
+        self.assertEqual(declared["made_by"], made)
         self.assertEqual({k: v for k, v in declared.items() if k not in drop},
                          {k: v for k, v in face.items() if k not in drop})
-        # A daemon started again with no build serves the model from its cache cold: no worker
-        # holds a trace of it, so ``made_by`` is null -- and every fact the kernel measures is
-        # what it was. Nothing of the provenance was written anywhere.
+        # A daemon started again with no build serves the model from its .xbf: no worker holds a trace of it, so
+        # ``made_by`` is null -- and every fact the kernel measures is what it was. Nothing of the provenance was
+        # written anywhere.
         self._restart_daemon()
         cold = self.where("block/face 1", ident)
-        self.assertIsNone(cold.pop("made_by"))
+        self.assertIsNone(cold.pop("made_by", None))
         self.assertEqual({k: v for k, v in cold.items() if k not in drop}, {k: v for k, v in face.items() if k not in drop})
         self.assertEqual(sorted(path.relative_to(self.folder).as_posix() for path in self.folder.rglob("*") if path.is_file()),
                          ["XBF/block.xbf", "block.py"])
 
     def test_a_failing_body_answers_with_its_error(self) -> None:
-        self.script.write_text("from cad.engine import xbf\n\n@xbf('XBF/block.xbf')\ndef block():\n    raise RuntimeError('no')\nif __name__ == '__main__':\n    block()\n", encoding="utf-8")
+        self.script.write_text("from cad.engine import model\n\n@model('XBF/block.xbf')\ndef block():\n    raise RuntimeError('no')\nif __name__ == '__main__':\n    block()\n", encoding="utf-8")
         done = self.run_script("block.py")
         self.assertEqual(done.returncode, 1)
         self.assertIn("RuntimeError: no", done.stderr)
@@ -224,7 +228,7 @@ if __name__ == '__main__':
         # what it declares, whatever its argv holds.
         self.script.write_text(textwrap.dedent(MODEL.format(size=3)) + "\n\n@stl('peg.stl')\ndef peg():\n"
                                "    return bd.Cylinder(1, 3)\nif __name__ == '__main__':\n    peg()\n", encoding="utf-8")
-        self.script.write_text(self.script.read_text(encoding="utf-8").replace("import xbf", "import stl, xbf"),
+        self.script.write_text(self.script.read_text(encoding="utf-8").replace("import model", "import model, stl"),
                                encoding="utf-8")
         done = self.run_script("block.py")
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -234,11 +238,13 @@ if __name__ == '__main__':
                          "each model reports its viewer link, including file-output builds")
         from urllib.parse import parse_qs, urlparse
 
-        from cad.engine.ids import model_id
+        from tests.python.support.ids import model_id
 
-        # Each model reports its id, the one the script's own process derives (ids.model_id), and
-        # its page is that id's.
-        expected = [model_id(self.script, "block"), model_id(self.script, "peg")]
+        from cad.engine.ids import file_id
+
+        # Each model reports its id, the one the script's own process derives (its .xbf's; the peg, an STL
+        # alone, its file's), and its page is that id's.
+        expected = [model_id(self.script, "block", xbf="XBF/block.xbf"), file_id(self.folder / "peg.stl")]
         self.assertEqual([line.removeprefix("  id: ") for line in done.stdout.splitlines() if line.startswith("  id: ")],
                          expected)
         views = [line for line in done.stdout.splitlines() if line.startswith("  view: ")]
@@ -255,9 +261,9 @@ if __name__ == '__main__':
     def test_decoration_only_declares_and_main_calls_only_its_selected_model(self) -> None:
         self.own()
         self.script.write_text(textwrap.dedent("""
-            from cad import model, xbf
+            from cad import xbf
 
-            @model
+            @xbf
             def unused():
                 raise AssertionError("uncalled model ran")
 

@@ -22,9 +22,11 @@ options make the same hulls.
 change of its model, so each mesh's hulls are kept in the engine's cache folder, never beside the model:
 ``places.cache_dir()/hulls/<digest>.npz``, the digest of the recipe (``RECIPE``: the CoACD release line the
 extra pins, the weld and the seed), the options and the mesh's own bytes (its positions as little-endian
-float32, its triangles as little-endian uint32). A hit reads the hulls back with no coacd here at all, and
-a changed part, a changed option or another release line is a new key. A file that does not read is
-decomposed again and written over. It is a cache: wiping it costs a decomposition, never a document.
+float32, its triangles as little-endian uint32). A hit reads the hulls back with no coacd here at all, and sets
+the file's access time (``places.used``), and a changed part, a changed option or another release line is a new
+key. A file that does not read is decomposed again and written over. It is a cache: wiping it costs a
+decomposition, never a document, and ``cad cache prune`` holds it, with the shared files' part meshes, to a size,
+the hulls used longest ago going first.
 
 **Where coacd is.** An integration runs where its extra is installed: the child runs this interpreter where this
 environment holds coacd (one installed with ``cad[coacd]``, or a model's whose header names it), else the Python
@@ -173,15 +175,20 @@ def hulls(meshes: Sequence[Mesh], names: Sequence[str] | None = None) -> list[li
 
 
 def _read(path: Path) -> list[Hull] | None:
+    """The hulls kept at ``path``, the file's time set to now (``places.used``: read, it is used); None for none."""
+    from cad.engine.places import used
+
     if not path.is_file():
         return None
     try:
         with np.load(path, allow_pickle=False) as held:
             count = int(held["count"])
-            return [(np.asarray(held[f"p{at}"], dtype=np.float32).reshape(-1, 3),
-                     np.asarray(held[f"t{at}"], dtype=np.uint32).reshape(-1, 3)) for at in range(count)]
+            found = [(np.asarray(held[f"p{at}"], dtype=np.float32).reshape(-1, 3),
+                      np.asarray(held[f"t{at}"], dtype=np.uint32).reshape(-1, 3)) for at in range(count)]
     except (OSError, ValueError, KeyError):
         return None
+    used(path)
+    return found
 
 
 def _write(path: Path, found: list[Hull]) -> None:

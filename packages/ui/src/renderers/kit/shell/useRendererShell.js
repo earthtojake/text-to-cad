@@ -24,6 +24,7 @@ import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
+import { useProjectKey } from "../../../file-viewer/projectKeys.js";
 import { projectionControl } from "./useStageViewport.js";
 import { DISPLAY_MODE_OPTIONS } from "../view-settings/DisplayModeOptions.js";
 import { normalizeViewFeatures } from "@cad/core/common/viewSettings.js";
@@ -134,11 +135,12 @@ const EMPTY = Object.freeze({});
  *   never what is on its way in. Omitted: the resource the renderer was handed.
  * @param {() => import("@cad/core/prompt").PromptReference[]} [options.promptReferences]  What a snapshot
  *   depicts, when that is narrower than the whole file (a selection). Default: the file.
- * @param {(input: { resource: object, references: object[], capture: Promise<Blob> }) => object} [options.promptContext]
+ * @param {(input: { resource: object, references: object[], capture: Promise<Blob>, subject: object | null }) => object} [options.promptContext]
  *   How this renderer assembles a snapshot's prompt context. Default `createViewPromptContext`, which takes
  *   references already in the prompt grammar; a renderer with a reference vocabulary of its own supplies the
  *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
- *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
+ *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`. `subject` is the
+ *   host's `promptSubject`: what its prompts name the file by (`subjectReference`).
  * @param {{ active?: boolean, handle?: (options: { toolInHand: boolean }) => boolean }} [options.escape]  Escape, innermost first: `handle` returns
  *   true when it spent the key. `toolInHand`: a tool other than the file's default, or an effect, is in hand; the
  *   renderer then spends the key only on what is under way (a measurement being drawn) and leaves what is picked, and
@@ -468,10 +470,11 @@ export function useRendererShell({
         return;
       }
       void deliverPrompt(promptContextRef.current({
-        resource: liveResourceRef.current?.() || resource, references: referencesRef.current?.() || [], capture: pixels
+        resource: liveResourceRef.current?.() || resource, references: referencesRef.current?.() || [], capture: pixels,
+        subject: host.promptSubject ?? null
       }));
     } catch (error) { reportActionError(error); }
-  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard, reportActionError]);
+  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard, host.promptSubject, reportActionError]);
   const copyActionRef = useRef(null);
   // Annotate's Copy: the view with its ink, or the view alone before there is any, to the clipboard;
   // true once it is there.
@@ -483,7 +486,7 @@ export function useRendererShell({
       return true;
     } catch (error) { reportActionError(error); return false; }
   }, [host.clipboard, reportActionError, controls]);
-  // ---- a prompt's views and files ---------------------------------------------
+  // ---- a prompt's views and its snapshot ---------------------------------------
   // The view on screen as a prompt carries it: the camera, the mode on screen and the Grid switch, and
   // what places or hides the parts — the renderer's pose and visibility (`viewState`) — (`annotation/views.js`).
   const viewStateRef = useRef(viewState);
@@ -500,24 +503,23 @@ export function useRendererShell({
   const annotationNow = useCallback(() => (annotationRef.current.items.length ? annotationDocumentOf(annotationRef.current.items, annotationUnits) : null), [annotationUnits]);
   const resourceRef = useRef(resource);
   resourceRef.current = resource;
-  // The file a prompt's views render: the one shown, by its absolute path.
+  // The file a prompt's views render: the one shown, by its absolute path (a model's document by its id).
   const promptFile = useCallback(() => {
     const shown = liveResourceRef.current?.() || resourceRef.current;
     return shown?.kind === "workspace-file" || shown?.kind === "cad-model" ? shown.path : null;
   }, []);
-  // Quick Edit captures the current view and annotation views; the host prepares JSON at the press.
+  // Quick Edit's snapshot, read at the press: the current view and the views with ink, and the ink, which the page
+  // makes the packet of (`quickEditPrompt.js`), for every host alike.
   const replayUnavailable = useRef("");
   replayUnavailable.current = String(load.replayUnavailable || "");
   const quickEditPrompt = useMemo(() => ({
     unavailable: () => replayUnavailable.current,
-    views: () => (!replayUnavailable.current && host.promptFiles && promptFile() ? promptViews(currentView(), annotationRef.current.views, annotationRef.current.items) : []),
-    files: views => {
-      const input = promptFile();
-      if (!host.promptFiles || !input || !views.length) return null;
-      return host.promptFiles.create({ name: input.split("/").pop(), input, views, annotation: annotationNow() });
+    snapshot: () => {
+      if (replayUnavailable.current || !promptFile()) return null;
+      const views = promptViews(currentView(), annotationRef.current.views, annotationRef.current.items);
+      return views.length ? { views, annotation: annotationNow() } : null;
     },
-    read: path => host.promptFiles.read(path),
-  }), [host.promptFiles, currentView, annotationNow, promptFile]);
+  }), [currentView, annotationNow, promptFile]);
   // The view as it is on screen, the annotation's ink in it: the annotation's Copy.
   const captureView = useCallback(() => {
     if (!viewerRef.current?.captureScreenshotBlob) return Promise.reject(new Error("The viewer is not ready"));
@@ -563,6 +565,7 @@ export function useRendererShell({
   // The view's panel, as the frame drew it (`ViewFrame.jsx` fills it in): ⌘\\ (Ctrl+\\) shows or hides it; / opens it
   // on its search.
   const panelControl = useRef(null);
+  const projectKey = useProjectKey();
   useViewerShortcuts({
     viewerElement,
     onChord: event => {
@@ -576,8 +579,9 @@ export function useRendererShell({
     onUndo: () => !previewing && historyRef.current.undo(),
     onRedo: () => !previewing && historyRef.current.redo(),
     // A tool's letter takes it up, F frames the model (`toolShortcuts.js`), over the strip the frame
-    // has on screen (`toolKeys`, RendererShell's); never in preview.
+    // has on screen (`toolKeys`, RendererShell's); [ and ] move through the project (`projectKeys.js`); never in preview.
     onKey: event => (event.key === "/" && !event.shiftKey && !previewing && panelControl.current ? panelControl.current.search()
+      : !previewing && projectKey(event) ? true
       : !previewing && !idle && pressToolKey(event, {
       tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool),
       fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } })),

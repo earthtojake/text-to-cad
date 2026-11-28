@@ -1,11 +1,11 @@
-from cad import model
+from cad import xbf
 
 import build123d as bd
 
 REVISION = 4
 
 
-@model
+@xbf
 def assembly():
     parts = []
     for i in range(32):

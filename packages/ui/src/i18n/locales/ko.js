@@ -192,12 +192,32 @@ export default {
   "app.engine.linkReplaced": "이 링크는 더 이상 유효하지 않습니다.",
   "app.engine.openNewLink": "에이전트에게 모델을 다시 열어 달라고 한 뒤 새 링크를 사용하세요.",
   "app.engine.reload": "새로 고침",
+  "share.gone.title": "이 공유 모델은 만료되었거나 삭제되었습니다.",
+  "share.gone.detail": "공유 모델은 마지막으로 공유된 후 7일 동안 유지됩니다. 공유한 사람이 다시 공유할 수 있습니다.",
+  "share.damaged.title": "이 공유 모델이 손상되었습니다.",
+  "share.damaged.detail": "공유한 사람에게 다시 공유해 달라고 요청하세요.",
+  "share.unsupported.title": "이 공유 모델은 여기에서 열 수 없습니다.",
+  "share.failed.title": "이 공유 모델을 열 수 없습니다.",
+  "share.retry": "다시 시도",
+  "share.delete.title": "이 공유 모델을 삭제할까요?",
+  "share.delete.detail": "모든 사람에게 링크가 더 이상 작동하지 않습니다.",
+  "share.delete.action": "삭제",
+  "share.delete.deleting": "삭제 중…",
+  "share.deleted.title": "이 공유 모델이 삭제되었습니다.",
+  "share.deleted.detail": "이제 누구도 이 링크로 열 수 없습니다.",
+  "share.delete.gone.title": "이 공유 모델은 이미 없습니다.",
+  "share.delete.gone.detail": "만료되었거나 이미 삭제되었습니다.",
+  "share.delete.refused.title": "이 삭제 링크는 이 공유 모델의 것이 아닙니다.",
+  "share.delete.refused.detail": "공유할 때 받은 삭제 링크를 사용하세요.",
+  "share.delete.damaged.title": "이 삭제 링크가 불완전하거나 손상되었습니다.",
+  "share.delete.damaged.detail": "받은 삭제 링크를 # 뒤의 내용까지 모두 포함해 여세요.",
+  "share.delete.failed.title": "이 공유 모델을 삭제할 수 없습니다.",
+  "share.delete.pageTitle": "공유 모델 삭제",
 
   "file.opening": "여는 중…",
   "file.missing": "파일이 없습니다",
-  "file.notHeld": "이 모델은 더 이상 유지되지 않습니다",
-  "file.notSaved": "이 모델은 저장되지 않았습니다",
-  "file.detached": "이 모델의 스크립트가 없습니다",
+  "file.notKnown": "알 수 없는 문서입니다",
+  "file.notKnownDetail": "이 컴퓨터에는 이 ID의 문서가 없습니다. 다른 컴퓨터의 링크일 수 있습니다.",
   "file.openFailed": "이 파일을 열 수 없습니다",
   "file.displayFailed": "이 파일을 표시할 수 없습니다",
   "file.goHome": "홈으로",
@@ -211,6 +231,7 @@ export default {
 
   "file.copyPath": "경로 복사",
   "file.copyLink": "링크 복사",
+  "file.downloadFiles": "파일 다운로드",
   "file.revealFinder": "Finder에서 보기",
   "file.revealExplorer": "파일 탐색기에서 보기",
   "file.revealFileManager": "파일 관리자에서 보기",
@@ -218,17 +239,16 @@ export default {
   "file.browser": "브라우저",
   "file.fileExplorer": "파일 탐색기",
   "file.fileManager": "파일 관리자",
-  "file.sourceMissing": "소스가 이동되었거나 삭제되었습니다.",
+  "file.sourceMissing": "소스가 이동되었거나 없습니다.",
   "file.kicadBoardTooNew": "{app}에서 이 기판을 열 수 없습니다. 더 새로운 버전의 KiCad로 저장되었습니다.",
   "file.kicadSchematicTooNew": "{app}에서 이 회로도를 열 수 없습니다. 더 새로운 버전의 KiCad로 저장되었습니다.",
   "file.defaultApp": "기본 앱",
 
-  "menu.backToHome": "홈으로",
   "menu.theme": "테마",
   "menu.language": "언어",
   "menu.languageAutomatic": "자동({language})",
   "menu.feedback": "피드백 보내기",
-  "menu.madeBy": "만든 사람 @{handle}",
+  "menu.settings": "설정",
 
   "consent.shareUsage": "원격 분석",
   "consent.shareUsageEnvironment": "원격 분석(환경에서 설정됨)",
@@ -244,64 +264,188 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "폴더",
-  "explorer.foldersAbove": "상위 폴더",
-  "explorer.filterLabel": "파일 필터",
-  "explorer.filterPlaceholder": "파일 필터…",
-  "explorer.loading": "불러오는 중…",
-  "explorer.searching": "검색 중…",
-  "explorer.readFailed": "이 폴더를 읽을 수 없습니다",
-  "explorer.searchFailed": "이 폴더를 검색할 수 없습니다",
-  "explorer.noCadFiles": "CAD 파일 없음",
-  "explorer.noCadFilesHere": "여기에 CAD 파일이 없습니다",
-  "explorer.noMatches": "일치하는 파일이 없습니다",
-  "explorer.noMatchesYet": "아직 일치하는 파일이 없습니다. 계속 입력해 검색 범위를 좁혀 보세요.",
-  "explorer.stoppedEarly": "검색을 일찍 멈췄습니다. 계속 입력해 범위를 좁혀 보세요.",
-  "explorer.models": "모델",
-  "explorer.files": "파일",
-  "explorer.noModels": "아직 모델이 없습니다",
-  "explorer.modelsFailed": "모델을 읽을 수 없습니다",
-  "explorer.filterModelsLabel": "모델 필터",
-  "explorer.filterModelsPlaceholder": "모델 필터…",
-  "explorer.noModelsMatch": "일치하는 모델이 없습니다",
 
-  "home.recentFiles": "최근",
+  "project.importFolder": "이 폴더를 프로젝트로 가져오기…",
+  "project.openNewTab": "새 탭에서 열기",
+  "project.openBrowser": "브라우저에서 열기",
+  "project.previous": "프로젝트의 이전 문서",
+  "project.next": "프로젝트의 다음 문서",
+  "search.menu": "문서 검색",
+  "search.title": "문서 검색",
+  "search.label": "문서 검색",
+  "search.placeholder": "모든 문서 검색…",
+  "search.results": "문서",
+  "search.inProject": "{name} 안",
+  "search.otherProjects": "다른 프로젝트",
+  "search.recent": "최근",
+  "search.kindPart": "부품",
+  "search.kindAssembly": "어셈블리",
+  "search.current": "보는 중",
+  "search.reading": "문서를 읽는 중…",
+  "search.failed": "문서를 읽을 수 없습니다.",
+  "search.nothingFound": "“{query}”와 일치하는 항목이 없습니다",
+  "search.empty": "아직 문서가 없습니다.",
+  "search.more": "{total}개 중 {shown}개 표시: 입력해서 좁혀 보세요",
+  "search.openNewTab": "새 탭에서 열기",
+  "search.openBrowser": "브라우저에서 열기",
+  "search.keyMove": "이동",
+  "search.keyOpen": "열기",
+  "search.keyClose": "닫기",
+
+
+  "home.title": "홈",
+
+
+  "home.import": "가져오기",
+
+
+  "home.importFile": "파일…",
+
+
+  "home.importFolder": "폴더…",
+
+
+  "home.importFileButton": "파일 가져오기",
+
+
+  "home.importFolderButton": "폴더 가져오기",
+
+
+
+
+  "home.projectActionsAria": "프로젝트 {name} 작업",
+
+
+  "home.projectRemove": "CAD에서 제거",
+
+
+  "home.projectRemoved": "{name}을(를) 제거했습니다. 디스크의 내용은 바뀌지 않았습니다.",
+
+
+  "home.projectMade": "{name}이(가) 이제 프로젝트입니다. 폴더에는 아무것도 쓰지 않았습니다.",
+
+
+  "home.projectAgain": "{name}은(는) 이미 프로젝트입니다.",
+
+
+  "home.projectInside": "{name}은(는) 이미 프로젝트인 {project} 안에 있습니다.",
+
+
+  "home.projectEmpty": "이 폴더는 비어 있습니다.",
+  "home.folderFailed": "이 폴더를 읽을 수 없습니다. 이동되었거나 이름이 바뀌었을 수 있습니다.",
+
+
+  "home.projectMissing": "이 프로젝트의 폴더가 없습니다. 제거하거나 폴더를 원래 자리에 되돌려 놓으세요.",
+
+
+  "home.projectTruncated": "일부 파일만 표시됩니다. 이 폴더에는 한 번에 표시할 수 있는 것보다 많은 파일이 있습니다.",
+
+
+  "home.place.recents": "최근 항목",
+
+
+  "home.place.starred": "별표",
+
+
+  "home.project": "프로젝트",
+
+
+  "home.projects": "프로젝트",
+
+
+  "home.placesAria": "위치",
+  "home.sidebar": "사이드바",
+
+
+  "home.addProject": "폴더를 프로젝트로 열기",
+
+
+  "home.loadingProjects": "프로젝트 불러오는 중",
+
+
+  "home.projectsEmpty": "아직 프로젝트가 없습니다.",
+
+
+  "home.projectsFailed": "프로젝트를 읽을 수 없습니다.",
+
+
+  "home.projectGone": "이 프로젝트는 더 이상 CAD에 없습니다. 되돌리려면 폴더를 다시 여세요.",
+
+
+  "home.recentsEmpty": "최근에 연 항목이 없습니다.",
+
+
+  "home.starredEmpty": "아직 별표한 항목이 없습니다. 파일에 별표를 표시하면 여기에 표시됩니다.",
+
+
+
+
+
+
+  "home.sortAria": "정렬",
+
+
+  "home.sortByAria": "정렬: {sort}",
+
+
+  "home.sort.activity": "최근 활동",
+
+
+  "home.sort.name": "이름",
+  "home.sort.viewed": "마지막 조회",
+  "home.sort.edited": "마지막 수정",
+
+
+
+
+  "home.openNewTab": "새 탭에서 열기",
+
+
+  "home.openBrowser": "브라우저에서 열기",
+
+
+  "home.backTo": "{name}(으)로 돌아가기",
+  "home.parentFoldersAria": "상위 폴더",
+
+
+
+
+
+
+  "home.emptyTitle": "아직 아무것도 없습니다",
+
+
+  "home.emptyBody": "파일이나 폴더를 가져오거나 에이전트에게 모델을 만들어 달라고 하세요.",
+
+
   "home.searchAria": "모델 검색",
   "home.searchPlaceholder": "검색",
   "home.layout": "레이아웃",
-  "home.open": "열기",
   "home.grid": "그리드",
   "home.list": "목록",
   "home.openAria": "{name} 열기",
-  "home.emptyTitle": "아직 연 항목이 없습니다",
-  "home.emptyBody": "CAD 파일을 열거나 에이전트에게 모델을 만들어 달라고 하세요.",
-  "home.openFile": "파일 열기",
-  "home.formatModel": "모델",
-  "home.noMatchingModels": "일치하는 모델이 없습니다.",
+  "home.noAppOpens": "이 컴퓨터에는 {name}을(를) 열 수 있는 앱이 없습니다.",
+  "format.xbf": "XBF",
+  "home.formatPart": "부품",
+  "home.formatAssembly": "어셈블리",
+  "home.noMatchingModels": "일치하는 항목이 없습니다.",
   "home.filesAria": "파일",
+  "home.foldersAria": "폴더",
+  "home.otherFilesAria": "기타 파일",
+  "home.recent": "최근",
+  "home.allFiles": "모든 파일",
   "home.loadingFiles": "파일 불러오는 중",
   "home.modelsAria": "CAD 모델",
   "home.fileUnavailable": "파일을 사용할 수 없음",
   "home.actionsAria": "{name} 작업",
   "home.menuOpen": "열기",
-  "home.pin": "고정",
-  "home.unpin": "고정 해제",
-  "home.delete": "삭제",
-  "home.deleteModelTitle": "{name}을(를) 삭제할까요?",
-  "home.deleteModelBody": "엔진의 기록과 저장된 빌드를 삭제합니다. 스크립트와 내보낸 파일은 디스크에 남습니다. 다시 빌드하려면 스크립트를 실행하세요.",
-  "home.deleteFileTitle": "뷰어에서 {name}을(를) 삭제할까요?",
-  "home.deleteFileBody": "이 파일에 대한 엔진의 기록을 삭제합니다. 파일 자체는 디스크에 남습니다.",
-  "home.cancel": "취소",
-  "home.kindsAria": "표시",
-  "home.kind.all": "전체",
-  "home.kind.models": "모델",
-  "home.kind.files": "파일",
-  "home.kindAria": "표시: {kind}",
+  "home.star": "별표 표시",
+  "home.unstar": "별표 해제",
   "home.columnName": "이름",
-  "home.columnKind": "종류",
-  "home.columnSize": "크기",
-  "home.columnUpdated": "업데이트",
-  "home.columnCreated": "생성 날짜",
+  "home.columnType": "종류",
+  "home.columnViewed": "마지막 조회",
+  "home.columnEdited": "마지막 수정",
+  "home.folderType": "폴더",
   "home.openingAria": "{name} 여는 중",
   "home.ageNow": "방금",
   "home.ageEdited": "{age} 편집됨",
@@ -714,7 +858,6 @@ export default {
   "parameters.error.build_failed": "이 값으로는 빌드되지 않습니다.",
   "parameters.error.preview_build_failed": "이 값으로는 빌드되지 않습니다.",
   "parameters.error.preview_failed": "이 값을 표시하지 못했습니다.",
-  "parameters.reason.file": "스크립트에서 편집하세요.",
   "parameters.reason.no_worker": "편집하려면 스크립트를 다시 실행하세요.",
   "parameters.reason.shared": "다른 파일에서 설정됩니다.",
   "parameters.reason.sharedIn": "{source}에서 설정됩니다.",

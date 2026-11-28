@@ -1,17 +1,18 @@
-import type { CadEntry, CadWorkspaceService } from '@cad/core/client';
+import type { CadClient, CadEntry, CadWorkspaceService } from '@cad/core/client';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
+import { documentPage } from '@cad/core/lib/documentPages.js';
 import type { ClipboardPort } from '../host/types.js';
 import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
 
 /**
  * `@cad/ui/catalog`: CAD files as the viewer reads them, by absolute path, and documents the
- * engine holds by their id alone (a model's), which have no file to browse. Pure — no React
+ * engine holds by their id alone (a model's), which have no file of their own. Pure — no React
  * and no transport — so a host's adapters and their unit tests import it alone.
  *
- * A view shows one file and browses from its folder. The source a host hands the viewer
- * (`createCadFileSource`) reads the file's catalog entry, lists a folder at a time and searches
- * under one, all through a CAD client; the file menu (`createCadFileActions`) copies a file's
- * path and reveals it. Every path is absolute, in forward slashes, in every app.
+ * A view shows one file. The source a host hands the viewer (`createCadFileSource`) reads the
+ * file's catalog entry through a CAD client; the file menu (`createCadFileActions`) copies a file's
+ * path and reveals it. Moving between files is a project's (the server's projects, which a host's
+ * library reads). Every path is absolute, in forward slashes, in every app.
  */
 
 /** `path` in the viewer's one spelling: forward slashes, and no trailing one but the top's (`/`, `C:/`). */
@@ -39,12 +40,11 @@ export function contentRevision(entry: CadEntry): string {
 }
 
 /**
- * The files a view reads, through a CAD client: a file's metadata from its catalog entry, one
- * folder's subfolders and CAD files, and a bounded search under a folder. A file's revision is its
- * content's (`contentRevision`), never compiler progress. (A renderer follows its file's updates
- * through the client itself.)
+ * The files a view reads, through a CAD client: a file's metadata from its catalog entry. A file's
+ * revision is its content's (`contentRevision`), never compiler progress. (A renderer follows its
+ * file's updates through the client itself.)
  */
-export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEntry' | 'folder' | 'search'>,
+export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEntry'>,
   { id = 'local' }: { id?: string } = {}): FileSource {
   return {
     id,
@@ -65,14 +65,6 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
         extension: byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || '', mediaType: byId ? 'cad-document' : 'cad',
         revision: contentRevision(entry) };
     },
-    async list(directory, { signal }) {
-      const folder = await client.folder(directory, { signal });
-      return folder.entries.map(entry => ({ path: joinPath(folder.path, entry.name), name: entry.name, kind: entry.kind }));
-    },
-    async search(directory, query, { signal }) {
-      const found = await client.search(directory, query, { signal });
-      return { paths: found.results.map(normalizePath), truncated: found.truncated };
-    },
   };
 }
 
@@ -88,12 +80,12 @@ export function createCadFileActions({ platform, clipboard, reveal, openIn, link
    * file's document (`entryOf`). The link copied is `<origin>/<document id>?token=<fresh link>`, the
    * page's own address. Without it, no Copy link.
    */
-  link?: { origin: string | (() => string); client: Pick<CadWorkspaceService, 'link' | 'entryOf'> };
+  link?: { origin: string | (() => string); client: Pick<CadClient, 'link' | 'entryOf'> };
   /**
    * Open in's apps, through a CAD client (`openInApps`, `openIn`): a document is asked for by its id,
    * a file's from the client's row of it (`entryOf`).
    */
-  openIn?: Pick<CadWorkspaceService, 'openInApps' | 'openIn' | 'entryOf'>;
+  openIn?: Pick<CadClient, 'openInApps' | 'openIn' | 'entryOf'>;
 }): FileActions {
   const clientOf = openIn?.entryOf ? openIn : link?.client;
   const idOf = (path: string, given?: string) => given || (isDocumentId(path) ? path : String(clientOf?.entryOf?.(normalizePath(path))?.id || '') || null);
@@ -109,16 +101,16 @@ export function createCadFileActions({ platform, clipboard, reveal, openIn, link
         // The address still on its way: a host's clipboard starts the write inside the press that
         // asked for it (a browser refuses one begun after the link's request), then fills it in.
         await clipboard.writeText(link.client.link().then(({ link: fresh }) =>
-          `${origin}/${encodeURIComponent(id)}?token=${encodeURIComponent(fresh)}`));
+          `${origin}${documentPage(id)}?token=${encodeURIComponent(fresh)}`));
       } } : {}),
     },
     ...(openIn ? {
-      apps: async (entry: { path: string }, options: { signal?: AbortSignal } = {}) => {
-        const id = idOf(entry.path);
+      apps: async (entry: { path: string; id?: string }, options: { signal?: AbortSignal } = {}) => {
+        const id = idOf(entry.path, entry.id);
         return id ? openIn.openInApps(id, options) : null;
       },
-      openApp: async (entry: { path: string }, target: string, app: string) => {
-        const id = idOf(entry.path);
+      openApp: async (entry: { path: string; id?: string }, target: string, app: string) => {
+        const id = idOf(entry.path, entry.id);
         if (!id) throw new Error('This document has no id to open it by.');
         await openIn.openIn(id, target, app);
       },

@@ -43,6 +43,7 @@ import { ViewerElementContext, ViewerHostContext } from '../../../../dist/host/c
 import { testHost } from '../../../../dist/host/testing/host.js';
 import { createAnimationClock } from '../../../../dist/renderers/kit/tools/playbar/animationClock.js';
 import { NavbarViewSlotContext } from '../../../../dist/file-viewer/navbarSlots.js';
+import { formatPromptMessage } from '@cad/core/prompt';
 
 // The navbar's view slot, as a file viewer gives it, where the view's Display and Preview stand.
 function NavbarSlot({ children }: { children: React.ReactNode }) {
@@ -57,7 +58,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; viewport.preview = null; });
 
 
-function mount(host = testHost(), state?: unknown, name = 'one.harness', element: { current: HTMLElement | null } | null = null) {
+function mount(host = testHost(), state?: unknown, name = 'one.harness', element: { current: HTMLElement | null } | null = null, commands: unknown = null) {
   const save = vi.fn();
   const navigation = vi.fn();
   let settings: any = { toolStack: { panels: {}, collapsed: {} } };
@@ -66,7 +67,7 @@ function mount(host = testHost(), state?: unknown, name = 'one.harness', element
     update: (patch: any) => { settings = { ...settings, ...patch }; listeners.forEach(listener => listener()); } };
   const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null,
     onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
-    state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
+    state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences, ...(commands ? { commands } : {}) } } };
   // `element`: the viewer the keyboard reaches (its Escape and Delete), as a file viewer provides.
   const view = render(<ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={element as any}><NavbarSlot>
     <HarnessRenderer {...(props as any)} />
@@ -151,17 +152,28 @@ it('Quick Edit is always there, one row with nothing picked, its attachments ove
   expect([top.hidden, top.hasAttribute('inert'), top.contains(container.querySelector('[data-quick-edit]'))]).toEqual([true, true, true]);
 });
 
+it("a screenshot the host asks for goes to its composer naming the file as the host's prompts do", async () => {
+  const link = 'https://cad.example/AbCdEfGhIjKlMnOpQrSt_-';
+  const destination = { kind: 'composer', available: true } as const;
+  const deliver = vi.fn(async (_context: unknown) => ({ status: 'added' as const, partIds: [] }));
+  // The host's request for the view, as its command store holds it (one snapshot, as a store keeps).
+  const requested = { captureRequest: { key: 1 } };
+  const commands = { subscribe: () => () => {}, getSnapshot: () => requested, acknowledge: vi.fn() };
+  mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
+    promptSubject: { resource: { kind: 'url', url: link } } }), undefined, 'one.harness', null, commands);
+  await waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
+  const message = formatPromptMessage(deliver.mock.calls[0][0] as any);
+  expect([message.startsWith('harness:'), message.endsWith(`File: ${link}`)]).toEqual([true, true]);
+});
+
 // A stroke as the drawing tools put one into the model.
 const ink = (id: string) => ({ id, kind: 'stroke', points: new Float32Array([0, 0, 0, 1, 0, 0]), color: '#ff2d55', width: 2, touches: [] });
 
-it("an annotation is Quick Edit's attachment, which sends the note with the files made of its view and its annotation, and goes with them", async () => {
+it("an annotation is Quick Edit's attachment, which sends the note with the packet the page made of its view and its annotation, and goes with them", async () => {
   const destination = { kind: 'composer', available: true } as const;
   const send = vi.fn(async (_context: unknown) => ({ status: 'sent' as const, partIds: [] }));
-  const promptFiles = {
-    create: vi.fn(async (_request: any) => ({ snapshot: '/tmp/p/one-1.snapshot.json' })),
-    read: vi.fn(async () => new Blob(['{}'], { type: 'application/json' })),
-  };
-  const host = testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } as any, promptFiles });
+  // A host with no folders to name files from (a shared page's): the packet is the page's, all the same.
+  const host = testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } as any });
   mount(host);
   fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
   act(() => viewport.props.annotation.add([ink('a')]));
@@ -171,21 +183,18 @@ it("an annotation is Quick Edit's attachment, which sends the note with the file
   expect(document.activeElement).toBe(note);
   note.textContent = 'Add a boss here.';
   fireEvent.input(note);
-  expect(promptFiles.create).not.toHaveBeenCalled();
   fireEvent.keyDown(note, { key: 'Enter' });
   await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
-  // The view on screen, as a snapshot job says it (its mode and Grid switch with it, so the snapshot
-  // replays it), with the annotation in the same snapshot file.
-  const [request] = promptFiles.create.mock.calls[0] as any[];
-  expect(request).toMatchObject({ name: 'one.harness', input: '/models/one.harness', annotation: { units: 'mm', marks: [{ id: 'a', kind: 'stroke' }] } });
-  expect(request.views).toEqual([{ label: 'current view', camera: { position: [0, -100, 0], target: [0, 0, 0], up: [0, 0, 1], orthographicHalfHeight: 40 },
-    display: { mode: 'solid', grid: false }, width: 1600, height: 1200 }]);
   const context = send.mock.calls[0][0] as any;
-  expect(context.parts.map((part: any) => [part.kind, part.label ?? part.id])).toEqual([['text', 'text'], ['reference', 'file'],
-    ['attachment', 'Snapshot (cad model snapshot --annotation)']]);
-  expect(await context.parts[2].path).toBe('/tmp/p/one-1.snapshot.json');
-  expect(context.parts.filter((part: any) => part.kind === 'attachment').map((part: any) => part.mimeType)).toEqual(['application/json']);
-  expect(promptFiles.read).not.toHaveBeenCalled();
+  expect(context.parts.map((part: any) => [part.kind, part.id])).toEqual([['text', 'text'], ['reference', 'file'], ['attachment', 'snapshot']]);
+  expect(context.parts.filter((part: any) => part.kind === 'attachment').map((part: any) => [part.mimeType, part.path])).toEqual([['application/json', undefined]]);
+  // The view on screen, as a snapshot job says it (its mode and Grid switch with it, so the snapshot
+  // replays it), with the annotation in the same packet, inline.
+  const [, packet] = /^Snapshot JSON \(`cad snapshot --job`\):\n```json\n(.*)\n```$/.exec(await context.parts[2].inlineText)!;
+  expect(JSON.parse(packet)).toEqual({ input: '/models/one.harness', jobs: [{
+    camera: { position: [0, -100, 0], target: [0, 0, 0], up: [0, 0, 1], orthographicHalfHeight: 40 }, display: { mode: 'solid', grid: false },
+    output: { padding: 0, tightFrame: false }, outputs: [{ label: 'current view', width: 1600, height: 1200 }] }],
+    annotation: { units: 'mm', marks: [{ kind: 'stroke', points: [0, 0, 0, 1, 0, 0], color: '#ff2d55', width: 2, touches: [] }] } });
   // Sent, the note goes with its annotation: the bar is one row again.
   await waitFor(() => expect(box.querySelector('[data-quick-edit-context]')).toBeNull());
   expect([viewport.props.annotation.hasAnnotation, note.textContent]).toEqual([false, '']);
@@ -519,9 +528,8 @@ it.each([['a GPU', false, 1], ['a software renderer', true, 0]])('on %s, Preview
 
 
 it('text-only Quick Edit captures the current view at Copy without any annotations', async () => {
-  const promptFiles = { create: vi.fn(async (_request: any) => ({ inline: '{"jobs":[]}' })), read: vi.fn() };
   let copied = '';
-  const { canvas } = mount(testHost({ promptFiles, clipboard: {
+  const { canvas } = mount(testHost({ clipboard: {
     writeText: async text => { copied = await text; }, readText: async () => '', writeImage: async () => {} } }));
   pick(canvas);
   const note = screen.getByRole('textbox', { name: 'Describe your changes' });
@@ -530,9 +538,9 @@ it('text-only Quick Edit captures the current view at Copy without any annotatio
   // The harness's synthetic press reference is not a CAD selector. Clear it while the note stays.
   secondaryTap(canvas, 300, 200);
   fireEvent.click(screen.getByRole('menuitem', { name: 'Clear the note' }));
-  expect(promptFiles.create).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(copied).toContain('Snapshot JSON (cad model snapshot --annotation):'));
-  expect(promptFiles.create.mock.calls[0][0]).toMatchObject({ annotation: null,
-    views: [{ label: 'current view', camera: { position: [0, -100, 0] } }] });
+  await waitFor(() => expect(copied).toContain('Snapshot JSON (`cad snapshot --job`):'));
+  const packet = JSON.parse(/```json\n(.*)\n```/.exec(copied)![1]);
+  expect(packet).toMatchObject({ input: '/models/one.harness', jobs: [{ camera: { position: [0, -100, 0] }, outputs: [{ label: 'current view' }] }] });
+  expect(packet).not.toHaveProperty('annotation');
 });

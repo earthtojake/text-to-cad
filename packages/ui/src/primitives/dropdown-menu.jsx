@@ -7,6 +7,12 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import { cn } from "@cad/ui/utils"
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 
+/**
+ * The room between a menu and its trigger (`docs/design-system.md`, "Menus"): 6px, every menu's unless it stands
+ * somewhere else on purpose. Inside, a menu is padded 6px (`p-1.5`), its separators running its full width.
+ */
+export const MENU_GAP_PX = 6;
+
 // A menu's open state, held here so its trigger can open it at a finger's click (below).
 const MenuOpenContext = React.createContext(null);
 
@@ -62,7 +68,7 @@ const DropdownMenuContent = React.forwardRef(/**
  * @param {React.ForwardedRef<React.ComponentRef<typeof DropdownMenuPrimitive.Content>>} ref
  */ function DropdownMenuContent({
   className,
-  sideOffset = 4,
+  sideOffset = MENU_GAP_PX,
   container,
   children,
   ...props
@@ -91,7 +97,7 @@ const DropdownMenuContent = React.forwardRef(/**
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-50 flex max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) flex-col overflow-hidden rounded-md border bg-popover p-1 text-xs text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          "z-50 flex max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) flex-col overflow-hidden rounded-md border bg-popover p-1.5 text-xs text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           className
         )}
         {...props}
@@ -151,12 +157,14 @@ function DropdownMenuCheckboxItem({
   );
 }
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioGroup>} props */
 function DropdownMenuRadioGroup({
   ...props
 }) {
   return <DropdownMenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
 }
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>} props */
 function DropdownMenuRadioItem({
   className,
   children,
@@ -205,7 +213,7 @@ function DropdownMenuSeparator({
   return (
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn("-mx-1 my-1 h-px bg-border", className)}
+      className={cn("-mx-1.5 my-1 h-px bg-border", className)}
       {...props}
     />
   );
@@ -266,7 +274,7 @@ function DropdownMenuSubContent({
     <DropdownMenuPrimitive.SubContent
       data-slot="dropdown-menu-sub-content"
       className={cn(
-        "z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-md border bg-popover p-1 text-xs text-popover-foreground shadow-lg data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+        "z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-md border bg-popover p-1.5 text-xs text-popover-foreground shadow-lg data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
         className
       )}
       {...props}

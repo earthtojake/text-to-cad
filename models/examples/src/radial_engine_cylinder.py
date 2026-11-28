@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cad import model
+from cad import xbf
 from math import cos, radians, sin, tau
 
 import build123d as bd
@@ -58,7 +58,7 @@ def _edge_fillets(part):
     return edges
 
 
-@model
+@xbf
 def radial_engine_cylinder():
     """Return the radial-engine-style cylinder model in millimeters."""
     boss_rotation_y = 90.0 - BOSS_ANGLE_DEGREES

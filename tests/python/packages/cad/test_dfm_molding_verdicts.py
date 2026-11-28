@@ -142,7 +142,7 @@ class CandidatesAndPartsTest(unittest.TestCase):
         self.assertEqual({failure["location"].split("/face")[0] for failure in failed["failures"]}, {"plain"})
         self.assertEqual(len(result.measurements["projection"]["items"]), 2)
         (said,) = [f for f in result.findings if f.code == "several_bodies"]
-        self.assertEqual(sorted(said.refs), ["drafted", "plain"])   # its parts, as `cad step inspect` takes them
+        self.assertEqual(sorted(said.refs), ["drafted", "plain"])   # its parts, as `cad inspect` takes them
         self.assertNotIn("pull_check", result.measurements)   # each part opens its own way: no one pull to compare
         self.assertEqual([part["own"] for part in result.measurements["pulls"]], [False, False])
 

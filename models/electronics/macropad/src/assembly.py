@@ -3,16 +3,17 @@ plate, nine MX switches, nine keycaps and the knob, each where the board puts it
 the layers apart in order (board, plate, switches, caps, knob), holds, and sets them back.
 
     cad run src/assembly.py
-    cad model export <id> STEP/nine.step GLB/nine.glb
+    cad export nine.xbf STEP/nine.step
+    cad export nine.xbf GLB/nine.glb
 
 The board is KiCad's STEP of it with every part, converted once to an xbf (README: "Rebuild"):
-`cad kicad_pcb export macropad.kicad_pcb --to step -o STEP`, then `cad step export STEP/macropad.step
+`cad export macropad.kicad_pcb STEP/macropad.step`, then `cad export STEP/macropad.step
 XBF/macropad.xbf`. Export both again after a board change.
 """
 from pathlib import Path
 
 import build123d as bd
-from cad import model, xbf
+from cad import xbf
 from cad.build123d import animation
 
 from lib import board_geometry
@@ -22,7 +23,7 @@ from vendor_parts import mx_switch
 BOARD_XBF = Path(__file__).resolve().parent.parent / "XBF" / "macropad.xbf"
 
 
-@model
+@xbf
 def nine():
     g = board_geometry.read()
     pcb = xbf.read(BOARD_XBF)
@@ -61,7 +62,7 @@ def nine():
 LIFT = {"board": 12, "plate": 26, "switches": 40, "caps": 54, "knob": 64}   # the explode's end, for a still
 
 
-@model
+@xbf
 def nine_exploded():
     """The explode's open pose as a model of its own (a snapshot never plays an animation)."""
     parts = []

@@ -1,7 +1,7 @@
 # f1 models
 
 `models/f1` on cadgen 0.8: an original ground-effect Formula 1 concept car. `f1.py`
-is the one model (`@model`; a run writes nothing):
+is the one model (`@xbf`; a run writes nothing):
 
 | Script | Model | What it is |
 | --- | --- | --- |
@@ -13,10 +13,10 @@ is the one model (`@model`; a run writes nothing):
 Build from this folder: `python f1.py`.
 
 ```
-python f1.py                                         # prints the car's id: and view:
-cad model snapshot "$ID" drs.png --pose drs_open
-cad model snapshot "$ID" lock.png --pose full_lock_left
-cad model export "$ID" GLB/f1.glb                       # the five clips
+python f1.py                                         # saves the car as f1.xbf, printing its view:
+cad snapshot f1.xbf drs.png --pose drs_open
+cad snapshot f1.xbf lock.png --pose full_lock_left
+cad export f1.xbf GLB/f1.glb                         # the five clips
 ```
 
 ## How it is built

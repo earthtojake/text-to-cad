@@ -1,21 +1,19 @@
-"""``cad <document_type> <operation> <file>``: every document type's commands, from the registry.
+"""What each document type does for the ``cad`` command's verbs: ``OPERATIONS``, every type's operation as a runner
+of its command line, from the registry.
 
-The shape is one for every type (``cad.registry``): the type's id, then one of the operations it
-implements, then its file (or, for ``model``, a model's document id) -- ``cad xbf export arm.xbf
-arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
-robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
-others are named for what they do. Each operation has one result shape: ``export`` says the files it
-wrote; ``dfm``, ``interference``, ``solve``, ``drc``, ``erc`` and ``validate`` their findings (each with a
-severity, a code and a location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the
-type.
+The verbs (``cad export SRC DST``, ``cad inspect FILE``, ``cad snapshot``, ``cad dfm``, ``cad fea``:
+``cad_server.cli.verbs``) read a file's type from its suffix and hand its command line to the runner of what that
+type does for them (``cad.registry.operation_for``). Each operation has one result shape: ``export`` says the files it
+wrote; ``dfm``, ``interference``, ``solve``, ``ranges`` and ``validate`` their findings (each with a severity, a code
+and a location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
-A B-rep type's ``interference`` (``model``, ``xbf``, ``step``) is the check that no two parts of the document
-share volume: ``cad model interference <id> --pose open --fit pin base``. The engine measures it, in a checks
-process (``cad._internal.interference``); this command holds no kernel and needs none.
+A B-rep type's ``interference`` (``xbf``, ``step``; ``cad inspect FILE --interference``) is the check that no two parts
+of the document share volume: ``cad inspect arm.xbf --interference --pose open --fit pin base``. The engine measures
+it, in a checks process (``cad._internal.interference``); this command holds no kernel and needs none.
 
-A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
-check, and a DXF's the check of a sheet's cut file: ``cad step dfm part.step --process molding --pull -z``,
-``cad model dfm <id> --process printing --candidates``, ``cad dxf dfm cut.dxf``. A B-rep's (a model, an xbf,
+A 3D type's ``dfm`` (``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
+check, and a DXF's the check of a sheet's cut file: ``cad dfm part.step --process molding --pull -z``,
+``cad dfm arm.xbf --process printing --candidates``, ``cad dfm cut.dxf``. A B-rep's (an xbf,
 a STEP) and a DXF's are the build123d integration's, for cnc, sheet, molding or printing (a DXF: sheet); a
 mesh's (STL, 3MF, GLB) the trimesh integration's, for printing (molding, CNC and sheet are judged on exact
 geometry: a mesh asked for one is refused with the check to run instead). A B-rep's is the engine's: asked
@@ -26,29 +24,25 @@ and a call refused there is the command line's mistake as it is here (exit 2). T
 its state (``_verdict``): 0 ok, 1 failed (an error, or with ``--strict`` a warning), 3 not checked -- nothing
 was judged, or not all of it: a source that does not read or holds no solid, a family that could not be
 measured, an engine that stopped or failed, a check that crashed -- and 2 the command line's mistake, as ever.
-A B-rep
-type's ``solve`` (``model``, ``xbf``, ``step``) is the stress study: ``cad step solve part.step`` lists the parts,
-the pairs that touch and a part's faces a study names, and ``cad step solve part.step --study study.json --out
-DIR`` solves it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and
-CalculiX, else in the environment of ``cad[build123d,calculix,netgen]``. Their ``ranges`` sweeps each joint of the
-document's mechanism against its parts' surfaces and says where each stops (``cad step ranges arm.step``,
-``cad model ranges <id> --step 0.5 --json``), writing nothing; it runs here when this environment holds the kernel,
-else in the installation's base, which does. A KiCad
-board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
-way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
-environment of ``cad[kicad]``. (A MuJoCo model's file is no document type: its check is the mujoco
-integration's, ``cad mujoco check``, ``cad_server.cli.integrations``.)
+A B-rep type's ``solve`` (``xbf``, ``step``; ``cad fea``) is the stress study: ``cad fea part.step`` lists the parts,
+the pairs that touch and a part's faces a study names, and ``cad fea part.step --study study.json --out DIR`` solves
+it, writing its results into DIR; it runs here when this environment holds the kernel, netgen and CalculiX, else in
+the environment of ``cad[build123d,calculix,netgen]``. Their ``ranges`` (``cad inspect FILE --ranges``) sweeps each
+joint of the document's mechanism against its parts' surfaces and says where each stops (``cad inspect arm.step
+--ranges``, ``cad inspect arm.xbf --ranges --step 0.5 --json``), writing nothing; it runs here when this environment
+holds the kernel, else in the installation's base, which does. A KiCad file's ``export``, and KiCad's own checks of
+one (``cad kicad drc``, ``cad kicad erc``: the kicad integration's, ``cad_server.cli.integrations``, run by the
+runners here), are the kicad integration's, run the same way: here when this process runs KiCad itself
+(``CAD_KICAD_CLI``, or kicode installed here), else in the environment of ``cad[kicad]``.
 
-``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
-<operation> --help`` that operation's options. A file of another type is refused by name, before
-anything runs: ``part.glb is a glb, not a stl: use cad glb snapshot``; a model's document id given to a
-file's type, and a file given to ``model``, the same -- a check of the operation's parser (``_typed``), so
-it is the command line's failure (``wrong_type``, exit 2) with ``--json`` and without
-(``cad_server._internal.cli_errors``).
+A source that is not there is refused by name before anything runs (``no such file: part.stl``: ``not_found``), a
+check of the operation's parser (``_typed``), so it is the command line's failure with ``--json`` and without
+(``cad_server._internal.cli_errors``). An ``xbf``'s file is the ``.xbf`` a model is saved as, as it is the
+library's: ``cad inspect arm.xbf`` answers from the build the engine holds while the file is the one that build
+wrote, and from the file otherwise, and the engine and the library's functions tell an id from the file
+themselves.
 
-Each type's command is its own module (``cad_server.cli.<type>``), so ``python -m
-cad_server.cli.step export ...`` runs what ``cad step export ...`` does. Dispatch stays lazy: the
-engine and the checks import when an operation runs, never for ``--help``.
+Dispatch stays lazy: the engine and the checks import when an operation runs, never for ``--help``.
 """
 
 from __future__ import annotations
@@ -62,15 +56,21 @@ from typing import Any
 
 from cad.registry import DOCUMENT_TYPES, by_extension, help_text
 
-__all__ = ["OPERATIONS", "build_parser", "operations_of", "type_main", "type_usage"]
+__all__ = ["OPERATIONS", "build_parser", "flagged", "kicad_export", "kicad_rules", "operations_of", "source_word"]
 
 # The engine's verbs that are operations (``cad_server.engine.cli.VERBS``), and the attribute of the
 # parsed arguments each names its source by.
 _ENGINE_SOURCES = {"export": "source", "snapshot": "document", "inspect": "document"}
 
+def source_word(document_type: str) -> str:
+    """What a type's runner takes, as a usage line says it: ``FILE``, or for ``xbf`` a document id or its
+    saved file."""
+    entry = DOCUMENT_TYPES[document_type]
+    return f"FILE{entry.suffix}" if entry.held else "FILE"
+
 
 def _urdf_parser(prog: str) -> argparse.ArgumentParser:
-    """``cad urdf validate``'s parser, an ADAPTER's: ``--packages NAME=PATH`` repeats, a key/value map no
+    """``cad inspect robot.urdf``'s parser, an ADAPTER's: ``--packages NAME=PATH`` repeats, a key/value map no
     signature derives (``cad_server._internal.cli_from_function``)."""
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
     from cad_server._internal.cli_parser import parser as command_parser
@@ -247,7 +247,7 @@ def _verdict(invoke: Callable[[], object], *, prog: str, as_json: bool, source: 
 
 
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> dfm``: the library's manufacturing check (``cad.<type>.dfm``), its ``--process`` the
+    """``cad dfm FILE``: the library's manufacturing check (``cad.dfm``), its ``--process`` the
     type's -- cnc, sheet, molding or printing for a B-rep, printing for a mesh, sheet for a DXF.
     A B-rep's (a model, an xbf, a STEP) is asked of the engine, which measures it in the kernel process that
     holds the document (``cad.engine.api.check``). Where the engine measures nothing (none to reach, another
@@ -283,17 +283,33 @@ def _dfm(document_type: str) -> Callable[[list[str], str], int]:
     return run
 
 
+#: The flag of ``cad inspect`` that picks each of its modes (``cad.registry.MODES``), and what it says.
+FLAGS = {"interference": ("--interference", "the interference check: which parts share volume, as built and at "
+                                            "each --pose"),
+         "ranges": ("--ranges", "the joint stops: each joint swept against its parts' surfaces, where it stops each "
+                                "way")}
+
+
+def flagged(parser: argparse.ArgumentParser, mode: str | None) -> argparse.ArgumentParser:
+    """``parser`` taking the flag of ``cad inspect``'s ``mode`` too (``--interference``, ``--ranges``), which picked
+    it, so its usage and its help are the command's; ``parser`` as it is for no mode."""
+    if mode is not None:
+        flag, said = FLAGS[mode]
+        parser.add_argument(flag, action="store_true", help=said)
+    return parser
+
+
 def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentParser:
-    """``cad <type> interference``'s parser, an ADAPTER's: ``--fit`` repeats and takes two values, a pair
+    """``cad inspect FILE --interference``'s parser, an ADAPTER's: ``--fit`` repeats and takes two values, a pair
     no signature derives a flag for (``cad_server._internal.cli_from_function``), and ``--pose`` is read as
     snapshot's is."""
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
     from cad_server._internal.cli_parser import parser as command_parser
 
     entry = DOCUMENT_TYPES[document_type]
-    parser = command_parser(prog, description=entry.operation("interference").summary)
-    parser.add_argument("document", metavar="ID" if not entry.has_file else "FILE",
-                        help="the model's document id (cad run SCRIPT.py prints it)" if not entry.has_file
+    parser = flagged(command_parser(prog, description=entry.operation("interference").summary), "interference")
+    parser.add_argument("document", metavar="FILE",
+                        help="the .xbf file a model is saved as, checked as the file it is" if entry.held
                         else f"the {entry.suffix} file")
     parser.add_argument("--pose", action="append", default=[], metavar="POSE",
                         help="a pose to check at beside as built, as snapshot's --pose takes one: a mechanism "
@@ -312,10 +328,10 @@ def _interference_parser(document_type: str, prog: str) -> argparse.ArgumentPars
 
 
 def _interference(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> interference``: the library's interference check (``cad.<type>.interference``), asked of
-    the engine, which measures it in a checks process; this command holds no kernel and needs none. Its
-    ``--fit`` takes two values a time, which no signature derives a flag for, so
-    its parser is an adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
+    """``cad inspect FILE --interference``: the library's interference check (``cad.inspect(source,
+    interference=True)``), asked of the engine, which measures it in a checks process; this command holds no kernel
+    and needs none. Its ``--fit`` takes two values a time, which no signature derives a flag for, so its parser is an
+    adapter's; its exit status is a check's (``_verdict``): 0 clear, 1 parts share volume,
     3 none found but a pair unmeasured, 2 an option refused by name."""
 
     def run(argv: list[str], prog: str) -> int:
@@ -414,12 +430,20 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
     return _verdict(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), source=str(positional[0]))
 
 
+def _named(source: Any) -> str:
+    """A source as the library's runner in another environment takes it (``integration_env.call``): a file's
+    path made absolute, as this folder reads it, and a model's document id as it is."""
+    from cad.engine.ids import is_id
+
+    return str(source) if is_id(str(source)) else str(Path(source).expanduser().resolve())
+
+
 # --- a B-rep type's stress study: read by the kernel, meshed by netgen, solved by CalculiX ------------------
 
 
 def _solve(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> solve SOURCE [--study STUDY --out DIR]``: the library's stress study
-    (``cad.<type>.solve``), run here when this environment holds the kernel, netgen and CalculiX, else in the
+    """``cad fea SOURCE [--study STUDY --out DIR]``: the library's stress study
+    (``cad.fea``), run here when this environment holds the kernel, netgen and CalculiX, else in the
     environment of ``cad[build123d,calculix,netgen]`` (``cad_server._internal.integration_env``), its options refused
     here first, before one is made."""
 
@@ -459,9 +483,7 @@ def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: s
         # document id as it is.
         plain = {name: str(Path(value).expanduser().resolve()) if isinstance(value, Path) else value
                  for name, value in keywords.items()}
-        sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
-                   for value in positional]
-        found = integration_env.call(python, document_type, target[1], sources, plain)
+        found = integration_env.call(python, document_type, target[1], [_named(value) for value in positional], plain)
         return FeaResult.from_data(found)
 
     return emit(studied, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)),
@@ -472,9 +494,9 @@ def _solve_elsewhere(document_type: str, target: tuple[str, str], integration: s
 
 
 def _ranges(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> ranges SOURCE [--step S] [--clearance MM] [--joint NAME]``: the library's joint stops (``cad.<type>.ranges``),
-    run here when this environment holds the kernel, else in the installation's base, which does
-    (``cad_server._internal.integration_env``), its options refused here first."""
+    """``cad inspect FILE --ranges [--step S] [--clearance MM] [--joint NAME]``: the library's joint stops
+    (``cad.inspect(source, ranges=True)``), run here when this environment holds the kernel, else in the
+    installation's base, which does (``cad_server._internal.integration_env``), its options refused here first."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad._internal.ranges import INTEGRATION, RESOLUTION, StopsResult, options
@@ -484,7 +506,7 @@ def _ranges(document_type: str) -> Callable[[list[str], str], int]:
                                                             _verb, emit, generated_parser, run_cli)
 
         target = (f"cad.{document_type}", "ranges")
-        parser = _typed(generated_parser(target, prog=prog), document_type, "ranges", "source")
+        parser = _typed(flagged(generated_parser(target, prog=prog), "ranges"), document_type, "ranges", "source")
         if integration_env.carries(INTEGRATION):
             return run_cli(_verb(target), argv, prog=prog, parser=parser)
         parsed = parser.parse_args(argv)
@@ -498,9 +520,8 @@ def _ranges(document_type: str) -> Callable[[list[str], str], int]:
             options(step=keywords.get("step", 1.0), clearance=keywords.get("clearance", RESOLUTION),
                     joint=tuple(keywords.get("joint") or ()))
             python = integration_env.environment(INTEGRATION, said)
-            sources = [str(value) if document_type == "model" else str(Path(value).expanduser().resolve())
-                       for value in positional]
-            found = integration_env.call(python, document_type, "ranges", sources, keywords)
+            found = integration_env.call(python, document_type, "ranges", [_named(value) for value in positional],
+                                         keywords)
             return StopsResult(ok=bool(found["ok"]), path=Path(found["path"]),
                                findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
                                summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
@@ -519,8 +540,8 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     from cad_server._internal.cli_parser import parser as command_parser
 
     descriptions = {
-        "export": "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless, "
-                  "into a folder.",
+        "export": "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless: "
+                  "what DST says, --as naming it where DST cannot.",
         "inspect": "What a saved KiCad board holds: its format, thickness, size, layers, parts and nets.",
     }
     parser = command_parser(prog, description=descriptions[operation])
@@ -528,12 +549,16 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     if operation == "export":
         from cad.kicad._export import EXPORTS
 
-        parser.add_argument("--to", required=True, choices=EXPORTS,
-                            help="what to write: gerbers and drill (a folder of files), pos (placement CSV), bom (the "
-                                 "schematic's parts CSV), step and glb (3D), odb (ODB++ zip), ipc2581, pdf (a front and "
-                                 "a back fabrication drawing) or dxf (the outline and holes)")
-        parser.add_argument("-o", "--out", required=True, type=Path, metavar="DIR",
-                            help="the folder to write into, made when missing")
+        parser.add_argument("dst", metavar="DST",
+                            help="where to write it: a .step (or .stp) or a .glb (its 3D), a .dxf (the outline and "
+                                 "holes), an .xml (IPC-2581) or a .csv (--as pos, the placement, or --as bom); or a "
+                                 "folder (ending in /, or one that is there: made when missing) or a .zip for the "
+                                 "Gerbers, the drill files, the ODB++ (a .zip is KiCad's compressed ODB++, a folder "
+                                 "its tree) or the PDF (a drawing of each side, the back mirrored), --as naming which")
+        parser.add_argument("--as", dest="as_", choices=EXPORTS, metavar="KIND",
+                            help="what to write, where DST cannot say it: gerbers, drill, odb or pdf into a folder or "
+                                 "a .zip; pos or bom into a .csv. Given where DST says it (step, glb, dxf, ipc2581), "
+                                 "the two must agree")
     parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
                         help="print the answer as one JSON line on stdout")
     return parser
@@ -547,33 +572,46 @@ def _runs_kicad_here() -> bool:
     return carried()
 
 
-def _kicad_elsewhere(document_type: str, operation: str, args: list, kwargs: dict, prog: str) -> dict:
-    """``cad.<document_type>.<operation>`` run in the environment of ``cad[kicad]``, made first when it is not."""
+def _kicad_elsewhere(owner: str, operation: str, args: list, kwargs: dict, prog: str) -> dict:
+    """``cad.<owner>.<operation>`` (``cad.kicad.drc``, ``cad.kicad_pcb``'s export) run in the environment of
+    ``cad[kicad]``, made first when it is not."""
     from cad_server._internal import integration_env
 
     def said(line: str) -> None:
         print(f"{prog}: {line}", file=sys.stderr, flush=True)
 
-    return integration_env.call(integration_env.environment("kicad", said), document_type, operation, args, kwargs)
+    return integration_env.call(integration_env.environment("kicad", said), owner, operation, args, kwargs)
 
 
-def _kicad_rules(document_type: str, operation: str) -> Callable[[list[str], str], int]:
-    """A KiCad file's rules check (a board's ``drc``, a schematic's ``erc``), the kicad integration's: run here
-    when this process runs KiCad, else in the environment of ``cad[kicad]``, its file refused here first."""
+def kicad_rules(operation: str, refuse: Callable[[str], None]) -> Callable[[list[str], str], int]:
+    """KiCad's own check of a file, the kicad integration's (``cad kicad drc BOARD``, ``cad kicad erc SCHEMATIC``:
+    ``cad.kicad.drc``, ``cad.kicad.erc``): run here when this process runs KiCad, else in the environment of
+    ``cad[kicad]``, its file refused here first (``refuse``: one of another kind, by name; and one that is not there,
+    ``not_found``)."""
 
     def run(argv: list[str], prog: str) -> int:
-        target = (f"cad.{document_type}", operation)
-        if _runs_kicad_here():
-            return _checked(document_type, target, argv, prog)
+        target = ("cad.kicad", operation)
         from cad.results import CheckFinding, CheckResult
-        from cad_server._internal.cli_from_function import JSON_FLAG_DEST, emit, generated_parser
+        from cad_server._internal.cli_from_function import JSON_FLAG_DEST, emit, generated_parser, run_cli
 
-        parsed = _typed(generated_parser(target, prog=prog), document_type, operation,
-                        _first_parameter(target)).parse_args(argv)
-        source = vars(parsed)[_first_parameter(target)]
+        parser = generated_parser(target, prog=prog)
+        named = _first_parameter(target)
+
+        def check(parsed: argparse.Namespace) -> None:
+            source = getattr(parsed, named, None)
+            if source is not None:
+                refuse(str(source))
+
+        parser.checks.append(check)  # type: ignore[attr-defined]
+        if _runs_kicad_here():
+            from cad_server._internal.cli_from_function import _verb
+
+            return run_cli(_verb(target), argv, prog=prog, parser=parser)
+        parsed = parser.parse_args(argv)
+        source = vars(parsed)[named]
 
         def checked() -> CheckResult:
-            found = _kicad_elsewhere(document_type, operation, [str(Path(source).expanduser().resolve())], {}, prog)
+            found = _kicad_elsewhere("kicad", operation, [str(Path(source).expanduser().resolve())], {}, prog)
             return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
                                findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
                                summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
@@ -603,10 +641,10 @@ def _checked(document_type: str, target: tuple[str, str], argv: list[str], prog:
 
 def _present(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     """A generated operation's ``parser`` (``cli_from_function``) with the check that each file one of its
-    options names is there -- a ``Path`` option of a check is a file it reads (``cad srdf validate --urdf
+    options names is there -- a ``Path`` option of a check is a file it reads (``cad inspect robot.srdf --urdf
     robot.urdf``) --, a file that is not there being the command line's failure (``not_found``), as the
     operation's own file is (``_typed``), said before anything runs. Only a generated parser's: a hand-written
-    one's ``Path`` may be a folder to write (``cad kicad_pcb export -o DIR``)."""
+    one's ``Path`` may be a file or a folder to write."""
     from cad_server._internal.cli_errors import Failure
 
     named = [action for action in parser._actions if action.option_strings and action.type is Path]  # noqa: SLF001
@@ -640,10 +678,14 @@ def _failed(as_json: bool, prog: str, words: str, reason: str = "failed") -> int
 
 
 def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
-    """A KiCad file's export (``--to KIND -o DIR``), the kicad integration's: run here when this process runs
-    KiCad, else in the environment of ``cad[kicad]``."""
+    """A KiCad file's export (``cad export FILE DST [--as KIND]``), the kicad integration's: where DST says, checked
+    before KiCad runs (``cad.kicad._destination.resolve``: a refusal writes nothing); KiCad's export into a folder of
+    its own, run here when this process runs KiCad, else in the environment of ``cad[kicad]``; then its files put
+    where DST says (``place``)."""
 
     def run(argv: list[str], prog: str) -> int:
+        from cad._internal.refused import ArgumentRefused
+        from cad.kicad._destination import place, resolve, scratch
         from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
         parser = _board_parser if document_type == "kicad_pcb" else _schematic_parser
@@ -651,28 +693,35 @@ def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
         args = _typed(parser(prog, "export"), document_type, "export", named).parse_args(argv)
         given = getattr(args, named)
         as_json = bool(getattr(args, JSON_FLAG_DEST))
-        source, out = Path(given).expanduser().resolve(), Path(args.out).expanduser().resolve()
+        source = Path(given).expanduser().resolve()
         try:
-            if _runs_kicad_here():
-                import importlib
+            plan = resolve(document_type, source, args.dst, args.as_)
+        except ArgumentRefused as refused:
+            return _failed(as_json, prog, str(refused), "invalid_argument")
+        try:
+            with scratch() as folder:
+                if _runs_kicad_here():
+                    import importlib
 
-                done = importlib.import_module(f"cad.{document_type}").export(source, args.to, out)
-                written, warnings = [str(path) for path in done.written], list(done.warnings)
-            else:
-                from cad_server._internal.integration_env import Failed
+                    done = importlib.import_module(f"cad.{document_type}").export(source, plan.kind, folder,
+                                                                                    **plan.options)
+                    written, warnings = list(done.written), list(done.warnings)
+                else:
+                    from cad_server._internal.integration_env import Failed
 
-                try:
-                    found = _kicad_elsewhere(document_type, "export", [str(source), args.to, str(out)], {}, prog)
-                except Failed as error:
-                    raise RuntimeError(str(error)) from None
-                written = [str(path) for path in found.get("written") or ()]
-                warnings = list(found.get("warnings") or ())
+                    try:
+                        found = _kicad_elsewhere(document_type, "export", [str(source), plan.kind, folder],
+                                                 plan.options, prog)
+                    except Failed as error:
+                        raise RuntimeError(str(error)) from None
+                    written, warnings = list(found.get("written") or ()), list(found.get("warnings") or ())
+                placed = [str(path) for path in place(plan, written, folder)]
         except (RuntimeError, OSError, ValueError) as error:
             return _failed(as_json, prog, str(error))
         for line in warnings:
             print(f"{prog}: warning: {line}", file=sys.stderr)
-        return _answer(as_json, {"ok": True, "to": args.to, "written": written, "warnings": warnings},
-                       [f"wrote {path}" for path in written])
+        return _answer(as_json, {"ok": True, "as": plan.kind, "written": placed, "warnings": warnings},
+                       [f"wrote {path}" for path in placed])
 
     return run
 
@@ -725,8 +774,8 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
                                  "default; the title block is drawn unless --display '{\"title\": false}')")
         return parser
     descriptions = {
-        "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, into a folder: a pdf of "
-                  "every sheet, an svg per sheet, the netlist (the board imports it) or a BOM.",
+        "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, what DST says: a PDF of "
+                  "every sheet, the netlist (the board imports it), a BOM, or an SVG per sheet.",
         "inspect": "What a saved KiCad schematic holds: its sheets, parts and nets, read from its project's root; "
                    "with REF, what that reference names (#U3, #U3.7, #net:VBUS, #sheet:/Power/, #wire:<uuid>).",
     }
@@ -736,9 +785,12 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     if operation == "export":
         from cad.kicad._schematic import EXPORTS
 
-        parser.add_argument("--to", required=True, choices=EXPORTS, help="what to write: " + ", ".join(EXPORTS))
-        parser.add_argument("-o", "--out", required=True, type=Path, metavar="DIR",
-                            help="the folder to write into, made when missing")
+        parser.add_argument("dst", metavar="DST",
+                            help="where to write it: a .pdf (every sheet), a .net (the netlist) or a .csv (the BOM); "
+                                 "or a folder (ending in /, or one that is there: made when missing) or a .zip for its "
+                                 "SVGs, one a sheet")
+        parser.add_argument("--as", dest="as_", choices=EXPORTS, metavar="KIND",
+                            help="what to write (pdf, svg, netlist or bom): DST says it, and the two must agree")
     else:
         parser.add_argument("ref", metavar="REF", nargs="?", help="a reference to resolve: #U3, #U3.7, #net:GND")
     parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
@@ -802,7 +854,7 @@ def _display_object(given: str | None, prog: str, as_json: bool, shape: str, *, 
 
 
 def _schematic_snapshot(argv: list[str], prog: str) -> int:
-    """``cad kicad_sch snapshot``: the engine's verb, ``--sheet`` and ``--border`` folded into its display."""
+    """``cad snapshot SCHEMATIC``: the engine's verb, ``--sheet`` and ``--border`` folded into its display."""
     import json
 
     from cad_server.engine.cli import VERBS, answered
@@ -851,7 +903,7 @@ def window_value(text: str) -> list[float]:
 
 
 def _board_snapshot(argv: list[str], prog: str) -> int:
-    """``cad kicad_pcb snapshot``: the engine's verb, ``--window`` folded into its display, and the picture's
+    """``cad snapshot BOARD``: the engine's verb, ``--window`` folded into its display, and the picture's
     other side, when one is given alone, following the window's shape."""
     import json
 
@@ -883,14 +935,15 @@ def _board_snapshot(argv: list[str], prog: str) -> int:
     return answered(VERBS["snapshot"][2], args, prog)
 
 
+#: The KiCad files' exports, as ``cad export`` runs them.
+kicad_export = {"kicad_pcb": _kicad_export("kicad_pcb"), "kicad_sch": _kicad_export("kicad_sch")}
+
 # A type's operations its own code runs, in place of the engine's verb of that name.
 _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
-    ("kicad_pcb", "drc"): _kicad_rules("kicad_pcb", "drc"),
-    ("kicad_pcb", "export"): _kicad_export("kicad_pcb"),
+    ("kicad_pcb", "export"): kicad_export["kicad_pcb"],
     ("kicad_pcb", "inspect"): _board_inspect,
     ("kicad_pcb", "snapshot"): _board_snapshot,
-    ("kicad_sch", "erc"): _kicad_rules("kicad_sch", "erc"),
-    ("kicad_sch", "export"): _kicad_export("kicad_sch"),
+    ("kicad_sch", "export"): kicad_export["kicad_sch"],
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
 }
@@ -920,14 +973,11 @@ del _entry, _name
 
 
 def build_parser(document_type: str, operation: str, prog: str | None = None) -> argparse.ArgumentParser:
-    """The parser of ``cad <type> <operation>``: its options, exactly as the command parses them."""
-    prog = prog or f"cad {document_type} {operation}"
+    """The parser of a type's operation, as the verb that runs it parses its command line (``prog``: ``cad
+    export``, ...): its options, exactly as the command parses them."""
+    prog = prog or f"cad {operation}"
     if (document_type, operation) not in OPERATIONS:
-        raise KeyError(f"cad {document_type} has no operation {operation!r}")
-    if (document_type, operation) in (("kicad_pcb", "drc"), ("kicad_sch", "erc")):
-        from cad_server._internal.cli_from_function import generated_parser
-
-        return generated_parser((f"cad.{document_type}", operation), prog=prog)
+        raise KeyError(f"{document_type} has no operation {operation!r}")
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
     if (document_type, operation) == ("kicad_pcb", "snapshot"):
@@ -944,21 +994,30 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return _interference_parser(document_type, prog)
     from cad_server._internal.cli_from_function import generated_parser
 
-    return generated_parser((f"cad.{document_type}", operation), prog=prog)
+    return flagged(generated_parser((f"cad.{document_type}", operation), prog=prog),
+                   "ranges" if operation == "ranges" else None)
 
 
 def operations_of(document_type: str) -> tuple[str, ...]:
-    """The operations ``cad <type>`` takes, in the fixed order."""
+    """The operations a type has a runner of, in the fixed order."""
     return tuple(name for name in DOCUMENT_TYPES[document_type].operation_names if (document_type, name) in OPERATIONS)
 
 
 def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, attribute: str) -> argparse.ArgumentParser:
     """``parser`` (the command's, ``cad_server._internal.cli_parser``) with the check that the source it reads
     as ``attribute`` is the type's and is there (``_refuse_other_type``): a source of another type, and a file
-    that is not there, are the command line's failures, said the same for every type before anything runs."""
+    that is not there, are the command line's failures, said the same for every type before anything runs. A source
+    that is a share's link is this computer's copy of it from then on, and refused where it has none
+    (``engine.cli.linked``)."""
 
     def check(parsed: argparse.Namespace) -> None:
         source = getattr(parsed, attribute, None)
+        if isinstance(source, str):
+            from cad_server.engine.cli import linked
+
+            # A share's link: this computer's copy of it, the file it shared or its import's (``engine.cli.linked``).
+            source = linked(source)
+            setattr(parsed, attribute, source)
         if source is not None:
             _refuse_other_type(document_type, operation, str(source))
 
@@ -968,87 +1027,31 @@ def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, 
 
 def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     """A source of another type, refused by name before anything runs (``Failure``, ``wrong_type``): a file
-    of another type or of no type, a model's document id given to a file's type, a file given to ``model``;
-    and a file of the type's that is not there (``not_found``), whichever the type."""
+    of another type or of no type, a model's document id given to a file's type, a file given to ``xbf`` but its
+    ``.xbf``; and a file of the type's that is not there (``not_found``), whichever the type. The verbs give each
+    runner a source of its own type (``cad_server.cli.verbs``): this holds the runners to it."""
     from cad.engine.addresses import parts
     from cad.engine.ids import is_id
     from cad_server._internal.cli_errors import Failure
 
-    def use(other: str) -> str:
-        return f": use cad {other} {operation}" if (other, operation) in OPERATIONS else \
-            f"; cad {other} takes {', '.join(operations_of(other))}"
-
     given = parts(source)[0]  # a FILE#REF's file, a path that holds a '#' itself (project#1/part.step) whole
     entry = DOCUMENT_TYPES[document_type]
     if is_id(given):
-        if entry.has_file:
-            raise Failure(f"{source} is a model's document id, not a {entry.suffix} file{use('model')}", "wrong_type")
+        if not entry.held:
+            raise Failure(f"{source} is a model's document id, not a {entry.suffix} file", "wrong_type")
         return
     script = given.partition("::")[0]
     if script.lower().endswith(".py"):
-        # A model's script where its document is wanted: what builds the document, and what takes it.
+        # A model's script where its document is wanted: what builds the document.
         import shlex
 
-        then = (f", which cad model {operation} takes" if ("model", operation) in OPERATIONS else "")
-        raise Failure(f"{source} is a model's script, not {'a document id' if not entry.has_file else f'a {document_type} file'}"
-                      f": `cad run {shlex.quote(script)}` builds its models and prints each one's id{then}", "wrong_type")
+        raise Failure(f"{source} is a model's script, not a document: `cad run {shlex.quote(script)}` builds its "
+                      "models, writes each one's .xbf and prints each one's id", "wrong_type")
     suffix = Path(given).suffix
     found = by_extension(suffix) if suffix else None
     if found is not None and found.id != document_type:
-        raise Failure(f"{source} is a {found.id}, not a {document_type}{use(found.id)}", "wrong_type")
-    if not entry.has_file:
-        raise Failure(f"cad model takes a model's document id (cad run SCRIPT.py prints it), not {source!r}",
-                      "wrong_type")
+        raise Failure(f"{source} is a {found.id}, not a {document_type}", "wrong_type")
     if found is None:
-        from cad.registry import INTEGRATIONS
-
-        # A tool's own file that is no document type (a MuJoCo model's .xml): its integration's command takes it.
-        owner = next((item for item in INTEGRATIONS.values() if suffix.lower() in item.files), None)
-        raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "
-                      f"{' or '.join(entry.extensions)}"
-                      + (f" (cad {owner.name} {owner.operation_names[0]} takes {' and '.join(owner.files)})"
-                         if owner is not None else ""), "wrong_type")
+        raise Failure(f"{source} is not a {document_type} file: it takes {' or '.join(entry.extensions)}", "wrong_type")
     if not os.path.exists(os.path.expanduser(given)):
         raise Failure(f"no such file: {source}", "not_found")
-
-
-def type_usage(document_type: str) -> str:
-    """``cad <type> --help``: the type and its operations, from the registry."""
-    what = "FILE" if DOCUMENT_TYPES[document_type].has_file else "ID"
-    return (f"usage: cad {document_type} <operation> {what} [options]\n\n{help_text(document_type)}\n\n"
-            f"Run 'cad {document_type} <operation> --help' for an operation's options.\n")
-
-
-def type_main(document_type: str, argv: Sequence[str] | None = None, prog: str | None = None) -> int:
-    """``cad <type> <operation> ...``: one operation of one type."""
-    argv = list(sys.argv[1:] if argv is None else argv)
-    prog = prog or f"cad {document_type}"
-    if argv[:1] and argv[0] in {"-h", "--help", "help"}:
-        sys.stdout.write(type_usage(document_type))
-        return 0
-    if not argv:
-        return _no_operation(prog, document_type, f"cad {document_type} needs an operation", argv, usage=True)
-    operation, rest = argv[0], argv[1:]
-    run = OPERATIONS.get((document_type, operation))
-    if run is None:
-        from cad_server._internal.cli_parser import suggest
-
-        close = suggest(operation, operations_of(document_type))
-        return _no_operation(prog, document_type, f"cad {document_type} has no operation {operation!r}"
-                             + (f" (did you mean {close!r}?)" if close else "")
-                             + f"; it has {', '.join(operations_of(document_type))}; 'cad {document_type} --help' "
-                               "says what each does", rest)
-    return run(rest, f"{prog} {operation}")
-
-
-def _no_operation(prog: str, document_type: str, problem: str, argv: list[str], *, usage: bool = False) -> int:
-    """A type's command line that names none of its operations: the command line's failure (``usage``), said
-    as an unknown command is (``cad_server.cli._unknown``) -- under ``--json`` its JSON document alone, else
-    its line on stderr, the type's help after it only for a command line that names no operation at all
-    (``usage``), never after one it does not have."""
-    from cad_server._internal.cli_errors import Failure, wants_json, write
-
-    if wants_json(argv) or not usage:
-        return write(Failure(problem, "usage"), prog=prog, as_json=wants_json(argv))
-    sys.stderr.write(f"{prog}: {problem}\n\n" + type_usage(document_type))
-    return 2

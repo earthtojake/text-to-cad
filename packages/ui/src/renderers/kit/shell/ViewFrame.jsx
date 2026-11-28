@@ -1,7 +1,5 @@
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useI18n } from "@cad/ui/i18n";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
-import { PANEL_SHEET_LEFT_CLASS } from "../../../file-viewer/panelPeek.js";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { ViewPreviewLabel, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
@@ -9,16 +7,10 @@ import FloatingToolBar, { StripTouchProvider } from "../tools/FloatingToolBar.js
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { ToolbarTooltipScope } from "@cad/ui/primitives/toolbar-button";
 import { InspectContext } from "../inspector/inspect.js";
-import FlatPanel, { flatPanelShortcut, useFlatPanelState } from "./FlatPanel.jsx";
+import FlatPanel, { useFlatPanelState } from "./FlatPanel.jsx";
 import HoverTip, { useFrameHoverTip } from "./HoverTip.jsx";
-import { usePanelToggles } from "../../../file-viewer/panelToggles.js";
-import { ViewerElementContext, ViewerHostContext } from "../../../host/context.js";
-import { Sheet, SheetContent, SheetTitle } from "@cad/ui/primitives/sheet";
-import { usePhoneSheetPlace } from "./usePhoneSheetPlace.js";
-import { sidebarLayout, toggleSidebar } from "./sidebars.js";
-import { PanelPeekContext, usePanelPeek } from "./usePanelPeek.js";
+import { PanelSheet, usePanelFrame } from "../../../file-viewer/panelFrame.jsx";
 import { useTouchGestures } from "../viewport/touchGestures.js";
-import { hasOpenPopup } from "../../../lib/popups.js";
 import { ViewCornerSideProvider, viewCornerSide } from "./ViewCorner.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
@@ -33,9 +25,9 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *
  * - **The panel** (`sidebars.js`), the one sidebar, at the left (`FlatPanel.jsx`, `panel`; its width and tab the
  *   file's, `filePanel.js`): the file's structure, then the file's own settings (Parameters, Joints, Animation), as
- *   its tabs. Open, it always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
+ *   its tabs. How it shares the view is the panel's frame (`file-viewer/panelFrame.jsx`, the home's sidebar's too). Open, it always pushes the model aside (a view that would leave the model under 640px beside it starts it collapsed, unwritten:
  *   `sidebars.js`); ⌘\ (Ctrl+\) toggles it (`panelControl`). Its toggle is the
- *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model but
+ *   navbar's (`file-viewer/panelToggles.js`), after its logo: a collapsed panel leaves nothing over the model but
  *   while a mouse rests on that toggle, when it peeks over the view, pushing nothing (`usePanelPeek.js`), until the
  *   pointer has left both, Escape, a press on the model, or a click on the toggle (or ⌘\) pins it. On a
  *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet) under the navbar, over the model with no scrim,
@@ -113,7 +105,6 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   preview = null, tools, toolRow = null, toolStack = null, status = null, panel = null, panelControl = null,
   layout, onLayoutChange, corner = null, navbar = null, card = null, notice = null, quickEdit = null, bottomCentre = null, loading = null, alert = null,
   contextMenu = null, onCanvasPress = null, inspect = null, viewport = null }) {
-  const { t } = useI18n();
   // The viewport's theme (`look/useViewportTheme.js`): what stands on the picture — the canvas box (labels, chips,
   // the cube, the hover tip, the loading cover) and the corner's bare buttons — is scoped to its light or dark (the
   // `.light` / `.dark` token scopes, `styles/tokens.css`), on its canvas (`--canvas`); the chrome on surfaces of
@@ -140,9 +131,6 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
 
   // ---- the panel (`sidebars.js`): the file's structure and its own settings, as tabs; a phone's a sheet ----------------
   const sided = Boolean(panel && (panel.sections || panel.tabs?.length));
-  // A phone's sheet: closed until its toggle opens it, and kept nowhere.
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const viewerElement = useContext(ViewerElementContext);
   // What a press would pick, beside the pointer.
   const hoverTip = useFrameHoverTip({ hovered: inspect?.hovered || "", describe: inspect?.describe || null, tip: inspect?.tip || null, enabled: selecting && !toolsHidden && !previewing });
   const flat = useFlatPanelState({ frameRef: root, kind: panel?.kind ?? "", toolStack: layout, onToolStackChange: onLayoutChange, compact: Boolean(compact) });
@@ -153,49 +141,21 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
   // the file arrives), so neither it nor its toggle comes in late and pushes the model aside. A load that failed, or a
   // compact host, has none.
   const has = sided && !(failed ?? chromeHidden) && !compact;
-  const sidebarState = { frameWidth: flat.frameWidth, choice: kept.open, has: has && !mobile, mobile, phoneHas: has };
-  const { mode } = sidebarLayout(sidebarState);
-  const stateRef = useRef(sidebarState);
-  stateRef.current = sidebarState;
   // A choice the person made is kept, for the file, and holds at any width; what the width does is never kept.
   const change = flat.change;
-  // A peek (`usePanelPeek.js`): the collapsed panel over the view while a mouse rests on its toggle; never kept. Inside a
-  // file viewer it is the page's one peek (`PanelPeekContext`), up from the first frame, its enabled state what this
-  // frame says with its toggle (`peekable`); outside one, the frame's own.
-  const peekable = has && !mobile && !previewing && mode === "closed";
-  const pagePeek = useContext(PanelPeekContext);
-  const ownPeek = usePanelPeek({ enabled: !pagePeek && peekable });
-  const peek = pagePeek ?? ownPeek;
-  const closePeek = peek.close;
-  const toggle = useCallback(() => {
-    const current = stateRef.current;
-    if (current.mobile) { if (current.phoneHas) setSheetOpen(open => !open); return; }
-    if (!current.has) return;
-    // A click (or ⌘\) while it peeks pins it: the panel opens as a click on a collapsed one always has, where the peek
-    // is (no slide: the card becomes the docked panel in place), and that is the person's choice on this file, kept. A
-    // peek on its own is none.
-    closePeek(false, true);
-    change({ open: toggleSidebar(current).open });
-  }, [change, closePeek]);
-  // Escape puts a peek away, before anything else of the view's (the tool in hand, the selection: the view's ladder
-  // leaves it to the peek, `lib/popups.js`), after a popup or the search box in it has spent its own.
-  useEffect(() => {
-    if (!peek.peeking) return undefined;
-    const onKeyDown = event => {
-      if (event.key !== "Escape" || event.defaultPrevented || hasOpenPopup(peek.panelRef.current)) return;
-      event.preventDefault();
-      closePeek();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [peek.peeking, peek.panelRef, closePeek]);
+  const choose = useCallback(open => change({ open }), [change]);
+  // How it shares the view (`file-viewer/panelFrame.jsx`): pushed or collapsed by the person's choice, else by the
+  // view's width; a peek (`usePanelPeek.js`) of the collapsed panel over the view while a mouse rests on its toggle,
+  // never kept; a phone's sheet, closed until its toggle opens it; and its toggle, the navbar's.
+  const frame = usePanelFrame({ has, mobile, hidden: previewing, frameWidth: flat.frameWidth, choice: kept.open, onChoice: choose });
+  const { mode, peek, toggle, closePeek } = frame;
   if (panelControl) panelControl.current = previewing ? null : {
     toggle,
     search: () => {
-      if (stateRef.current.mobile) return false;
-      if (!stateRef.current.has) return false;
+      if (frame.state.current.mobile) return false;
+      if (!frame.state.current.has) return false;
       // A peek opens its search where it is: only the toggle pins it.
-      if (sidebarLayout(stateRef.current).mode === "closed" && !peek.peeking) toggle();
+      if (mode === "closed" && !peek.peeking) toggle();
       flat.askSearch();
       return true;
     }
@@ -209,33 +169,13 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
   // A phone's: the same panel, its tabs, search and every tab's content, the same components at the same sizes (a tree
   // row's own touch height aside), in a sheet from the left over the model (`FlatPanel`'s "page" mode), in the viewer's element.
-  // Under the navbar, with no scrim (`usePhoneSheetPlace`), sliding in and out from the left as the Display card does
-  // from the right: the peek's one slide (`panelPeek.js`), so a phone's two popovers move alike.
-  const closeSheet = useCallback(() => setSheetOpen(false), []);
-  const sheetPlace = usePhoneSheetPlace(viewerElement, has && mobile && sheetOpen && !previewing);
-  const sheetNode = has && mobile ? <Sheet open={sheetOpen && !previewing} onOpenChange={setSheetOpen}>
-    <SheetContent side="left" showCloseButton={false} onSwipeClose={closeSheet} container={viewerElement?.current ?? undefined}
-      scrim={false} animated={false} style={sheetPlace.style} overlayStyle={sheetPlace.style} onCloseAutoFocus={sheetPlace.onCloseAutoFocus}
-      onPointerDownOutside={sheetPlace.onPointerDownOutside}
-      aria-describedby={undefined} className={cn("h-auto w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0", PANEL_SHEET_LEFT_CLASS)} data-panel-sheet="">
-      <SheetTitle className="sr-only">{panel.label}</SheetTitle>
-      <FlatPanel mode="page" open onClose={closeSheet} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
-        sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
-        onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} />
-    </SheetContent>
-  </Sheet> : null;
-  // The toggle, the navbar's (`file-viewer/panelToggles.js`), its first control. A collapsed panel leaves nothing over the model.
-  const platform = useContext(ViewerHostContext)?.environment?.platform;
-  const panelOpen = mobile ? sheetOpen : mode === "push";
-  const showToggle = has && !previewing;
-  const toggles = useMemo(() => (!showToggle ? null : {
-    left: { open: panelOpen, label: t(panelOpen ? "flatPanel.hide" : "flatPanel.show"), shortcut: flatPanelShortcut(platform), toggle,
-      // Whether it may peek, once the frame has measured its width (before, its mode is not yet known: not said).
-      hover: mobile ? null : peek.toggleHandlers, peeking: peek.peeking, peekable: flat.frameWidth > 0 ? peekable : undefined }
-  }), [showToggle, panelOpen, platform, toggle, t, mobile, peek.toggleHandlers, peek.peeking, peekable, flat.frameWidth > 0]);
-  // Leaving a phone's width (or Preview) puts its sheet away.
-  useLayoutEffect(() => { if (!mobile || previewing) setSheetOpen(false); }, [mobile, previewing]);
-  usePanelToggles(toggles);
+  // Under the navbar, with no scrim, sliding in and out from the left as the Display card does
+  // from the right: the peek's one slide (`panelPeek.js`), so a phone's two popovers move alike (`PanelSheet`).
+  const sheetNode = has && mobile ? <PanelSheet sheet={frame.sheet} label={panel.label}>
+    <FlatPanel mode="page" open onClose={frame.sheet.close} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
+      sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
+      onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} />
+  </PanelSheet> : null;
 
   // ---- the strip's column and Quick Edit: centred on the whole view, over the panels -------------
   const hasQuickEdit = Boolean(quickEdit);

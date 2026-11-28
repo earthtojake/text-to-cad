@@ -13,7 +13,9 @@ use [backend.md](./backend.md) for that interface.
 ## The URL
 
 The URL's path names the document, `/<id>` (`src/client/workbench/fileParam.js`); the bare
-path is the home. No query parameter names a file: a developer's default file
+path is the home, and its query names the place on it: none (Recents), `?view=pinned` (Starred) or
+`?project=<id>`, a project's page; anything else, an old `?view=standalone` among them, is Recents. So the place is the address's, never storage's: a reload stays on it, Back and
+Forward walk the places, and a new tab opens at one. No query parameter names a file: a developer's default file
 (`VIEWER_DEFAULT_FILE`, an absolute path set at build time) is resolved to its id through
 the catalog, and `writeDocumentId` keeps whatever query the page carries.
 
@@ -39,7 +41,7 @@ The record is `{ version, settings, files }`:
 
 | Kept | Where | What |
 | --- | --- | --- |
-| Tab settings | `settings` | `toolStack` (the tool stack's resizable panels' sizes and its folded panels, `kit/tools/toolStackLayout.js`; the view's panel is the file's, below), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list), `explorer` (the folder the name menu's Files was last in: where a model's Files starts). |
+| Tab settings | `settings` | `toolStack` (the tool stack's resizable panels' sizes and its folded panels, `kit/tools/toolStackLayout.js`; the view's panel is the file's, below), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's documents as a grid or a list, `layout`, and their order, `sort`: last activity, name or kind). An `explorer` an earlier release kept (the folder its name menu's Files was last in) is read as nothing. |
 | File views | `files[[absolute file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a flat view's plane transform with the pane it was framed in), `display` (the Display settings, Clip and Explode included), `preview` (Preview's Render settings: lighting, background, floor, part colours), `playback` (the playback settings: Orbit's speed and — once chosen in the playbar's Playback settings — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering Preview; defaults Orbit at 1× (an old record's Autoplay is dropped); whether Preview orbits is not kept) and `renderer`, the renderer's own slices, each behind the signature it was written against: an engine document's (an `.xbf`'s, a STEP's) expanded rows, hidden parts and isolated assemblies, and its pose; a robot's joint values and hidden components; a board's Display, what it isolates, and whether it is shown in 2D or 3D with its 3D camera, its projection and whether its parts' 3D models show (`board3d`, never the URL). Beside them `panel`, the view's panel ([filePanel.js](../../../packages/ui/src/file-viewer/filePanel.js)), whatever the renderer: open or closed once the person has chosen (unset, it follows the view: open where the model keeps 640px beside it, a view 872px wide or more with the 232px panel, collapsed below; set, it holds at any width), its width (200 to 480px, a stored width outside them read as the bound) and its tab, each unset until changed (a record from when the view had a right panel may hold `right`, `rightWidth` and `sections`, and one from when \ alone hid everything `hidden`: each read as nothing), written by the panel itself and kept in the record by the file viewer whatever the renderer writes. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view in the record: leaving it — for another file, or for the home — sets its view aside in the page's memory, never in `sessionStorage` (`CadViewer`'s `files.retain`, after the view's last write as it unmounts), so showing it again in the same page opens it as it was left, and a reload of the tab, which shows the same file, brings the file on screen's view back; a file left is back at the defaults once the page that left it has gone. |
 
 | Not kept | Every open starts it afresh |
@@ -76,14 +78,23 @@ never written again.
 ## localStorage
 
 Nothing goes in localStorage: a value that depends on a file, a tab or a person's
-choice belongs in the tab record.
+choice belongs in the tab record. One exception: a shared view bundle's page has no server to keep
+the person's own settings (`settings.json`, the same for every CAD view where there is an
+engine), so it keeps the one it has, the language chosen in the app menu, in this browser's
+localStorage, under `text-to-cad:language` (`src/host/browserLanguage.js`): the same for every
+share this browser opens, as the server's is for every view.
 
 ## The library's pictures
 
-The home's card pictures are not browser storage: the page draws one when a file's view settles
-(`useModelThumbnail`, once per revision) and hands it to the server, which keeps it in the state
-folder (`cad_server/viewer/recents.py`). They are bounded however often a file is edited: an entry
-keeps at most one picture, and a board one per theme, each replaced in place by the next; only the
-200 entries the home lists first keep theirs, within 64 MiB in all, least recently used out first;
-an entry removed or deleted takes its pictures with it. The page asks for a picture by its name
-(`?v=`), so a new picture is never hidden by an older one in a cache.
+The home's card pictures are not browser storage: the page takes one when a file's view settles
+(`useModelThumbnail`, once per revision) and hands it to the server, which keeps it in its cache folder, one picture
+a file, replaced in place by the next and shown only while the file is the version it was taken of. The home draws
+none of its own. The page asks for a picture by the row's token (`?v=`), so a new picture is never hidden by an older
+one in a cache.
+
+## Projects
+
+A project (a folder a person opened as one: the home's Import › Folder, a standalone document's Import its folder as
+a project, or `cad viewer <folder>`) is not browser storage either: it is an entry of the library in the server's
+state folder, which every CAD view reads, with the files a person opened or pinned. Nothing is written to the folder
+itself, and removing a project forgets its entry alone.

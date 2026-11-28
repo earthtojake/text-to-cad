@@ -122,7 +122,7 @@ cad run build.py                                # about 30 s: the steps below, i
 #   scripts/board_03_route.py                   tracks + vias: the plan, routed by cad.kicad.route (about 5 s)
 #   scripts/board_04_pour.py                    GND pours both layers + stitching
 #   scripts/board_05_islands.py                 a via in any pour piece left without one
-#   cad kicad_pcb drc ... --json                tmp/drc_before_cleanup.json, what the cleanup reads
+#   cad kicad drc ... --json                tmp/drc_before_cleanup.json, what the cleanup reads
 #   scripts/board_06_cleanup.py                 vias DRC calls dangling, same-net vias too close
 #   scripts/board_07_silk.py                    every reference to a free spot, or onto the Fab layer
 
@@ -130,16 +130,17 @@ cad run build.py                                # about 30 s: the steps below, i
 cad run src/footprint_models.py                 # 3dmodels/: the PJ398SM jack and the RD901F pot
 
 # check the board
-cad kicad_sch erc twin_orbit.kicad_sch
+cad kicad erc twin_orbit.kicad_sch
 cad run scripts/check_schematic.py              # KiCad's nets == the drawn intent, both instances
-cad kicad_pcb drc twin_orbit.kicad_pcb
+cad kicad drc twin_orbit.kicad_pcb
 cad run check_twin_orbit.py                     # prints nothing when the board is clean
 
 # fabrication (JLCPCB 2-layer)
-for k in gerbers drill pos bom pdf; do cad kicad_pcb export twin_orbit.kicad_pcb --to $k -o fab/$k; done
+for k in gerbers drill pdf; do cad export twin_orbit.kicad_pcb fab/$k/ --as $k; done
+for k in pos bom; do cad export twin_orbit.kicad_pcb fab/$k.csv --as $k; done
 (cd fab && zip -qr gerbers_jlcpcb.zip gerbers drill)
-cad kicad_sch export twin_orbit.kicad_sch --to pdf -o fab/schematic
-cad kicad_pcb export twin_orbit.kicad_pcb --to glb -o GLB      # the board with its parts, to look at
+cad export twin_orbit.kicad_sch fab/schematic.pdf
+cad export twin_orbit.kicad_pcb GLB/twin_orbit.glb   # the board with its parts, to look at
 
 # the panel, read from the board: the board's STEP with its origin at the board's top-left corner
 cad run kicad-cli pcb export step --force --subst-models --user-origin 100x50mm -o STEP/twin_orbit.step twin_orbit.kicad_pcb

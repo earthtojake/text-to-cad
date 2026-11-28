@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from lib import frontend as B
 from lib import spec as S
@@ -16,7 +16,7 @@ MIRROR_MOUNT_LEFT = (_TOP[0] - 16.0, 235.0, _TOP[2] + 6.0)
 MIRROR_MOUNT_RIGHT = (MIRROR_MOUNT_LEFT[0], -MIRROR_MOUNT_LEFT[1], MIRROR_MOUNT_LEFT[2])
 
 
-@model
+@xbf
 def handlebar():
     built = B.build_handlebar()
     if isinstance(built, list):

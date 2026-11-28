@@ -187,8 +187,10 @@ class ExportToleranceTest(unittest.TestCase):
             step("part.step", tolerance=0.01)
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'angle'"):
             step("part.step", angle=5)
-        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'angle'"):
-            stl.export("part.stl", "part.glb", angle=5)
+        import cad
+
+        with self.assertRaisesRegex(TypeError, "cad.export of an stl takes no angle"):
+            cad.export("part.stl", "part.glb", angle=5)
         with self.assertRaisesRegex(ExportRefused, "at least 0.001 mm"):
             stl("part.stl", tolerance=0)
         with self.assertRaisesRegex(ExportRefused, "from 1 to 28.5 degrees"):

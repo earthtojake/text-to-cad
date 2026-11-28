@@ -1008,7 +1008,7 @@ class TypeSideTest(unittest.TestCase):
                     hits = refs.resolve_structure(structure, finding.location, path)
                     self.assertEqual(len(hits), 1, finding.location)
             # what no rule's verdict says names its faces as data too: a sharp corner's, a chamfered edge's, a
-            # block's -- each ref one `cad step inspect` resolves, the finding's location the first
+            # block's -- each ref one `cad inspect` resolves, the finding's location the first
             sharp = _boxes_bracket()
             chamfered = bd.Pos(100, 0, 0) * bd.chamfer(bd.Box(80, 40, 3).edges(), 0.5)
             chamfered.label = "chamfered"

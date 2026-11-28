@@ -5,7 +5,7 @@ A page of [the engine's documentation](../README.md). A name in bold in parenthe
 ## Viewer exports
 
 The browser's Export action writes the displayed document as its code built it,
-through `export/viewer.py` and the same worker writer as `cad <type> export`. Its source is the
+through `export/viewer.py` and the same worker writer as `cad export`. Its source is the
 displayed document and revision, nothing else (`viewer.exports.specification`: `{doc,
 revision}`); no part, no pose, and nothing of the view -- selection, visibility, Clip, Explode,
 Preview -- is an input. A posed or partial file is a function in the model's code.
@@ -22,10 +22,10 @@ The page offers what the file's kind writes, and nothing is inspected first: an 
 (a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf. An opened XBF file's XBF
 download returns its original bytes (`original`), including an `xbf/8` file converted in
 memory for viewing. Use
-`cad xbf export old.xbf upgraded.xbf` to save that conversion to a different path
+`cad export old.xbf upgraded.xbf` to save that conversion to a different path
 (**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
-file offers the other two mesh kinds and nothing else. A KiCad board offers KiCad's files of it, each `cad kicad_pcb export
---to <kind>` (Gerbers, Drill, Position, BOM, STEP, GLB, ODB++, IPC-2581, PDF, DXF), run by the job on its
+file offers the other two mesh kinds and nothing else. A KiCad board offers KiCad's files of it, the kinds `cad
+export BOARD DST --as <kind>` writes (Gerbers, Drill, Position, BOM, STEP, GLB, ODB++, IPC-2581, PDF, DXF), run by the job on its
 own thread in the environment of `cad[kicad]` (made on first need), from the board at the bytes shown
 (the catalog's hash, checked before; its `mtime_ns-size`, after): one file downloads as it is, a folder
 of them (the Gerbers, the drill files, the PDF's two pages) as `<board>-<kind>.zip`. A job the writer refuses (a DXF
@@ -42,10 +42,10 @@ result without killing a worker shared with another caller.
 
 The xbf is the model's result; STEP, GLB, STL, 3MF and DXF are exports of a document, and an
 xbf can be one too. One writer, `export.translate(document, kind, path)`,
-writes every one, whether a decorator declares the file or `cad <type> export` asks for it: the
+writes every one, whether a decorator declares the file or `cad export` asks for it: the
 same document writes the same bytes. The file holds what the code built. Every file is written beside its
 target and moved over it, and only when its bytes change (`atomic_replace.put`): a target that
-holds them already is left as it is (`cad <type> export` says `unchanged`). In a folder that takes no
+holds them already is left as it is (`cad export` says `unchanged`). In a folder that takes no
 new file (read-only), the bytes are made aside and compared, so an unchanged file passes, and a
 changed or new one fails in one line naming the folder and its mode.
 
@@ -55,9 +55,10 @@ changed or new one fails in one line naming the folder and its mode.
   what it would write however the script has changed since, and nothing is built); from Python, a
   `Model` (called first, as the program's own call of it is: taken from its key or the engine's
   cache, or replayed, when nothing changed; then exported by its handle) too. An xbf is written from a
-  STEP. An ordinary current-format xbf is not written from another xbf, which already is the
-  document. A loaded `xbf/8` converted in memory is the exception: export to a different XBF
-  path serializes the complete upgraded XCAF document atomically; the source path is refused
+  STEP, and from another xbf: a copy of its document (`cad export a.xbf b.xbf`, as `cp` makes one), as a
+  model's own document, by its handle, is written to any path but the `.xbf` its model saves it as
+  (`export.prepare`: a build's source is `live`). A loaded `xbf/8` converted in memory is written as the
+  complete upgraded XCAF document, atomically, to a different XBF path; its own path is refused
   (**Document compatibility**). Several destinations read the document
   once, and every destination is checked before any is written (`export.prepare`, then
   `Prepared.land`, `worker._export`): a kind that can refuse only once it has drawn its file -- a DXF
@@ -70,7 +71,7 @@ changed or new one fails in one line naming the folder and its mode.
   refusal. An export
   runs in the worker that built the document while the file is as it left it, else in the
   daemon's documents worker, which reads it.
-- **A mesh file is a source of the other mesh kinds**: `cad stl export part.stl part.3mf`, any
+- **A mesh file is a source of the other mesh kinds**: `cad export part.stl part.3mf`, any
   pair of GLB, STL and 3MF either way. It is read as a document of its own kind
   (`export/mesh_file.py`): triangles, with the parts, names, colours and placements its format
   carries, each part's mesh the file's own (never meshed again, never cached); the GLB, STL and
@@ -155,7 +156,7 @@ changed or new one fails in one line naming the folder and its mode.
   off z=0, by its element name. Layers are written in name order and edges in an order of
   their content (curve kind, sampled points, length), never the kernel's traversal, and
   ezdxf's provenance is pinned and its classes sorted: the same geometry is the same bytes in
-  any process on any day, so a declared DXF is the bytes `cad xbf export flat.xbf flat.dxf`
+  any process on any day, so a declared DXF is the bytes `cad export flat.xbf flat.dxf`
   writes. The drawing checks run on the document before it is written -- units set, no
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an
@@ -211,26 +212,36 @@ the bake's: juno 108.7 MB to 6.9, tom 98.5 to 18.7, w16 83.2 to 38.5, radial 78.
 samplers shared, above). A sparsely keyed eased bake (a small model's) can take more LINEAR keys
 than it had CUBICSPLINE ones, each a third the bytes.
 
-**File decorators require `out`.** `@xbf("XBF/arm.xbf")` declares the native document;
-`@step("arm.step")`, `@glb("arm.glb")`, `@stl("arm.stl")`, `@threemf("arm.3mf")`
-and `@dxf("arm.dxf")` declare translations. Relative paths are relative to the script.
-There is no default decorator path. Beyond its path and optional `name=`, no file decorator
+**A file decorator's path is optional.** `@xbf` declares the native document, the `.xbf`
+the model is saved as; `@step`, `@glb`, `@stl`, `@threemf` and `@dxf` declare translations, each its own file and
+nothing else, alone or beside `@xbf`, one kind once (`Model.files`). A function with file decorators alone writes no
+`.xbf`: it is no model document (`Models.unsaved`: its page its first file's), and after a restart its run
+builds it from nothing, which each of its runs says (`build._unsaved`: `plate saves no .xbf (no @xbf): once the CAD
+server restarts, its next run builds it again from scratch; add @xbf to save it`). A path given, positionally or `out=`
+(`@xbf("XBF/arm.xbf")`, `@step(out="arm.step")`), is relative to the script. With none (`@step`,
+`@step()`, `@glb(tolerance=0.1)`) the file is the model's name -- `name=`, else its function's -- and
+the format's extension beside the script (`Model.plan`): bare `@xbf` on `arm` writes `arm.xbf`, `@step` alone
+`arm.step`; a `name=` with a folder in it (`arms/left`) writes `arms/left.xbf`. A shape a program holds is
+saved as a model by `cad.save(shape, "crate.xbf")`, its `.xbf` written once the engine holds it (`api.hand_over`), and
+written as another file by `cad.export(shape, "crate.step")`, now, in the calling process, through the same
+translation (`api.write_shape`). Either path is relative to the calling script's folder, or the working folder where
+there is none. A decorator given a shape is their earlier spelling, which warns once.
+Nothing compares the files two models write: two that write one file are their author's to tell apart.
+Beyond its path, an optional `name=` and a mesh's `tolerance=` and `angle=`, no file decorator
 takes anything else: a model's material, colours, joints, the pose its joints connect its parts at, its
 configurations, its motions and its animations are written in its body. Every declared file shows the model as
 built: where its joints' `connect_to` placed the parts. A model that wants a second pose on
-every build is a second model function with other joint values. A model with no `@xbf` writes
-its derived files and nothing else.
+every build is a second model function with other joint values.
 
 **Every model that runs writes its files** (law 10). A child model -- one another model's body
 calls, in its file or another -- writes the files it declares after its target's are written,
 once per build, from its own document: the result its body returned, before its caller placed
 or labelled it, its closure the one a build of its own script makes (its folder, the modules its
-script imports). So its xbf is the one its own build writes, byte for byte, and the engine's cache
-keeps its document as any (a later build of it takes that, **Build closure**); a file whose bytes are
-unchanged is kept. A declared file is an export appended to the run: translated from the document
+script imports). So its xbf is the one its own build writes, byte for byte, and a later build of it takes that
+file (**Build closure**); a file whose bytes are unchanged is kept. A declared file is an export appended to the run: translated from the document
 every time the model runs or is taken -- an xbf from the document's own bytes, serialised before any
 export meshes its shapes -- compared with the file, and written only where it differs or is missing
-(`atomic_replace.put`, the one writer `cad <type> export` writes its files with too), nothing remembered
+(`atomic_replace.put`, the one writer `cad export` writes its files with too), nothing remembered
 of what was written: a declared file is what the code that last ran makes, whichever model ran it. A child called
 twice is one model, written once; a child that is also a target of the build writes as the
 target; a child run inside a replayed body writes as one its caller ran; one that ran before its
@@ -245,15 +256,16 @@ make a child's part, placed in its caller's assembly, other bytes than its own b
 The xbf is saved first, then each derived file. Nothing of them is sent to a page: one serving
 a declared file follows that file's bytes (**Document lifetime**).
 
-**Functions** (`api`, behind each type's `cad.<type>.export`, `.snapshot` and `.inspect`; `serve`,
-`status`, `stop`, `delete` and `server` only the CLI calls): one per command, each through the daemon. No function builds source text;
-a shape made elsewhere is handed over, never built (`model(shape, name=...)`, **Shapes handed over**).
+**Functions** (`api`, behind the library's verbs, `cad.export`, `cad.snapshot` and `cad.inspect`; `serve`,
+`status` and `stop` only the CLI calls): one per command, each through the daemon. No function builds source text;
+a shape made elsewhere is saved, never built (`cad.save(shape, "plate.xbf")`, **Shapes handed over**).
 `export(source, *destinations)` a list of `Written`; `check(source, check)` a manufacturing check's report,
 measured in the engine's checks processes (**Document types and integrations**); `snapshot(source, out, ...)` a `Drawn`, and `snapshot(job=PACKET, ...)` (with `source` in place of the packet's input, as `--job PACKET SRC`) a list of them, one verb with two input shapes, anything else refused as Python refuses a call; `inspect(doc)` what
 the document holds and its build closure (`query="summary"`; `"structure"` the same with nothing measured, and with no
 query the closure alone), `inspect(doc, ref)` an element's facts. Each takes a handle (what a model call
 returns), a document id or a file path; `export` and `snapshot` take the decorated function too,
-building it first. A type's function takes its own sources alone: `cad.model.*` a handle, an id or a
-decorated function, every other type's a file of it (`cad.xbf.export("arm.xbf", ...)`). A handle exports and draws its document the same way (`.export()`,
+building it first. A verb runs the operation of its source's type, which takes its own sources alone: `xbf`'s a
+handle, an id, a decorated function or the `.xbf` a model is saved as (`cad.export("arm.xbf", "arm.glb")`: the file
+read as the file it is), every other type's a file of it. A handle exports and draws its document the same way (`.export()`,
 `.snapshot()`); a `Model`'s `.build(verify=, profile=, daemon=)` is the debug seam, a `Report`: it
 and its children, as declared.

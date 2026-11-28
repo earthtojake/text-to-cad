@@ -24,11 +24,7 @@ files into a model, or working out why a run ran what it ran.
   loaded there, when it is first read and never before, so a script that only builds
   pays nothing for it. In a plain script (a check, a drawing) it is the tree a calling
   body reads, every part placed, named, coloured and given its material, without its
-  joints. Verbs take the handle (`model.export(handle, ...)`, `posed(handle, state)`).
-- **A file decorator takes `@model`'s place, never beside it**: `@step("part.step")`,
-  and `@xbf`, `@glb`, `@stl`, `@threemf` and `@dxf` likewise with a path, declare a model
-  whose run also writes those files
-  ([model page or file page](exports.md#model-page-or-file-page)).
+  joints. Verbs take the handle (`cad.export(handle, ...)`, `posed(handle, state)`).
 - **Kernel objects belong in bodies.** `import build123d as bd` loads no kernel until an
   attribute is read from `bd`, which in a body happens in the server. Read at module
   level (`from build123d import Box`, an `Axis`, a `Location`, a colour palette, a
@@ -43,15 +39,15 @@ files into a model, or working out why a run ran what it ran.
 ## Parameters a person tunes
 
 A number a person will tune is declared at the top level of the model's own script, and the code
-goes on with the plain number `model.param` returns:
+goes on with the plain number `xbf.param` returns:
 
 ```python
-WALL = model.param("wall", 2.0, min=1, max=5, unit="mm")   # unit "mm" or "deg"; step= too
-HOLES = model.param("holes", 4, min=2, max=8)              # an int default: whole numbers
-BORE = model.param("bore", 3 + CLEARANCE)                  # CLEARANCE declared in spec.py
+WALL = xbf.param("wall", 2.0, min=1, max=5, unit="mm")   # unit "mm" or "deg"; step= too
+HOLES = xbf.param("holes", 4, min=2, max=8)              # an int default: whole numbers
+BORE = xbf.param("bore", 3 + CLEARANCE)                  # CLEARANCE declared in spec.py
 ```
 
-`cad model inspect "$ID"` lists them. The viewer saves one only where its default is a plain number in
+`cad inspect model.xbf` lists them. The viewer saves one only where its default is a plain number in
 the model's own script; any other is listed read-only, and changes where it is declared:
 
 ```text
@@ -65,14 +61,14 @@ parameters
 To change a value, edit its number in the script and run it. A save from the viewer rewrites numbers
 in the script and builds it again, so read a script again before you edit it.
 
-An exported xbf lists each parameter at the value it was built with, read-only.
+A copy of a model's xbf lists each parameter at the value it was built with, read-only.
 
 ## Assemblies call their parts
 
 ```python
 # src/assembly.py
 import build123d as bd
-from cad import model
+from cad import xbf
 
 from plate import THICKNESS, plate      # src/plate.py: a part model and a constant of its script
 from standoff import standoff_m3        # src/standoff.py: one configuration of a part
@@ -80,7 +76,7 @@ from standoff import standoff_m3        # src/standoff.py: one configuration of 
 PITCH = 30.0
 
 
-@model
+@xbf
 def assembly():
     base = plate().shape
     post = standoff_m3().shape
@@ -98,7 +94,7 @@ if __name__ == "__main__":
 - **A child builds in the same run** and keeps its own document and id, which every
   command answers. Its `.shape` is what its body returned, before the caller placed or
   labelled it. Called twice it is built once, each call a new placement of the one
-  result; called only for the files it declares, it is a bare call.
+  result; called only to save its `.xbf`, it is a bare call.
 - **A jointed child brings its mechanism**: its joints, states and sequences are in the
   assembly's document too. The joints between children are written in the assembly's
   body ([kinematics](kinematics.md#joints-place-parts-and-make-the-mechanism)).
@@ -116,11 +112,14 @@ docstrings; the constants and defaults they read) and every file it reads, by it
 ([inputs](#inputs)). The run's lines say which:
 
 ```text
-built src/assembly.py::assembly warm in 0.09s: bodies 2 run, 1 replayed; 3 misses, 2 hits; body 0.02s, names 0.00s, document 0.00s
+built src/assembly.py::assembly warm in 0.07s: bodies 2 run, 1 replayed; 3 misses, 2 hits; body 0.01s, names 0.00s, document 0.00s, xbf 0.00s
   parts 3 · bounds 60 × 44 × 16 mm (was 60 × 40 × 16) · joints 0 · sequences 0 · changed 1
   rebuilt: plate.py: DEPTH changed
+  src/assembly.xbf (written, 14.3 KB)
   src/plate.py::plate, a child
+    src/plate.xbf (written, 8.5 KB)
   src/standoff.py::standoff_m3, a child
+    src/standoff_m3.xbf (kept, 6.9 KB)
 ```
 
 That run followed an edit of the plate's depth: the plate's body and the assembly's ran,
@@ -206,12 +205,12 @@ from any working folder:
 from pathlib import Path
 
 import build123d as bd
-from cad import model, stl, xbf
+from cad import xbf, stl
 
 HERE = Path(__file__).resolve().parent
 
 
-@model
+@xbf
 def rig():
     motor = xbf.read(HERE / "../vendor/motor.xbf")
     motor.label = "motor"
@@ -228,13 +227,13 @@ def rig():
   part is a part. Take the tree's parts placed with `leaves(tree)` (`cad.build123d`),
   never `located` or `moved` on a node of it, which copies the whole assembly
   ([opening geometry](inspection-and-validation.md#opening-geometry)).
-- **A vendor STEP is converted once**: `cad step export vendor.step vendor.xbf` writes an
+- **A vendor STEP is converted once**: `cad export vendor.step vendor.xbf` writes an
   xbf of it, which `xbf.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
 - **A STEP that names other files as its parts** (an external reference, written by a
   CAD tool's multi-file export) is refused by name, here and in the viewer and
-  `cad <type> export`: export it again from its CAD tool as one file.
+  `cad export`: export it again from its CAD tool as one file.
 - **`stl.read(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
   `name` and `bounding_box()`. A document holds B-rep alone, so a mesh is measured and
   built from, never placed in a model.
@@ -250,31 +249,29 @@ def rig():
 
 ## Documents and the server
 
-- **The id names the model, not a state of it.** It comes from the script's path and the
-  function's name (`bracket.id`, without a call), so two scripts may use one function
-  name, and a renamed function is a new document. `@model(name="bracket")` takes the id
-  from the script's folder and that name instead, whichever file of the folder declares
-  it; one name declared twice in a folder is refused, naming both declarations and the
-  way out.
+- **The id names the model, not a state of it.** It is that of the model's `.xbf`
+  (`bracket.id`, without a call), which is named for the function or for
+  `@xbf(name="bracket")`. A renamed function is a new document, and two models of one
+  name in a folder, in one script or two, save one file and are one document, the last
+  one built: nothing refuses it.
 - **What names the state** is the key of the code and inputs the document was built
-  from, `handle.report["closure"]["key"]` (`cad model inspect "$ID" --query closure`
+  from, `handle.report["closure"]["key"]` (`cad inspect model.xbf --query closure`
   prints the closure). A file derived from a document (a simulator's description, a GLB
   beside a film) that records the key can tell whether the document has been built from
   other sources since. The key is `None` where the model's code cannot be keyed.
-- **A document is kept until it is deleted**, across server restarts: its id answers
-  every command as last built, and one the server has lost is refused with the `cad run`
-  that brings it back. `cad delete <id>` (or a script's path, for every document of it)
-  removes the record and the kept document, never a file of yours. Delete only what the
-  person asked to delete, with `--yes`.
+- **A document is its `.xbf`**, across server restarts: its id answers every command as
+  last built while the file is there, and with the file gone the id names nothing: run its
+  script again. cad keeps no other copy of it, so to be rid of a document is to delete its
+  file. Delete only what the person asked to delete.
 - **A shape with no script** (a notebook cell, a REPL, a script that only holds a
-  shape) is handed over: `model(shape, name="plate")` makes a document of it, served on
+  shape) is saved: `cad.save(shape, "plate.xbf")` makes a document of it, served on
   its page and exported like any other, and returns its handle. Joints, mechanism states
   and sequences on the shape go with it; a GLB's animations are passed as
-  `animations=[...]`. Nothing builds it again but the program that handed it over. A
+  `animations=[...]`. Any other file of a shape is `cad.export(shape, "plate.step")`. Nothing builds it again but the program that saved it. A
   decorated function in no saved file is refused, with these words.
-- `cad server status` lists each document as `live` (its worker holds it), `held` (the
-  server answers it without one, and a ref's `made_by` is null), `unsaved` (lost: run
-  its script) or `detached` (its script is gone).
+- `cad server status` lists each document its workers hold: `live`, `building` or `failed`
+  (its last run failed, and its previous good build is served). One no worker holds is its
+  `.xbf`, read as any file, and a ref's `made_by` is null.
 - **A build that runs away on memory is stopped.** A worker past
   `CAD_ENGINE_WORKER_CEILING_MB` (default: half the machine's memory) at two of the server's
   checks, half a minute apart, is stopped, and the build's error says so. The server reads

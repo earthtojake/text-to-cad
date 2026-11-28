@@ -192,12 +192,32 @@ export default {
   "app.engine.linkReplaced": "このリンクは使えなくなりました。",
   "app.engine.openNewLink": "エージェントにもう一度モデルを開いてもらい、新しいリンクを使ってください。",
   "app.engine.reload": "再読み込み",
+  "share.gone.title": "この共有モデルは期限切れか、削除されました。",
+  "share.gone.detail": "共有モデルは最後に共有されてから7日間有効です。共有した人はもう一度共有できます。",
+  "share.damaged.title": "この共有モデルは壊れています。",
+  "share.damaged.detail": "共有した人に、もう一度共有するよう頼んでください。",
+  "share.unsupported.title": "この共有モデルはここでは開けません。",
+  "share.failed.title": "この共有モデルを開けませんでした。",
+  "share.retry": "再試行",
+  "share.delete.title": "この共有モデルを削除しますか？",
+  "share.delete.detail": "リンクは全員に対して機能しなくなります。",
+  "share.delete.action": "削除",
+  "share.delete.deleting": "削除中…",
+  "share.deleted.title": "この共有モデルは削除されました。",
+  "share.deleted.detail": "リンクからはもう誰も開けません。",
+  "share.delete.gone.title": "この共有モデルはすでにありません。",
+  "share.delete.gone.detail": "期限切れになったか、すでに削除されています。",
+  "share.delete.refused.title": "この削除リンクはこの共有モデルのものではありません。",
+  "share.delete.refused.detail": "共有したときに受け取った削除リンクを使ってください。",
+  "share.delete.damaged.title": "この削除リンクは不完全か、壊れています。",
+  "share.delete.damaged.detail": "受け取った削除リンクを、# 以降も含めてすべて開いてください。",
+  "share.delete.failed.title": "この共有モデルを削除できませんでした。",
+  "share.delete.pageTitle": "共有モデルを削除",
 
   "file.opening": "開いています…",
   "file.missing": "ファイルが存在しません",
-  "file.notHeld": "このモデルは保持されていません",
-  "file.notSaved": "このモデルは保存されていません",
-  "file.detached": "このモデルのスクリプトがありません",
+  "file.notKnown": "このドキュメントは見つかりません",
+  "file.notKnownDetail": "このコンピューターには、この ID のドキュメントがありません。別のコンピューターのリンクかもしれません。",
   "file.openFailed": "このファイルを開けませんでした",
   "file.displayFailed": "このファイルを表示できませんでした",
   "file.goHome": "ホームへ戻る",
@@ -211,6 +231,7 @@ export default {
 
   "file.copyPath": "パスをコピー",
   "file.copyLink": "リンクをコピー",
+  "file.downloadFiles": "ファイルをダウンロード",
   "file.revealFinder": "Finder で表示",
   "file.revealExplorer": "エクスプローラーで表示",
   "file.revealFileManager": "ファイルマネージャーで表示",
@@ -218,17 +239,16 @@ export default {
   "file.browser": "ブラウザ",
   "file.fileExplorer": "エクスプローラー",
   "file.fileManager": "ファイルマネージャー",
-  "file.sourceMissing": "ソースは移動または削除されました。",
+  "file.sourceMissing": "ソースは移動したか、見つかりません。",
   "file.kicadBoardTooNew": "{app} ではこの基板を開けません。新しいバージョンの KiCad で保存されています。",
   "file.kicadSchematicTooNew": "{app} ではこの回路図を開けません。新しいバージョンの KiCad で保存されています。",
   "file.defaultApp": "既定のアプリ",
 
-  "menu.backToHome": "ホームへ戻る",
   "menu.theme": "テーマ",
   "menu.language": "言語",
   "menu.languageAutomatic": "自動（{language}）",
   "menu.feedback": "フィードバックを送信",
-  "menu.madeBy": "制作: @{handle}",
+  "menu.settings": "設定",
 
   "consent.shareUsage": "テレメトリ",
   "consent.shareUsageEnvironment": "テレメトリ（環境で設定済み）",
@@ -244,64 +264,188 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "フォルダー",
-  "explorer.foldersAbove": "上位のフォルダー",
-  "explorer.filterLabel": "ファイルを絞り込む",
-  "explorer.filterPlaceholder": "ファイルを絞り込む…",
-  "explorer.loading": "読み込み中…",
-  "explorer.searching": "検索中…",
-  "explorer.readFailed": "このフォルダーを読み込めませんでした",
-  "explorer.searchFailed": "このフォルダーを検索できませんでした",
-  "explorer.noCadFiles": "CAD ファイルはありません",
-  "explorer.noCadFilesHere": "ここに CAD ファイルはありません",
-  "explorer.noMatches": "一致するファイルはありません",
-  "explorer.noMatchesYet": "まだ一致するファイルはありません。入力を続けて検索を絞り込んでください。",
-  "explorer.stoppedEarly": "検索を途中で止めました。入力を続けて絞り込んでください。",
-  "explorer.models": "モデル",
-  "explorer.files": "ファイル",
-  "explorer.noModels": "まだモデルはありません",
-  "explorer.modelsFailed": "モデルを読み込めませんでした",
-  "explorer.filterModelsLabel": "モデルを絞り込む",
-  "explorer.filterModelsPlaceholder": "モデルを絞り込む…",
-  "explorer.noModelsMatch": "一致するモデルはありません",
 
-  "home.recentFiles": "最近",
+  "project.importFolder": "このフォルダーをプロジェクトとして読み込む…",
+  "project.openNewTab": "新しいタブで開く",
+  "project.openBrowser": "ブラウザで開く",
+  "project.previous": "プロジェクト内の前へ",
+  "project.next": "プロジェクト内の次へ",
+  "search.menu": "ドキュメントを検索",
+  "search.title": "ドキュメントを検索",
+  "search.label": "ドキュメントを検索",
+  "search.placeholder": "すべてのドキュメントを検索…",
+  "search.results": "ドキュメント",
+  "search.inProject": "{name} 内",
+  "search.otherProjects": "ほかのプロジェクト",
+  "search.recent": "最近",
+  "search.kindPart": "部品",
+  "search.kindAssembly": "アセンブリ",
+  "search.current": "表示中",
+  "search.reading": "ドキュメントを読み込み中…",
+  "search.failed": "ドキュメントを読み込めませんでした。",
+  "search.nothingFound": "「{query}」に一致するものはありません",
+  "search.empty": "まだドキュメントがありません。",
+  "search.more": "{total} 件中 {shown} 件を表示中：入力して絞り込めます",
+  "search.openNewTab": "新しいタブで開く",
+  "search.openBrowser": "ブラウザで開く",
+  "search.keyMove": "移動",
+  "search.keyOpen": "開く",
+  "search.keyClose": "閉じる",
+
+
+  "home.title": "ホーム",
+
+
+  "home.import": "読み込む",
+
+
+  "home.importFile": "ファイル…",
+
+
+  "home.importFolder": "フォルダー…",
+
+
+  "home.importFileButton": "ファイルを読み込む",
+
+
+  "home.importFolderButton": "フォルダーを読み込む",
+
+
+
+
+  "home.projectActionsAria": "プロジェクト {name} の操作",
+
+
+  "home.projectRemove": "CAD から削除",
+
+
+  "home.projectRemoved": "{name} を削除しました。ディスク上は何も変わっていません。",
+
+
+  "home.projectMade": "{name} をプロジェクトにしました。フォルダーには何も書き込んでいません。",
+
+
+  "home.projectAgain": "{name} はすでにプロジェクトです。",
+
+
+  "home.projectInside": "{name} は、すでにプロジェクトである {project} の中にあります。",
+
+
+  "home.projectEmpty": "このフォルダーは空です。",
+  "home.folderFailed": "このフォルダーを読み込めませんでした。移動または名前が変更された可能性があります。",
+
+
+  "home.projectMissing": "このプロジェクトのフォルダーが見つかりません。削除するか、フォルダーを元に戻してください。",
+
+
+  "home.projectTruncated": "一部のファイルだけを表示しています。このフォルダーには一度に表示できる数より多くのファイルがあります。",
+
+
+  "home.place.recents": "最近",
+
+
+  "home.place.starred": "スター付き",
+
+
+  "home.project": "プロジェクト",
+
+
+  "home.projects": "プロジェクト",
+
+
+  "home.placesAria": "場所",
+  "home.sidebar": "サイドバー",
+
+
+  "home.addProject": "フォルダーをプロジェクトとして開く",
+
+
+  "home.loadingProjects": "プロジェクトを読み込み中",
+
+
+  "home.projectsEmpty": "プロジェクトはまだありません。",
+
+
+  "home.projectsFailed": "プロジェクトを読み込めませんでした。",
+
+
+  "home.projectGone": "このプロジェクトはもう CAD にありません。戻すには、そのフォルダーをもう一度開いてください。",
+
+
+  "home.recentsEmpty": "最近開いたものはありません。",
+
+
+  "home.starredEmpty": "スターを付けたものはまだありません。ファイルにスターを付けると、ここに表示されます。",
+
+
+
+
+
+
+  "home.sortAria": "並べ替え",
+
+
+  "home.sortByAria": "並べ替え: {sort}",
+
+
+  "home.sort.activity": "最終アクティビティ",
+
+
+  "home.sort.name": "名前",
+  "home.sort.viewed": "最終閲覧",
+  "home.sort.edited": "最終編集",
+
+
+
+
+  "home.openNewTab": "新しいタブで開く",
+
+
+  "home.openBrowser": "ブラウザーで開く",
+
+
+  "home.backTo": "{name} に戻る",
+  "home.parentFoldersAria": "上位のフォルダー",
+
+
+
+
+
+
+  "home.emptyTitle": "まだ何もありません",
+
+
+  "home.emptyBody": "ファイルやフォルダーを読み込むか、エージェントにモデルを作ってもらいましょう。",
+
+
   "home.searchAria": "モデルを検索",
   "home.searchPlaceholder": "検索",
   "home.layout": "レイアウト",
-  "home.open": "開く",
   "home.grid": "グリッド",
   "home.list": "リスト",
   "home.openAria": "{name} を開く",
-  "home.emptyTitle": "まだ何も開いていません",
-  "home.emptyBody": "CAD ファイルを開くか、エージェントにモデルを作ってもらいましょう。",
-  "home.openFile": "ファイルを開く",
-  "home.formatModel": "モデル",
-  "home.noMatchingModels": "一致するモデルはありません。",
+  "home.noAppOpens": "このコンピューターには {name} を開けるアプリがありません。",
+  "format.xbf": "XBF",
+  "home.formatPart": "部品",
+  "home.formatAssembly": "アセンブリ",
+  "home.noMatchingModels": "一致するものはありません。",
   "home.filesAria": "ファイル",
+  "home.foldersAria": "フォルダー",
+  "home.otherFilesAria": "その他のファイル",
+  "home.recent": "最近",
+  "home.allFiles": "すべてのファイル",
   "home.loadingFiles": "ファイルを読み込み中",
   "home.modelsAria": "CAD モデル",
   "home.fileUnavailable": "ファイルを利用できません",
   "home.actionsAria": "{name} の操作",
   "home.menuOpen": "開く",
-  "home.pin": "ピン留め",
-  "home.unpin": "ピン留めを外す",
-  "home.delete": "削除",
-  "home.deleteModelTitle": "{name} を削除しますか?",
-  "home.deleteModelBody": "エンジンの記録と保存済みのビルドを削除します。スクリプトと書き出したファイルはディスクに残ります。もう一度ビルドするにはスクリプトを実行してください。",
-  "home.deleteFileTitle": "{name} をビューアーから削除しますか?",
-  "home.deleteFileBody": "このファイルのエンジンの記録を削除します。ファイル自体はディスクに残ります。",
-  "home.cancel": "キャンセル",
-  "home.kindsAria": "表示",
-  "home.kind.all": "すべて",
-  "home.kind.models": "モデル",
-  "home.kind.files": "ファイル",
-  "home.kindAria": "表示: {kind}",
+  "home.star": "スターを付ける",
+  "home.unstar": "スターを外す",
   "home.columnName": "名前",
-  "home.columnKind": "種類",
-  "home.columnSize": "サイズ",
-  "home.columnUpdated": "更新",
-  "home.columnCreated": "作成日",
+  "home.columnType": "種類",
+  "home.columnViewed": "最終閲覧",
+  "home.columnEdited": "最終編集",
+  "home.folderType": "フォルダ",
   "home.openingAria": "{name} を開いています",
   "home.ageNow": "たった今",
   "home.ageEdited": "編集: {age}",
@@ -714,7 +858,6 @@ export default {
   "parameters.error.build_failed": "この値ではビルドできません。",
   "parameters.error.preview_build_failed": "この値ではビルドできません。",
   "parameters.error.preview_failed": "この値を表示できませんでした。",
-  "parameters.reason.file": "スクリプトで編集してください。",
   "parameters.reason.no_worker": "編集するにはスクリプトを再実行してください。",
   "parameters.reason.shared": "別のファイルで設定されています。",
   "parameters.reason.sharedIn": "{source} で設定されています。",

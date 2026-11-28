@@ -2,9 +2,9 @@
 
 One engine serves one page, at its origin. Every document is addressed by path, ``/<id>``
 (``cad.engine.ids``): a model's id, or a file's once a launcher or the page registers it. The
-home is ``/``: Recents; the explorer opens where it was last, else the person's home folder. A
-launch's folder (``launch``'s ``start``) resolves only the relative files it names. There are no
-page sessions and no per-launch folders.
+home is ``/``: the projects a person opened (``projects.py``) and the standalone documents. A
+launch's folder (``launch``'s ``start``) resolves only the relative files and folders it names. There
+are no page sessions and no per-launch folders.
 """
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from cad.engine.ids import is_id
 from .documents import EngineDocuments
 from .scanner import to_posix_path
 from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
+from .projects import Projects, locate
 
 
 # The page's credentials all come from the user's one token (``engines/token``, read at the start:
@@ -192,12 +193,12 @@ class ViewerApp(CadApp):
     def file_of(self, ident):
         return self.server.file_of(ident)
 
-    def delete_document(self, ident):
-        # The engine's own deletion (``Server.delete``, the daemon's ``Models.delete``): what it holds
-        # of the document, then its record and its cached document.
-        if self.server.delete is None:
-            return super().delete_document(ident)
-        return self.server.delete(ident)
+    def forget(self, ident):
+        # The engine's own (``Server.forget``, the daemon's ``Models.forget``): what it holds of the document
+        # first, then what the library and the cache keep of it.
+        if self.server.forget is None:
+            return super().forget(ident)
+        return self.server.forget(ident)
 
     def set_parameters(self, ident, values):
         # The engine's own ``set`` (``Server.set_parameters``, the daemon's ``parameters.Setting``): the one path
@@ -213,9 +214,8 @@ class ViewerApp(CadApp):
         return self.server.preview_parameters(ident, values, page)
 
     def _holds_model(self, ident):
-        # Held by this engine's server, and no file: a model's (or a shape's). Else the engine's
-        # records, which know a model it holds on disk only.
-        if self.server.holds(ident) and not self.server.file_of(ident):
+        # A model a live worker holds is registered with this engine's server (its loader); else the engine is asked.
+        if ident in self.server.model_loaders:
             return True
         return super()._holds_model(ident)
 
@@ -255,6 +255,15 @@ class EngineApp:
         self.viewer_analytics.started(client={"name": "cad-viewer", "version": __version__}, presentation="browser")
         self.analytics.start()
         self.viewer_analytics.start()
+        from cad_server.engine.library import Library
+
+        # The project folders an id is looked for in (``locate``).
+        self.projects = Projects(Library())
+
+    def locate(self, ident):
+        """The path of the file of id ``ident`` (``projects.locate``), which the engine's server knows from
+        then on; None for an id that names nothing. The server's ``locate``."""
+        return locate(ident, self.server, self.projects.library, self.projects)
 
     def active(self):
         with self.lock:
@@ -313,16 +322,26 @@ class EngineApp:
     def launch(self, options):
         """A launch of the one page (``cad viewer``, a text-only host's link, the dev client's
         ``--api-only``): each file it names (``files``: on-disk CAD files, a relative one read from its
-        folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``. ``url`` is the first file's page, else the home's, each with the link
-        (``link``), which ``token`` is too -- the user's token itself only for the dev client's ``--api-only``,
-        whose proxy outlives a link."""
+        folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``, and each
+        folder it names is opened as a project (``projects``: ``{id, name, root, made, url}``, ``projects.py``), its ``url`` the
+        home at that project. The launch's ``url`` is the first file's page, else the first project's, else the home's
+        (``home``), each with the link (``link``), which ``token`` is too -- the user's token itself only for the dev
+        client's ``--api-only``, whose proxy outlives a link."""
         from .main import Unopened, resolve_dist_dir
         start = os.path.abspath(options.get('start') or os.path.expanduser('~'))
         dist = '' if options.get('api_only') else resolve_dist_dir(options.get('dist') or '')
         if not options.get('api_only') and not dist:
             return {'failed': 'The viewer client is not built; build apps/web or install the cad wheel'}
+        from .projects import Refused, project_root
+        names = options.get('files') or []
+        folders = [name for name in names if self.folder(name, start)]
         try:
-            documents = [self.document(name, start) for name in options.get('files') or []]
+            # A folder that is no project fails the launch before anything of it is registered or opened.
+            roots = [project_root(self.named(name, start)) for name in folders]
+        except Refused as refusal:
+            return {'failed': f'{refusal}: {refusal.hint}', 'reason': 'invalid_argument'}
+        try:
+            documents = [self.document(name, start) for name in names if name not in folders]
         except ValueError as error:
             # With the ``cad`` command's reason for a FILE it does not open (``main.Unopened``), which the
             # launcher exits by.
@@ -331,13 +350,41 @@ class EngineApp:
             reused = self._default is not None
             app = self.default_app(dist or None)
             app.start = to_posix_path(start)
+        projects = [self.project(app, root) for root in roots]
         link = self.link()
         for document in documents:
             document['url'] = f'{self.server.url}/{document["id"]}?token={link}'
-        return {'ok': True, 'url': documents[0]['url'] if documents else f'{self.server.url}/?token={link}',
+        for project in projects:
+            # The page's own address for a project (``apps/web``'s ``fileParam.js``): the home at the project.
+            project['url'] = f'{self.server.url}/?' + urlencode([('project', project['id']), ('token', link)])
+        home = f'{self.server.url}/?token={link}'
+        pages = [*documents, *projects]
+        return {'ok': True, 'url': pages[0]['url'] if pages else home, 'home': home,
                 'apiUrl': self.server.url, 'token': self.token if options.get('api_only') else link,
                 'port': self.server.port, 'pid': os.getpid(),
-                'start': app.start, 'documents': documents, 'action': 'reused' if reused else 'started'}
+                'start': app.start, 'documents': documents, 'projects': projects, 'action': 'reused' if reused else 'started'}
+
+    @staticmethod
+    def named(name, start):
+        """The absolute path a launch's ``name`` names: read from ``start`` where it is relative, ``~`` the home folder."""
+        return os.path.abspath(os.path.join(start, os.path.expanduser(name)))
+
+    @classmethod
+    def folder(cls, name, start):
+        """Whether a launch's ``name`` is a folder (not an id)."""
+        from cad.engine.ids import is_id
+
+        return not is_id(name) and os.path.isdir(cls.named(name, start))
+
+    @staticmethod
+    def project(app, root):
+        """The folder ``root`` (``projects.project_root``'s), opened as a project (``projects.Projects.add``):
+        ``{id, name, root, made}``."""
+        from .projects import public
+
+        record, made = app.projects.add(root)
+        found = public(record)
+        return {'id': found['id'], 'name': found['name'], 'root': found['root'], 'made': made}
 
     def document(self, name, start):
         """A file or an id a launch names, as ``{id, file}``: a file registered by its canonical path
@@ -349,9 +396,7 @@ class EngineApp:
         from .main import Unopened, unopened
 
         if is_id(name):
-            if not self.server.holds(name):
-                self.server.revive(name)  # a document the engine's cache holds, after a restart
-            if not (self.server.holds(name) or self.server.file_of(name)):
+            if not self.server.holds(name) and self.server.locate(name) is None:
                 raise Unopened(f'no document {name} is held', 'not_found')
             return {'id': name, 'file': self.server.file_of(name)}
         refused = unopened(name, start)
@@ -360,6 +405,13 @@ class EngineApp:
         path = os.path.join(start, os.path.expanduser(name))
         ident = self.server.remember(path)
         return {'id': ident, 'file': to_posix_path(self.server.file_of(ident))}
+
+    def bundle(self, path, folder, release):
+        """The view bundle of the CAD file at ``path`` written into ``folder`` from what the one page's app
+        answers a page (``bundle.write``, the engine's **View bundle**; ``cad share``'s step): what was done."""
+        from .bundle import write
+
+        return write(self.default_app(), path, folder, release=release)
 
     def sessions(self):
         page = [] if self._default is None else [{'kind': 'viewer', 'start': self._default.start}]

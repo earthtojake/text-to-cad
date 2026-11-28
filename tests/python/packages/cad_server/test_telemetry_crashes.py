@@ -422,10 +422,10 @@ class ServerCrashTest(_Recording):
     def serve(self):
         from cad_server.mcp.server import Server
         from cad_server.mcp.ui import AppPage
-        from cad_server.viewer.recents import RecentStore
+        from cad_server.engine.library import Library
 
         (self.tmp / "app").mkdir(exist_ok=True)
-        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"), analytics=self.recorder)
+        server = Server(page=AppPage(self.tmp / "app"), library=Library(self.tmp / "state"), analytics=self.recorder)
         server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                      "clientInfo": {"name": "codex-mcp-client", "version": "0.159.0"}}, None)
         return server
@@ -578,7 +578,7 @@ class CommandCrashTest(unittest.TestCase):
             raise ValueError("no such file: /home/someone/secret.step")
 
         for invoke in (told, _cadgen_bug):
-            emit(invoke, prog="cad urdf validate", as_json=True, stdout=io.StringIO())
+            emit(invoke, prog="cad inspect", as_json=True, stdout=io.StringIO())
         [crash] = self.crashes()
         self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cad_server/analytics.py"))
 

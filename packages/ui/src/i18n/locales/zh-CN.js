@@ -193,12 +193,32 @@ export default {
   "app.engine.linkReplaced": "此链接已失效。",
   "app.engine.openNewLink": "让你的智能体再次打开该模型，然后使用新链接。",
   "app.engine.reload": "重新加载",
+  "share.gone.title": "此共享模型已过期或已被删除。",
+  "share.gone.detail": "共享模型在最后一次共享后保留 7 天。共享者可以再次共享。",
+  "share.damaged.title": "此共享模型已损坏。",
+  "share.damaged.detail": "请让共享者重新共享。",
+  "share.unsupported.title": "无法在此打开此共享模型。",
+  "share.failed.title": "无法打开此共享模型。",
+  "share.retry": "重试",
+  "share.delete.title": "删除此共享模型？",
+  "share.delete.detail": "链接将对所有人失效。",
+  "share.delete.action": "删除",
+  "share.delete.deleting": "正在删除…",
+  "share.deleted.title": "此共享模型已删除。",
+  "share.deleted.detail": "任何人都无法再通过链接打开它。",
+  "share.delete.gone.title": "此共享模型已不存在。",
+  "share.delete.gone.detail": "它已过期或已被删除。",
+  "share.delete.refused.title": "此删除链接与此共享模型不匹配。",
+  "share.delete.refused.detail": "请使用共享时收到的删除链接。",
+  "share.delete.damaged.title": "此删除链接不完整或已损坏。",
+  "share.delete.damaged.detail": "请打开收到的完整删除链接，包括 # 之后的所有内容。",
+  "share.delete.failed.title": "无法删除此共享模型。",
+  "share.delete.pageTitle": "删除共享模型",
 
   "file.opening": "正在打开…",
   "file.missing": "文件不存在",
-  "file.notHeld": "此模型已不再保留",
-  "file.notSaved": "此模型未保存",
-  "file.detached": "此模型的脚本已不存在",
+  "file.notKnown": "未知的文档",
+  "file.notKnownDetail": "这台电脑上没有此 ID 的文档：链接可能来自另一台电脑。",
   "file.openFailed": "无法打开该文件",
   "file.displayFailed": "无法显示该文件",
   "file.goHome": "返回主页",
@@ -212,6 +232,7 @@ export default {
 
   "file.copyPath": "复制路径",
   "file.copyLink": "复制链接",
+  "file.downloadFiles": "下载文件",
   "file.revealFinder": "在 Finder 中显示",
   "file.revealExplorer": "在资源管理器中显示",
   "file.revealFileManager": "在文件管理器中显示",
@@ -219,17 +240,16 @@ export default {
   "file.browser": "浏览器",
   "file.fileExplorer": "文件资源管理器",
   "file.fileManager": "文件管理器",
-  "file.sourceMissing": "源文件已被移动或删除。",
+  "file.sourceMissing": "源文件已被移动或已不存在。",
   "file.kicadBoardTooNew": "{app} 无法打开此电路板：它由更新版本的 KiCad 保存。",
   "file.kicadSchematicTooNew": "{app} 无法打开此原理图：它由更新版本的 KiCad 保存。",
   "file.defaultApp": "默认应用",
 
-  "menu.backToHome": "返回主页",
   "menu.theme": "主题",
   "menu.language": "语言",
   "menu.languageAutomatic": "自动（{language}）",
   "menu.feedback": "发送反馈",
-  "menu.madeBy": "由 @{handle} 制作",
+  "menu.settings": "设置",
 
   "consent.shareUsage": "遥测",
   "consent.shareUsageEnvironment": "遥测（由你的环境设置）",
@@ -245,64 +265,188 @@ export default {
   "language.ja": "日本語",
   "language.ko": "한국어",
 
-  "explorer.folders": "文件夹",
-  "explorer.foldersAbove": "上层文件夹",
-  "explorer.filterLabel": "筛选文件",
-  "explorer.filterPlaceholder": "筛选文件…",
-  "explorer.loading": "加载中…",
-  "explorer.searching": "搜索中…",
-  "explorer.readFailed": "无法读取此文件夹",
-  "explorer.searchFailed": "无法搜索此文件夹",
-  "explorer.noCadFiles": "无 CAD 文件",
-  "explorer.noCadFilesHere": "此处无 CAD 文件",
-  "explorer.noMatches": "没有匹配的文件",
-  "explorer.noMatchesYet": "暂无匹配文件。继续输入可缩小搜索范围。",
-  "explorer.stoppedEarly": "搜索提前停止。继续输入可缩小范围。",
-  "explorer.models": "模型",
-  "explorer.files": "文件",
-  "explorer.noModels": "还没有模型",
-  "explorer.modelsFailed": "无法读取模型",
-  "explorer.filterModelsLabel": "筛选模型",
-  "explorer.filterModelsPlaceholder": "筛选模型…",
-  "explorer.noModelsMatch": "没有匹配的模型",
 
-  "home.recentFiles": "最近",
+  "project.importFolder": "将其文件夹导入为项目…",
+  "project.openNewTab": "在新标签页中打开",
+  "project.openBrowser": "在浏览器中打开",
+  "project.previous": "项目中的上一个",
+  "project.next": "项目中的下一个",
+  "search.menu": "搜索文档",
+  "search.title": "搜索文档",
+  "search.label": "搜索文档",
+  "search.placeholder": "搜索所有文档…",
+  "search.results": "文档",
+  "search.inProject": "在 {name} 中",
+  "search.otherProjects": "其他项目",
+  "search.recent": "最近",
+  "search.kindPart": "零件",
+  "search.kindAssembly": "装配体",
+  "search.current": "正在查看",
+  "search.reading": "正在读取文档…",
+  "search.failed": "无法读取文档。",
+  "search.nothingFound": "没有与“{query}”匹配的内容",
+  "search.empty": "还没有文档。",
+  "search.more": "显示 {total} 个中的 {shown} 个：输入以缩小范围",
+  "search.openNewTab": "在新标签页中打开",
+  "search.openBrowser": "在浏览器中打开",
+  "search.keyMove": "移动",
+  "search.keyOpen": "打开",
+  "search.keyClose": "关闭",
+
+
+  "home.title": "主页",
+
+
+  "home.import": "导入",
+
+
+  "home.importFile": "文件…",
+
+
+  "home.importFolder": "文件夹…",
+
+
+  "home.importFileButton": "导入文件",
+
+
+  "home.importFolderButton": "导入文件夹",
+
+
+
+
+  "home.projectActionsAria": "项目 {name} 的操作",
+
+
+  "home.projectRemove": "从 CAD 中移除",
+
+
+  "home.projectRemoved": "已移除 {name}。磁盘上的内容没有改变。",
+
+
+  "home.projectMade": "{name} 现在是一个项目。没有向该文件夹写入任何内容。",
+
+
+  "home.projectAgain": "{name} 已经是一个项目。",
+
+
+  "home.projectInside": "{name} 位于已经是项目的 {project} 中。",
+
+
+  "home.projectEmpty": "此文件夹为空。",
+  "home.folderFailed": "无法读取此文件夹。它可能已被移动或重命名。",
+
+
+  "home.projectMissing": "此项目的文件夹已不存在。请移除它，或把文件夹放回原处。",
+
+
+  "home.projectTruncated": "未列出全部文件：此文件夹中的文件超出了一次可列出的数量。",
+
+
+  "home.place.recents": "最近",
+
+
+  "home.place.starred": "已加星标",
+
+
+  "home.project": "项目",
+
+
+  "home.projects": "项目",
+
+
+  "home.placesAria": "位置",
+  "home.sidebar": "侧边栏",
+
+
+  "home.addProject": "将文件夹作为项目打开",
+
+
+  "home.loadingProjects": "正在加载项目",
+
+
+  "home.projectsEmpty": "还没有项目。",
+
+
+  "home.projectsFailed": "无法读取项目。",
+
+
+  "home.projectGone": "此项目已不在 CAD 中。重新打开它的文件夹即可恢复。",
+
+
+  "home.recentsEmpty": "最近没有打开过任何内容。",
+
+
+  "home.starredEmpty": "还没有加星标的内容。给一个文件加星标，它就会留在这里。",
+
+
+
+
+
+
+  "home.sortAria": "排序",
+
+
+  "home.sortByAria": "排序：{sort}",
+
+
+  "home.sort.activity": "最近活动",
+
+
+  "home.sort.name": "名称",
+  "home.sort.viewed": "上次查看",
+  "home.sort.edited": "上次编辑",
+
+
+
+
+  "home.openNewTab": "在新标签页中打开",
+
+
+  "home.openBrowser": "在浏览器中打开",
+
+
+  "home.backTo": "返回 {name}",
+  "home.parentFoldersAria": "上级文件夹",
+
+
+
+
+
+
+  "home.emptyTitle": "这里还没有内容",
+
+
+  "home.emptyBody": "导入一个文件或文件夹，或让你的智能体制作一个模型。",
+
+
   "home.searchAria": "搜索模型",
   "home.searchPlaceholder": "搜索",
   "home.layout": "布局",
-  "home.open": "打开",
   "home.grid": "网格",
   "home.list": "列表",
   "home.openAria": "打开 {name}",
-  "home.emptyTitle": "还没有打开任何文件",
-  "home.emptyBody": "打开一个 CAD 文件，或让你的智能体制作一个模型。",
-  "home.openFile": "打开文件",
-  "home.formatModel": "模型",
-  "home.noMatchingModels": "没有匹配的模型。",
+  "home.noAppOpens": "这台电脑上没有可打开 {name} 的应用。",
+  "format.xbf": "XBF",
+  "home.formatPart": "零件",
+  "home.formatAssembly": "装配体",
+  "home.noMatchingModels": "没有匹配项。",
   "home.filesAria": "文件",
+  "home.foldersAria": "文件夹",
+  "home.otherFilesAria": "其他文件",
+  "home.recent": "最近",
+  "home.allFiles": "所有文件",
   "home.loadingFiles": "正在加载文件",
   "home.modelsAria": "CAD 模型",
   "home.fileUnavailable": "文件不可用",
   "home.actionsAria": "{name} 的操作",
   "home.menuOpen": "打开",
-  "home.pin": "置顶",
-  "home.unpin": "取消置顶",
-  "home.delete": "删除",
-  "home.deleteModelTitle": "删除 {name}?",
-  "home.deleteModelBody": "删除引擎的记录及其保存的构建。脚本和任何导出的文件仍保留在磁盘上。运行脚本即可重新构建。",
-  "home.deleteFileTitle": "从查看器中删除 {name}?",
-  "home.deleteFileBody": "删除引擎对此文件的记录。文件本身仍保留在磁盘上。",
-  "home.cancel": "取消",
-  "home.kindsAria": "显示",
-  "home.kind.all": "全部",
-  "home.kind.models": "模型",
-  "home.kind.files": "文件",
-  "home.kindAria": "显示：{kind}",
+  "home.star": "加星标",
+  "home.unstar": "取消星标",
   "home.columnName": "名称",
-  "home.columnKind": "类型",
-  "home.columnSize": "大小",
-  "home.columnUpdated": "更新",
-  "home.columnCreated": "创建",
+  "home.columnType": "类型",
+  "home.columnViewed": "上次查看",
+  "home.columnEdited": "上次编辑",
+  "home.folderType": "文件夹",
   "home.openingAria": "正在打开 {name}",
   "home.ageNow": "刚刚",
   "home.ageEdited": "{age}编辑",
@@ -715,7 +859,6 @@ export default {
   "parameters.error.build_failed": "这些值无法构建。",
   "parameters.error.preview_build_failed": "这些值无法构建。",
   "parameters.error.preview_failed": "无法显示这些值。",
-  "parameters.reason.file": "请在脚本中编辑。",
   "parameters.reason.no_worker": "请重新运行脚本后再编辑。",
   "parameters.reason.shared": "在另一个文件中设置。",
   "parameters.reason.sharedIn": "在 {source} 中设置。",

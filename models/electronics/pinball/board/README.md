@@ -17,8 +17,8 @@ design model's numbers (`../src/layout.py`, `../src/playfield.py`) through `scri
 | Parts | 250 footprints: 189 to assemble (38 LEDs, RP2040, flash, CH224K, TPS563201, AP2112K, 74AHCT1G125, MAX98357A, LIS3DH, USBLC6-2SC6, AO3400A x 2, SS34 x 2, 18 TVS, the connectors and passives), 18 ball switches, 33 holes, 6 fiducials, 4 SWD test pads |
 | Nets | 125 |
 | Routing | every net: 2055 track segments, 6.80 m of copper, 514 vias (369 the wiring's, 145 the art's stitching) |
-| ERC | clean: 0 errors, 0 warnings (`cad kicad_sch erc`) |
-| DRC | clean: 0 errors, 14 warnings (`cad kicad_pcb drc` on the built board, the project's rules; the warnings are listed below) |
+| ERC | clean: 0 errors, 0 warnings (`cad kicad erc`) |
+| DRC | clean: 0 errors, 14 warnings (`cad kicad drc` on the built board, the project's rules; the warnings are listed below) |
 | Fit | `check_fit.py` passes, 0 failures: outline, flipper bores, every fixing hole under its part, every insert's LED under its window, the combs against `playfield.py`, every top part hidden under furniture, the underside clear of the flipper mechanisms |
 | Own checks | `check_board.py` clean: 630 pins, 0 differ from the schematic; 0 segments off 45 degrees; each rail's width for its peak current (IPC-2221, 10 C rise); each supply pin's capacitor distance; In1 under the whole USB pair (D+ 42.7 mm, D- 44.8 mm) |
 | Rules | JLCPCB standard 4-layer from the pcb skill's table (read 2026-11-04): 0.15 mm clearance (fab 0.09), 0.2 mm signal, 0.3/0.6 mm vias, 0.3 mm copper to edge, 0.25 mm hole clearance; a custom rule each for the combs' chevrons (0.1 mm, `pinball.kicad_dru`), the stock SK6812MINI-E's own cut-out (0.2 mm to its edge) and the RP2040's fan-out (0.15 mm tracks under the package) |
@@ -117,8 +117,8 @@ cad run build.py                               # about eight minutes: the steps 
 cad run scripts/part_models.py                 # pinball.3dshapes/: before opening the board in 3D
 
 # check the board
-cad kicad_sch erc pinball.kicad_sch
-cad kicad_pcb drc pinball.kicad_pcb
+cad kicad erc pinball.kicad_sch
+cad kicad drc pinball.kicad_pcb
 cad run check_board.py                         # pin by pin against the schematic, angles, widths, decoupling, USB
 cd .. && cad run board/check_fit.py && cd board   # against the CAD model
 ```
@@ -127,8 +127,8 @@ cd .. && cad run board/check_fit.py && cd board   # against the CAD model
 
 ```bash
 cad viewer --json pinball.kicad_pcb pinball.kicad_sch     # prints each file's url
-cad kicad_pcb snapshot pinball.kicad_pcb tmp/copper.png --display copper
-cad kicad_sch snapshot pinball.kicad_sch tmp/mcu.png --sheet /MCU/
+cad snapshot pinball.kicad_pcb tmp/copper.png --display copper
+cad snapshot pinball.kicad_sch tmp/mcu.png --sheet /MCU/
 ```
 
 ## What is real and what is simplified

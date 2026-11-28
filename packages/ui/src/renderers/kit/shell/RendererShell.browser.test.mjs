@@ -94,7 +94,7 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, each text
   await page.addStyleTag({ content: '#root > div { width: 390px !important; height: 700px !important; }' });
   const pane = page.getByTestId('one');
   await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
-  const SELECTORS = ['[data-navbar-panel="left"]', '[data-navbar-menu]', '[data-file-name]', '[data-testid="file-actions"]'];
+  const SELECTORS = ['[data-navbar-logo]', '[data-navbar-panel="left"]', '[data-file-name]', '[data-testid="file-actions"]'];
   const row = () => pane.locator('[data-viewer-navbar]').evaluate((bar, selectors) => {
     const top = bar.getBoundingClientRect();
     const boxes = selectors.map(selector => bar.querySelector(selector).getBoundingClientRect());
@@ -102,7 +102,9 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, each text
       gaps: boxes.slice(1).map((box, at) => Math.round(box.left - boxes[at].right)), centred: boxes.every(box => Math.abs(box.top + box.height / 2 - (top.top + top.height / 2)) < 1) };
   }, SELECTORS);
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().height === 48);
-  assert.deepEqual(await row(), { left: 10, heights: [36, 36, 36, 36], widths: [36, 36, 36], gaps: [0, 0, 0], centred: true }, 'the left end, regular');
+  // The name is text, no control: its line's height, centred on the row with the controls either side of it.
+  // The logo first, on the row's 8px, then the toggle, the name and the ⋯.
+  assert.deepEqual(await row(), { left: 8, heights: [36, 36, 20, 36], widths: [36, 36, 36], gaps: [0, 0, 0], centred: true }, 'the left end, regular');
   // What each primitive draws at, read off the page: [height, font size / line height].
   const drawn = selector => page.locator(selector).first().evaluate(element => {
     const style = getComputedStyle(element);
@@ -123,11 +125,14 @@ test('a phone\'s scale: the primitives read the tokens (36px controls, each text
     const style = getComputedStyle(element);
     return { fill: style.backgroundColor, ring: element.matches(':focus-visible') };
   });
-  for (const selector of ['[data-navbar-menu]', '[data-file-name]']) {
+  // The logo is the way home where the host has one (no menu of its own); the ⋯ opens its menu.
+  for (const selector of ['[data-navbar-logo]', '[data-testid="file-actions"]']) {
     await pane.locator(`[data-viewer-navbar] ${selector}`).tap();
-    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'open', selector);
-    await page.touchscreen.tap(200, 500);
-    await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'closed', selector);
+    if (selector !== '[data-navbar-logo]') {
+      await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'open', selector);
+      await page.touchscreen.tap(200, 500);
+      await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAttribute('data-state') === 'closed', selector);
+    }
     // Its colour transition (`transition-colors`) run out: what is left is what stays.
     await page.waitForFunction(selector => document.querySelector(`[data-testid="one"] [data-viewer-navbar] ${selector}`).getAnimations()
       .every(animation => animation.playState === 'finished'), selector);
@@ -215,6 +220,37 @@ for (const phone of [true, false]) {
   });
 }
 
+// The logo is the way home, so it stands in one place on every page (`docs/viewer-ux.md`, "The navbar"): first in the
+// row, its drawn mark on the page's 16px line, over the home (its sidebar's toggle after it), over a document with a
+// panel (the panel's toggle after it) and over a page with no toggle (a file no renderer opens) alike.
+test('the logo stands in one place on every page: over the home, over a document with a panel, and over a page with no toggle', async (t) => {
+  const origin = await serve(t);
+  const { page } = await newPage(t);
+  const pane = page.getByTestId('one');
+  const lead = () => pane.locator('[data-viewer-navbar] nav').evaluate(nav => {
+    const mark = nav.querySelector('[data-navbar-logo] img').getBoundingClientRect(), bar = nav.closest('[data-viewer-navbar]').getBoundingClientRect();
+    const toggle = nav.querySelector('[data-navbar-panel="left"]');
+    return { mark: mark.left + 2 - bar.left, first: nav.firstElementChild.hasAttribute('data-navbar-logo'),
+      toggle: toggle ? toggle.getBoundingClientRect().left - bar.left : null };
+  });
+  const seen = {};
+  const pages = [['home', 'home', () => pane.locator('[data-viewer-navbar] [data-navbar-home] input')], ['panel', 'panel.harness', () => pane.locator('[data-viewer-navbar] [data-navbar-panel="left"]')],
+    ['none', 'nothing.unopenable', () => pane.getByText('Could not open that file')]];
+  for (const [name, address, ready] of pages) {
+    await page.goto(`${origin}/?file=${address}&home=1`);
+    await ready().first().waitFor();
+    await settle(page);
+    seen[name] = await lead();
+    // The keyboard goes as the eye does: from the logo to the toggle.
+    if (name === 'panel') {
+      await pane.locator('[data-viewer-navbar] [data-navbar-logo]').focus();
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-navbar-panel')), 'left', 'Tab from the logo is the toggle');
+    }
+  }
+  assert.deepEqual(seen, { home: { mark: 16, first: true, toggle: 36 }, panel: { mark: 16, first: true, toggle: 36 }, none: { mark: 16, first: true, toggle: null } });
+});
+
 // Every popup trigger a finger reaches on a phone (`docs/design-system.md`, "Dropdowns": ONE touch rule, the trigger's): on the
 // view (the navbar, the strip), in the Display card, in the sidebar sheet and in Preview's Settings, a tap opens its
 // popup and a second tap on the same trigger shuts it.
@@ -298,7 +334,8 @@ test('a finger on a phone: the navbar\'s menus stay open, a held press opens the
   await page.addStyleTag({ content: '#root > div { width: 390px !important; height: 700px !important; }' });
   const pane = page.getByTestId('one');
   await pane.locator('[data-viewer-navbar] [data-testid="file-actions"]').waitFor();
-  for (const [selector, name] of [['[data-navbar-menu]', 'app menu'], ['[data-testid="file-actions"]', '⋯']]) {
+  // The ⋯ (the app's menu is the home's where the host has a home: `ModelLibrary.browser.test.mjs` taps it there).
+  for (const [selector, name] of [['[data-testid="file-actions"]', '⋯']]) {
     const trigger = pane.locator(`[data-viewer-navbar] ${selector}`);
     await trigger.tap();
     await page.locator('[role=menu]').first().waitFor();

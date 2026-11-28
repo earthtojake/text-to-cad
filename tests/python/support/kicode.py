@@ -61,10 +61,12 @@ def kicad_cli(case: unittest.TestCase) -> Path:
 
 def call(case: unittest.TestCase, operation: str, *args: Any, document_type: str = "kicad_pcb") -> dict[str, Any]:
     """``cad.<document_type>.<operation>(*args)`` (a board's, by default) run in the environment, as the
-    ``cad`` command runs it: its result as data (``cad_server._internal.integration_env.call``)."""
+    ``cad`` command runs it: its result as data (``cad_server._internal.integration_env.call``). KiCad's own checks,
+    ``drc`` and ``erc``, are the kicad integration's (``cad.kicad.drc``), as ``cad kicad drc`` runs them."""
     from cad_server._internal import integration_env
 
-    return integration_env.call(python(case), document_type, operation, [str(arg) for arg in args], {})
+    owner = "kicad" if operation in ("drc", "erc") else document_type
+    return integration_env.call(python(case), owner, operation, [str(arg) for arg in args], {})
 
 
 def environment(case: unittest.TestCase, root: Path) -> dict[str, str]:

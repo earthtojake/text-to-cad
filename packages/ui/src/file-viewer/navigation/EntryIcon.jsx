@@ -8,9 +8,8 @@ import {
 
 // One glyph for every CAD file, on every surface that lists files — the
 // explorer, the Home, the name menu: lucide's plain `File`, so a file reads as
-// a file at a glance, and the name beside it says which kind. (A model, built
-// from code, is lucide's `Box`: `DocumentGlyph`.) Only a file still loading
-// differs: the spinner.
+// a file at a glance, and the name beside it says which kind. Only a file still
+// loading differs: the spinner.
 const ENTRY_ICON_COMPONENTS = {
   [ENTRY_ICON_KIND.LOADING]: LoaderCircle,
 };

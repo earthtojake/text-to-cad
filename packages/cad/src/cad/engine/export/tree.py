@@ -126,9 +126,13 @@ def write_xbf(view: Any, path: Path) -> None:
     """The view as an xbf of its own, saved atomically (``document.save``)."""
     from cad.engine import document
 
-    # A migration edits metadata on the original XCAF tree. Reconstructing it from the
-    # viewer tree would discard its build provenance and preserved legacy attributes.
-    doc = view.source.xcaf if view.source.migration is not None else document.to_xcaf(tree_of(view))
+    # A migration edits metadata on the original XCAF tree, and a file's .xbf written to another is a copy of its
+    # document (``cad export a.xbf b.xbf``): each saves that tree as it is. Reconstructing it from the viewer tree
+    # would discard its build closure (law 1), its provenance and any preserved legacy attributes.
+    source = view.source
+    copied = (source.xcaf is not None and not source.live and not source.foreign and source.path is not None
+              and Path(source.path).suffix.lower() == ".xbf")
+    doc = source.xcaf if source.migration is not None or copied else document.to_xcaf(tree_of(view))
     if view.source.migration is not None:
         from cad.engine.document_migrations import set_origin
 

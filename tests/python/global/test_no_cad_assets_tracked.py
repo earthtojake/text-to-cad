@@ -50,7 +50,9 @@ ALLOWED: tuple[tuple[str, int, str], ...] = (
      "need neither Python nor ezdxf"),
 )
 
-OUTPUT_FOLDERS = ("STEP/x.step", "STL/x.stl", "GLB/x.glb", "3MF/x.3mf", "DXF/x.dxf", "XBF/x.xbf")
+# Each folder a sample's files are written to on request, and the .xbf a run writes beside a script (bare @model).
+OUTPUT_FOLDERS = ("STEP/x.step", "STL/x.stl", "GLB/x.glb", "3MF/x.3mf", "DXF/x.dxf", "XBF/x.xbf", "src/x.xbf",
+                  "src/deep/x.xbf")
 
 
 def _pattern(path: str) -> re.Pattern[str]:

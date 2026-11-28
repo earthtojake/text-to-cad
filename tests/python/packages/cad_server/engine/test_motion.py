@@ -24,16 +24,16 @@ import numpy as np
 from cad.engine import build as engine_build
 from cad.engine import document, mechanism
 from cad.engine.export.keys import KEY_DEGREES, KEY_MM
-from tests.python.support import engine_cache
+from tests.python.support import engine_restart
 
 ARM = """
 import math
 import build123d as bd
 from cad.build123d import configuration_sequence, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/arm.xbf")
+@model("XBF/arm.xbf")
 def arm():
     base = bd.Box(100, 60, 20)
     link = bd.Pos(40, 0, 25) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -251,11 +251,11 @@ def table(t):
 HINGE = """
 import build123d as bd
 from cad.build123d import configuration_sequence
-from cad.engine import xbf
+from cad.engine import model
 import moves
 
 
-@xbf("XBF/hinge.xbf")
+@model("XBF/hinge.xbf")
 def hinge():
     base = bd.Box(100, 60, 20)
     arm = bd.Pos(40, 0, 25) * bd.Box(120, 20, 10, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.CENTER))
@@ -295,8 +295,8 @@ class MotionReadsTest(unittest.TestCase):
         self.table(40)
 
     def restart(self) -> None:
-        """A fresh worker: nothing held but what the engine's cache kept (``engine_cache``)."""
-        engine_cache.restart(self.folder / "cache")
+        """A fresh worker: nothing held but the models' .xbf files (``engine_restart``)."""
+        engine_restart.restart()
 
     def table(self, base: float) -> None:
         path = self.folder / "table.json"
@@ -304,8 +304,8 @@ class MotionReadsTest(unittest.TestCase):
         os.utime(path, ns=(time.time_ns(), time.time_ns()))
 
     def hinge(self, *, verify: bool = False) -> dict:
-        [report] = engine_build.build(self.folder / "hinge.py", ["hinge"], cwd=self.folder, verify=verify,
-                                      cache=str(self.folder / "cache"))
+        [report] = engine_restart.build(self.folder / "hinge.py", ["hinge"], cwd=self.folder,
+                                        verify=verify)
         self.assertTrue(report["ok"], report)
         return report
 
@@ -313,7 +313,7 @@ class MotionReadsTest(unittest.TestCase):
         return document.Loaded(self.xbf).mechanism.motions["table"].keys[0][2]["elbow"][0]
 
     def test_a_file_a_motion_reads_changed_builds_the_model_again(self) -> None:
-        self.assertEqual(self.hinge()["cache"]["reason"], "the engine's cache holds none of it")
+        self.assertEqual(self.hinge()["cache"]["reason"], "it has no .xbf")
         self.assertIn(["read", "../table.json"], [row[:2] for row in document.Loaded(self.xbf).closure["inputs"]])
         self.assertEqual(self.hinge()["cache"], {"used": True, "from": "memory"})
         self.table(45)
@@ -323,7 +323,7 @@ class MotionReadsTest(unittest.TestCase):
                          "the body replayed, and its harvest is not reused: a file its function read changed")
         self.assertEqual(self.first(), 45.0, "sampled again, from the file as it is")
         self.restart()
-        self.assertEqual(self.hinge()["cache"], {"used": True, "from": "cache"})
+        self.assertEqual(self.hinge()["cache"], {"used": True, "from": "xbf"})
         self.table(50)
         self.assertEqual(self.hinge()["cache"]["reason"], "../table.json changed")
         self.assertEqual(self.first(), 50.0)

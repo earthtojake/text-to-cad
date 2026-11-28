@@ -46,8 +46,8 @@ export function validateRenderers(renderers: readonly RendererRegistration[]): v
   const ids = new Set<string>();
   for (const renderer of renderers) {
     if (!renderer.id || ids.has(renderer.id)) throw new Error(`Duplicate or empty file renderer ID: "${renderer.id}".`);
-    if (!Number.isFinite(renderer.priority)) throw new Error(`Renderer "${renderer.id}" has an invalid priority.`);
     ids.add(renderer.id);
+    if (!Number.isFinite(renderer.priority)) throw new Error(`Renderer "${renderer.id}" has an invalid priority.`);
   }
   if (renderers.filter((renderer) => renderer.fallback).length > 1) {
     throw new Error("Register at most one explicit fallback file renderer.");

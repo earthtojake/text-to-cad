@@ -1,5 +1,5 @@
 """Exports: a document translated to STEP, GLB, STL, 3MF and xbf by one writer
-(``export.translate``), whether a decorator declares the file or ``cad <type> export`` asks
+(``export.translate``), whether a decorator declares the file or ``cad export`` asks
 for it. The STEP reads back through the engine's own reader with its names, colours,
 materials and instance tree; the meshes are parsed and counted; a posed model's STEP is the
 same bytes in every process; a build keeps a file its document did not change, writes only
@@ -31,18 +31,18 @@ from cad.engine.export import ExportRefused, Source, translate
 BOARD = """
 import build123d as bd
 from cad.build123d import mechanism_state
-from cad.engine import glb, paint, step, stl, threemf, xbf
+from cad.engine import glb, paint, step, stl, threemf, model
 from bd_materials import metals
 
 
-@xbf("XBF/peg.xbf")
+@model("XBF/peg.xbf")
 def peg():
     peg = bd.Cylinder(2, 10)
     peg.color = bd.Color(0.9, 0.2, 0.1)
     return peg
 
 
-@xbf("XBF/board.xbf")
+@model("XBF/board.xbf")
 @step("board.step")
 @glb("board.glb")
 @stl("board.stl")
@@ -75,11 +75,11 @@ def board():
 # seventh: a colour presentation per styled shape, which OCCT's writer keeps in a map.
 KIT = """
 import build123d as bd
-from cad.engine import paint, xbf
+from cad.engine import paint, model
 from bd_materials import metals
 
 
-@xbf("XBF/kit.xbf")
+@model("XBF/kit.xbf")
 def kit():
     looks = [(0.9, 0.2, 0.1), (0.1, 0.8, 0.2), (0.2, 0.3, 0.9), (0.7, 0.7, 0.1), (0.5, 0.1, 0.6), (0.1, 0.5, 0.5)]
     parts = []
@@ -109,7 +109,7 @@ translate(Path(sys.argv[1]), None, Path(sys.argv[2]))
 HINGES = """
 import build123d as bd
 from cad.build123d import mechanism_state, posed
-from cad.engine import xbf
+from cad.engine import model
 
 PLATE = bd.Box(10, 10, 2)
 PLATE.color = bd.Color(0.2, 0.3, 0.9)
@@ -128,14 +128,14 @@ def hinge(index):
     return bd.Compound(children=[base, lid], label="hinge")
 
 
-@xbf("XBF/hinges.xbf")
+@model("XBF/hinges.xbf")
 def hinges():
     row = bd.Compound(children=[hinge(0), hinge(1), hinge(2)], label="hinges")
     mechanism_state(row, "open", flap0=30, flap1=60, flap2=90)
     return row
 
 
-@xbf("XBF/hinges_open.xbf")
+@model("XBF/hinges_open.xbf")
 def hinges_open():
     return posed(hinges().shape, "open")
 """
@@ -147,10 +147,10 @@ def hinges_open():
 # the body and not what it makes.
 ROWS = """
 import build123d as bd
-from cad.engine import step, xbf
+from cad.engine import step, model
 
 
-@xbf("XBF/rows.xbf")
+@model("XBF/rows.xbf")
 @step("rows.step")
 def rows():
     noop = {noop}  # noqa: F841
@@ -340,9 +340,12 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(count, sum(held[placed.prototype].triangles for placed in view.placements))
         self.assertEqual(len(data), 84 + 50 * count)
 
-    def test_what_is_no_document_or_no_new_one_is_refused_by_name(self) -> None:
-        with self.assertRaisesRegex(ExportRefused, "not written from another xbf"):
-            translate(self.xbf, None, self.folder / "again.xbf")
+    def test_what_is_no_document_is_refused_by_name_and_an_xbf_of_an_xbf_is_its_copy(self) -> None:
+        # An xbf written from another is a copy of its document, as cp makes one: its build closure with it.
+        translate(self.xbf, None, self.folder / "again.xbf")
+        closure = document.Loaded(self.xbf).closure
+        self.assertTrue(closure)
+        self.assertEqual(document.Loaded(self.folder / "again.xbf").closure, closure)
         with self.assertRaisesRegex(ExportRefused, "is a mesh"):
             translate(self.folder / "board.glb", None, self.folder / "back.step")
         with self.assertRaisesRegex(ExportRefused, "an export is one of"):
@@ -407,10 +410,10 @@ TWO = """
 import build123d as bd
 from bd_materials import metals
 from cad.build123d import free, mechanism_state
-from cad.engine import xbf
+from cad.engine import model
 
 
-@xbf("XBF/two.xbf")
+@model("XBF/two.xbf")
 def two():
     plate = bd.Box(100, 60, 20)
     plate.label = "plate"
@@ -433,7 +436,7 @@ def two():
 
 
 class RobotExportTest(unittest.TestCase):
-    """``cad <type> export`` of a robot description: ``--zero`` reaches the engine, and what the file holds is said
+    """``cad export`` of a robot description: ``--zero`` reaches the engine, and what the file holds is said
     after its line, on stderr, and under ``--json`` as the row's ``robot``."""
 
     @classmethod
@@ -522,10 +525,10 @@ class BuildFilesTest(unittest.TestCase):
     def test_a_read_only_folder_takes_its_unchanged_files_and_refuses_a_change_in_one_line(self) -> None:
         text = """
             import build123d as bd
-            from cad.engine import step, xbf
+            from cad.engine import step, model
 
 
-            @xbf("out/plate.xbf")
+            @model("out/plate.xbf")
             @step("out/plate.step")
             def plate():
                 return bd.Box(4, 5, {height})
@@ -542,7 +545,7 @@ class BuildFilesTest(unittest.TestCase):
         [report] = engine_build.build(script, ["plate"], cwd=self.folder)
         self.assertTrue(report["ok"], report)
         self.assertFalse(any(row["written"] for row in report["files"].values()), report["files"])
-        source = engine_build.held(script, "plate")  # what ``cad <type> export`` translates
+        source = engine_build.held(script, "plate")  # what ``cad export`` translates
         self.assertEqual(translate(source, None, out / "plate.step"), (out / "plate.step").stat().st_size)
         self.assertEqual({path: path.stat().st_mtime_ns for path in out.iterdir()}, stats)
         refusal = f"its folder {out} is read-only (mode 0555)"
@@ -556,7 +559,7 @@ class BuildFilesTest(unittest.TestCase):
         self.assertEqual({path: path.stat().st_mtime_ns for path in out.iterdir()}, stats)
 
     def test_a_verb_given_a_declared_file_reads_the_file_and_consults_no_model(self) -> None:
-        """A declared file is an export of its model, never a tie to it: ``cad <type> export
+        """A declared file is an export of its model, never a tie to it: ``cad export
         <declared>.xbf out.step`` reads the file as a file document, in the documents worker, though
         the worker that built the model holds its document -- the same STEP, no model consulted."""
         from cad_server.engine import daemon
@@ -564,10 +567,10 @@ class BuildFilesTest(unittest.TestCase):
 
         script = self.write("plate.py", """
             import build123d as bd
-            from cad.engine import xbf
+            from cad.engine import model
 
 
-            @xbf("out/plate.xbf")
+            @model("out/plate.xbf")
             def plate():
                 return bd.Box(4, 5, 6)
         """)
@@ -588,7 +591,7 @@ class BuildFilesTest(unittest.TestCase):
         self.assertEqual(engine._routed({"source": {"path": str(declared)}, "cwd": str(self.folder)}),
                          ("documents", str(self.folder), None))
 
-    def test_a_derived_decorator_alone_writes_its_one_file(self) -> None:
+    def test_a_derived_decorator_alone_writes_its_own_file_alone(self) -> None:
         script = self.write("solo.py", """
             import build123d as bd
             from cad.engine import step
@@ -600,19 +603,22 @@ class BuildFilesTest(unittest.TestCase):
         """)
         [report] = engine_build.build(script, None, cwd=self.folder)
         self.assertTrue(report["ok"], report)
+        # A file decorator writes its own file and nothing else: @step alone, its STEP, no .xbf.
         self.assertEqual(self.files(), {"solo.py", "solo.step"})
+        self.assertEqual([(Path(path).name, row["kind"], row["written"]) for path, row in report["files"].items()],
+                         [("solo.step", "step", True)])
 
     def test_a_decorator_takes_out_alone_and_a_file_shows_the_joints_pose(self) -> None:
         import cad.engine
         from cad.engine import model
-        from cad.engine.model import glb, step, xbf
+        from cad.engine.model import glb, step
 
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*material"):
             step("a.step", material="steel")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*pose"):
             step("a.step", pose="open")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*out2"):
-            xbf(out2="a.xbf")
+            model("a.xbf", out2="b.xbf")
         with self.assertRaisesRegex(TypeError, "unexpected keyword argument.*animate"):
             glb("a.glb", animate={"flap": (0, 90)})
         self.assertFalse(hasattr(model, "snapshot"), "a picture is the snapshot verb's, never a declaration")
@@ -1151,7 +1157,7 @@ class StepBytesTest(unittest.TestCase):
 
     def test_a_build_s_step_is_its_xbf_s_read_cold_in_another_process(self) -> None:
         self.assertEqual(self.fresh("cold.step"), self.built)
-        # So exporting the xbf over the build's STEP keeps the file (``cad <type> export``: unchanged).
+        # So exporting the xbf over the build's STEP keeps the file (``cad export``: unchanged).
         stamp = self.step.stat().st_mtime_ns
         translate(self.xbf, None, self.step)
         self.assertEqual(self.step.stat().st_mtime_ns, stamp)

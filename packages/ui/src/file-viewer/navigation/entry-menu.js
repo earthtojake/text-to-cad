@@ -124,3 +124,45 @@ export function openInMenu(platform, capabilities, t = english, { sourceMissing 
   if (source && source.default !== false) entries.push({ action: "app", label: t("file.defaultApp"), group: "default", target: "source", app: "default", ...opens });
   return entries;
 }
+
+/**
+ * What a home's ⋯ lists under Open in for a file that is no document (a folder's PDF, script or another tool's native
+ * file), as Open in's entries in its order: the apps the host lists for it (`files`: its one target, the file itself),
+ * by their names; then Default app, unless the host says the OS's own handler is not offered (`default: false`: an
+ * extension it will not start, anything that could be a program); then the desktop's file manager, by its name, where
+ * the caller asks for it (`capabilities`). Nothing until the host answers, and nothing where it lists no app and no handler.
+ *
+ * @param {Platform} platform
+ * @param {ReadonlySet<EntryAction>} capabilities What this host can perform on a file that the menu lists here.
+ * @param {(key: string, params?: Record<string, unknown>) => string} [t] The view's translator; English by default.
+ * @param {{ files?: OpenInFiles | null }} [state] The host's apps for the file.
+ * @returns {OpenInEntry[]}
+ */
+export function fileOpenMenu(platform, capabilities, t = english, { files = null } = {}) {
+  const file = files?.targets?.[0] ?? null;
+  const present = file?.present !== false;
+  const opens = present ? { enabled: true } : { enabled: false, reason: t("file.sourceMissing") };
+  /** @type {OpenInEntry[]} */
+  const entries = [];
+  for (const app of file?.apps ?? []) entries.push({ action: "app", label: app.name, group: "source", target: file.target, app: app.id, ...(present ? appOpens(app, file.kind, t) : opens) });
+  if (file && file.default !== false) entries.push({ action: "app", label: t("file.defaultApp"), group: "default", target: file.target, app: "default", ...opens });
+  if (capabilities.has("reveal")) entries.push({ action: "reveal", label: fileManagerName(platform, t), group: "places", ...opens });
+  return entries;
+}
+
+/**
+ * What a press on a file that is no document opens it with, from the host's answer for it (`files`): the OS's own
+ * handler where the host offers it (`"default"`: every file but one whose target says `default: false`), else the
+ * first app the host lists that can read the file (its order: an editor, for code); null where the host lists neither,
+ * the file is gone, or it answered nothing: nothing here opens it.
+ *
+ * @param {OpenInFiles | null | undefined} files
+ * @returns {{ target: string, app: string } | null}
+ */
+export function fileOpener(files) {
+  const file = files?.targets?.[0] ?? null;
+  if (!file || file.present === false) return null;
+  if (file.default !== false) return { target: file.target, app: "default" };
+  const app = (file.apps ?? []).find((entry) => !entry.refuses);
+  return app ? { target: file.target, app: app.id } : null;
+}

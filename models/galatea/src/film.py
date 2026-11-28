@@ -10,7 +10,7 @@
     --draft, --preview      at 960 x 540 or 640 x 360 with few samples: for framing, and for the motion
     --again                 render a frame that is there already
 
-It renders the GLB of the robot (GLB/galatea.glb, which `cad model export` writes; the README has the
+It renders the GLB of the robot (GLB/galatea.glb, which `cad export` writes; the README has the
 line), loaded by `cad.blender`, in Cycles. Everything it writes goes under tmp/, which Git ignores.
 
 A shot is one clip of the model (a motion of `lib/poses.py`) seen by one camera move. The pelvis is

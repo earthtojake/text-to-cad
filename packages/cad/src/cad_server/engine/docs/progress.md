@@ -103,8 +103,8 @@ destination. A snapshot's are three: `scene` while the document is served, meshe
 model's document, by the daemon as it draws a file through a render process (`Daemon.draw`,
 `renders.Renders.draw`) and by the verb's own process for the write, or wholly in that process
 with `daemon=False` (`render.service.draw_here_each`). A measurement's are `inspect`'s summary
-measuring a volume per part, in the process that asks (`api._summary`). `cad <type> export`, `cad
-snapshot` and `cad <type> inspect` draw them as `python model.py` draws a build's: the one bar, on a
+measuring a volume per part, in the process that asks (`api._summary`). `cad export`, `cad
+snapshot` and `cad inspect` draw them as `python model.py` draws a build's: the one bar, on a
 terminal, nothing piped (`api.export(progress=)`, `api.snapshot(progress=)` and
 `api.inspect(progress=)` take the frames instead, `False` none, as `build_script` does). A viewer
 export's job (`cad_server.jobs`) keeps its worker's latest as its status's `progress` and the stage's

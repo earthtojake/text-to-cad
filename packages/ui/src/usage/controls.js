@@ -85,16 +85,34 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
   // Quick Edit's bar coming, and put away by its X: whether it is in the way.
   'quick_edit_shown', 'quick_edit_dismissed', 'board_side', 'board_dimension',
-  // The navbar, its file menu and its name menu's Models and Files (the explorer), and the app menu.
+  // The navbar, its file menu (Open in new tab, a standalone document's Import its folder as a project, a shared
+  // document's Download files, Previous and Next in project, which [ and ] count too), the project's name before the document's, the logo (`home`: the way home) and the app menu. The name
+  // menu's Models and Files (the explorer), gone since projects replaced them (`models` ... `explorer_filter`): no
+  // view sends them now, but older releases do. Then the search of every document: opened, a document picked from
+  // it, and one opened beside the view.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
   'explorer', 'explorer_filter', 'file_copy_path', 'file_copy_link', 'file_reveal', 'file_open_app', 'home',
+  'file_import_folder', 'file_open_beside', 'file_download_files', 'project_crumb', 'project_previous', 'project_next',
+  'search_open', 'search_pick', 'search_new_tab',
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
   'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
-  // The home.
-  'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
+  // The home: `home_pick` is Import's File (its Open,
+  // before), `home_import_folder` its Folder (where one chooser takes either, a Mac's, by what was chosen in it; a
+  // cancel counts neither); `home_pin` and `home_unpin` a card's Star and Unstar (the words they
+  // shipped with); and a project's menu. No view sends `home_kind_<kind>` (the kinds' tabs, gone: `home_kind_all` and the
+  // rest), `home_sort_kind`, or `home_delete` (a card's Remove from Recents, gone with it),
+  // `home_delete_cancel` or a long place's Show more, `home_project_more`: older releases do.
+  'home_search', 'home_kind_all', 'home_kind_models', 'home_kind_drawings', 'home_kind_boards', 'home_kind_schematics', 'home_kind_robots',
+  'home_layout_grid', 'home_layout_list',
   'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
+  'home_import_folder', 'home_project_copy_path', 'home_project_reveal', 'home_project_remove', 'home_project_more',
+  // The home's places (a row of its sidebar: pinned, peeking or a phone's sheet; Starred is `home_place_pinned`, and no
+  // view sends `home_place_standalone`, the place that is gone), its Sort, a document's and a project's Open in new tab
+  // (or Open in browser), and the way back to the document just left (its button, or Escape).
+  'home_place_recents', 'home_place_pinned', 'home_place_standalone', 'home_place_project',
+  'home_sort_activity', 'home_sort_name', 'home_sort_kind', 'home_sort_viewed', 'home_sort_edited', 'home_open_new_tab', 'home_project_open_new_tab', 'home_back',
 ]));
 
 /**
