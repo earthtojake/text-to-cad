@@ -664,6 +664,37 @@ class OwnFieldTest(MemoCase):
                 self.assertEqual(memo._fields_key(shape, None), ())
 
 
+    def test_the_fields_build123d_keeps_are_read_off_its_bytecode_as_dis_reads_them(self) -> None:
+        """``_own_fields`` reads each ``STORE_ATTR`` off a code object's bytes: the names ``dis`` reads, an argument
+        past a byte (``EXTENDED_ARG``) among them."""
+        import dis
+        import types
+
+        import build123d as bd
+
+        def read(code: types.CodeType) -> set[str]:
+            found = {step.argval for step in dis.get_instructions(code) if step.opname == "STORE_ATTR"}
+            return found.union(*(read(held) for held in code.co_consts if isinstance(held, types.CodeType)))
+
+        many = "def many(self):\n" + "".join(f"    self.f{n} = {n}\n" for n in range(300))
+        space: dict = {}
+        exec(compile(many, "many", "exec"), space)
+        self.assertEqual(memo._stores(space["many"].__code__), {f"f{n}" for n in range(300)})
+        for kind in (bd.Box, bd.Compound, bd.Face, bd.Sketch, bd.BuildPart):
+            expected: set[str] = set()
+            for base in kind.__mro__:
+                if (base.__module__ or "").startswith(("build123d", "anytree")):
+                    for value in vars(base).values():
+                        for function in (value, getattr(value, "__func__", None), getattr(value, "fget", None),
+                                         getattr(value, "fset", None), getattr(value, "fdel", None)):
+                            while function is not None:
+                                if isinstance(getattr(function, "__code__", None), types.CodeType):
+                                    expected |= read(function.__code__)
+                                function = getattr(function, "__wrapped__", None)
+            with self.subTest(kind=kind.__name__):
+                self.assertEqual(memo._own_fields(kind), frozenset(expected))
+
+
 class MakerTest(MemoCase):
     def test_a_maker_s_run_is_counted_as_the_model_s_call(self) -> None:
         from build123d import Solid

@@ -163,6 +163,7 @@ from __future__ import annotations
 
 import array
 import contextlib
+import dis
 import enum
 import functools
 import hashlib
@@ -3816,13 +3817,12 @@ def _own_fields(kind: type) -> frozenset[str]:
     module wraps (``install``) through its wrapper. What a shape
     holds beside them is its model's own (``_fields_key``). A model's subclass of a build123d class
     is the model's: what its code stores is not among these."""
-    import dis
     import types
 
     found: set[str] = set()
 
     def stored(code: types.CodeType) -> None:
-        found.update(step.argval for step in dis.get_instructions(code) if step.opname == "STORE_ATTR")
+        found.update(_stores(code))
         for held in code.co_consts:
             if isinstance(held, types.CodeType):
                 stored(held)
@@ -3840,6 +3840,25 @@ def _own_fields(kind: type) -> frozenset[str]:
                         stored(code)
                     function, seen = getattr(function, "__wrapped__", None), seen + 1
     return frozenset(found)
+
+
+def _stores(code: Any) -> set[str]:
+    """The attribute names ``code`` itself stores (``STORE_ATTR``), read off its bytes: what ``dis.get_instructions``
+    reads, without making an instruction of each (a tenth of the time, which every worker's first build paid for
+    build123d's classes). Each unit is an operation and its argument's low byte, ``EXTENDED_ARG`` units carrying
+    the higher ones; ``STORE_ATTR``'s argument is the name's place in ``co_names``."""
+    raw, names, found = code.co_code, code.co_names, set()
+    extended = 0
+    for at in range(0, len(raw), 2):
+        operation, argument = raw[at], raw[at + 1] | extended
+        extended = argument << 8 if operation == _EXTENDED_ARG else 0
+        if operation == _STORE_ATTR:
+            found.add(names[argument])
+    return found
+
+
+_STORE_ATTR = dis.opmap["STORE_ATTR"]
+_EXTENDED_ARG = dis.opmap["EXTENDED_ARG"]
 
 
 def _fields_key(shape: Any, state: _Run) -> tuple:
