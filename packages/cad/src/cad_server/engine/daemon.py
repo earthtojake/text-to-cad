@@ -144,12 +144,12 @@ def _drawing(make: bool) -> dict[str, Any] | None:
     return made(make)
 
 
-def _kernel_making() -> Any:
-    """The engine's making of the WebAssembly kernel's folder where it is chosen, else None
-    (``cad_server._internal.engine_host.kernel_making``)."""
+def _kernel_making(chosen: bool = True) -> Any:
+    """The engine's making of the WebAssembly kernel's folder where it is chosen, else None; ``chosen`` false:
+    whichever is chosen (``cad_server._internal.engine_host.kernel_making``)."""
     from cad_server._internal.engine_host import kernel_making
 
-    return kernel_making()
+    return kernel_making(chosen)
 
 
 def _making() -> Any:
@@ -759,12 +759,13 @@ class Daemon:
         43 s measured on a new uvx environment, against 2.5 s loaded again), which the standby pays while
         nobody waits -- once the engine's kernel environment, the base, exists: now, where it is made
         already (or the installation carries the kernel), else the moment the engine's making of it is done
-        (``made_base``). The base is never made here: it is made on first need (``base.kernel``), and until
-        then no standby stands and nothing waits on one. Started in the environment of the client that
+        (``made_base``) -- the base's, or the WebAssembly kernel's folder's where a person chose that kernel. The
+        base is never made here: it is made on first need (``base.kernel``), and until then no standby stands and
+        nothing waits on one. Started in the environment of the client that
         started the daemon (``environment``); each standby after it in that of the lease that took the last
         one. With ``CAD_ENGINE_STANDBY=0`` (``standby``) no service's standby is enabled: none stands by, and
         none replaces one."""
-        _making().made = self.made_base
+        _making().made = _kernel_making(chosen=False).made = self.made_base
         if not standby():
             return
         for service in SERVICES:

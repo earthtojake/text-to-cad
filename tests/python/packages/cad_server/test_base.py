@@ -625,6 +625,16 @@ class WasmKernelTest(unittest.TestCase):
             engine.base({"op": "base", "key": self.home.name}, sent.append)
         self.assertEqual((len(followed), sent[-1]), (1, {"ok": True, "base": True}))
 
+    def test_a_kernel_folder_made_by_the_engine_stands_its_standby_as_a_base_made_does(self) -> None:
+        from cad_server.engine.daemon import Daemon
+
+        engine = Daemon(cap=1)
+        self.addCleanup(engine.shutdown)
+        with mock.patch.object(base, "KERNEL_MAKING", base.KernelMaking()), \
+                mock.patch.object(base, "MAKING", base.Making()), mock.patch.dict(os.environ, {"CAD_ENGINE_STANDBY": "0"}):
+            engine.stand()
+            self.assertEqual((base.MAKING.made, base.KERNEL_MAKING.made), (engine.made_base, engine.made_base))
+
     def test_a_choice_that_names_no_kernel_folder_is_refused_in_one_line(self) -> None:
         for section in ({"kind": "wasm", "folder": "kernel"}, {"kind": "wasm", "folder": 3}):
             self.choose(section)

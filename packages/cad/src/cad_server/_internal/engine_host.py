@@ -67,12 +67,12 @@ def drawing(make):
     return made(make)
 
 
-def kernel_making():
+def kernel_making(chosen: bool = True):
     """The engine's making of the WebAssembly kernel's folder (``cad_server._internal.base.KERNEL_MAKING``), where a
-    person's settings choose that kernel; else None."""
+    person's settings choose that kernel (else None); ``chosen`` false: whichever is chosen."""
     from cad_server._internal.base import KERNEL_MAKING, wasm_chosen
 
-    return KERNEL_MAKING if wasm_chosen() else None
+    return KERNEL_MAKING if not chosen or wasm_chosen() else None
 
 
 def making():
