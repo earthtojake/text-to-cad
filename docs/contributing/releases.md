@@ -203,13 +203,12 @@ the agents running them reach for them, and nothing shipped later can change wha
    and say its release, then runs that release's worker from there:
 
    ```text
-   uv tool run --isolated --managed-python --python 3.14 --from cad@latest cad --version
-   uv tool run --isolated --managed-python --python 3.14 --from "cad==<X>" python -P -m cad_server._internal.auto_update_helper <told>
+   uv tool run --isolated --managed-python --from cad@latest cad --version
+   uv tool run --isolated --managed-python --from "cad==<X>" python -P -m cad_server._internal.auto_update_helper <told>
    ```
 
-   So every later release installs and runs on Python 3.14 from PyPI with those uv options, prints
-   `cad X.Y.Z` as the last line of `cad --version`, keeps a worker at that module that takes one
-   JSON argument, and writes the attempt's record with the keys and phases an earlier release's
+   So every later release installs from PyPI with those uv options, prints `cad X.Y.Z` as the last
+   line of `cad --version`, keeps a worker at that module that takes one JSON argument, and writes the attempt's record with the keys and phases an earlier release's
    server, button and `cad update` read. The two sides of it differ:
 
    - **The record** is written by the newer release and read by the older. A key or a phase may be
@@ -231,6 +230,13 @@ the agents running them reach for them, and nothing shipped later can change wha
      A later release may stop sending a key where the workers after it do without. The one thing
      that cannot be done is the reverse, a worker that needs a key some installed release does not
      send: nothing shipped later adds it there.
+
+   The lines name no version of Python, on purpose: uv takes one the release's own
+   `requires-python` admits, and fetches it where the computer has none, so a release may raise
+   its floor and an installed release still starts its worker (measured, uv 0.11: with a version
+   named, a release that had left that version behind was refused as unsatisfiable, with no older
+   release taken in its place). A release still says truthfully which Pythons it runs on, since
+   that is all uv goes by.
 
    And `api.texttocad.dev/v1/notices` keeps answering `{"notices": [...]}`.
    `tests/python/packages/cad_server/test_update_handshake.py` holds the lines, what this release

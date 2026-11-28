@@ -1,6 +1,6 @@
 """cad's own update, carried out by the release it updates to: the worker ``auto_update.trigger`` starts, detached, with
 no window and outside any Windows app package (``places.outside_package``), from that release in uv's cache, never from
-the environment it replaces: ``uv tool run --isolated --managed-python --python 3.14 --from "cad==<release>" python -P
+the environment it replaces: ``uv tool run --isolated --managed-python --from "cad==<release>" python -P
 -m cad_server._internal.auto_update_helper <told>`` (``auto_update.from_cache``, ``auto_update.HELPER``), uv having
 built that environment first (``auto_update.build``). So the newest release's code always does the update, and the
 worker holds none of the environment's files. That entry is a contract every later release keeps: an older release

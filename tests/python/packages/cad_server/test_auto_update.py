@@ -205,7 +205,7 @@ class GlobalInstallTest(Case):
         environment (uv looks again, where a bare name would take what it built before), ``cad`` for the upgrade."""
         self.assertEqual((auto_update.NEWEST, auto_update.UPGRADE), ("cad@latest", "cad"))
         self.assertEqual(auto_update.from_cache("uv", auto_update.NEWEST, "cad", "--version"),
-                         ["uv", "tool", "run", "--isolated", "--managed-python", "--python", "3.14", "--from",
+                         ["uv", "tool", "run", "--isolated", "--managed-python", "--from",
                           "cad@latest", "cad", "--version"])
         for known, version, chosen in (({"latest": "0.2.0"}, "0.1.0", "0.2.0"), ({"latest": "1.3.0"}, "0.1.0", "1.3.0"),
                                        ({"latest": "0.1.0"}, "0.1.0", None), ({"latest": "0.0.9"}, "0.1.0", None),
@@ -603,8 +603,8 @@ class DueTest(Case):
         told = json.loads(popen.call_args.args[0][-1])
         self.assertEqual((told["target"], told["wanted"]), ("9.0.0", "9.0.0"), "a new major version as any release")
         self.assertNotIn("requirement", told)
-        self.assertEqual(popen.call_args.args[0][:9], [str(self.uv), "tool", "run", "--isolated", "--managed-python",
-                                                       "--python", "3.14", "--from", "cad==9.0.0"],
+        self.assertEqual(popen.call_args.args[0][:7], [str(self.uv), "tool", "run", "--isolated", "--managed-python",
+                                                       "--from", "cad==9.0.0"],
                          "the worker runs from the very release uv built")
         with mock.patch.object(cad_server, "__version__", "0.1.0-dev.1"), \
                 mock.patch.object(auto_update.subprocess, "Popen") as popen:
@@ -1039,7 +1039,7 @@ class HelperCommandTest(Case):
         self.assertNotIn("requirement", told, "what is installed is the installer's newest, never named here")
         # Run by uv from the release in its cache, never from the installed tool (``--isolated``).
         self.assertEqual(auto_update.from_cache("/u/uv", "cad==0.2.0", "cad", "--version"),
-                         ["/u/uv", "tool", "run", "--isolated", "--managed-python", "--python", "3.14", "--from",
+                         ["/u/uv", "tool", "run", "--isolated", "--managed-python", "--from",
                           "cad==0.2.0", "cad", "--version"])
 
     def triggered(self, **options) -> tuple[list[str], dict]:
@@ -1050,9 +1050,9 @@ class HelperCommandTest(Case):
                 mock.patch.object(auto_update.subprocess, "Popen") as popen:
             self.assertTrue(auto_update.trigger("0.2.0", **options))
         (line,), env = popen.call_args
-        self.assertEqual(line[:10], [str(self.uv), "tool", "run", "--isolated", "--managed-python", "--python", "3.14",
+        self.assertEqual(line[:8], [str(self.uv), "tool", "run", "--isolated", "--managed-python",
                                      "--from", "cad==0.2.0", "python"], "the release uv built, from its cache")
-        return line[9:], env
+        return line[7:], env
 
     def test_the_trigger_starts_it_detached_with_nothing_that_points_elsewhere_and_keeps_the_attempt(self) -> None:
         line, options = self.triggered()
@@ -1113,7 +1113,7 @@ class HelperCommandTest(Case):
             found = auto_update.begin(None, start=False)
         self.assertEqual(building.call_args.args, (str(self.uv),), "the newest, whatever it is: no release named")
         (line,), options = started.call_args
-        self.assertEqual(line[:10], [str(self.uv), "tool", "run", "--isolated", "--managed-python", "--python", "3.14",
+        self.assertEqual(line[:8], [str(self.uv), "tool", "run", "--isolated", "--managed-python",
                                      "--from", "cad==0.4.2", "python"])
         self.assertEqual(json.loads(line[-1])["target"], "0.4.2")
         self.assertEqual((found["release"], found["outcome"], options["cwd"]), ("0.4.2", "underway", str(self.state)))
@@ -1199,7 +1199,7 @@ class HelperCommandTest(Case):
         uv.chmod(0o755)
         self.assertEqual(BUILD(str(uv)), ("0.2.0", 0, "cad 0.2.0\n"))
         self.assertEqual(asked.read_text(encoding="utf-8").split(),
-                         ["tool", "run", "--isolated", "--managed-python", "--python", "3.14", "--from", "cad@latest",
+                         ["tool", "run", "--isolated", "--managed-python", "--from", "cad@latest",
                           "cad", "--version"])
         with mock.patch.dict(os.environ, {"FAIL": "1"}):
             self.assertEqual(BUILD(str(uv)), (None, 2, "error: offline\n"))

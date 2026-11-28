@@ -669,11 +669,13 @@ def helper_command(target: str | None, *, now: float, version: str, record: str,
 
 def from_cache(uv: str, wanted: str, *command: str) -> list[str]:
     """``command`` run by uv from an environment of ``wanted`` (a requirement) in its cache, isolated from the uv tool
-    ``cad`` installed (which uv would reuse where it holds the release asked for), on the Python of cad's own uv calls
-    (``launch.PYTHON``), with the person's own uv settings, as the update installs by them."""
-    from cad_server._internal.launch import PYTHON
-
-    return [uv, "tool", "run", "--isolated", "--managed-python", "--python", PYTHON, "--from", wanted, *command]
+    ``cad`` installed (which uv would reuse where it holds the release asked for), on a Python uv manages
+    (``--managed-python``: never whatever interpreter an app's PATH finds first), with the person's own uv settings,
+    as the update installs by them. No version of Python is named: every release after this one is started by this
+    line, and one named here is one it could never leave. uv takes a Python the release's own ``requires-python``
+    admits, and fetches one where it has none (measured, uv 0.11: a release that needs a newer Python than the one
+    installed gets it; with a version named the same release is refused as unsatisfiable)."""
+    return [uv, "tool", "run", "--isolated", "--managed-python", "--from", wanted, *command]
 
 
 def build(uv: str, timeout: float = UPGRADE_SECONDS) -> tuple[str | None, int | None, str]:

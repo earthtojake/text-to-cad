@@ -221,7 +221,7 @@ worker writes, so the record only gains fields.
 replaces: uv builds that release in its cache first (`build`: where it cannot, the attempt fails with uv's cause and
 nothing is touched), then the worker starts from it, detached, with no window, outside any Windows app package (by
 Task Scheduler, `places.outside_package`) and out of the job of the app that ran cad where that job allows it (an app
-closing its job would end the update midway; the server's daemon starts so too): `uv tool run --isolated --managed-python --python 3.14 --from "cad==<X>"
+closing its job would end the update midway; the server's daemon starts so too): `uv tool run --isolated --managed-python --from "cad==<X>"
 python -P -m cad_server._internal.auto_update_helper <told>` (`from_cache`, `helper_command`). That entry is a
 contract every later release keeps: an older release starts a newer one's worker by it, and hands it `told`, of which
 a worker may use any key and must need none an installed release does not send (a later release may send fewer; the
