@@ -44,6 +44,7 @@
      "pickAny": "<pickAny>",
      "platform": "<platform>",
      "protocol": 9,
+     "reveal": "<reveal>",
      "surface": "file",
      "version": "<version>"
     }
@@ -68,6 +69,7 @@
      "platform": "<platform>",
      "projects": [],
      "protocol": 9,
+     "reveal": "<reveal>",
      "recents": [],
      "surface": "sidebar",
      "version": "<version>"
@@ -92,6 +94,7 @@
      "pickAny": "<pickAny>",
      "platform": "<platform>",
      "protocol": 9,
+     "reveal": "<reveal>",
      "surface": "agent",
      "version": "<version>"
     }
@@ -136,6 +139,7 @@
      "pickAny": "<pickAny>",
      "platform": "<platform>",
      "protocol": 9,
+     "reveal": "<reveal>",
      "surface": "tab",
      "version": "<version>"
     }

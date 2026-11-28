@@ -52,6 +52,8 @@ export interface CadServerInfo {
   pickAny?: boolean;
   /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
   platform?: string;
+  /** Whether this computer has a file manager Reveal can open; false where it has none (a Linux without `xdg-open`). */
+  reveal?: boolean;
   /** The person's home folder, `/`-separated: a path in it is said from `~`, and it is no project. */
   home?: string;
   /** The engine process answering (`os.getpid()`). */

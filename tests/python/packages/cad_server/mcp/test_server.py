@@ -19,6 +19,7 @@ from unittest import mock
 from urllib.parse import quote
 
 from cad_server._internal.picker import FilePicker
+from cad_server.viewer import reveal
 from cad_mcp.browser import deliver
 from cad_server.mcp.browser import OPEN, OPENED
 from cad_mcp.shim import initialize_params
@@ -320,10 +321,12 @@ class TabServerTest(_Session):
         self.assertEqual({key: opened[key] for key in ("protocol", "page", "model", "surface")},
                          {"protocol": 9, "page": "viewer", "model": self.bracket, "surface": "agent"})
         # No tolerance: the page reads each part's one display mesh by its key.
-        self.assertEqual(sorted(opened), ["model", "page", "pick", "pickAny", "platform", "protocol", "surface",
+        self.assertEqual(sorted(opened), ["model", "page", "pick", "pickAny", "platform", "protocol", "reveal", "surface",
                                           "version"])
         # One chooser of a file or a folder where the computer has one (a Mac's): the home's Import is one button.
         self.assertEqual(opened["pickAny"], opened["pick"] and sys.platform == "darwin")
+        # Whether it has a file manager Reveal can open: the file menus offer Reveal only where it does.
+        self.assertEqual(opened["reveal"], reveal.available())
         # The thread's tab reopens on what the thread last opened.
         self.assertEqual(self.launch("cad_tab")["model"], self.bracket)
         refused = self.call("cad_open", {"source": "parts/bracket.stl"})

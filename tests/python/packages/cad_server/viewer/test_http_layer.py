@@ -26,6 +26,7 @@ from urllib.parse import quote
 import cad_server
 from cad_server._internal.picker import FilePicker, PickerFailed
 from cad_server.viewer import handler as handler_module
+from cad_server.viewer import reveal
 from cad_server.viewer.http_app import create_cad_app, host_is_allowed, hostname_only
 
 
@@ -229,10 +230,12 @@ class ServerInfo(HttpLayerTestCase):
         self.assertIsInstance(info["pick"], bool)
         # One chooser of a file or a folder (a Mac's), where the computer has a chooser: Import is then one button.
         self.assertEqual(info["pickAny"], info["pick"] and sys.platform == "darwin")
+        # Whether it has a file manager Reveal can open: the page offers Reveal only where it does.
+        self.assertEqual(info["reveal"], reveal.available())
         # The release the engine runs: a page that reconnects to another reloads into it.
         self.assertEqual(info["release"], cad_server.__version__)
         self.assertEqual(list(info), ["app", "release", "identityToken", "platform", "user", "home",
-                                      "start", "pick", "pickAny", "port", "pid", "instance", "cadUpdate", "cadNotices",
+                                      "start", "pick", "reveal", "pickAny", "port", "pid", "instance", "cadUpdate", "cadNotices",
                                       "kinds"])
         self.assertEqual(headers["cache-control"], "no-store")
         # This start of the engine: a page that sees another one reloads. One per process, so it is

@@ -9,11 +9,30 @@ from cad.engine import executables
 from .backend import absolute_path
 
 
+class CannotReveal(OSError):
+    """No file manager can be opened on this computer: a Linux with neither a session bus to ask nor ``xdg-open``."""
+
+
+def _session_bus() -> bool:
+    """Whether a desktop session's bus is there to ask (``DBUS_SESSION_BUS_ADDRESS``, or the runtime folder's own)."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    return bool(os.environ.get("DBUS_SESSION_BUS_ADDRESS")) or bool(runtime and os.path.exists(os.path.join(runtime, "bus")))
+
+
+def available() -> bool:
+    """Whether this computer has a file manager Reveal can open (``reveal_path``): Finder and Explorer always; on
+    another, ``xdg-open``, or ``dbus-send`` with a session's bus to ask. The page offers Reveal only where it does."""
+    if sys.platform in ("darwin", "win32"):
+        return True
+    return executables.find("xdg-open") is not None or (executables.find("dbus-send") is not None and _session_bus())
+
+
 def reveal_path(path) -> None:
     """Show ``path`` selected in Finder, Explorer or the desktop's file manager.
 
     ``ValueError`` for a ref that is not an absolute path, ``FileNotFoundError`` when nothing is
-    there. Never a shell: each platform's command takes the path as one argument.
+    there, ``CannotReveal`` where no file manager can be opened (``available``). Never a shell: each
+    platform's command takes the path as one argument.
     """
     target = Path(absolute_path(path)).resolve(strict=True)
     if not (target.is_file() or target.is_dir()):
@@ -44,6 +63,6 @@ def reveal_path(path) -> None:
                 pass
         opener = executables.find("xdg-open")
         if opener is None:
-            raise FileNotFoundError("xdg-open is not installed")
+            raise CannotReveal("no file manager can be opened here: xdg-open is not installed")
         subprocess.run([opener, str(target if target.is_dir() else target.parent)],
             check=True, capture_output=True, timeout=10)

@@ -297,6 +297,7 @@ class CadApp:
 
         from .drawings import DrawingRenders
         from .plots import BoardAnswers
+        from .reveal import available as reveal_available
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -308,9 +309,11 @@ class CadApp:
         self._exports = None
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
         # Whether this computer has a chooser for the home's Import (``POST /api/v1/local/pick``), and whether
-        # one chooser takes a file or a folder there (a Mac's: ``{"any": true}``), so Import is one button.
+        # one chooser takes a file or a folder there (a Mac's: ``{"any": true}``), so Import is one button; and
+        # whether it has a file manager Reveal can open (``reveal.available``).
         self.pick = available()
         self.pick_any = self.pick and takes_either()
+        self.reveal = reveal_available()
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -370,6 +373,8 @@ class CadApp:
             # The folder of the most recent launch, its relative files' folder. Not a boundary.
             "start": self.start,
             "pick": self.pick,
+            # Whether this computer has a file manager Reveal can open: the page offers it only where it does.
+            "reveal": self.reveal,
             # Whether that chooser takes a file or a folder in one (a Mac's): the home's Import is one button.
             "pickAny": self.pick_any,
             "port": self.port,
@@ -1204,7 +1209,7 @@ class CadApp:
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
 
     def _reveal(self, request, response) -> None:
-        from .reveal import reveal_path
+        from .reveal import CannotReveal, reveal_path
 
         self._limit(request, 8192)
         payload = json.loads(request.body())
@@ -1212,6 +1217,10 @@ class CadApp:
             raise ValueError("Reveal requires a path")
         try:
             reveal_path(payload["path"])
+        except CannotReveal:
+            # Not the file's fault: there is nothing here to show it in (`reveal` in /api/v1/server says so).
+            raise ApiError(501, "No file manager can be opened on this computer.",
+                           "copy the file's path and open its folder another way") from None
         except FileNotFoundError:
             raise ApiError(404, "That file is no longer there.", "open it from where it is now") from None
         response.send_empty(204)
