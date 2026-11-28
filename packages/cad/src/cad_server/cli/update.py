@@ -42,16 +42,17 @@ BEGIN_SECONDS = ASK_SECONDS + 900.0
 # How long the command waits for the update to end, and how often it looks: past the longest build and the switch.
 WAIT_SECONDS = 1800.0
 LOOK_SECONDS = 0.5
-NOT_A_TOOL = ("refused: this cad is not a global install, so it does not update itself: update it the way it was "
-              "installed (for pipx, `pipx upgrade cad`; for pip, `pip install --upgrade cad`), or install it globally "
-              "with `uv tool install cad`")
-# Where the update left no cad that runs and cad is being installed again whole (``auto_update_helper.reinstall``):
+NOT_A_TOOL = ("refused: this cad is not a global install, so it does not update itself: install it globally with "
+              "`uv tool install cad` (after `pipx uninstall cad`, where pipx installed it), or update it the way it "
+              "was installed (for pip, `pip install --upgrade cad`)")
+# Where cad is being installed again whole (``auto_update_helper.reinstall``: the update left no cad that runs, or a
+# range an earlier release wrote in uv's record kept the release out):
 # what is said of it as it begins, everywhere; and, on Windows, where the install waits for this process to leave
 # cad's environment (its own program is a file of it, which Windows lets no one remove while it runs), what the
 # command ends on: the person looks later.
-AGAIN = "cad: the update left cad unable to run, so cad is being installed again"
-REPAIRING = ("the update of cad {was} left cad unable to run, so cad is being installed again: run `cad --version` in "
-             "a few minutes to see where it ended{log}")
+AGAIN = "cad: the update could not finish in place, so cad is being installed again"
+REPAIRING = ("the update of cad {was} could not finish in place, so cad is being installed again: run `cad --version` "
+             "in a few minutes to see where it ended{log}")
 OLD_SERVER = ("the cad server running cannot update cad: run `cad server stop`, then `cad server start`, then "
               "`cad update` again")
 

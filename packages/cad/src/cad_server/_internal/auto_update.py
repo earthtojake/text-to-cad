@@ -575,6 +575,30 @@ def pinned(prefix: str | os.PathLike[str] | None = None) -> bool:
     return "==" in str(specifier)
 
 
+# A range that only caps cad's major, as cad's own earlier tools wrote it in uv's receipt (``capped``): ``<N``, with
+# or without ``>=X.Y.Z`` before it.
+_CAP = re.compile(r"(>=\d+(\.\d+)*,)?<\d+")
+
+
+def capped(prefix: str | os.PathLike[str] | None = None) -> bool:
+    """Whether uv's receipt of the global install at ``prefix`` (``sys.prefix``) holds cad below a major and nothing
+    else: ``cad<N`` (the bridge of 0.11.12 to 0.11.18 and their repair wrote it) or ``cad>=X.Y.Z,<N`` (their update
+    did), ``N`` a whole major. cad holds no major back any more, and ``uv tool upgrade cad`` keeps to uv's record, so
+    where such a range is all that keeps the newest release out, the worker installs cad again whole, which writes
+    ``cad`` alone (``auto_update_helper.switch``). Any other range is the person's own, and kept. Never raises."""
+    import tomllib
+
+    try:
+        first = tomllib.loads((Path(prefix or sys.prefix) / "uv-receipt.toml").read_text(
+            encoding="utf-8"))["tool"]["requirements"][0]
+        name = first.get("name") if isinstance(first, dict) else re.split(r"[\s\[<>=!~;@]", str(first))[0]
+        specifier = first.get("specifier", "") if isinstance(first, dict) else str(first)[len(str(name)):]
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
+        return False
+    clauses = sorted("".join(str(specifier).split()).split(","), reverse=True)  # ``>=`` before ``<``
+    return str(name).lower() == "cad" and _CAP.fullmatch(",".join(clauses)) is not None
+
+
 def helper_command(target: str | None, *, now: float, version: str, record: str, install: Global, tries: int = 1,
                    asked: bool = False, start: bool = True, wanted: str | None = None,
                    log: str | None = None, python: str = "python",

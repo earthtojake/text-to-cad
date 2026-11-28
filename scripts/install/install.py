@@ -12,10 +12,7 @@ plugin install``, which carries the one table of them. It does these things alon
 2. installs the ``cad`` command only where uv has no ``cad`` tool (``install_cad``): ``uv tool install
    --managed-python --python 3.14 cad``, PyPI's newest. One that does not start (a tool Windows left half-replaced)
    is installed again whole, ``uv tool install --force ...``, PyPI's newest: the one repair, which cad's own update
-   and the skills' Setup line run too. A ``cad`` pipx installed, where uv has none,
-   is the computer's cad too (``pipx_cad``): installed again by pipx where it does not start (``repair_pipx``); uv
-   installs no second cad. cad updates only what ``uv tool install`` made, so step 3 leaves pipx's as it is and says
-   its own command, ``pipx upgrade cad``. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
+   and the skills' Setup line run too. First the ``cad`` command 0.10.0-0.11.11 wrote in uv's bin folder goes, where it is
    provably ours (``old_launcher``); another program's ``cad`` there stops this step, in one line. On Windows a
    ``cad.exe`` that runs is renamed out of uv's way (``set_aside``), never a reason to stop; what a run set aside and
    could not delete, a later run deletes (``tidy``). Where uv is about to install cad's environment again on Windows,
@@ -28,8 +25,8 @@ plugin install``, which carries the one table of them. It does these things alon
    restarts the server on it at once, and the command waits for it). What it prints is captured, never shown: one line says the update
    begins, and one line what came of it, over the first in a terminal (after it on a pipe or in a file). Its exit
    status says little (0 where it updated and where nothing is newer, non-zero where the update may still be
-   queued), so the release the tool runs is read again, by its ``cad --version`` (uv's and pipx's listings name the
-   release they installed, not a newer one cad's update installed beside it); where cad was not updated, that line
+   queued), so the release the tool runs is read again, by its ``cad --version`` (uv's listing names the
+   release it installed, not a newer one cad's update installed beside it); where cad was not updated, that line
    gives cad's own most telling line as the reason, and the run goes on: cad updates itself. Never where cad ran this
    (``BY_CAD``), and never for a cad this run installed;
 4. hands over (``hand_over``): ``<cad> plugin install`` by that tool's own command, on this process's own output, so a
@@ -123,7 +120,7 @@ status. That of 0.11.12 to 0.11.14 reads two fields of it, ``setup`` the integer
 failed, or that reader would take the run as done and never run it again. Later releases' take a run whose ``setup`` is
 0 as done, and any ``failed`` in ``apps``, ``UNSAID`` included, as the plugin's to run again by cad's own retry.
 
-No loops. The edges: this command starts uv and pipx (installs only), the installed ``cad --version``, ``cad update`` (a
+No loops. The edges: this command starts uv (installs only), the installed ``cad --version``, ``cad update`` (a
 person's run alone), ``cad plugin install --help`` (the installed cad's, which runs nothing on any release), ``cad
 plugin install`` (the installed cad's, then the newest's) and ``cad plugin update auto on``; never ``cad plugin update``
 alone, ``cad setup`` or a server, and it takes ``CAD_INSTALL_ATTEMPT`` and ``CAD_PLUGIN_SERVER_RUN`` out of what each of
@@ -139,7 +136,7 @@ ends in ``cad plugin install`` and the switch, neither of which starts anything 
 (install mode, ``cad setup``, ``once``) come here too, bounded by their own record, and this command never runs ``cad
 setup``: nothing goes back to them.
 
-Test hooks, never documented to people: ``CAD_INSTALL_PATH_ONLY`` (look for uv, pipx and cad on PATH and in
+Test hooks, never documented to people: ``CAD_INSTALL_PATH_ONLY`` (look for uv and cad on PATH and in
 ``~/.local/bin`` alone: never in Homebrew's or npm's folders, where a test would find a real one); ``CAD_API_URL``,
 cad's own (the address the report goes to, a stand-in's). uv runs with this process's environment, so a rehearsal
 offers its own wheels through uv's ``UV_FIND_LINKS``: uv installs the newest release it is offered, its own or
@@ -480,6 +477,9 @@ def make_room(here: Here, folder: Path, tools: Dict[str, Tool]) -> Tuple[Optiona
     found = [where / name for where in launcher_folders(here, folder) for name in names if old_launcher(where / name)]
     command = folder / names[0]
     if command not in found and os.path.lexists(command) and os.path.normcase(str(command)) not in listed:
+        if pipx_s(command):
+            return (f"cad: not installed: {here.shown(command)} is the cad pipx installed, which uv will not replace. "
+                    "Run `pipx uninstall cad`, then run this again."), []
         return (f"cad: not installed: {here.shown(command)} is another program's cad command, which uv will not "
                 "replace. Move it away, then run this again."), []
     moved: List[Tuple[Path, Path]] = []
@@ -500,6 +500,16 @@ def make_room(here: Here, folder: Path, tools: Dict[str, Tool]) -> Tuple[Optiona
             except OSError:
                 pass
     return None, moved
+
+
+def pipx_s(command: Path) -> bool:
+    """Whether ``command`` is a link into pipx's environment of cad (``.../venvs/cad/...``), as pipx exposes a
+    package's commands where it can link: what the one line about it can then name. Never raises."""
+    try:
+        parts = Path(os.path.realpath(command)).parts
+    except OSError:
+        return False
+    return command.is_symlink() and any(parts[at:at + 2] == ("venvs", "cad") for at in range(len(parts) - 1))
 
 
 def launcher_python(path: Path) -> Optional[Path]:
@@ -757,14 +767,12 @@ def on_path(here: Here, uv: str, folder: Path) -> None:
 class Cad:
     """What the cad step left: the cad this computer has (None where it has none), the step's exit status (0: cad
     installed, or here already), and its ``cad`` command, the tool's own. ``there``: it was here already and starts,
-    so this run installed nothing; ``pipx``: pipx's cad, whose environment is ``env``."""
+    so this run installed nothing."""
 
     release: Optional[str] = None
     code: int = 0
     command: Optional[str] = None
     there: bool = False
-    pipx: bool = False
-    env: str = ""
 
 
 def by_cad(here: Here) -> bool:
@@ -779,113 +787,18 @@ def find_uv(here: Here) -> Optional[str]:
 
 def says(ran: Ran) -> Optional[str]:
     """The release a ``cad --version`` that ended well says it runs (``cad X.Y.Z``), or None. That is the release a
-    cad updated by its own update runs: its installer's listing (``uv tool list``, pipx's metadata) keeps naming the
+    cad updated by its own update runs: its installer's listing (``uv tool list``) keeps naming the
     release the installer installed, since that update installs the newer one beside it."""
     lines = [line.strip() for line in ran.out.splitlines() if line.strip()] if ran.ok else []
     found = re.fullmatch(r"cad (\d+\.\d+\.\d+\S*)", lines[-1]) if lines else None
     return found.group(1) if found else None
 
 
-def already(here: Here, release: str, pipx: bool = False) -> None:
+def already(here: Here, release: str) -> None:
     """The line for a cad that is here and starts, where cad ran this: it is left as it is. Where a person did, the
     update's own line says it (``update``), and none here."""
     if by_cad(here):
-        print(f"cad {release} is installed already: it is left as it is, and "
-              + ("`pipx upgrade cad` updates it." if pipx else "updates itself."), flush=True)
-
-
-def find_pipx(here: Here) -> Optional[str]:
-    """pipx, where the person's ``pipx install cad`` would have found it: on PATH and in ``~/.local/bin``
-    (``Here.which``); unless only PATH is searched, also ``PIPX_BIN_DIR``, ``~/Library/Python/3.*/bin`` (``pip
-    install --user pipx`` on macOS), ``/usr/bin``, and on Windows the per-user Pythons' ``Scripts`` folders and Scoop's
-    shims. Never ``python -m pipx``: on a Mac without its developer tools, running ``python3`` opens a dialog."""
-    found = here.which("pipx")
-    if found or here.path_only:
-        return found
-    name = "pipx.exe" if here.windows else "pipx"
-    if here.windows:
-        appdata = Path(here.environ.get("APPDATA") or here.home / "AppData" / "Roaming")
-        local = Path(here.environ.get("LOCALAPPDATA") or here.home / "AppData" / "Local")
-        patterns = [appdata / "Python", local / "Programs" / "Python"]
-        folders = [here.home / "scoop" / "shims"]
-        folders += sorted((path / "Scripts" for pattern in patterns if pattern.is_dir()
-                           for path in pattern.glob("Python3*")), reverse=True)
-    else:
-        folders = [Path("/usr/bin")]
-        python = here.home / "Library" / "Python"
-        folders += sorted((path / "bin" for path in python.glob("3.*")), reverse=True) if python.is_dir() else []
-    if here.environ.get("PIPX_BIN_DIR"):
-        folders.insert(0, Path(here.environ["PIPX_BIN_DIR"]))
-    return next((str(folder / name) for folder in folders if (folder / name).is_file()), None)
-
-
-def pipx_release(env: Path) -> Optional[str]:
-    """The release of cad in ``env`` where pipx made it for cad: pipx's ``venvs/cad``, whose ``pipx_metadata.json``
-    names ``cad`` as its package; else None."""
-    if env.name.lower() != "cad" or env.parent.name != "venvs":
-        return None
-    try:
-        package = json.loads((env / "pipx_metadata.json").read_text(encoding="utf-8"))["main_package"]
-        return str(package["package_version"]) if str(package["package"]).lower() == "cad" else None
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-
-
-def pipx_cad(here: Here, folder: Path) -> Optional[Tool]:
-    """The ``cad`` pipx installed here (``pipx install cad``), or None: its release, its command and its environment.
-    pipx says where its environments are and where it puts their commands (``pipx environment --value``), where it is
-    found (``find_pipx``); and, off Windows, where pipx links its commands, a ``cad`` in uv's bin folder ``folder`` (pipx's
-    by default too) or on PATH that is a link into pipx's environment of cad is one too, pipx found or not."""
-    found: List[Tuple[Path, Optional[Path]]] = []  # (the environment, its command)
-    pipx = find_pipx(here)
-    if pipx:
-        said = {value: here.run([pipx, "environment", "--value", value], timeout=60)
-                for value in ("PIPX_LOCAL_VENVS", "PIPX_BIN_DIR")}
-        last = {value: ran.out.strip().splitlines()[-1].strip() if ran.ok and ran.out.strip() else ""
-                for value, ran in said.items()}
-        if last["PIPX_LOCAL_VENVS"]:
-            command = Path(last["PIPX_BIN_DIR"]) / ("cad.exe" if here.windows else "cad") if last["PIPX_BIN_DIR"] else None
-            found.append((Path(last["PIPX_LOCAL_VENVS"]) / "cad", command))
-        else:  # pipx 1.0 (Ubuntu 22.04's) has no `environment`: its list names cad's commands inside its environment
-            listed = here.run([pipx, "list", "--json"], timeout=60)
-            try:
-                paths = json.JSONDecoder().raw_decode(listed.out, listed.out.index("{"))[0]["venvs"]["cad"]["metadata"]["main_package"][
-                    "app_paths"] if listed.ok else []
-            except (ValueError, KeyError, TypeError):
-                paths = []
-            found += [(Path(path["__Path__"]).parent.parent, None) for path in paths[:1] if isinstance(path, dict)]
-    if not here.windows:
-        for link in (folder / "cad", here.which("cad")):
-            if link and os.path.islink(link):
-                found.append((Path(os.path.realpath(link)).parent.parent, Path(link)))
-    for env, command in found:
-        release, own = pipx_release(env), env / ("Scripts/cad.exe" if here.windows else "bin/cad")
-        if release is not None and own.is_file():
-            return Tool(release, {"cad": str(command if command is not None and command.is_file() else own)}, str(env))
-    return None
-
-
-def repair_pipx(here: Here, piped: Tool) -> Cad:
-    """pipx's cad that does not start, installed again by pipx (``pipx install --force cad``, pipx found as
-    ``find_pipx`` finds it), as uv's is by uv: never by uv, which would make a second cad. pipx's output shown as it
-    runs. Where pipx is not found or its install fails, one line says so, and the step has failed."""
-    pipx = find_pipx(here)
-    if not pipx:
-        print(f"cad {piped.version}, installed with pipx, does not start, and pipx was not found here, so it could not be "
-              "installed again.", flush=True)
-        return Cad(piped.version, 1)
-    print(f"cad {piped.version} is installed with pipx but does not start: installing it again with pipx.", flush=True)
-    try:
-        code = subprocess.call([pipx, "install", "--force", "cad"], env=here.environ, stdin=subprocess.DEVNULL)
-    except OSError as error:
-        code = 127
-        print(f"cad: failed: {error}", flush=True)
-    release = pipx_release(Path(piped.env))
-    if code:
-        print(f"cad: failed (pipx install exit status {code}; what pipx said is above), so cad {piped.version} could not "
-              "be installed again.", flush=True)
-        return Cad(release, code)
-    return Cad(release, 0, piped.commands["cad"], pipx=True, env=piped.env)
+        print(f"cad {release} is installed already: it is left as it is, and updates itself.", flush=True)
 
 
 def cad_env(here: Here, uv: str, tool: Optional[Tool]) -> Optional[Path]:
@@ -901,9 +814,9 @@ def cad_env(here: Here, uv: str, tool: Optional[Tool]) -> Optional[Path]:
 def install_cad(here: Here) -> Cad:
     """Step 2 (see the module): the ``cad`` command, a uv tool at PyPI's newest release, only where uv has no ``cad``
     tool, or one whose command does not start (installed again); one that starts, at any release, is not installed
-    again (``Cad.there``: ``update`` is what brings it up to date). A ``cad`` pipx installed (``pipx install cad``),
-    where uv has none, is a global cad as uv's is: the same where it starts; installed again by pipx where it does
-    not (``repair_pipx``), and uv installs no second cad. uv's output shown as it runs. On Windows a ``cad.exe`` that
+    again (``Cad.there``: ``update`` is what brings it up to date). A ``cad`` anything else put in uv's bin folder
+    (pipx, say) stops the step in one line (``make_room``): uv installs no second cad over it. uv's output shown as
+    it runs. On Windows a ``cad.exe`` that
     runs never stops it: each one in uv's way is renamed aside first (``set_aside``), and what is left set aside is
     deleted by a later run (``tidy``)."""
     uv = find_uv(here)
@@ -918,14 +831,6 @@ def install_cad(here: Here) -> Cad:
     tools = uv_tools(here, uv)
     tool = tools.get("cad")
     env = cad_env(here, uv, tool)
-    piped = pipx_cad(here, folder) if tool is None else None
-    if piped is not None:
-        ran = here.run([piped.commands["cad"], "--version"], timeout=60)
-        if ran.ok:
-            release = says(ran) or piped.version
-            already(here, release, pipx=True)
-            return Cad(release, 0, piped.commands["cad"], there=True, pipx=True, env=piped.env)
-        return repair_pipx(here, piped)
     problem, moved = make_room(here, folder, tools)
     if problem:
         print(problem, flush=True)
@@ -938,7 +843,7 @@ def install_cad(here: Here) -> Cad:
             settle(here, moved, True)
             release = says(ran) or tool.version
             already(here, release)
-            return Cad(release, 0, tool_command, there=True, env=tool.env)
+            return Cad(release, 0, tool_command, there=True)
         # There, but it does not start (a tool Windows left half-replaced, say): installed again.
         print(f"cad {tool.version} is installed but does not start: installing it again with uv.", flush=True)
         again = True
@@ -982,14 +887,9 @@ def over_line(stream: Any, line: str) -> bool:
 def update(here: Here, cad: Cad) -> None:
     """Step 3 (see the module): the cad that was here already brought up to date by its own ``cad update``,
     ``UPDATE_SECONDS`` at most, what it prints captured; then the release it runs read again, whatever the command's
-    exit status: as its ``cad --version`` says it (``says``), else from uv. A cad pipx installed is not updated: one
-    line says its own command, ``pipx upgrade cad`` (cad updates only what ``uv tool install`` made). Said in one line as it begins, then one line of what came of it, over the first where the
+    exit status: as its ``cad --version`` says it (``says``), else from uv. Said in one line as it begins, then one line of what came of it, over the first where the
     terminal allows (``over_line``): updated, the newest already, or not updated now, with cad's own most telling
     line (``Ran.last``) as the reason. Never a failure of the run."""
-    if cad.pipx:  # cad updates only what `uv tool install` made
-        print(f"cad {cad.release} was installed with pipx, so it does not update itself: `pipx upgrade cad` updates "
-              "it.", flush=True)
-        return
     first = f"Updating cad {cad.release} to the newest release..."
     over = over_line(sys.stdout, first)
     print(first, end="" if over else "\n", flush=True)

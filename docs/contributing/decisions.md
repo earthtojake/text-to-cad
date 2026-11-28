@@ -91,7 +91,8 @@ of its own: one function finds the person's (uv's default install place, then PA
 says in one line how to get it. cad's part is what makes that safe where processes run cad (below).
 Only a cad `uv tool install` made updates itself. One pipx made does not (it did from 0.11.12 to 0.11.18: of the
 computers that updated in a month, 1 in about 3,800 was pipx's, for a second upgrade path, its own pin and bin
-folder rules, and a rehearsal route): `cad update` there says `pipx upgrade cad`. One the person pinned
+folder rules, and a rehearsal route): `cad update` there names the way onto uv, `pipx uninstall cad` then
+`uv tool install cad`, and the install command stops on pipx's `cad` with the same first step. One the person pinned
 (`uv tool install cad==X`) is left alone, and told how to unpin it.
 
 **Why.** Installers update a tool where it is, and uv is the one the person chose. But uv deletes the old
@@ -242,10 +243,11 @@ version ahead of them. Where a release needs words on every older computer, a no
 
 **What it costs.** A breaking major reaches every computer by itself, as a breaking minor does today:
 the migration guide and the 30-day rule are what stand between a release and a person's work. A
-computer whose uv record holds a range an earlier release wrote (`cad>=X,<1`, `cad<1`) stays below the
-next major until that major's own worker, which its cad runs, moves it, or the person runs `uv tool
-install --force cad` ([Before the first release of a higher
-major](releases.md#before-the-first-release-of-a-higher-major)).
+computer whose uv record holds a range an earlier release wrote (`cad>=X,<1`, `cad<1`) would stay below
+the next major, since `uv tool upgrade cad` keeps to uv's record. So where uv built a newer release than
+the upgrade took, and the record's range only caps the major, the worker installs cad again whole (`uv
+tool install --force cad`), which clears it. A range of that shape a person wrote themselves is cleared
+too: the way to stay on a release is a pin, `cad==X`. Any other range is the person's, and kept.
 
 ## Who updates which copy
 

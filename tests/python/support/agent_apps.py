@@ -45,10 +45,7 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 # FAKE_UV_INSTALLER there (a stand-in of uv's own installer); uv's tools are FAKE_UV_STATE's ({name: version}), their commands in
 # FAKE_UV_BIN: `uv tool list` lists them, `uv tool install` records one (`cad`, unversioned: FAKE_PYPI; at
 # FAKE_NO_COMMAND, a release with no command, it fails and takes the tool away, as uv does) and writes its command, a
-# stand-in (its receipt names an `editable` requirement where it was one); `pipx environment --value` says
-# FAKE_PIPX_VENVS (PIPX_LOCAL_VENVS) and FAKE_PIPX_BIN (PIPX_BIN_DIR), or fails as pipx 1.0 does (FAKE_PIPX_1_0), whose
-# `pipx list --json` names cad's command in FAKE_PIPX_VENVS, and `pipx install --force cad` sets the release in pipx's
-# metadata of cad (FAKE_PYPI); `gemini extensions uninstall
+# stand-in (its receipt names an `editable` requirement where it was one); `gemini extensions uninstall
 # <name>` removes that extension's folder, and, with FAKE_GEMINI_RECORD, `gemini extensions install <url> --ref <ref>`
 # writes its record; `copilot plugin` keeps its catalogs in ~/.copilot/settings.json and its plugins in
 # ~/.copilot/config.json as Copilot CLI does, its `marketplace add` failing for a catalog it has already, `install`
@@ -57,7 +54,7 @@ THEIRS = "---\nname: {name}\ndescription: someone else's\n---\n"
 #
 # For the install command: each call also notes the variables FAKE_LOG_ENV names and whether the file FAKE_LOG_EXISTS
 # names is there. `cad update` says a line on each stream and the lines FAKE_UPDATE_SAID names (split at `|`), waits
-# FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's record of it, else pipx's), or, as cad's own update
+# FAKE_UPDATE_SLEEP seconds, makes the tool FAKE_CAD_UPDATES (uv's record of it), or, as cad's own update
 # does, leaves those records and has `cad --version` say FAKE_CAD_SWITCHES from then on (a file beside FAKE_UV_STATE),
 # and exits FAKE_UPDATE_EXIT. `cad plugin install`, and `uv tool run ... plugin install`
 # (the newest cad's), says a line on each stream, writes FAKE_PLUGIN_APPS as the report CAD_PLUGIN_REPORT names (no
@@ -134,11 +131,6 @@ STAND_IN = textwrap.dedent('''\
             state.with_suffix(".runs").write_text(os.environ["FAKE_CAD_SWITCHES"], encoding="utf-8")
         elif os.environ.get("FAKE_CAD_UPDATES") and "cad" in tools:
             state.write_text(json.dumps({{**tools, "cad": os.environ["FAKE_CAD_UPDATES"]}}))
-        elif os.environ.get("FAKE_CAD_UPDATES"):
-            metadata = Path(os.environ["FAKE_PIPX_VENVS"]) / "cad" / "pipx_metadata.json"
-            found = json.loads(metadata.read_text())
-            found["main_package"]["package_version"] = os.environ["FAKE_CAD_UPDATES"]
-            metadata.write_text(json.dumps(found))
         sys.exit(int(os.environ.get("FAKE_UPDATE_EXIT", "0")))
     if name == "uv" and sys.argv[1:3] in (["tool", "dir"], ["tool", "list"], ["tool", "install"], ["tool", "uninstall"]):
         state, tools_dir = Path(os.environ["FAKE_UV_STATE"]), Path(os.environ["FAKE_UV_STATE"]).with_suffix(".tools")
@@ -170,20 +162,6 @@ STAND_IN = textwrap.dedent('''\
     if name == "cad" and sys.argv[1:] == ["--version"]:
         runs = Path(os.environ["FAKE_UV_STATE"]).with_suffix(".runs")
         print(f"cad {{runs.read_text(encoding='utf-8')}}" if runs.is_file() else "cad (stand-in)")
-    if name == "pipx" and sys.argv[1] == "environment" and os.environ.get("FAKE_PIPX_1_0"):
-        print("pipx: error: argument command: invalid choice: 'environment'")
-        sys.exit(2)
-    if name == "pipx" and sys.argv[1:3] == ["environment", "--value"]:
-        print(os.environ[{{"PIPX_LOCAL_VENVS": "FAKE_PIPX_VENVS", "PIPX_BIN_DIR": "FAKE_PIPX_BIN"}}[sys.argv[3]]])
-    if name == "pipx" and sys.argv[1:3] == ["install", "--force"]:
-        metadata = Path(os.environ["FAKE_PIPX_VENVS"]) / "cad" / "pipx_metadata.json"
-        found = json.loads(metadata.read_text())
-        found["main_package"]["package_version"] = os.environ.get("FAKE_PYPI", "0.13.0")
-        metadata.write_text(json.dumps(found))
-    if name == "pipx" and sys.argv[1:] == ["list", "--json"]:
-        own = str(Path(os.environ["FAKE_PIPX_VENVS"]) / "cad" / "bin" / "cad")
-        print("nothing to see here")
-        print(json.dumps({{"venvs": {{"cad": {{"metadata": {{"main_package": {{"app_paths": [{{"__Path__": own}}]}}}}}}}}}}))
     if name == "gemini" and "uninstall" in sys.argv:
         shutil.rmtree(Path(os.environ["HOME"]) / ".gemini" / "extensions" / sys.argv[-1], ignore_errors=True)
     if name == "gemini" and sys.argv[1:3] == ["extensions", "install"] and os.environ.get("FAKE_GEMINI_RECORD"):

@@ -82,7 +82,9 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   starts the release installed and counts the update blocked once (``pinned``); ``cad update`` refuses in one line
   that says how to unpin; the button answers 409 ``pinned``; nothing begins, the receipt as the person wrote it.
 - ``self-major``: a new major version is a release as any other: ``cad update --major`` is no option (exit 2,
-  nothing begun); with a release a major up out, the server's next start is the update to it, in place.
+  nothing begun); with a release a major up out, the server's next start is the update to it, on a computer whose
+  uv still holds the range 0.11.12 to 0.11.17 wrote (``cad>=<release>,<N``): the upgrade keeps to it, so the worker
+  installs cad again whole, which clears it, and the new major runs.
 - ``self-stopped-midway``: the worker of the update a start began stopped the moment it is seen (uv's run of it
   and the worker both), before it reaches uv's upgrade: the record left underway, cad as it was; twenty minutes
   pass with no beat (its last beat set back) and the attempt is lost; the next start begins nothing (the schedule waits an hour after a try); a typed ``cad update``
@@ -94,8 +96,9 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   which runs from uv's cache, makes it anew in one step (``uv tool install --force cad``): healthy at the next
   release, its server started, uv's receipt naming cad alone, the record's worker the next release.
 - ``self-pipx``: cad installed with pipx (pipx itself by uv) is not cad's to update: the next release out, a start
-  starts the release installed, the button answers 409, ``cad update`` refuses naming ``pipx upgrade cad``, nothing
-  is begun; then (off Windows) the person's ``pipx upgrade cad`` brings the next release, and its server starts.
+  starts the release installed, the button answers 409, ``cad update`` refuses naming the way onto uv (``pipx
+  uninstall cad``, then ``uv tool install cad``), nothing is begun; then (off Windows) those two commands, the
+  person's, leave uv's cad at the next release, its server started.
 - ``install-repair``: the install command, the advised repair, over a cad that does not start, whose dist-info has no
   ``RECORD``, with a process running from its environment: on Windows it stops that process and waits for it, then
   installs cad again whole with uv (``--force``), deleting nothing by hand: healthy, uv's receipt as it was.
@@ -972,8 +975,8 @@ def pages(box: Box, version: str) -> None:
 # once, on stderr, as that begins (``cad_server.cli.update.AGAIN``), and then how it ended, as of any update; on
 # Windows, where the command's own process holds the environment the repair removes, it says so and leaves instead
 # (``REPAIRING``), exit 1.
-AGAIN = "cad: the update left cad unable to run, so cad is being installed again"
-REPAIRING = "left cad unable to run, so cad is being installed again: run `cad --version` in a few minutes"
+AGAIN = "cad: the update could not finish in place, so cad is being installed again"
+REPAIRING = "could not finish in place, so cad is being installed again: run `cad --version` in a few minutes"
 
 
 def typed_update(box: Box, was: str, target: str, *, server: bool | None = True, also: tuple[str, ...] = (),
@@ -1098,7 +1101,7 @@ class Watch:
         return list(self.seen)
 
 
-def start_updates(box: Box, before: Tool, was: str, target: str) -> tuple[dict, str]:
+def start_updates(box: Box, before: Tool, was: str, target: str, *, repaired: bool = False) -> tuple[dict, str]:
     """The server's next start, with the feed as last read naming ``target`` newer than ``was``: stopped by its own
     command, then ``cad server start``, which becomes the update -- the server of ``was`` it starts begins it and
     serves nothing, the worker upgrades cad in place and starts ``target``'s, and the command returns once that one
@@ -1121,7 +1124,7 @@ def start_updates(box: Box, before: Tool, was: str, target: str) -> tuple[dict, 
                      f"{done.stdout}\n{done.stderr}\nthe door answered as {seen} ({watch.looks} looks)\n{box.said()}")
     if (record.get("asked"), record.get("from")) != (False, was) or "restored" in record:
         raise Failed(f"{box.label}: the update a start began: {record}\n{box.said()}")
-    in_place(box, before, target)
+    in_place(box, before, target, repaired=repaired)
     return record, (f"`cad server start`: {said!r} in {took:.1f} s (exit 0); no server of {was} answered the door "
                     f"from the stop until {target}'s did, {watch.looks} looks")
 
@@ -1598,18 +1601,28 @@ def self_pinned(box: Box) -> None:
 
 def self_major(box: Box) -> None:
     """A new major version is a release as any other: ``--major`` is no option, and with a release a major up out,
-    the server's next start is the update to it."""
+    the server's next start is the update to it -- on a computer whose uv still holds the range 0.11.12 to 0.11.17
+    wrote as they updated (``cad>=<release>,<N``), which ``uv tool upgrade cad`` keeps to: the worker installs cad
+    again whole, which clears it, and no server of the release before answers meanwhile."""
     box.set_up("on")
-    before = Tool(box)
     done = box.run([box.cad(), "update", "--major"], check=False, timeout=SECONDS + 60)
     if done.returncode != 2 or "unrecognized arguments: --major" not in done.stderr:
         raise Failed(f"{box.label}: cad update --major exited {done.returncode}: {done.stdout}{done.stderr}")
     nothing_begun(box, "--major")
-    box.out(HIGH)
     box.run([box.cad(), "server", "stop"])
+    capped = f"cad>={NEW},<{MAJOR + 1}"
+    box.run(["uv", "tool", "install", "--force", "--managed-python", "--python", "3.14", capped], timeout=SECONDS)
+    before = Tool(box)
+    if before.release != NEW or "specifier" not in json.dumps(before.receipt):
+        raise Failed(f"{box.label}: uv's cad, installed as {capped}: {before.release}, {before.receipt}")
+    box.out(HIGH)
     feed_read(box, HIGH)
-    _record, line = start_updates(box, before, NEW, HIGH)
-    say(f"        `cad update --major`: refused (exit 2); {HIGH}, a major up, out: {line}")
+    record, line = start_updates(box, before, NEW, HIGH, repaired=True)
+    log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
+    if " tool upgrade cad\n" not in log or FORCED not in log or "by a range an earlier release wrote" not in log:
+        raise Failed(f"{box.label}: the update past the range was not the upgrade, then cad installed again:\n{log[-3000:]}")
+    say(f"        `cad update --major`: refused (exit 2); uv's record {capped!r}, {HIGH}, a major up, out: {line}; the "
+        f"range cleared ({record.get('detail')})")
     pages(box, HIGH)
 
 
@@ -1789,8 +1802,9 @@ class Pipx:
 
 def self_pipx(box: Box) -> None:
     """cad installed with pipx is not cad's to update: with the next release out and read, a start starts the release
-    installed, the button refuses, ``cad update`` refuses in one line that names ``pipx upgrade cad``, and no attempt
-    is kept; then (off Windows) that command, the person's, brings the next release, and its server starts."""
+    installed, the button refuses, ``cad update`` refuses in one line that names the way onto uv (``pipx uninstall
+    cad``, then ``uv tool install cad``), and no attempt is kept; then (off Windows) those two commands, the
+    person's, leave uv's cad at the next release, and its server starts."""
     pipx = Pipx(box)
     box.out(NEW)
     box.run(["pipx", "install", "cad"], timeout=SECONDS)
@@ -1807,7 +1821,7 @@ def self_pipx(box: Box) -> None:
         raise Failed(f"{box.label}: the button on pipx's cad answered {status}: {answer}\n{box.said()}")
     done = box.run([box.cad(), "update"], check=False, timeout=SECONDS)
     line = done.stderr.strip().splitlines()[-1:]
-    if done.returncode != 1 or not line or "`pipx upgrade cad`" not in line[0] or done.stdout.strip():
+    if done.returncode != 1 or not line or "`uv tool install cad` (after `pipx uninstall cad`" not in line[0] or done.stdout.strip():
         raise Failed(f"{box.label}: cad update on pipx's cad exited {done.returncode}:\n{done.stdout}\n{done.stderr}")
     nothing_begun(box, "pipx's cad")
     pipx.holds(NEW)
@@ -1817,14 +1831,15 @@ def self_pipx(box: Box) -> None:
         say(refused)
         return
     box.run([box.cad(), "server", "stop"])
-    box.run(["pipx", "upgrade", "cad"], timeout=SECONDS)
-    pipx.holds(NEXT)
+    box.run(["pipx", "uninstall", "cad"], timeout=SECONDS)
+    box.run(["uv", "tool", "install", "cad"], timeout=SECONDS)
+    tool = box.is_tool(NEXT)
     started = box.run([box.cad(), "server", "start"]).stdout.strip()
     if started != STARTED.format(release=NEXT):
-        raise Failed(f"{box.label}: after `pipx upgrade cad`, cad server start said {started!r}\n{box.said()}")
-    serves(box, pipx.env, NEXT)
-    nothing_begun(box, "pipx's cad, upgraded by pipx")
-    say(f"{refused}; `pipx upgrade cad`: {NEXT}, its server started")
+        raise Failed(f"{box.label}: on uv's cad, cad server start said {started!r}\n{box.said()}")
+    serves(box, Path(tool["env"]), NEXT)
+    nothing_begun(box, "pipx's cad, moved onto uv by the person")
+    say(f"{refused}; `pipx uninstall cad`, `uv tool install cad`: uv's cad {NEXT}, its server started")
 
 
 # A process of cad's environment that runs until its input ends (``install-repair``): an agent's ``cad`` command at

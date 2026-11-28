@@ -382,8 +382,8 @@ while a newer release is out, does it with one click. It does nothing in the bac
 the server at once, as `cad server stop` does; a command it cuts short says cad updated itself while it
 ran, and runs again as it was. Where an update leaves cad unable to run, cad installs itself again. A cad
 you pinned to a release (`uv tool install cad==X`) is left as it is, and so is a cad something other
-than `uv tool install` put there: update that one the way you installed it (`pipx upgrade cad`,
-`pip install --upgrade cad`). To update it now:
+than `uv tool install` put there (pipx, pip): move it onto uv (`pipx uninstall cad`, then
+`uv tool install cad`), or update it the way you installed it. To update it now:
 
 ```bash
 cad update
@@ -421,8 +421,11 @@ cad server start
 ```
 
 cad's own update is that same `uv tool upgrade cad`: it takes the newest of all, a new major version
-included, and leaves uv's record of cad as it is. An update by 0.11.17 or earlier left uv a range there
-(`cad<1`), which keeps cad below the next major; `uv tool install --force cad` clears it.
+included, and leaves uv's record of cad as it is, with one exception. cad 0.11.18 and earlier left uv a
+range there that only keeps cad below the next major (`cad<1`). cad holds no major back any more, so
+where that range is all that keeps a new major out, cad's update installs cad again whole
+(`uv tool install --force cad`), which clears it. To stay on a release, pin it: `uv tool install
+cad==X`.
 
 ### The plugin
 

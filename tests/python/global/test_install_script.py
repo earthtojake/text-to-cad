@@ -280,111 +280,28 @@ class InstallScriptTests(AgentApps):
         self.assertTrue((site / "cad-1.0.0.dist-info").is_dir())
         self.assertFalse(hasattr(install, "repair"))
 
-    def pipx_cad(self, version: str = "0.13.0", link: bool = True) -> dict:
-        """cad as ``pipx install cad`` leaves it: pipx's environment of cad (its metadata, its own ``cad``, a stand-in)
-        and, with ``link``, its command in ~/.local/bin, a link to that (pipx's bin folder by default, and uv's). What
-        the stand-in pipx says."""
+    def test_a_cad_pipx_installed_stops_the_cad_step_in_one_line_that_names_pipx_s_own_command(self) -> None:
+        """cad is a uv tool, and cad updates only what uv made: pipx's ``cad`` in uv's bin folder (pipx's by default
+        too) is in uv's way. uv installs no second cad over it, nothing of pipx's is run or changed, and the one line
+        says how the person takes it out; a link into another of pipx's environments is another program's cad."""
         venvs = self.home / ".local" / "share" / "pipx" / "venvs"
-        own = venvs / "cad" / "bin" / "cad"
-        own.parent.mkdir(parents=True)
-        (venvs / "cad" / "pipx_metadata.json").write_text(json.dumps(
-            {"main_package": {"package": "cad", "package_or_url": "cad", "package_version": version}}), encoding="utf-8")
-        own.write_text(STAND_IN.format(python=sys.executable, latest=LATEST), encoding="utf-8")
-        own.chmod(0o755)
-        if link:
-            self.uv_bin.mkdir(parents=True, exist_ok=True)
-            (self.uv_bin / "cad").symlink_to(own)
-        return {"FAKE_PIPX_VENVS": str(venvs), "FAKE_PIPX_BIN": str(self.uv_bin)}
-
-    def test_a_cad_pipx_installed_is_left_as_it_is_and_uv_installs_no_second(self) -> None:
-        said = self.pipx_cad()
+        for name in ("cad", "other"):
+            own = venvs / name / "bin" / "cad"
+            own.parent.mkdir(parents=True)
+            own.write_text("#!/bin/sh\n", encoding="utf-8")
+            own.chmod(0o755)
+        self.uv_bin.mkdir(parents=True, exist_ok=True)
+        (self.uv_bin / "cad").symlink_to(venvs / "cad" / "bin" / "cad")
         self.programs("pipx")
-        report = self.root / "report.json"
-        done = self.run_install(CAD_INSTALL_REPORT=str(report), **said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.installs(), [])
-        self.assertIn("cad 0.13.0 is installed already: it is left as it is, and `pipx upgrade cad` updates it.",
-                      done.stdout)
-        self.assertNotIn("another program's", done.stdout)
-        self.assertEqual(self.calls("pipx"), [["environment", "--value", "PIPX_LOCAL_VENVS"],
-                                              ["environment", "--value", "PIPX_BIN_DIR"]])
-        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
-        self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
-                         {"release": "0.13.0", "setup": 0})
-        # A person's run: cad updates only what `uv tool install` made, so pipx's is not updated, and one line says
-        # the command that does.
-        pipx_s = "cad 0.13.0 was installed with pipx, so it does not update itself: `pipx upgrade cad` updates it.\n"
-        done = self.run_install(**said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
-        self.assertIn(pipx_s, done.stdout)
-        self.assertNotIn("Updating cad", done.stdout)
-        self.assertEqual(self.installs(), [])
-        # pipx 1.0, which has no `pipx environment`, and no link in ~/.local/bin: its list says where its cad is.
+        done = self.run_install()
+        self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+        self.assertIn("cad: not installed: ~/.local/bin/cad is the cad pipx installed, which uv will not replace. Run "
+                      "`pipx uninstall cad`, then run this again.", done.stdout)
+        self.assertEqual((self.installs(), self.calls("pipx")), ([], []), "nothing installed, and pipx never run")
+        self.assertTrue((self.uv_bin / "cad").is_symlink(), "left as it is")
         (self.uv_bin / "cad").unlink()
-        done = self.run_install(FAKE_PIPX_1_0="1", **said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn(pipx_s, done.stdout)
-        self.assertEqual((self.installs(), self.calls("pipx")[-1]), ([], ["list", "--json"]))
-        # pipx not found: its link in ~/.local/bin says whose cad it is.
-        (self.uv_bin / "cad").symlink_to(self.home / ".local" / "share" / "pipx" / "venvs" / "cad" / "bin" / "cad")
-        (self.bin / "pipx").unlink()
-        done = self.run_install(**said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
-        self.assertIn(pipx_s, done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
-        # uv's cad is there too: uv's is the one, and pipx is not asked.
-        self.programs("pipx")
-        (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")
-        done = self.run_install(**said)
-        self.assertIn("Updating cad 0.12.0 to the newest release...", done.stdout)
-        self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
-
-    def test_a_cad_pipx_installed_that_does_not_start_is_installed_again_by_pipx_never_by_uv(self) -> None:
-        said = self.pipx_cad("0.12.0")
-        self.programs("pipx")
-        report = self.root / "report.json"
-        done = self.run_install(FAKE_FAIL="cad:--version", FAKE_PYPI="0.14.0", CAD_INSTALL_REPORT=str(report), **said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("cad 0.12.0 is installed with pipx but does not start: installing it again with pipx.",
-                      done.stdout)
-        self.assertEqual(self.installs(), [], "never with uv")
-        self.assertEqual(self.calls("pipx")[-1], ["install", "--force", "cad"])
-        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
-        self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
-                         {"release": "0.14.0", "setup": 0})
-        # pipx's install fails, or pipx is not found: said in one line, and the plugin's step runs all the same, by
-        # the newest cad.
-        for fail, line in (("cad:--version,pipx:install", "cad: failed (pipx install exit status 1; what pipx said is "
-                                                          "above), so cad 0.14.0 could not be installed again."),
-                           ("cad:--version", "cad 0.14.0, installed with pipx, does not start, and pipx was not found "
-                                             "here, so it could not be installed again.")):
-            with self.subTest(fail=fail):
-                if "pipx" not in fail:
-                    (self.bin / "pipx").unlink()
-                done = self.run_install(FAKE_FAIL=fail, CAD_INSTALL_REPORT=str(report), **said)
-                self.assertEqual(1, done.returncode)
-                self.assertIn(line, done.stdout)
-                self.assertNotIn("run `pipx", done.stdout)
-                self.assertEqual(self.installs(), [])
-                self.assertEqual(self.newest(), [NEWEST])
-                self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["setup"], 1)
-
-    def test_pipx_without_a_cad_or_a_link_into_another_of_its_environments_is_no_cad(self) -> None:
-        said = self.pipx_cad(link=False)
-        (self.home / ".local" / "share" / "pipx" / "venvs" / "cad" / "pipx_metadata.json").write_text(json.dumps(
-            {"main_package": {"package": "other", "package_version": "1.0"}}), encoding="utf-8")
-        self.programs("pipx")
-        done = self.run_install(**said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]], "uv's cad, as on any")
-        self.no_tools()
-        other = self.home / ".local" / "share" / "pipx" / "venvs" / "other" / "bin" / "cad"
-        other.parent.mkdir(parents=True)
-        other.write_text("#!/bin/sh\n", encoding="utf-8")
-        (self.uv_bin / "cad").symlink_to(other)
-        done = self.run_install(**said)
+        (self.uv_bin / "cad").symlink_to(venvs / "other" / "bin" / "cad")
+        done = self.run_install()
         self.assertEqual(1, done.returncode)
         self.assertIn("is another program's cad command", done.stdout)
 

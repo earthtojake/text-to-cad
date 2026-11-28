@@ -183,7 +183,9 @@ person's installer takes for `cad` is what is installed, never a release yanked 
 back). Only a global install updates itself, one uv made (`uv tool install cad`): it is updated
 where it is, by the person's own uv (`base.find_uv`: uv's default install place, then PATH, else a one-line
 error saying how to get uv), with the person's settings and
-uv's receipt left as it is, a range a person or an earlier release wrote there included. A cad pipx or pip
+uv's receipt left as it is, a range a person wrote there included; one that only caps the major, as 0.11.18 and
+earlier wrote it (`cad<1`, `cad>=X,<1`), is cleared where it is all that keeps the newest release out (cad installed
+again whole: `auto_update.capped`). A cad pipx or pip
 installed is updated the way it was installed, and `cad update` says so. One a person pinned (`uv tool install
 cad==X`) is left alone (cause `pinned`). Two switches in the person's settings:
 `auto_update.on`, whether cad updates itself, on unless turned off (`cad update auto`); and `plugin.auto_update`,
