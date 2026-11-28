@@ -63,7 +63,7 @@ from typing import Any, Callable
 
 from cad.engine import places
 
-__all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "PASSING", "RETRY", "RETRY_SECONDS", "Environment",
+__all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "KERNEL_MAKING", "KernelMaking", "MAKING", "PASSING", "RETRY", "RETRY_SECONDS", "Environment",
            "Installation", "MARKER", "Making", "Recipe", "Refused", "Remembered", "SCHEMA", "TOLD", "complete", "ensure",
            "failure", "find_uv", "folder", "halt", "interpreter", "kernel", "kernel_python", "make", "marked", "where"]
 
@@ -386,11 +386,13 @@ def wasm_chosen() -> bool:
         return False
 
 
-def wasm_kernel(make: bool = True) -> dict[str, Any] | None:
+def wasm_kernel(make: bool = True, *, engine: bool = False) -> dict[str, Any] | None:
     """The WebAssembly kernel as the engine is handed it, where the person's settings choose it; None where they
     choose the base (no ``kernel`` section, or another kind). Its folder is the one the settings name, or, where
     they name none, the one the engine makes in the cache on first need (``kernel_folder.ensure``: with ``make``,
-    else None while it is not made), each line of its making said to the request the need came from (``TOLD``).
+    else None while it is not made) by its one making (``KERNEL_MAKING``, as the base is made: one making for every
+    asker, a failure remembered) -- with ``engine`` (a command: ``cad run``), the server's, asked over its door --
+    each line of its making said to the request the need came from (``TOLD``).
     Its ``python`` is the folder's own launcher; it is not this installation's ``own`` (what measures there is
     its libraries, which its processes say), and it is ``wasm``: a process started there is given the engine's
     folder and runs the engine's code as this server has it, and the engine's pools and the builds' leases know
@@ -407,10 +409,7 @@ def wasm_kernel(make: bool = True) -> dict[str, Any] | None:
         return None
     folder = section.get("folder")
     if folder is None:
-        from cad_server._internal import kernel_folder
-
-        told = TOLD.get()
-        made = kernel_folder.ensure(make=make, told=told if callable(told) else None)
+        made = _kernel_folder(make, engine)
         if made is None:
             return None
         home = made
@@ -432,25 +431,55 @@ def wasm_kernel(make: bool = True) -> dict[str, Any] | None:
             **({"core": str(core)} if core.is_file() else {})}
 
 
-#: What a still is refused with where the kernel is the WebAssembly one and this installation has no native one.
-NO_DRAWING = ("a still is drawn by the native CAD kernel's OpenGL viewer, which this installation does not have: "
-              "its kernel is the WebAssembly one. See the model on its page instead (cad show), or choose the native "
-              'kernel ("kernel": {"kind": "native"} in settings.json) and ask again')
+def _kernel_folder(make: bool, engine: bool) -> Path | None:
+    """The kernel folder the engine makes (``kernel_folder``): made by ``KERNEL_MAKING`` where it is not and ``make``
+    -- the server's, over its door, with ``engine`` --, else None while it is not made."""
+    from cad_server._internal import kernel_folder
+
+    found = kernel_folder.ensure(make=False)
+    if found is not None or not make:
+        return found
+    told = TOLD.get()
+    if engine:
+        _by_the_engine(Path(), {"op": "base", "key": KERNEL_MAKING.key()},
+                       lambda _path: {} if kernel_folder.ensure(make=False) is not None else None, told)
+    else:
+        earlier = KERNEL_MAKING.remembered()
+        if earlier is not None:
+            raise Refused(earlier.said(), earlier.cause)
+        error = KERNEL_MAKING.follow(told)
+        if error is not None:
+            cause = KERNEL_MAKING.cause or "other"
+            raise Refused(f"{error}. {_next(cause, RETRY_SECONDS)}", cause)
+    found = kernel_folder.ensure(make=False)
+    if found is None:
+        raise Refused("the WebAssembly kernel's folder was made and is not there: ask again", "other")
+    return found
+
+
+#: What a still is refused with where the kernel is the WebAssembly one and its folder carries no view core to draw with.
+NO_DRAWING = ("a still on the WebAssembly kernel is drawn by its view core, which the kernel folder at {folder} does "
+              "not carry: make the folder again with the view core, or choose the native kernel "
+              '("kernel": {{"kind": "native"}} in settings.json) and ask again')
 
 
 def drawing(make: bool = True) -> dict[str, Any] | None:
     """The environment the engine's render processes run in, as the engine is handed it
     (``cad.engine.places.DRAWING``): the kernel's (``kernel``), but where a person chose the WebAssembly kernel,
-    which carries no OpenGL viewer, the native one this installation has -- its own environment's, or a base
-    already made -- and never one made for the drawing alone. ``Refused`` in one line (``NO_DRAWING``) where it
-    has none."""
+    which carries no OpenGL viewer, this installation's own Python (numpy and Pillow, no kernel: a render process
+    models nothing) with the kernel folder's view core (``core``), whose software renderer draws the stills
+    (``cad.engine.render.core``). None while the kernel folder is not made and ``make`` is false; ``Refused`` in one
+    line (``NO_DRAWING``) where the folder carries no view core."""
     if not wasm_chosen():
         return kernel(make)
-    found = ensure(make=False)
+    found = wasm_kernel(make)
     if found is None:
-        raise Refused(NO_DRAWING, "other")
-    return {"python": found.python, "prefix": found.prefix, "path": None if found.path is None else list(found.path),
-            "own": found.own}
+        return None
+    if not found.get("core"):
+        raise Refused(NO_DRAWING.format(folder=found["prefix"]), "other")
+    installation = Installation.here()
+    return {"python": installation.executable, "prefix": installation.prefix, "path": None, "own": True,
+            "core": found["core"]}
 
 
 def _span(seconds: float) -> str:
@@ -510,13 +539,22 @@ class Making:
         the server makes for it even where the server's own environment carries the kernel."""
         return where(Installation.here()).name
 
+    def done(self) -> bool:
+        """Whether what this makes is there, made here or by another process."""
+        return complete(where(Installation.here())) is not None
+
+    def build(self, told: Callable[[str], None]) -> None:
+        """What this makes, made now, each line said to ``told``; ``Refused`` where it cannot be."""
+        installation = Installation.here()
+        _make(where(installation), installation, told)
+
     def start(self) -> bool:
         """The base made on a thread of its own when it is absent and none is being made here: whether it
         is being made now."""
         with self.changed:
             if self.state == "making":
                 return True
-            if complete(where(Installation.here())) is not None:
+            if self.done():
                 return False
             self.state, self.lines, self.error, self.since = "making", [], None, time.time()
         threading.Thread(target=self._make, name="cad-base", daemon=True).start()
@@ -531,8 +569,7 @@ class Making:
     def _make(self) -> None:
         cause = None
         try:
-            installation = Installation.here()
-            _make(where(installation), installation, self._said)
+            self.build(self._said)
             state, error = "made", None
         except Refused as refused:
             state, error, cause = "failed", str(refused), refused.cause
@@ -559,7 +596,7 @@ class Making:
         left = RETRY_SECONDS - since if cause in PASSING else None
         if left is not None and left <= 0:
             return None
-        if complete(where(Installation.here())) is not None:
+        if self.done():
             return None
         return Remembered(error, cause, since, left)
 
@@ -600,8 +637,36 @@ class Making:
                     "seconds": round(time.time() - (self.since or time.time()), 1)}
 
 
-# The engine's making of its base (``Making``): one a process.
+class KernelMaking(Making):
+    """The WebAssembly kernel's folder made as the base is (``Making``): once, on a thread of its own, for every
+    asker, its lines kept, a failure remembered -- the folder of ``kernel_folder.ensure``, by its key."""
+
+    def key(self) -> str | None:
+        from cad_server._internal import kernel_folder
+
+        try:
+            return kernel_folder.where().name
+        except Refused:  # no Node to run it: nothing of this to name
+            return None
+
+    def done(self) -> bool:
+        from cad_server._internal import kernel_folder
+
+        try:
+            return kernel_folder.ensure(make=False) is not None
+        except Refused:
+            return False
+
+    def build(self, told: Callable[[str], None]) -> None:
+        from cad_server._internal import kernel_folder
+
+        kernel_folder.ensure(told=told)
+
+
+# The engine's making of its base (``Making``), and of the WebAssembly kernel's folder (``KernelMaking``): one each a
+# process.
 MAKING = Making()
+KERNEL_MAKING = KernelMaking()
 # Where a making's lines go when a kernel process's start waits on it (``kernel``): to the request that start is
 # for, which the server sets for each request it serves (``cad_server.engine.daemon``: a ``log`` frame of the
 # ``making`` stream, which every client says as it comes); else nowhere.

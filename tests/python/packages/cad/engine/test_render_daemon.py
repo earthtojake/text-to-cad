@@ -21,7 +21,7 @@ import numpy as np
 from cad.engine.render import context
 from tests.python.support import engine_daemon, opengl
 from tests.python.support.paths import add_sources
-from tests.python.support.render_stills import PLATFORM, X_VARIABLES, drawn, gl, mismatch
+from tests.python.support.render_stills import PLATFORM, X_VARIABLES, draws, drawn, gl, mismatch, renderer
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
 
@@ -53,7 +53,7 @@ class DaemonRenderTest(unittest.TestCase):
     the pictures, and the daemon's door, lock and clients' pipes."""
 
     def setUp(self) -> None:
-        gl()
+        draws()
         self.folder = Path(tempfile.mkdtemp(prefix="engine-render-daemon-")).resolve()
         self.state = Path(tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)).resolve()
         self.env = {**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
@@ -88,7 +88,7 @@ class DaemonRenderTest(unittest.TestCase):
     def test_a_served_document_is_drawn_warm_and_follows_its_builds(self) -> None:
         self.build(10)
         first = self.snapshot("first.png")
-        self.assertEqual(first["renderer"], "occt")
+        self.assertEqual(first["renderer"], renderer())
         pid = first["process"]["pid"]
         warm = self.snapshot("warm.png")
         self.assertEqual(warm["process"]["pid"], pid)
@@ -107,7 +107,8 @@ class DaemonRenderTest(unittest.TestCase):
                         "150", "--json")
         self.assertEqual(done.returncode, 0, done.stderr)
         model = json.loads(done.stdout.strip().splitlines()[-1])
-        self.assertEqual((model["renderer"], "process" in model), ("occt", False))
+        # On the WebAssembly kernel its worker draws none: the render process draws an xbf the engine exports.
+        self.assertEqual((model["renderer"], "process" in model), (renderer(), renderer() == "core"))
         # The daemon's socket (on Windows the port file standing in for it) and its lock, nothing else.
         self.assertEqual({path.suffix or path.name for path in self.state.iterdir()},
                          {".port", ".lock"} if os.name == "nt" else {".door", ".lock", "clients"})
@@ -166,7 +167,7 @@ class EngineDisplayTest(unittest.TestCase):
             done = self.run_in(env, "-m", "cad_server.engine", "snapshot", source, f"{name}.png", "--width", "200",
                                "--height", "150", "--json")
             self.assertEqual(done.returncode, 0, done.stderr)
-            self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1])["renderer"], "occt")
+            self.assertEqual(json.loads(done.stdout.strip().splitlines()[-1])["renderer"], renderer())
             found[name] = drawn((self.folder / f"{name}.png").read_bytes(), (200, 150))
         return found
 
@@ -191,6 +192,9 @@ class EngineDisplayTest(unittest.TestCase):
         for name, picture in found.items():
             if here is not None:
                 self.assertLessEqual(mismatch(picture, here), 0.015, name)
+        if renderer() == "core":  # the view core draws with no display: none is started for it
+            self.assertEqual(_xvfb_pids(self.state), [])
+            return
         # The Xvfb is the daemon's: gone with it.
         xvfb = _xvfb_pids(self.state)
         self.assertTrue(xvfb, "the engine started no Xvfb")

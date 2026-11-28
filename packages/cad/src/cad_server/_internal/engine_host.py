@@ -67,6 +67,13 @@ def drawing(make):
     return made(make)
 
 
+def kernel_making():
+    """The engine's making of the WebAssembly kernel's folder (``cad_server._internal.base.KERNEL_MAKING``)."""
+    from cad_server._internal.base import KERNEL_MAKING
+
+    return KERNEL_MAKING
+
+
 def making():
     """The engine's making of that environment when it is absent (``cad_server._internal.base.MAKING``)."""
     from cad_server._internal.base import MAKING

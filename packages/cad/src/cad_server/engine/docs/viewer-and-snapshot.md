@@ -210,6 +210,16 @@ that carries no kernel but has a display (`xvfb-run cad snapshot ...`) runs the 
 installation's base from its own process, which draws it so (`cli._drawn_elsewhere`); and with neither the
 snapshot fails, naming what to install. Nothing is written but OUT.
 
+**On the WebAssembly kernel** (a person's `kernel` setting) there is no OpenGL: a kernel process refuses a picture
+at once and the render process draws it, from the engine's meshes as ever, by the view core's software renderer
+(`render/core.py`). That render process runs in the installation's own Python (numpy and Pillow, no kernel) beside
+the kernel folder's view core job server (`--core`, `base.drawing`); its scene is `occt.Scene`'s -- the same
+decisions (`Scene.plan`, the camera `Scene.aim` keeps, `clip.cut`, `grid.drawn`, the ink's geometry) -- written as
+the core's `render` job takes it, each part's mesh sent once by its key. Its pictures match OpenGL's to under a level
+on average. What it does not draw yet is refused in one line (`core.NOT_YET`): Preview's studio, the path tracer, a
+GLB's base colour textures on lit faces, a DXF's drawing; a folder with no view core refuses every still
+(`base.NO_DRAWING`).
+
 `SRC` may also be a file the viewer opens that is no document, each read by its reader
 (`formats/`) and drawn by OCCT in the same look, through the daemon by a render process of its own
 per file (read again when a file it read changes) or with `daemon=False` in this process:

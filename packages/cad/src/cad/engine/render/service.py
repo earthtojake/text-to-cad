@@ -86,11 +86,8 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
     viewer's scene coordinates, as a Quick Edit packet's view carries them
     (``camera_in_millimetres``). (A view's own camera drawn exactly -- ``--camera authored``, a
     job's view with its tight frame off -- is ``Scene.frame``'s.) Sets ``scene.camera`` as
-    ``Scene.frame`` does, for the overlays."""
-    from OCP.Graphic3d import Graphic3d_Camera
-    from OCP.gp import gp_Dir, gp_Pnt
-
-    from cad.engine.render.occt import camera_in_millimetres, direction_of, occt_fov, occt_scale, vertical_fov
+    ``Scene.frame`` does, for the overlays (``Scene.aim``)."""
+    from cad.engine.render.occt import camera_in_millimetres, direction_of, vertical_fov
 
     spec = camera_in_millimetres(spec, scene.millimetres_per_scene_unit)
 
@@ -129,14 +126,10 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
         raise ValueError("camera.up must not lie along the direction the camera looks")
     right /= np.linalg.norm(right)
     screen_up = np.cross(right, forward)
-    camera = scene.canvas.view.Camera()
-    camera.SetAspect(aspect)  # the picture's, so what projects through this camera lands where it is drawn
     fov = vertical_fov(aspect, focal_length)
     if projection == "perspective":
-        camera.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Perspective)
         # three's zoom narrows the field of view.
         fov = float(np.degrees(2 * np.arctan(np.tan(np.radians(fov / 2)) / zoom)))
-        camera.SetFOVy(occt_fov(fov, aspect))  # OCCT's spans the width when taller than wide
         if position is not None:
             eye = position
         else:
@@ -151,7 +144,6 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
             eye = target + d * distance
         scale = None
     else:
-        camera.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Orthographic)
         safe = max(1 - 2 * padding, 0.1)
         xs, ys = points @ right, points @ screen_up
         half = max((ys.max() - ys.min()) / (2 * safe), (xs.max() - xs.min()) / (2 * aspect * safe), 1e-6) / zoom
@@ -161,15 +153,8 @@ def frame_camera(scene: Any, spec: dict[str, Any], projection: str, focal_length
         target = middle + d * float(target @ d)
         eye = target + d * radius * 4
         scale = 2 * half
-        camera.SetScale(occt_scale(scale, aspect))
-    camera.SetEyeAndCenter(gp_Pnt(*map(float, eye)), gp_Pnt(*map(float, target)))
-    camera.SetUp(gp_Dir(*map(float, screen_up)))
-    scene.canvas.view.ZFitAll(1.0)
-    scene.camera = {"fov": fov, "direction": d, "up": screen_up, "right": right, "eye": eye, "target": target,
-                    "projection": projection, "scale": scale}
-    if scene.studio:
-        scene._studio_backdrop()  # Preview's sweep is shaded for the camera
-    return scene.camera
+    return scene.aim({"fov": fov, "direction": d, "up": screen_up, "right": right, "eye": eye, "target": target,
+                      "projection": projection, "scale": scale})
 
 
 def view_of(scene: Any) -> dict[str, Any]:
@@ -260,10 +245,12 @@ def picture(canvas: Any, paint: Callable[[np.ndarray], None] | None, still: Any,
 
 
 class Held:
-    """One document as a renderer holds it (see the module docstring)."""
+    """One document as a renderer holds it (see the module docstring). ``core``: the view core's job server
+    (``render.core.Core``) that draws its stills where the kernel is the WebAssembly one; None: OCCT draws them."""
 
-    def __init__(self, path: Path, name: str | None = None) -> None:
+    def __init__(self, path: Path, name: str | None = None, core: Any = None) -> None:
         self.path = Path(path)
+        self.core = core
         # What a picture's refusals call the document: its file's name, or the model's own for a build's
         # document that no file holds, drawn under a stand-in path (``snapshot._occt``).
         self.name = name or self.path.name
@@ -286,7 +273,16 @@ class Held:
         from cad.engine import formats
 
         started = time.perf_counter()
-        found = formats.read(self.path)
+        try:
+            found = formats.read(self.path)
+        except ModuleNotFoundError as error:
+            if self.core is None or (error.name or "").partition(".")[0] != "OCP":
+                raise
+            from cad.engine.snapshot import SnapshotRefused
+
+            raise SnapshotRefused(f"{self.path.name} is read by the native CAD kernel, which this installation does "
+                                  "not have: see it on its page (cad show), or choose the native kernel",
+                                  part="source") from None
         read = round((time.perf_counter() - started) * 1000)
         self.kind, self.poser, self.files, self.warnings = found.kind, found.pose, found.files, found.warnings
         held = self.hold(found.structure, found.buffers, found.shapes)
@@ -298,8 +294,7 @@ class Held:
         those a reader made already, by key: a GLB's textured parts); a scene of the modes that was
         drawn is made again from them now too, its presentations computed for the display it last
         showed, so the next picture waits on neither."""
-        from cad.engine.mesh import Mesh
-        from cad.engine.render.occt import prototype_shapes
+        from cad.engine.mesh_format import Mesh
 
         started = time.perf_counter()
         keys = {p["key"] for p in structure["prototypes"]}
@@ -313,15 +308,14 @@ class Held:
         for found, prototype in wanted.items():
             if found not in self.shapes:
                 given = (shapes or {}).get(found[0])
-                self.shapes[found] = given if given is not None else \
-                    prototype_shapes(prototype, Mesh.from_bytes(self.buffers[found[0]]))
+                self.shapes[found] = self._shapes(prototype, Mesh.from_bytes(self.buffers[found[0]]), given)
                 made += 1
         for gone in set(self.shapes) - set(wanted):
             del self.shapes[gone]
         again = False
         if structure.get("version") != self.version or self.structure is None:
             again = False in self.scenes and self.last is not None
-            self.close()
+            self._let_go()
         self.structure, self.version = structure, structure.get("version")
         if again:
             assert self.last is not None
@@ -332,7 +326,27 @@ class Held:
         return {"parts": len(wanted), "made": made, "kept": len(wanted) - made, "scene": again,
                 "ms": round((time.perf_counter() - started) * 1000)}
 
+    def _shapes(self, prototype: dict[str, Any], mesh: Any, given: Any) -> Any:
+        """A part as this renderer draws it: OCCT's shapes (``shapes.prototype_shapes``, or ``given``, those a
+        reader made: a GLB's textured parts), or the core's ranges of its mesh (``core.part_meshes``), a textured
+        part's textures kept as a mark that they are not drawn."""
+        if self.core is None:
+            from cad.engine.render.shapes import prototype_shapes
+
+            return given if given is not None else prototype_shapes(prototype, mesh)
+        from cad.engine.render.core import part_meshes
+
+        found = part_meshes(prototype, mesh)
+        found.textures = dict(getattr(given, "textures", None) or {})
+        return found
+
     def close(self) -> None:
+        """Let go of the scenes (``_let_go``), and of the view core's job server where it draws them."""
+        self._let_go()
+        if self.core is not None:
+            self.core.stop()
+
+    def _let_go(self) -> None:
         """Let go of the scenes, at once and whole, between pictures: each canvas closed, then the
         scenes collected here and now (a scene collected while another draws takes that one's
         environment map with it). The meshes and shapes stay."""
@@ -346,15 +360,35 @@ class Held:
         gc.collect()
 
     def _scene(self, preview: bool, size: tuple[int, int]) -> tuple[Any, bool]:
-        from cad.engine.render.occt import Scene
-
         scene = self.scenes.get(preview)
         if scene is not None:
             return scene, False
         assert self.structure is not None
         parts = [self.shapes[(p["key"], _paints(p))] for p in self.structure["prototypes"]]
-        scene = self.scenes[preview] = Scene(self.path, self.buffers, size=size, structure=self.structure, parts=parts)
+        if self.core is None:
+            from cad.engine.render.occt import Scene
+
+            scene = Scene(self.path, self.buffers, size=size, structure=self.structure, parts=parts)
+        else:
+            from cad.engine.render.core import CoreScene
+
+            scene = CoreScene(self.path, self.buffers, size=size, structure=self.structure, parts=parts, core=self.core)
+        self.scenes[preview] = scene
         return scene, True
+
+    def _not_drawn_yet(self, still: Any, shown: dict[str, Any]) -> None:
+        """What the view core does not draw yet, refused in one line before anything is drawn (``core.NOT_YET``):
+        Preview's studio, and a part's base colour textures where the faces are lit."""
+        from cad.engine.render.core import NOT_YET
+        from cad.engine.snapshot import SnapshotRefused
+
+        if still.preview:
+            raise SnapshotRefused(NOT_YET["preview"], part="preview")
+        if still.display.get("mode", "solid") in ("solid", "shaded"):
+            for prototype in shown["prototypes"]:
+                if getattr(self.shapes.get((prototype["key"], _paints(prototype))), "textures", None):
+                    raise SnapshotRefused(NOT_YET["textures"].format(name=prototype.get("name") or self.name),
+                                          part="display.mode")
 
     def draw(self, still: Any) -> tuple[bytes, dict[str, Any]]:
         """``still`` (a ``snapshot.Still``) drawn: the PNG's bytes and what was drawn."""
@@ -376,6 +410,8 @@ class Held:
                 raise SnapshotRefused(f"--pose: {error}", part="pose") from None
             posed = shown["kinematics"]["pose"]
         refusals(still, shown, self.name)
+        if self.core is not None:
+            self._not_drawn_yet(still, shown)
         hidden = hidden_instances(shown, still.display, self.name)
         clock = time.perf_counter()
         scene, fresh = self._scene(still.preview, still.drawn)
@@ -437,13 +473,16 @@ class Held:
                       "parts": len(self.structure["prototypes"]), "instances": len(shown["instances"]),
                       "unmeshed": unmeshed, **({"untextured": untextured} if untextured else {}),
                       "pose": posed, "exploded": exploded_amount(display) or None,
-                      "renderer": "occt", **({"font": ", ".join(sorted(scene.fonts))} if scene.fonts else {}),
+                      "renderer": "occt" if self.core is None else "core",
+                      **({"coreMs": round(scene.canvas.seconds * 1000)} if self.core is not None else {}),
+                      **({"font": ", ".join(sorted(scene.fonts))} if scene.fonts else {}),
                       **({"kind": self.kind, "warnings": self.warnings} if self.kind else {}), "timings": timings}
 
 
-def holder(path: Path) -> Any:
+def holder(path: Path, core: Any = None) -> Any:
     """What holds the file at ``path`` that is no document, for ``open`` and ``draw``: a drawing's
-    (a DXF, ``drawing.Held``), a board's (a ``.kicad_pcb``, ``board.Held``), else a document's."""
+    (a DXF, ``drawing.Held``), a board's (a ``.kicad_pcb``, ``board.Held``), else a document's, drawn by
+    ``core`` where it is given (``Held``)."""
     from cad.engine import formats
 
     if Path(path).suffix.lower() == ".kicad_pcb":
@@ -455,10 +494,15 @@ def holder(path: Path) -> Any:
 
         return Schematic(Path(path))
     if Path(path).suffix.lower() == formats.DRAWING:
+        if core is not None:
+            from cad.engine.render.core import NOT_YET
+            from cad.engine.snapshot import SnapshotRefused
+
+            raise SnapshotRefused(NOT_YET["drawing"], part="source")
         from cad.engine.render.drawing import Held as Drawing
 
         return Drawing(Path(path))
-    return Held(Path(path))
+    return Held(Path(path), core=core)
 
 
 def foreign(path: Path) -> bool:
@@ -556,6 +600,12 @@ def main() -> int:
     from cad.engine.snapshot import SnapshotRefused, Still
     from cad.engine.worker import request_cap, resident_mb
 
+    # ``--core PROGRAM``: the view core's job server draws the stills (the WebAssembly kernel's: ``places.drawing``).
+    core = None
+    if "--core" in sys.argv:
+        from cad.engine.render.core import Core
+
+        core = Core(sys.argv[sys.argv.index("--core") + 1])
     frames.write(protocol, {"ready": os.getpid()})
     # Collected between requests alone: nothing of a scene is let go of while one draws.
     gc.disable()
@@ -577,7 +627,7 @@ def main() -> int:
                 if held is None or held.path != Path(request["path"]) or getattr(held, "kind", None):
                     if held is not None:
                         held.close()
-                    held = Held(Path(request["path"]))
+                    held = Held(Path(request["path"]), core=core)
                 with pool():
                     frames.write(protocol, {"id": ident, "held": held.hold(request["structure"], buffers)})
                 continue
@@ -585,7 +635,7 @@ def main() -> int:
                 if held is not None:
                     held.close()
                 held = None
-                opened = holder(Path(request["path"]))
+                opened = holder(Path(request["path"]), core)
                 with pool():
                     answer = opened.open()
                 held = opened

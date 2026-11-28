@@ -46,12 +46,18 @@ CAP = "#e9a451"  # the viewer's cap when it is not in the part's colour
 
 
 def plane(scene: Any, clip: dict[str, Any]) -> Any:
-    """The clip's plane (``gp_Pln``), its normal pointing into the half the cut keeps (OCCT keeps
-    the half-space the normal points into). ``at`` is in the file's unit, as the viewer reads it
-    (``clipInWorld``): ``scene.millimetres_per_unit`` of the scene's millimetres each; without it
-    the plane goes through the middle of the model at rest."""
+    """The clip's plane (``gp_Pln``) of ``cut``'s normal and point."""
     from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
 
+    normal, point = cut(scene, clip)
+    return gp_Pln(gp_Pnt(*point), gp_Dir(*normal))
+
+
+def cut(scene: Any, clip: dict[str, Any]) -> tuple[list[float], list[float]]:
+    """The clip's plane as a normal and a point on it, the normal pointing into the half the cut keeps (OCCT
+    keeps the half-space the normal points into). ``at`` is in the file's unit, as the viewer reads it
+    (``clipInWorld``): ``scene.millimetres_per_unit`` of the scene's millimetres each; without it
+    the plane goes through the middle of the model at rest."""
     axis = "xyz".index(clip.get("axis", "x"))
     if clip.get("at") is not None:
         at = float(clip["at"]) * scene.millimetres_per_unit
@@ -61,7 +67,7 @@ def plane(scene: Any, clip: dict[str, Any]) -> Any:
     normal, point = [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
     normal[axis] = 1.0 if clip.get("invert") else -1.0
     point[axis] = at
-    return gp_Pln(gp_Pnt(*point), gp_Dir(*normal))
+    return normal, point
 
 
 def _linear(value: Any) -> np.ndarray:
@@ -170,8 +176,8 @@ def apply(scene: Any, clip: dict[str, Any] | None) -> float:
     view.SetClipPlanes(Graphic3d_SequenceOfHClipPlane())
     if not clip or clip.get("enabled") is False:
         return time.perf_counter() - clock
-    cut = plane(scene, clip)
-    cutting = Graphic3d_ClipPlane(cut)
+    flat = plane(scene, clip)
+    cutting = Graphic3d_ClipPlane(flat)
     cutting.SetCapping(False)
     view.AddClipPlane(cutting)
     if scene.mode == "wireframe":
@@ -188,7 +194,7 @@ def apply(scene: Any, clip: dict[str, Any] | None) -> float:
             continue
         colour = cap_colour(scene, index, clip)
         if colour not in lists:
-            lists[colour] = _planes(cut, colour)
+            lists[colour] = _planes(flat, colour)
         connected = AIS_ConnectedInteractive()
         connected.Connect(carrier, _trsf(scene.placement(index)))
         connected.SetClipPlanes(lists[colour])

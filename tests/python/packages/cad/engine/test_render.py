@@ -38,10 +38,11 @@ import numpy as np
 
 from cad.engine.render import context
 from cad.engine.snapshot import SnapshotRefused, Still, parse_display
-from tests.python.support.render_stills import (BENCH, PLATFORM, SIZE, X_VARIABLES, build, drawn, gl, mismatch,
-                                                pixels, served, shapes)
+from tests.python.support.render_stills import (BENCH, PLATFORM, SIZE, X_VARIABLES, build, draws, drawn, gl, held,
+                                                mismatch, on_core, pixels, scene, served, shapes)
 
 GOLDEN = Path(__file__).resolve().parent / "render_golden"
+NOT_YET_PREVIEW = "Preview's studio is refused there until the core draws it"
 WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
 
 # Ink on the plate (instance 1, in its own frame: its top face is z 2) and a dimension along its front.
@@ -177,13 +178,11 @@ class HeldTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        gl()
-        from cad.engine.render.service import Held
-
+        draws()
         cls.folder = Path(tempfile.mkdtemp(prefix="engine-render-")).resolve()
         cls.document = build(cls.folder, BENCH, "bench")
         cls.structure, cls.buffers = served(cls.document)
-        cls.held = Held(cls.document)
+        cls.held = held(cls.document)
         cls.held.hold(cls.structure, cls.buffers)
 
     @classmethod
@@ -200,7 +199,8 @@ class HeldTest(unittest.TestCase):
             with self.subTest(row=name):
                 data, report = self.draw(**row)
                 found = drawn(data, SIZE)
-                self.assertEqual((report["renderer"], report["width"], report["height"]), ("occt", *SIZE))
+                renderer = "occt" if self.held.core is None else "core"
+                self.assertEqual((report["renderer"], report["width"], report["height"]), (renderer, *SIZE))
                 own = GOLDEN / PLATFORM / f"{name}.png"
                 golden = own if own.is_file() else GOLDEN / f"{name}.png"
                 if WRITE:
@@ -343,27 +343,32 @@ class HeldTest(unittest.TestCase):
         """X-ray draws the look's colour-only model (``look.py``) on OCCT's Phong program: a part's
         material is its colour alone, so the fixture with its materials taken away draws the same;
         and the next mode is drawn under the look's own PBR rig again, as if X-ray never was."""
-        from OCP.Graphic3d import Graphic3d_TypeOfShadingModel
-
         from cad.engine.render.look import LOOK
-        from cad.engine.render.service import Held
 
         solid = pixels(self.draw(**ROWS["solid"])[0])
         xray = pixels(self.draw(**ROWS["xray"])[0])
         scene = self.held.scenes[False]
-        self.assertEqual(scene.canvas.view.ShadingModel(), Graphic3d_TypeOfShadingModel.Graphic3d_TypeOfShadingModel_Phong)
-        self.assertEqual(len(scene.lights), 1 + len(LOOK.xray.lights), "its ambient light and its directional lights")
+        if self.held.core is None:
+            from OCP.Graphic3d import Graphic3d_TypeOfShadingModel
+
+            self.assertEqual(scene.canvas.view.ShadingModel(), Graphic3d_TypeOfShadingModel.Graphic3d_TypeOfShadingModel_Phong)
+            self.assertEqual(len(scene.lights), 1 + len(LOOK.xray.lights), "its ambient light and its directional lights")
+        else:  # the core's scene names X-ray's rig in place of the look's
+            self.assertEqual(scene.describe()[0]["phong"]["ambient"], LOOK.xray.ambient)
         self.assertLess(mismatch(pixels(self.draw(**ROWS["solid"])[0]), solid), 0.001, "Solid as before X-ray")
-        self.assertEqual(scene.canvas.view.ShadingModel(), Graphic3d_TypeOfShadingModel.Graphic3d_TypeOfShadingModel_Pbr)
+        if self.held.core is None:
+            self.assertEqual(scene.canvas.view.ShadingModel(), Graphic3d_TypeOfShadingModel.Graphic3d_TypeOfShadingModel_Pbr)
+        else:
+            self.assertNotIn("phong", scene.describe()[0])
         bare = json.loads(json.dumps(self.structure))
         bare["version"] = "bare"
         for prototype in bare["prototypes"]:
             prototype.pop("material", None)
             prototype.pop("faceMaterials", None)
-        held = Held(self.document)
-        self.addCleanup(held.close)
-        held.hold(bare, self.buffers)
-        self.assertLess(mismatch(pixels(held.draw(Still(ROWS["xray"]["display"], size=SIZE))[0]), xray), 0.001,
+        again = held(self.document)
+        self.addCleanup(again.close)
+        again.hold(bare, self.buffers)
+        self.assertLess(mismatch(pixels(again.draw(Still(ROWS["xray"]["display"], size=SIZE))[0]), xray), 0.001,
                         "a material is its colour alone")
 
     def test_every_segment_of_a_zigzag_stroke_is_drawn(self) -> None:
@@ -408,10 +413,21 @@ class HeldTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotRefused, "--pose: .*hinge"):
             self.draw(display={}, pose={"hinge": 400})
 
+    def preview_refused_on_core(self) -> None:
+        """Preview's studio is OCCT's alone yet: the view core refuses it in one line (``core.NOT_YET``)."""
+        if self.held.core is not None:
+            from cad.engine.render.core import NOT_YET
+
+            with self.assertRaises(SnapshotRefused) as refused:
+                self.draw(display={}, preview=True)
+            self.assertEqual(str(refused.exception), NOT_YET["preview"])
+        on_core(self, NOT_YET_PREVIEW)
+
     def test_preview_stands_its_floor_at_the_model_s_lowest_point(self) -> None:
         """Preview's floor is under the model wherever it was authored (the viewer's default
         placement, Lowest point): the bench's block reaches 15 below Z=0, and the floor is there,
         not at the document's origin; a pose that moves the lowest point moves the floor with it."""
+        self.preview_refused_on_core()
         from cad.engine.render.explode import placed_box
 
         def lowest(scene) -> float:
@@ -431,6 +447,7 @@ class HeldTest(unittest.TestCase):
         self.assertGreater(len(floors), 1, "a pose that moves the lowest point moves the floor")
 
     def test_preview_keeps_its_studio_and_its_look_between_pictures(self) -> None:
+        self.preview_refused_on_core()
         first = pixels(self.draw(display={}, preview=True)[0])
         scene = self.held.scenes[True]
         stage = list(scene.stage)
@@ -443,6 +460,7 @@ class HeldTest(unittest.TestCase):
         """three's NeutralToneMapping, which OCCT's raster has none of: the sheen a dielectric adds taken
         off a dark colour, a middle one kept, a bright one eased under 1. Laid over the model's pixels
         alone, so the studio's floor and backdrop (drawn in the viewer's finished colours) stay as drawn."""
+        self.preview_refused_on_core()
         from cad.engine.render.occt import neutral
 
         mapped = neutral(np.array([[0.02, 0.02, 0.02], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [4.0, 4.0, 4.0]]))
@@ -475,6 +493,7 @@ class HeldTest(unittest.TestCase):
         """A version replaced: its scenes let go of whole between pictures and made again, and
         Preview's environment lights the new scene as it lit the last (a scene collected while
         another drew took that one's environment map with it)."""
+        self.preview_refused_on_core()
         from cad.engine.render.service import Held
 
         held = Held(self.document)
@@ -492,22 +511,20 @@ class HeldTest(unittest.TestCase):
             old = dict(held.scenes)
 
     def test_a_new_version_keeps_the_shapes_it_shares_and_makes_its_scene_at_once(self) -> None:
-        from cad.engine.render.service import Held
-
-        held = Held(self.document)
-        self.addCleanup(held.close)
-        self.assertEqual(held.hold(self.structure, self.buffers)["made"], shapes(self.structure))
-        held.draw(Still({"mode": "solid"}, size=SIZE))
-        scene = held.scenes[False]
-        again = held.hold({**self.structure, "version": "next"}, {})
+        holding = held(self.document)
+        self.addCleanup(holding.close)
+        self.assertEqual(holding.hold(self.structure, self.buffers)["made"], shapes(self.structure))
+        holding.draw(Still({"mode": "solid"}, size=SIZE))
+        scene = holding.scenes[False]
+        again = holding.hold({**self.structure, "version": "next"}, {})
         self.assertEqual((again["made"], again["kept"], again["scene"]), (0, shapes(self.structure), True))
-        self.assertIsNot(held.scenes[False], scene, "a scene of the new version, made before any picture asks")
+        self.assertIsNot(holding.scenes[False], scene, "a scene of the new version, made before any picture asks")
         repainted = json.loads(json.dumps(self.structure))
         repainted["version"] = "repainted"
         repainted["prototypes"][2]["faceColors"] = {}
-        self.assertEqual(held.hold(repainted, {})["made"], 1, "a part's paints are its shapes too")
+        self.assertEqual(holding.hold(repainted, {})["made"], 1, "a part's paints are its shapes too")
         with self.assertRaisesRegex(KeyError, "no mesh of part"):
-            held.hold({**self.structure, "version": "lost", "prototypes": [{**self.structure["prototypes"][0],
+            holding.hold({**self.structure, "version": "lost", "prototypes": [{**self.structure["prototypes"][0],
                                                                              "key": "0" * 32}]}, {})
 
 
@@ -542,11 +559,10 @@ class CapTest(unittest.TestCase):
     (linear, squared), hiding what is inside the cut part -- a small box held in a big one."""
 
     def setUp(self) -> None:
-        gl()
+        draws()
         import build123d as bd
 
         from cad.engine.mesh import mesh_shape
-        from cad.engine.render.occt import Scene
 
         outer, inner = mesh_shape(bd.Box(20, 20, 20).wrapped), mesh_shape(bd.Box(6, 6, 6).wrapped)
         identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
@@ -554,9 +570,9 @@ class CapTest(unittest.TestCase):
         self.red, blue = (0.8, 0.1, 0.1), (0.05, 0.2, 0.9)
         structure = {"prototypes": [{"key": "outer", "color": [*self.red, 1]}, {"key": "inner", "color": [*blue, 1]}],
                      "instances": [{"prototype": 0, "matrix": identity}, {"prototype": 1, "matrix": inside}]}
-        self.scene = Scene(Path("caps.xbf"), {"outer": outer.to_bytes(), "inner": inner.to_bytes()}, size=SIZE,
-                           structure=structure)
-        self.addCleanup(self.scene.canvas.close)
+        self.scene, closed = scene(Path("caps.xbf"), {"outer": outer.to_bytes(), "inner": inner.to_bytes()}, size=SIZE,
+                                   structure=structure)
+        self.addCleanup(closed)
 
     def draw(self, display: dict) -> tuple[np.ndarray, tuple[int, int]]:
         self.scene.show(display)
@@ -600,11 +616,10 @@ class SeeThroughTest(unittest.TestCase):
     (``occt.SEE_THROUGH_OFFSET``), never decided pixel by pixel in shards along each one's triangles."""
 
     def test_a_pane_resting_on_a_box_is_one_colour_through_its_top(self) -> None:
-        gl()
+        draws()
         import build123d as bd
 
         from cad.engine.mesh import mesh_shape
-        from cad.engine.render.occt import Scene
 
         base, pane = mesh_shape(bd.Box(30, 30, 10).wrapped), mesh_shape(bd.Box(20, 20, 4).wrapped)
         identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
@@ -612,15 +627,16 @@ class SeeThroughTest(unittest.TestCase):
         structure = {"prototypes": [{"key": "base", "color": [0.011, 0.012, 0.014, 1]},
                                     {"key": "pane", "color": [0.9, 0.9, 0.85, 0.5]}],
                      "instances": [{"prototype": 0, "matrix": identity}, {"prototype": 1, "matrix": resting}]}
-        scene = Scene(Path("pane.xbf"), {"base": base.to_bytes(), "pane": pane.to_bytes()}, size=SIZE, structure=structure)
-        self.addCleanup(scene.canvas.close)
-        scene.show({"mode": "solid"})
-        scene.frame("iso")
+        pane_scene, closed = scene(Path("pane.xbf"), {"base": base.to_bytes(), "pane": pane.to_bytes()}, size=SIZE,
+                                   structure=structure)
+        self.addCleanup(closed)
+        pane_scene.show({"mode": "solid"})
+        pane_scene.frame("iso")
         # Points of the pane's top (z 9) whose ray from the iso camera, (-1, 1, -0.8), leaves through its bottom
         # face (at x - 5, y + 5), clear of its edges: through each, the pane's two faces over the box's top.
         xs, ys = np.meshgrid(np.linspace(-3, 8, 12), np.linspace(-8, 3, 12))
-        at = np.rint(scene.project(np.stack([xs.ravel(), ys.ravel(), np.full(xs.size, 9.0)], -1))).astype(int)
-        seen = pixels(scene.canvas.png())[at[:, 1], at[:, 0]]
+        at = np.rint(pane_scene.project(np.stack([xs.ravel(), ys.ravel(), np.full(xs.size, 9.0)], -1))).astype(int)
+        seen = pixels(pane_scene.canvas.png())[at[:, 1], at[:, 0]]
         spread = int(np.abs(seen - np.median(seen, 0)).max())
         self.assertLessEqual(spread, 4, f"the pane over the box varies by {spread} levels: shards where it lies on it")
 

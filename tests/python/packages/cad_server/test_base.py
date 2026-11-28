@@ -541,43 +541,69 @@ class WasmKernelTest(unittest.TestCase):
             self.assertEqual(base.kernel(), chosen)
             self.assertEqual(base.kernel(make=False), chosen)
 
-    def test_a_render_process_runs_in_the_native_kernel_the_installation_has_beside_it_and_none_is_made_for_it(self) -> None:
+    def test_a_render_process_on_the_webassembly_kernel_is_this_installation_s_python_drawing_with_its_view_core(self) -> None:
         native = {"python": "/base/bin/python", "prefix": "/base", "path": None, "own": False}
         with mock.patch.object(base, "kernel", return_value=native) as asked:
             self.assertEqual(base.drawing(), native, "no choice: where the kernel is")
             asked.assert_called_once_with(True)
         self.make()
         self.choose({"kind": "wasm", "folder": str(self.home)})
-        own = base.Environment("/own/bin/python", "/own", True)
-        with mock.patch.object(base, "ensure", return_value=own) as asked:
-            self.assertEqual(base.drawing(), {"python": "/own/bin/python", "prefix": "/own", "path": None, "own": True})
-            asked.assert_called_once_with(make=False)
-        with mock.patch.object(base, "ensure", return_value=None), self.assertRaises(base.Refused) as refused:
+        here = base.Installation.here()
+        with mock.patch.object(base, "ensure", side_effect=AssertionError("no native kernel is looked for")), \
+                self.assertRaises(base.Refused) as refused:
             base.drawing()
         said = str(refused.exception)
-        self.assertEqual(said, base.NO_DRAWING)
+        self.assertEqual(said, base.NO_DRAWING.format(folder=self.home))
         self.assertNotIn("\n", said)
-        self.assertIn("cad show", said)
+        self.assertIn("native kernel", said)
+        (self.home / "bin" / "viewcore").write_text("#!/bin/sh\n", encoding="utf-8")
+        with mock.patch.object(base, "ensure", side_effect=AssertionError("no native kernel is looked for")):
+            self.assertEqual(base.drawing(), {"python": here.executable, "prefix": here.prefix, "path": None,
+                                              "own": True, "core": str(self.home / "bin" / "viewcore")})
 
     def test_a_choice_that_names_no_folder_is_the_folder_the_engine_makes_on_first_need(self) -> None:
+        """The engine's one making makes it, as it makes the base: once for every asker, each line said to the request
+        the need came from; a failure remembered and told at once, not made again on every request."""
         from cad_server._internal import kernel_folder
 
         self.choose({"kind": "wasm"})
         self.assertTrue(base.wasm_chosen())
-        asked: list[bool] = []
+        made: list[str] = []
+        failing = [True]
 
-        def ensure(*, make: bool, told) -> Path | None:
-            asked.append(make)
+        def ensure(*, make: bool = True, told=None) -> Path | None:
+            if (self.home / base.WASM_MARKER).is_file():
+                return self.home
             if not make:
                 return None
+            made.append("made")
+            told("downloading Pyodide")
+            if failing[0]:
+                raise base.Refused("the WebAssembly kernel's pyodide.asm.wasm could not be downloaded", "network")
             self.make()
             return self.home
 
+        lines: list[str] = []
         with mock.patch.object(kernel_folder, "ensure", ensure), \
+                mock.patch.object(kernel_folder, "where", lambda *_args: self.home), \
+                mock.patch.object(base, "KERNEL_MAKING", base.KernelMaking()), \
                 mock.patch.object(base, "ensure", side_effect=AssertionError("the base is not the kernel chosen")):
             self.assertIsNone(base.kernel(make=False), "not made yet, and not made for the asking")
-            self.assertEqual(base.kernel()["prefix"], str(self.home))
-        self.assertEqual(asked, [False, True])
+            token = base.TOLD.set(lines.append)
+            try:
+                with self.assertRaisesRegex(base.Refused, "could not be downloaded"):
+                    base.kernel()
+                with self.assertRaisesRegex(base.Refused, "could not be downloaded.*its try"):
+                    base.kernel()  # remembered: told at once
+                self.assertEqual(made, ["made"])
+                failing[0] = False
+                base.KERNEL_MAKING.failed = -1e9  # a failure that can clear by itself, waited out
+                self.assertEqual(base.kernel()["prefix"], str(self.home))
+            finally:
+                base.TOLD.reset(token)
+            self.assertEqual(base.KERNEL_MAKING.key(), self.home.name)
+        self.assertEqual(made, ["made", "made"])
+        self.assertEqual(lines, ["downloading Pyodide"] * 2)
 
     def test_a_choice_that_names_no_kernel_folder_is_refused_in_one_line(self) -> None:
         for section in ({"kind": "wasm", "folder": "kernel"}, {"kind": "wasm", "folder": 3}):

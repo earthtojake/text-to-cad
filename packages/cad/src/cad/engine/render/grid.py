@@ -445,10 +445,15 @@ def show(scene: Any, on: bool = True) -> float:
         scene.grid_structure = None
     if not on or scene.preview:
         return time.perf_counter() - clock
-    if getattr(scene, "camera", None) is None:
-        raise RuntimeError("the grid is drawn for a framed camera: frame the scene first")
-    low, high = scene.rest_bounds()
-    found = bands(paper(low, high), Lens(scene.camera, scene.canvas.width, scene.canvas.height))
+    found = drawn(scene)
     if len(found.triangles):
         scene.grid_structure = _present(scene, found)
     return time.perf_counter() - clock
+
+
+def drawn(scene: Any) -> Bands:
+    """The grid's bands for the camera ``scene`` has framed (``Scene.frame``), sized from the model at rest."""
+    if getattr(scene, "camera", None) is None:
+        raise RuntimeError("the grid is drawn for a framed camera: frame the scene first")
+    low, high = scene.rest_bounds()
+    return bands(paper(low, high), Lens(scene.camera, scene.canvas.width, scene.canvas.height))

@@ -495,7 +495,12 @@ class SnapshotTest(unittest.TestCase):
         snapshot(self.document, alone, display=parse_display(json.dumps(packet["jobs"][0]["display"]), grid=False),
                  camera="authored", daemon=False, annotation=packet["annotation"], annotation_source=packet,
                  measurements=packet["measurements"])
-        self.assertLess(np.abs(rgba(folder / "view-1.png") - rgba(alone)).max(), 3)
+        from tests.python.support.render_stills import mismatch, renderer
+
+        if renderer() == "occt":
+            self.assertLess(np.abs(rgba(folder / "view-1.png") - rgba(alone)).max(), 3)
+        else:  # the engine's view core against OCCT in this process: two renderers, held as the goldens are
+            self.assertLess(mismatch(rgba(folder / "view-1.png")[..., :3], rgba(alone)[..., :3]), 0.015)
         everything = folder / "everything.png"
         snapshot(self.document, everything, display={"mode": "solid", "camera": {"projection": "orthographic"}},
                  camera="authored", daemon=False, annotation=packet["annotation"], annotation_source=packet)

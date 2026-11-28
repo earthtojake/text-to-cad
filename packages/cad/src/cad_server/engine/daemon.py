@@ -128,11 +128,27 @@ def _kernel(make: bool) -> dict[str, Any] | None:
     return made(make)
 
 
+def _wasm_kernel() -> bool:
+    """Whether the engine's kernel processes are the WebAssembly kernel's (``places.kernel``), as far as it is made."""
+    try:
+        found = _places.kernel(make=False)
+    except Exception:  # noqa: BLE001 - a kernel that cannot be had draws nothing either way
+        return False
+    return bool(found and found.get("wasm"))
+
+
 def _drawing(make: bool) -> dict[str, Any] | None:
     """The environment the engine's render processes run in (``cad_server._internal.engine_host.drawing``)."""
     from cad_server._internal.engine_host import drawing as made
 
     return made(make)
+
+
+def _kernel_making() -> Any:
+    """The engine's making of the WebAssembly kernel's folder (``cad_server._internal.engine_host.kernel_making``)."""
+    from cad_server._internal.engine_host import kernel_making
+
+    return kernel_making()
 
 
 def _making() -> Any:
@@ -790,6 +806,9 @@ class Daemon:
                 return
         else:
             making = _making()
+            kernel = _kernel_making()
+            if request.get("key") is not None and request.get("key") == kernel.key():
+                making = kernel  # the WebAssembly kernel's folder (``base.KERNEL_MAKING``)
         if request.get("key") != making.key():
             send({"ok": False, "other": True})
             return
@@ -1432,8 +1451,10 @@ class Daemon:
             return
         if op == "export":
             # A model's picture is drawn in its worker: told the engine's X display with it (``display.py``), started
-            # now where it is an Xvfb of the engine's own, never for a build that draws nothing.
-            shown = display.environment() if request.get("draw") or request.get("draw_still") else {}
+            # now where it is an Xvfb of the engine's own, never for a build that draws nothing, nor where the kernel is
+            # the WebAssembly one, whose worker draws none (its render process draws it, needing no display).
+            draws = (request.get("draw") or request.get("draw_still")) and not _wasm_kernel()
+            shown = display.environment() if draws else {}
             order = {"id": 1, "op": "export", "source": request["source"], "destinations": request["destinations"],
                      "cwd": request.get("cwd"),
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),

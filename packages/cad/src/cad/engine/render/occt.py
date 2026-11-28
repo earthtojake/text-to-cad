@@ -48,7 +48,7 @@ from typing import Any
 
 import numpy as np
 
-from cad.engine.mesh import Mesh
+from cad.engine.mesh_format import Mesh
 from cad.engine.render.context import Canvas
 from cad.engine.render.look import LOOK
 from cad.engine.render.shapes import LINES, FaceGroup, prototype_shapes
@@ -211,12 +211,12 @@ class Scene:
         self.millimetres_per_scene_unit = float(structure.get("millimetresPerSceneUnit") or self.millimetres_per_unit)
         self.timings["read"] = time.perf_counter() - clock
         clock = time.perf_counter()
-        self.canvas = Canvas(*size)
+        self.canvas = self._canvas(size)
         self.timings["context"] = time.perf_counter() - clock
         clock = time.perf_counter()
         self.prototypes = structure["prototypes"]
         self.meshes = {p["key"]: Mesh.from_bytes(buffers[p["key"]]) for p in self.prototypes}
-        self.parts = list(parts) if parts is not None else [prototype_shapes(p, self.meshes[p["key"]])
+        self.parts = list(parts) if parts is not None else [self._part(p, self.meshes[p["key"]])
                                                             for p in self.prototypes]
         self.timings["shapes"] = time.perf_counter() - clock
         self.matrices = [_matrix(instance["matrix"]) for instance in structure["instances"]]
@@ -253,6 +253,15 @@ class Scene:
         self._setup_view()
 
     # --- the view ------------------------------------------------------------------------
+
+    def _canvas(self, size: tuple[int, int]) -> Any:
+        """What the scene is drawn on: an OpenGL canvas of ``size`` (``context.Canvas``)."""
+        return Canvas(*size)
+
+    @staticmethod
+    def _part(prototype: dict[str, Any], mesh: Mesh) -> Any:
+        """A prototype's faces by group and its edges by class, as this renderer draws them: OCCT shapes."""
+        return prototype_shapes(prototype, mesh)
 
     def _setup_view(self) -> None:
         from cad.engine.render.finish import put_up
@@ -386,32 +395,42 @@ class Scene:
     def show(self, display: dict[str, Any] | None = None, *, preview: bool = False) -> float:
         """Show every instance in ``display``'s mode (or Preview's look); the seconds it took to
         build what is shown (presentations computed on first use, then shared)."""
-        from OCP.AIS import AIS_ConnectedInteractive
-        from OCP.Graphic3d import Graphic3d_ZLayerId_Topmost
-
         clock = time.perf_counter()
         display = dict(display or {})
         mode = "solid" if preview else display.get("mode", "solid")
-        context = self.canvas.context
-        for shown in self.shown:
-            context.Remove(shown, False)
-        self.shown = []
+        self._take_down()
         self.mode, self.display, self.preview = mode, display, preview
-        look = "hidden" if mode == "hidden-line" else "xray" if mode == "xray" else "pbr" if preview else "lit"
+        look = self.look()
         if not preview:  # Preview's look puts up its own (``preview_look``)
             self._rig(look == "xray")
+        self._put_up(self.plan(), look)
+        self._clip(display.get("clip"))
+        seconds = time.perf_counter() - clock
+        self.timings["present"] = seconds
+        return seconds
+
+    def look(self) -> str:
+        """How the faces shown are lit: ``hidden`` (hidden-line's, the backdrop's colour), ``xray`` (the
+        colour-only model), ``pbr`` (Preview's) or ``lit`` (the look's own)."""
+        mode = self.mode
+        return "hidden" if mode == "hidden-line" else "xray" if mode == "xray" else "pbr" if self.preview else "lit"
+
+    def plan(self) -> list[tuple[str, int, int, Any, Any]]:
+        """What ``show`` puts up for the mode shown, in the order it is drawn: per instance not hidden, each face
+        group of its part (``("faces", instance, prototype, group, colour)``) and each edge class drawn
+        (``("edges", instance, prototype, class, None)``). Every renderer draws this list."""
+        mode, display, preview = self.mode, self.display, self.preview
         faces = mode != "wireframe"
         edges = not preview and mode != "shaded" and not (mode in ("solid", "parts")
                                                           and self.structure.get("kind") in ROBOTS)
         # ``display.edges``: the edge classes drawn (``snapshot.EDGE_CLASSES``); every class without it.
         classes = (display.get("edges") or {}).get("classes") or LINES
-        on_top = mode in ("xray", "wireframe")
+        found: list[tuple[str, int, int, Any, Any]] = []
         for index, instance in enumerate(self.structure["instances"]):
             if index in self.hidden:
                 continue
             p = instance["prototype"]
             part = self.parts[p]
-            trsf = _trsf(self.placement(index))
             rgba = instance.get("color") or self.prototypes[p].get("color")
             rgba = tuple(rgba) if rgba else None
             if mode == "parts":
@@ -421,24 +440,43 @@ class Scene:
                     color = rgba if group is None or mode == "parts" else (
                         (group.color if group.color is not None else rgba)
                         if isinstance(group, FaceGroup) else group)
-                    connected = AIS_ConnectedInteractive()
-                    connected.Connect(self._faces(p, group, color, look), trsf)
-                    context.Display(connected, 1, -1, False)
-                    self.shown.append(connected)
+                    found.append(("faces", index, p, group, color))
             if edges:
                 for line in LINES:
-                    if line not in part.edges or line not in classes:
-                        continue
-                    connected = AIS_ConnectedInteractive()
-                    connected.Connect(self._edges(p, line), trsf)
-                    context.Display(connected, 0, -1, False)
-                    if on_top:
-                        context.SetZLayer(connected, Graphic3d_ZLayerId_Topmost)
-                    self.shown.append(connected)
-        self._clip(display.get("clip"))
-        seconds = time.perf_counter() - clock
-        self.timings["present"] = seconds
-        return seconds
+                    if line in part.edges and line in classes:
+                        found.append(("edges", index, p, line, None))
+        return found
+
+    def _take_down(self) -> None:
+        """What the last ``show`` put up, taken away."""
+        context = self.canvas.context
+        for shown in self.shown:
+            context.Remove(shown, False)
+        self.shown = []
+
+    def _put_up(self, plan: list[tuple[str, int, int, Any, Any]], look: str) -> None:
+        """``plan`` shown in OCCT: one connected object per item, placed, of its part's presentation for its
+        look; X-ray's and Wireframe's edges in the Topmost layer."""
+        from OCP.AIS import AIS_ConnectedInteractive
+        from OCP.Graphic3d import Graphic3d_ZLayerId_Topmost
+
+        context = self.canvas.context
+        on_top = self.mode in ("xray", "wireframe")
+        placed: dict[int, Any] = {}
+        for kind, index, p, which, color in plan:
+            trsf = placed.get(index)
+            if trsf is None:
+                trsf = placed[index] = _trsf(self.placement(index))
+            connected = AIS_ConnectedInteractive()
+            if kind == "faces":
+                connected.Connect(self._faces(p, which, color, look), trsf)
+                context.Display(connected, 1, -1, False)
+            else:
+                connected.Connect(self._edges(p, which), trsf)
+                context.Display(connected, 0, -1, False)
+                if on_top:
+                    context.SetZLayer(connected, Graphic3d_ZLayerId_Topmost)
+            self.shown.append(connected)
 
     # --- clip --------------------------------------------------------------------------------
 
@@ -475,9 +513,6 @@ class Scene:
         ``annotation/views.js``, its lengths in the viewer's scene coordinates: ``camera_in_millimetres``),
         placed as it is, the way the snapshot page places one (``fitOrthographicCamera``: the
         half-height the vertical half-extent, no fit, no padding)."""
-        from OCP.gp import gp_Dir, gp_Pnt
-        from OCP.Graphic3d import Graphic3d_Camera
-
         camera = camera_in_millimetres(camera, self.millimetres_per_scene_unit)
         eye, target = np.array(camera["position"], float), np.array(camera["target"], float)
         up = np.array(camera.get("up") or (0.0, 0.0, 1.0), float)
@@ -486,22 +521,33 @@ class Scene:
         right /= np.linalg.norm(right) or 1.0
         screen_up = np.cross(right, -d)
         aspect = self.canvas.width / self.canvas.height
+        scale = None
+        if projection != "perspective":
+            scale = 2 * float(camera["orthographicHalfHeight"]) / float(camera.get("zoom") or 1.0)
+        return self.aim({"fov": vertical_fov(aspect, focal_length), "direction": d, "up": screen_up, "right": right,
+                         "eye": eye, "target": target, "projection": projection, "scale": scale})
+
+    def aim(self, camera: dict[str, Any]) -> dict[str, Any]:
+        """The view's camera set to ``camera`` (``frame``'s record: eye, target, up, the projection, the
+        orthographic view's height ``scale`` or the vertical field of view ``fov``, for this picture's
+        aspect), its near and far fitted to what is shown; kept as ``self.camera``, which it answers."""
+        from OCP.gp import gp_Dir, gp_Pnt
+        from OCP.Graphic3d import Graphic3d_Camera
+
+        aspect = self.canvas.width / self.canvas.height
         cam = self.canvas.view.Camera()
         cam.SetAspect(aspect)  # the picture's, so what projects through the camera lands where it is drawn
-        scale = None
-        if projection == "perspective":
+        if camera["projection"] == "perspective":
             cam.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Perspective)
-            cam.SetFOVy(occt_fov(vertical_fov(aspect, focal_length), aspect))
+            cam.SetFOVy(occt_fov(camera["fov"], aspect))
         else:
             cam.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Orthographic)
-            scale = 2 * float(camera["orthographicHalfHeight"]) / float(camera.get("zoom") or 1.0)
-        cam.SetEyeAndCenter(gp_Pnt(*eye), gp_Pnt(*target))
-        cam.SetUp(gp_Dir(*screen_up))
-        if scale is not None:
-            cam.SetScale(occt_scale(scale, aspect))
+        cam.SetEyeAndCenter(gp_Pnt(*map(float, camera["eye"])), gp_Pnt(*map(float, camera["target"])))
+        cam.SetUp(gp_Dir(*map(float, camera["up"])))
+        if camera["scale"] is not None:
+            cam.SetScale(occt_scale(camera["scale"], aspect))
         self.canvas.view.ZFitAll(1.0)
-        self.camera = {"fov": vertical_fov(aspect, focal_length), "direction": d, "up": screen_up, "right": right,
-                       "eye": eye, "target": target, "projection": projection, "scale": scale}
+        self.camera = camera
         if self.studio:
             self._studio_backdrop()  # the sweep's shading follows the camera
         return self.camera
@@ -523,9 +569,6 @@ class Scene:
         ``padding`` of the picture each side (a job's ``output.padding``); ``tight`` off (a job's
         ``output.tightFrame``) fits the drawn parts' box instead. Or a prompt view's own camera,
         placed as it is (``_pinned``)."""
-        from OCP.gp import gp_Dir, gp_Pnt
-        from OCP.Graphic3d import Graphic3d_Camera
-
         if isinstance(camera, dict):
             return self._pinned(camera, projection, focal_length)
 
@@ -546,12 +589,8 @@ class Scene:
         low, high = points.min(0), points.max(0)
         centre = (low + high) / 2
         radius = float(np.linalg.norm(high - low)) / 2 or 1.0
-        cam = self.canvas.view.Camera()
-        cam.SetAspect(aspect)  # the picture's, so what projects through the camera lands where it is drawn
+        fov = vertical_fov(aspect, focal_length)
         if projection == "perspective":
-            cam.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Perspective)
-            fov = vertical_fov(aspect, focal_length)
-            cam.SetFOVy(occt_fov(fov, aspect))
             vertical = math.tan(math.radians(fov / 2)) * safe
             horizontal = vertical * aspect
             relative = points - centre
@@ -562,23 +601,14 @@ class Scene:
             target, eye = centre, centre + d * distance
             scale = None
         else:
-            cam.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Orthographic)
             xs, ys = points @ right, points @ screen_up
             half = max((ys.max() - ys.min()) / (2 * safe), (xs.max() - xs.min()) / (2 * aspect * safe), 1e-6)
             mid = right * (xs.max() + xs.min()) / 2 + screen_up * (ys.max() + ys.min()) / 2
             target = mid + d * float(centre @ d)
             eye = target + d * radius * 4
             scale = 2 * half
-        cam.SetEyeAndCenter(gp_Pnt(*eye), gp_Pnt(*target))
-        cam.SetUp(gp_Dir(*screen_up))
-        if scale is not None:
-            cam.SetScale(occt_scale(scale, aspect))
-        self.canvas.view.ZFitAll(1.0)
-        self.camera = {"fov": vertical_fov(aspect, focal_length), "direction": d, "up": screen_up, "right": right, "eye": eye, "target": target,
-                       "projection": projection, "scale": scale}
-        if self.studio:
-            self._studio_backdrop()  # the sweep's shading follows the camera
-        return self.camera
+        return self.aim({"fov": fov, "direction": d, "up": screen_up, "right": right, "eye": eye, "target": target,
+                         "projection": projection, "scale": scale})
 
     def project(self, points: np.ndarray) -> np.ndarray:
         """World points to output pixels (x right, y down), through OCCT's own camera."""
@@ -636,11 +666,6 @@ class Scene:
         (``widths``: the pen's share of the width at each point), each point a disc of that width, so
         segments meet round however sharp the turn (a core-profile GL context draws GL lines one
         pixel wide)."""
-        from OCP.AIS import AIS_Shape
-        from OCP.Graphic3d import Graphic3d_TypeOfShadingModel, Graphic3d_ZLayerId_Top
-
-        from cad.engine.render.shapes import craft, read
-
         points = np.asarray(points, float)
         shares = np.ones(len(points)) if widths is None or len(widths) != len(points) else np.asarray(widths, float)
         if closed:
@@ -665,8 +690,17 @@ class Scene:
         first = len(quads) + np.arange(len(points))[:, None] * rim
         k = np.arange(rim)[None, :]
         triangles.append(np.stack([np.repeat(centres, rim), (first + k).ravel(), (first + (k + 1) % rim).ravel()], 1))
-        nodes = np.vstack([quads, discs, points])
-        compound = read(craft([(nodes, np.concatenate(triangles), None)], {}))
+        self._ink(np.vstack([quads, discs, points]), np.concatenate(triangles), color)
+
+    def _ink(self, nodes: np.ndarray, triangles: np.ndarray, color: str) -> None:
+        """Triangles of the ink (``nodes`` (n, 3), 0-based ``triangles`` (m, 3)), unlit in ``color``, in the Top
+        layer: tested against the model's depth, writing none."""
+        from OCP.AIS import AIS_Shape
+        from OCP.Graphic3d import Graphic3d_TypeOfShadingModel, Graphic3d_ZLayerId_Top
+
+        from cad.engine.render.shapes import craft, read
+
+        compound = read(craft([(nodes, triangles, None)], {}))
         shown = AIS_Shape(compound)
         shown.SetColor(_color(color))
         aspect = shown.Attributes().ShadingAspect().Aspect()
@@ -680,6 +714,10 @@ class Scene:
         if width > 1.5 and getattr(self, "camera", None) is not None:
             self._ribbon(points, color, width, closed, widths)
             return
+        self._line(points, color, width, closed)
+
+    def _line(self, points: np.ndarray, color: str, width: float, closed: bool) -> None:
+        """A polyline of the ink as a GL line ``width`` wide, in the Top layer."""
         from OCP.AIS import AIS_Shape
         from OCP.BRepBuilderAPI import BRepBuilderAPI_MakePolygon
         from OCP.Graphic3d import Graphic3d_ZLayerId_Top
@@ -705,6 +743,15 @@ class Scene:
         canvas's alpha, filtered trilinearly from mipmaps; drawn after the model in the Top layer,
         so hidden where the model is in front of it, and writing no depth, as the viewer's mesh
         (``depthTest``, no ``depthWrite``, render order 40)."""
+        from cad.engine.render.text import TEXT_SCALE, face, text_canvas
+
+        picture = text_canvas(mark.get("text", ""), float(mark.get("fontPx", 14)), mark["color"])
+        self.fonts.add(face(500, float(mark.get("fontPx", 14)) * TEXT_SCALE).name)
+        self._quad(np.asarray(corners, float), picture)
+        self.text_quads.append((np.asarray(corners, float), mark["color"]))
+
+    def _quad(self, corners: np.ndarray, picture: np.ndarray) -> None:
+        """``picture`` (RGBA bytes, sRGB, rows top first) on the quad of ``corners``, as ``_text_quad`` says."""
         from OCP.Aspect import Aspect_InteriorStyle
         from OCP.Graphic3d import (Graphic3d_AlphaMode, Graphic3d_ArrayOfTriangles, Graphic3d_AspectFillArea3d,
                                    Graphic3d_Group, Graphic3d_LevelOfTextureAnisotropy, Graphic3d_Structure,
@@ -714,10 +761,6 @@ class Scene:
         from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA, Quantity_TOC_RGB
         from OCP.gp import gp_Pnt, gp_Pnt2d
 
-        from cad.engine.render.text import TEXT_SCALE, face, text_canvas
-
-        picture = text_canvas(mark.get("text", ""), float(mark.get("fontPx", 14)), mark["color"])
-        self.fonts.add(face(500, float(mark.get("fontPx", 14)) * TEXT_SCALE).name)
         height, width = picture.shape[:2]
         pixmap = Image_PixMap()
         pixmap.InitZero(Image_Format.Image_Format_RGBA, width, height)
@@ -753,7 +796,6 @@ class Scene:
         structure.SetZLayer(Graphic3d_ZLayerId_Top)
         structure.Display()
         self.structures.append(structure)
-        self.text_quads.append((np.asarray(corners, float), mark["color"]))
 
     def annotate(self, annotation: dict[str, Any]) -> list[np.ndarray]:
         """The viewer's annotation data drawn: each mark's points in its part's frame (``part``:
@@ -1266,13 +1308,7 @@ class Scene:
                 boxes.append((x0, y0, x1, y1, color))
         if not boxes:
             return
-        for structure in self.structures:
-            structure.Erase()
-        try:
-            bares = [self.canvas.tile(x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1, _color in boxes]
-        finally:
-            for structure in self.structures:
-                structure.Display()
+        bares = self._bare([box[:4] for box in boxes])
 
         def linear(c: np.ndarray) -> np.ndarray:
             return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
@@ -1289,6 +1325,17 @@ class Scene:
             ratio = (linear(seen) - linear(under)) / np.where(weight > 0, span, 1.0)
             cover = np.clip((ratio * weight).sum(-1) / np.maximum(weight.sum(-1), 1e-9), 0, 1)[:, None]
             drawn[touched] = np.rint((ink * cover + under * (1 - cover)) * 255).astype(np.uint8)
+
+    def _bare(self, boxes: list[tuple[int, int, int, int]]) -> list[np.ndarray]:
+        """The frame's pixels in each of ``boxes`` (left, top, right, bottom) drawn without the text quads: a
+        camera tile each (``Canvas.tile``)."""
+        for structure in self.structures:
+            structure.Erase()
+        try:
+            return [self.canvas.tile(x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1 in boxes]
+        finally:
+            for structure in self.structures:
+                structure.Display()
 
     def _on_black_and_white(self) -> tuple[np.ndarray, np.ndarray]:
         """The view drawn on black and then on white, each in linear light; its own backdrop is put

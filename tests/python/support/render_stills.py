@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -74,6 +76,62 @@ def bench():
 def gl() -> None:
     """Skip, saying why, where no OpenGL context can be made (on CI with a display, fail)."""
     opengl.require(context.available())
+
+
+def core() -> Any:
+    """The view core's job server that draws the stills where the suite runs on the WebAssembly kernel (its kernel
+    folder, ``engine_daemon.KERNEL``, carries one: ``bin/viewcore``), as the engine's render process draws them there
+    (``places.drawing``): a ``render.core.Core`` of its own, else None (OCCT draws)."""
+    from tests.python.support.engine_daemon import KERNEL
+
+    folder = os.environ.get(KERNEL)
+    program = Path(folder) / "bin" / "viewcore" if folder else None
+    if program is None or not program.is_file():
+        return None
+    from cad.engine.render.core import Core
+
+    return Core(str(program))
+
+
+def renderer() -> str:
+    """What a still's report names as its renderer where the suite runs: ``core`` on the WebAssembly kernel's view
+    core, else ``occt``."""
+    return "occt" if core() is None else "core"
+
+
+def draws() -> None:
+    """What a test that draws a still needs: the view core where the suite runs on it, else an OpenGL context
+    (``gl``)."""
+    if core() is None:
+        gl()
+
+
+def held(document: Path, **given: Any) -> Any:
+    """A renderer holding ``document`` (``service.Held``), drawing as the engine does where the suite runs."""
+    from cad.engine.render.service import Held
+
+    return Held(document, core=core(), **given)
+
+
+def scene(path: Path, buffers: dict, **given: Any) -> Any:
+    """A scene of ``buffers`` (``occt.Scene``, or the view core's ``core.CoreScene`` where the suite runs on it), and
+    what lets go of it."""
+    drawer = core()
+    if drawer is None:
+        from cad.engine.render.occt import Scene
+
+        made = Scene(path, buffers, **given)
+        return made, made.canvas.close
+    from cad.engine.render.core import CoreScene
+
+    return CoreScene(path, buffers, core=drawer, **given), drawer.stop
+
+
+def on_core(test: Any, what: str) -> None:
+    """Skip ``test``, saying so, where the view core draws: ``what`` is OCCT's alone (its own presentations), or what
+    the core refuses (``core.NOT_YET``), which the test asserts first."""
+    if core() is not None:
+        test.skipTest(f"OCCT's own on the WebAssembly kernel's view core: {what}")
 
 
 def pixels(data: bytes) -> np.ndarray:

@@ -301,7 +301,7 @@ class Process:
         told the child as soon as it exists, before it is ready (its supervisor's to kill should it
         stop meanwhile); ``python``: the Python a lease named, its caller's, which it runs in place of its
         service's environment's, its import path the caller's own. ``Gone`` when it does not start."""
-        named = python
+        named, core = python, None
         if named is not None:
             own = False
         elif service.environment in ("kernel", "drawing"):
@@ -311,6 +311,8 @@ class Process:
             # The WebAssembly kernel carries no engine: its processes run this server's, given its folder as its
             # own environment's are.
             python, own = found["python"], found["own"] or bool(found.get("wasm"))
+            # A render process on the WebAssembly kernel draws with its view core (``places.drawing``).
+            core = found.get("core") if service.environment == "drawing" else None
         else:
             python, own = service.environment, False
         env = dict(environment) if service.env == "lease" else dict(os.environ)
@@ -327,13 +329,15 @@ class Process:
         else:
             env["PYTHONDONTWRITEBYTECODE"] = "1"
         env.update(service.set_env)
-        if service.draws:
+        if service.draws and not core:  # OpenGL's display: the view core draws with none
             from cad_server.engine import display
 
             env.update(display.environment())
         argv = [python if part == "{python}" else part for part in service.command]
         if standby and service.standby is not None:
             argv.extend(service.standby.args)
+        if core:
+            argv.extend(("--core", core))
         popen = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                  env=env, cwd=_home(service, label, cwd), **places.windowless())
         if spawned is not None:

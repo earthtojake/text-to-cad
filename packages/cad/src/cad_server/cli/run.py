@@ -571,7 +571,7 @@ def main(argv: list[str] | None = None) -> int:
         spec = prepared.spec
         assert isinstance(spec, extras.Spec)
         base.TOLD.set(said)  # a kernel folder made on this first need says its lines here
-        chosen = base.wasm_kernel() if base.wasm_chosen() and _for_the_kernel(plan, spec) else None
+        chosen = base.wasm_kernel(engine=True) if base.wasm_chosen() and _for_the_kernel(plan, spec) else None
         if chosen is not None:
             _admitted(prepared.wanted, _kernel_python(chosen), Path(plan.target).name if plan.kind == "script"
                       else "the program", "the WebAssembly kernel's")
