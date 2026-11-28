@@ -38,3 +38,17 @@ test("a request that failed says what it was doing in words, and keeps the clien
   assert.match(failureAlert("/m/a.step", "", { kind: "network", operation: "preparing display assets", detail: "Failed to fetch" }).message,
     /while preparing display assets for/);
 });
+
+test("a file the engine may not read says so, with what to do, and asks for no report", () => {
+  const detail = "/m/plate.step cannot be read: permission denied";
+  const failure = { kind: "http", status: 403, operation: "engine-document", method: "POST", url: "http://127.0.0.1:3245/api/v1/documents",
+    detail, payload: { error: detail, hint: "close it there", code: "unreadable" } };
+  const alert = failureAlert("/m/plate.step", detail, failure);
+  assert.deepEqual([alert.title, alert.message, alert.reason, alert.reportable],
+    ["Couldn’t read the model", "“/m/plate.step” could not be read.", detail, false]);
+  assert.match(alert.recovery, /^Another program may have it open/);
+  assert.ok(alert.details.includes("HTTP status: 403"));
+  // Any other refusal is the request's, and reportable.
+  const other = failureAlert("/m/plate.step", "bad", { ...failure, status: 400, detail: "bad", payload: { error: "bad" } });
+  assert.deepEqual([other.title, other.reportable], ["The viewer couldn’t complete the request", undefined]);
+});

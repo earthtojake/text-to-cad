@@ -57,6 +57,17 @@ export function failureAlert(fileRef, error, failure, compile = false, t = engli
     recovery: t("alert.service.recovery"),
     reload: true
   };
+  // The engine may not read the file (`code: "unreadable"`), so nothing is known about its contents:
+  // on Windows, another program holding it, or saving, syncing or scanning it, or an account that
+  // may not read it. The person's to free, and no issue of CAD's to report.
+  if (failure?.payload?.code === "unreadable") return {
+    ...common, summary: t("alert.unreadable.summary"), title: t("alert.unreadable.title"),
+    message: t("alert.unreadable.message", { file: fileRef }),
+    reason: detail,
+    recovery: t("alert.unreadable.recovery"),
+    reportable: false,
+    reload: true
+  };
   if (kind === "http" || kind === "response") return {
     ...common, summary: t("alert.request.summary"), title: t("alert.request.title"),
     message: failure?.status
@@ -64,15 +75,6 @@ export function failureAlert(fileRef, error, failure, compile = false, t = engli
       : t("alert.request.unexpected", { operation: operationWords(operation, t), file: fileRef }),
     reason: detail,
     recovery: t("alert.request.recovery"),
-    reload: true
-  };
-  // The file refused to be read, so nothing is known about its contents: on Windows,
-  // another program holding it, or saving or replacing it, arrives as a PermissionError.
-  if (failure?.errorType === "PermissionError") return {
-    ...common, summary: t("alert.unreadable.summary"), title: t("alert.unreadable.title"),
-    message: t("alert.unreadable.message", { file: fileRef }),
-    reason: detail,
-    recovery: t("alert.unreadable.recovery"),
     reload: true
   };
   return {

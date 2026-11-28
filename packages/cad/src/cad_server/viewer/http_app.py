@@ -788,7 +788,8 @@ class CadApp:
         -- or a model the engine holds made served -- ``{"id"}`` -- answered ``201 {"id", "kind",
         "api"}``. An ``.xbf`` or a STEP is read by the engine first, off the request (``documents.py``):
         while it reads, ``202`` with the same body, its ``state`` ``reading``, the last frame of its
-        import (``building``) and when to ask again (``retryMs``, and ``Retry-After``)."""
+        import (``building``) and when to ask again (``retryMs``, and ``Retry-After``); one it may not
+        read, ``403`` with ``code`` ``unreadable``."""
         self._limit(request, 8192)
         payload = json.loads(request.body() or b"{}")
         if type(payload) is not dict or len(payload) != 1 or not set(payload) <= {"path", "id"}:
@@ -818,8 +819,10 @@ class CadApp:
                 return send_json(response, 202, {"id": ident, "kind": kind, "api": document_api(kind, ident), **body},
                                  [("retry-after", retry)])
             if status != 200:
+                # A file the engine may not read names its own remedy and ``code`` (``documents._unreadable``).
                 raise ApiError(status, str(body.get("error") or "the engine would not serve it"),
-                               "check that the file is whole, then open it again")
+                               body.get("hint") or "check that the file is whole, then open it again",
+                               **{key: body[key] for key in ("code",) if key in body})
             ident = body["doc"]
         send_json(response, 201, {"id": ident, "kind": kind, "api": document_api(kind, ident)})
 
