@@ -6,7 +6,7 @@
 //   KERNEL_DIR/lib/pythonX.Y/site-packages/       every pinned wheel unpacked, each module's bytecode beside it
 //   KERNEL_DIR/host/                              python.mjs and bootstrap.py, as they stood when it was made
 //   KERNEL_DIR/bin/python                         that python.mjs under the Node named (default: the one running
-//                                                 this); with --live, the python.mjs beside this file instead
+//                                                 this); with --live, cad's own python.mjs as it stands instead
 //   KERNEL_DIR/core/, KERNEL_DIR/bin/viewcore     the view core and its job server (hosts/node/serve.mjs) under
 //                                                 that Node, where VIEWCORE_DIR (default: this package) has a
 //                                                 built module (dist/viewcore.wasm); the engine's pools use it
@@ -24,10 +24,9 @@ import zlib from "node:zlib";
 import { readEntries } from "./zip.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-// Packages a build imports and seldom calls (bootstrap.py: bound at import, imported for real at their first use).
-// Each costs most of a second or more to import here; build123d imports them at the top of modules a build uses.
-const DEFERRED = ["sklearn", "scipy", "IPython", "requests", "pygments", "prompt_toolkit", "fontTools"];
-
+// The kernel's host as cad ships it: its Python's stand-in, what that runs first, and the lock of what a kernel
+// folder is made of.
+const HOST = path.join(HERE, "..", "..", "..", "cad", "src", "cad_server", "_internal", "kernel_host");
 const args = process.argv.slice(2);
 const option = (name) => { const at = args.indexOf(name); return at < 0 ? null : args.splice(at, 2)[1]; };
 const node = option("--node") || process.execPath;
@@ -36,7 +35,7 @@ const live = args.includes("--live") && args.splice(args.indexOf("--live"), 1).l
 const [packages, target] = args;
 if (!packages || !target) { console.error("usage: node make.mjs PACKAGES_DIR KERNEL_DIR [--node PATH]"); process.exit(2); }
 
-const pinsText = fs.readFileSync(path.join(HERE, "pins.json"));
+const pinsText = fs.readFileSync(path.join(HOST, "lock.json"));
 const pins = JSON.parse(pinsText);
 const staged = `${path.resolve(target)}.making-${process.pid}`;
 fs.rmSync(staged, { recursive: true, force: true });
@@ -80,9 +79,9 @@ const final = path.resolve(target);
 const launcher = path.join(staged, "bin", "python");
 // The launcher names its own folder as it will stand, the Node it runs and the host beside this file.
 fs.mkdirSync(path.join(staged, "host"));
-for (const name of ["python.mjs", "bootstrap.py"]) fs.copyFileSync(path.join(HERE, name), path.join(staged, "host", name));
+for (const name of ["python.mjs", "bootstrap.py"]) fs.copyFileSync(path.join(HOST, name), path.join(staged, "host", name));
 fs.writeFileSync(launcher, `#!/bin/sh\nCAD_KERNEL_HOME=${JSON.stringify(final)} exec ${JSON.stringify(node)} `
-  + `${JSON.stringify(path.join(live ? HERE : path.join(final, "host"), "python.mjs"))} "$@"\n`);
+  + `${JSON.stringify(path.join(live ? HOST : path.join(final, "host"), "python.mjs"))} "$@"\n`);
 fs.chmodSync(launcher, 0o755);
 // The view core, laid out as its hosts find each other (hosts/node beside hosts/web, the module in dist).
 const CORE = ["hosts/node/serve.mjs", "hosts/node/viewcore.mjs", "hosts/web/viewcore.js", "dist/viewcore.wasm"];
@@ -104,7 +103,8 @@ fs.writeFileSync(path.join(staged, "kernel.json"), JSON.stringify({
   python,
   pins: createHash("sha256").update(pinsText).digest("hex"),
   node,
-  deferred: DEFERRED,
+  // Packages a build imports and seldom calls (bootstrap.py: bound at import, imported for real at first use).
+  deferred: pins.deferred ?? [],
   core: core ? createHash("sha256").update(fs.readFileSync(path.join(viewcore, "dist", "viewcore.wasm"))).digest("hex") : null,
 }, null, 1) + "\n");
 fs.rmSync(final, { recursive: true, force: true });

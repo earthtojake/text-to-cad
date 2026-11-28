@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // fetch.mjs: the pinned WebAssembly kernel downloaded into a folder (prototype): Pyodide's core, the CAD kernel's
 // Python binding built for it (OCP on OCCT 8.0.1), build123d and what it imports, each file checked against the
-// sha256 pins.json names. Usage: node fetch.mjs PACKAGES_DIR
+// sha256 lock.json names. Usage: node fetch.mjs PACKAGES_DIR
 //   PACKAGES_DIR/pyodide/   Pyodide's core (its loader, its module, the standard library)
 //   PACKAGES_DIR/wheels/    one wheel per package
-// A wheel pins.json marks `slim` is kept without its texture images (a material library's maps, 90 MB that no build
+// A wheel lock.json marks `slim` is kept without its texture images (a material library's maps, 90 MB that no build
 // reads): the wheel as downloaded is checked, then written again without them.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -14,6 +14,9 @@ import { fileURLToPath } from "node:url";
 import { readEntries, writeZip } from "./zip.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// The kernel's host as cad ships it: its Python's stand-in, what that runs first, and the lock of what a kernel
+// folder is made of.
+const HOST = path.join(HERE, "..", "..", "..", "cad", "src", "cad_server", "_internal", "kernel_host");
 const TEXTURES = /\.(png|jpe?g|webp|exr|hdr|ktx2?|tiff?)$/i;
 
 async function fetched(url, sha256) {
@@ -27,7 +30,7 @@ async function fetched(url, sha256) {
 
 const target = process.argv[2];
 if (!target) { console.error("usage: node fetch.mjs PACKAGES_DIR"); process.exit(2); }
-const pins = JSON.parse(fs.readFileSync(path.join(HERE, "pins.json"), "utf8"));
+const pins = JSON.parse(fs.readFileSync(path.join(HOST, "lock.json"), "utf8"));
 fs.mkdirSync(path.join(target, "pyodide"), { recursive: true });
 fs.mkdirSync(path.join(target, "wheels"), { recursive: true });
 let total = 0;

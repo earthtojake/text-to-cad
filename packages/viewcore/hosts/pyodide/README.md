@@ -13,12 +13,12 @@ what cad's library needs changed to run on it.
 
 | File | What |
 |---|---|
-| `pins.json` | The pinned set: Pyodide's core and one wheel per package, each with its URL and sha256 |
+| `lock.json` (in cad: `packages/cad/src/cad_server/_internal/kernel_host/`) | The pinned set: Pyodide's core and one wheel per package, each with its URL and sha256; the engine makes a kernel folder of it on first need |
 | `fetch.mjs` | Downloads the set into a folder and checks every file: `node fetch.mjs PACKAGES_DIR` |
 | `kernel.mjs`, `kernel.py` | The kernel loaded (Node or a Worker) and the harness cad's build runs under: `build`, `withValues`, `preview` |
 | `build.mjs` | A script built in Node: `node build.mjs PACKAGES_DIR SCRIPT.py [--out DIR]` |
 | `make.mjs` | A kernel folder made of the set: every wheel unpacked with its bytecode, and a `bin/python` the engine can start: `node make.mjs PACKAGES_DIR KERNEL_DIR [--node PATH]` |
-| `python.mjs`, `bootstrap.py` | That `python`: CPython's command line (`-m`, `-c`, a script) on the WebAssembly kernel, with the real filesystem, streams, environment and process id, so the engine's own kernel programs (`cad.engine.worker`, `cad.engine.kernel_pool`) run in it unchanged |
+| `python.mjs`, `bootstrap.py` (in cad, beside the lock) | That `python`: CPython's command line (`-m`, `-c`, a script) on the WebAssembly kernel, with the real filesystem, streams, environment and process id, so the engine's own kernel programs (`cad.engine.worker`, `cad.engine.kernel_pool`) run in it unchanged |
 | `zip.mjs` | The little of the zip format this needs (a wheel's entries, cad's source as one archive) |
 | `page/` | A page that builds a parametric model in the tab and draws it through the view core: `node page/serve.mjs PACKAGES_DIR`, with `dist/viewcore.wasm` built (`../../scripts/core.sh`) and the repository's `npm ci` done (three.js) |
 

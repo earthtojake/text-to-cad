@@ -205,6 +205,9 @@ cad = ["py.typed", "*.pyi"]
 # The engine's look lights the regular display modes with this environment image, which the
 # engine serves to the viewer and the OCCT stills read (cad.engine.render.look).
 "cad.engine.render" = ["studio.hdr"]
+# The WebAssembly kernel's host, which the engine makes a kernel folder with (cad_server._internal.kernel_folder):
+# the stand-in for CPython's command line that Node runs, and the lock of what the folder is made of.
+"cad_server._internal.kernel_host" = ["python.mjs", "lock.json"]
 # _runtime holds what the server serves that is not Python: the viewer's built client that
 # `cad viewer` serves and the CAD app page its MCP endpoint serves. It is data, not a subpackage (no
 # __init__), and it is found at call time by cad_server.assets. Verified by

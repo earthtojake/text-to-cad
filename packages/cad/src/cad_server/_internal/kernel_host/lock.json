@@ -1,5 +1,16 @@
 {
+ "schema": "cad wasm kernel lock/1",
  "pyodide": "314.0.8",
+ "python": "3.14",
+ "deferred": [
+  "sklearn",
+  "scipy",
+  "IPython",
+  "requests",
+  "pygments",
+  "prompt_toolkit",
+  "fontTools"
+ ],
  "core": [
   {
    "file": "pyodide.mjs",

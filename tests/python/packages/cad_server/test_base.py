@@ -559,12 +559,32 @@ class WasmKernelTest(unittest.TestCase):
         self.assertNotIn("\n", said)
         self.assertIn("cad show", said)
 
+    def test_a_choice_that_names_no_folder_is_the_folder_the_engine_makes_on_first_need(self) -> None:
+        from cad_server._internal import kernel_folder
+
+        self.choose({"kind": "wasm"})
+        self.assertTrue(base.wasm_chosen())
+        asked: list[bool] = []
+
+        def ensure(*, make: bool, told) -> Path | None:
+            asked.append(make)
+            if not make:
+                return None
+            self.make()
+            return self.home
+
+        with mock.patch.object(kernel_folder, "ensure", ensure), \
+                mock.patch.object(base, "ensure", side_effect=AssertionError("the base is not the kernel chosen")):
+            self.assertIsNone(base.kernel(make=False), "not made yet, and not made for the asking")
+            self.assertEqual(base.kernel()["prefix"], str(self.home))
+        self.assertEqual(asked, [False, True])
+
     def test_a_choice_that_names_no_kernel_folder_is_refused_in_one_line(self) -> None:
-        for section in ({"kind": "wasm"}, {"kind": "wasm", "folder": "kernel"}, {"kind": "wasm", "folder": 3}):
+        for section in ({"kind": "wasm", "folder": "kernel"}, {"kind": "wasm", "folder": 3}):
             self.choose(section)
             with self.assertRaises(base.Refused) as refused:
                 base.kernel()
-            self.assertIn("name no folder", str(refused.exception))
+            self.assertIn("is no absolute path", str(refused.exception))
         self.choose({"kind": "wasm", "folder": str(self.home)})
         for schema, launcher in ((None, True), ("another kernel/9", True), (base.WASM_SCHEMA, False)):
             if schema is not None:

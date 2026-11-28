@@ -13,6 +13,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadKernel, sourceZip } from "./kernel.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+// The kernel's host as cad ships it: its Python's stand-in, what that runs first, and the lock of what a kernel
+// folder is made of.
+const HOST = path.join(HERE, "..", "..", "..", "cad", "src", "cad_server", "_internal", "kernel_host");
 const args = process.argv.slice(2);
 const option = (name) => { const at = args.indexOf(name); return at < 0 ? null : args.splice(at, 2)[1]; };
 const out = option("--out");
@@ -38,7 +41,7 @@ export function folderFiles(folder) {
 
 const kernel = await loadKernel({
   base: pathToFileURL(path.resolve(packages) + path.sep).href,
-  pins: JSON.parse(fs.readFileSync(path.join(HERE, "pins.json"), "utf8")),
+  pins: JSON.parse(fs.readFileSync(path.join(HOST, "lock.json"), "utf8")),
   cad: await sourceZip(source),
   kernelPy: fs.readFileSync(path.join(HERE, "kernel.py"), "utf8"),
   stdout: (line) => console.error(line), stderr: (line) => console.error(line),
