@@ -137,6 +137,26 @@ async function press(page, key) {
   await page.keyboard.press(key);
 }
 
+// A file deleted or moved while it is on screen is gone at once, whatever its kind's renderer watches: within a couple
+// of seconds (the catalog's next read) the page says that file is not there, by its path, with its project's name still
+// before it (the way back to its folder) and nothing to report; put back, it opens again by itself.
+test('a document deleted while it is on screen says its file is not there, keeps its project, and opens again once it is back', async (t) => {
+  const { page, errors } = await open(t, pathOf('bravo.stl'));
+  await onScreen(page, 'bravo.stl');
+  const kept = files.get('bravo.stl');
+  files.delete('bravo.stl');
+  const said = page.getByText('File does not exist', { exact: true });
+  await said.waitFor({ timeout: 6000 });
+  assert.equal(await page.getByText(pathOf('bravo.stl'), { exact: true }).count(), 1, 'the file, by its path');
+  assert.equal(await page.locator('[data-navbar-project]').innerText().then(text => text.replace(/\s+/g, ' ').trim()), 'proj /', 'its project still before it');
+  assert.equal(await page.locator('[data-file-name]').innerText(), 'bravo.stl');
+  assert.equal(await page.getByRole('button', { name: /Report/ }).count(), 0, 'nothing to report: it is not a fault of the viewer');
+  files.set('bravo.stl', kept);
+  await onScreen(page, 'bravo.stl');
+  await said.waitFor({ state: 'detached' });
+  assert.deepEqual(errors, []);
+});
+
 // `[` and `]` step through the folder in the order its page listed it when the person came to its documents, held while
 // they stay among them: opening a document moves it first under Last activity, the default order, so an order taken
 // again at each step walked back and forth between two documents and left the one just opened with no previous.

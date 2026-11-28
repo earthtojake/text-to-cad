@@ -35,7 +35,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, project = null, onImportFolder = null, onSearch = null, notice, navbarActions, update, alert = null, fileMenuItems, overlay, onError, presentation, layout }: FileViewerProps) {
+export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, project = null, onImportFolder = null, onSearch = null, notice, gone = false, navbarActions, update, alert = null, fileMenuItems, overlay, onError, presentation, layout }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -49,6 +49,8 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   // The host's home is on screen: no file, and a home to show.
   const home = loaded.status === "empty" && Boolean(presentation?.home);
   const reloadCurrent = useCallback(() => { if (currentKey.current === key) reload(); }, [key, reload]);
+  // The host saw the file on screen go: opened again, it says what became of it (`presentation.error`).
+  useEffect(() => { if (gone && (loaded.status === "ready" || loaded.status === "loading")) reload(); }, [gone]);
   const latest = useRef({ state, onStateChange, sourceId: source.id });
   latest.current = { state, onStateChange, sourceId: source.id };
   const changeState = useCallback((update: (previous: FileViewerState) => FileViewerState) => {

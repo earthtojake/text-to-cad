@@ -9,7 +9,8 @@ import { createTabStore, memoryTabRecord } from '@cad/ui/tab-store';
 
 // The viewer a host composes (`CadViewer`), over the core client and the engine's API as the spec's server answers it
 // (`CadViewer.browser.test.mjs`): the home, a project's folder, its documents and what a page records of each.
-const client = createCadClient({ origin: location.origin, pollIntervalMs: 0 });
+// The catalog of the file on screen read again every two seconds, as the web page's client reads it.
+const client = createCadClient({ origin: location.origin, pollIntervalMs: 2000 });
 const tabStore = createTabStore(memoryTabRecord());
 const live = createLiveRegistry();
 const host = { files: createCadFileSource(client), clipboard: { writeText: async () => {}, writeImage: async () => {} },

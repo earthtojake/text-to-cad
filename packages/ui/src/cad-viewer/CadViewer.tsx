@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ExportControls } from '../export/ExportControls.js';
-import type { CadEntryProject, CadProjectFolder, CadWorkspaceService } from '@cad/core/client';
+import type { CadEntry, CadEntryProject, CadProjectFolder, CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
@@ -15,7 +15,7 @@ import { cadRenderers } from './renderers.js';
 import type { LibraryLayout, LibrarySort } from '../tab-store/tabRecord.js';
 import type { TabStore } from '../tab-store/tabStore.js';
 import { useTabViewerState } from '../tab-store/useTabViewerState.js';
-import { normalizePath } from './catalog.js';
+import { baseName, normalizePath } from './catalog.js';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
@@ -212,6 +212,17 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // own (a model's). `file` may name it either way: a host addresses documents by id.
   const shown = entry ? (entry.sourcePath === null ? path : normalizePath(entry.file)) : null;
   const shownId = entry ? String(entry.id || '') || null : null;
+  // The document on screen as the catalog last had it, while it is the one on screen: after it has gone (deleted or
+  // moved while it was shown) the page still names it and keeps the way back to its project's folder. Gone: the catalog
+  // had its row, and read again it has none (`client.js`'s `publishCatalog`), whatever the renderer watches; FileViewer
+  // opens it again (`gone`), and the page says that file is not there until it is back.
+  const lastRow = useRef<{ path: string; entry: CadEntry } | null>(null);
+  if (entry) lastRow.current = { path, entry };
+  else if (lastRow.current && lastRow.current.path !== path) lastRow.current = null;
+  const known = entry ?? lastRow.current?.entry ?? null;
+  // Its name: its row's, else (a file's row has none) its file's.
+  const knownName = known ? String(known.name || '') || (known.sourcePath === null ? '' : baseName(normalizePath(String(known.file || '')))) : '';
+  const gone = Boolean(path && !entry && lastRow.current && catalog.hydrated && !catalog.error && !catalog.engineGone);
   latest.current.shown = shown;
   useEffect(() => { latest.current.onShown?.(shown, shownId); }, [shown, shownId]);
 
@@ -285,8 +296,8 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const forgotten = Boolean(left) && (path ? path !== left?.file : !origin);
   useEffect(() => { if (forgotten) setLeft(null); }, [forgotten]);
   const back = useCallback(() => { if (left) latest.current.onShow(left.file); }, [left]);
-  const shownName = String(entry?.name || '') || name || '';
-  const projectRef = homed ? (entry?.project as CadEntryProject | null | undefined) ?? null : null;
+  const shownName = knownName || name || '';
+  const projectRef = homed ? (known?.project as CadEntryProject | null | undefined) ?? null : null;
   const folderRead = useProjectFolder(client, projectRef);
   // The home's order, by which the folder's files are stepped through as its page lists them.
   const { layout, sort, panel: libraryPanel } = settings.library;
@@ -354,12 +365,17 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
       panel={libraryPanel ?? null} onPanelChange={changeLibraryPanel} /> : undefined,
     // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
-    // A document named by its id that the engine does not hold says so, in the engine's words; a file that is not
-    // there, its path.
-    error: ({ message, missing, reload }: { message: string; missing: boolean; reload?: () => void }) => missing
-      ? <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
-        title={isDocumentId(path) ? t("file.notHeld") : t("file.missing")} description={isDocumentId(path) ? message : undefined} />
-      : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
+    // A file that is not there says so by its path, as the page names files: the one the server says the id was, else
+    // the one the page last showed, else the path asked for; an id that names nothing here says it is not known. Either
+    // opens by itself once the catalog has it again (a file put back, a model's script run again).
+    error: ({ message, missing, error, reload }: { message: string; missing: boolean; error?: unknown; reload?: () => void }) => {
+      if (!missing) return <EmptyState title={t("file.openFailed")} description={message} action={goHome} />;
+      const said = (error as { path?: unknown } | null)?.path;
+      const last = lastRow.current?.path === path && lastRow.current.entry.sourcePath !== null ? normalizePath(lastRow.current.entry.file) : '';
+      const where = typeof said === 'string' && said ? said : last || (isDocumentId(path) ? '' : path);
+      return <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
+        title={where ? t("file.missing") : t("file.notKnown")} description={where || t("file.notKnownDetail")} />;
+    },
   }), [library, layout, changeLayout, sort, changeSort, path, host.fileActions, place, home, placeShown, onListed, origin, back, links, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
   // The search of every document (⌘K, and Search documents in a document's ⋯), over a document and the home alike,
   // where the host has a library (`search/`).
@@ -374,7 +390,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     <ControlUsageProvider report={host.usage?.controls}>
     <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} update={update} alert={hostAlert} fileMenuItems={menu}
       overlay={<>{overlay}{library ? <DocumentSearch search={search} library={library} navigation={viewerHost.navigation} current={searchCurrent} onError={onError} /> : null}</>}
-      onSearch={library ? search.show : null} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+      onSearch={library ? search.show : null} file={path || null} name={knownName || name} filePath={shown} gone={gone} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} project={project} onImportFolder={onImportFolder} notice={notice} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}

@@ -127,7 +127,7 @@ function XbfSurface({ view, data }) {
   const [parameterPreview, setParameterPreview] = useState(null);
   const loaded = useXbfScene({ client: document.client, file: view.file.path, preview: parameterPreview });
   // A document the engine no longer holds is opened again, once, the catalog asked again first (it
-  // still has the row it had): the file viewer then says what became of it, in the document's words.
+  // still has the row it had): the file viewer then says what became of its file.
   const reopened = useRef(false);
   useEffect(() => {
     if (!goneFromEngine(loaded.error) || reopened.current) return;

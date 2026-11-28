@@ -311,6 +311,12 @@ export interface FileViewerProps {
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**
+   * The host has seen the file on screen go (deleted or moved while it was shown): it is opened again, so the page says
+   * what became of it as it does for a file that will not open (`presentation.error`, `missing`), whatever its renderer
+   * watches. Said once each time it goes; the error page's `reload` opens it again once it is back.
+   */
+  gone?: boolean;
+  /**
    * The viewer's layout pinned, for a viewer that is not the page's own (one drawn small, or out of sight): neither
    * measured nor said to the page, so its size never changes the page's.
    * Unset (the page's viewer): measured from its own width (`responsive.js`), and its root carries

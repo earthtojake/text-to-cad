@@ -817,7 +817,14 @@ not open, CAD not running, a replaced link, a server that does not answer.
   one small outline button 12px under that (`StatusAction`). No icon, no tinted tile, no colour for the tone, in the
   app's theme. Why: the words say how serious it is, and a page state has no picture to take a Background from.
 - A file that will not open shows under the navbar ("File does not exist" with its path, "Could not open that file"
-  with the reason), with Go home where the host has a home. "CAD is not running" covers the whole page, and the page
+  with the reason), with Go home where the host has a home. A document's id that names nothing here says "This
+  document is not known", never the engine's words.
+- **A file deleted or moved while it is on screen is gone at once**, whatever its kind (a model's `.xbf`, an STL, a
+  STEP): at the catalog's next read of it (two seconds) the view gives way to the same "File does not exist" with its
+  path, the project's name still before the file's (the way back to its folder), and no Report Issue: nothing of
+  cad's failed. Put back at that path (a model's script run again), it opens again by itself. Why: a document is its
+  file, so its page says what became of the file, in the one place it says so for a file that will not open, and not
+  as a fault of the view's. "CAD is not running" covers the whole page, and the page
   under it is inert, so no tools or panel show.
 
 ## Selection and gestures

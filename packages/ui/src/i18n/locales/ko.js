@@ -216,7 +216,8 @@ export default {
 
   "file.opening": "여는 중…",
   "file.missing": "파일이 없습니다",
-  "file.notHeld": "이 모델은 더 이상 유지되지 않습니다",
+  "file.notKnown": "알 수 없는 문서입니다",
+  "file.notKnownDetail": "이 컴퓨터에는 이 ID의 문서가 없습니다. 다른 컴퓨터의 링크일 수 있습니다.",
   "file.openFailed": "이 파일을 열 수 없습니다",
   "file.displayFailed": "이 파일을 표시할 수 없습니다",
   "file.goHome": "홈으로",

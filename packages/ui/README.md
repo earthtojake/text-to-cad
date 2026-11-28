@@ -379,7 +379,9 @@ out from its heading row, each with its star and a ⋯ menu (Open, Open in new t
 deletes or forgets a file); a card is a real link where the host gives documents an address
 ([the home](docs/viewer-ux.md#the-home)). A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
-"Could not open that file" and why, each with Go home where the host has a home. A
+"Could not open that file" and why, each with Go home where the host has a home; a file that goes while it is shown
+says the same within the catalog's next read (`CadViewer`'s `gone`, FileViewer opening it again), its project's name
+kept, and opens again once it is back. A
 renderer's loading and update status is its own, in its viewport. An error appears as a
 card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own

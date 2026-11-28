@@ -318,6 +318,18 @@ class Documents(HttpLayerTestCase):
             with self.subTest(file=missing):
                 self.assertEqual(self.by_path(missing)[1]["documents"], [])
 
+    def test_the_id_of_a_file_that_went_says_which_file_it_was(self):
+        part = Path(self.fixture.root, "gone.stl")
+        part.write_bytes(b"solid p\nendsolid p\n")
+        [envelope] = self.by_path(part)[1]["documents"]
+        part.unlink()
+        # A page that showed it says that file is not there, by its path, not that an id names nothing.
+        status, _, body = self.fixture.request("GET", f"/api/v1/documents/{envelope['id']}")
+        self.assertEqual((status, json.loads(body)["path"]), (404, str(part).replace(os.sep, "/")))
+        # An id nothing here ever named has none.
+        status, _, body = self.fixture.request("GET", "/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ff")
+        self.assertEqual((status, "path" in json.loads(body)), (404, False))
+
     def test_a_model_by_its_id_is_its_envelope_at_the_build_held_and_one_not_held_names_nothing(self):
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
         script = os.path.join(self.fixture.root, "parts", "cube.py")

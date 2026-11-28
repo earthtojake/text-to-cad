@@ -217,7 +217,8 @@ export default {
 
   "file.opening": "正在打开…",
   "file.missing": "文件不存在",
-  "file.notHeld": "此模型已不再保留",
+  "file.notKnown": "未知的文档",
+  "file.notKnownDetail": "这台电脑上没有此 ID 的文档：链接可能来自另一台电脑。",
   "file.openFailed": "无法打开该文件",
   "file.displayFailed": "无法显示该文件",
   "file.goHome": "返回主页",

@@ -216,7 +216,8 @@ export default {
 
   "file.opening": "開いています…",
   "file.missing": "ファイルが存在しません",
-  "file.notHeld": "このモデルは保持されていません",
+  "file.notKnown": "このドキュメントは見つかりません",
+  "file.notKnownDetail": "このコンピューターには、この ID のドキュメントがありません。別のコンピューターのリンクかもしれません。",
   "file.openFailed": "このファイルを開けませんでした",
   "file.displayFailed": "このファイルを表示できませんでした",
   "file.goHome": "ホームへ戻る",

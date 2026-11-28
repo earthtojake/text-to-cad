@@ -769,13 +769,20 @@ class CadApp:
         return self._envelope(*self._known(ident))
 
     def _known(self, ident) -> tuple[dict, dict | None]:
-        """``_catalog`` of the document of id ``ident``; 404 for an id no document has (``envelope``)."""
+        """``_catalog`` of the document of id ``ident``; 404 for an id no document has (``envelope``), with the
+        ``path`` of the file it named where this server knows it (``_named``): a page says that file is gone."""
         if not is_id(ident):
             raise ApiError(404, f"{ident} is not a document id", "a document's id is the one its page, /<id>, names")
         catalog, model = self._catalog(None, ident)
         if not catalog["entries"]:
-            raise ApiError(404, catalog["missing"], "run the model's script again, or open the file from where it is now")
+            named = self._named(ident)
+            raise ApiError(404, catalog["missing"], "run the model's script again, or open the file from where it is now",
+                           **({"path": to_posix_path(named)} if named else {}))
         return catalog, model
+
+    def _named(self, ident) -> str | None:
+        """The file document ``ident`` was, there or not: the one this app was named for it, else its library entry's."""
+        return self.file_of(ident) or (self.library.read()["files"].get(ident) or {}).get("path") or None
 
     def _envelope(self, catalog: dict, model: dict | None) -> dict:
         """A document as every page reads it first: its ``id`` and ``kind``, its ``name``, its

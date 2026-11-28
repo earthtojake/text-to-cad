@@ -112,7 +112,8 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
   const activeFiles = new Map();
   // Each path a view asked for, and the id of the document the server answered it with.
   const aliases = new Map();
-  // Why the server has no row for an id it was asked for (the engine's words), by that id.
+  // Why the server has no row for an id or a path it was asked for (the engine's words), and the path of the file
+  // that is not there where it said one (`path`), by what was asked.
   const missing = new Map();
   let preferredFile = '';
   /** The key of the row `file` names: its document's id once the server said it. */
@@ -201,12 +202,18 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     const incoming = applyViewerOriginToEntries(catalog?.entries, origin);
     // The document the path asked for is the row the server answered: its id joins every spelling.
     if (asked && incoming.length === 1 && incoming[0].id && !isDocumentId(asked)) aliases.set(asked, incoming[0].id);
-    // An id the engine no longer holds (deleted while it was on screen): its row goes with it.
+    // An id the engine no longer holds, or a path that answers no document (a file deleted or moved while it was on
+    // screen): its row goes with it, so whatever shows it sees it gone.
     let gone = '';
     if (isDocumentId(asked)) {
       if (typeof catalog?.missing === 'string' && !incoming.length) {
-        missing.set(asked, catalog.missing);
+        missing.set(asked, { detail: catalog.missing, path: typeof catalog.path === 'string' ? catalog.path : '' });
         gone = asked;
+      } else missing.delete(asked);
+    } else if (asked && Array.isArray(catalog?.entries)) {
+      if (!incoming.length) {
+        missing.set(asked, { detail: `File does not exist: ${asked}`, path: asked });
+        gone = keyOf(asked);
       } else missing.delete(asked);
     }
     const answered = new Set(incoming.map(entryKey));
@@ -214,7 +221,8 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     const shown = new Set([...activeFiles.keys(), preferredFile].map(keyOf));
     const previous = new Map(snapshot.entries.map((entry) => [entryKey(entry), entry]));
     const entries = [
-      ...snapshot.entries.filter((entry) => !answered.has(entryKey(entry)) && shown.has(entryKey(entry)) && entryKey(entry) !== gone),
+      ...snapshot.entries.filter((entry) => !answered.has(entryKey(entry)) && shown.has(entryKey(entry)) && entryKey(entry) !== gone
+        && !(gone && !isDocumentId(asked) && normalizedFile(entry.file) === asked)),
       ...incoming.map((entry) => {
         const before = previous.get(entryKey(entry));
         return before && JSON.stringify(before) === JSON.stringify(entry) ? before : entry;
@@ -244,7 +252,8 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
           } catch (error) {
             const failure = error?.failure;
             if (failure?.status !== 404 || isEngineGone(error)) throw error;
-            catalog = { entries: [], revision: '', missing: failure.detail };
+            // The file the id named, where the server knows it: a page says that file is gone.
+            catalog = { entries: [], revision: '', missing: failure.detail, path: failure.payload?.path };
           }
         } else {
           // The path rides in the query even empty: a page with no file asks the cheapest read there is.
@@ -332,7 +341,10 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       if (signal?.aborted || disposed) throw abortError();
       if (!entry) {
         // An id the engine does not hold says why, in the engine's words.
-        throw Object.assign(new Error(missing.get(path) || `File does not exist: ${path}`), { code: 'cad-file-missing' });
+        // The file that is not there, by its path, where the server named one (`path`: '' for an id nothing here knows).
+        const gone = missing.get(path);
+        throw Object.assign(new Error(gone?.detail || `File does not exist: ${path}`),
+          { code: 'cad-file-missing', path: gone ? gone.path : isDocumentId(path) ? '' : normalizedFile(path) });
       }
       return entry;
     },

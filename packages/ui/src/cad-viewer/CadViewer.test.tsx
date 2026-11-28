@@ -183,20 +183,42 @@ test("the home's sidebar is kept in the tab's settings as a file's panel is in i
   expect(reloaded.settings.getSnapshot().library).toEqual({ layout: 'list', sort: 'activity' });
 });
 
-test('a document named by its id is its row, joined by id: the host hears its file and its id, and one the engine does not hold says why', async () => {
+test('a document named by its id is its row, joined by id: the host hears its file and its id; one that goes from under the page says which file went, keeping its project, and one nothing here knows says so', async () => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   const base = cadClient();
   const client = { ...base, entryOf: (path: string) => (base.getSnapshot() as unknown as { entries: Record<string, unknown>[] }).entries
     .find(entry => entry.id === path || entry.file === path) ?? null };
   const shown: [string | null, string | null][] = [];
-  render(<CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()}
-    file={id} library={library} onShow={() => {}} onShown={(file, ident) => shown.push([file, ident])} />);
+  const view = (file: string) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()}
+    file={file} library={library} onShow={() => {}} onShown={(next, ident) => shown.push([next, ident])} />;
+  const { rerender } = render(view(id));
   // A symlink's target and its link are one document, one row: the file is heard by the row's own path.
-  await act(async () => client.publish([{ id, file: '/models/real/a.step' }]));
+  const project = { id: 'p1', name: 'parts', root: '/models', folder: 'real' };
+  await act(async () => client.publish([{ id, file: '/models/real/a.step', name: 'a.step', project }]));
   expect(shown.at(-1)).toEqual(['/models/real/a.step', id]);
-  // One the engine does not hold: one title, over the engine's own words.
-  const missing = render(<>{props().presentation!.error!({ message: `no document ${id} is held`, missing: true })}</>);
-  expect([missing.getByText('This model is no longer held'), missing.getByText(`no document ${id} is held`)].every(Boolean)).toBe(true);
+  expect(props().gone).toBe(false);
+  // Deleted or moved while it is on screen: read again, the catalog has no row for it. The page opens it again to say
+  // so (`gone`), still naming it and its project, the way back to its folder; its page names the file by its path.
+  await act(async () => client.publish([]));
+  expect([props().gone, props().name, props().project?.name]).toEqual([true, 'a.step', 'parts']);
+  const gone = render(<>{props().presentation!.error!({ message: `no document ${id} is held`, missing: true, error: new Error('gone') })}</>);
+  expect([gone.getByText('File does not exist'), gone.getByText('/models/real/a.step')].every(Boolean)).toBe(true);
+  expect(gone.queryByText(`no document ${id} is held`)).toBeNull();
+  gone.unmount();
+  // Back: the page is the document's again.
+  await act(async () => client.publish([{ id, file: '/models/real/a.step', name: 'a.step', project }]));
+  expect(props().gone).toBe(false);
+  // An id the page never showed: by the file the server says it was, else not known (never the engine's words).
+  const other = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ac';
+  rerender(view(other));
+  const named = render(<>{props().presentation!.error!({ message: `no document ${other} is held`, missing: true,
+    error: Object.assign(new Error('gone'), { path: '/models/b.stl' }) })}</>);
+  expect([named.getByText('File does not exist'), named.getByText('/models/b.stl')].every(Boolean)).toBe(true);
+  named.unmount();
+  const unknown = render(<>{props().presentation!.error!({ message: `no document ${other} is held`, missing: true,
+    error: Object.assign(new Error('gone'), { path: '' }) })}</>);
+  expect(unknown.getByText('This document is not known')).toBeTruthy();
+  expect(unknown.queryByText(`no document ${other} is held`)).toBeNull();
 });
 
 test("the host's Full size is the navbar's one host action: Export is the file menu's, never the navbar's", () => {
