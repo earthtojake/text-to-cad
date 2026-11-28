@@ -9,6 +9,7 @@ class engine of the file's own (``store_fixtures.StoreCase``), with an engine, a
 from __future__ import annotations
 
 import json
+import os
 import sys
 import shutil
 import textwrap
@@ -40,6 +41,12 @@ if __name__ == "__main__":
 
 
 class XbfStoreTest(store_fixtures.StoreCase):
+    def assert_was(self, said: str, path) -> None:
+        """``said``, the path a 404 gives for a file that is gone, is ``path``: by its name and its folder, which
+        is still there, as a system may spell one folder two ways."""
+        self.assertEqual(os.path.basename(said), os.path.basename(str(path)))
+        self.assertTrue(os.path.samefile(os.path.dirname(said), os.path.dirname(str(path))), said)
+
     def assert_taken(self, name: str = "cube") -> None:
         """A run of ``<name>.py`` a fresh worker took from its ``.xbf``: no body ran."""
         done = self.run_script(name)
@@ -177,6 +184,7 @@ class XbfStoreTest(store_fixtures.StoreCase):
         # A file that is gone names nothing: a 404, with no state and no command.
         dropped.unlink()
         status, gone = envelope(file_id(dropped))
+        self.assert_was(gone.pop("path"), dropped)  # the file it was, for the page to say
         self.assertEqual((status, gone), (404, {
             "error": f"no document {file_id(dropped)} is held",
             "hint": "run the model's script again, or open the file from where it is now"}))
@@ -208,7 +216,9 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.xbf("cube").unlink()
         self.assertEqual(answer("GET", f"/api/v1/documents/{ident}/version"),
                          (404, {"error": missing, "hint": "check the path or id"}))
-        self.assertEqual(answer("GET", f"/api/v1/documents/{ident}"), (404, {
+        status, gone = answer("GET", f"/api/v1/documents/{ident}")
+        self.assert_was(gone.pop("path"), self.xbf("cube"))
+        self.assertEqual((status, gone), (404, {
             "error": missing, "hint": "run the model's script again, or open the file from where it is now"}))
         self.assertEqual(self.page(ident)[0], 404)
         self.assertEqual(answer("PATCH", "/api/v1/documents", {"action": "open", "path": ident}),
