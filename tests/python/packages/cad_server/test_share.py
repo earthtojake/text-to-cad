@@ -2202,7 +2202,7 @@ class ImportTest(unittest.TestCase):
                 self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
                 self.assertIn("cad import writes no version control's files, so nothing was written",
                               json.loads(refused.stdout)["error"])
-        self.assertEqual(sorted(str(path.relative_to(self.here)) for path in self.here.rglob("*")),
+        self.assertEqual(sorted(path.relative_to(self.here).as_posix() for path in self.here.rglob("*")),
                          ["bare", "bare/HEAD", "bare/refs", "repo", "repo/.git"])
         self.assertEqual(len(self.downloads()), downloaded)
         shutil.rmtree(self.here)
