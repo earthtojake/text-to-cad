@@ -401,6 +401,22 @@ class SheetWarningTests(unittest.TestCase):
         self.assertIn("three_views(gap=", crowded[0])
         self.assertEqual(build(70), [], "given the room, the same sheet is quiet")
 
+        # The other way round: the top view's own rows below it push its label down onto the front
+        # view's overall width. Clear of that dimension's value, the label is printed across its line.
+        def label_on_line(offset):
+            sheet = Sheet("A3")
+            top, front, _right = sheet.three_views(_part())
+            front.overall()
+            top.dim((-20, -15, 0), (10, -10, 0), orientation="h", offset=offset)
+            notices: list[str] = []
+            _render_sheet(sheet, index=1, count=1, label="label", warnings=notices)
+            return [n for n in notices if "annotation overlaps" in n]
+
+        across = label_on_line(-23)
+        self.assertEqual(len(across), 1, across)
+        self.assertIn("'TOP' is printed over the line of '40'", across[0])
+        self.assertEqual(label_on_line(-12), [], "a row above it, the label is clear of the line")
+
 
 class DrawingVocabularyTests(unittest.TestCase):
     """Every argument is checked where it is written, not at render time."""
