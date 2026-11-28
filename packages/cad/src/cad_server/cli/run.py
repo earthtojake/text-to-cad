@@ -560,11 +560,17 @@ def main(argv: list[str] | None = None) -> int:
         said(f"{plan.target} is no command of its environment: run a script, -m MODULE or -c CODE")
         return 2
     sys.stdout.flush()
-    if os.name == "nt":  # no exec on Windows: a child, and its exit code
-        import subprocess
+    return _start(command)
 
-        return subprocess.call(command)
+
+def _start(command: list[str]) -> int:
+    """Run ``command`` in this process's place (a child on Windows, which has no exec, and its exit code).
+    A command that cannot start is said in one line and exits 1, on every platform."""
     try:
+        if os.name == "nt":
+            import subprocess
+
+            return subprocess.call(command)
         os.execv(command[0], command)
     except OSError as error:
         print(f"{PROG}: cannot run {command[0]}: {error.strerror or error}", file=sys.stderr, flush=True)
