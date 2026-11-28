@@ -157,6 +157,21 @@ class Core:
             self._fail("vc_open_shape")
         return Doc(self, h)
 
+    def render(self, scene: dict, payloads: list[bytes] | tuple = ()) -> bytes:
+        """A still drawn in software (``vc_render``): ``scene`` as include/viewcore.h says it, ``payloads`` the
+        buffers it names by their place in this list. Width x height RGBA bytes, sRGB, the top row first; or a PNG
+        where the scene's ``format`` is ``"png"``."""
+        text = json.dumps({**scene, "payloads": [len(p) for p in payloads]}, separators=(",", ":")).encode()
+        blob = b"".join(payloads)
+        ptr = self._call("vc_alloc", len(text) + len(blob))
+        if not ptr:
+            self._fail("vc_alloc")
+        try:
+            self.memory.write(self.store, text + blob, ptr)
+            return self._result("vc_render", "vc_render", ptr, len(text), ptr + len(text), len(blob))
+        finally:
+            self._call("vc_free", ptr)
+
     def memory_bytes(self) -> int:
         return self.memory.data_len(self.store)
 

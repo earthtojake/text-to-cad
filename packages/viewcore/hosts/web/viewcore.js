@@ -185,6 +185,31 @@ export class Core {
     }
   }
 
+  /**
+   * A still drawn in software (vc_render): `scene` as include/viewcore.h says it, `payloads` the buffers it names
+   * by their place in this list (meshes, the environment, textures). Width x height RGBA bytes, sRGB, the top row
+   * first; or a PNG where `scene.format` is "png".
+   */
+  render(scene, payloads = []) {
+    const parts = payloads.map((p) => (p instanceof Uint8Array ? p : new Uint8Array(p)));
+    const text = new TextEncoder().encode(JSON.stringify({ ...scene, payloads: parts.map((p) => p.length) }));
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    const ptr = this.x.vc_alloc(text.length + total) >>> 0;
+    if (!ptr) this.fail("vc_alloc");
+    try {
+      const into = new Uint8Array(this.memory.buffer, ptr, text.length + total);
+      into.set(text);
+      let at = text.length;
+      for (const part of parts) {
+        into.set(part, at);
+        at += part.length;
+      }
+      return this.result("vc_render", ptr, text.length, ptr + text.length, total);
+    } finally {
+      this.x.vc_free(ptr);
+    }
+  }
+
   /** A part's canonical shape bytes opened by themselves (the engine's pool jobs): a Doc of one part, index 0. */
   openShape(data) {
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);

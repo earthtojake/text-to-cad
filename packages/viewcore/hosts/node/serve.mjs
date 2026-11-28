@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The view core as a job server: the engine's pool jobs (meshing a part, its table, its measure, a pick's facts,
-// reading an .xbf, exporting one) answered by the core in one long-lived Node process, over its standard streams.
+// reading an .xbf, exporting one, drawing a still) answered by the core in one long-lived Node process, over its standard streams.
 //
 //   node serve.mjs [VIEWCORE_WASM]
 //
@@ -28,6 +28,8 @@
 //   read_xbf   {path}                                         -> {path, version: [mtime_ns as text, size],
 //              parts: [{key, name}, ...]} + [structure JSON, each part's shape bytes in the parts' order]
 //   export     {path, format: step | stl | threemf | glb}     -> [the file's bytes]
+//   render     {scene} + [the buffers the scene names, in order] -> {width, height, format, seconds} + [the picture:
+//              RGBA bytes, or a PNG where scene.format is "png"]
 //   close      {}                                             -> {} and the process ends
 // A part named by "key" keeps its topology for the next job naming it (the last KEPT parts), as an engine pool
 // process does; an .xbf read stays open for an export of the same file as it stood (the last DOCUMENTS).
@@ -162,6 +164,15 @@ const JOBS = {
     if (typeof header.path !== "string") throw new Error("export takes a path");
     if (!Object.hasOwn(EXPORTS, header.format)) throw new Error(`no format ${JSON.stringify(header.format)}: ${Object.keys(EXPORTS).join(", ")}`);
     return { payloads: [document(header.path).doc.exportBytes(header.format)] };
+  },
+
+  render(header, payloads) {
+    const scene = header.scene;
+    if (scene === null || typeof scene !== "object" || Array.isArray(scene)) throw new Error("render takes a scene");
+    const started = performance.now();
+    const picture = core.render(scene, payloads);
+    const seconds = (performance.now() - started) / 1000;
+    return { header: { width: scene.width, height: scene.height, format: scene.format ?? "rgba", seconds }, payloads: [picture] };
   },
 
   close: () => ({ header: {}, last: true }),

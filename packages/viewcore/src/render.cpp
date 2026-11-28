@@ -397,7 +397,9 @@ struct Environment {
 Environment& environment(const uint8_t* image, size_t size, int width, int height) {
   static std::map<uint64_t, std::unique_ptr<Environment>> kept;
   uint64_t hash = 1469598103934665603ull ^ ((uint64_t)width << 32 | (uint32_t)height);
-  for (size_t at = 0; at < size; ++at) hash = (hash ^ image[at]) * 1099511628211ull;
+  size_t at = 0;
+  for (; at + 8 <= size; at += 8) hash = (hash ^ load<uint64_t>(image + at)) * 1099511628211ull, hash ^= hash >> 29;
+  for (; at < size; ++at) hash = (hash ^ image[at]) * 1099511628211ull;
   auto found = kept.find(hash);
   if (found != kept.end()) return *found->second;
   if (kept.size() >= 2) kept.clear();
@@ -576,11 +578,10 @@ const double GUARD = 8192;                    // pixels beyond the picture a tri
 // plane.
 struct Setup {
   int x0, x1, y0, y1;
-  int64_t a[3], b[3], c[3];
-  int64_t off[3][8], off_low[3], off_high[3];
+  int64_t a[4], b[4], c[4];  // a triangle's fourth edge holds everywhere
+  int64_t off[4][8], off_low[4], off_high[4];
   float zx, zy, z0;
   float zoff[8];
-  bool front;
   bool cut;
   float cx, cy, c0;  // the clip plane's distance over w, a plane too
 };
@@ -599,6 +600,7 @@ struct Renderer {
   Environment* env = nullptr;
 
   std::vector<Span> payloads;
+  Span matrices;  // sixteen doubles each, column-major: what an item's "matrix" numbers
   std::vector<Mesh> meshes;
   std::vector<Item> items;
   std::vector<Point> points;
@@ -610,9 +612,23 @@ struct Renderer {
   std::vector<uint32_t> flats;     // the unlit colours, as stored
   std::map<std::string, uint32_t> placed;
 
-  std::vector<float> depth;
-  std::vector<uint32_t> color;  // per sample: a triangle's number while the opaque are drawn, then the colour stored
-  int sx[8], sy[8];
+  // Per sample: the depth, and a triangle's number while the opaque are drawn, then the colour stored. Kept from
+  // one still to the next (the module is one thread): a frame's worth is not asked of the allocator each time.
+  static std::vector<float>& depths() {
+    static std::vector<float> kept;
+    return kept;
+  }
+  static std::vector<uint32_t>& colors() {
+    static std::vector<uint32_t> kept;
+    return kept;
+  }
+  std::vector<float>& depth = depths();
+  std::vector<uint32_t>& color = colors();
+  float* depth_at = nullptr;
+  uint32_t* color_at = nullptr;
+  int sx[8], sy[8];  // the samples of a pixel, in 1/256 of it
+  int sx_low = 0, sx_high = 0, sy_low = 0, sy_high = 0;
+  double fsx[8], fsy[8];
 
   // --- reading ---
 
@@ -638,7 +654,12 @@ struct Renderer {
     if (samples != 1 && samples != 2 && samples != 4 && samples != 8)
       throw std::invalid_argument("the scene's samples are not 1, 2, 4 or 8");
     // OpenGL's y runs up the picture, and its samples and its fill rule with it.
-    for (int s = 0; s < samples; ++s) sx[s] = SAMPLE_AT[samples][s][0] * 16, sy[s] = (16 - SAMPLE_AT[samples][s][1]) * 16;
+    for (int s = 0; s < samples; ++s) {
+      sx[s] = SAMPLE_AT[samples][s][0] * 16, sy[s] = (16 - SAMPLE_AT[samples][s][1]) * 16;
+      fsx[s] = sx[s] / 256.0, fsy[s] = sy[s] / 256.0;
+      sx_low = s ? std::min(sx_low, sx[s]) : sx[s], sx_high = s ? std::max(sx_high, sx[s]) : sx[s];
+      sy_low = s ? std::min(sy_low, sy[s]) : sy[s], sy_high = s ? std::max(sy_high, sy[s]) : sy[s];
+    }
     double three[3];
     if (scene.get("background")) {
       numbers(scene.get("background"), three, 3, "background");
@@ -654,6 +675,7 @@ struct Renderer {
       }
     if (const Value* list = scene.get("meshes"))
       for (const Value& index : list->items) meshes.emplace_back(payload(&index, "mesh"));
+    if (const Value* shared = scene.get("matrices")) matrices = payload(shared, "matrices");
     if (const Value* plane = scene.get("clip")) {
       numbers(plane, clip, 4, "clip");
       has_clip = true;
@@ -710,7 +732,15 @@ struct Renderer {
     Item item;
     static const double identity[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     std::memcpy(item.matrix, identity, sizeof identity);
-    if (entry.get("matrix")) numbers(entry.get("matrix"), item.matrix, 16, "matrix");
+    if (const Value* given = entry.get("matrix")) {
+      if (given->is_number()) {  // its place in the scene's "matrices"
+        double at = given->number();
+        if (at < 0 || (at + 1) * 128 > matrices.size) throw std::invalid_argument("the scene has no matrix " + given->text);
+        for (int k = 0; k < 16; ++k) item.matrix[k] = load<double>(matrices.data + (size_t)at * 128 + k * 8);
+      } else {
+        numbers(given, item.matrix, 16, "matrix");
+      }
+    }
     const double* m = item.matrix;
     double det = m[0] * (m[5] * m[10] - m[6] * m[9]) - m[4] * (m[1] * m[10] - m[2] * m[9]) +
                  m[8] * (m[1] * m[6] - m[2] * m[5]);
@@ -975,29 +1005,53 @@ struct Renderer {
     auto found = placed.find(key);
     if (found != placed.end()) return found->second;
     const Mesh& mesh = meshes[mesh_index];
-    uint32_t base = (uint32_t)points.size();
+    const uint32_t base = (uint32_t)points.size();
     const double* m = matrix;
     // A normal goes by the inverse transpose: the cofactors (here a column after a column), by the determinant's sign.
     double co[9] = {m[5] * m[10] - m[6] * m[9], m[6] * m[8] - m[4] * m[10], m[4] * m[9] - m[5] * m[8],
                     m[2] * m[9] - m[1] * m[10], m[0] * m[10] - m[2] * m[8], m[1] * m[8] - m[0] * m[9],
                     m[1] * m[6] - m[2] * m[5], m[2] * m[4] - m[0] * m[6], m[0] * m[5] - m[1] * m[4]};
-    double det = m[0] * co[0] + m[4] * co[3] + m[8] * co[6];
-    double sign = det < 0 ? -1 : 1;
-    uint32_t count = edge_points ? mesh.npoints : mesh.nodes;
+    if (m[0] * co[0] + m[4] * co[3] + m[8] * co[6] < 0)
+      for (double& value : co) value = -value;
+    // The placement and the camera as one matrix (a row of it the view's right, up or depth), and the clip
+    // plane as the part's own.
+    const double* axes[3] = {right, up, ahead};
+    double vm[3][4], cut[4] = {0, 0, 0, 0};
+    for (int r = 0; r < 3; ++r) {
+      for (int c = 0; c < 3; ++c) vm[r][c] = axes[r][0] * m[c * 4] + axes[r][1] * m[c * 4 + 1] + axes[r][2] * m[c * 4 + 2];
+      vm[r][3] = axes[r][0] * (m[12] - eye[0]) + axes[r][1] * (m[13] - eye[1]) + axes[r][2] * (m[14] - eye[2]);
+    }
+    if (has_clip) {
+      for (int c = 0; c < 3; ++c) cut[c] = clip[0] * m[c * 4] + clip[1] * m[c * 4 + 1] + clip[2] * m[c * 4 + 2];
+      cut[3] = clip[0] * m[12] + clip[1] * m[13] + clip[2] * m[14] + clip[3];
+    }
+    const uint32_t count = edge_points ? mesh.npoints : mesh.nodes;
     const uint8_t* from = edge_points ? mesh.edge_points : mesh.positions;
+    points.resize((size_t)base + count), attributes.resize(((size_t)base + count) * 3);
+    cuts.resize((size_t)base + count), outside.resize((size_t)base + count);
     for (uint32_t at = 0; at < count; ++at) {
-      double p[3] = {load<float>(from + (size_t)at * 12), load<float>(from + (size_t)at * 12 + 4),
-                     load<float>(from + (size_t)at * 12 + 8)}, w[3];
-      transform(m, p, w);
-      float attribute[3] = {0, 0, 0};
-      if (!edge_points) {
-        double n[3] = {load<float>(mesh.normals + (size_t)at * 12), load<float>(mesh.normals + (size_t)at * 12 + 4),
-                       load<float>(mesh.normals + (size_t)at * 12 + 8)};
-        attribute[0] = (float)(sign * (co[0] * n[0] + co[3] * n[1] + co[6] * n[2]));
-        attribute[1] = (float)(sign * (co[1] * n[0] + co[4] * n[1] + co[7] * n[2]));
-        attribute[2] = (float)(sign * (co[2] * n[0] + co[5] * n[1] + co[8] * n[2]));
+      const double p[3] = {load<float>(from + (size_t)at * 12), load<float>(from + (size_t)at * 12 + 4),
+                           load<float>(from + (size_t)at * 12 + 8)};
+      const double v[3] = {vm[0][0] * p[0] + vm[0][1] * p[1] + vm[0][2] * p[2] + vm[0][3],
+                           vm[1][0] * p[0] + vm[1][1] * p[1] + vm[1][2] * p[2] + vm[1][3],
+                           vm[2][0] * p[0] + vm[2][1] * p[1] + vm[2][2] * p[2] + vm[2][3]};
+      Point& point = points[base + at];
+      point = {0, 0, 0, 1};
+      const bool inside = project(v, point);
+      outside[base + at] = inside ? 0 : 1;
+      cuts[base + at] = has_clip ? (float)((cut[0] * p[0] + cut[1] * p[1] + cut[2] * p[2] + cut[3]) *
+                                           (perspective && inside ? point.iw : 1.0f))
+                                 : 0.0f;
+      float* attribute = &attributes[((size_t)base + at) * 3];
+      if (edge_points) {
+        attribute[0] = attribute[1] = attribute[2] = 0;
+      } else {
+        const double n[3] = {load<float>(mesh.normals + (size_t)at * 12), load<float>(mesh.normals + (size_t)at * 12 + 4),
+                             load<float>(mesh.normals + (size_t)at * 12 + 8)};
+        attribute[0] = (float)(co[0] * n[0] + co[3] * n[1] + co[6] * n[2]);
+        attribute[1] = (float)(co[1] * n[0] + co[4] * n[1] + co[7] * n[2]);
+        attribute[2] = (float)(co[2] * n[0] + co[5] * n[1] + co[8] * n[2]);
       }
-      add_point(w, attribute);
     }
     placed[key] = base;
     return base;
@@ -1206,48 +1260,57 @@ struct Renderer {
 
   // --- the rasterizer ---
 
+  // A coordinate of the picture in 1/256 of a pixel, the nearest.
+  static inline int64_t snap(float v) { return (int64_t)((double)v * 256.0 + 2147483648.5) - 2147483648LL; }
   // A triangle's setup; false where it covers nothing. `factor` and `units` are glPolygonOffset's.
   bool setup(const Point& p0, const Point& p1, const Point& p2, float factor, float units, Setup& s) const {
-    int64_t x[3] = {(int64_t)std::lround(p0.x * 256.0f), (int64_t)std::lround(p1.x * 256.0f),
-                    (int64_t)std::lround(p2.x * 256.0f)};
-    int64_t y[3] = {(int64_t)std::lround(p0.y * 256.0f), (int64_t)std::lround(p1.y * 256.0f),
-                    (int64_t)std::lround(p2.y * 256.0f)};
-    float z[3] = {p0.z, p1.z, p2.z};
-    int64_t area = (x[1] - x[0]) * (y[2] - y[0]) - (x[2] - x[0]) * (y[1] - y[0]);
-    if (area == 0) return false;
-    s.front = area < 0;  // counter-clockwise as the eye sees it, the picture's y running down
-    if (area < 0) {
-      std::swap(x[1], x[2]), std::swap(y[1], y[2]), std::swap(z[1], z[2]);
-      area = -area;
+    const Point* corners[3] = {&p0, &p1, &p2};
+    return setup(corners, 3, factor, units, s);
+  }
+  // The same of a convex figure of three or four corners in order (a line's rectangle is four).
+  bool setup(const Point* const* corners, int count, float factor, float units, Setup& s) const {
+    int64_t x[4], y[4];
+    float z[4];
+    int64_t low_x = INT64_MAX, high_x = INT64_MIN, low_y = INT64_MAX, high_y = INT64_MIN;
+    for (int k = 0; k < count; ++k) {
+      x[k] = snap(corners[k]->x), y[k] = snap(corners[k]->y), z[k] = corners[k]->z;
+      low_x = std::min(low_x, x[k]), high_x = std::max(high_x, x[k]);
+      low_y = std::min(low_y, y[k]), high_y = std::max(high_y, y[k]);
     }
-    int64_t low_x = std::min(x[0], std::min(x[1], x[2])), high_x = std::max(x[0], std::max(x[1], x[2]));
-    int64_t low_y = std::min(y[0], std::min(y[1], y[2])), high_y = std::max(y[0], std::max(y[1], y[2]));
     s.x0 = (int)std::max<int64_t>(0, low_x >> 8), s.x1 = (int)std::min<int64_t>(width - 1, high_x >> 8);
     s.y0 = (int)std::max<int64_t>(0, low_y >> 8), s.y1 = (int)std::min<int64_t>(height - 1, high_y >> 8);
     if (s.x0 > s.x1 || s.y0 > s.y1) return false;
-    for (int e = 0; e < 3; ++e) {
-      int from = e, to = (e + 1) % 3;
-      int64_t dx = x[to] - x[from], dy = y[to] - y[from];
-      s.a[e] = -dy, s.b[e] = dx;
-      s.c[e] = dy * x[from] - dx * y[from];
-      if (!(dy < 0 || (dy == 0 && dx < 0))) s.c[e] -= 1;  // not a left edge or OpenGL's top: its own points are outside
-      s.off_low[e] = INT64_MAX, s.off_high[e] = INT64_MIN;
-      for (int k = 0; k < samples; ++k) {
-        s.off[e][k] = s.a[e] * sx[k] + s.b[e] * sy[k];
-        s.off_low[e] = std::min(s.off_low[e], s.off[e][k]);
-        s.off_high[e] = std::max(s.off_high[e], s.off[e][k]);
-      }
+    const int64_t area = (x[1] - x[0]) * (y[2] - y[0]) - (x[2] - x[0]) * (y[1] - y[0]);
+    if (area == 0) return false;
+    const int64_t turn = area < 0 ? -1 : 1;  // the edges' functions are positive inside whichever way it winds
+    for (int e = 0; e < count; ++e) {
+      const int from = e, to = e == count - 1 ? 0 : e + 1;
+      const int64_t dx = (x[to] - x[from]) * turn, dy = (y[to] - y[from]) * turn;
+      const int64_t a = -dy, b = dx;
+      s.a[e] = a, s.b[e] = b;
+      // A left edge or OpenGL's top holds its own points; another does not.
+      s.c[e] = dy * x[from] - dx * y[from] - ((dy < 0 || (dy == 0 && dx < 0)) ? 0 : 1);
+      // The least and the most the function gains from a pixel's corner to a sample of it (bounds, over the
+      // samples' box): what tells a pixel wholly outside or wholly inside without asking each sample.
+      s.off_low[e] = a * (a > 0 ? sx_low : sx_high) + b * (b > 0 ? sy_low : sy_high);
+      s.off_high[e] = a * (a > 0 ? sx_high : sx_low) + b * (b > 0 ? sy_high : sy_low);
+      for (int k = 0; k < samples; ++k) s.off[e][k] = a * sx[k] + b * sy[k];
+    }
+    if (count == 3) {
+      s.a[3] = s.b[3] = s.c[3] = s.off_low[3] = s.off_high[3] = 0;
+      for (int k = 0; k < samples; ++k) s.off[3][k] = 0;
     }
     // The depth's plane over the picture, in pixels.
-    double fx[3] = {x[0] / 256.0, x[1] / 256.0, x[2] / 256.0}, fy[3] = {y[0] / 256.0, y[1] / 256.0, y[2] / 256.0};
-    double inverse = 1.0 / ((fx[1] - fx[0]) * (fy[2] - fy[0]) - (fx[2] - fx[0]) * (fy[1] - fy[0]));
-    double zx = ((z[1] - z[0]) * (fy[2] - fy[0]) - (z[2] - z[0]) * (fy[1] - fy[0])) * inverse;
-    double zy = ((z[2] - z[0]) * (fx[1] - fx[0]) - (z[1] - z[0]) * (fx[2] - fx[0])) * inverse;
-    double z0 = z[0] - zx * fx[0] - zy * fy[0];
+    const double scale = 1.0 / 256.0;
+    const double ax = (x[1] - x[0]) * scale, ay = (y[1] - y[0]) * scale, bx = (x[2] - x[0]) * scale, by = (y[2] - y[0]) * scale;
+    const double inverse = 1.0 / (ax * by - bx * ay);
+    const double zx = ((z[1] - z[0]) * by - (z[2] - z[0]) * ay) * inverse;
+    const double zy = ((z[2] - z[0]) * ax - (z[1] - z[0]) * bx) * inverse;
+    double z0 = z[0] - zx * (x[0] * scale) - zy * (y[0] * scale);
     if (factor != 0 || units != 0)
       z0 += factor * std::max(std::fabs(zx), std::fabs(zy)) + units * DEPTH_UNIT;
     s.zx = (float)zx, s.zy = (float)zy, s.z0 = (float)z0;
-    for (int k = 0; k < samples; ++k) s.zoff[k] = (float)(zx * (sx[k] / 256.0) + zy * (sy[k] / 256.0));
+    for (int k = 0; k < samples; ++k) s.zoff[k] = (float)(zx * fsx[k] + zy * fsy[k]);
     s.cut = false;
     return true;
   }
@@ -1270,14 +1333,15 @@ struct Renderer {
   template <typename Sink>
   inline void raster(const Setup& s, Sink&& sink) const {
     const int full = (1 << samples) - 1;
-    const int64_t step[3] = {s.a[0] * 256, s.a[1] * 256, s.a[2] * 256};
-    for (int py = s.y0; py <= s.y1; ++py) {
-      int64_t row[3];
-      for (int e = 0; e < 3; ++e) row[e] = s.a[e] * ((int64_t)s.x0 * 256) + s.b[e] * ((int64_t)py * 256) + s.c[e];
+    const int64_t step[4] = {s.a[0] * 256, s.a[1] * 256, s.a[2] * 256, s.a[3] * 256};
+    const int64_t down[4] = {s.b[0] * 256, s.b[1] * 256, s.b[2] * 256, s.b[3] * 256};
+    int64_t row[4];
+    for (int e = 0; e < 4; ++e) row[e] = s.a[e] * ((int64_t)s.x0 * 256) + s.b[e] * ((int64_t)s.y0 * 256) + s.c[e];
+    for (int py = s.y0; py <= s.y1; ++py, row[0] += down[0], row[1] += down[1], row[2] += down[2], row[3] += down[3]) {
       // The row's span: where each edge function can be non-negative at some sample.
       int from = s.x0, to = s.x1;
       if (to - from > 6) {
-        for (int e = 0; e < 3; ++e) {
+        for (int e = 0; e < 4; ++e) {
           int64_t most = row[e] + s.off_high[e];
           if (step[e] > 0) {
             if (most < 0) from = (int)std::min<int64_t>(s.x1 + 1, std::max<int64_t>(from, s.x0 + (-most) / step[e]));
@@ -1294,20 +1358,27 @@ struct Renderer {
         }
         if (to < from) continue;
       }
-      int64_t e0 = row[0] + step[0] * (from - s.x0), e1 = row[1] + step[1] * (from - s.x0),
-              e2 = row[2] + step[2] * (from - s.x0);
+      const int64_t along = from - s.x0;
+      int64_t e0 = row[0] + step[0] * along, e1 = row[1] + step[1] * along, e2 = row[2] + step[2] * along,
+              e3 = row[3] + step[3] * along;
       const float zrow = s.z0 + s.zy * (float)py;
       const float crow = s.cut ? s.c0 + s.cy * (float)py : 0.0f;
       size_t pixel = (size_t)py * width + from;
-      for (int px = from; px <= to; ++px, ++pixel, e0 += step[0], e1 += step[1], e2 += step[2]) {
-        if (((e0 + s.off_high[0]) | (e1 + s.off_high[1]) | (e2 + s.off_high[2])) < 0) continue;
+      for (int px = from; px <= to; ++px, ++pixel, e0 += step[0], e1 += step[1], e2 += step[2], e3 += step[3]) {
+        if (((e0 + s.off_high[0]) | (e1 + s.off_high[1]) | (e2 + s.off_high[2]) | (e3 + s.off_high[3])) < 0) continue;
         int mask;
-        if (((e0 + s.off_low[0]) | (e1 + s.off_low[1]) | (e2 + s.off_low[2])) >= 0) {
+        if (((e0 + s.off_low[0]) | (e1 + s.off_low[1]) | (e2 + s.off_low[2]) | (e3 + s.off_low[3])) >= 0) {
           mask = full;
         } else {
-          mask = 0;
-          for (int k = 0; k < samples; ++k)
-            if (((e0 + s.off[0][k]) | (e1 + s.off[1][k]) | (e2 + s.off[2][k])) >= 0) mask |= 1 << k;
+#define VC_INSIDE(k) \
+  (int)((uint64_t) ~((e0 + s.off[0][k]) | (e1 + s.off[1][k]) | (e2 + s.off[2][k]) | (e3 + s.off[3][k])) >> 63)
+          if (samples == 4) {
+            mask = VC_INSIDE(0) | VC_INSIDE(1) << 1 | VC_INSIDE(2) << 2 | VC_INSIDE(3) << 3;
+          } else {
+            mask = 0;
+            for (int k = 0; k < samples; ++k) mask |= VC_INSIDE(k) << k;
+          }
+#undef VC_INSIDE
           if (!mask) continue;
         }
         if (s.cut && crow + s.cx * (float)px < 0) continue;
@@ -1335,12 +1406,10 @@ struct Renderer {
     float nx = -dy / length * (line * 0.5f), ny = dx / length * (line * 0.5f);
     Point corner[4] = {{a.x + nx, a.y + ny, a.z, a.iw}, {a.x - nx, a.y - ny, a.z, a.iw},
                        {b.x - nx, b.y - ny, b.z, b.iw}, {b.x + nx, b.y + ny, b.z, b.iw}};
-    float ca = cuts[ia], cb = cuts[ib];
+    const float ca = cuts[ia], cb = cuts[ib];
+    const Point* corners[4] = {&corner[0], &corner[1], &corner[2], &corner[3]};
     Setup s;
-    if (setup(corner[0], corner[1], corner[2], 0, 0, s) && (!cut || setup_cut(corner[0], corner[1], corner[2], ca, ca, cb, s)))
-      raster(s, sink);
-    if (setup(corner[0], corner[2], corner[3], 0, 0, s) && (!cut || setup_cut(corner[0], corner[2], corner[3], ca, cb, cb, s)))
-      raster(s, sink);
+    if (setup(corners, 4, 0, 0, s) && (!cut || setup_cut(corner[0], corner[1], corner[2], ca, ca, cb, s))) raster(s, sink);
   }
 
   // --- lighting ---
@@ -1462,9 +1531,9 @@ struct Renderer {
     const Item& m = items[t.item];
     const Point &p0 = points[t.v[0]], &p1 = points[t.v[1]], &p2 = points[t.v[2]];
     // The points as the rasterizer placed them, to 1/256 of a pixel.
-    const float x0 = std::nearbyint(p0.x * 256.0f) * (1.0f / 256.0f), y0 = std::nearbyint(p0.y * 256.0f) * (1.0f / 256.0f);
-    const float ax = std::nearbyint(p1.x * 256.0f) * (1.0f / 256.0f) - x0, ay = std::nearbyint(p1.y * 256.0f) * (1.0f / 256.0f) - y0;
-    const float bx = std::nearbyint(p2.x * 256.0f) * (1.0f / 256.0f) - x0, by = std::nearbyint(p2.y * 256.0f) * (1.0f / 256.0f) - y0;
+    const float x0 = snap(p0.x) * (1.0f / 256.0f), y0 = snap(p0.y) * (1.0f / 256.0f);
+    const float ax = snap(p1.x) * (1.0f / 256.0f) - x0, ay = snap(p1.y) * (1.0f / 256.0f) - y0;
+    const float bx = snap(p2.x) * (1.0f / 256.0f) - x0, by = snap(p2.y) * (1.0f / 256.0f) - y0;
     const float area = ax * by - bx * ay;
     const float qx = px + 0.5f - x0, qy = py + 0.5f - y0;
     float l1 = (qx * by - bx * qy) / area, l2 = (ax * qy - qx * ay) / area;
@@ -1518,6 +1587,7 @@ struct Renderer {
     const size_t count = (size_t)width * height * samples;
     depth.assign(count, 1.0f);
     color.assign(count, 0u);
+    depth_at = depth.data(), color_at = color.data();
     bool after = false;  // anything drawn once the opaque are lit: see-through surfaces, the layers above
     for (const Item& item : items)
       if (item.layer != 0 || item.blend || item.kind == TRIANGLES) after = true;
@@ -1571,8 +1641,16 @@ struct Renderer {
   }
 
   inline void visible(size_t pixel, int mask, float z, const float* zoff, uint32_t id) {
-    float* d = &depth[pixel * samples];
-    uint32_t* c = &color[pixel * samples];
+    float* d = depth_at + pixel * samples;
+    uint32_t* c = color_at + pixel * samples;
+    if (samples == 4 && mask == 15) {
+      const float z0 = z + zoff[0], z1 = z + zoff[1], z2 = z + zoff[2], z3 = z + zoff[3];
+      if (z0 <= d[0]) d[0] = z0, c[0] = id;
+      if (z1 <= d[1]) d[1] = z1, c[1] = id;
+      if (z2 <= d[2]) d[2] = z2, c[2] = id;
+      if (z3 <= d[3]) d[3] = z3, c[3] = id;
+      return;
+    }
     for (int k = 0; k < samples; ++k) {
       if (!(mask >> k & 1)) continue;
       float zs = z + zoff[k];
@@ -1636,14 +1714,22 @@ struct Renderer {
   }
   std::vector<uint8_t> parity;
 
-  inline uint32_t light(uint32_t id, int px, int py) const {
+  inline uint32_t light(uint32_t id, int px, int py) {
     if (id == 0) return background_stored;
     if (id & FLAT) return flats[id & ~FLAT];
+    if (id == even_id) return even_color;
+    const Triangle& t = triangles[id - 1];
     float c[4];
-    shade(triangles[id - 1], px, py, c);
-    return stored(c);
+    shade(t, px, py, c);
+    const uint32_t found = stored(c);
+    // A flat face under an orthographic camera is one colour all over: the next pixel of it asks nothing.
+    if (!perspective && items[t.item].shading != UNLIT &&
+        std::memcmp(&attributes[(size_t)t.v[0] * 3], &attributes[(size_t)t.v[1] * 3], 3 * sizeof(float)) == 0 &&
+        std::memcmp(&attributes[(size_t)t.v[0] * 3], &attributes[(size_t)t.v[2] * 3], 3 * sizeof(float)) == 0)
+      even_id = id, even_color = found;
+    return found;
   }
-  uint32_t background_stored = 0;
+  uint32_t background_stored = 0, even_id = 0, even_color = 0;
 
   inline uint32_t mean(const uint32_t* c) const {
     const Tone& t = tone();
@@ -1710,53 +1796,89 @@ struct Renderer {
     const Tone& t = tone();
     const bool blend = item.blend;
     const bool cut = has_clip && item.cut;
-    auto apply = [&](size_t pixel, int mask, float z, const float* zoff, const float rgba[4], uint32_t solid) {
-      float* d = &depth[pixel * samples];
-      uint32_t* c = &color[pixel * samples];
-      float alpha = clamp01(rgba[3]);
-      float src[3] = {clamp01(rgba[0]) * alpha, clamp01(rgba[1]) * alpha, clamp01(rgba[2]) * alpha};
+    const int full = (1 << samples) - 1;
+    float alpha = 1, src[3] = {0, 0, 0};  // what is being drawn, its colour times its alpha
+    uint32_t solid = 0;
+    auto take = [&](const float rgba[4]) {
+      alpha = clamp01(rgba[3]);
+      for (int c = 0; c < 3; ++c) src[c] = clamp01(rgba[c]) * alpha;
+      if (!blend) solid = stored(rgba);
+    };
+    auto over = [&](uint32_t under) {
+      const float rest = 1 - alpha;
+      return t.pack(src[0] + t.decode[under & 255] * rest, src[1] + t.decode[under >> 8 & 255] * rest,
+                    src[2] + t.decode[under >> 16 & 255] * rest);
+    };
+    // The samples of `mask` that pass the depth, written where the item writes it.
+    auto passing = [&](size_t pixel, int mask, float z, const float* zoff) {
+      float* d = depth_at + pixel * samples;
+      int pass = 0;
+      for (int k = 0; k < samples; ++k) {
+        const float zs = z + zoff[k];
+        if ((mask >> k & 1) && zs <= d[k] && zs >= 0) {
+          pass |= 1 << k;
+          if (write) d[k] = zs;
+        }
+      }
+      return pass;
+    };
+    auto apply = [&](size_t pixel, int pass) {
+      uint32_t* c = color_at + pixel * samples;
+      if (!blend) {
+        for (int k = 0; k < samples; ++k)
+          if (pass >> k & 1) c[k] = solid;
+        return;
+      }
+      if (pass == full) {
+        bool one = true;
+        for (int k = 1; k < samples; ++k) one &= c[k] == c[0];
+        if (one) {
+          const uint32_t found = over(c[0]);
+          for (int k = 0; k < samples; ++k) c[k] = found;
+          return;
+        }
+      }
       uint32_t last_in = 0, last_out = 0;
       bool have = false;
       for (int k = 0; k < samples; ++k) {
-        if (!(mask >> k & 1)) continue;
-        float zs = z + zoff[k];
-        if (!(zs <= d[k]) || zs < 0) continue;
-        if (write) d[k] = zs;
-        if (!blend) {
-          c[k] = solid;
-          continue;
-        }
-        if (!have || c[k] != last_in) {
-          last_in = c[k];
-          last_out = t.pack(src[0] + t.decode[last_in & 255] * (1 - alpha), src[1] + t.decode[last_in >> 8 & 255] * (1 - alpha),
-                            src[2] + t.decode[last_in >> 16 & 255] * (1 - alpha));
-          have = true;
-        }
+        if (!(pass >> k & 1)) continue;
+        if (!have || c[k] != last_in) last_in = c[k], last_out = over(last_in), have = true;
         c[k] = last_out;
       }
     };
     if (item.kind == EDGES) {
       const float rgba[4] = {item.color[0], item.color[1], item.color[2], 1};
-      const uint32_t solid = flats[item.flat & ~FLAT];
+      take(rgba);
+      solid = flats[item.flat & ~FLAT];
       for (uint32_t at = item.first; at < item.first + item.count; ++at)
         raster_segment(segments[(size_t)at * 2], segments[(size_t)at * 2 + 1], item.width, cut,
-                       [&](size_t pixel, int, int, int mask, float z, const float* zoff) { apply(pixel, mask, z, zoff, rgba, solid); });
+                       [&](size_t pixel, int, int, int mask, float z, const float* zoff) {
+                         if (int pass = passing(pixel, mask, z, zoff)) apply(pixel, pass);
+                       });
       return;
     }
     if (item.kind == CAP) return;
     for (uint32_t at = item.first; at < item.first + item.count; ++at) {
       const Triangle& tri = triangles[at];
-      raster_triangle(tri, item.offset_factor, item.offset_units, cut, [&](size_t pixel, int px, int py, int mask, float z, const float* zoff) {
-        // Lit only where a sample passes the depth.
-        const float* d = &depth[pixel * samples];
-        bool any = false;
-        for (int k = 0; k < samples; ++k)
-          if ((mask >> k & 1) && z + zoff[k] <= d[k]) any = true;
-        if (!any) return;
-        float rgba[4];
-        shade(tri, px, py, rgba);
-        apply(pixel, mask, z, zoff, rgba, blend ? 0 : stored(rgba));
-      });
+      // One colour all over: an unlit face without a texture, or a flat lit one under an orthographic camera.
+      const bool even = item.shading == UNLIT
+                            ? !item.textured
+                            : !perspective &&
+                                  std::memcmp(&attributes[(size_t)tri.v[0] * 3], &attributes[(size_t)tri.v[1] * 3], 12) == 0 &&
+                                  std::memcmp(&attributes[(size_t)tri.v[0] * 3], &attributes[(size_t)tri.v[2] * 3], 12) == 0;
+      bool lit_once = false;
+      raster_triangle(tri, item.offset_factor, item.offset_units, cut,
+                      [&](size_t pixel, int px, int py, int mask, float z, const float* zoff) {
+                        const int pass = passing(pixel, mask, z, zoff);
+                        if (!pass) return;  // lit only where a sample passes the depth
+                        if (!even || !lit_once) {
+                          float rgba[4];
+                          shade(tri, px, py, rgba);
+                          take(rgba);
+                          lit_once = true;
+                        }
+                        apply(pixel, pass);
+                      });
     }
   }
 };

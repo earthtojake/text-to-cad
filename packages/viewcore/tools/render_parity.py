@@ -122,6 +122,15 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
     from cad.engine.render.shapes import _LINE_OF, LINES, FaceGroup
 
     payloads = payloads or Payloads()
+    placements: list[bytes] = []
+
+    def placed(index: int) -> int:
+        # An instance's matrix, sixteen doubles column-major, by its place among the scene's.
+        data = np.ascontiguousarray(scene.placement(index).T, "<f8").tobytes()
+        if data not in placements:
+            placements.append(data)
+        return placements.index(data)
+
     display, mode, preview = scene.display, scene.mode, scene.preview
     if preview:
         raise ValueError("Preview's studio is not the core's to draw")
@@ -151,7 +160,7 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
         prototype = scene.prototypes[p]
         part = scene.parts[p]
         mesh = scene.meshes[prototype["key"]]
-        matrix = [float(v) for v in scene.placement(index).T.reshape(-1)]
+        matrix = placed(index)
         rgba = instance.get("color") or prototype.get("color")
         rgba = tuple(rgba) if rgba else None
         if mode == "parts":
@@ -221,7 +230,7 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
                 p = instance["prototype"]
                 if index in scene.hidden or not len(scene.meshes[scene.prototypes[p]["key"]].indices):
                     continue
-                draw.append({"cap": mesh_index(p), "matrix": [float(v) for v in scene.placement(index).T.reshape(-1)],
+                draw.append({"cap": mesh_index(p), "matrix": placed(index),
                              "color": list(section.cap_colour(scene, index, clip))})
     if grid:
         from cad.engine.render import grid as paper
@@ -239,6 +248,7 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
                             "height": picture.shape[0]},
                 "color": [1.0, 1.0, 1.0, 1.0], "blend": True, "offset": [1.0, 1.0], "clip": False, "layer": "default"})
     found["meshes"] = meshes
+    found["matrices"] = payloads.add(b"".join(placements))
     found["draw"] = draw
     return found, payloads
 
@@ -419,9 +429,12 @@ class Node:
         return data
 
     def render(self, scene: dict, blob: bytes) -> tuple[bytes, float]:
-        scene = {k: v for k, v in scene.items() if k != "payloads"}
-        found, parts = self.job("render", (blob,), scene=scene, blobs=scene_lengths(blob, scene))
-        return parts[0], found["seconds"]
+        parts, at = [], 0
+        for length in scene.get("payloads") or []:
+            parts.append(blob[at:at + length])
+            at += length
+        found, answer = self.job("render", tuple(parts), scene={k: v for k, v in scene.items() if k != "payloads"})
+        return answer[0], found["seconds"]
 
     def memory(self) -> int:
         return self.job("about")[0]["memoryBytes"]
@@ -430,10 +443,6 @@ class Node:
         self.job("close")
         self.process.stdin.close()
         self.process.wait(30)
-
-
-def scene_lengths(blob: bytes, scene: dict) -> list[int]:
-    return scene.get("payloads") or []
 
 
 def load_case(folder: Path, name: str, root: Path) -> tuple[dict, bytes, dict]:
