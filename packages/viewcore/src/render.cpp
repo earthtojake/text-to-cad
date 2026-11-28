@@ -124,41 +124,21 @@ inline void normalize(float d[3]) {
   d[0] *= m, d[1] *= m, d[2] *= m;
 }
 
-// One level of a cube map: six faces n a side, each with a border of the texels beside it on the faces around,
-// so a bilinear read never leaves its face's block.
+// One level of a cube map: six faces n a side. cad hands OCCT the environment as a cube map with the filter a
+// texture has unless it asks for another: the nearest texel, of the nearest level.
 struct Level {
   int n = 0;
   std::vector<float> t;
-  float* at(int face, int i, int j) { return &t[(((size_t)face * (n + 2) + (j + 1)) * (n + 2) + (i + 1)) * 3]; }
-  const float* at(int face, int i, int j) const {
-    return &t[(((size_t)face * (n + 2) + (j + 1)) * (n + 2) + (i + 1)) * 3];
-  }
-  void border() {
-    for (int face = 0; face < 6; ++face)
-      for (int j = -1; j <= n; ++j)
-        for (int i = -1; i <= n; ++i) {
-          if (i >= 0 && i < n && j >= 0 && j < n) continue;
-          float d[3], s, u;
-          int other;
-          dir_of(face, (i + 0.5f) / n * 2 - 1, (j + 0.5f) / n * 2 - 1, d);
-          face_of(d, other, s, u);
-          int x = std::min(n - 1, std::max(0, (int)((s * 0.5f + 0.5f) * n)));
-          int y = std::min(n - 1, std::max(0, (int)((u * 0.5f + 0.5f) * n)));
-          std::memcpy(at(face, i, j), at(other, x, y), 3 * sizeof(float));
-        }
-  }
+  float* at(int face, int i, int j) { return &t[(((size_t)face * n + j) * n + i) * 3]; }
+  const float* at(int face, int i, int j) const { return &t[(((size_t)face * n + j) * n + i) * 3]; }
   inline void read(const float d[3], float out[3]) const {
     int face;
     float s, u;
     face_of(d, face, s, u);
-    float fx = (s * 0.5f + 0.5f) * n - 0.5f, fy = (u * 0.5f + 0.5f) * n - 0.5f;
-    int i = (int)std::floor(fx), j = (int)std::floor(fy);
-    float tx = fx - i, ty = fy - j;
-    i = std::min(n - 1, std::max(-1, i)), j = std::min(n - 1, std::max(-1, j));
+    int i = std::min(n - 1, std::max(0, (int)((s * 0.5f + 0.5f) * n)));
+    int j = std::min(n - 1, std::max(0, (int)((u * 0.5f + 0.5f) * n)));
     const float* p = at(face, i, j);
-    const float* q = p + (size_t)(n + 2) * 3;
-    for (int c = 0; c < 3; ++c)
-      out[c] = (p[c] * (1 - tx) + p[3 + c] * tx) * (1 - ty) + (q[c] * (1 - tx) + q[3 + c] * tx) * ty;
+    out[0] = p[0], out[1] = p[1], out[2] = p[2];
   }
 };
 
@@ -199,12 +179,13 @@ inline float van_der_corput(unsigned number) {
 struct Environment {
   std::vector<Level> mips;
   float sh[9][3];
+  float brightest = 0;  // the cube map's 1, as cad hands the map over (finish.cube_pixmap)
   Prefiltered levels[SPECULAR_LEVELS];
 
   Environment(const uint8_t* image, int width, int height) {
     Level base;
     base.n = ENVIRONMENT_SIDE;
-    base.t.assign((size_t)6 * (base.n + 2) * (base.n + 2) * 3, 0.0f);
+    base.t.assign((size_t)6 * base.n * base.n * 3, 0.0f);
     for (int face = 0; face < 6; ++face)
       for (int j = 0; j < base.n; ++j)
         for (int i = 0; i < base.n; ++i) {
@@ -213,13 +194,17 @@ struct Environment {
           double m = std::sqrt((double)c[0] * c[0] + (double)c[1] * c[1] + (double)c[2] * c[2]);
           equirectangular(image, width, height, c[2] / m, c[0] / m, c[1] / m, base.at(face, i, j));
         }
-    base.border();
+    for (int face = 0; face < 6; ++face)
+      for (int j = 0; j < base.n; ++j)
+        for (int i = 0; i < base.n; ++i)
+          for (int c = 0; c < 3; ++c) brightest = std::max(brightest, base.at(face, i, j)[c]);
+    if (!(brightest > 0)) brightest = 1;
     mips.push_back(std::move(base));
     while (mips.back().n > 1) {  // glGenerateMipmap: each texel the mean of the four under it
       const Level& above = mips.back();
       Level next;
       next.n = above.n / 2;
-      next.t.assign((size_t)6 * (next.n + 2) * (next.n + 2) * 3, 0.0f);
+      next.t.assign((size_t)6 * next.n * next.n * 3, 0.0f);
       for (int face = 0; face < 6; ++face)
         for (int j = 0; j < next.n; ++j)
           for (int i = 0; i < next.n; ++i)
@@ -227,7 +212,6 @@ struct Environment {
               next.at(face, i, j)[c] = 0.25f * (above.at(face, 2 * i, 2 * j)[c] + above.at(face, 2 * i + 1, 2 * j)[c] +
                                                 above.at(face, 2 * i, 2 * j + 1)[c] +
                                                 above.at(face, 2 * i + 1, 2 * j + 1)[c]);
-      next.border();
       mips.push_back(std::move(next));
     }
     harmonics();
@@ -288,15 +272,11 @@ struct Environment {
     }
   }
 
-  inline void trilinear(const float d[3], float lod, float out[3]) const {
+  // textureCubeLod of the cube map: the level nearest `lod`.
+  inline void at_lod(const float d[3], float lod, float out[3]) const {
     const int last = (int)mips.size() - 1;
-    if (!(lod > 0)) return mips[0].read(d, out);
-    if (lod >= last) return mips[last].read(d, out);
-    int low = (int)lod;
-    float share = lod - low, a[3], b[3];
-    mips[low].read(d, a);
-    mips[low + 1].read(d, b);
-    for (int c = 0; c < 3; ++c) out[c] = a[c] * (1 - share) + b[c] * share;
+    int level = lod > 0.5f ? (int)std::ceil(lod + 0.5f) - 1 : 0;
+    mips[level > last ? last : level].read(d, out);
   }
 
   Prefiltered& level(int index) {
@@ -333,7 +313,15 @@ struct Environment {
     return q * q;
   }
 
+  // OCCT keeps the specular map in bytes, of the cube map's own 0 to 1 (cad hands it the image over its brightest
+  // texel): a texel is the nearest of 256 steps of that.
   void bake(int index, Prefiltered& found, int face, int i, int j, float* out) const {
+    float exact[3];
+    bake_exact(index, found, face, i, j, exact);
+    for (int c = 0; c < 3; ++c)
+      out[c] = std::floor(clamp01(exact[c] / brightest) * 255.0f + 0.5f) * (1.0f / 255.0f) * brightest;
+  }
+  void bake_exact(int index, Prefiltered& found, int face, int i, int j, float* out) const {
     float n[3];
     dir_of(face, (i + 0.5f) / found.n * 2 - 1, (j + 0.5f) / found.n * 2 - 1, n);
     normalize(n);
@@ -349,7 +337,7 @@ struct Environment {
       float l[3] = {x[0] * tap[0] + y[0] * tap[1] + n[0] * tap[2], x[1] * tap[0] + y[1] * tap[1] + n[1] * tap[2],
                     x[2] * tap[0] + y[2] * tap[1] + n[2] * tap[2]};
       float value[3];
-      trilinear(l, tap[4], value);
+      at_lod(l, tap[4], value);
       sum[0] += value[0] * tap[3], sum[1] += value[1] * tap[3], sum[2] += value[2] * tap[3];
       weight += tap[3];
     }
@@ -1357,35 +1345,34 @@ struct Renderer {
 
   // --- lighting ---
 
-  // The direction from a pixel's surface to the eye.
-  inline void view_at(int px, int py, float v[3]) const {
-    if (!perspective) {
-      v[0] = (float)-ahead[0], v[1] = (float)-ahead[1], v[2] = (float)-ahead[2];
-      return;
-    }
-    double x = (px + 0.5 - width / 2.0) / focal, y = -(py + 0.5 - height / 2.0) / focal;
-    double d[3] = {ahead[0] + right[0] * x + up[0] * y, ahead[1] + right[1] * x + up[1] * y,
-                   ahead[2] + right[2] * x + up[2] * y};
+  // The direction from a point of the picture's surface to the eye.
+  inline void view_at(float x, float y, float v[3]) const {
+    double px = (x - width / 2.0) / focal, py = -(y - height / 2.0) / focal;
+    double d[3] = {ahead[0] + right[0] * px + up[0] * py, ahead[1] + right[1] * px + up[1] * py,
+                   ahead[2] + right[2] * px + up[2] * py};
     double m = -1.0 / std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
     v[0] = (float)(d[0] * m), v[1] = (float)(d[1] * m), v[2] = (float)(d[2] * m);
   }
 
   // OCCT's PBR program (Graphic3d_ShaderManager's computeLighting, PBRIllumination.glsl): the colour, linear, and
   // the alpha a see-through face is blended by.
-  inline void pbr(const Item& m, const float n[3], const float v[3], float out[4]) const {
+  // A face seen from behind (`back`) is lit by its normal turned over, as the program's lights turn it; the
+  // environment's light is read by the normal as it is, as the program reads it.
+  inline void pbr(const Item& m, const float n[3], bool back, const float v[3], float out[4]) const {
     const float nv = n[0] * v[0] + n[1] * v[1] + n[2] * v[2];
-    const float cos_v = nv > 0 ? nv : 0;
+    const float side = back ? -1.0f : 1.0f;
+    const float cos_v = nv * side > 0 ? nv * side : 0;
     float sum[3] = {0, 0, 0};
     for (const Light& light : lights) {
       const float* l = light.to;
-      float nl = n[0] * l[0] + n[1] * l[1] + n[2] * l[2];
+      float nl = (n[0] * l[0] + n[1] * l[1] + n[2] * l[2]) * side;
       if (!(nl > 0)) continue;
       float h[3] = {v[0] + l[0], v[1] + l[1], v[2] + l[2]};
       float hm = 1.0f / std::sqrt(h[0] * h[0] + h[1] * h[1] + h[2] * h[2]);
       h[0] *= hm, h[1] *= hm, h[2] *= hm;
       float vh = v[0] * h[0] + v[1] * h[1] + v[2] * h[2];
       if (vh < 0) vh = 0;
-      float nh = n[0] * h[0] + n[1] * h[1] + n[2] * h[2];
+      float nh = (n[0] * h[0] + n[1] * h[1] + n[2] * h[2]) * side;
       if (nh < 0) nh = 0;
       float fresnel = 1.0f - vh;
       fresnel *= fresnel;
@@ -1505,11 +1492,21 @@ struct Renderer {
     float scale = a[0] * a[0] + a[1] * a[1] + a[2] * a[2];
     scale = scale > 0 ? 1.0f / std::sqrt(scale) : 0.0f;
     // The face's other side is lit by its normal turned over: front is counter-clockwise, a mirrored part's clockwise.
-    if ((area < 0) == m.mirrored) scale = -scale;
+    const bool back = (area < 0) == m.mirrored;
+    if (back && m.shading != PBR) scale = -scale;
     a[0] *= scale, a[1] *= scale, a[2] *= scale;
+    // The view direction is the program's: a vertex's own, read across the triangle like its normal.
     float v[3];
-    view_at(px, py, v);
-    if (m.shading == PBR) pbr(m, a, v, out);
+    if (perspective) {
+      float v0[3], v1[3], v2[3];
+      view_at(p0.x, p0.y, v0), view_at(p1.x, p1.y, v1), view_at(p2.x, p2.y, v2);
+      for (int c = 0; c < 3; ++c) v[c] = v0[c] * l0 + v1[c] * l1 + v2[c] * l2;
+      float m = 1.0f / std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+      v[0] *= m, v[1] *= m, v[2] *= m;
+    } else {
+      v[0] = (float)-ahead[0], v[1] = (float)-ahead[1], v[2] = (float)-ahead[2];
+    }
+    if (m.shading == PBR) pbr(m, a, back, v, out);
     else colour_only(m, a, v, out);
   }
 
@@ -1633,7 +1630,7 @@ struct Renderer {
         for (int k = 0; k < samples; ++k) {
           if (!(mask >> k & 1)) continue;
           float zs = (float)(z0 + zx * (px + sx[k] / 256.0) + zy * (py + sy[k] / 256.0));
-          if (zs >= 0 && zs <= d[k]) d[k] = zs, c[k] = item.flat;
+          if (zs >= 0 && zs < d[k]) d[k] = zs, c[k] = item.flat;  // the capping's own depth test: nearer alone
         }
       }
   }
