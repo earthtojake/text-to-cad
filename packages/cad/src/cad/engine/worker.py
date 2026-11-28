@@ -130,11 +130,17 @@ def resident_mb() -> float | None:
                 return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 2**20
         if sys.platform == "emscripten":
             # The WebAssembly kernel: the process is its host's (Node's), which a Linux host shows it here; the
-            # page size this Python knows is its own memory's, so the kernel's figure in kB is read.
-            with open("/proc/self/status", encoding="ascii") as handle:
-                for line in handle:
-                    if line.startswith("VmRSS:"):
-                        return int(line.split()[1]) / 1024
+            # page size this Python knows is its own memory's, so the kernel's figure in kB is read. Another host
+            # (Windows, macOS) has no /proc: Node says its own.
+            try:
+                with open("/proc/self/status", encoding="ascii") as handle:
+                    for line in handle:
+                        if line.startswith("VmRSS:"):
+                            return int(line.split()[1]) / 1024
+            except FileNotFoundError:
+                import js  # pyodide: the host's globals
+
+                return float(js.process.memoryUsage.rss()) / 2**20
             return None
         if os.name == "nt":
             import ctypes

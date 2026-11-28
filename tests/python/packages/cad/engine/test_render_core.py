@@ -108,11 +108,24 @@ class CoreSceneTest(unittest.TestCase):
     def setUp(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="render-core-"))
         self.log = folder / "asked.jsonl"
-        program = folder / "viewcore"
         (folder / "server.py").write_text(SERVER, encoding="utf-8")
-        program.write_text(f"#!/bin/sh\nexec {json.dumps(sys.executable)} {json.dumps(str(folder / 'server.py'))} "
-                           f"{json.dumps(str(self.log))}\n", encoding="utf-8")
-        program.chmod(0o755)
+        if os.name == "nt":
+            # As a kernel folder lays it out (``places.started``): its command file names the Node (here the
+            # interpreter itself, not a virtual environment's launcher, whose child a kill leaves running) that
+            # runs the job server (here a stand-in that reads its log's place beside it).
+            python = getattr(sys, "_base_executable", sys.executable)
+            server = folder / "core" / "hosts" / "node" / "serve.mjs"
+            server.parent.mkdir(parents=True)
+            server.write_text(SERVER.replace("sys.argv[1]", repr(str(self.log))), encoding="utf-8")
+            (folder / "kernel.json").write_text(json.dumps({"node": python}), encoding="utf-8")
+            program = folder / "bin" / "viewcore.cmd"
+            program.parent.mkdir()
+            program.write_text(f'@echo off\n"{python}" "{server}" %*\n', encoding="utf-8")
+        else:
+            program = folder / "viewcore"
+            program.write_text(f"#!/bin/sh\nexec {json.dumps(sys.executable)} {json.dumps(str(folder / 'server.py'))} "
+                               f"{json.dumps(str(self.log))}\n", encoding="utf-8")
+            program.chmod(0o755)
         self.core = Core(str(program))
         self.addCleanup(self.core.stop)
         self.buffers = {"big": _box((0, 0, 0), (20, 20, 20)), "small": _box((0, 0, 0), (6, 6, 6))}

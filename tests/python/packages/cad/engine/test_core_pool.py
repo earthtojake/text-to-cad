@@ -89,10 +89,10 @@ def _pid() -> int:
 def _alive(pid: int, at_once: bool = False) -> bool:
     import time
 
+    from cad_server._internal import kernel_folder  # the system asked, on Windows too
+
     for _ in range(1 if at_once else 200):  # killed and waited for: gone at once, or within moments where the system is slow to say so
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
+        if not kernel_folder._alive(pid):
             return False
         time.sleep(0.01)
     return True
@@ -124,11 +124,23 @@ class CorePoolTest(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="core-pool-")).resolve()
         self.addCleanup(lambda: __import__("shutil").rmtree(self.folder, ignore_errors=True))
-        (self.folder / "server.py").write_text(SERVER, encoding="utf-8")
-        program = self.folder / ("viewcore.cmd" if os.name == "nt" else "viewcore")
-        program.write_text(f'@"{sys.executable}" "{self.folder / "server.py"}"\r\n' if os.name == "nt" else
-                           f'#!/bin/sh\nexec "{sys.executable}" "{self.folder / "server.py"}"\n', encoding="utf-8")
-        program.chmod(0o755)
+        if os.name == "nt":
+            # As a kernel folder lays it out: its command file is not what the engine starts, but the Node it names
+            # (here the interpreter itself: a virtual environment's python.exe is a launcher, whose child a kill
+            # leaves running) and the job server's script (here the stand-in's) (``places.started``).
+            server = self.folder / "core" / "hosts" / "node" / "serve.mjs"
+            server.parent.mkdir(parents=True)
+            python = getattr(sys, "_base_executable", sys.executable)
+            (self.folder / "kernel.json").write_text(json.dumps({"node": python}), encoding="utf-8")
+            program = self.folder / "bin" / "viewcore.cmd"
+            program.parent.mkdir()
+            program.write_text(f'@echo off\n"{python}" "{server}" %*\n', encoding="utf-8")
+        else:
+            server = self.folder / "server.py"
+            program = self.folder / "viewcore"
+            program.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{server}"\n', encoding="utf-8")
+            program.chmod(0o755)
+        server.write_text(SERVER, encoding="utf-8")
         self.program = str(program)
         self.kernels: list[_Kernel] = []
 

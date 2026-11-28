@@ -30,8 +30,8 @@ def _windows(host) -> None:
     engine's folders, ``PYTHONPATH``) and hands them back, so it reads and makes them as a Windows Python does.
     ``os.path`` is ``ntpath`` and ``pathlib``'s paths are parsed by it, the working folder is said as Windows says it
     (``C:\\here``: the platform's is ``/C:/here``, where python.mjs mounts the drive), and the import system takes
-    a drive's path as absolute (its own joins keep ``/``: ``C:\\src/cad/__init__.py``). A rooted path of the
-    platform's own folders (``/lib``) stays the platform's: no drive is put before it."""
+    a drive's path as absolute and joins it with Windows' separator. A rooted path of the platform's own folders
+    (``/lib``) stays the platform's: no drive is put before it."""
     if not host.get("windows"):
         return
     import ntpath
@@ -72,6 +72,18 @@ def _windows(host) -> None:
     os.sep, os.altsep, os.pathsep = ntpath.sep, ntpath.altsep, ntpath.pathsep
     pathlib.PurePosixPath.parser = ntpath
     external._path_isabs, external._path_abspath = absolute, made_absolute
+
+    # A module's file under a drive is named as Windows names it (``C:\\src\\cad\\__init__.py``, which the library's
+    # own comparisons of paths expect); the platform's own (``/lib/python314.zip/json/__init__.py``) as it was.
+    join = external._path_join
+
+    def joined(*parts):
+        if parts and ntpath.splitdrive(parts[0])[0]:
+            return "\\".join(part.rstrip("\\/") for part in parts if part)
+        return join(*parts)
+
+    external.path_separators = "/\\"
+    external._path_join = joined
 
 
 def _files(host, real) -> None:

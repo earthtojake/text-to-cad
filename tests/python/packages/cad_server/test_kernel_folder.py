@@ -337,7 +337,9 @@ print(json.dumps({"cwd": os.getcwd(), "seps": [os.sep, os.altsep, os.pathsep],
     "parent": str(pathlib.Path("C:/work/model/part.py").parent), "name": pathlib.Path("C:\\work\\part.py").name,
     "absolute": [os.path.isabs(name) for name in ("C:\\x", "/lib/x", "relative")],
     "own": [os.path.abspath("/lib/python3.14"), str(pathlib.Path("/lib/x").resolve())],
-    "site": site.getsitepackages(), "path": sys.path}))
+    "site": site.getsitepackages(), "path": sys.path,
+    "joined": [importlib._bootstrap_external._path_join(*parts) for parts in (("C:\\src\\", "cad", "__init__.py"),
+                                                                             ("/lib/python314.zip", "json"))]}))
 """
         ran = subprocess.run([sys.executable, "-I", "-c", code, str(kernel_folder._HOST / "bootstrap.py")],
                              capture_output=True, text=True, timeout=60)
@@ -349,6 +351,10 @@ print(json.dumps({"cwd": os.getcwd(), "seps": [os.sep, os.altsep, os.pathsep],
         self.assertEqual(said["absolute"], [True, True, False])
         self.assertEqual(said["own"], ["\\lib\\python3.14", "\\lib\\x"], "no drive is put before them")
         self.assertEqual(said["site"], ["/lib/python3.14/site-packages"])
+        # A module's file is named as Windows names it; the platform's own as the platform does.
+        self.assertEqual(said["joined"][0], "C:\\src\\cad\\__init__.py")
+        if os.name != "nt":  # a Windows Python's own joins are Windows' anyway
+            self.assertEqual(said["joined"][1], "/lib/python314.zip/json")
         # PYTHONPATH read by Windows' separator; the pieces the platform made of it by its own are gone.
         self.assertEqual(said["path"][:3], ["C:\\src", "D:\\more", "/lib/python3.14"])
         self.assertFalse([entry for entry in said["path"] if entry.startswith("/home/pyodide/")])

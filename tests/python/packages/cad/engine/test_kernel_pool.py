@@ -195,7 +195,10 @@ class ThreadlessWorkerTest(unittest.TestCase):
                 return message
 
     def test_it_says_it_is_ready_answers_each_request_in_turn_and_leaves_when_its_input_closes(self) -> None:
-        self.assertEqual(self.frame()["ready"], self.worker.pid)
+        ready = self.frame()["ready"]
+        if os.name != "nt":  # on Windows a virtual environment's python.exe is a launcher: the worker is its child
+            self.assertEqual(ready, self.worker.pid)
+        self.assertIsInstance(ready, int)
         # A question about an element is answered by the loop, between requests, not by a thread during one.
         self.ask({"id": 1, "op": "where", "doc": "none", "key": "k", "kind": "face", "ordinal": 1})
         self.assertEqual(self.answer(1), {"id": 1, "where": None})

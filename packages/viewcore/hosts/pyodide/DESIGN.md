@@ -68,7 +68,7 @@ one line; nothing falls back to the kernel the person did not choose. The suites
 | 12 | Integrations that are other programs (KiCad, CalculiX, MuJoCo, Netgen, Blender) | `cad/kicad/`, `calculix/`, `mujoco/`, `netgen/` | Not kernel processes: `cad run` gives a program that uses one its own native environment, as before | unchanged |
 | 13 | The build closure's libraries | `cad/engine/previous.py:130` | The WebAssembly binding's distribution is named: nothing built on one kernel is taken as built on the other | done |
 | 14 | Start-up: the binding's 104 MB module, build123d's imports of scipy, scikit-learn, IPython; Node 22 holding over 4 GB | `make.mjs`, `bootstrap.py`, `python.mjs:27` | Packages unpacked once with bytecode; imports a build calls nothing of deferred to first use by a finder that imports the real package then; Node 24 required, refused in one line under it | done, measured |
-| 15 | Windows | `python.mjs` (mounts), `make.mjs` (launchers) | The launchers are POSIX shell scripts and the host mounts POSIX paths | open |
+| 15 | Windows: a `.cmd` launcher is started through `cmd.exe` (which rereads the arguments and is the process killed, leaving Node running); POSIX mounts; no `process.getuid`; no `/proc` for a worker's own memory; a Windows engine's port takes a request only with its token | `cad/engine/places.py` (`started`), `kernel_folder.py`, `make.mjs`, `python.mjs`, `bootstrap.py` (`_windows`), `cad/engine/relay.py`, `cad/engine/worker.py` | The launchers are `bin\python.cmd`, `bin\viewcore.cmd`, and the engine starts the Node and script they name (`places.started`); each drive is mounted at `/C:` and every path the platform's files are asked by is read as Windows reads it; the program's `os.path` is `ntpath`, `pathlib` parses with it, its working folder is `C:\...`; a worker's memory where there is no `/proc` is Node's (`process.memoryUsage.rss`); the relay puts the engine's token in its program's request | done, tested, measured (Windows Server 2022, Node 24) |
 
 ## The pools' job seam
 
@@ -150,5 +150,7 @@ is built), named in the setting's `folder`.
 4. A model's body cannot listen on a socket, start a thread or a process: a script that does fails there.
 5. Memory: a worker is 1.6-1.9 GB against a native worker's 0.45 GB, and the engine's caps are sized for the
    native one.
-6. Windows, and a macOS worker's own memory reading.
+6. On Windows, Python's own TLS reads only the roots the system already holds,
+   which a fresh machine fetches as its own programs first ask: an engine-made folder's download can be refused
+   there until then (as is any of cad's downloads).
 7. This host has no test a CI job runs: the kernel folder is made by hand.

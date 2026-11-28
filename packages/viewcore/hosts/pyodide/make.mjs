@@ -80,9 +80,19 @@ const launcher = path.join(staged, "bin", "python");
 // The launcher names its own folder as it will stand, the Node it runs and the host beside this file.
 fs.mkdirSync(path.join(staged, "host"));
 for (const name of ["python.mjs", "bootstrap.py"]) fs.copyFileSync(path.join(HOST, name), path.join(staged, "host", name));
-fs.writeFileSync(launcher, `#!/bin/sh\nCAD_KERNEL_HOME=${JSON.stringify(final)} exec ${JSON.stringify(node)} `
-  + `${JSON.stringify(path.join(live ? HOST : path.join(final, "host"), "python.mjs"))} "$@"\n`);
-fs.chmodSync(launcher, 0o755);
+// A launcher: a shell script; on Windows a command file (`bin/python.cmd`), which the engine does not start itself
+// but runs as the Node and the host script of this folder it names (so `--live` makes no difference there).
+function launch(at, script, home) {
+  if (process.platform === "win32") {
+    const named = home ? `set "CAD_KERNEL_HOME=${home}"\r\n` : "";
+    fs.writeFileSync(`${at}.cmd`, `@echo off\r\n${named}"${node}" "${script}" %*\r\n`);
+    return;
+  }
+  const named = home ? `CAD_KERNEL_HOME=${JSON.stringify(home)} ` : "";
+  fs.writeFileSync(at, `#!/bin/sh\n${named}exec ${JSON.stringify(node)} ${JSON.stringify(script)} "$@"\n`);
+  fs.chmodSync(at, 0o755);
+}
+launch(launcher, path.join(live ? HOST : path.join(final, "host"), "python.mjs"), final);
 // The view core, laid out as its hosts find each other (hosts/node beside hosts/web, the module in dist).
 const CORE = ["hosts/node/serve.mjs", "hosts/node/viewcore.mjs", "hosts/web/viewcore.js", "dist/viewcore.wasm"];
 const core = CORE.every((name) => fs.existsSync(path.join(viewcore, name)));
@@ -93,9 +103,7 @@ if (core) {
     fs.copyFileSync(path.join(viewcore, name), path.join(staged, "core", name));
   }
   fs.writeFileSync(path.join(staged, "core", "package.json"), '{"type": "module"}\n');  // its .js files are modules
-  const serve = path.join(staged, "bin", "viewcore");
-  fs.writeFileSync(serve, `#!/bin/sh\nexec ${JSON.stringify(node)} ${JSON.stringify(path.join(final, "core", CORE[0]))} "$@"\n`);
-  fs.chmodSync(serve, 0o755);
+  launch(path.join(staged, "bin", "viewcore"), path.join(final, "core", CORE[0]), null);
 }
 fs.writeFileSync(path.join(staged, "kernel.json"), JSON.stringify({
   schema: "cad wasm kernel/1",

@@ -31,6 +31,7 @@ import re
 import select
 import struct
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -117,32 +118,46 @@ def exchange(child: subprocess.Popen, header: dict[str, Any], payloads: list[byt
     """``header`` (with its ``payloads``) asked of the host ``child`` and its answer read, within ``seconds`` (by the
     job's kind, ``SECONDS``): the answer's header and payloads, a refusal (``ok`` false) among them. ``HostFailed``,
     the host killed and waited for, where it is late, ends, or answers what is no frame. Where pipes cannot be waited
-    on with a deadline (Windows), the job has none."""
+    on with a deadline (Windows), a timer kills the host at the deadline, and what its pipes then say is its
+    lateness."""
     job = str(header.get("job"))
     seconds = SECONDS.get(job, 120.0) if seconds is None else seconds
     head = _text({**header, "payloads": [len(payload) for payload in payloads]})
     frame = b"".join([_SIZES.pack(4 + len(head) + sum(map(len, payloads)), len(head)), head, *payloads])
     deadline = None if os.name == "nt" else time.monotonic() + seconds
+    late = threading.Event()
+    watchdog = threading.Timer(seconds, lambda: (late.set(), _killed(child))) if deadline is None else None
+    if watchdog is not None:
+        watchdog.daemon = True
+        watchdog.start()
     try:
-        written, reading = child.stdin.fileno(), child.stdout.fileno()
-        child.stdin.flush()
-        if deadline is not None:
-            os.set_blocking(written, False)
-        _write(written, frame, deadline)
-        length, head_length = _SIZES.unpack(_read(reading, _SIZES.size, deadline))
-        if length < 4 or head_length > length - 4 or length > _LONGEST:
-            raise ValueError("no frame")
-        body = _read(reading, length - 4, deadline)
-        said = json.loads(body[:head_length])
-        if not isinstance(said, dict):
-            raise ValueError("no frame")
-        found, at = [], head_length
-        for size in said.get("payloads") or ():
-            found.append(body[at:at + int(size)])
-            at += int(size)
-        if at > len(body):
-            raise ValueError("no frame")
-        return said, found
+        try:
+            written, reading = child.stdin.fileno(), child.stdout.fileno()
+            child.stdin.flush()
+            if deadline is not None:
+                os.set_blocking(written, False)
+            _write(written, frame, deadline)
+            length, head_length = _SIZES.unpack(_read(reading, _SIZES.size, deadline))
+            if length < 4 or head_length > length - 4 or length > _LONGEST:
+                raise ValueError("no frame")
+            body = _read(reading, length - 4, deadline)
+            said = json.loads(body[:head_length])
+            if not isinstance(said, dict):
+                raise ValueError("no frame")
+            found, at = [], head_length
+            for size in said.get("payloads") or ():
+                found.append(body[at:at + int(size)])
+                at += int(size)
+            if at > len(body):
+                raise ValueError("no frame")
+            return said, found
+        except Exception:
+            if late.is_set():  # killed at its deadline (Windows): whatever its pipes said since is its lateness
+                raise TimeoutError from None
+            raise
+        finally:
+            if watchdog is not None:
+                watchdog.cancel()
     except TimeoutError:
         _killed(child)
         raise HostFailed(f"the view core took longer than {seconds:g} s for its {job} job, and was stopped: ask "

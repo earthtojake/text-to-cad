@@ -204,14 +204,15 @@ class RunOnTheKernelTest(KernelPackagesTest):
             sys.exit(run._ended(code))
         """)
         env = {**os.environ, "PYTHONPATH": SOURCE_PATH}
-        killed = subprocess.run([sys.executable, "-c", probe, "kill -KILL $$"], env=env, capture_output=True, text=True,
-                                timeout=60)
-        self.assertEqual((killed.returncode, killed.stdout.strip()), (-signal.SIGKILL, str(-signal.SIGKILL)))
-        # Ctrl-C reaches the whole foreground group: here, the program sends it to its parent and itself goes on.
-        interrupted = subprocess.run([sys.executable, "-c", probe, "kill -INT $PPID; sleep 0.2; exit 5"], env=env,
-                                     capture_output=True, text=True, timeout=60)
-        self.assertEqual((interrupted.returncode, interrupted.stdout.strip()), (5, "5"))
-        self.assertNotIn("Traceback", interrupted.stderr)
+        if os.name != "nt":  # signals are POSIX's: on Windows a program's exit code is all there is
+            killed = subprocess.run([sys.executable, "-c", probe, "kill -KILL $$"], env=env, capture_output=True,
+                                    text=True, timeout=60)
+            self.assertEqual((killed.returncode, killed.stdout.strip()), (-signal.SIGKILL, str(-signal.SIGKILL)))
+            # Ctrl-C reaches the whole foreground group: here, the program sends it to its parent and itself goes on.
+            interrupted = subprocess.run([sys.executable, "-c", probe, "kill -INT $PPID; sleep 0.2; exit 5"], env=env,
+                                         capture_output=True, text=True, timeout=60)
+            self.assertEqual((interrupted.returncode, interrupted.stdout.strip()), (5, "5"))
+            self.assertNotIn("Traceback", interrupted.stderr)
         self.assertEqual(subprocess.run([sys.executable, "-c", probe, "exit 7"], env=env, timeout=60).returncode, 7)
 
 
