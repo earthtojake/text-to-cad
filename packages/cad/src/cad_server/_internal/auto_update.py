@@ -575,6 +575,76 @@ def pinned(prefix: str | os.PathLike[str] | None = None) -> bool:
     return "==" in str(specifier)
 
 
+# cad's own entries in uv's cache, removed once for each release (``tidy_cache``): the file in the state folder that
+# names the release it was last done for, and how long uv is given: it waits while any other uv process is alive (a
+# ``uv run``, an app's ``uvx`` server line), so the server's tidying gives it a moment and tries again an hour later,
+# and a person who typed the command a little longer. Never ``--force``: what uv protects is another uv's install.
+CACHE_MARK = "uv-cache.json"
+CACHE_SECONDS = 5.0
+CACHE_ASKED_SECONDS = 20.0
+CLEANED, BUSY, LINKED = "cleaned", "busy", "linked"  # what ``tidy_cache`` came to
+
+
+def _linked(prefix: str | os.PathLike[str]) -> bool:
+    """Whether cad's installed files in the environment at ``prefix`` are symbolic links (uv's link mode ``symlink``,
+    a person's own setting): they point into uv's cache, and cleaning it would take cad with it."""
+    return any((folder / "cad" / "__init__.py").is_symlink() for folder in site_packages(prefix))
+
+
+def tidy_cache(*, asked: bool = False, timeout: float | None = None) -> str | None:
+    """cad's own entries removed from uv's cache: ``uv cache clean cad``, uv's own command for one package. Every
+    update leaves the release before unpacked there (about 15 MB), which nothing uses again and nothing else removes;
+    the release installed costs nothing there, its files the same ones the install links to. uv has no command for
+    past releases alone, so the installed one's entry goes too, and uv fetches cad's wheel again where a later
+    environment needs it (a new set of integrations for ``cad run``).
+
+    Done once for each release (``CACHE_MARK``), by the server's tidying (``cad_server.engine.daemon.Daemon.
+    caught_up``: never while cad's update is underway, nor while an environment is being made) and, ``asked``, by ``cad
+    cache prune`` whenever it is typed. Only for a global install with a uv to ask; only once this release's CAD
+    kernel environment is made, whose making takes cad from the cache (``base.ensure``; ``asked`` does not wait for
+    it); never where cad's installed files are links into the cache (``LINKED``: noted, and not tried again for this
+    release). uv waits for every other uv process to end before it cleans, so it is given ``timeout`` seconds
+    (``CACHE_SECONDS``; ``CACHE_ASKED_SECONDS`` where asked) and stopped where it has not begun (``BUSY``): nothing is
+    noted, and a later tidying tries again. ``CLEANED`` where it was done now; None where there was nothing to do or
+    uv failed. Never raises."""
+    try:
+        found = global_install()
+        if found is None or found.uv is None:
+            return None
+        version, mark = _version(), _data() / CACHE_MARK
+        if not asked:
+            try:
+                if json.loads(mark.read_text(encoding="utf-8")).get("release") == version:
+                    return None
+            except (OSError, ValueError, AttributeError):
+                pass
+        from cad_server._internal import base
+
+        try:
+            made = base.ensure(make=False)
+        except Exception:  # noqa: BLE001 - an environment that cannot be told is none made
+            made = None
+        if made is None and not asked:
+            return None
+        if any(_linked(env) for env in {str(found.prefix), *([made.prefix] if made is not None else [])}):
+            _keep(mark, {"release": version, "skipped": LINKED})
+            return LINKED
+        try:
+            done = subprocess.run([found.uv, "cache", "clean", "cad"], stdin=subprocess.DEVNULL, capture_output=True,
+                                  timeout=(CACHE_ASKED_SECONDS if asked else CACHE_SECONDS) if timeout is None
+                                  else timeout,
+                                  env={name: value for name, value in os.environ.items() if name not in _UNSET},
+                                  creationflags=0x08000000 if os.name == "nt" else 0)  # CREATE_NO_WINDOW
+        except subprocess.TimeoutExpired:
+            return BUSY
+        if done.returncode != 0:
+            return None
+        _keep(mark, {"release": version, "at": time.time()})
+        return CLEANED
+    except Exception:  # noqa: BLE001 - a tidying never fails what asked for it
+        return None
+
+
 # A range that only caps cad's major, as cad's own earlier tools wrote it in uv's receipt (``capped``): ``<N``, with
 # or without ``>=X.Y.Z`` before it.
 _CAP = re.compile(r"(>=\d+(\.\d+)*,)?<\d+")

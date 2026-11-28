@@ -226,7 +226,9 @@ so a range you gave uv there (`uv tool install "cad<0.13"`) still holds, but for
 cad below a major version (`cad<1`, as cad 0.11.18 and earlier wrote it), which the update replaces
 (`uv tool install --upgrade cad`) when a new major is out; a cad you pinned
 to a release is left alone, and so is one pipx or pip installed, which you update the way you
-installed it. A typed `cad update` does the same, at once. It is what you could run
+installed it. A typed `cad update` does the same, at once. Once for each release, after its
+CAD kernel environment is made, cad also runs `uv cache clean cad`, which removes cad's own past
+releases from uv's cache and nothing of any other package. It is what you could run
 yourself, so whoever can write cad's environment can change what `cad` runs, as always. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an
 install by hand) runs its own `cad plugin install` once, unattended: code of the cad

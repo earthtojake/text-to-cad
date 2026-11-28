@@ -224,6 +224,103 @@ class CacheTest(unittest.TestCase):
         with mock.patch.object(releases, "past", side_effect=OSError("unreadable")):
             self.assertEqual(releases.tidy(), [])
 
+    def test_cad_s_own_entries_in_uv_s_cache_are_removed_once_for_each_release(self) -> None:
+        """Every update leaves the release before unpacked in uv's cache, which nothing else removes. ``uv cache clean
+        cad``, once for each release: by the server's tidying once this release's kernel environment is made (its
+        making takes cad from the cache), and by ``cad cache prune`` whenever it is typed; only for a global install
+        with a uv; never where cad's files are links into the cache; never forced: uv waits while another uv process
+        is alive (measured: an app's ``uvx`` server line holds it for a whole session), so it is given a moment and
+        tried again at a later tidying; a uv that fails changes nothing either."""
+        import subprocess
+        import types
+
+        from cad_server._internal import auto_update
+
+        tool = self.root / "tools" / "cad"
+        site = tool / ("Lib/site-packages" if os.name == "nt" else "lib/python3.14/site-packages")
+        (site / "cad").mkdir(parents=True)
+        (site / "cad" / "__init__.py").write_text("", encoding="utf-8")
+        kernel = self.root / "cache" / "base" / "abc"
+        made: list = [None]
+        ran: list = []
+        outcome: list = [0]
+
+        def run(command, **options):
+            ran.append((command, options["timeout"]))
+            if outcome[0] == "waits":
+                raise subprocess.TimeoutExpired(command, options["timeout"])
+            return types.SimpleNamespace(returncode=outcome[0])
+
+        mark = self.state / auto_update.CACHE_MARK
+        with mock.patch.object(auto_update, "global_install", return_value=auto_update.Global(tool, "/u/uv")), \
+                mock.patch.object(base, "ensure", side_effect=lambda make=True: made[0]), \
+                mock.patch.object(auto_update.subprocess, "run", side_effect=run):
+            self.assertIsNone(auto_update.tidy_cache(), "the kernel environment is not made yet: its making needs cad")
+            self.assertEqual(ran, [])
+            made[0] = base.Environment("python", str(kernel), False)
+            for failing, came in ((2, None), ("waits", auto_update.BUSY)):
+                outcome[0] = failing
+                self.assertEqual(auto_update.tidy_cache(), came)
+                self.assertFalse(mark.exists(), "nothing noted: a later tidying tries again")
+            outcome[0] = 0
+            ran.clear()
+            self.assertEqual(auto_update.tidy_cache(), auto_update.CLEANED)
+            self.assertEqual(ran, [(["/u/uv", "cache", "clean", "cad"], auto_update.CACHE_SECONDS)],
+                             "uv's own command for one package, never forced, given a moment")
+            self.assertEqual(json.loads(mark.read_text(encoding="utf-8"))["release"], version())
+            self.assertIsNone(auto_update.tidy_cache(), "once for this release")
+            self.assertEqual(len(ran), 1)
+            self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.CLEANED, "typed: whenever it is asked")
+            self.assertEqual(ran[-1][1], auto_update.CACHE_ASKED_SECONDS, "a person who asked waits a little longer")
+            # The next release: done again, once.
+            with mock.patch.object(auto_update, "_version", return_value="99.0.0"):
+                self.assertEqual(auto_update.tidy_cache(), auto_update.CLEANED)
+                self.assertIsNone(auto_update.tidy_cache())
+            # Asked before the kernel environment is made, or where it cannot be told: done all the same.
+            made[0] = None
+            mark.unlink()
+            self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.CLEANED)
+            with mock.patch.object(base, "ensure", side_effect=RuntimeError("no installation here")):
+                self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.CLEANED)
+                mark.unlink()
+                self.assertIsNone(auto_update.tidy_cache())
+            # cad's files are links into the cache (uv's link mode `symlink`): never, and not tried again.
+            if os.name != "nt":
+                made[0] = base.Environment("python", str(kernel), False)
+                real = self.root / "uv-cache" / "cad" / "__init__.py"
+                real.parent.mkdir(parents=True)
+                real.write_text("", encoding="utf-8")
+                (site / "cad" / "__init__.py").unlink()
+                (site / "cad" / "__init__.py").symlink_to(real)
+                ran.clear()
+                self.assertEqual(auto_update.tidy_cache(), auto_update.LINKED)
+                self.assertIsNone(auto_update.tidy_cache(), "noted for this release")
+                self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.LINKED)
+                self.assertEqual(ran, [], "uv is never asked")
+                self.assertEqual(json.loads(mark.read_text(encoding="utf-8"))["skipped"], "linked")
+        # No global install (pip, a checkout, a test), or no uv: nothing.
+        with mock.patch.object(auto_update.subprocess, "run", side_effect=AssertionError("never run")):
+            self.assertIsNone(auto_update.tidy_cache(asked=True))
+            with mock.patch.object(auto_update, "global_install", return_value=auto_update.Global(tool, None)):
+                self.assertIsNone(auto_update.tidy_cache(asked=True))
+            with mock.patch.object(auto_update, "global_install", side_effect=OSError("unreadable")):
+                self.assertIsNone(auto_update.tidy_cache(), "never raises")
+
+    def test_prune_says_what_came_of_uv_s_cache(self) -> None:
+        from cad_server._internal import auto_update
+
+        for came, said in ((auto_update.CLEANED, "removed cad's releases from uv's cache (`uv cache clean cad`)\n"
+                                                 "1 removed, 0 B freed\n"),
+                           (auto_update.BUSY, "kept cad's releases in uv's cache: another uv process is running, and uv "
+                                              "waits for it (run this again once it has ended, or `uv cache clean "
+                                              "cad`)\nnothing removed\n"),
+                           (auto_update.LINKED, "kept cad's releases in uv's cache: cad's files are links into it "
+                                                "(uv's link mode symlink)\nnothing removed\n"),
+                           (None, "nothing removed\n")):
+            with self.subTest(came=came), mock.patch.object(auto_update, "tidy_cache", return_value=came) as asked:
+                self.assertEqual(_run("prune"), (0, said, ""))
+                asked.assert_called_once_with(asked=True)
+
     def test_the_tidying_never_raises(self) -> None:
         self.environment("theirs00", OTHER)
         with mock.patch.object(base, "_remove", side_effect=base.Refused("held")):

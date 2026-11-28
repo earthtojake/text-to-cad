@@ -11,15 +11,17 @@ records, Recents and settings in the state folder, and anything else in the fold
 - ``prune``: what this release of cad cannot use: the environments made for another release (their marker names it,
   ``base.marked``), and the release folders of the layout of 0.11.11 and earlier (``<state>/releases/<release>``,
   ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start;
-  and, on Windows, each ``cad.exe`` cad's update moved aside in uv's bin folder and could not remove then, where no
-  update is underway (``_tidy``).
+  and, where no update is underway (``_tidy``), on Windows each ``cad.exe`` cad's update moved aside in uv's bin
+  folder and could not remove then, and cad's own entries in uv's cache (``uv cache clean cad``: each past release
+  stays unpacked there; nothing of another package is touched).
 - ``clean``: all of the cache, and what ``prune`` removes of it; refused while a server runs, which runs from it.
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
 kept, and said (``base.unused``). Nothing else of cad deletes a past release's folders or environments but its
 server, at its start and then hourly, which removes by the same rules, quietly, what ``prune`` removes: the
-environments made for another release, the release folders of 0.11.11 and earlier, and the ``cad.exe`` files moved
-aside (``base.tidy``, ``releases.tidy``, ``auto_update.tidy``).
+environments made for another release, the release folders of 0.11.11 and earlier, the ``cad.exe`` files moved
+aside, and, once for each release, cad's entries in uv's cache (``base.tidy``, ``releases.tidy``,
+``auto_update.tidy``, ``auto_update.tidy_cache``).
 """
 
 from __future__ import annotations
@@ -109,8 +111,9 @@ def _say(line: str) -> None:
 
 
 def _tidy() -> int:
-    """On Windows, each ``cad.exe`` cad's update moved aside and could not remove then (``auto_update.tidy``), where no
-    update is underway, removed, each said: how many."""
+    """Where no update is underway: on Windows, each ``cad.exe`` cad's update moved aside and could not remove then
+    (``auto_update.tidy``), removed; and cad's own entries in uv's cache, where each past release stays unpacked
+    (``auto_update.tidy_cache``: ``uv cache clean cad``), removed. Each said: how many."""
     from cad_server._internal import auto_update
 
     if auto_update.underway() is not None:
@@ -118,7 +121,15 @@ def _tidy() -> int:
     gone = auto_update.tidy()
     for path in gone:
         _say(f"removed {path} (a cad command cad's update moved aside)")
-    return len(gone)
+    came = auto_update.tidy_cache(asked=True)
+    if came == auto_update.CLEANED:
+        _say("removed cad's releases from uv's cache (`uv cache clean cad`)")
+    elif came == auto_update.BUSY:
+        _say("kept cad's releases in uv's cache: another uv process is running, and uv waits for it (run this again "
+             "once it has ended, or `uv cache clean cad`)")
+    elif came == auto_update.LINKED:
+        _say("kept cad's releases in uv's cache: cad's files are links into it (uv's link mode symlink)")
+    return len(gone) + (came == auto_update.CLEANED)
 
 
 def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]], *, tidy: bool = False) -> int:

@@ -2173,6 +2173,38 @@ class JoinTest(unittest.TestCase):
             self.assertIsNone(client.make_way())
         sweep.assert_called_once_with(stop=True, seconds=client.STOP_SECONDS, leave=version())
 
+    def test_an_older_server_still_stopping_past_the_wait_is_said_in_one_line_with_what_to_do(self) -> None:
+        """A server that ends its workers may take longer to go than a start waits: it was told to stop and is on its
+        way, so the start says so and what to do, never the door's path (measured on a Mac: gone seconds after a
+        ten-second wait gave up; the next start worked)."""
+        older = types.SimpleNamespace(release="0.0.1", close=lambda: None)
+        endpoint = client.places.Endpoint(client.places.address(), client.places.lock_path())
+        with mock.patch.object(client.places, "endpoints", return_value=[endpoint]), \
+                mock.patch.object(client, "_answering", return_value=True), \
+                mock.patch.object(client, "_note_pages"), \
+                mock.patch.object(client, "_connect", return_value=older), \
+                mock.patch.object(client, "_exchange"), \
+                mock.patch.object(client, "_sandboxed", return_value=False), \
+                mock.patch.object(client, "wait_gone", return_value=False) as waited, \
+                mock.patch.object(client, "_spawn", side_effect=AssertionError("never started")):
+            with self.assertRaises(ConnectionError) as refused:
+                client.start()
+        self.assertEqual(str(refused.exception), client.STOPPING)
+        self.assertEqual(client.STOPPING, "the cad server of an earlier release was told to stop and is still "
+                                          "stopping: run `cad server start` again in a few seconds")
+        self.assertNotIn("door", client.STOPPING)
+        self.assertEqual((waited.call_args.args[0], client.STOP_SECONDS), (20.0, 20.0))
+        # `cad server stop`, and cad's update, which wait longer and by their own words, still hear sweep's.
+        with mock.patch.object(client.places, "endpoints", return_value=[endpoint]), \
+                mock.patch.object(client, "_answering", return_value=True), \
+                mock.patch.object(client, "_note_pages"), \
+                mock.patch.object(client, "_connect", return_value=older), \
+                mock.patch.object(client, "_exchange"), \
+                mock.patch.object(client, "wait_gone", return_value=False):
+            with self.assertRaises(client.StillThere) as left:
+                client.sweep(stop=True, seconds=60.0)
+        self.assertIn("did not exit", str(left.exception))
+
     def test_starts_at_once_stop_the_older_server_alone_and_join_the_one_another_of_them_started(self) -> None:
         """Starts at the same moment all find an older server; one stops it and starts this release's. Another reaches
         the server after that -- before it would tell it to stop, or while it waits for the older one to go -- and

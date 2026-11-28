@@ -40,8 +40,13 @@ NOT_RUNNING = f"the {COMMAND} server is not running: run `{START}`"
 SANDBOXED = (f"the {COMMAND} server is not running, and this shell's sandbox cannot start one: run `{START}` outside "
              "the sandbox, and every later command finds it running")
 # How long a start waits for a server of another release to go once told to stop: an agent app gives the server
-# line that starts one 30 seconds in all. And how long it waits for its own server's door.
-STOP_SECONDS = 10.0
+# line that starts one 30 seconds in all, and one that ends its workers and pools has been seen to take more than
+# ten. And how long it waits for its own server's door.
+STOP_SECONDS = 20.0
+# What a start says where the server it told to stop is still going after that: it is on its way, and the start
+# after it finds room.
+STOPPING = (f"the {COMMAND} server of an earlier release was told to stop and is still stopping: run `{START}` again "
+            "in a few seconds")
 START_SECONDS = 60.0
 # The release a ``cad`` command holds the server it reaches to: its own, which the command line sets
 # (``cad_server.cli``). None, every other process's -- a person's own Python, a model ``cad run`` runs, a worker --
@@ -70,6 +75,10 @@ def newer(theirs: str | None, mine: str) -> bool:
 
 class NotRunning(ConnectionError):
     """No server answers: ``NOT_RUNNING``, which every command says as its failure (``not_running``)."""
+
+
+class StillThere(ConnectionError):
+    """A server told to stop that had not gone within the wait (``sweep``): it may be on its way still."""
 
 
 class OtherRelease(ConnectionError):
@@ -296,7 +305,8 @@ def make_way() -> str | None:
     started it --: the stop is asked of the server it reaches only once that server's own greeting names an older
     release (``sweep``'s ``leave``), so no start stops a server of this release or a newer one, however the moments
     fall. ``ConnectionError`` in one line where room cannot be made: in a shell whose sandbox refuses the loopback port
-    a server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop did not go."""
+    a server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop has not gone yet
+    (``STOPPING``: what to do, never the door's path)."""
     found = _connect()
     if found is not None:
         found.close()
@@ -305,7 +315,10 @@ def make_way() -> str | None:
     if _sandboxed():
         raise ConnectionError(SANDBOXED)
     if found is not None:
-        sweep(stop=True, seconds=STOP_SECONDS, leave=version())
+        try:
+            sweep(stop=True, seconds=STOP_SECONDS, leave=version())
+        except StillThere:
+            raise ConnectionError(STOPPING) from None
         found = _connect()
         if found is not None:
             found.close()
@@ -672,7 +685,7 @@ def sweep(*, stop: bool, seconds: float = 60.0, leave: str | None = None) -> dic
             except ConnectionError:
                 pass  # it closed the connection unanswered: stopping already (another start told it), as asked
             if not wait_gone(seconds, endpoint=endpoint, leave=leave):
-                raise ConnectionError(f"the engine server at {endpoint.address} did not exit")
+                raise StillThere(f"the engine server at {endpoint.address} did not exit")
             found["stopped"].append(str(endpoint.address))
             _remove_dead(endpoint)  # what it left, should it have died before removing its files
             continue

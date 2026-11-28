@@ -1933,7 +1933,8 @@ class Daemon:
         -- each part minds only its own: where no attempt is underway, on Windows each ``cad.exe`` an update moved
         aside and could not remove then (``auto_update.tidy``), the cache's environments made for another release
         and the release folders of 0.11.11 and earlier, as ``cad cache prune`` removes them, quietly (``base.tidy``,
-        ``releases.tidy``: never one a process runs from, never this release's), at the start (``starting``) and then at most once each ``TIDY_SECONDS``; at the start, what a
+        ``releases.tidy``: never one a process runs from, never this release's), and, once for each release, cad's
+        own entries in uv's cache, where past releases pile up (``auto_update.tidy_cache``), at the start (``starting``) and then at most once each ``TIDY_SECONDS``; at the start, what a
         start outside a Windows app package that crashed left in the state folder (``places.tidy_handoff``); the
         install command run once where cad is newer than the release it is up to date for and the person's switch
         says so (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its
@@ -1951,6 +1952,8 @@ class Daemon:
                 auto_update.tidy()
                 base.tidy()
                 releases.tidy()
+                if (_making().status() or {}).get("state") != "making":  # uv is not installing from its cache
+                    auto_update.tidy_cache()
             if starting:
                 _places.tidy_handoff()
             self.catching.tend(told)
