@@ -404,7 +404,9 @@ def wasm_kernel() -> dict[str, Any] | None:
     if not isinstance(marker, dict) or marker.get("schema") != WASM_SCHEMA or not python.is_file():
         raise Refused(f"{folder} is no WebAssembly kernel folder (no {WASM_MARKER} of {WASM_SCHEMA} and bin/python "
                       "in it): make it again, or choose the native kernel in the settings", "other")
-    return {"python": str(python), "prefix": str(home), "path": None, "own": False, "wasm": True}
+    core = home / "bin" / "viewcore"
+    return {"python": str(python), "prefix": str(home), "path": None, "own": False, "wasm": True,
+            **({"core": str(core)} if core.is_file() else {})}
 
 
 #: What a still is refused with where the kernel is the WebAssembly one and this installation has no native one.

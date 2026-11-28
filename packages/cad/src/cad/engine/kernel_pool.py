@@ -68,9 +68,11 @@ class KernelPool:
     one is free for. ``python``: the kernel's Python; ``path``: the import path its processes are given (the
     engine's own folder, as a kernel process the server starts is given it)."""
 
+    MOST = PROCESSES
+
     def __init__(self, workers: int, python: str, path: list[str], *, initializer: Callable | None = None,
                  max_tasks_per_child: int | None = None) -> None:
-        self.workers = max(1, min(int(workers), PROCESSES))
+        self.workers = max(1, min(int(workers), self.MOST))
         self.python, self.path = python, list(path)
         # A spawn pool's initializer watches for its parent's end from a thread; here the closed pipe says it.
         # Any other (the readers' warm-up) is the process's first act.
@@ -157,8 +159,7 @@ class KernelPool:
                         child = self._start()
                         with self._wake:
                             self._children[ident] = child
-                    _write(child.stdin, (job.fn, job.args))
-                    kind, value = _read(child.stdout)
+                    kind, value = self._ask(child, job)
                 except BaseException as error:  # noqa: BLE001 - a process that did not start, or died in the job
                     code = None if child is None else child.poll()
                     if child is not None:
@@ -180,6 +181,11 @@ class KernelPool:
                 self._let_go(child)
             with self._wake:
                 self._children.pop(ident, None)
+
+    def _ask(self, child: subprocess.Popen, job: _Job) -> tuple[str, Any]:
+        """``job`` asked of ``child`` and its answer read: ``("done", value)`` or ``("failed", error)``."""
+        _write(child.stdin, (job.fn, job.args))
+        return _read(child.stdout)
 
     @staticmethod
     def _let_go(child: subprocess.Popen, kill: bool = False) -> None:

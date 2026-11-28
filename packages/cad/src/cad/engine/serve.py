@@ -502,9 +502,18 @@ def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoo
         from cad.engine.kernel_pool import KernelPool
         from cad.engine.places import engine_root
 
-        try:
+        def kernel() -> Any:
             return KernelPool(workers, found["python"], [engine_root()], initializer=options.get("initializer"),
-                              max_tasks_per_child=options.get("max_tasks_per_child"))  # type: ignore[return-value]
+                              max_tasks_per_child=options.get("max_tasks_per_child"))
+
+        try:
+            if found.get("core"):
+                # Its kernel folder carries the view core's job server: the jobs that one answers are its
+                # processes', and a kernel process starts only for one it does not (``core_pool``).
+                from cad.engine.core_pool import CorePool
+
+                return CorePool(workers, found["core"], kernel)  # type: ignore[return-value]
+            return kernel()  # type: ignore[return-value]
         except OSError as error:
             raise KernelProcessesUnavailable(
                 f"The CAD engine could not start its kernel processes in {found['python']} "

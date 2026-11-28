@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 // make.mjs: a kernel folder made of what fetch.mjs downloaded (prototype): the WebAssembly kernel laid out so a
 // start reads it as it stands, and a `python` the engine can start.
-// Usage: node make.mjs PACKAGES_DIR KERNEL_DIR [--node PATH]
+// Usage: node make.mjs PACKAGES_DIR KERNEL_DIR [--node PATH] [--core VIEWCORE_DIR] [--live]
 //   KERNEL_DIR/pyodide/                           Pyodide's core
 //   KERNEL_DIR/lib/pythonX.Y/site-packages/       every pinned wheel unpacked, each module's bytecode beside it
-//   KERNEL_DIR/bin/python                         python.mjs under the Node named (default: the one running this)
+//   KERNEL_DIR/host/                              python.mjs and bootstrap.py, as they stood when it was made
+//   KERNEL_DIR/bin/python                         that python.mjs under the Node named (default: the one running
+//                                                 this); with --live, the python.mjs beside this file instead
+//   KERNEL_DIR/core/, KERNEL_DIR/bin/viewcore     the view core and its job server (hosts/node/serve.mjs) under
+//                                                 that Node, where VIEWCORE_DIR (default: this package) has a
+//                                                 built module (dist/viewcore.wasm); the engine's pools use it
 //   KERNEL_DIR/kernel.json                        what it was made of: Pyodide's release, the pins' digest, the
 //                                                 packages whose import is deferred to their first use
+// The folder names nothing outside itself but the Node it runs: it can be moved by making it again, never copied.
 // A start then unzips nothing and compiles no Python (measured: half the time to ready). The folder is made beside
 // its place and moved there whole, so one that exists is complete.
 import { createHash } from "node:crypto";
@@ -25,6 +31,8 @@ const DEFERRED = ["sklearn", "scipy", "IPython", "requests", "pygments", "prompt
 const args = process.argv.slice(2);
 const option = (name) => { const at = args.indexOf(name); return at < 0 ? null : args.splice(at, 2)[1]; };
 const node = option("--node") || process.execPath;
+const viewcore = path.resolve(option("--core") || path.join(HERE, "..", ".."));
+const live = args.includes("--live") && args.splice(args.indexOf("--live"), 1).length > 0;
 const [packages, target] = args;
 if (!packages || !target) { console.error("usage: node make.mjs PACKAGES_DIR KERNEL_DIR [--node PATH]"); process.exit(2); }
 
@@ -71,9 +79,25 @@ fs.mkdirSync(path.join(staged, "bin"));
 const final = path.resolve(target);
 const launcher = path.join(staged, "bin", "python");
 // The launcher names its own folder as it will stand, the Node it runs and the host beside this file.
+fs.mkdirSync(path.join(staged, "host"));
+for (const name of ["python.mjs", "bootstrap.py"]) fs.copyFileSync(path.join(HERE, name), path.join(staged, "host", name));
 fs.writeFileSync(launcher, `#!/bin/sh\nCAD_KERNEL_HOME=${JSON.stringify(final)} exec ${JSON.stringify(node)} `
-  + `${JSON.stringify(path.join(HERE, "python.mjs"))} "$@"\n`);
+  + `${JSON.stringify(path.join(live ? HERE : path.join(final, "host"), "python.mjs"))} "$@"\n`);
 fs.chmodSync(launcher, 0o755);
+// The view core, laid out as its hosts find each other (hosts/node beside hosts/web, the module in dist).
+const CORE = ["hosts/node/serve.mjs", "hosts/node/viewcore.mjs", "hosts/web/viewcore.js", "dist/viewcore.wasm"];
+const core = CORE.every((name) => fs.existsSync(path.join(viewcore, name)));
+if (core) {
+  const texts = fs.readdirSync(path.join(viewcore, "dist")).filter((name) => /LICENSE|EXCEPTION/.test(name)).map((name) => `dist/${name}`);
+  for (const name of [...CORE, ...texts]) {
+    fs.mkdirSync(path.dirname(path.join(staged, "core", name)), { recursive: true });
+    fs.copyFileSync(path.join(viewcore, name), path.join(staged, "core", name));
+  }
+  fs.writeFileSync(path.join(staged, "core", "package.json"), '{"type": "module"}\n');  // its .js files are modules
+  const serve = path.join(staged, "bin", "viewcore");
+  fs.writeFileSync(serve, `#!/bin/sh\nexec ${JSON.stringify(node)} ${JSON.stringify(path.join(final, "core", CORE[0]))} "$@"\n`);
+  fs.chmodSync(serve, 0o755);
+}
 fs.writeFileSync(path.join(staged, "kernel.json"), JSON.stringify({
   schema: "cad wasm kernel/1",
   pyodide: pins.pyodide,
@@ -81,7 +105,9 @@ fs.writeFileSync(path.join(staged, "kernel.json"), JSON.stringify({
   pins: createHash("sha256").update(pinsText).digest("hex"),
   node,
   deferred: DEFERRED,
+  core: core ? createHash("sha256").update(fs.readFileSync(path.join(viewcore, "dist", "viewcore.wasm"))).digest("hex") : null,
 }, null, 1) + "\n");
 fs.rmSync(final, { recursive: true, force: true });
 fs.renameSync(staged, final);
-console.log(`${final}: ${pins.packages.length} packages, ${files} files, ${compiled} modules compiled, Python ${python}`);
+console.log(`${final}: ${pins.packages.length} packages, ${files} files, ${compiled} modules compiled, Python ${python}`
+  + (core ? ", the view core" : ", no view core (none built)"));
