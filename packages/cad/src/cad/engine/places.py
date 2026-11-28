@@ -39,7 +39,7 @@ __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME"
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "drawing", "earlier_cache_dir", "earlier_state_dir", "endpoints",
            "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation", "kernel",
-           "lock", "lock_path", "make_engine_dir", "port_path", "registered", "state_dir", "windowless"]
+           "lock", "lock_path", "make_engine_dir", "port_path", "registered", "started", "state_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
 # Whether this Python starts threads and child processes. The WebAssembly kernel's (CPython on Emscripten, which a
@@ -649,6 +649,28 @@ def windowless() -> dict[str, Any]:
     started with no console gets a new one, with a window (#597): a window per process, open as long
     as it lives, and closing one ends it."""
     return {"creationflags": CREATE_NO_WINDOW} if os.name == "nt" else {}
+
+
+# A WebAssembly kernel folder's launchers on Windows (``bin\\python.cmd``, ``bin\\viewcore.cmd``), by name: the script
+# each runs under the folder's Node, from the folder.
+_LAUNCHED = {"python.cmd": ("host", "python.mjs"), "viewcore.cmd": ("core", "hosts", "node", "serve.mjs")}
+
+
+def started(program: str) -> list[str]:
+    """The command that starts ``program``: itself, but for a WebAssembly kernel folder's launcher on Windows, the
+    Node its folder names (``kernel.json``'s ``node``) and the script the launcher runs. Windows starts a ``.cmd``
+    file through its command interpreter, which reads the arguments again by its own rules and is the process its
+    starter holds: killing it leaves the Node it started running."""
+    launcher = Path(program)
+    script = _LAUNCHED.get(launcher.name.lower()) if WINDOWS else None
+    if script is None:
+        return [program]
+    home = launcher.parent.parent
+    try:
+        node = json.loads((home / "kernel.json").read_text(encoding="utf-8")).get("node")
+    except (OSError, ValueError, AttributeError):
+        node = None
+    return [node, str(home.joinpath(*script))] if isinstance(node, str) and node else [program]
 
 
 def standard_input_aside() -> int:

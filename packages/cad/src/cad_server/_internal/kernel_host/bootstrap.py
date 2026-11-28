@@ -21,6 +21,59 @@ def _process(host) -> None:
     os.getppid = lambda: parent
 
 
+# The platform's own folders, which no Windows path names: its standard library and packages (``/lib``), devices.
+_OWN = ("lib", "dev", "sys", "proc")
+
+
+def _windows(host) -> None:
+    """Windows' paths, where the host is Windows: the program is handed them (its script, its working folder, the
+    engine's folders, ``PYTHONPATH``) and hands them back, so it reads and makes them as a Windows Python does.
+    ``os.path`` is ``ntpath`` and ``pathlib``'s paths are parsed by it, the working folder is said as Windows says it
+    (``C:\\here``: the platform's is ``/C:/here``, where python.mjs mounts the drive), and the import system takes
+    a drive's path as absolute (its own joins keep ``/``: ``C:\\src/cad/__init__.py``). A rooted path of the
+    platform's own folders (``/lib``) stays the platform's: no drive is put before it."""
+    if not host.get("windows"):
+        return
+    import ntpath
+    import pathlib
+    from importlib import _bootstrap_external as external
+
+    getcwd, isabs, abspath = os.getcwd, ntpath.isabs, ntpath.abspath
+
+    def here():
+        folder = getcwd()
+        parts = folder.split("/")
+        if len(parts) > 1 and len(parts[1]) == 2 and parts[1][1] == ":":
+            return parts[1] + "\\" + "\\".join(parts[2:])
+        return folder
+
+    def platforms(path):
+        name = os.fsdecode(os.fspath(path)).replace("\\", "/")
+        return name[:1] == "/" and name[1:2] != "/" and name[1:].split("/")[0] in _OWN
+
+    def absolute(path):
+        return platforms(path) or isabs(path)
+
+    def made_absolute(path):
+        return ntpath.normpath(path) if platforms(path) else abspath(path)
+
+    def real(path, *, strict=False):
+        return made_absolute(path)
+
+    import site
+
+    # ``site`` takes a Windows separator for a Windows layout (``PREFIX\\Lib\\site-packages``): the packages
+    # folder is the platform's.
+    site.getsitepackages = lambda prefixes=None: [host["site"]]
+    os.getcwd = here
+    os.getcwdb = lambda: os.fsencode(here())
+    ntpath.isabs, ntpath.abspath, ntpath.realpath = absolute, made_absolute, real
+    os.path = sys.modules["os.path"] = ntpath
+    os.sep, os.altsep, os.pathsep = ntpath.sep, ntpath.altsep, ntpath.pathsep
+    pathlib.PurePosixPath.parser = ntpath
+    external._path_isabs, external._path_abspath = absolute, made_absolute
+
+
 def _files(host, real) -> None:
     """A file's times to the nanosecond and its real inode and device: the platform rounds a time to the
     millisecond and numbers files itself, and the engine tells whether a file is the one a process wrote by those
@@ -64,7 +117,7 @@ def _files(host, real) -> None:
                 return found
             return merged(found, real["stat"](os.path.join(folder, name), follow))
         name = os.path.abspath(name)
-        if name.startswith(kept):
+        if name.replace("\\", "/").startswith(kept):
             return found
         return merged(found, real["stat"](name, follow))
 
@@ -387,7 +440,8 @@ def _path(host) -> None:
     """``sys.path`` as CPython makes it: the program's folder first (the script's; the working folder for -m, by
     its path, and for -c, as the empty entry) unless it was started safe (-P), then PYTHONPATH, then the standard
     library and the installed packages."""
-    named = [entry for entry in os.environ.get("PYTHONPATH", "").split(":") if entry]
+    said = os.environ.get("PYTHONPATH", "")
+    named = [entry for entry in said.split(os.pathsep) if entry]
     listed = [] if host["isolated"] else named  # -E, -I: the environment's path is not this program's
     first: list[str] = []
     if not host["safe"] and (host["isolated"] or not os.environ.get("PYTHONSAFEPATH")):
@@ -395,7 +449,10 @@ def _path(host) -> None:
                  .get(host["kind"], "")]
     # The interpreter started before the real filesystem was there: it put PYTHONPATH and its own first entry on
     # the path already, and remembered that none of those folders existed.
-    rest = [entry for entry in sys.path if entry and entry not in named]
+    # On Windows it read PYTHONPATH as this platform's (``:`` between folders) and put each piece under its own
+    # working folder: those are no folders.
+    pieces = tuple(f"/{piece}" for piece in said.split(":") if piece) if os.pathsep != ":" else ()
+    rest = [entry for entry in sys.path if entry and entry not in named and not (pieces and entry.endswith(pieces))]
     sys.path[:] = [*first, *listed, *rest]
     sys.path_importer_cache.clear()
     importlib.invalidate_caches()
@@ -427,6 +484,7 @@ def main(host, real, net) -> int:
     real = real.to_py(depth=1) if hasattr(real, "to_py") else real
     _sockets(net.to_py(depth=1) if hasattr(net, "to_py") else net)
     _process(host)
+    _windows(host)
     if host["mounted"]:
         os.chdir(host["cwd"])
     _files(host, real)

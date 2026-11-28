@@ -4,7 +4,7 @@ A program on the WebAssembly kernel's Python (``cad run``, where a person chose 
 system's to make its pair with (``door.dial``): its sockets are its host's, and they connect. So the process that
 starts it stands between: a ``Relay`` listens on the loopback, admits a connection by the token it made (as a
 Windows engine's port does), dials the engine itself for it (``client._connect``) and passes the bytes both ways
-until either side is done. The program is told where by ``VARIABLE`` -- its relay's port and token, which it must
+until either side is done, the engine's token put in the request on Windows, whose engine takes none without it. The program is told where by ``VARIABLE`` -- its relay's port and token, which it must
 know before it starts -- and its client asks there (``client._connect``).
 
 The relay admits what its starter's own client could ask, no more: it runs as the person who ran the program, and
@@ -13,6 +13,7 @@ its token is the program's alone.
 
 from __future__ import annotations
 
+import json
 import secrets
 import socket
 import threading
@@ -90,12 +91,11 @@ class Relay:
             taken.settimeout(None)
             taken.sendall(door.greeting(engine.protocol, engine.release))
             threading.Thread(target=self._down, args=(engine, taken), name="cad-relay-answers", daemon=True).start()
-            while True:
-                data = taken.recv(_CHUNK)
-                if not data:
-                    return
+            data = self._request(taken, engine)
+            while data:
                 engine.writer.write(data)
                 engine.writer.flush()
+                data = taken.recv(_CHUNK)
         except (OSError, ValueError):
             return
         finally:
@@ -109,6 +109,22 @@ class Relay:
                         one.close()
                 except OSError:
                     pass
+
+    @staticmethod
+    def _request(taken: socket.socket, engine: Any) -> bytes:
+        """The connection's request line as the engine is to read it, and what came after it: a Windows engine's
+        port takes a request only with its token in it (``client._exchange``), which this relay's connection to it
+        holds and the program never learns. Empty where the program ends before its line does."""
+        line = b""
+        while b"\n" not in line:
+            data = taken.recv(_CHUNK)
+            if not data:
+                return b""
+            line += data
+        line, rest = line.split(b"\n", 1)
+        if engine.token is not None:
+            line = json.dumps({**json.loads(line), "token": engine.token}).encode()
+        return line + b"\n" + rest
 
     @staticmethod
     def _down(engine: Any, taken: socket.socket) -> None:

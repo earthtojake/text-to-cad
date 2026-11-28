@@ -333,7 +333,7 @@ class Process:
             from cad_server.engine import display
 
             env.update(display.environment())
-        argv = [python if part == "{python}" else part for part in service.command]
+        argv = [word for part in service.command for word in (places.started(python) if part == "{python}" else [part])]
         if standby and service.standby is not None:
             argv.extend(service.standby.args)
         if core:

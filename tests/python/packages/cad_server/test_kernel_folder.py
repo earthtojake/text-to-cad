@@ -13,6 +13,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -24,7 +25,24 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cad/src")
 
+from cad.engine import places  # noqa: E402
 from cad_server._internal import base, kernel_folder  # noqa: E402
+
+
+def _runs(folder: Path, name: str) -> tuple[list[str], str | None]:
+    """What a kernel folder's launcher ``bin/NAME`` runs, as ``[node, script]``, and the folder it names
+    (``CAD_KERNEL_HOME``) or None: a shell script's ``exec NODE SCRIPT "$@"``, on Windows a command file's
+    ``"NODE" "SCRIPT" %*`` (``bin/NAME.cmd``). Anything else is ``([], None)``."""
+    import re
+
+    if os.name == "nt":
+        lines = (folder / "bin" / f"{name}{base.WASM_LAUNCHER}").read_text(encoding="utf-8").splitlines()
+        home = next((found[1] for line in lines if (found := re.fullmatch(r'set "CAD_KERNEL_HOME=(.*)"', line))), None)
+        found = re.fullmatch(r'"([^"]+)" "([^"]+)" %\*', lines[-1])
+        return ([found[1], found[2]] if found and lines[0] == "@echo off" else []), home
+    words = shlex.split((folder / "bin" / name).read_text(encoding="utf-8").splitlines()[-1])
+    home = words.pop(0).split("=", 1)[1] if words and words[0].startswith("CAD_KERNEL_HOME=") else None
+    return (words[1:3] if len(words) == 4 and (words[0], words[3]) == ("exec", "$@") else []), home
 
 
 def _wheel(files: dict[str, bytes]) -> bytes:
@@ -103,17 +121,19 @@ class KernelFolderTest(unittest.TestCase):
         pinned = self.locked(viewcore=self.item("viewcore-4.zip"))
         folder = self.ensure(pinned)
         self.assertEqual((folder / "core" / "hosts" / "node" / "serve.mjs").read_bytes(), b"// the job server")
-        launcher = (folder / "bin" / "viewcore").read_text(encoding="utf-8")
-        self.assertEqual(shlex.split(launcher.splitlines()[-1]),
-                         ["exec", "/usr/bin/node", str(folder / "core" / "hosts" / "node" / "serve.mjs"), "$@"])
+        serve = str(folder / "core" / "hosts" / "node" / "serve.mjs")
+        self.assertEqual(_runs(folder, "viewcore"), (["/usr/bin/node", serve], None))
         marker = json.loads((folder / base.WASM_MARKER).read_text(encoding="utf-8"))
         self.assertEqual(marker["core"], pinned["viewcore"]["sha256"])
         self.assertIn("and the view core", self.said[0])
         (self.root / "state").mkdir()
         (self.root / "state" / "settings.json").write_text(json.dumps({"kernel": {"kind": "wasm"}}), encoding="utf-8")
         with mock.patch.object(kernel_folder, "lock", return_value=pinned):
-            self.assertEqual(base.kernel()["core"], str(folder / "bin" / "viewcore"))
-            self.assertEqual(base.drawing()["core"], str(folder / "bin" / "viewcore"))
+            self.assertEqual(base.kernel()["core"], str(folder / "bin" / f"viewcore{base.WASM_LAUNCHER}"))
+            self.assertEqual(base.drawing()["core"], str(folder / "bin" / f"viewcore{base.WASM_LAUNCHER}"))
+            # What the engine starts for it: the launcher; on Windows the Node it names, running the job server.
+            self.assertEqual(places.started(base.kernel()["core"]),
+                             ["/usr/bin/node", serve] if os.name == "nt" else [base.kernel()["core"]])
         # An archive that is no view core is refused, and nothing is left made.
         self.files["other.zip"] = _wheel({"README": b"not a core"})
         (self.root / "index" / "other.zip").write_bytes(self.files["other.zip"])
@@ -133,10 +153,9 @@ class KernelFolderTest(unittest.TestCase):
         self.assertFalse((site / "looks" / "oak" / "normal.png").exists())
         self.assertTrue((site / "looks" / "oak" / "color.png").is_file(), "but its colour maps: a material's colour")
         self.assertEqual(sorted(path.name for path in (folder / "host").iterdir()), ["bootstrap.py", "python.mjs"])
-        launcher = (folder / "bin" / "python").read_text(encoding="utf-8")
-        self.assertEqual(shlex.split(launcher.splitlines()[-1]),
-                         [f"CAD_KERNEL_HOME={folder}", "exec", "/usr/bin/node", str(folder / "host" / "python.mjs"), "$@"])
-        self.assertTrue(os.access(folder / "bin" / "python", os.X_OK))
+        self.assertEqual(_runs(folder, "python"), (["/usr/bin/node", str(folder / "host" / "python.mjs")], str(folder)))
+        if os.name != "nt":
+            self.assertTrue(os.access(folder / "bin" / "python", os.X_OK))
         marker = json.loads((folder / base.WASM_MARKER).read_text(encoding="utf-8"))
         self.assertEqual((marker["schema"], marker["python"], marker["deferred"]), (base.WASM_SCHEMA, "3.14", ["scipy"]))
         self.assertEqual(self.compiled, [folder])
@@ -148,7 +167,10 @@ class KernelFolderTest(unittest.TestCase):
         (self.root / "state").mkdir()
         (self.root / "state" / "settings.json").write_text(json.dumps({"kernel": {"kind": "wasm"}}), encoding="utf-8")
         with mock.patch.object(kernel_folder, "lock", return_value=self.locked()):
-            self.assertEqual(base.kernel()["python"], str(folder / "bin" / "python"))
+            self.assertEqual(base.kernel()["python"], str(folder / "bin" / f"python{base.WASM_LAUNCHER}"))
+            self.assertEqual(places.started(base.kernel()["python"]),
+                             ["/usr/bin/node", str(folder / "host" / "python.mjs")] if os.name == "nt"
+                             else [base.kernel()["python"]])
         # Another lock (another release's) is another folder, made of the downloads it shares with this one.
         other = self.ensure(self.locked(deferred=[]))
         self.assertNotEqual(other, folder)
@@ -264,6 +286,7 @@ class KernelFolderTest(unittest.TestCase):
         self.assertFalse((downloads / f"{'0' * 64}.part-{gone.pid}").exists())
         self.assertTrue((kernel / f"abc.making-{os.getpid()}").exists(), "a living process's making is its own")
 
+    @unittest.skipIf(os.name == "nt", "a shell launcher's quoting; Windows' is a command file, and no Windows name holds a quote")
     def test_a_cache_path_the_shell_would_read_is_quoted_in_the_launcher(self) -> None:
         odd = self.root / 'cache $HOME `x` "q"'
         with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(odd)}):
@@ -293,6 +316,42 @@ class KernelFolderTest(unittest.TestCase):
             self.assertRegex(item["sha256"], r"^[0-9a-f]{64}$")
             self.assertEqual(item["url"].rsplit("/", 1)[1], item["file"])
         self.assertEqual(pinned["python"], "3.14")
+
+
+class HostWindowsPathsTest(unittest.TestCase):
+    """The host's Windows paths (``bootstrap._windows``): on a Windows computer the kernel's Python reads and makes
+    paths as a Windows Python does, though its platform is POSIX. Pure Python: run here in a Python of its own,
+    with the platform's working folder a mounted drive's (``/C:/...``) and its path as Pyodide makes it."""
+
+    def test_the_program_is_handed_windows_paths_and_the_platform_s_own_folders_stay_its_own(self) -> None:
+        code = r"""
+import json, os, sys, importlib.metadata, importlib.util, pathlib, site  # imported first: their folders are no drive's
+spec = importlib.util.spec_from_file_location("host_bootstrap", sys.argv[1])
+host = importlib.util.module_from_spec(spec); spec.loader.exec_module(host)
+os.getcwd = lambda: "/C:/work/model"
+os.environ["PYTHONPATH"] = "C:\\src;D:\\more"
+sys.path[:] = ["/home/pyodide/C", "/home/pyodide/\\src;D", "/home/pyodide/\\more", "/lib/python3.14", *sys.path]
+host._windows({"windows": True, "site": "/lib/python3.14/site-packages"})
+host._path({"isolated": False, "safe": True, "kind": "module", "target": "m"})
+print(json.dumps({"cwd": os.getcwd(), "seps": [os.sep, os.altsep, os.pathsep],
+    "parent": str(pathlib.Path("C:/work/model/part.py").parent), "name": pathlib.Path("C:\\work\\part.py").name,
+    "absolute": [os.path.isabs(name) for name in ("C:\\x", "/lib/x", "relative")],
+    "own": [os.path.abspath("/lib/python3.14"), str(pathlib.Path("/lib/x").resolve())],
+    "site": site.getsitepackages(), "path": sys.path}))
+"""
+        ran = subprocess.run([sys.executable, "-I", "-c", code, str(kernel_folder._HOST / "bootstrap.py")],
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(ran.returncode, 0, ran.stderr)
+        said = json.loads(ran.stdout)
+        self.assertEqual(said["cwd"], "C:\\work\\model")
+        self.assertEqual(said["seps"], ["\\", "/", ";"])
+        self.assertEqual((said["parent"], said["name"]), ("C:\\work\\model", "part.py"))
+        self.assertEqual(said["absolute"], [True, True, False])
+        self.assertEqual(said["own"], ["\\lib\\python3.14", "\\lib\\x"], "no drive is put before them")
+        self.assertEqual(said["site"], ["/lib/python3.14/site-packages"])
+        # PYTHONPATH read by Windows' separator; the pieces the platform made of it by its own are gone.
+        self.assertEqual(said["path"][:3], ["C:\\src", "D:\\more", "/lib/python3.14"])
+        self.assertFalse([entry for entry in said["path"] if entry.startswith("/home/pyodide/")])
 
 
 if __name__ == "__main__":

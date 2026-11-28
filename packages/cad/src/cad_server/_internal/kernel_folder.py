@@ -158,6 +158,25 @@ class _Disk(Exception):
 
 
 def _alive(pid: int) -> bool:
+    """Whether process ``pid`` lives. On Windows the system is asked: ``os.kill(pid, 0)`` there sends a Ctrl-C to
+    the process group ``pid`` names (``CTRL_C_EVENT`` is 0), and fails for any other process, living or gone."""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+        kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: another user's; any other, no such process
+        try:
+            code = wintypes.DWORD()
+            return not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value == 259  # STILL_ACTIVE
+        finally:
+            kernel.CloseHandle(handle)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -194,6 +213,20 @@ def _unpacked(wheel: Path, site: Path, slim: bool) -> None:
                 shutil.copyfileobj(read, out)
 
 
+def _launcher(at: Path, runs: str, script: Path, home: Path | None) -> None:
+    """A launcher at ``at`` that runs ``script`` under the Node ``runs``, the kernel folder ``home`` named where one
+    is: a shell script; on Windows a command file, ``at`` with ``.cmd`` (the engine starts what it runs itself:
+    ``places.started``)."""
+    if os.name == "nt":
+        named = f'set "CAD_KERNEL_HOME={home}"\n' if home is not None else ""
+        at.with_name(f"{at.name}{base.WASM_LAUNCHER}").write_text(f'@echo off\n{named}"{runs}" "{script}" %*\n',
+                                                                  encoding="utf-8")
+        return
+    named = f"CAD_KERNEL_HOME={shlex.quote(str(home))} " if home is not None else ""
+    at.write_text(f'#!/bin/sh\n{named}exec {shlex.quote(runs)} {shlex.quote(str(script))} "$@"\n', encoding="utf-8")
+    at.chmod(at.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
 def _compiled(folder: Path) -> None:
     """Each module's bytecode beside it, written by the kernel's own Python (a start then compiles nothing). A
     folder whose bytecode could not be written still runs: its first imports are the slower."""
@@ -201,8 +234,11 @@ def _compiled(folder: Path) -> None:
     if site is None:
         return
     try:
-        subprocess.run([str(folder / "bin" / "python"), "-m", "compileall", "-q", str(site)], capture_output=True,
-                       timeout=1800, env={**os.environ, "CAD_KERNEL_HOME": str(folder)})
+        from cad.engine import places
+
+        python = places.started(str(folder / "bin" / f"python{base.WASM_LAUNCHER}"))
+        subprocess.run([*python, "-m", "compileall", "-q", str(site)], capture_output=True, timeout=1800,
+                       env={**os.environ, "CAD_KERNEL_HOME": str(folder)})
     except (OSError, subprocess.TimeoutExpired):
         pass
 
@@ -246,20 +282,14 @@ def ensure(*, make: bool = True, told: Callable[[str], None] | None = None) -> P
         for name in ("python.mjs", "bootstrap.py"):
             shutil.copyfile(_HOST / name, staged / "host" / name)
         (staged / "bin").mkdir()
-        launcher = staged / "bin" / "python"
         # The launcher names its own folder as it will stand and the Node it runs.
-        launcher.write_text(f'#!/bin/sh\nCAD_KERNEL_HOME={shlex.quote(str(folder))} exec {shlex.quote(runs)} '
-                            f'{shlex.quote(str(folder / "host" / "python.mjs"))} "$@"\n', encoding="utf-8")
-        launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        _launcher(staged / "bin" / "python", runs, folder / "host" / "python.mjs", folder)
         if viewcore:
             _unpacked(_fetched(viewcore, downloads, told), staged / "core", False)
             if not (staged / "core" / _SERVE).is_file() or not (staged / "core" / "dist" / "viewcore.wasm").is_file():
                 raise base.Refused(f"the view core's {viewcore['file']} holds no {_SERVE} and dist/viewcore.wasm: "
                                    f"{_BY_HAND}", "other")
-            serve = staged / "bin" / "viewcore"
-            serve.write_text(f'#!/bin/sh\nexec {shlex.quote(runs)} {shlex.quote(str(folder / "core" / _SERVE))} "$@"\n',
-                             encoding="utf-8")
-            serve.chmod(serve.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            _launcher(staged / "bin" / "viewcore", runs, folder / "core" / _SERVE, None)
         (staged / base.WASM_MARKER).write_text(json.dumps({
             "schema": base.WASM_SCHEMA, "pyodide": pinned["pyodide"], "python": pinned["python"],
             "pins": hashlib.sha256(json.dumps(pinned, sort_keys=True).encode()).hexdigest(), "node": runs,

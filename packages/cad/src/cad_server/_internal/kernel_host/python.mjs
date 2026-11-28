@@ -25,6 +25,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const WINDOWS = process.platform === "win32";
 // Node 22's V8 keeps a copy of the kernel's function table per loaded library: 4.3 GB for this kernel, against
 // 2 GB from Node 24 on.
 const NODE_FLOOR = 24;
@@ -41,7 +42,10 @@ if (major < NODE_FLOOR) {
     + "which cad makes again with it (or, for a folder the settings name, make that folder again)");
 }
 
-const home = process.env.CAD_KERNEL_HOME;
+// On Windows the engine starts this script under the folder's Node itself (a `.cmd` launcher cannot be started
+// cleanly): the folder is then the one this script stands in.
+const home = process.env.CAD_KERNEL_HOME
+  || (fs.existsSync(path.join(HERE, "..", "kernel.json")) ? path.dirname(HERE) : undefined);
 if (!home || !fs.existsSync(path.join(home, "kernel.json"))) {
   refuse("no kernel folder is named: the kernel runs through its folder's bin/python, which names it (CAD_KERNEL_HOME); "
     + "run that, or remove the folder and cad makes it again");
@@ -83,11 +87,15 @@ while (args.length) {
 }
 if (run.kind === null) refuse("no program: this Python runs -m MODULE, -c CODE or a SCRIPT, never a prompt");
 
+// The platform asks Node for the user's and group's ids, which Node has on POSIX alone: on Windows, 0, as Node's
+// own file facts there say every file's owner is.
+if (WINDOWS) for (const name of ["getuid", "geteuid", "getgid", "getegid"]) process[name] ??= () => 0;
+
 const { loadPyodide } = await import(pathToFileURL(path.join(home, "pyodide", "pyodide.mjs")).href);
 const pyodide = await loadPyodide({
   indexURL: path.join(home, "pyodide") + path.sep,
   // The program's environment is the process's own.
-  env: { ...process.env, HOME: process.env.HOME || "/" },
+  env: { ...process.env, ...(WINDOWS ? {} : { HOME: process.env.HOME || "/" }) },
 });
 
 // The standard streams as bytes, read and written where the process's are. A read waits for input as a native
@@ -122,11 +130,52 @@ pyodide.setStdout({ write: writer(1) });
 pyodide.setStderr({ write: writer(2) });
 
 // The real filesystem at its own paths. Pyodide's own folders stay its own: /lib holds its standard library, /dev
-// its devices. On Windows nothing is mounted (its paths are not this platform's): the engine does not offer the
-// WebAssembly kernel there yet.
+// its devices.
 const FS = pyodide.FS;
 const KEPT = new Set(["dev", "lib", "sys"]);
-if (process.platform !== "win32") {
+if (WINDOWS) {
+  // Windows' paths are drive-lettered and either slash separates: each drive is mounted at `/C:`, and every path
+  // the platform's files are asked by is read as Windows reads it first (`C:\a\b`, `C:/a/b` are `/C:/a/b`). A
+  // relative path the platform has joined to its working folder (`/C:/here/D:\there`) is the drive's own from its
+  // letter on: no Windows name holds a colon. bootstrap.py gives the program Windows' paths back (`os.path` is
+  // `ntpath`, the working folder `C:\here`).
+  for (let code = 65; code <= 90; code++) {
+    const drive = `${String.fromCharCode(code)}:`;
+    try {
+      if (!fs.statSync(`${drive}\\`).isDirectory()) continue;
+      FS.mkdirTree(`/${drive}`);
+      FS.mount(FS.filesystems.NODEFS, { root: `${drive}/` }, `/${drive}`);
+    } catch {
+      // No such drive, or one not ready (an empty card reader).
+    }
+  }
+  // And a rooted path with no drive (`\\lib\\x`, which the platform joins as `/C:/here//lib/x`): one of the
+  // platform's own folders, else the root of the working folder's drive.
+  const OWN = new Set(["dev", "lib", "sys", "proc"]);
+  const native = (name) => {
+    if (typeof name !== "string") return name;
+    let parts = name.replaceAll("\\", "/").split("/");
+    let drive = -1, rooted = -1;
+    parts.forEach((part, index) => {
+      if (/^[A-Za-z]:$/.test(part)) drive = index;
+      else if (part === "" && index > 0 && index < parts.length - 1) rooted = index;
+    });
+    if (rooted > drive) {
+      const own = OWN.has(parts[rooted + 1]);
+      parts = own || drive < 0 ? ["", ...parts.slice(rooted + 1)] : [parts[drive], ...parts.slice(rooted + 1)];
+      drive = own || drive < 0 ? -1 : 0;
+    }
+    return drive < 0 ? parts.join("/") : `/${parts.slice(drive).join("/")}`;
+  };
+  for (const name of ["lookupPath", "open", "mknod", "mkdir", "mkdirTree", "rmdir", "unlink", "readdir", "readlink",
+    "stat", "lstat", "chdir", "chmod", "lchmod", "chown", "lchown", "truncate", "utime", "statfs", "analyzePath"]) {
+    const original = FS[name];
+    if (typeof original === "function") FS[name] = (first, ...rest) => original(native(first), ...rest);
+  }
+  const rename = FS.rename, symlink = FS.symlink;
+  FS.rename = (from, to) => rename(native(from), native(to));
+  FS.symlink = (target, link) => symlink(target, native(link));
+} else {
   for (const name of fs.readdirSync("/")) {
     if (KEPT.has(name)) continue;
     try {
@@ -196,7 +245,7 @@ pyodide.globals.set("_host", pyodide.toPy({
   ppid: process.ppid,
   args: process.argv.slice(2),
   cwd: process.cwd(),
-  executable: path.join(home, "bin", "python"),
+  executable: path.join(home, "bin", WINDOWS ? "python.cmd" : "python"),
   kind: run.kind,
   target: run.target,
   argv: run.argv,
@@ -204,7 +253,8 @@ pyodide.globals.set("_host", pyodide.toPy({
   isolated: run.isolated,
   customize: run.site,
   site,
-  mounted: process.platform !== "win32",
+  mounted: true,
+  windows: WINDOWS,
   libraries: fs.readdirSync(path.join(home, "lib", `python${made.python}`, "site-packages"))
     .filter((name) => name.endsWith(".libs")),
   deferred: made.deferred ?? [],

@@ -132,8 +132,8 @@ class KernelPool:
         listed = [*self.path, *[item for item in env.get("PYTHONPATH", "").split(os.pathsep) if item]]
         env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys(listed))
         env["PYTHONDONTWRITEBYTECODE"] = "1"
-        child = subprocess.Popen([self.python, "-P", "-m", "cad.engine.kernel_pool"], stdin=subprocess.PIPE,
-                                 stdout=subprocess.PIPE, env=env, **places.windowless())
+        child = subprocess.Popen([*places.started(self.python), "-P", "-m", "cad.engine.kernel_pool"],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env, **places.windowless())
         if self.initializer is not None:
             try:
                 _write(child.stdin, (self.initializer, ()))

@@ -267,8 +267,8 @@ class CorePool(KernelPool):
     def _start(self) -> subprocess.Popen:
         from cad.engine import places
 
-        return subprocess.Popen([self.python], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=dict(os.environ),
-                                **places.windowless())
+        return subprocess.Popen(places.started(self.python), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                env=dict(os.environ), **places.windowless())
 
     def _ask(self, child: subprocess.Popen, job: _Job) -> tuple[str, Any]:
         """The job asked of ``child`` (``exchange``): its answer; a host that was late, garbled or trapped is killed

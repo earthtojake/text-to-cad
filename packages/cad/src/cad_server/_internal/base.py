@@ -374,6 +374,8 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
 KERNEL_SETTING = "kernel"
 WASM_MARKER = "kernel.json"
 WASM_SCHEMA = "cad wasm kernel/1"
+# A kernel folder's launchers (``bin/python``, ``bin/viewcore``) are shell scripts; on Windows, command files.
+WASM_LAUNCHER = ".cmd" if os.name == "nt" else ""
 
 
 def wasm_chosen() -> bool:
@@ -422,11 +424,11 @@ def wasm_kernel(make: bool = True, *, engine: bool = False) -> dict[str, Any] | 
         marker = json.loads((home / WASM_MARKER).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         marker = None
-    python = home / "bin" / "python"
+    python = home / "bin" / f"python{WASM_LAUNCHER}"
     if not isinstance(marker, dict) or marker.get("schema") != WASM_SCHEMA or not python.is_file():
-        raise Refused(f"{home} is no WebAssembly kernel folder (no {WASM_MARKER} of {WASM_SCHEMA} and bin/python "
-                      "in it): make it again, or choose the native kernel in the settings", "other")
-    core = home / "bin" / "viewcore"
+        raise Refused(f"{home} is no WebAssembly kernel folder (no {WASM_MARKER} of {WASM_SCHEMA} and "
+                      f"bin/{python.name} in it): make it again, or choose the native kernel in the settings", "other")
+    core = home / "bin" / f"viewcore{WASM_LAUNCHER}"
     return {"python": str(python), "prefix": str(home), "path": None, "own": False, "wasm": True,
             **({"core": str(core)} if core.is_file() else {})}
 

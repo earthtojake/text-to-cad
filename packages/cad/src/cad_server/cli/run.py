@@ -481,6 +481,7 @@ def _on_the_kernel(plan: Plan, spec, chosen: dict, said) -> int:
                                                       if item and item not in path)])
         command = _command(plan, chosen["python"])
         assert command is not None
+        command[:1] = places.started(command[0])
         sys.stdout.flush()
         try:
             code = _waited(command, env)

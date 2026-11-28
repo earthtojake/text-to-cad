@@ -211,6 +211,28 @@ class WindowsTest(Folders):
         self.assertEqual(places.adopt_earlier(), [], "once")
 
 
+class StartedTest(unittest.TestCase):
+    """What the engine starts for a program it is handed (``places.started``): the program, but for a WebAssembly
+    kernel folder's launcher on Windows, a command file, which its Node and script stand in for."""
+
+    def test_on_windows_a_kernel_folder_s_launchers_are_started_as_the_node_and_script_they_run(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            home = Path(scratch)
+            (home / "bin").mkdir()
+            (home / "kernel.json").write_text(json.dumps({"node": "C:/node/node.exe"}), encoding="utf-8")
+            python, core = str(home / "bin" / "python.cmd"), str(home / "bin" / "viewcore.cmd")
+            with mock.patch.object(places, "WINDOWS", True):
+                self.assertEqual(places.started(python), ["C:/node/node.exe", str(home / "host" / "python.mjs")])
+                self.assertEqual(places.started(core),
+                                 ["C:/node/node.exe", str(home / "core" / "hosts" / "node" / "serve.mjs")])
+                # Any other program, and a launcher outside a kernel folder, is started as it is.
+                for other in (r"C:\env\Scripts\python.exe", str(home / "bin" / "other.cmd"),
+                              str(home / "elsewhere" / "bin" / "python.cmd")):
+                    self.assertEqual(places.started(other), [other])
+            with mock.patch.object(places, "WINDOWS", False):
+                self.assertEqual(places.started(python), [python])
+
+
 class DrawingTest(unittest.TestCase):
     """The render processes' environment as a server answers it (``places.DRAWING``): a refusal of it reads as the
     kernel's (``places.kernel``), whichever the server's kernel is, its cause kept."""

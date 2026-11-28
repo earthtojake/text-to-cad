@@ -54,7 +54,8 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -n "${CAD_TEST_KERNEL:-}" ]; then
-  if [ ! -f "$CAD_TEST_KERNEL/kernel.json" ] || [ ! -x "$CAD_TEST_KERNEL/bin/python" ]; then
+  # Its launcher is bin/python, on Windows bin/python.cmd.
+  if [ ! -f "$CAD_TEST_KERNEL/kernel.json" ] || { [ ! -x "$CAD_TEST_KERNEL/bin/python" ] && [ ! -f "$CAD_TEST_KERNEL/bin/python.cmd" ]; }; then
     echo "test-python.sh: --kernel wants a kernel folder (its kernel.json and bin/python), not '$CAD_TEST_KERNEL'" >&2
     exit 2
   fi

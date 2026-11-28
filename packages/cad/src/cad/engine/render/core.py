@@ -102,7 +102,7 @@ class Core:
         if self.child is None or self.child.poll() is not None:
             from cad.engine import places
 
-            self.child = subprocess.Popen([self.program], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            self.child = subprocess.Popen(places.started(self.program), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                           **places.windowless())
             self.sent = set()
         return self.child

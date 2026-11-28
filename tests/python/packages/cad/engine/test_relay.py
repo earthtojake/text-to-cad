@@ -66,6 +66,18 @@ class RelayTest(unittest.TestCase):
             self.assertEqual(stream.readline(), b"answered " + asked)
         self.dial.assert_called_once_with()
 
+    def test_a_windows_engine_s_token_is_put_in_the_request_its_program_never_learns(self) -> None:
+        """A Windows engine's port takes a request only with its token (``client._exchange``): the relay's
+        connection holds it and puts it in the request line; what follows passes as it is."""
+        self.engine.connection.token = "engine-token"
+        taken, line = self.said(relay.named(self.relay.value)[1])
+        self.assertNotIn(b"engine-token", line)
+        stream = taken.makefile("rwb")
+        stream.write(b'{"op": "pid"}\nmore bytes\n')
+        stream.flush()
+        self.assertEqual(stream.readline(), b'answered {"op": "pid", "token": "engine-token"}\n')
+        self.assertEqual(stream.readline(), b"answered more bytes\n")
+
     def test_another_token_and_a_line_that_is_no_hello_hear_nothing_and_no_engine_is_dialled(self) -> None:
         for token in ("0" * door.ID_CHARACTERS, "not a hello"):
             if token == "not a hello":
