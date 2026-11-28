@@ -134,17 +134,53 @@ if (process.platform !== "win32") {
 const site = pyodide.runPython("import site; site.getsitepackages()[0]");
 FS.mount(FS.filesystems.NODEFS, { root: path.join(home, "lib", `python${made.python}`, "site-packages") }, site);
 
-// File facts the platform rounds or invents (a time to the millisecond, an inode of its own): the real ones.
+// File facts the platform rounds or invents (a time to the millisecond, an inode of its own): the real ones, of a
+// path, or of an open file (by the host's own descriptor for it, else by where it is).
+const facts = (stat) => [stat.mode, stat.ino, stat.dev, stat.nlink, stat.uid, stat.gid, stat.size, stat.atimeNs,
+  stat.mtimeNs, stat.ctimeNs].map(String);
 const realStat = (file, follow) => {
-  let stat;
   try {
-    stat = (follow ? fs.statSync : fs.lstatSync)(file, { bigint: true });
+    return facts((follow ? fs.statSync : fs.lstatSync)(file, { bigint: true }));
   } catch (error) {
     return error.code || "EIO";
   }
-  return [stat.mode, stat.ino, stat.dev, stat.nlink, stat.uid, stat.gid, stat.size, stat.atimeNs, stat.mtimeNs,
-    stat.ctimeNs].map(String);
 };
+const NODEFS = FS.filesystems.NODEFS;
+// Where an open file or folder is on the real filesystem; null for one that is not there (a pipe, a device, a
+// file of the platform's own).
+const openPath = (fd) => {
+  const stream = FS.getStream(fd);
+  if (!stream?.node || stream.node.mount?.type !== NODEFS) return null;
+  try {
+    return NODEFS.realPath(stream.node);
+  } catch {
+    return null;
+  }
+};
+const openStat = (fd) => {
+  const stream = FS.getStream(fd);
+  if (!stream?.node || stream.node.mount?.type !== NODEFS) return "ENOTSUP";
+  try {
+    return facts(typeof stream.nfd === "number" ? fs.fstatSync(stream.nfd, { bigint: true })
+      : fs.statSync(NODEFS.realPath(stream.node), { bigint: true }));
+  } catch (error) {
+    return error.code || "EIO";
+  }
+};
+// A file's own number (its inode), which the platform replaces by one of its making wherever it answers a file's
+// facts: the real one, so that every answer names the same file the same way (by path, by an open file, by a
+// folder's entry), and as another process on this computer names it.
+const attributes = NODEFS.getattr;
+NODEFS.getattr = (read, node) => {
+  let seen;
+  const found = attributes(() => (seen = read()), node);
+  if (seen && Number.isSafeInteger(seen.ino)) found.ino = seen.ino;
+  return found;
+};
+// A file the program makes takes the mode it asked for less the process's mask, as on any system: the platform
+// sets the mode asked for whole, after it makes the file.
+const openFile = FS.open;
+FS.open = (file, flags, mode) => openFile(file, flags, typeof mode === "number" ? mode & ~process.umask() : mode);
 
 pyodide.globals.set("_host", pyodide.toPy({
   pid: process.pid,
@@ -160,14 +196,15 @@ pyodide.globals.set("_host", pyodide.toPy({
     .filter((name) => name.endsWith(".libs")),
   deferred: made.deferred ?? [],
 }));
-pyodide.globals.set("_host_stat", realStat);
+pyodide.globals.set("_host_files", pyodide.toPy({ stat: realStat, open_stat: openStat, open_path: openPath,
+  umask: (mask) => process.umask(mask) }, { depth: 1 }));
 // Beside the standard library's extension modules: on the path already, and a library's module to a build (cad's
 // build forgets a model's own modules between builds, which it tells from libraries' by where their files are).
 const dynload = pyodide.runPython("import sysconfig; sysconfig.get_path('stdlib') + '/lib-dynload'");
 pyodide.FS.writeFile(`${dynload}/_cad_bootstrap.py`, fs.readFileSync(path.join(HERE, "bootstrap.py"), "utf8"));
 let code = 0;
 try {
-  code = pyodide.runPython("import _cad_bootstrap; _cad_bootstrap.main(_host, _host_stat)");
+  code = pyodide.runPython("import _cad_bootstrap; _cad_bootstrap.main(_host, _host_files)");
 } catch (error) {
   fs.writeSync(2, `${String(error?.message ?? error)}\n`);
   code = 1;

@@ -158,6 +158,21 @@ class ImportTest(unittest.TestCase):
         self.assertAlmostEqual(volumes["base"], 500)
         self.assertAlmostEqual(volumes["peg"], 72 * math.pi)
 
+    def test_a_python_that_starts_no_process_parses_its_steps_itself_to_the_same_tree(self) -> None:
+        from cad.engine import places, reader
+        from cad.engine.kernel import memo
+
+        memo.clear()
+        apart = json.dumps(self.built("twice"), sort_keys=True)
+        memo.clear()
+        with mock.patch.object(places, "THREADS", False), \
+                mock.patch.object(reader.Reader, "_start", side_effect=AssertionError("a reader process started")):
+            here = self.built("twice")
+            with self.assertRaisesRegex(ValueError, "^ValueError: cannot read the STEP file "):
+                reader.Reader().read(str(self.folder / "absent.step"))
+        self.assertEqual(json.dumps(here, sort_keys=True), apart)
+        self.assertFalse(reader._SESSION)
+
 
 READS = """
 from pathlib import Path

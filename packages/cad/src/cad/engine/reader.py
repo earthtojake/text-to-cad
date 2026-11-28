@@ -16,7 +16,7 @@ material. A mechanism is never imported: a part is a part.
 working memory is many times the result's (2.3 GB for a 354 MB file) and an allocator gives
 little of it back, so a worker that parsed a STEP would keep it for its life. One reader
 serves a build: started on the build's first STEP read (``session``), reused for the rest,
-gone when the build ends. It answers a read with the description as JSON and one
+gone when the build ends (a Python that starts no process parses in its own: ``Reader.read``). It answers a read with the description as JSON and one
 ``BinTools`` dump of a compound holding every part's shape, then a marker per location
 (``pack``); the worker reads the dump once and assembles the tree. So the worker holds the
 result and nothing of the parse. A shape written and read once is what the kernel gives
@@ -400,7 +400,19 @@ class Reader:
                                 stdout=subprocess.PIPE, env=env, **windowless())
 
     def read(self, path: str) -> tuple[dict[str, Any], bytes]:
-        """The description of the STEP at ``path`` and its packed shapes and locations."""
+        """The description of the STEP at ``path`` and its packed shapes and locations. On a Python that starts
+        no process (``places.THREADS``: the WebAssembly kernel's) the parse is this process's own, answered and
+        refused in the reader process's words; its working memory is then the worker's to keep, which the
+        server's ceiling on a worker's memory answers."""
+        from cad.engine.places import THREADS
+
+        if not THREADS:
+            try:
+                answer = _parse(os.fspath(path))
+            except Exception as error:  # noqa: BLE001 - as the reader process says it
+                raise ValueError(f"{type(error).__name__}: {error}") from None
+            self.reads += 1
+            return answer
         with self.lock:
             if self.process is None or self.process.poll() is not None:
                 self.process = self._start()

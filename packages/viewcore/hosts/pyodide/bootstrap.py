@@ -23,26 +23,21 @@ def _process(host) -> None:
 def _files(host, real) -> None:
     """A file's times to the nanosecond and its real inode and device: the platform rounds a time to the
     millisecond and numbers files itself, and the engine tells whether a file is the one a process wrote by those
-    (``worker._stat``, a memo's file version). Only for a path of the real filesystem; a failure is the platform's
-    own, raised as it raises it."""
+    (``worker._stat``, a memo's file version). Every way ``os`` answers them says the same: by path, by an open
+    file, by a name in an open folder (``shutil.rmtree`` tells a folder from a link to one by comparing two of
+    them). Only for the real filesystem; a failure is the platform's own, raised as it raises it. What stays the
+    platform's: an entry of ``os.scandir`` read without ``os.stat`` (``DirEntry.stat``, ``DirEntry.inode``).
+
+    And the process's mask for the files it makes (``os.umask``), which the platform keeps to itself."""
     if not host["mounted"]:
         return
     kept = ("/dev/", "/lib/", "/sys/")
-    stat, lstat = os.stat, os.lstat
+    stat, lstat, fstat = os.stat, os.lstat, os.fstat
 
-    def exact(found, path, follow):
-        try:
-            name = os.path.abspath(os.fspath(path))
-        except TypeError:
-            return found
-        if isinstance(name, bytes):
-            name = os.fsdecode(name)
-        if name.startswith(kept):
-            return found
-        facts = real(name, follow)
+    def merged(found, facts):
         if isinstance(facts, str):  # gone since, or not the real filesystem's
             return found
-        mode, ino, dev, _links, _uid, _gid, _size, atime, mtime, ctime = (int(fact) for fact in facts)
+        _mode, ino, dev, _links, _uid, _gid, _size, atime, mtime, ctime = (int(fact) for fact in facts)
         cls, (shown, more) = found.__reduce__()
         shown = list(shown)
         shown[1], shown[2] = ino, dev
@@ -53,15 +48,40 @@ def _files(host, real) -> None:
             more[field + "_ns"] = value
         return cls(tuple(shown), more)
 
+    def named(found, path, dir_fd, follow):
+        try:
+            name = os.fspath(path)
+        except TypeError:
+            return found
+        if isinstance(name, bytes):
+            name = os.fsdecode(name)
+        if dir_fd is not None and not os.path.isabs(name):
+            folder = real["open_path"](dir_fd)
+            if folder is None:
+                return found
+            return merged(found, real["stat"](os.path.join(folder, name), follow))
+        name = os.path.abspath(name)
+        if name.startswith(kept):
+            return found
+        return merged(found, real["stat"](name, follow))
+
+    def opened(found, fd):
+        return merged(found, real["open_stat"](fd))
+
     def stat_exact(path, *, dir_fd=None, follow_symlinks=True):
         found = stat(path, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
-        return found if dir_fd is not None or isinstance(path, int) else exact(found, path, follow_symlinks)
+        return opened(found, path) if isinstance(path, int) else named(found, path, dir_fd, follow_symlinks)
 
     def lstat_exact(path, *, dir_fd=None):
-        found = lstat(path, dir_fd=dir_fd)
-        return found if dir_fd is not None else exact(found, path, False)
+        return named(lstat(path, dir_fd=dir_fd), path, dir_fd, False)
 
-    os.stat, os.lstat = stat_exact, lstat_exact
+    def fstat_exact(fd):
+        return opened(fstat(fd), fd)
+
+    def umask(mask):
+        return int(real["umask"](int(mask)))
+
+    os.stat, os.lstat, os.fstat, os.umask = stat_exact, lstat_exact, fstat_exact, umask
 
 
 # --- imports a program may never use ------------------------------------------------------------------------------
@@ -228,6 +248,7 @@ def _path(host) -> None:
 
 def main(host, real) -> int:
     host = host.to_py() if hasattr(host, "to_py") else host
+    real = real.to_py(depth=1) if hasattr(real, "to_py") else real
     _process(host)
     if host["mounted"]:
         os.chdir(host["cwd"])
