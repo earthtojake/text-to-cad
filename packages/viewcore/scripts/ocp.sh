@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build OCP, the Python binding of Open CASCADE Technology (OCCT), as a Pyodide wheel (prototype recipe).
-# Usage: ocp.sh [--plib-fast] [--simd] [--freetype-src DIR] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR
+# Usage: ocp.sh [--plib-fast] [--no-opt] [--freetype-src DIR] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR
 #   Every version, URL, hash and flag that decides what is built is in kernel-pins.json beside this script: a bump of
 #   OCCT, OCP or Pyodide edits that file only. The arguments are directories:
 #   EMSDK_DIR      an emsdk with the pinned Emscripten installed and activated (the version Pyodide's own build used,
@@ -11,12 +11,14 @@
 #   MODULES        the OCP submodules to bind, one per line (ocp-modules.txt beside this script), or `all`
 #   WORK_DIR       downloads, build trees, logs/ and dist/ (the wheel and its .sha256); a rerun resumes after the
 #                  last step that finished with the same inputs
-#   --plib-fast    OCCT's PLib.cxx with the pinned flags.plib_fast_patch (one file, compiled here and linked ahead of
-#                  OCCT's own); off by default: the default build compiles OCCT as released
-#   --simd         the pinned flags.simd everywhere (OCCT, the binding and the link); off by default
+#   --plib-fast    OCCT's PLib.cxx with flags.plib_fast_patch, compiled with flags.plib_fast (SIMD) and linked ahead
+#                  of OCCT's own: one file differs. Off by default: the default build compiles OCCT as released. SIMD
+#                  in one function makes the whole module need WebAssembly SIMD (every current engine has it)
 #   --freetype-src a checkout of FreeType at the pinned freetype.tag (Emscripten's port) for OCCT's fonts (text to
 #                  shapes); without it OCCT is built without FreeType and Font_FTFont reports no font
 #   -j N           parallel jobs (default: nproc); a job compiling the binding's largest files takes up to ~1.7 GB
+#   --no-opt       skip Binaryen's pass (flags.wasm_opt), for a machine short of the memory it takes (~5.6 GB at
+#                  its peak, ~20 min with BINARYEN_CORES=2); the wheel's version says so (+...noopt)
 #   --keys         fetch and prepare, then print each later stage's key (what a CI cache of OCCT's build is keyed by)
 #                  and stop
 #
@@ -48,20 +50,20 @@
 # with --freetype-src FreeType (the FreeType License).
 set -euo pipefail
 
-PLIB=0 SIMD=0 FREETYPE_SRC="" JOBS=$(nproc) KEYS=0
+PLIB=0 FREETYPE_SRC="" JOBS=$(nproc) KEYS=0 NOOPT=0
 while [ $# -gt 0 ]; do
   case $1 in
     --plib-fast) PLIB=1; shift ;;
-    --simd) SIMD=1; shift ;;
     --freetype-src) FREETYPE_SRC=$(cd "$2" && pwd); shift 2 ;;
     -j) JOBS=$2; shift 2 ;;
     --keys) KEYS=1; shift ;;
+    --no-opt) NOOPT=1; shift ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     --*) echo "ocp.sh: unknown option $1" >&2; exit 2 ;;
     *) break ;;
   esac
 done
-[ $# -eq 5 ] || { echo "usage: ocp.sh [--plib-fast] [--simd] [--freetype-src DIR] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR" >&2; exit 2; }
+[ $# -eq 5 ] || { echo "usage: ocp.sh [--plib-fast] [--no-opt] [--freetype-src DIR] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR" >&2; exit 2; }
 EMSDK_DIR=$(cd "$1" && pwd) OCCT_SRC=$(cd "$2" && pwd) XBUILDENV=$(cd "$3" && pwd) WORK=$5
 MODULES=$4; [ "$MODULES" = all ] || MODULES=$(cd "$(dirname "$4")" && pwd)/$(basename "$4")
 mkdir -p "$WORK"; WORK=$(cd "$WORK" && pwd)
@@ -92,7 +94,7 @@ out = {
     "WHEEL_NAME": need("wheel", "name"),
 }
 for k, v in out.items(): print(f"{k}={shlex.quote(str(v))}")
-for k, key in (("COMMON", "common"), ("OCCTFLAGS", "occt"), ("CXXFLAGS", "cxx"), ("LINKFLAGS", "link"), ("OPTFLAGS", "wasm_opt"), ("SIMDFLAGS", "simd")):
+for k, key in (("COMMON", "common"), ("OCCTFLAGS", "occt"), ("CXXFLAGS", "cxx"), ("LINKFLAGS", "link"), ("OPTFLAGS", "wasm_opt"), ("PLIBFLAGS", "plib_fast")):
     print(f"{k}=({' '.join(shlex.quote(x) for x in need('flags', key))})")
 deps = need("binding_deps")
 print("DEPS=(" + " ".join(shlex.quote(n) for n in deps) + ")")
@@ -104,7 +106,7 @@ for n, d in deps.items():
 PY
 ) || exit 1
 eval "$PINVARS"
-PYMAJMIN=${PYTHON_VERSION/./}                  # 3.14 -> 314
+PYMAJMIN=${PYTHON_VERSION/./}                  # X.Y -> XY
 EXT_SUFFIX=cpython-$PYMAJMIN-wasm32-emscripten  # CPython's extension suffix under Pyodide
 SO=OCP.$EXT_SUFFIX.so
 
@@ -126,8 +128,8 @@ MAIN_WASM=$PYROOT/dist/pyodide.asm.wasm
 [ -z "$(git -C "$OCCT_SRC" status --porcelain --untracked-files=no)" ] || die "$OCCT_SRC has local changes; OCCT is built as released"
 WASM_OPT=$EMSDK_DIR/upstream/bin/wasm-opt
 
-FLAGS=("${COMMON[@]}"); [ $SIMD = 1 ] && FLAGS+=("${SIMDFLAGS[@]}")
-VARIANT=base; [ $SIMD = 1 ] && VARIANT=simd; [ -n "$FREETYPE_SRC" ] && VARIANT=$VARIANT-ft
+FLAGS=("${COMMON[@]}")
+VARIANT=base; [ -n "$FREETYPE_SRC" ] && VARIANT=$VARIANT-ft
 STAMPS=$WORK/stamps; mkdir -p "$STAMPS"
 key() { printf '%s\n' "$@" | sha256sum | cut -c1-12; }
 done_() { [ -f "$STAMPS/$1" ]; }
@@ -172,7 +174,7 @@ fi
 # ---- 2. the binding's sources for the list ----
 OCPSRC=$WORK/ocp-src
 LISTSUM=$([ "$MODULES" = all ] && echo all || sha256sum <"$MODULES" | cut -c1-12)
-PREP_KEY=$(key "$SOURCES_KEY" "$LISTSUM" "$OCCT_TAG" "$(sed -n '/^# ---- 2\./,/^# ---- 3\./p' "$0" | sha256sum)")
+PREP_KEY=$(key "$SOURCES_KEY" "$LISTSUM" "$OCCT_TAG" "$(sed -n '/^# ---- 2\./,/^PY$/p' "$0" | sha256sum)")  # this step's own code
 if ! done_ "prepare-$PREP_KEY"; then
   log "preparing OCP's sources for $( [ "$MODULES" = all ] && echo all modules || basename "$MODULES")"
   python3 -I - "$SRC/OCP" "$OCPSRC" "$MODULES" "$OCCT_SRC" <<'PY'
@@ -348,7 +350,8 @@ CXX="em++ ${CXXFLAGS[*]} ${FLAGS[*]} -w -I$OCPSRC -I$SRC/pybind11/include -I$SRC
 # The binding reads OCCT's headers only: its key is OCCT's tag and toolkits, not OCCT's flags.
 COMPILE_KEY=$(key "$PREP_KEY" "$OCCT_TAG" "$TOOLKITS" "${CXX//$OCCT/OCCT}")
 OBJ=$WORK/obj-$COMPILE_KEY
-LINK_KEY=$(key "$COMPILE_KEY" "${LINKFLAGS[*]}" "${OPTFLAGS[*]}" "$PLIB" "$(cat "$HERE/patches/$PLIB_PATCH")" "$(sed -n '/^# ---- 5\./,/^# ---- 6\./p' "$0" | sha256sum)")
+LINK_KEY=$(key "$COMPILE_KEY" "$OCCT_KEY" "${LINKFLAGS[*]}" "$([ $NOOPT = 1 ] && echo noopt || echo "${OPTFLAGS[*]}")" \
+  "$([ $PLIB = 1 ] && echo "plib ${PLIBFLAGS[*]} $(sha256sum <"$HERE/patches/$PLIB_PATCH")")")
 OUT=$WORK/link-$LINK_KEY
 if [ $KEYS = 1 ]; then echo "occt $OCCT_KEY"; echo "compile $COMPILE_KEY"; echo "link $LINK_KEY"; exit 0; fi
 
@@ -421,7 +424,7 @@ if ! done_ "link-$LINK_KEY"; then
     (cd "$OUT/plib" && patch -s -p1 <"$HERE/patches/$PLIB_PATCH")
     read -r DIR CMD < <(python3 -I -c 'import json,sys; e = next(e for e in json.load(open(sys.argv[1])) if e["file"].endswith("/PLib/PLib.cxx")); print(e["directory"], e["command"])' "$OCCT_BUILD/compile_commands.json")
     CMD=${CMD/"$OCCT_SRC/$PLIB_REL"/"$OUT/plib/$PLIB_REL"}
-    CMD=$(echo "$CMD" | sed "s| -o [^ ]*| -o $OUT/plib/PLib.o|")
+    CMD="$(echo "$CMD" | sed "s| -o [^ ]*| -o $OUT/plib/PLib.o|") ${PLIBFLAGS[*]}"
     (cd "$DIR" && eval "$CMD") || die "--plib-fast: the patched PLib.cxx did not compile"
     EXTRA=("$OUT/plib/PLib.o")
   fi
@@ -486,18 +489,21 @@ if missing:
           *sorted(missing)[:50], sep="\n  ")
     sys.exit(1)
 PY
+  if [ $NOOPT = 1 ]; then cp "$OUT/linked.wasm" "$OUT/$SO"; else
   log "optimising (wasm-opt ${OPTFLAGS[*]})"
-  "$WASM_OPT" "${OPTFLAGS[@]}" "$OUT/linked.wasm" -o "$OUT/$SO" >"$WORK/logs/wasm-opt.log" 2>&1 ||
-    die "wasm-opt failed, see $WORK/logs/wasm-opt.log (a validation error there is a compiler fault in the module itself: $(grep -m2 -i -E 'error|invalid' "$WORK/logs/wasm-opt.log" | tr '\n' ' '))"
+  "$WASM_OPT" "${OPTFLAGS[@]}" "$OUT/linked.wasm" -o "$OUT/$SO" >"$WORK/logs/wasm-opt.log" 2>&1 || {
+    [ $? = 137 ] && die "wasm-opt was killed, most likely for memory (it needs ~5.6 GB): rerun where it has that much free (BINARYEN_CORES=1 or 2 lowers it a little), or with --no-opt"
+    die "wasm-opt failed, see $WORK/logs/wasm-opt.log (a validation error there is a compiler fault in the module itself: $(grep -m2 -i -E 'error|invalid' "$WORK/logs/wasm-opt.log" | tr '\n' ' '))"; }
+  fi
   mark "link-$LINK_KEY"
 fi
 
 # ---- 6. the wheel ----
 DIST=$WORK/dist; mkdir -p "$DIST"
 LOCAL=""; [ "$LIST_ID" = all ] || LOCAL=$LIST_ID
-[ $SIMD = 1 ] && LOCAL=${LOCAL:+$LOCAL.}simd
 [ $PLIB = 1 ] && LOCAL=${LOCAL:+$LOCAL.}plib
 [ -n "$FREETYPE_SRC" ] || LOCAL=${LOCAL:+$LOCAL.}noft
+[ $NOOPT = 1 ] && LOCAL=${LOCAL:+$LOCAL.}noopt
 VERSION=$OCP_VERSION${LOCAL:++$LOCAL}
 log "writing the wheel, version $VERSION"
 LICENCES=("$OCCT_SRC/LICENSE_LGPL_21.txt" "$OCCT_SRC/OCCT_LGPL_EXCEPTION.txt" "$SRC/OCP-LICENSE")

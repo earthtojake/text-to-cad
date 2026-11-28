@@ -42,6 +42,27 @@ block), `kernel/bounds.py` and the writers in `export/` are the reference until 
 | `bench/` | Reference outputs from cad's engine, the comparison, the benchmarks |
 | `licenses/` | OCCT's licence: the GNU LGPL 2.1 and the Open CASCADE exception, shipped beside the module |
 
+## The kernel's own wheel (`scripts/ocp.sh`)
+
+`hosts/pyodide` runs cad's build on OCP, the Python binding of OCCT, built for Pyodide. `scripts/ocp.sh` builds that
+wheel from OCCT's source as released and OCP's generated binding sources, everything it fetches pinned in
+`scripts/kernel-pins.json` (URL and sha256, or repository and commit): a bump of OCCT, OCP or Pyodide edits that file
+only.
+
+```bash
+scripts/ocp.sh EMSDK_DIR OCCT_SRC XBUILDENV_DIR scripts/ocp-modules.txt WORK_DIR   # the wheel in WORK_DIR/dist/
+```
+
+`scripts/ocp-modules.txt` lists the OCP submodules to bind: those cad, build123d, ocpsvg and ocp_gordon import, and
+what their bindings need to import. Importing one left out raises `ModuleNotFoundError` naming it and the list. `all`
+builds every module, the same steps. `--plib-fast` applies `scripts/patches/occt-plib-max-opt-dim.patch` to one OCCT
+file and compiles that file with SIMD (off by default). `ocp.sh --help` has the rest; a cold build takes about two hours
+on 4 cores and needs about 6.5 GB of memory.
+
+The wheel contains OCCT (GNU LGPL 2.1 with the Open CASCADE exception 1.0), OCP's generated sources (Apache-2.0),
+pybind11 (BSD-3-Clause), fmt and RapidJSON (MIT); their texts are in its `.dist-info/licenses`. Whatever ships it
+offers OCCT's source at the pinned tag and these scripts.
+
 ## Licence
 
 The core's code is MIT, as the repository. The module links OCCT 8.0.1, which is under the GNU LGPL 2.1 with the

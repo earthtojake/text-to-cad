@@ -52,15 +52,15 @@
     "tag": "VER-2-13-3"
   },
   "flags": {
-    "comment": "Flags that change the module's code. common: every compile and the link. occt: OCCT's compiles, after its CMake's own (build type Release: -O3 -DNDEBUG). cxx: the binding's compiles. simd: added by --simd. plib_fast_patch: applied by --plib-fast.",
+    "comment": "Flags that change the module's code. common: every compile and the link. occt: OCCT's compiles, after its CMake's own (build type Release: -O3 -DNDEBUG). cxx: the binding's compiles. plib_fast_patch and plib_fast: --plib-fast's patch of PLib.cxx and the flags added to that one file's compile.",
     "common": ["-fPIC", "-fwasm-exceptions", "-sSUPPORT_LONGJMP=wasm", "-fvisibility=hidden", "-fvisibility-inlines-hidden", "-g0"],
     "occt_build_type": "Release",
     "occt": ["-UOCC_CONVERT_SIGNALS"],
     "cxx": ["-std=c++17", "-O3", "-DNDEBUG", "-DFMT_HEADER_ONLY"],
     "link": ["-O1", "-sSIDE_MODULE=1", "-Wl,--allow-multiple-definition"],
     "wasm_opt": ["--post-emscripten", "-O3"],
-    "simd": ["-msimd128"],
-    "plib_fast_patch": "occt-plib-max-opt-dim.patch"
+    "plib_fast_patch": "occt-plib-max-opt-dim.patch",
+    "plib_fast": ["-msimd128"]
   },
   "wheel": {
     "name": "cad-ocp-wasm"
