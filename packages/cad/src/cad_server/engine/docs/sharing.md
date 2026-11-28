@@ -277,7 +277,11 @@ names another (a test's stand-in, a local run of the service), as `CAD_API_URL` 
 
 **The view.** The bundle's `manifest.json`, and every file it lists but `thumbnail.png`, by its path in the
 bundle: relative, `/` separated, with no empty, `.` or `..` segment, at most 1024 bytes; each a regular file inside
-the bundle with the bytes its manifest says, or nothing is sent. **The files.** The file itself and the files that
+the bundle with the bytes its manifest says, or nothing is sent. The view names its document by the share's own id
+for it (`sharing.document_of`, made from the share's id, the same in every commit of the share, so a page keeps what it
+remembers of the model across them), never by this computer's (`ids.file_id`, a digest of the file's path, which
+anyone with the link could test guesses of the person's folders against): the manifest's `document.id`, and the
+structure's `path` and `id`, are written so as the files are sent; the bundle in the cache keeps the engine's. **The files.** The file itself and the files that
 made it, by their paths under the files' root, the same rules. 200,000 files at most over both.
 
 **The packs.** Each file the share lacks (whose bytes `stored.json` does not hold for this share) as one gzip

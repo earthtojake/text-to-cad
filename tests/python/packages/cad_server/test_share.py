@@ -566,6 +566,20 @@ class ShareTest(unittest.TestCase):
 
         return sharing.folder_of(file_id(self.base / target))
 
+    def unplaced(self, found: dict[str, Any]) -> str:
+        """The share's view names no place of this computer's -- no folder of it, and not the id this computer names
+        the file by, a digest of its path that anyone could test guesses against -- but names the document by the
+        share's own id for it (``document_of``): that id."""
+        from cad_server import sharing
+
+        for path in self.service.shares[found["id"]]["manifest"]["view"]:
+            data = self.service.read(found["id"], path)
+            self.assertNotIn(str(self.base).encode(), data, path)
+            self.assertNotIn(found["document"]["id"].encode(), data, path)
+        named = sharing.document_of(sharing.Share(self.service.url, found["id"], "", ""))
+        self.assertEqual(json.loads(self.service.read(found["id"], "manifest.json"))["document"]["id"], named)
+        return named
+
     def import_(self, *args: str, cwd: Path, elsewhere: bool = False) -> Any:
         """``cad import``, on this computer, or ``elsewhere``: on another, with a state, a cache and an engine folder of
         its own (no server runs there, so the import's record is kept by the command), which keep no record of this
@@ -666,8 +680,13 @@ class ShareTest(unittest.TestCase):
         paths = sorted(["manifest.json", *(path for path in listed if path != "thumbnail.png")])
         share = self.service.shares[found["id"]]
         self.assertEqual(sorted(share["manifest"]["view"]), paths)
+        # As the engine wrote them, but that the share names the document by its own id, not this computer's.
+        named = self.unplaced(found)
         for path in paths:
-            self.assertEqual(self.service.read(found["id"], path), (bundle / path).read_bytes(), path)
+            local = json.loads((bundle / path).read_bytes()) if path == "manifest.json" else None
+            self.assertEqual(self.service.read(found["id"], path), (bundle / path).read_bytes() if local is None else
+                             json.dumps({**local, "document": {**local["document"], "id": named}},
+                                        separators=(",", ":")).encode(), path)
         packs = self.service.puts("pack")
         self.assertEqual(found["sent"]["files"], len(paths) + 1)  # and the file itself
         self.assertEqual((found["sent"]["packs"], found["sent"]["bytes"]),
@@ -684,7 +703,7 @@ class ShareTest(unittest.TestCase):
         stamps = {path: (bundle / path).stat().st_mtime_ns for path in paths}
         again = self.shared()
         self.assertEqual({path: (bundle / path).stat().st_mtime_ns for path in paths}, stamps)
-        self.assertEqual((again["id"], again["sent"]["files"]), (found["id"], 0))
+        self.assertEqual((again["id"], again["sent"]["files"], self.unplaced(again)), (found["id"], 0, named))
         shutil.rmtree(self.cache / "documents")
         remade = self.shared()
         self.assertEqual((remade["id"], remade["again"]), (found["id"], True))
@@ -769,6 +788,7 @@ class ShareTest(unittest.TestCase):
         (ident,) = self.service.shares
         manifest = self.service.shares[ident]["manifest"]
         self.assertEqual(sorted(manifest["files"]), ["arm.urdf", "meshes/base.stl"])
+        self.unplaced(json.loads(self.cad("arm.urdf", "--json", cwd=robot).stdout))
         self.assertEqual(self.service.read(ident, "meshes/base.stl", "files"), STL.encode())
 
     # --- a model -------------------------------------------------------------------------------------------------
@@ -817,6 +837,11 @@ class ShareTest(unittest.TestCase):
                                             **previous._platform()})
         for path in expected:
             self.assertEqual(self.service.read(found["id"], path, "files"), (project / path).read_bytes(), path)
+        # Its view names the model by the share's id for it, in its manifest and its structure, never by this
+        # computer's (its .xbf's path's digest), nor any folder of this computer.
+        named = self.unplaced(found)
+        self.assertEqual({name: json.loads(self.service.read(found["id"], "structure.json"))[name]
+                          for name in ("path", "id")}, {"path": named, "id": named})
         stock = str(workspace / "stock.json")
         self.assertEqual(found["files"], {"count": 5, "bytes": sum(len((project / path).read_bytes())
                                                                    for path in expected),
@@ -870,6 +895,9 @@ class ShareTest(unittest.TestCase):
         self.assertEqual(written, expected)
         for path in expected:
             self.assertEqual((place / "copy" / path).read_bytes(), (project / path).read_bytes(), path)
+        # The .xbf's build closure, which travels in it, names its files relative to its folder: no folder of this
+        # computer's.
+        self.assertNotIn(str(self.base).encode(), (place / "copy" / "plate.xbf").read_bytes())
         lines = imported.stdout.splitlines()
         self.assertRegex(lines[0], r"^Imported plate into copy: 5 files, [\d.]+ (B|KiB); it is plate\.xbf; its script "
                                    r"is plate\.py$")

@@ -13,7 +13,8 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   and ``<origin>/<id>#delete=<secret>``, whose part after ``#`` no browser sends to a server;
 - **the view** (``view_files``): ``manifest.json`` and every file it lists but ``LEFT_OUT``'s, each a path the
   protocol takes (``sharable``), a regular file inside the bundle and the bytes the manifest says, in reading order
-  (``reading``): the bundle is taken as its manifest lists it, and nothing else of it is read;
+  (``reading``): the bundle is taken as its manifest lists it, and nothing else of it is read; its document named by
+  the share's own id for it (``document_of``), never this computer's, a digest of the file's path;
 - **the files that made it** (``Sources``): a model's (``model_sources``) from the build closure its ``.xbf``
   holds -- its script, every module of the project its build imported and every file it read, at their paths under
   the files' root (``root_of``: its project, never the home folder; a file outside it is left out, and said), none
@@ -255,16 +256,18 @@ class Share:
 @dataclass(frozen=True)
 class File:
     """One file a share holds: its path in the share (in the view bundle, or under the files' root), its bytes'
-    SHA-256 and size, and where it is."""
+    SHA-256 and size, and where it is; or, for a file a share holds as it made it (``view_files``: the bundle's
+    manifest and structure, named by the share), its bytes (``data``)."""
 
     path: str
     sha256: str
     size: int
     source: Path
+    data: bytes | None = None
 
     def read(self) -> bytes:
         """Its bytes, still the ones that were read of it (``Unsharable`` for a file changed since)."""
-        data = self.source.read_bytes()
+        data = self.source.read_bytes() if self.data is None else self.data
         if len(data) != self.size or hashlib.sha256(data).hexdigest() != self.sha256:
             raise Unsharable(f"{self.path} changed while it was shared: share it again")
         return data
@@ -350,25 +353,53 @@ def _digest_of(path: Path) -> tuple[str, int]:
     return found.hexdigest(), size
 
 
-def view_files(folder: Path) -> list[File]:
+def document_of(share: Share) -> str:
+    """The id a share's view names its document by, in place of the one this computer names it by (``ids.file_id``,
+    a digest of the file's path that anyone could test guesses of the person's folders against): one made from the
+    share's id alone, so the same in every commit of the share, which a page keeps what it remembers of the document
+    by, and of no path."""
+    import uuid
+
+    return str(uuid.UUID(bytes=hashlib.sha256(f"{FORMAT} document {share.id}".encode("ascii")).digest()[:16],
+                         version=4))
+
+
+def _named(raw: bytes, local: str, ident: str, members: tuple[str, ...]) -> bytes:
+    """A bundle's JSON object (``raw``) with each of its ``members`` that names the document by ``local`` naming it by
+    ``ident``, written compactly, as the bundle writes it; ``raw`` as it is where none does."""
+    found = json.loads(raw.decode("utf-8"))
+    if not isinstance(found, dict) or not any(found.get(member) == local for member in members):
+        return raw
+    return json.dumps({name: ident if name in members and value == local else value for name, value in found.items()},
+                      separators=(",", ":")).encode("utf-8")
+
+
+def view_files(folder: Path, share: Share | None = None) -> list[File]:
     """The files of the bundle in ``folder`` that a share holds, in reading order (``reading``): ``manifest.json``, and
     every file it lists but ``LEFT_OUT``'s, each a path a share takes (``sharable``), a regular file inside the folder
-    and the bytes the manifest says (its ``sha256`` and ``bytes``). Anything else is ``Unsharable``, in its words."""
+    and the bytes the manifest says (its ``sha256`` and ``bytes``). Anything else is ``Unsharable``, in its words.
+
+    For ``share``, the bundle names its document as the share does (``document_of``), never as this computer does:
+    the manifest's ``document.id`` and the structure's ``path`` and ``id`` that are the file's id here, a digest of
+    its path, are the share's id for it, the manifest listing the structure's bytes as they are then."""
     manifest = folder / MANIFEST
     try:
         raw = manifest.read_bytes()
     except FileNotFoundError:
         raise Unsharable("the folder holds no view bundle: it has no manifest.json") from None
     try:
-        listed = json.loads(raw.decode("utf-8")).get("files")
+        told = json.loads(raw.decode("utf-8"))
+        listed = told.get("files")
     except (UnicodeDecodeError, ValueError, AttributeError):
-        listed = None
+        told, listed = None, None
     if not isinstance(listed, dict):
         raise Unsharable("the view bundle's manifest.json lists no files")
     if len(listed) + 1 > MOST_FILES:
         raise Unsharable(f"the view bundle holds {len(listed) + 1} files, more than the {MOST_FILES} a share holds")
+    local = (told.get("document") or {}).get("id") if isinstance(told.get("document"), dict) else None
+    renamed = share is not None and isinstance(local, str) and bool(local)
     root = os.path.realpath(folder)
-    found = [File(MANIFEST, hashlib.sha256(raw).hexdigest(), len(raw), manifest)]
+    found: list[File] = []
     for path, entry in listed.items():
         if path in LEFT_OUT or path == MANIFEST:
             continue
@@ -381,7 +412,23 @@ def view_files(folder: Path) -> list[File]:
         sha256, size = _digest_of(source)
         if not isinstance(entry, dict) or (entry.get("sha256"), entry.get("bytes")) != (sha256, size):
             raise Unsharable(f"the view bundle's {path} is not what its manifest says: share it again")
+        if renamed and path == "structure.json":
+            data = File(path, sha256, size, source).read()
+            try:
+                made = _named(data, str(local), document_of(share), ("path", "id"))
+            except (UnicodeDecodeError, ValueError):
+                made = data
+            if made != data:
+                listed = {**listed, path: {**entry, "sha256": hashlib.sha256(made).hexdigest(), "bytes": len(made)}}
+                found.append(File(path, listed[path]["sha256"], len(made), source, made))
+                continue
         found.append(File(path, sha256, size, source))
+    if renamed:
+        raw = json.dumps({**told, "document": {**told["document"], "id": document_of(share)}, "files": listed},
+                         separators=(",", ":")).encode("utf-8")
+        found.append(File(MANIFEST, hashlib.sha256(raw).hexdigest(), len(raw), manifest, raw))
+    else:
+        found.append(File(MANIFEST, hashlib.sha256(raw).hexdigest(), len(raw), manifest))
     return sorted(found, key=reading)
 
 

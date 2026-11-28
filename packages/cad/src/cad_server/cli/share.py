@@ -342,23 +342,21 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
             raise classify(error) from None
         if made is not None and _made(path) != made:
             sources, made = _sources(path, kind)  # built again meanwhile: the files of the model its view shows
-        try:
-            found = sharing.view_files(folder / sharing.VIEW)
-        except (sharing.Unsharable, OSError) as error:
-            raise Failure(f"the view bundle cannot be shared: {error}") from None
+        share = sharing.share_of(earlier) if earlier is not None else sharing.Share.new(service)
+        found = _view(folder, share)
         shown = manifest.get("document") or {}
         document = {"id": ident, "kind": str(shown.get("kind") or kind),
                     "name": str(shown.get("name") or os.path.basename(path)), "path": path}
         # The share's name, which its zip's folder is named for: a model's .xbf's stem (its model's name, as @xbf
         # names the file), else the file's name; the same whether a worker holds the model or its file is read.
         title = sharing.share_name(Path(path).stem if kind == "xbf" else os.path.basename(path))
-        share = sharing.share_of(earlier) if earlier is not None else sharing.Share.new(service)
         try:
             sent = _sent(share, found, sources, title, sharing.stored(folder, share), prog)
         except sharing.Refused as refusal:
             if refusal.status != 403:
                 raise _refused(refusal) from None
             share = sharing.Share.new(service)  # that id is no longer this computer's to write: a new share, whole
+            found = _view(folder, share)
             try:
                 sent = _sent(share, found, sources, title, None, prog)
             except sharing.Refused as again:
@@ -399,6 +397,18 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
         print(f"{prog}: warning: this computer's library could not keep the share ({unkept}): sharing it again "
               "makes a new link, and only its delete link deletes this one", file=sys.stderr, flush=True)
     return 0
+
+
+def _view(folder: Path, share: Any) -> list[Any]:
+    """The view bundle's files in the file's folder of cad's cache, as ``share`` holds them (``sharing.view_files``:
+    its document named by the share, never by this computer's id of it, a digest of its path), or the failure."""
+    from cad_server import sharing
+    from cad_server._internal.cli_errors import Failure
+
+    try:
+        return sharing.view_files(folder / sharing.VIEW, share)
+    except (sharing.Unsharable, OSError) as error:
+        raise Failure(f"the view bundle cannot be shared: {error}") from None
 
 
 # Why a file that made a document was left out of its share, in a line's words.

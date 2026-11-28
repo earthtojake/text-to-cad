@@ -144,6 +144,20 @@ class KiCadShare(unittest.TestCase):
         for path in expected:
             self.assertEqual((folder / path).read_bytes(), (root / path).read_bytes(), path)
 
+    def unplaced(self, found: dict[str, Any]) -> None:
+        """The share's view, as a page reads it, names no place of this computer's: no folder of it, and not the id
+        this computer names the file by (a digest of its path), but the share's own for it (``document_of``)."""
+        from cad.engine.ids import file_id
+        from cad_server import sharing
+
+        view = share_service.view(self.origin, found["id"])
+        local = file_id(found["document"]["path"])
+        for path, data in view.items():
+            self.assertNotIn(str(self.base).encode(), data, path)
+            self.assertNotIn(local.encode(), data, path)
+        named = sharing.document_of(sharing.Share(self.origin, found["id"], "", ""))
+        self.assertEqual(json.loads(view["manifest.json"])["document"]["id"], named)
+
     def test_a_board_shares_its_project_and_its_view_and_imports_back_byte_for_byte(self) -> None:
         found = self.shared("blinky.kicad_pcb", self.board)
         manifest = share_service.manifest(self.origin, found["id"])
@@ -165,6 +179,7 @@ class KiCadShare(unittest.TestCase):
         self.assertEqual(view, {"manifest.json", "plot.json"})
         self.assertIn("its view (its layers, in 2D)", found["sent"]["what"])
         self.assertIsNone(found["sent"]["parts"])
+        self.unplaced(found)
 
         imported, folder = self.imported(found["view"])
         self.assertEqual((imported["file"], imported["entry"], imported["files"]["count"]), ("blinky.kicad_pcb", None,
@@ -188,6 +203,7 @@ class KiCadShare(unittest.TestCase):
                 self.assertEqual((found["files"]["file"], found["files"]["left_out"]), (shared, []))
                 self.assertEqual(set(manifest["view"]), {"manifest.json", "schematic.json", *pages})
                 self.assertIn("its view (2 sheets)", found["sent"]["what"])
+                self.unplaced(found)
                 # An import finds the root the hierarchy is drawn from, which draws the same pages.
                 imported, folder = self.imported(found["view"])
                 self.assertEqual(imported["file"], "divider.kicad_sch")
