@@ -231,6 +231,7 @@ export default {
 
   "file.copyPath": "複製路徑",
   "file.copyLink": "複製連結",
+  "file.downloadFiles": "下載檔案",
   "file.revealFinder": "在 Finder 中顯示",
   "file.revealExplorer": "在檔案總管中顯示",
   "file.revealFileManager": "在檔案管理員中顯示",

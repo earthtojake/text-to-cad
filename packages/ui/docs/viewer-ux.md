@@ -134,7 +134,9 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **The ⋯ file menu**, from the document itself outwards: Copy path, Copy link; where it opens: Open in new tab (from
   an app's frame, Open in browser, left out where Open in's Browser already is it), Open in ▸ (Browser, the file
   manager, the source's apps, each export's apps, then Default app unless the host says the OS's own handler is not
-  offered for the source: never for a script or a KiCad file); what is made of it: the host's items, Export ▸; last,
+  offered for the source: never for a script or a KiCad file); what is made of it: the host's items, Export ▸, and on
+  a shared file's page (cad.fun) alone Download files, the share's zip of the files that made it, which anyone with the
+  link may download (on a page cad serves the files are the person's own, so it is never there); last,
   after a rule, other documents and its project: Search documents with ⌘K (Ctrl+K) at the right (where the host has a
   library), then Previous in project and Next in project with `[` and `]` at the right (a folder of more than one
   document; each off at its end), or, for a document in no project, Import its folder as a project

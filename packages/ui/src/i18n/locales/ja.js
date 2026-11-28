@@ -230,6 +230,7 @@ export default {
 
   "file.copyPath": "パスをコピー",
   "file.copyLink": "リンクをコピー",
+  "file.downloadFiles": "ファイルをダウンロード",
   "file.revealFinder": "Finder で表示",
   "file.revealExplorer": "エクスプローラーで表示",
   "file.revealFileManager": "ファイルマネージャーで表示",

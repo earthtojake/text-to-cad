@@ -25,9 +25,10 @@ const NOWHERE = () => {};
  * models table (a board is drawn in 2D) and no next version, and the host no file actions, no folders to name files
  * from, no Telemetry and no What's new. A Quick Edit carries its snapshot packet as on any page (the page makes it). A
  * prompt from the page names the document by the share's link, not as the view does (`promptSubject`): the host's.
+ * The document's ⋯ offers the files that made it, the share's zip (`sharedFiles`), where the page is a share's.
  */
-export default function BundleApp({ client, tabStore, language: chosenLanguage = null, promptSubject }: { client: CadViewBundleClient; tabStore: TabStore;
-  language?: string | null; promptSubject: PromptSubject }) {
+export default function BundleApp({ client, tabStore, language: chosenLanguage = null, promptSubject, sharedFiles }: { client: CadViewBundleClient; tabStore: TabStore;
+  language?: string | null; promptSubject: PromptSubject; sharedFiles?: { url: string } }) {
   const files = useMemo(() => createCadFileSource(client, { id: 'view-bundle' }), [client]);
   const sayRef = useRef<(key: string, params?: Record<string, unknown>) => string>(english);
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
@@ -45,9 +46,9 @@ export default function BundleApp({ client, tabStore, language: chosenLanguage =
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   sayRef.current = translator(locale);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files, clipboard: browserClipboard, promptContext, links, promptSubject,
+    files, clipboard: browserClipboard, promptContext, links, promptSubject, sharedFiles,
     environment: { colorScheme: appearance.colorScheme, locale, platform: keyboardPlatform() },
-  }), [files, promptContext, links, promptSubject, appearance.colorScheme, locale]);
+  }), [files, promptContext, links, promptSubject, sharedFiles, appearance.colorScheme, locale]);
   return <div className="fixed inset-0 flex flex-col overflow-hidden">
     <div className="isolate min-h-0 flex-1">
       <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={client.file} name={name} onShow={NOWHERE}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { ExportControls } from '../export/ExportControls.js';
+import { ExportControls, SharedFilesItem } from '../export/ExportControls.js';
 import type { CadEntryProject, CadProjectFolder, CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
@@ -338,7 +338,8 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // What a person does on the screen is counted for the host (`usage/controls.js`).
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} update={update} alert={hostAlert} fileMenuItems={menu}
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} update={update} alert={hostAlert}
+      fileMenuItems={menu || host.sharedFiles ? <>{menu}{host.sharedFiles ? <SharedFilesItem url={host.sharedFiles.url} /> : null}</> : null}
       overlay={<>{overlay}{library ? <DocumentSearch search={search} library={library} navigation={viewerHost.navigation} current={searchCurrent} onError={onError} /> : null}</>}
       onSearch={library ? search.show : null} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} project={project} onImportFolder={onImportFolder} notice={notice} onError={onError} presentation={presentation} />}</ExportControls>

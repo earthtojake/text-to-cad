@@ -10,7 +10,7 @@ import { browserLanguage } from './host/browserLanguage.js';
 import App from './App';
 import BundleApp from './BundleApp';
 import { ShareDelete, ShareFailed } from './SharePage';
-import { lookEnvironment, sharePromptSubject, shareService } from './host/share.js';
+import { lookEnvironment, shareFilesUrl, sharePromptSubject, shareService } from './host/share.js';
 import { readDocumentId } from './client/workbench/fileParam.js';
 import { StartingView } from './StartingView';
 import { sessionTabRecord } from './persistence/tabRecord';
@@ -87,7 +87,7 @@ function startEngine(element: HTMLElement) {
  * its view's packs from this page's own origin (`shareService`), opens them with the key its id gives
  * (`openShare`, with the look's environment image this build holds: `lookEnvironment`) and shows the bundle
  * (`BundleApp`), its prompts naming the model by the share's link
- * (`sharePromptSubject`); the delete link (`#delete=<secret>`) is
+ * (`sharePromptSubject`), its ⋯ offering the files that made it (`shareFilesUrl`); the delete link (`#delete=<secret>`) is
  * the page that deletes it (`ShareDelete`). The secret is read from the address once, here, and is never written
  * anywhere: not to the address or its history, storage, a log or a request but the DELETE's header. Until the
  * share opens the page is the bar `index.html` drew.
@@ -106,6 +106,7 @@ function startShare(element: HTMLElement, address: NonNullable<ReturnType<typeof
     if ('deleteSecret' in address) { page(<ShareDelete id={address.id} secret={address.deleteSecret} locale={locale} />); return; }
     const { id } = address;
     const subject = sharePromptSubject(id);
+    const sharedFiles = { url: shareFilesUrl(id) };
     const open = async () => {
       page(<div aria-hidden="true" data-boot-navbar="" />);
       try {
@@ -115,7 +116,8 @@ function startShare(element: HTMLElement, address: NonNullable<ReturnType<typeof
         return;
       }
       if (controller.signal.aborted) { client.dispose(); return; }
-      root.render(<StrictMode><BundleApp client={client} tabStore={tabStore} language={language} promptSubject={subject} /></StrictMode>);
+      root.render(<StrictMode><BundleApp client={client} tabStore={tabStore} language={language} promptSubject={subject}
+        sharedFiles={sharedFiles} /></StrictMode>);
     };
     void open();
   });
