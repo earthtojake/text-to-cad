@@ -132,7 +132,7 @@ wheels = [
 
 [[package]]
 name = "cad"
-version = "0.11.18"
+version = "0.11.19"
 source = { editable = "packages/cad" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },

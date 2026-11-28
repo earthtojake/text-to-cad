@@ -28,7 +28,7 @@ and edits through its IPC API. There is no board model or build step; the files 
 
 ## Setup
 
-Written for `cad==0.11.18`. Before first use in a chat, run `cad --version`. If it fails, or `cad` is missing or older
+Written for `cad==0.11.19`. Before first use in a chat, run `cad --version`. If it fails, or `cad` is missing or older
 than 0.11.12, run `uv tool install --force cad`. If it is older than the release this skill was written for, run
 `cad update`.
 
