@@ -130,31 +130,38 @@ named by its place among the job's payloads.
 | `width`, `height` | the picture, in pixels |
 | `samples` | samples a pixel: 1, 2, 4 or 8 (8, what cad asks of OpenGL; a software OpenGL gives 4) |
 | `background` | the flat colour behind the model |
-| `format` | `"rgba"` (width x height x 4 bytes, sRGB, the top row first), or `"png"` |
-| `camera` | `{projection: "orthographic" \| "perspective", eye, target, up, height \| fov}`: `height` the view's, `fov` the vertical field of view in degrees (`Scene.frame`'s record: `scale`, `fov`). Near and far are fitted to what is drawn, as `ZFitAll` fits them |
-| `light` | `{lights: [{direction, intensity}...], environment: {payload, width, height, intensity}}`: the PBR rig. `direction` is the way the light travels; the environment is the equirectangular radiance (`finish.environment()`: float32 RGB rows, +Z at the top) |
+| `format` | `"rgba"` (width x height x 4 bytes, sRGB, the top row first), `"png"`, or `"depth"`: each pixel's depth (its first sample's), float32, 0 at the near plane to 1 at the far and where nothing is, the top row first (what `Scene._depth` reads of OCCT) |
+| `camera` | `{projection: "orthographic" \| "perspective", eye, target, up, height \| fov}`: `height` the view's, `fov` the vertical field of view in degrees (`Scene.frame`'s record: `scale`, `fov`). Near and far are fitted to what is drawn, as `ZFitAll` fits them, unless `near` and `far` (distances along the view from the eye) are given |
+| `light` | `{lights: [{direction, intensity, shadow?}...], environment: {payload, width, height, intensity, specularSize?, specularSamples?}}`: the PBR rig. `direction` is the way the light travels; the environment is the equirectangular radiance (`finish.environment()`: float32 RGB rows, +Z at the top). `shadow: {resolution, bias}` (the first light that has one): it casts a shadow on the faces as OCCT's shadow map does (`OpenGl_ShadowMap`: a square map `resolution` texels a side, orthographic along the light, Y up, 1.1 times the box of what is drawn; read with `LightShadow.glsl`'s sixteen taps and its bias rule). `specularSize` and `specularSamples` are the specular map's side as a power of two and its samples a texel (OCCT's `PbrEnvPow2Size` 9 and `PbrEnvBakingSpecNbSamples` 256 unless given; Preview bakes at 7 and 4096) |
 | `phong` | `{ambient, specular, shininess, lights}`: X-ray's colour-only rig, in place of `light` |
 | `clip` | `[a, b, c, d]`: what is kept is where `a x + b y + c z + d >= 0` |
+| `backdrop` | `{payload, width, height}`: a picture behind everything in place of `background` (RGB bytes, sRGB, the top row first), stretched over the frame and read bilinearly in linear light at each pixel's centre, clamped at its edges |
 | `meshes` | the payloads that are parts' XBM2 buffers; a draw names one by its place here |
 | `matrices` | a payload of placements, sixteen float64 each; a draw's `matrix` is its place here (or sixteen numbers) |
 | `draw` | what is drawn, in OCCT's order |
 
 A draw is one of:
 
-- `{faces: mesh, ranges?, matrix, shading, color, alpha, metallic, roughness, ior, emission, offset, layer}`: a
-  part's triangles, all of them or the index ranges `[[first, count]...]` of a face group. `shading` is `"pbr"`
-  (`finish.finish`'s numbers; `roughness` is three's), `"phong"` (`color` the part's colour, which the program
-  squares) or `"unlit"`. `alpha` under 1 draws it after the opaque, blended, writing no depth. `offset` is the
-  polygon offset `[factor, units]`.
+- `{faces: mesh, ranges?, matrix, shading, color, alpha, metallic, roughness, ior, emission, offset, texels?,
+  texture?, layer}`: a part's triangles, all of them or the index ranges `[[first, count]...]` of a face group.
+  `shading` is `"pbr"` (`finish.finish`'s numbers; `roughness` is three's), `"phong"` (`color` the part's colour,
+  which the program squares) or `"unlit"`. `alpha` under 1 draws it after the opaque, blended, writing no depth.
+  `offset` is the polygon offset `[factor, units]`. `texture: {payload, width, height}` with `texels` (a payload of
+  two float32 a node of the mesh, its texture coordinates) is a base colour texture over `color` and `alpha` (a
+  GLB's, `Scene._faces`' texture set): RGBA bytes, sRGB, rows from the top, v up, read bilinearly and repeated;
+  F0 is worked out from the colour it gives. A texture drawn smaller than its texels (OCCT's mipmaps) is not.
 - `{edges: mesh, classes, matrix, color, width, layer}`: the mesh's polylines of the classes named (the XBM2 edge
   table's codes), `width` pixels wide.
 - `{lines: {positions, counts}, matrix?, color, width, clip, layer}`: polylines of the scene's own (a drawing's
   pens): their points end to end (float32 triples) and each one's count of them (uint32).
 - `{cap: mesh, matrix, color}`: the instance's cut by `clip`, flat and unlit.
-- `{triangles: {positions, texels?, indices}, texture?: {payload, width, height}, color, blend, offset, clip,
-  layer}`: triangles Python computed (the grid's bands, an annotation's ribbons and text), unlit, in `color`
-  (RGBA) times the texture (RGBA bytes, sRGB, rows from the top, read bilinearly), blended where `blend`.
-  `clip: false` leaves them uncut.
+- `{triangles: {positions, texels?, colors?, indices}, texture?: {payload, width, height}, color, blend, offset,
+  clip, infinite?, layer}`: triangles Python computed (the grid's bands, an annotation's ribbons and text, Preview's
+  floor and its shadow), unlit, in `color` (RGBA) times the texture (RGBA bytes, sRGB, rows from the top, read
+  bilinearly) or times the vertices' `colors` (RGBA bytes, each over 255 as OpenGL takes a vertex's colour, no sRGB
+  curve; read across the triangle, and blended), blended where `blend`. `clip: false` leaves them uncut.
+  `infinite: true` is a structure OCCT calls infinite: the planes are fitted to it whole, but the box that fits
+  the perspective's near plane and the shadow map takes only its box's centre.
 
 `layer` is `"default"`, `"top"` (above the model, tested against its depth, writing none: the ink) or `"topmost"`
 (above everything, a depth of its own: X-ray's and Wireframe's edges). `tools/render_parity.py`'s `scene_of` builds
@@ -170,7 +177,15 @@ a line is the rectangle a pixel wide about it; the frame is resolved in linear l
 surface is blended in the order drawn; a cap passes the depth only where it is nearer. Of OCCT's PBR program: a
 face seen from behind is lit by its lights with the normal turned over and by the environment with the normal as it
 is; the view direction is a vertex's, read across the triangle; the environment's cube map is read by the nearest
-texel (cad sets no filter on it); the specular map is kept in bytes, of the cube map's 0 to 1.
+texel (cad sets no filter on it); the specular map is kept in bytes, of the cube map's 0 to 1. A lit face's
+pixels are lit four at a time (128-bit SIMD), each lane the arithmetic of one pixel in the same order, so the bytes
+are the same lit either way.
 
-Not drawn by the core: Preview's studio (its floor, contact shadow and tone mapping, `Scene.preview_look`), the
-path tracer, and a GLB's base colour textures on lit faces.
+Preview (`Scene.preview_look`) is drawn by cad's own Preview code with the core under it: `render_parity.py
+preview` runs `Scene._studio`, `_studio_backdrop` and `painter` with the scene's canvas, `_depth` and `_structure`
+swapped for the core's (a frame is the model as `scene_of` says it, the studio's floor and shadow as `triangles`,
+the backdrop picture; a depth is a `"depth"` frame through the 8-bit picture OCCT dumps a depth into). What OCCT
+does there and the core is told: the background picture shows its last row all the way down; a square depth
+picture is drawn with the view's own aspect.
+
+Not drawn by the core: the path tracer.

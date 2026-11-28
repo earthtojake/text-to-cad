@@ -35,7 +35,7 @@ block), `kernel/bounds.py` and the writers in `export/` are the reference until 
 | `include/viewcore.h` | The C ABI |
 | `src/` | The core |
 | `scripts/occt.sh` | OCCT's static libraries for WebAssembly, the subset the core links |
-| `scripts/core.sh` | The core linked into `dist/viewcore.wasm` |
+| `scripts/core.sh` | The core linked into `dist/viewcore.wasm` (the stills' rasterizer in WebAssembly's 128-bit SIMD, which Node, current browsers and wasmtime run) |
 | `hosts/wasmtime/`, `hosts/web/` | Loading the module in Python (wasmtime) and in a page |
 | `hosts/node/` | Loading it in Node, and a job server that answers the engine's pool jobs (meshing, tables, measures, a pick's facts, reading and exporting an `.xbf`, drawing a still) from it |
 | `tools/` | The core built natively, and the checks that hold it to cad's own code: the pool jobs (`pool_parity.py`), the stills (`render_parity.py`) |

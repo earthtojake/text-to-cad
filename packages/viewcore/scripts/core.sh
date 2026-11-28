@@ -7,7 +7,8 @@
 #   DEFINE...         measurement builds only (src/profile.hpp): -DVC_PROFILE, which also exports vc_profile, and the
 #                     variants' switches (-DVC_SHARED_PART, -DVC_NO_CHECK, ...). None is in the default build.
 # The flags are OCCT's own (occt.sh): wasm exceptions in the legacy encoding, which Emscripten 7's LLVM compiles
-# OCCT with (it crashes asked for exnref), the same defines (no signal conversion), no threads, no SIMD. The linked module is a standalone
+# OCCT with (it crashes asked for exnref), the same defines (no signal conversion), no threads, no SIMD but in the stills'
+# rasterizer (src/render.cpp), which lights four pixels at a time in 128-bit SIMD. The linked module is a standalone
 # reactor, PURE_WASI so that it imports WASI alone (src/wasi_only.cpp answers the few non-WASI calls OCCT's linked
 # code names), exporting every vc_* function and its memory; Binaryen then translates its exceptions to the standard
 # exnref encoding, which wasmtime and current browsers load. Binaryen is given the module's features by name: with
@@ -35,7 +36,9 @@ CXXFLAGS=(-std=c++17 -O2 -ffp-contract=off -fwasm-exceptions -include mutex -DNo
           -I"$OCCT/include/opencascade" -Wall -Wno-deprecated-declarations ${DEFINES[@]+"${DEFINES[@]}"})
 pids=()
 for source in "$HERE"/src/*.cpp; do
-  em++ "${CXXFLAGS[@]}" -c "$source" -o "$OBJ/$(basename "$source" .cpp).o" & pids+=($!)
+  own=()
+  [ "$(basename "$source")" = render.cpp ] && own=(-msimd128)
+  em++ "${CXXFLAGS[@]}" ${own[@]+"${own[@]}"} -c "$source" -o "$OBJ/$(basename "$source" .cpp).o" & pids+=($!)
 done
 for pid in "${pids[@]}"; do wait "$pid"; done
 
@@ -50,7 +53,7 @@ em++ -O2 -fwasm-exceptions "${LINK_ZLIB[@]}" -sSTANDALONE_WASM -sPURE_WASI --no-
   "$OBJ"/*.o -L"$OCCT/lib" "${LIBS[@]/#/-l}" -o "$OUT/${NAME%.wasm}.legacy.wasm"
 FEATURES=(--enable-exception-handling --enable-reference-types --enable-bulk-memory --enable-bulk-memory-opt
           --enable-sign-ext --enable-nontrapping-float-to-int --enable-mutable-globals --enable-multivalue
-          --enable-call-indirect-overlong)
+          --enable-call-indirect-overlong --enable-simd)
 "$EMSDK_DIR/upstream/bin/wasm-opt" "${FEATURES[@]}" --translate-to-exnref -O2 "$OUT/${NAME%.wasm}.legacy.wasm" \
   -o "$OUT/$NAME"
 rm -f "$OUT/${NAME%.wasm}.legacy.wasm"

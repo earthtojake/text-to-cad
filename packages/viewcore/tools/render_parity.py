@@ -115,8 +115,10 @@ def _groups(prototype) -> dict[int, object]:
     return groups
 
 
-def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> tuple[dict, Payloads]:
-    """What ``scene`` (shown and framed) hands OCCT, as the core's scene: plain numbers and buffers."""
+def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None,
+             texels: dict | None = None) -> tuple[dict, Payloads]:
+    """What ``scene`` (shown and framed) hands OCCT, as the core's scene: plain numbers and buffers. ``texels``: a
+    textured part's texture coordinates, a pair a node of its mesh, by its key (a GLB's, ``read_file``)."""
     from cad.engine.render import clip as section
     from cad.engine.render import finish
     from cad.engine.render.look import LOOK
@@ -134,11 +136,10 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
         return placements.index(data)
 
     display, mode, preview = scene.display, scene.mode, scene.preview
-    if preview:
-        raise ValueError("Preview's studio is not the core's to draw")
-    look = "hidden" if mode == "hidden-line" else "xray" if mode == "xray" else "lit"
+    look = "hidden" if mode == "hidden-line" else "xray" if mode == "xray" else "pbr" if preview else "lit"
     faces = mode != "wireframe"
-    edges = mode != "shaded" and not (mode in ("solid", "parts") and scene.structure.get("kind") in ROBOTS)
+    edges = not preview and mode != "shaded" and not (mode in ("solid", "parts")
+                                                      and scene.structure.get("kind") in ROBOTS)
     classes = (display.get("edges") or {}).get("classes") or LINES
     layer = "topmost" if mode in ("xray", "wireframe") else "default"
     backdrop = list(finish.linear(scene.background or BACKGROUND))
@@ -190,6 +191,12 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
                 elif look == "xray":
                     base = finish.linear(color if color is not None else LOOK.fill)
                     item.update(shading="phong", color=list(base), alpha=LOOK.mode("xray").opacity)
+                elif look == "pbr" and own is None:
+                    # Preview's surface without a material (Scene._material): its colour as it is, opaque, OCCT's
+                    # default PBR material at normalized roughness 0.5.
+                    base = finish.linear(color if color is not None else LOOK.fill)
+                    item.update(shading="pbr", color=list(base), alpha=1.0, metallic=0.0, roughness=0.01 + 0.99 * 0.5,
+                                ior=1.5, emission=[0.0, 0.0, 0.0])
                 else:
                     if fill:
                         own_colour = prototype.get("color") or ()
@@ -198,6 +205,13 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
                     item.update(shading="pbr", color=list(found["color"]), alpha=found["alpha"],
                                 metallic=found["metallic"], roughness=found["roughness"], ior=found["ior"],
                                 emission=list(found["emission"]))
+                texture = part.textures.get(group) if look in ("lit", "pbr") and not fill else None
+                if texture is not None and texels and prototype["key"] in texels:
+                    # A GLB's base colour texture over its material's colour (Scene._faces, SetTextureSet).
+                    picture = texture_picture(texture)
+                    item["texels"] = payloads.add(np.ascontiguousarray(texels[prototype["key"]], np.float32).tobytes())
+                    item["texture"] = {"payload": payloads.add(picture.tobytes()), "width": picture.shape[1],
+                                       "height": picture.shape[0]}
                 see_through = look == "xray" or (look != "hidden" and item["alpha"] < 1)
                 item["offset"] = list(SEE_THROUGH_OFFSET if see_through else EDGES_WIN_OFFSET)
                 draw.append(item)
@@ -216,6 +230,8 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
         found["phong"] = {"ambient": LOOK.xray.ambient, "specular": LOOK.xray.specular, "shininess": LOOK.xray.shininess,
                           "lights": [{"direction": list(light.direction), "intensity": light.intensity}
                                      for light in LOOK.xray.lights]}
+    elif preview:
+        found["light"] = preview_light(payloads)
     else:
         radiance = np.ascontiguousarray(finish.environment(), np.float32)
         found["light"] = {
@@ -253,6 +269,68 @@ def scene_of(scene, *, grid: bool = False, payloads: Payloads | None = None) -> 
     found["matrices"] = payloads.add(b"".join(placements))
     found["draw"] = draw
     return found, payloads
+
+
+def preview_light(payloads: Payloads) -> dict:
+    """``Scene.preview_look``'s rig as the core's light: the key (its direction, its strength, the shadow map it casts
+    at 4096 texels with a bias of 0.002) and the environment at full strength, baked as ``STUDIO_BAKE`` asks."""
+    from cad.engine.render import finish
+    from cad.engine.render.occt import KEY_DIRECTION, KEY_ILLUMINANCE, STUDIO_BAKE
+
+    radiance = np.ascontiguousarray(finish.environment(), np.float32)
+    key = -np.asarray(KEY_DIRECTION, float) / np.linalg.norm(KEY_DIRECTION)
+    return {"lights": [{"direction": key.tolist(), "intensity": KEY_ILLUMINANCE,
+                        "shadow": {"resolution": 4096, "bias": 0.002}}],
+            "environment": {"payload": payloads.add(radiance.tobytes()), "width": radiance.shape[1],
+                            "height": radiance.shape[0], "intensity": 1.0,
+                            "specularSize": STUDIO_BAKE["PbrEnvPow2Size"],
+                            "specularSamples": STUDIO_BAKE["PbrEnvBakingSpecNbSamples"]}}
+
+
+def texture_picture(texture) -> np.ndarray:
+    """A texture set's first texture (the base colour's) as RGBA bytes, the top row first: the image OCCT reads."""
+    from OCP.Image import Image_SupportedFormats
+
+    image = texture.First().GetImage(Image_SupportedFormats())
+    height, width = image.SizeY(), image.SizeX()
+    picture = np.zeros((height, width, 4), np.uint8)
+    for y in range(height):
+        for x in range(width):
+            colour = image.PixelColor(x, y, False)
+            rgb = colour.GetRGB()
+            picture[y, x] = [round(rgb.Red() * 255), round(rgb.Green() * 255), round(rgb.Blue() * 255),
+                             round(colour.Alpha() * 255)]
+    return picture
+
+
+def read_file(path: Path) -> tuple[dict, dict, list | None, dict]:
+    """A file as today's renderer is handed it: its structure, its parts' buffers, the shapes made for parts a buffer
+    does not carry whole (None: made from the buffers), and the texture coordinates of the textured parts by key."""
+    from cad.engine.mesh import mesh_shape, shape_bytes
+
+    if path.suffix.lower() == ".xbf":
+        from cad.engine.document import Loaded
+
+        loaded = Loaded(path)
+        buffers = {p.key: mesh_shape(shape_bytes(p.shape, read=True), parallel=False).to_bytes()
+                   for p in loaded.prototypes}
+        return loaded.structure(), buffers, None, {}
+    from cad.engine.formats import read
+    from cad.engine.mesh_format import Mesh
+    from cad.engine.render.shapes import prototype_shapes
+
+    foreign = read(path)
+    prototypes = foreign.structure["prototypes"]
+    parts = [foreign.shapes.get(p["key"]) or prototype_shapes(p, Mesh.from_bytes(foreign.buffers[p["key"]]))
+             for p in prototypes]
+    texels = {}
+    if path.suffix.lower() == ".glb":
+        from cad.engine.formats.glb import read_glb
+
+        for prototype, part in zip(prototypes, read_glb(path)[0]):
+            if part.uvs is not None:
+                texels[prototype["key"]] = part.uvs
+    return foreign.structure, foreign.buffers, parts, texels
 
 
 def camera_of(camera: dict) -> dict:
@@ -303,8 +381,6 @@ def variants(path: Path, structure: dict) -> list[tuple[str, dict]]:
 
 
 def reference(args: argparse.Namespace) -> int:
-    from cad.engine.document import Loaded
-    from cad.engine.mesh import mesh_shape, shape_bytes
     from cad.engine.render.context import encode
     from cad.engine.render.occt import Scene
 
@@ -313,10 +389,7 @@ def reference(args: argparse.Namespace) -> int:
     payloads = Payloads(out / "payloads")
     for file in args.files:
         path = Path(file)
-        loaded = Loaded(path)
-        structure = loaded.structure()
-        buffers = {p.key: mesh_shape(shape_bytes(p.shape, read=True), parallel=False).to_bytes()
-                   for p in loaded.prototypes}
+        structure, buffers, parts, texels = read_file(path)
         for model, shown in variants(path, structure):
             folder = out / model
             folder.mkdir(exist_ok=True)
@@ -327,7 +400,7 @@ def reference(args: argparse.Namespace) -> int:
                     continue
                 scene = scenes.get(size)
                 if scene is None:
-                    scene = scenes[size] = Scene(path, buffers, size=size, structure=shown)
+                    scene = scenes[size] = Scene(path, buffers, size=size, structure=shown, parts=parts)
                 seconds = {}
                 for turn in range(2):  # the second time is the warm one
                     clock = time.perf_counter()
@@ -345,7 +418,7 @@ def reference(args: argparse.Namespace) -> int:
                 png = encode(frame)
                 seconds["png"] = time.perf_counter() - clock
                 (folder / f"{name}.occt.png").write_bytes(png)
-                described, _ = scene_of(scene, grid=grid, payloads=payloads)
+                described, _ = scene_of(scene, grid=grid, payloads=payloads, texels=texels)
                 corners = scene.box_corners()
                 drift = float(np.abs(project(described["camera"], *size, corners) - scene.project(corners)).max())
                 described["payloads"] = [len(payloads.data[n]) if n in payloads.data else (out / "payloads" / n).stat().st_size
@@ -362,6 +435,262 @@ def reference(args: argparse.Namespace) -> int:
             for scene in scenes.values():
                 scene.canvas.close()
     return 0
+
+
+# --- Preview ---------------------------------------------------------------------------------------------------
+
+
+class Staged:
+    """A presentation of Preview's studio (``Scene._structure``) kept for the core: its triangles as the scene's
+    ``triangles`` draw, shown or put away as the scene puts its structures away."""
+
+    def __init__(self, triangles, aspect: dict, priority) -> None:
+        from OCP.collections import Vec4_uint8_t
+        from OCP.Graphic3d import Graphic3d_DisplayPriority
+
+        count = triangles.VertexNumber()
+        corners = [triangles.Vertice(i) for i in range(1, count + 1)]
+        self.positions = np.array([(p.X(), p.Y(), p.Z()) for p in corners], np.float32)
+        self.indices = np.array([triangles.Edge(i) - 1 for i in range(1, triangles.EdgeNumber() + 1)], np.uint32)
+        self.colors = self.texels = None
+        if triangles.HasVertexColors():
+            colours = []
+            for i in range(1, count + 1):
+                colour = Vec4_uint8_t(0, 0, 0, 0)
+                triangles.VertexColor(i, colour)
+                colours.append((colour.x(), colour.y(), colour.z(), colour.w()))
+            self.colors = np.array(colours, np.uint8)
+        if triangles.HasVertexTexels():
+            self.texels = np.array([(t.X(), t.Y()) for t in (triangles.VertexTexel(i) for i in range(1, count + 1))],
+                                   np.float32)
+        self.texture = aspect.get("texture")
+        self.below = priority == Graphic3d_DisplayPriority.Graphic3d_DisplayPriority_Below
+        self.shown = True
+
+    def Erase(self) -> None:
+        self.shown = False
+
+    def Remove(self) -> None:
+        self.shown = False
+
+    def Display(self) -> None:
+        self.shown = True
+
+    def item(self, payloads: Payloads) -> dict:
+        """The core's draw of it: unlit, blended, in the default layer, never cut, kept out of the fit."""
+        found = {"positions": payloads.add(self.positions.tobytes()), "indices": payloads.add(self.indices.tobytes())}
+        item: dict = {"triangles": found, "color": [1.0, 1.0, 1.0, 1.0], "blend": True, "offset": [1.0, 1.0],
+                      "clip": False, "infinite": True, "layer": "default"}
+        if self.colors is not None:
+            found["colors"] = payloads.add(self.colors.tobytes())
+        if self.texels is not None:
+            found["texels"] = payloads.add(self.texels.tobytes())
+        if self.texture is not None:
+            picture = _rgba(self.texture["picture"])
+            item["texture"] = {"payload": payloads.add(picture.tobytes()), "width": picture.shape[1],
+                               "height": picture.shape[0]}
+        return item
+
+
+def _shown(picture: np.ndarray) -> np.ndarray:
+    """The view's background picture as OCCT shows it stretched over the frame (``Aspect_FM_STRETCH``): every row of
+    the frame reads the texture's first row (v = 0), which is the picture's last (``Scene._texture`` sets a pixmap
+    whose rows run up), so it is that row across the frame, the same all the way down."""
+    return np.ascontiguousarray(picture[-1:])
+
+
+def _rgba(picture: np.ndarray) -> np.ndarray:
+    if picture.shape[2] == 4:
+        return np.ascontiguousarray(picture, np.uint8)
+    return np.ascontiguousarray(np.concatenate([picture, np.full(picture.shape[:2] + (1,), 255, np.uint8)], -1))
+
+
+class CoreCanvas:
+    """What cad's Preview code asks of ``Scene.canvas`` (its size, the view's background picture, a frame), the
+    frame drawn by the core from the scene as shown: the model (``scene_of``), the studio's presentations still
+    shown, the picture behind."""
+
+    def __init__(self, scene, core, width: int, height: int) -> None:
+        self.scene, self.core, self.width, self.height = scene, core, width, height
+        self.picture = None  # the view's background image: (picture, smooth), stretched over the frame
+        self.seconds = 0.0  # the core's time, every frame and depth it was asked for
+        self.depths: list[np.ndarray] = []
+        canvas = self
+
+        class Graphic:
+            def SetBackgroundImage(self, texture, _update=False):
+                canvas.picture = texture
+
+            def SetBackgroundImageStyle(self, *_args):
+                pass
+
+        class View:
+            def View(self):
+                return Graphic()
+
+        self.view = View()
+
+    def scene_now(self, payloads: Payloads) -> dict:
+        found, _ = scene_of(self.scene, payloads=payloads)
+        shown = [staged for staged in self.scene.stage if staged.shown]
+        # OCCT draws a layer's structures by display priority: the floor (Below) before the model, the shadow after.
+        found["draw"] = ([s.item(payloads) for s in shown if s.below] + found["draw"]
+                         + [s.item(payloads) for s in shown if not s.below])
+        if self.picture is not None:
+            picture = _shown(np.asarray(self.picture["picture"][..., :3], np.uint8))
+            found["backdrop"] = {"payload": payloads.add(picture.tobytes()), "width": picture.shape[1],
+                                 "height": picture.shape[0]}
+        return found
+
+    def draw(self, found: dict, payloads: Payloads) -> bytes:
+        found["payloads"] = [len(payloads.data[name]) for name in payloads.names]
+        data, seconds = self.core.render(found, b"".join(payloads.data[name] for name in payloads.names))
+        self.seconds += seconds
+        return data
+
+    def frame(self) -> np.ndarray:
+        payloads = Payloads()
+        found = self.scene_now(payloads)
+        found["samples"] = 4
+        data = self.draw(found, payloads)
+        return np.frombuffer(data, np.uint8).reshape(self.height, self.width, 4)[..., :3].copy()
+
+    def depth(self, eye, target, up, scale: float, size: int, z_range=None, keep_above: float | None = None):
+        """``Scene._depth`` by the core: the model's depth from an orthographic camera, one sample a pixel, then
+        through the 8-bit picture OCCT dumps a depth into (stretched over its own range, FreeImage's rounding)
+        and back, as ``_depth`` reads it."""
+        # OCCT draws the square picture with the view's own aspect: the scale spans the picture's height (its width
+        # where the view is taller than wide) and the other side spans the scale times the aspect, squeezed into
+        # the square. The core's pixels are square, so the model is squeezed instead, along that side of the
+        # camera (no depth, and no height above the floor, changes).
+        aspect = self.width / self.height
+        back = np.asarray(eye, float) - np.asarray(target, float)
+        back /= np.linalg.norm(back)
+        right = np.cross(np.asarray(up, float), back)
+        right /= np.linalg.norm(right)
+        axis, squeeze = (right, 1 / aspect) if aspect >= 1 else (np.cross(back, right), aspect)
+        squeezed = np.eye(4)
+        squeezed[:3, :3] += (squeeze - 1) * np.outer(axis, axis)
+        squeezed[:3, 3] = (np.eye(3) - squeezed[:3, :3]) @ np.asarray(target, float)
+        placement = self.scene.placement
+        self.scene.placement = lambda index: squeezed @ placement(index)
+        try:
+            payloads = Payloads()
+            found, _ = scene_of(self.scene, payloads=payloads)
+        finally:
+            del self.scene.placement
+        camera = {"projection": "orthographic", "eye": [float(v) for v in eye], "target": [float(v) for v in target],
+                  "up": [float(v) for v in up], "height": float(scale)}
+        if z_range is not None:
+            camera["near"], camera["far"] = float(z_range[0]), float(z_range[1])
+        found.update(width=size, height=size, samples=1, format="depth", camera=camera)
+        if keep_above is not None:  # z >= keep_above, where the model was squeezed
+            normal = np.linalg.solve(squeezed[:3, :3].T, [0.0, 0.0, 1.0])
+            point = squeezed[:3, :3] @ [0.0, 0.0, float(keep_above)] + squeezed[:3, 3]
+            found["clip"] = [*normal.tolist(), -float(normal @ point)]
+            for item in found["draw"]:
+                item.pop("clip", None)
+        depth = np.frombuffer(self.draw(found, payloads), np.float32).reshape(size, size)
+        self.depths.append(occt_depth_dump(depth))
+        return self.depths[-1]
+
+
+def occt_depth_dump(depth: np.ndarray) -> np.ndarray:
+    """A depth picture as ``Scene._depth`` reads OCCT's back: FreeImage's float-to-byte picture (stretched from its
+    least to its most, ``(BYTE)(scale * (value - least) + 0.5)``), then the two ends read as floats where the
+    bytes are least and most, and the bytes put back between them."""
+    least, most = float(depth.min()), float(depth.max())
+    if most == least:
+        least, most = 0.0, 255.0
+    scale = 255.0 / (most - least)
+    levels = np.floor(scale * (depth - np.float32(least)).astype(np.float64) + 0.5).astype(np.uint8).astype(np.float64)
+    low_at, high_at = np.unravel_index(levels.argmin(), levels.shape), np.unravel_index(levels.argmax(), levels.shape)
+    low, high = float(depth[low_at]), float(depth[high_at])
+    return low + levels / 255.0 * (high - low)
+
+
+def preview_core(scene, core) -> tuple[np.ndarray, dict]:
+    """Preview drawn by the core, by cad's own Preview code (``Scene._studio``, ``_studio_backdrop``, ``painter``)
+    with the scene's OCCT calls swapped for the core's: its canvas, ``_depth`` and ``_structure``. ``scene`` is
+    shown with ``preview=True`` and framed. The picture, and the seconds the core took and all took."""
+    started = time.perf_counter()
+    canvas = CoreCanvas(scene, core, scene.canvas.width, scene.canvas.height)
+    scene.stage = []
+    scene.canvas = canvas
+    scene._depth = canvas.depth
+    scene._structure = lambda triangles, aspect, priority: scene.stage.append(Staged(triangles, aspect, priority))
+    scene._unlit = lambda texture=None: {"texture": texture}
+    scene._texture = lambda picture, smooth=True: {"picture": np.asarray(picture), "smooth": smooth}
+    scene.clear_stage = lambda: scene.stage.clear()
+    scene._studio()
+    scene._studio_backdrop()
+    scene.studio, scene.traced = True, False
+    studio = time.perf_counter() - started
+    frame = canvas.frame()
+    paint = scene.painter()
+    if paint is not None:
+        paint(frame)
+    return frame, {"core": canvas.seconds, "studio": studio, "all": time.perf_counter() - started,
+                   "depths": canvas.depths}
+
+
+def preview(args: argparse.Namespace) -> int:
+    """Today's Preview and the core's of each file, side by side: ``<model>/preview.occt.png``, ``.<core>.png``."""
+    from cad.engine.render.occt import Scene
+    from PIL import Image
+
+    out = Path(args.out)
+    core = Native(args.native) if args.native else Node(args.node, Path(args.wasm))
+    table = []
+    for file in args.files:
+        path = Path(file)
+        structure, buffers, parts, _texels = read_file(path)
+        for model, shown in variants(path, structure):
+            folder = out / model
+            folder.mkdir(parents=True, exist_ok=True)
+            scene = Scene(path, buffers, size=SIZE, structure=shown, parts=parts)
+            scene.show({}, preview=True)
+            scene.frame(args.camera, "perspective")
+            depths: list[np.ndarray] = []  # today's two depth pictures, to hold the core's against
+            occt_depth = scene._depth
+            scene._depth = lambda *a, kept=depths, drawn=occt_depth, **k: kept.append(drawn(*a, **k)) or kept[-1]
+            clock = time.perf_counter()
+            scene.preview_look(0)
+            look = time.perf_counter() - clock
+            scene._depth = occt_depth
+            today = {}
+            for turn in range(2):  # the second time is the warm one
+                clock = time.perf_counter()
+                want = scene.canvas.frame()
+                paint = scene.painter()
+                if paint is not None:
+                    paint(want)
+                today["frame"] = time.perf_counter() - clock
+            Image.fromarray(want).save(folder / "preview.occt.png")
+            occt_canvas = scene.canvas
+            for turn in range(args.times):
+                got, seconds = preview_core(scene, core)
+            for name, ours, theirs in zip(("contact", "key"), seconds["depths"], depths):
+                print(f"{model:28} depth {name:8} largest difference {np.abs(ours - theirs).max():.6f}, "
+                      f"over 1/255: {(np.abs(ours - theirs) > 1 / 255).mean() * 100:.3f}%", flush=True)
+            Image.fromarray(got).save(folder / f"preview.{core.name}.png")
+            numbers = measure(want, got)
+            print(f"{model:28} preview  mean {numbers['mean']!s:22} >8 {numbers['over8']:6.2f}%  >32 "
+                  f"{numbers['over32']:6.2f}%  moved>32 {numbers['moved32']:6.2f}%  OpenGL look {look*1000:6.0f} ms "
+                  f"frame {today['frame']*1000:6.1f} ms  {core.name} {seconds['core']*1000:6.1f} ms "
+                  f"(studio {seconds['studio']*1000:5.0f} ms, all {seconds['all']*1000:5.0f} ms)", flush=True)
+            table.append({"model": model, "case": "preview", **numbers, "occt_ms": round(today["frame"] * 1000, 1),
+                          "core_ms": round(seconds["core"] * 1000, 1)})
+            sheet([("preview", want, got, numbers)], out / f"{model}.preview.{core.name}.png")
+            occt_canvas.close()
+    core.close()
+    if args.json:
+        Path(args.json).write_text(json.dumps(table, indent=1))
+    worst_mean = max(max(row["mean"]) for row in table)
+    worst_moved = max(row["moved32"] for row in table)
+    print(f"{len(table)} pictures: the largest mean difference {worst_mean:.3f} levels, the largest share moved over 32 "
+          f"levels {worst_moved:.3f}%")
+    return 0 if worst_mean <= 1.5 and worst_moved <= 0.5 else 1
 
 
 # --- the core's pictures ---------------------------------------------------------------------------------------
@@ -594,8 +923,17 @@ def main(argv: list[str] | None = None) -> int:
     held.add_argument("--samples", type=int, default=4,
                       help="samples a pixel: 4 is what a software OpenGL gave the reference pictures, of the 8 asked")
     held.add_argument("--json")
+    studio = commands.add_parser("preview")
+    studio.add_argument("--out", required=True)
+    studio.add_argument("--native")
+    studio.add_argument("--node", default="node")
+    studio.add_argument("--wasm", default=str(HERE / "dist/viewcore.wasm"))
+    studio.add_argument("--camera", default="iso")
+    studio.add_argument("--times", type=int, default=2)
+    studio.add_argument("--json")
+    studio.add_argument("files", nargs="+")
     args = parser.parse_args(argv)
-    return reference(args) if args.command == "reference" else compare(args)
+    return {"reference": reference, "compare": compare, "preview": preview}[args.command](args)
 
 
 if __name__ == "__main__":

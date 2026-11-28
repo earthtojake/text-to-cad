@@ -113,18 +113,20 @@ uint8_t *vc_glb(int32_t doc, uint32_t *out_len);
 /* A still, drawn in software (src/render.cpp): the picture cad's OpenGL renderer draws from the same inputs. `scene`
  * is JSON (UTF-8, `scene_len` bytes) and `blob` its payloads end to end, their lengths the scene's "payloads"; no
  * document is opened and nothing is meshed. The scene (hosts/node/README.md, "Stills", says each member):
- *   {"width", "height", "samples" (1, 2, 4 or 8; 8), "background": [r, g, b], "format" ("rgba", or "png"),
- *    "camera": {"projection" ("orthographic" | "perspective"), "eye", "target", "up", "height" | "fov"},
- *    "light": {"lights": [{"direction", "intensity"}...], "environment": {"payload", "width", "height", "intensity"}}
+ *   {"width", "height", "samples" (1, 2, 4 or 8; 8), "background": [r, g, b], "format" ("rgba", "png" or "depth"),
+ *    "camera": {"projection" ("orthographic" | "perspective"), "eye", "target", "up", "height" | "fov", "near", "far"},
+ *    "light": {"lights": [{"direction", "intensity", "shadow": {"resolution", "bias"}}...],
+ *              "environment": {"payload", "width", "height", "intensity", "specularSize", "specularSamples"}}
  *      or "phong": {"ambient", "specular", "shininess", "lights"},
- *    "clip": [a, b, c, d], "payloads": [length...], "meshes": [payload...], "matrices": payload,
+ *    "clip": [a, b, c, d], "backdrop": {"payload", "width", "height"}, "payloads": [length...],
+ *    "meshes": [payload...], "matrices": payload,
  *    "draw": [{"faces": mesh, "ranges", "matrix", "shading", "color", "alpha", "metallic", "roughness", "ior",
- *              "emission", "offset", "layer"} | {"edges": mesh, "classes", "matrix", "color", "width", "layer"} |
+ *              "emission", "offset", "texels", "texture", "layer"} | {"edges": mesh, "classes", "matrix", "color", "width", "layer"} |
  *             {"lines": {"positions", "counts"}, "matrix", "color", "width", "clip", "layer"} |
- *             {"cap": mesh, "matrix", "color"} | {"triangles": {"positions", "texels", "indices"}, "texture",
- *              "color", "blend", "offset", "clip", "layer"}...]}
+ *             {"cap": mesh, "matrix", "color"} | {"triangles": {"positions", "texels", "colors", "indices"},
+ *              "texture", "color", "blend", "offset", "clip", "infinite", "layer"}...]}
  * A mesh is a part's XBM2 buffer (vc_mesh); colours are linear. The result is width x height RGBA bytes, sRGB, the
- * top row first, or a PNG of them. The same scene gives the same bytes wherever the module runs. */
+ * top row first, or a PNG of them, or ("depth") a float32 depth a pixel. The same scene gives the same bytes wherever the module runs. */
 uint8_t *vc_render(const char *scene, uint32_t scene_len, const uint8_t *blob, uint32_t blob_len, uint32_t *out_len);
 
 #ifdef __cplusplus
