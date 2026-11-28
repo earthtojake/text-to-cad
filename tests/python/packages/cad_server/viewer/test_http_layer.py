@@ -599,10 +599,18 @@ class StaticDistAndSpa(HttpLayerTestCase):
         self.assertEqual(headers["content-type"], "text/html; charset=utf-8")
         self.assertIn(b"<!doctype html>", body)
 
-    def test_unknown_path_falls_back_to_the_spa(self):
-        status, _, body = self.fixture.request("GET", "/Users/someone/models")
+    def test_unknown_path_falls_back_to_the_spa_at_the_root_only(self):
+        status, _, body = self.fixture.request("GET", "/some-page")
         self.assertEqual(status, 200)
         self.assertIn(b"<!doctype html>", body)
+        # Below the root the page's relative scripts (./assets/) name a folder that is not there: a blank page.
+        # It is a 404 that says so instead.
+        for path in ("/Users/someone/models", "/documents/model/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab",
+                     "/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/extra", "/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/"):
+            with self.subTest(path=path):
+                status, headers, body = self.fixture.request("GET", path)
+                self.assertEqual((status, headers["content-type"]), (404, "text/plain; charset=utf-8"))
+                self.assertEqual(body, b"Not found: the viewer's pages are / and /<document id>")
 
     def test_existing_asset_is_served_with_its_type(self):
         status, headers, body = self.fixture.request("GET", "/assets/app.js")

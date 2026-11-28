@@ -173,7 +173,8 @@ made it in the same packs (a model's `.xbf`, its code and the files its build re
 it draws from, a robot's meshes or a KiCad project's files), which it serves
 as a zip (`/<id>.zip`, what `cad import` downloads), and serves this same built client, its `index.html` at `/<id>`
 and its files beside it (the build's asset URLs are relative, so `./assets/…` resolves to `/assets/…` from
-`/<id>`). `main.tsx` chooses the share mode first, at start-up, from the address alone (`readShareAddress`,
+`/<id>`; for the same reason the engine serves the page at `/` and `/<id>` alone, and an address below the root,
+`/a/b`, is a plain 404, not a page whose scripts are not there). `main.tsx` chooses the share mode first, at start-up, from the address alone (`readShareAddress`,
 `@cad/core/client`): a path that is exactly one share id (22 base64url characters). Any other address is the
 engine's page, as above; the engine's ids never have a share id's form.
 

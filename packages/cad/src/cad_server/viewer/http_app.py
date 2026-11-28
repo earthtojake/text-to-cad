@@ -522,7 +522,11 @@ class CadApp:
         an ordinary static server: serve the file if the bundle has it,
         otherwise fall back to index.html — EXCEPT under ``/assets/``, where a
         miss must be a 404 rather than HTML, or a stale hashed bundle reference
-        turns into an ES-module parse error instead of a readable status.
+        turns into an ES-module parse error instead of a readable status, and
+        at an address below the root (``/a/b``, ``/<id>/``): the page reads its
+        scripts at ``./assets/`` (the build's base is relative, so the share
+        service and the CAD app can serve it from roots of their own), which from
+        there is a folder that does not exist, and the page would be blank.
         """
         if not self.dist_dir:
             # No built client. Answering here rather than joining against an
@@ -548,6 +552,9 @@ class CadApp:
             return
         if request_path.startswith("/assets/"):
             response.send_plain(404, "Not found")
+            return
+        if "/" in pathname[1:]:
+            response.send_plain(404, "Not found: the viewer's pages are / and /<document id>")
             return
         index_html = os.path.join(self.dist_dir, "index.html")
         if not self._serve_file(response, index_html, content_type_for_static_asset(index_html)):
