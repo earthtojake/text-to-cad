@@ -969,8 +969,10 @@ class Screen:
         self.boundaries: dict[int, tuple[np.ndarray, np.ndarray, float] | None] = {}
         #: Per face index, the rays the kernel failed to intersect with it (``Intersector``).
         self.failed: dict[int, int] = {}
-        self.first = np.zeros(count, dtype=np.int64)
-        self.count = np.zeros(count, dtype=np.int64)
+        # numpy's index type: what they count and where they start are repeat's counts and reduceat's places, which
+        # a 32-bit numpy (the WebAssembly kernel's) takes in no 64-bit array.
+        self.first = np.zeros(count, dtype=np.intp)
+        self.count = np.zeros(count, dtype=np.intp)
         self.lo = np.zeros((0, 3))
         self.hi = np.zeros((0, 3))
 

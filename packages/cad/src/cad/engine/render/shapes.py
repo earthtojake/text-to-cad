@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from cad.engine.mesh import BOUNDARY, FEATURE, NONMANIFOLD, SEAM, TANGENT, Mesh
+from cad.engine.mesh_format import BOUNDARY, FEATURE, NONMANIFOLD, SEAM, TANGENT, Mesh
 
 LINES = ("feature", "tangent", "seam")
 _LINE_OF = {FEATURE: "feature", BOUNDARY: "feature", NONMANIFOLD: "feature", TANGENT: "tangent", SEAM: "seam"}
@@ -208,8 +208,9 @@ def part_shapes(mesh: Mesh, group_of: dict[int, Any] | None = None, default: Any
         # would compare element by element against an array of them.
         order = [default, *sorted({*painted.values()} - {default}, key=str)]
         number = {key: at for at, key in enumerate(order)}
+        # Counts as numpy's index type: a 32-bit numpy (the WebAssembly kernel's) takes no 64-bit counts.
         per_triangle = np.repeat(np.array([number[painted.get(int(o), default)] for o in faces[:, 0]], np.int64),
-                                 faces[:, 2] // 3)
+                                 (faces[:, 2] // 3).astype(np.intp))
         for key in order:
             chosen = triangles[per_triangle == number[key]]
             if not len(chosen):
@@ -248,5 +249,5 @@ def part_shapes(mesh: Mesh, group_of: dict[int, Any] | None = None, default: Any
 def _ranges(starts: np.ndarray, counts: np.ndarray) -> np.ndarray:
     """``concatenate(arange(s, s + c))`` for every pair, vectorized."""
     total = int(counts.sum())
-    bases = np.repeat(starts - np.concatenate(([0], np.cumsum(counts)[:-1])), counts)
+    bases = np.repeat(starts - np.concatenate(([0], np.cumsum(counts)[:-1])), np.asarray(counts, np.intp))
     return bases + np.arange(total)

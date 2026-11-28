@@ -315,9 +315,10 @@ class Context:
                 V, F, O = brep.triangles(part.shape, deflection)
                 Vs.append(V)
                 Fs.append(F + offset)
-                Os.append(O + (index << 20))
+                Os.append(np.asarray(O, np.int64) + (index << 20))
                 offset += len(V)
-            self._mesh = (np.vstack(Vs), np.vstack(Fs).astype(int), np.concatenate(Os).astype(int))
+            # Owners 64-bit whatever numpy's own integer is: part << 20 passes 32 bits at the 2048th part.
+            self._mesh = (np.vstack(Vs), np.vstack(Fs).astype(int), np.concatenate(Os).astype(np.int64))
         return self._mesh
 
     def owner_ref(self, owner: int) -> str:

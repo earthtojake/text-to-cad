@@ -347,7 +347,7 @@ class _Projected:
         cells = (np.minimum(fi[rows].astype(int), self.side - 1) * self.side
                  + np.minimum(fj[rows].astype(int), self.side - 1))
         buckets = [self.buckets[int(cell)] for cell in cells]
-        counts = np.array([len(bucket) for bucket in buckets], dtype=np.int64)
+        counts = np.array([len(bucket) for bucket in buckets], dtype=np.intp)  # repeat's counts: numpy's index type
         index = np.concatenate(buckets) if len(buckets) else np.zeros(0, dtype=int)
         ray = np.repeat(rows, counts)
         keep = ((self.u0[index] <= pu[ray]) & (pu[ray] <= self.u1[index]) & (self.v0[index] <= pv[ray])
