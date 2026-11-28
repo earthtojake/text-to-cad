@@ -100,6 +100,22 @@ class KernelPoolTest(unittest.TestCase):
         self.assertIsNone(watched.initializer)
         self.assertIsNone(watched.submit(_warmed).result(60))
 
+    def test_a_process_that_dies_warming_up_fails_the_job_and_is_waited_for(self) -> None:
+        from concurrent.futures.process import BrokenProcessPool
+
+        started: list = []
+        real = kernel_pool.subprocess.Popen
+
+        def popen(*args, **kwargs):
+            started.append(real(*args, **kwargs))
+            return started[-1]
+
+        with mock.patch.object(kernel_pool.subprocess, "Popen", popen):
+            with self.assertRaises(BrokenProcessPool):
+                self.pool(1, initializer=_dies).submit(_echo, 1).result(60)
+        self.assertEqual(len(started), 1)
+        self.assertIsNotNone(started[0].returncode, "ended and waited for: no process is left behind")
+
     def test_shut_down_it_cancels_what_waits_and_its_processes_leave_when_their_input_closes(self) -> None:
         pool = self.pool(1)
         running = pool.submit(_slow, 0.5)

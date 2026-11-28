@@ -135,8 +135,12 @@ class KernelPool:
         child = subprocess.Popen([self.python, "-P", "-m", "cad.engine.kernel_pool"], stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, env=env, **places.windowless())
         if self.initializer is not None:
-            _write(child.stdin, (self.initializer, ()))
-            _read(child.stdout)  # its warm-up's answer, whatever it is: a job that fails says so itself
+            try:
+                _write(child.stdin, (self.initializer, ()))
+                _read(child.stdout)  # its warm-up's answer, whatever it is: a job that fails says so itself
+            except BaseException:
+                self._let_go(child, kill=True)  # one that died warming up is ended and waited for, never left
+                raise
         return child
 
     def _serve(self) -> None:
