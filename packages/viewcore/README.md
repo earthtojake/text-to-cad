@@ -63,7 +63,10 @@ builds every module, the same steps. OCCT is compiled as released but for one fi
 `scripts/patches/occt-plib-max-opt-dim.patch` (its polynomial evaluation stays on the fixed-size path up to dimension
 48; results bit-identical) and is compiled with WebAssembly SIMD; `--plib-stock` leaves both out. The module therefore
 needs an engine with WebAssembly SIMD (Chrome 91, Firefox 89, Safari 16.4, Node 16.4 and later). A cold build takes
-about two hours on 4 cores and needs about 6.5 GB of memory; `ocp.sh --help` has the rest.
+about an hour on 4 cores and needs about 7 GB of memory. The wheel names no directory of the machine that built it
+(each compile maps its directories to fixed names), but two builds are not the same bytes: the compiler nests a few
+exception blocks differently from run to run, in code that does the same. The file to trust is the one whose sha256
+the lock names. `ocp.sh --help` has the rest.
 
 Text: OCCT reads fonts with FreeType, built in. Under Emscripten OCCT finds fonts only in `/usr/share/fonts`,
 `/usr/local/share/fonts` and `/system/fonts` (no fontconfig), plus what build123d registers (its bundled single-line

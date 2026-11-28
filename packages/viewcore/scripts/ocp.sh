@@ -357,7 +357,8 @@ OCCT_BUILD=$WORK/occt-$OCCT_KEY OCCT=$WORK/occt-$OCCT_KEY-install FT=$WORK/freet
 CXX="em++ ${CXXFLAGS[*]} ${FLAGS[*]} -w -I$OCPSRC -I$SRC/pybind11/include -I$SRC/fmt/include -I$SRC/rapidjson/include \
 -I$OCCT/include/opencascade -I$HEADERS -I$PYINC"
 # The binding reads OCCT's headers only: its key is OCCT's tag and toolkits, not OCCT's flags.
-COMPILE_KEY=$(key "$PREP_KEY" "$OCCT_TAG" "$TOOLKITS" "${CXX//$OCCT/OCCT}" "$MAPPED")
+CXXKEY=${CXX//$OCCT/OCCT}; CXXKEY=${CXXKEY//$WORK//work}; CXXKEY=${CXXKEY//$XBUILDENV//xbuildenv}   # the compile line without this machine's paths
+COMPILE_KEY=$(key "$PREP_KEY" "$OCCT_TAG" "$TOOLKITS" "$CXXKEY" "$MAPPED")
 CXX="$CXX ${MAP[*]}"
 OBJ=$WORK/obj-$COMPILE_KEY
 LINK_KEY=$(key "$COMPILE_KEY" "$OCCT_KEY" "${LINKFLAGS[*]}" "$([ $NOOPT = 1 ] && echo noopt || echo "${OPTFLAGS[*]}")" \
