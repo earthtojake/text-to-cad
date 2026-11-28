@@ -3,9 +3,10 @@ no window and outside any Windows app package (``places.outside_package``), from
 the environment it replaces: ``uv tool run --isolated --managed-python --python 3.14 --from "cad==<release>" python -P
 -m cad_server._internal.auto_update_helper <told>`` (``auto_update.from_cache``, ``auto_update.HELPER``), uv having
 built that environment first (``auto_update.build``). So the newest release's code always does the update, and the
-worker holds none of the environment's files. That entry and ``told`` are a contract every later release keeps: an
-older release starts a newer one's worker by them. ``told`` is one JSON argument: ``record`` (the attempt's file),
-``log``, ``from`` (the release that runs), ``at``, ``tries``, ``wanted``, ``asked``, ``start`` (a server wanted at the
+worker holds none of the environment's files. That entry is a contract every later release keeps: an older release
+starts a newer one's worker by it, and hands it ``told``, of which a worker may use any key and must need none an
+installed release does not send (a later release may send fewer). ``told`` is one JSON argument: ``record`` (the
+attempt's file), ``log``, ``from`` (the release that runs), ``at``, ``tries``, ``wanted``, ``asked``, ``start`` (a server wanted at the
 end though none runs), ``target`` (the release the update is for: the one uv built, this worker's own; an environment
 that holds it or a newer one is left as it is), ``prefix`` (the environment updated), ``cad`` (its
 own ``cad`` command), ``uv`` (the person's uv, ``base.find_uv``) and ``spare``

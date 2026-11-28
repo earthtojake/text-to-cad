@@ -208,11 +208,23 @@ the agents running them reach for them, and nothing shipped later can change wha
    ```
 
    So every later release installs and runs on Python 3.14 from PyPI with those uv options, prints
-   `cad X.Y.Z` as the last line of `cad --version`, keeps that module taking the keys `told` carries,
-   and writes the attempt's record with the keys and phases an earlier release's server, button and
-   `cad update` read. A key may be added; none is removed or renamed. And `api.texttocad.dev/v1/notices`
-   keeps answering `{"notices": [...]}`. `tests/python/packages/cad_server/test_update_handshake.py`
-   holds all of it against `update_handshake.json`. This is what lets everything else about the
+   `cad X.Y.Z` as the last line of `cad --version`, keeps a worker at that module that takes one
+   JSON argument, and writes the attempt's record with the keys and phases an earlier release's
+   server, button and `cad update` read. The two sides of it differ:
+
+   - **The record** is written by the newer release and read by the older. A key or a phase may be
+     added; none that an installed release reads is removed or renamed.
+   - **`told`** is written by the older release and read by the newer. A worker may use any key that
+     every release still updating this way sends, and needs none of them: it can find each itself.
+     A later release may stop sending a key where the workers after it do without. The one thing
+     that cannot be done is the reverse, a worker that needs a key some installed release does not
+     send: nothing shipped later adds it there.
+
+   And `api.texttocad.dev/v1/notices` keeps answering `{"notices": [...]}`.
+   `tests/python/packages/cad_server/test_update_handshake.py` holds the lines, what this release
+   sends in `told`, and the record against `update_handshake.json`, so a change to any of them is
+   made on purpose. It lasts as long as the releases that update this way are to update by
+   themselves. This is what lets everything else about the
    update change: the worker is always the newest release's, so a fault in how cad upgrades, goes
    back or repairs is fixed by the next release on every computer, and only a fault in these two
    lines is not. Where one ever is, a notice tells every older cad the one line that does not depend

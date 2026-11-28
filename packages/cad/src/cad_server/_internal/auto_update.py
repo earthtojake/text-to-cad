@@ -137,8 +137,8 @@ UPGRADE_SECONDS = 900.0
 # which also keeps the pipx that 0.11.12 to 0.11.18 updated).
 INSTALLER = "uv"
 # The worker's entry: ``python -P -m <HELPER> <told>``, run by uv from the release it updates to (``from_cache``). A
-# contract every later release keeps, with ``told`` (``helper_command``): an older release starts a newer one's worker
-# by it.
+# contract every later release keeps: an older release starts a newer one's worker by it, and hands it ``told``
+# (``helper_command``), of which a worker may use any key and must need none an installed release does not send.
 HELPER = "cad_server._internal.auto_update_helper"
 # One update begun at a time in a process: the check and the trigger together (``restart``, ``begin``).
 _BEGIN = threading.Lock()

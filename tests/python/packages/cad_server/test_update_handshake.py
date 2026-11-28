@@ -18,10 +18,16 @@ last line, ``cad X.Y.Z``), then run B's worker from there by one line (``entry``
 one JSON argument (``told``); B writes the attempt's record, whose keys A's server, button and ``cad update`` read
 (``record``, as A claims it: B adds its own beside them), and its phases (``phases``), on which A's commands wait or
 leave. So every later release installs and runs on that Python in uv's cache, answers ``cad --version`` so, keeps
-that module taking those keys, and keeps writing those. A key may be added to either; none is removed or renamed.
+that module taking one JSON argument, and keeps writing that record. The two sides of it differ:
 
-So all of it must stay as it is across
-releases, and this test fails when any of it changes: a change here is one made on purpose, for every release still
+- The record is written by the newer release and read by the older. A key or a phase may be added; none that an
+  installed release reads is removed or renamed.
+- ``told`` is written by the older release and read by the newer: here, what this release sends. A worker may use
+  any key that every release still updating this way sends, and needs none of them (it can find each itself). A
+  later release may stop sending a key where the workers after it do without. What can never be done is the
+  reverse: a worker that needs a key some installed release does not send, since nothing shipped later adds it there.
+
+This test fails when any of it changes: a change here is one made on purpose, for every release still
 installed, never one made in passing. Change the golden file with it, and say in the change why releases before it
 still update.
 """
