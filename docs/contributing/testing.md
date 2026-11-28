@@ -261,7 +261,7 @@ its pull request. The tier holds:
   release whose server does not start, and then held back; untouched by a release uv cannot install;
   through a file held open and an upgrade stopped past its `RECORD`, which the worker repairs; with `cad`
   called every 50 ms (on Windows every failure inside the switch, fast, never a cad half replaced), after
-  its worker was stopped midway, and from 0.11.17's own update in place; after an update, the new
+  its worker was stopped midway, and from 0.11.18's own update in place; after an update, the new
   server's one `cad plugin install`, read from cad's record of it; and the install command repairing a
   cad that does not start while a process runs from its environment.
   One more route starts on the real 0.11.13 (`plugin-update`, on shard 1/2 of each system): its own

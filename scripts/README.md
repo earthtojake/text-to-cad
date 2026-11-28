@@ -124,7 +124,7 @@ where those files ship, so these scripts are what produces them.
   busy the server, nor with automatic updates off; back by itself from a release whose server cannot start, then
   held back; untouched by a release uv cannot install; through a source file held open and an upgrade stopped past
   its `RECORD` (the worker's repair); while three callers run `cad` every 50 ms (on Windows every failure inside the
-  switch, fast, never a cad half replaced); never against a person's own pin; to a new major version as to any release; after its worker was stopped midway; from 0.11.17's own update in place; the new cad's server running
+  switch, fast, never a cad half replaced); never against a person's own pin; to a new major version as to any release; after its worker was stopped midway; from 0.11.18's own update in place; the new cad's server running
   `cad plugin install` once where `cad plugin update auto` is on (read from cad's record of it: the install
   command's count stays 0); and the install command repairing a cad that does not start while a process runs from
   its environment (`install-repair`).

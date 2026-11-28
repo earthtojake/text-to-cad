@@ -89,7 +89,8 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
   and the worker both), before it reaches uv's upgrade: the record left underway, cad as it was; twenty minutes
   pass with no beat (its last beat set back) and the attempt is lost; the next start begins nothing (the schedule waits an hour after a try); a typed ``cad update``
   installs the release, the automatic try before kept as lost.
-- ``self-hop``: the shipped ``SHIPPED`` (0.11.17) installed from PyPI as a uv tool, its server running: its own ``cad
+- ``self-hop``: the shipped ``SHIPPED`` (0.11.18, the release most computers update from) installed from PyPI as a
+  uv tool, its server running: its own ``cad
   update`` upgrades uv's tool in place into this tree, and this tree's ``cad update`` takes it on, in place.
 - ``self-forced``: the repair, where no upgrade can bring cad back: uv's receipt one uv cannot read (every ``uv tool
   upgrade`` fails on it) and a cad that does not start; the button: the worker's upgrade fails, and the worker itself,
@@ -204,7 +205,7 @@ OLD = "0.11.11"
 # ``plugin-update`` starts on.
 RUNS_IT = "0.11.13"
 # The newest shipped release whose own update upgrades uv's tool in place: what ``self-hop`` starts on.
-SHIPPED = "0.11.17"
+SHIPPED = "0.11.18"
 _BASE = 9000 + os.getpid() % 800
 # This tree as releases no index holds: the one installed first, the next, one whose server cannot start by the
 # shipped switch (the bridge's ``rollback``), one whose server cannot start by its own command, the one after them,
