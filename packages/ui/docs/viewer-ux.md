@@ -846,7 +846,18 @@ a schematic. On a STEP or .xbf, Measure carries one too.
 - **One tool in hand,** and only it lit (the pressed fill, its glyph in brand blue, no tooltip). Pressing it again
   does nothing. A tool goes down when another is taken up, or with Escape, which goes back to Select.
 - **Select** is every file's default, and every open starts in it: the tool in hand is never kept. A pick in a panel
-  tree takes Select up before it acts. Select has no row under the strip.
+  tree takes Select up before it acts. Select has no row under the strip, but on a phone (a STEP or .xbf), while
+  something is hidden or isolated: an eye crossed out and the count ("2 hidden"), Undo while the last hide can be undone
+  (the parts come back, picked again), and Show all; then Exit isolate (Exit all isolates for several). Why: a phone's
+  panel is a sheet over the model, so a part hidden from the bar over it comes back without opening the sheet; a
+  desktop's panel says what is hidden beside the model.
+- **The bar over a pick.** On a STEP or .xbf assembly, the parts Select has picked get a small bar just above them
+  (below where there is no room above), following them as the camera or an Explode moves them, kept clear of the strip
+  and of Quick Edit, and gone while they are off the view: Isolate (pressed while they are isolated: a press then leaves
+  isolation) and Hide, nothing else: the rest stays in the view's menu. Isolate from the bar keeps the pick, so the bar
+  stays. Why: the two things a person does to a part there and then, at the part, rather than in a menu they must know
+  to long-press for or in a panel that covers the model on a phone (where the panel is a sheet over it). As the bar over picked ink ([Draw](#draw)) is for
+  ink.
 - **Measure** is the ruler.
   - On a STEP or .xbf it takes whole things, as its filter allows: a vertex within 10px of an edge's end, else the
     edge, else the face; with nothing ticked, or Shift held, a free point. A hover lights what a press would take. A
