@@ -10,7 +10,7 @@ metadata:
 
 A model is a Python function that returns a build123d shape. Running its script builds it in
 text-to-cad's server, which holds the result as a document: the page the person has open follows
-every run, and every command (inspect, snapshot, export, check) acts on that document by its id.
+every run, and every command (inspect, snapshot, export, check) acts on that document by its `.xbf`.
 Files are exports, written when asked.
 
 ## Start with the task
