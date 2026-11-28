@@ -227,6 +227,38 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.assertEqual(answer("PATCH", "/api/v1/documents", {"action": "open", "path": ident})[0], 200)
         self.assertEqual(self.cli("inspect", ident).returncode, 0)
 
+    def test_a_live_model_whose_xbf_another_process_rewrote_is_that_file_until_its_script_runs_again(self) -> None:
+        ident = self.write("cube")
+        ran = self.run_script("cube")
+        self.write("wide", width=7.0)
+        self.run_script("wide")
+        generation = self.generation(ran.stdout)
+
+        def inspected(*options: str, source: str = str(self.xbf("cube"))) -> dict:
+            done = self.cli("inspect", source, *options, "--json")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            return json.loads(done.stdout)
+
+        def answered() -> tuple[str, list, list]:
+            """Its state and size by its path, and the size of what an export by its id writes."""
+            summary = inspected()["summary"]
+            done = self.cli("export", ident, "exported.step")
+            self.assertEqual(done.returncode, 0, done.stderr)
+            exported = inspected(source=str(self.project / "exported.step"))["summary"]
+            return summary["state"]["state"], summary["bounds"]["size"], exported["bounds"]["size"]
+
+        self.assertEqual(answered(), ("live", [3.0, 2.0, 1.0], [3.0, 2.0, 1.0]))
+        # Another model's .xbf copied over it in place, as git, a sync folder or cp writes it: the file is the
+        # document at once, for every verb, by its path and by its id, and a page on it follows to the file.
+        shutil.copyfile(self.xbf("wide"), self.xbf("cube"))
+        self.assertNotEqual(self.generation(ran.stdout, after=generation), generation)
+        self.assertEqual(answered(), ("file", [7.0, 2.0, 1.0], [7.0, 2.0, 1.0]))
+        self.assertEqual(self.ask({"op": "state", "id": ident}), {"ok": True, "state": "held"})
+        self.assertEqual(self.page(ident)[1]["prototypes"][0]["key"], inspected("wide/face 1")["key"])
+        # Its script's next run writes the file again, and holds it.
+        self.run_script("cube")
+        self.assertEqual(answered(), ("live", [3.0, 2.0, 1.0], [3.0, 2.0, 1.0]))
+
     def test_two_unchanged_runs_leave_one_generation_and_the_page_idle(self) -> None:
         # A document is what its last run made: nothing ran, nothing changed, so a page has nothing to fetch.
         self.said()

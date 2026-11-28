@@ -143,9 +143,9 @@ option names that is not there (`--urdf robot.urdf: no such file`; `--annotation
 schematic's `--display`; the snapshot refuses one as `snapshot.NoSuchFile`, a `SnapshotRefused`). `cad <verb>
 FILE --help` gives that file's type's options, `cad <verb> --help` every form. An integration's own operations on
 its tool's files are `cad <integration> <operation> <file>` (`cad kicad drc`, `cad kicad erc`, `cad mujoco check`:
-`cad_server.cli.integrations`). A model's document is a type of its own, `xbf`, saved as its `.xbf`: a verb reads
-the file as the file it is, never as the model the engine holds, so its `inspect` says the file's state, lists its
-parameters read-only and names no `made_by`; the engine's verbs and the library's functions tell an id from the
+`cad_server.cli.integrations`). A model's document is a type of its own, `xbf`, saved as its `.xbf`: a verb answers
+from the build the engine holds while the file is the one that build wrote, and from the file otherwise, when its
+`inspect` says the file's state, lists its parameters read-only and names no `made_by`; the engine's verbs and the library's functions tell an id from the
 file themselves (`cad._internal.document_type.is_file`). An argument is that file where its suffix is `.xbf`, in
 any case, which no document id ends in. The commands are the server's (`cad_server.cli.verbs`, over each type's
 runner, `cad_server.cli.document_types`), each verb's its own module (`python -m cad_server.cli.export ...`);

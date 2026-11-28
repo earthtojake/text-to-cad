@@ -51,7 +51,8 @@ def _source_help(document_type: str | None, generic: str) -> str:
 
     entry = DOCUMENT_TYPES[document_type]
     if entry.held:
-        return "the .xbf file a model is saved as, read as the file it is, never as the model the engine holds"
+        return ("the .xbf file a model is saved as: the build the engine holds while the file is the one that build "
+                "wrote, else the file as it is")
     return f"the {' or '.join(entry.extensions)} file"
 
 

@@ -38,8 +38,9 @@ runners here), are the kicad integration's, run the same way: here when this pro
 A source that is not there is refused by name before anything runs (``no such file: part.stl``: ``not_found``), a
 check of the operation's parser (``_typed``), so it is the command line's failure with ``--json`` and without
 (``cad_server._internal.cli_errors``). An ``xbf``'s file is the ``.xbf`` a model is saved as, as it is the
-library's: ``cad inspect arm.xbf`` reads the file as the file it is, never as the model the engine holds, and the
-engine and the library's functions tell an id from the file themselves.
+library's: ``cad inspect arm.xbf`` answers from the build the engine holds while the file is the one that build
+wrote, and from the file otherwise, and the engine and the library's functions tell an id from the file
+themselves.
 
 Dispatch stays lazy: the engine and the checks import when an operation runs, never for ``--help``.
 """

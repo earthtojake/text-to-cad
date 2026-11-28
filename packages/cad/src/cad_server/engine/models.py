@@ -6,7 +6,8 @@ the page live while a worker holds it. Only metadata lives here: a document's st
 the server's (``serve.Server``), asked of the worker that built it (``load``); registration never meshes or
 materializes an unviewed model. A worker retired (``drain``) or gone (``prune``) takes its rows with it, and
 its documents are their files from then on: the server reads each ``.xbf`` as it reads any file (``release``),
-and so does a verb by its id (``locate``). A document whose file is gone names nothing (``not_held``), and
+and so does a verb by its id (``locate``); so is a document whose ``.xbf`` another process wrote since its run
+(``held``). A document whose file is gone names nothing (``not_held``), and
 the engine runs nothing to bring it back. The book is process memory. So are the rows a build's report gives
 of its model's parameters -- where each is spelled in the code -- which the book keeps while the worker that
 recorded them is live (``live``), and never writes or sends on (``parameters``).
@@ -31,6 +32,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+
+from cad_server.engine.state import file_version
 
 # A document's states, as ``cad server status`` lists them (``state``).
 STATES = ("live", "held", "building", "failed")
@@ -117,7 +120,10 @@ class Models:
                     same = (old is not None and old.get("worker") is worker and old.get("revision") == recorded
                             and durable(recorded))
                     version = old["version"] if same else secrets.token_hex(8)
+                    # The version of the .xbf this run left (``state.file_version``): written, or taken whole and kept.
+                    # Another one there later is another process's file, the document from then on (``_holds``).
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
+                                           "written": file_version(source["xbf"]),
                                            "program": program or (old or {}).get("program") or source["script"],
                                            "kind": "xbf",
                                            "builtAt": time.time(), "version": version,
@@ -259,9 +265,10 @@ class Models:
                     and (name is None or row["source"]["name"] == name)]
 
     def held(self, ident: str) -> dict[str, Any] | None:
-        """The row of the model document ``ident`` while a live worker holds it and its ``.xbf`` is at its path,
-        else None: its file is the document then (``locate``), and a row whose file is gone is let go
-        (``release``): the id names nothing, whatever the worker holds."""
+        """The row of the model document ``ident`` while a live worker holds it and its ``.xbf`` is the one its run
+        left (``_holds``), else None: its file is the document then (``locate``), and the row is let go (``release``):
+        a file another process wrote is read as the file it is, and an id whose file is gone names nothing, whatever
+        the worker holds. The server asks it before it serves a model from its worker (``serve.Server.model_held``)."""
         with self.lock:
             record = self.records.get(ident)
         if record is None or self._holds(record):
@@ -289,10 +296,18 @@ class Models:
 
     def _holds(self, row: dict[str, Any]) -> bool:
         """Whether ``row``'s worker holds its document still -- live in the supervisor, or out of it and alive --
-        and its ``.xbf`` is at its path: a document whose file is gone is gone, whoever holds its build."""
+        and its ``.xbf`` is the one its last run left (``written``), or one a build of it is writing now (the
+        server's ``build_of``, until the build's answer gives the row its version): a document whose file is gone
+        is gone, and one whose file another process wrote is that file, whoever holds its build. A rewrite of the
+        same size within one tick of the file's clock keeps its version (``mtime_ns-size``), and is not seen."""
         worker = row["worker"]
-        return (worker is not None and (self.daemon.supervisor.holds(worker) or worker.alive())
-                and os.path.isfile(row["source"]["xbf"]))
+        if worker is None or not (self.daemon.supervisor.holds(worker) or worker.alive()):
+            return False
+        found = file_version(row["source"]["xbf"])
+        if found is None or found == row.get("written"):
+            return found is not None
+        server = self.daemon.server
+        return server is not None and server.build_of(row["id"])["building"] is not None
 
     def locate(self, ident: str) -> Path | None:
         """The file of document ``ident`` where it is now, with no record of it: the ``.xbf`` its row names

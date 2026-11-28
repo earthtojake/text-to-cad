@@ -1073,6 +1073,7 @@ class Daemon:
                 self.server.pressure = self.pressure
                 self.server.pressed = lambda: self.supervisor.shed(True)
                 self.server.forget = self.models.forget
+                self.server.model_held = self.models.held
                 # A model's parameters as its live worker recorded them, and their ``set`` (``parameters``).
                 self.server.parameters = self.models.live
                 self.server.set_parameters = self.setting.set

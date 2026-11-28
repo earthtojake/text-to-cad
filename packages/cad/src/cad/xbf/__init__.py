@@ -12,8 +12,9 @@ its handle or its ``.xbf``: ``cad.export(source, "arm.glb", tolerance=None, angl
 ``"sheet"``, ``"molding"``, ``"printing"``), which checks it for manufacturing on its exact geometry, measured
 by the engine with the build123d integration (``cad._internal.manufacturing``), and ``cad.fea(source,
 study=..., out="results/")``, a stress study of it (``cad._internal.fea.operation``), which reads an ``.xbf``:
-the file given, or one the engine writes of a held model in a temporary folder. A file is read as the file it
-is, never as the model the engine holds: its inspection says the file's state and closure, lists its
+the file given, or one the engine writes of a held model in a temporary folder. A model's ``.xbf`` answers from
+the build the engine holds while the file is the one that build wrote, and from the file otherwise (another
+process wrote it, or no worker holds the build): its inspection then says the file's state and closure, lists its
 parameters read-only and names no ``made_by``. Any other file is refused by name (``arm.step`` is
 ``cad.step``'s). Its script declares its parameters with it at a module's top level, ``WALL =
 xbf.param("wall", 2.0, min=1, max=5)`` (``cad.engine.parameters.param``, the standard library alone); a value
