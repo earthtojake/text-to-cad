@@ -92,9 +92,9 @@ test('an engine document (a STEP\'s renderer) has its Model tab from the first f
   }
 });
 
-// A part picked in an assembly gets a bar just above it (`SelectionActionBar.jsx`): Isolate and Hide. Hide takes it away and says so under the strip, with Undo (which brings it back, picked again) and Show
-// all; Isolate keeps the pick, its button pressed, and the row under the strip offers Exit isolate.
-test('a part picked in an assembly has a bar over it: Hide with Undo and Show all under the strip, Isolate with its exit', async (t) => {
+// A part picked in an assembly gets a bar just above it (`SelectionActionBar.jsx`): Isolate and Hide. Hide takes it
+// away and lets it go; Isolate keeps the pick, its button pressed, and a second press leaves isolation.
+test('a part picked in an assembly has a bar over it: Hide takes it away, Isolate keeps it and toggles', async (t) => {
   const harness = await serveXbfHarness(t);
   const { page, pane, errors } = await harness.open();
   await page.waitForFunction(() => {
@@ -103,9 +103,8 @@ test('a part picked in an assembly has a bar over it: Hide with Undo and Show al
   await pane.locator('[data-navbar-panel="left"]').first().waitFor();
   if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
   const bar = pane.getByRole('toolbar', { name: 'Selection actions', exact: true });
-  const row = pane.locator('[data-visibility-row]');
+  const rows = () => pane.locator('[aria-label="Modeling tree"] button[aria-label]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
   assert.equal(await bar.count(), 0, 'no bar while nothing is picked');
-  assert.equal(await row.count(), 0, 'no row under the strip while nothing is hidden');
   await pane.getByRole('button', { name: 'Select plate', exact: true }).click();
   await bar.waitFor();
   const controls = await bar.locator('button, [role=separator]').evaluateAll(elements => elements
@@ -116,20 +115,13 @@ test('a part picked in an assembly has a bar over it: Hide with Undo and Show al
     pane.locator('[data-cad-toolbar="tools"]').first().boundingBox()]);
   assert.ok(placed.y >= strip.y + strip.height && placed.y + placed.height <= canvas.y + canvas.height, JSON.stringify({ placed, canvas, strip }));
 
+  await bar.getByRole('button', { name: 'Isolate', exact: true }).click();
+  await bar.getByRole('button', { name: 'Exit isolate', exact: true }).click();
+  await bar.getByRole('button', { name: 'Isolate', exact: true }).waitFor();
+  assert.equal(await pane.locator('[data-isolate-exit]').count(), 0, 'out of isolation');
+
   await bar.getByRole('button', { name: 'Hide', exact: true }).click();
   await bar.waitFor({ state: 'detached' });
-  await row.waitFor();
-  assert.match(await row.textContent(), /1 hidden/);
-  assert.ok((await pane.locator('[aria-label="Modeling tree"] button[aria-label]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))))
-    .includes('Reveal plate'), 'the tree says it is hidden');
-  await row.getByRole('button', { name: 'Undo', exact: true }).click();
-  await row.waitFor({ state: 'detached' });
-  await bar.waitFor();
-
-  await bar.getByRole('button', { name: 'Isolate', exact: true }).click();
-  await bar.getByRole('button', { name: 'Exit isolate', exact: true }).waitFor();
-  await row.getByRole('button', { name: 'Exit isolate', exact: true }).click();
-  await row.waitFor({ state: 'detached' });
-  await bar.getByRole('button', { name: 'Isolate', exact: true }).waitFor();
+  assert.ok((await rows()).includes('Reveal plate'), 'the tree says it is hidden');
   assert.deepEqual(errors, []);
 });

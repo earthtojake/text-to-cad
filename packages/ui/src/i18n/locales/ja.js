@@ -828,7 +828,6 @@ export default {
   "tree.modelingTree": "モデリングツリー",
   "tree.modelTreeArea": "モデルツリーの領域",
   "tree.hiddenCount": "{count} 件非表示",
-  "tree.undoHide": "元に戻す",
   "selection.actions": "選択の操作",
   "tree.hiddenParts": "非表示のパーツ",
   "tree.searchResults": "モデルの検索結果",

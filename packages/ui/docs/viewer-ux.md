@@ -522,10 +522,7 @@ a schematic. On a STEP or .xbf, Measure carries one too.
 - **One tool in hand,** and only it lit (the pressed fill, its glyph in brand blue, no tooltip). Pressing it again
   does nothing. A tool goes down when another is taken up, or with Escape, which goes back to Select.
 - **Select** is every file's default, and every open starts in it: the tool in hand is never kept. A pick in a panel
-  tree takes Select up before it acts. Select's row under the strip is there only while something is hidden or
-  isolated (on a STEP or .xbf): an eye crossed out and the count ("2 hidden"), Undo while the last hide can be undone
-  (the parts come back, picked again), and Show all; then Exit isolate (Exit all isolates for several). Why: a part
-  hidden from the bar over it, or from a phone's sheet, comes back without the panel.
+  tree takes Select up before it acts. Select has no row under the strip.
 - **The bar over a pick.** On a STEP or .xbf assembly, the parts Select has picked get a small bar just above them
   (below where there is no room above), following them as the camera or an Explode moves them, kept clear of the strip
   and of Quick Edit, and gone while they are off the view: Isolate (pressed while they are isolated: a press then leaves

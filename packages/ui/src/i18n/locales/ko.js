@@ -828,7 +828,6 @@ export default {
   "tree.modelingTree": "모델링 트리",
   "tree.modelTreeArea": "모델 트리 영역",
   "tree.hiddenCount": "{count}개 숨김",
-  "tree.undoHide": "실행 취소",
   "selection.actions": "선택 항목 작업",
   "tree.hiddenParts": "숨긴 부품",
   "tree.searchResults": "모델 검색 결과",
