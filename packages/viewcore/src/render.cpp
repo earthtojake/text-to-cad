@@ -721,7 +721,7 @@ struct Renderer {
   bool shadow_pass = false;  // this is a light's view of the scene: its opaque faces' depth, for the shadow map
   bool depth_only = false;   // the picture asked for is the depth
   int shadow_light = -1;     // the light that casts a shadow (the first that asks)
-  std::vector<float> shadow_map;  // the depth it sees, a texel a float 0..1, rows from the top
+  const float* shadow_map = nullptr;  // the depth it sees, a texel a float 0..1, rows from the top
   int shadow_size = 0;
   double shadow_axes[3][4];  // a point of the model to the map's texel (x, y) and its depth there
   std::vector<float> lit_at;  // three a point: where the shadow's light sees it
@@ -1985,7 +1985,8 @@ struct Renderer {
 
   // Whether a triangle of `m` may be lit four pixels at a time (shade4): a PBR face under the environment.
   inline bool by_four(const Item& m) const {
-    return (m.shading == PBR && !m.textured && !m.colored && env != nullptr) || (m.shading == UNLIT && m.textured);
+    return (m.shading == PBR && !m.textured && !m.colored && env != nullptr) ||
+           (m.shading == UNLIT && (m.textured || m.colored));
   }
 
   // `shade` of the first `count` (1 to 4) of four pixels of one triangle, each lane the same arithmetic as one
@@ -2011,6 +2012,15 @@ struct Renderer {
     const float* a2 = &attributes[(size_t)t.v[2] * 3];
     f4 n[3];
     for (int c = 0; c < 3; ++c) n[c] = (splat(a0[c]) * l0 + splat(a1[c]) * l1) + splat(a2[c]) * l2;
+    if (m.shading == UNLIT && m.colored) {  // a vertex's colour, and its alpha, read across the triangle
+      const f4 alpha = ((splat(fourth[t.v[0]]) * l0 + splat(fourth[t.v[1]]) * l1) + splat(fourth[t.v[2]]) * l2) *
+                       splat(m.alpha);
+      for (int k = 0; k < count; ++k) {
+        for (int c = 0; c < 3; ++c) out[k][c] = n[c][k] * m.color[c];
+        out[k][3] = alpha[k];
+      }
+      return;
+    }
     if (m.shading == UNLIT) {  // textured (by_four)
       f4 rgba[4];
       texel4(m, n[0], n[1], count, rgba);
@@ -2185,6 +2195,28 @@ struct Renderer {
     double slack = 1e-6 * (std::fabs(least) + std::fabs(most) + (most - least)) + 1e-9;
     near = least - slack, far = most + slack;
   }
+  // What draw_shadow draws from, hashed: each opaque face's corners where the light sees them, its offset and its cut.
+  uint64_t shadow_key() const {
+    uint64_t hash = 1469598103934665603ull;
+    auto mix = [&](const void* data, size_t bytes) {
+      const uint8_t* at = (const uint8_t*)data;
+      for (size_t k = 0; k < bytes; ++k) hash = (hash ^ at[k]) * 1099511628211ull;
+    };
+    mix(&width, sizeof width);
+    for (const Item& item : items) {
+      if (item.kind != FACES || item.blend || item.layer != 0) continue;
+      const bool cut = has_clip && item.cut;
+      mix(&item.offset_factor, sizeof(float)), mix(&item.offset_units, sizeof(float)), mix(&cut, sizeof cut);
+      for (uint32_t at = item.first; at < item.first + item.count; ++at)
+        for (int k = 0; k < 3; ++k) {
+          const uint32_t v = triangles[at].v[k];
+          mix(&points[v], 3 * sizeof(float));
+          if (cut) mix(&cuts[v], sizeof(float));
+        }
+    }
+    return hash;
+  }
+
   // Its view of the model's opaque faces: their depth alone, a texel a sample.
   void draw_shadow() {
     depth.assign((size_t)width * height, DEPTH_FAR);
@@ -2696,8 +2728,19 @@ std::string render(const std::string& scene_text, const uint8_t* blob, size_t si
     seen.light_camera(light);
     seen.shadow_size = 0;  // its own points ask for no shadow
     seen.place_all();
-    seen.draw_shadow();
-    renderer.shadow_map = std::move(seen.own_depth);
+    // The map is kept for the next still that would draw the same one (Preview's three frames of a picture): what
+    // it is drawn from, said in full, is its key.
+    static struct {
+      uint64_t key = 0;
+      int size = 0;
+      std::vector<float> map;
+    } kept;
+    const uint64_t key = seen.shadow_key();
+    if (kept.size != light.shadow_size || kept.key != key) {
+      seen.draw_shadow();
+      kept.map = std::move(seen.own_depth), kept.key = key, kept.size = light.shadow_size;
+    }
+    renderer.shadow_map = kept.map.data();
     renderer.shadow_size = light.shadow_size;
     for (int c = 0; c < 3; ++c) {
       renderer.shadow_axes[0][c] = seen.right[c] / seen.pixel;
