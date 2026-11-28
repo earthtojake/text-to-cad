@@ -273,6 +273,17 @@ class KernelFolderTest(unittest.TestCase):
         checked = subprocess.run(["sh", "-n", str(folder / "bin" / "python")], capture_output=True, text=True)
         self.assertEqual(checked.returncode, 0, checked.stderr)
 
+    def test_the_host_cad_ships_reads_no_variable_of_cad_s_but_the_folder_its_launcher_names(self) -> None:
+        """A variable is for what a process must know before it starts: the host's folder, which its launcher sets.
+        What the host refuses is said for someone with the installed package alone (no tool outside it named)."""
+        import re
+
+        host = (kernel_folder._HOST / "python.mjs").read_text(encoding="utf-8")
+        self.assertEqual(sorted(set(re.findall(r"process\.env\.(CAD_\w+)", host))), ["CAD_KERNEL_HOME"])
+        refusals = re.findall(r"refuse\((.*?)\);", host, re.S)
+        self.assertTrue(refusals)
+        self.assertFalse([said for said in refusals if "make.mjs" in said or "fetch.mjs" in said])
+
     _real_node = staticmethod(kernel_folder.node)
 
     def test_the_lock_cad_ships_names_every_file_by_an_https_url_and_a_sha256(self) -> None:

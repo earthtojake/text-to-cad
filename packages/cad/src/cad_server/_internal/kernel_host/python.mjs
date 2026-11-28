@@ -2,7 +2,7 @@
 // python.mjs: the WebAssembly kernel as a Python the engine can start (prototype). It takes the part of CPython's
 // command line the engine's kernel processes are started with -- `python [-X opt] [-P] [-B] [-u] [-I] -m MODULE
 // [ARGS]`, `-c CODE [ARGS]`, `SCRIPT [ARGS]` -- and runs it in Pyodide (CPython compiled to WebAssembly) with the
-// CAD kernel's binding, on a kernel folder make.mjs made. The program sees the computer as a native Python would:
+// CAD kernel's binding, on a kernel folder (cad's own, or one made by hand). The program sees the computer as a native Python would:
 //
 //   - the real filesystem at its own paths (every top-level folder mounted where it is), so a script, its `.xbf`,
 //     the engine's folders and cad's own source are the files the engine names;
@@ -18,8 +18,7 @@
 // What it cannot be: a Python with threads or child processes. A program that starts one fails there, as on any
 // Pyodide.
 //
-// The kernel folder is named by CAD_KERNEL_HOME, or is the folder two above this file's launcher (make.mjs writes
-// `KERNEL/bin/python`, which sets it).
+// The kernel folder is named by CAD_KERNEL_HOME, which the folder's launcher (`KERNEL/bin/python`) sets.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -36,14 +35,16 @@ function refuse(text, code = 2) {
 }
 
 const major = Number(process.versions.node.split(".")[0]);
-if (major < NODE_FLOOR && process.env.CAD_KERNEL_ANY_NODE !== "1") {
-  refuse(`Node ${process.versions.node} holds over 4 GB for this kernel; run it with Node ${NODE_FLOOR} or later `
-    + "(the kernel folder's bin/python names the Node it runs: make it again with a newer one)");
+if (major < NODE_FLOOR) {
+  refuse(`Node ${process.versions.node} holds over 4 GB for this kernel; it runs under Node ${NODE_FLOOR} or later. `
+    + "The kernel folder's bin/python names the Node it runs: put a newer Node on PATH and remove the folder, "
+    + "which cad makes again with it (or, for a folder the settings name, make that folder again)");
 }
 
 const home = process.env.CAD_KERNEL_HOME;
 if (!home || !fs.existsSync(path.join(home, "kernel.json"))) {
-  refuse("CAD_KERNEL_HOME names no kernel folder (make one: node make.mjs PACKAGES_DIR KERNEL_DIR)");
+  refuse("no kernel folder is named: the kernel runs through its folder's bin/python, which names it (CAD_KERNEL_HOME); "
+    + "run that, or remove the folder and cad makes it again");
 }
 const made = JSON.parse(fs.readFileSync(path.join(home, "kernel.json"), "utf8"));
 
@@ -195,7 +196,7 @@ pyodide.globals.set("_host", pyodide.toPy({
   ppid: process.ppid,
   args: process.argv.slice(2),
   cwd: process.cwd(),
-  executable: process.env.CAD_KERNEL_PYTHON || path.join(home, "bin", "python"),
+  executable: path.join(home, "bin", "python"),
   kind: run.kind,
   target: run.target,
   argv: run.argv,

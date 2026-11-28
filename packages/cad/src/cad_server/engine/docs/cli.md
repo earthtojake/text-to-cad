@@ -314,6 +314,10 @@ processes started with the first page or view, each handed one part's shape as b
 largest first, a large part meshed with the kernel's face parallelism too.
 `inline` meshes one part at a time over the kernel's own threads. Python
 threads add nothing, because the kernel's mesher holds the interpreter's lock.
+Two more are set by cad for a process it starts, never by a person, where the kernel is the WebAssembly one:
+`CAD_ENGINE_RELAY` (`<port> <token>`), set by `cad run` for the program it runs on that kernel's Python, names the
+relay on the loopback the program's client reaches the engine through (`cad.engine.relay`: that Python cannot dial
+the door); `CAD_KERNEL_HOME`, set by a kernel folder's launcher (`bin/python`) for its host, names the folder.
 
 A served document stays in memory. `serve` reads its file once; from then on
 the script's worker sends each build's document to the daemon the moment the
