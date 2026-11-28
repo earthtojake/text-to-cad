@@ -77,10 +77,12 @@ def refusals(still: Any, name: str) -> None:
 
 
 class Held:
-    """One DXF as a renderer holds it: the drawing read, its shapes, a canvas made on first use."""
+    """One DXF as a renderer holds it: the drawing read, its shapes, a canvas made on first use; ``core``: the view
+    core's job server that draws it where the kernel is the WebAssembly one (``Sheet``), else OCCT."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, core: Any = None) -> None:
         self.path = Path(path)
+        self.core = core
         self.kind = "dxf"
         self.drawing: Any = None
         self.canvas: Any = None
@@ -102,6 +104,8 @@ class Held:
         if self.canvas is not None:
             self.canvas.close()
         self.canvas, self.shown = None, []
+        if self.core is not None:
+            self.core.stop()
 
     def _show(self) -> None:
         """Each pen's lines and fills as one presentation: fills under the lines, every one unlit."""
@@ -137,12 +141,7 @@ class Held:
 
     def draw(self, still: Any) -> tuple[bytes, dict[str, Any]]:
         """``still`` (a ``snapshot.Still``) drawn: the PNG's bytes and what was drawn."""
-        from OCP.Graphic3d import Graphic3d_Camera
-        from OCP.gp import gp_Dir, gp_Pnt
-
-        from cad.engine.render.context import Canvas
         from cad.engine.render.look import DRAWING
-        from cad.engine.render.occt import _color, occt_scale
         from cad.engine.render.overlay import REFERENCE_HEIGHT, paint_measurements
         from cad.engine.render.service import finished, picture
 
@@ -152,7 +151,64 @@ class Held:
         started = time.perf_counter()
         timings: dict[str, int] = {}
         width, height = still.drawn  # supersampled (a job's renderScale), brought down after (``picture``)
-        paper, ink = DRAWING.paper, DRAWING.ink
+        ink = DRAWING.ink
+        bounds = self.drawing.bounds or (0.0, 0.0, 1.0, 1.0)
+        span_x, span_y = abs(bounds[2] - bounds[0]), abs(bounds[3] - bounds[1])
+        if still.camera is not None:  # a plan view: the window it names, its half height half the picture's
+            centre_x, centre_y, half = plan_view(still.camera, self.path.name)
+            centre, scale = (centre_x, centre_y), height / (2 * half)
+        else:  # the whole drawing, fitted with the pane's margin
+            margin = DRAWING.margin * still.scale
+            usable_x = max(width - 2 * margin, width * 0.5)
+            usable_y = max(height - 2 * margin, height * 0.5)
+            scale = min(usable_x / span_x if span_x > 0 else np.inf, usable_y / span_y if span_y > 0 else np.inf)
+            scale = scale if np.isfinite(scale) and scale > 0 else 1.0  # pixels a unit, the pane's fit
+            centre = ((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
+        reach = max(span_x, span_y, 1.0)
+        if self.core is not None:
+            sheet = Sheet(self.core, self.drawing, width, height, centre, height / scale, reach)
+            canvas, backdrop = sheet, sheet.backdrop
+        else:
+            canvas, backdrop = self._occt(width, height, centre, scale, reach, timings), self._paper
+        clock = time.perf_counter()
+        texts = self.drawing.texts
+
+        def place(point: Any) -> tuple[float, float]:
+            return ((point[0] - centre[0]) * scale + width / 2, height / 2 - (point[1] - centre[1]) * scale)
+
+        marks = (still.annotation or {}).get("marks") or []
+        dimensions = still.measurements or []
+
+        def paint(frame: np.ndarray) -> None:  # the words, the ink over them, Measure's dimensions over all
+            if texts:
+                paint_words(frame, texts, place, scale, ink)
+            if marks:
+                paint_ink(frame, marks, place, height / REFERENCE_HEIGHT)
+            if dimensions:
+                paint_measurements(frame, dimensions, lambda points: np.array([place(point) for point in points]))
+
+        data = picture(canvas, paint if texts or marks or dimensions else None, still, backdrop)
+        timings["drawMs"] = round((time.perf_counter() - clock) * 1000)
+        timings["renderMs"] = round((time.perf_counter() - started) * 1000)
+        return data, {"width": still.size[0], "height": still.size[1], **finished(still),
+                      "camera": "plan" if still.camera is not None else "top", "projection": "orthographic",
+                      "displayMode": "drawing", "preview": False,
+                      "entities": self.drawing.entities, "layers": self.drawing.layers,
+                      "lines": len(self.drawing.lines), "fills": len(self.drawing.fills),
+                      "texts": len(self.drawing.texts), "pose": None,
+                      "exploded": None, "unmeshed": {}, "renderer": "occt" if self.core is None else "core", "kind": "dxf",
+                      "warnings": self.warnings, "timings": timings}
+
+    def _occt(self, width: int, height: int, centre: tuple[float, float], scale: float, reach: float,
+              timings: dict[str, int]) -> Any:
+        """The canvas OCCT draws the drawing on, made on first use, framed: from above, ``scale`` pixels a unit."""
+        from OCP.Graphic3d import Graphic3d_Camera
+        from OCP.gp import gp_Dir, gp_Pnt
+
+        from cad.engine.render.context import Canvas
+        from cad.engine.render.look import DRAWING
+        from cad.engine.render.occt import _color, occt_scale
+
         if self.canvas is None:
             clock = time.perf_counter()
             self.canvas = Canvas(width, height)
@@ -166,61 +222,79 @@ class Held:
             timings["sceneMs"] = round((time.perf_counter() - clock) * 1000)
         self.canvas.width, self.canvas.height = width, height
         for shown, pen in self.shown:
-            shown.SetColor(_color(pen or ink))
+            shown.SetColor(_color(pen or DRAWING.ink))
             shown.SetWidth(DRAWING.line_width)
-        self.canvas.view.SetBackgroundColor(_color(paper))
-        bounds = self.drawing.bounds or (0.0, 0.0, 1.0, 1.0)
-        span_x, span_y = abs(bounds[2] - bounds[0]), abs(bounds[3] - bounds[1])
-        if still.camera is not None:  # a plan view: the window it names, its half height half the picture's
-            centre_x, centre_y, half = plan_view(still.camera, self.path.name)
-            centre, scale = (centre_x, centre_y), height / (2 * half)
-        else:  # the whole drawing, fitted with the pane's margin
-            margin = DRAWING.margin * still.scale
-            usable_x = max(width - 2 * margin, width * 0.5)
-            usable_y = max(height - 2 * margin, height * 0.5)
-            scale = min(usable_x / span_x if span_x > 0 else np.inf, usable_y / span_y if span_y > 0 else np.inf)
-            scale = scale if np.isfinite(scale) and scale > 0 else 1.0  # pixels a unit, the pane's fit
-            centre = ((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
+        self.canvas.view.SetBackgroundColor(_color(DRAWING.paper))
         camera = self.canvas.view.Camera()
         camera.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Orthographic)
         camera.SetAspect(width / height)
-        reach = max(span_x, span_y, 1.0)
         camera.SetEyeAndCenter(gp_Pnt(centre[0], centre[1], reach), gp_Pnt(centre[0], centre[1], 0.0))
         camera.SetUp(gp_Dir(0, 1, 0))
         camera.SetScale(occt_scale(height / scale, width / height))
         self.canvas.view.ZFitAll(1.0)
-        clock = time.perf_counter()
-        texts = self.drawing.texts
+        return self.canvas
 
-        def place(point: Any) -> tuple[float, float]:
-            return ((point[0] - centre[0]) * scale + width / 2, height / 2 - (point[1] - centre[1]) * scale)
+    def _paper(self, colour: Any) -> None:
+        """The paper behind the drawing, or (a transparent picture's matte) black and white."""
+        from cad.engine.render.look import DRAWING
+        from cad.engine.render.occt import _color
 
-        view = self.canvas.view
-        marks = (still.annotation or {}).get("marks") or []
-        dimensions = still.measurements or []
+        self.canvas.view.SetBackgroundColor(_color(DRAWING.paper if colour is None else tuple(colour)))
 
-        def paint(frame: np.ndarray) -> None:  # the words, the ink over them, Measure's dimensions over all
-            if texts:
-                paint_words(frame, texts, place, scale, ink)
-            if marks:
-                paint_ink(frame, marks, place, height / REFERENCE_HEIGHT)
-            if dimensions:
-                paint_measurements(frame, dimensions, lambda points: np.array([place(point) for point in points]))
 
-        def backdrop(colour: Any) -> None:  # the paper, or (a transparent picture's matte) black and white
-            view.SetBackgroundColor(_color(paper if colour is None else tuple(colour)))
+class Sheet:
+    """A drawing drawn by the view core (``render.core.Core``) as OCCT draws it (``Held._show``): each pen's fills
+    (unlit triangles a hair under the sheet) under its lines (polylines a pixel wide), on the paper, a sample a
+    pixel, seen from above with ``height`` units of the drawing up the picture."""
 
-        data = picture(self.canvas, paint if texts or marks or dimensions else None, still, backdrop)
-        timings["drawMs"] = round((time.perf_counter() - clock) * 1000)
-        timings["renderMs"] = round((time.perf_counter() - started) * 1000)
-        return data, {"width": still.size[0], "height": still.size[1], **finished(still),
-                      "camera": "plan" if still.camera is not None else "top", "projection": "orthographic",
-                      "displayMode": "drawing", "preview": False,
-                      "entities": self.drawing.entities, "layers": self.drawing.layers,
-                      "lines": len(self.drawing.lines), "fills": len(self.drawing.fills),
-                      "texts": len(self.drawing.texts), "pose": None,
-                      "exploded": None, "unmeshed": {}, "renderer": "occt", "kind": "dxf",
-                      "warnings": self.warnings, "timings": timings}
+    def __init__(self, core: Any, drawing: Any, width: int, height: int, centre: tuple[float, float], view: float,
+                 reach: float) -> None:
+        self.core, self.drawing, self.width, self.height = core, drawing, width, height
+        self.centre, self.view, self.reach = centre, view, reach
+        self.paper: Any = None  # the colour behind (linear RGB); None: the look's paper
+
+    def backdrop(self, colour: Any) -> None:
+        self.paper = None if colour is None else [float(c) for c in colour]
+
+    def frame(self) -> np.ndarray:
+        from cad.engine.render import finish
+        from cad.engine.render.look import DRAWING
+
+        drawing, payloads = self.drawing, []
+
+        def add(values: Any, dtype: str) -> int:
+            payloads.append(np.ascontiguousarray(values, dtype).tobytes())
+            return len(payloads) - 1
+
+        bounds = drawing.bounds
+        depth = max(bounds[2] - bounds[0], bounds[3] - bounds[1], 1e-9) * 1e-4 if bounds else 1.0
+        draw: list[dict[str, Any]] = []
+        fills: dict[Any, list[np.ndarray]] = {}
+        for triangles, pen in drawing.fills:
+            fills.setdefault(pen, []).append(triangles)
+        for pen, chunks in fills.items():
+            corners = np.concatenate(chunks).reshape(-1, 2)
+            nodes = np.column_stack([corners, np.full(len(corners), -depth)])
+            draw.append({"triangles": {"positions": add(nodes, "<f4"), "indices": add(np.arange(len(nodes)), "<u4")},
+                         "color": [*finish.linear(pen or DRAWING.ink), 1.0], "blend": False, "offset": [1.0, 1.0]})
+        pens: dict[Any, list[np.ndarray]] = {}
+        for points, pen in drawing.lines:
+            pens.setdefault(pen, []).append(points)
+        for pen, chunks in pens.items():
+            counts = np.array([len(chunk) for chunk in chunks])
+            points = np.column_stack([np.concatenate(chunks), np.zeros(int(counts.sum()))])
+            draw.append({"lines": {"positions": add(points, "<f4"), "counts": add(counts, "<u4")},
+                         "color": list(finish.linear(pen or DRAWING.ink)), "width": DRAWING.line_width})
+        x, y = self.centre
+        scene = {"width": self.width, "height": self.height, "samples": 1, "format": "rgba",
+                 "background": self.paper if self.paper is not None else list(finish.linear(DRAWING.paper)),
+                 "camera": {"projection": "orthographic", "eye": [x, y, self.reach], "target": [x, y, 0.0],
+                            "up": [0.0, 1.0, 0.0], "height": float(self.view)}, "draw": draw}
+        data, _seconds = self.core.render(scene, payloads, [None] * len(payloads))
+        return np.frombuffer(data, np.uint8).reshape(self.height, self.width, 4)[..., :3].copy()
+
+    def close(self) -> None:
+        """Nothing is held for a frame: the job server is its ``Core``'s."""
 
 
 def paint_words(frame: np.ndarray, texts: list[Any], place: Any, scale: float, ink: str) -> None:

@@ -59,6 +59,7 @@ class PartShapes:
     edge_count: int = 0
     textures: dict[Any, Any] = field(default_factory=dict)  # group: its texture set (a GLB's)
     materials: dict[Any, Any] = field(default_factory=dict)  # group: its face material
+    uvs: Any = None  # each node of the part's mesh its texture coordinates, where it has textures
 
 
 def _compound(children: np.ndarray) -> bytes:
@@ -182,6 +183,7 @@ def prototype_shapes(prototype: dict[str, Any], mesh: Mesh, *, uvs: np.ndarray |
     result = part_shapes(mesh, groups, None, uvs=uvs)
     result.materials = group_materials
     result.textures = group_textures
+    result.uvs = uvs
     return result
 
 def part_shapes(mesh: Mesh, group_of: dict[int, Any] | None = None, default: Any = None,

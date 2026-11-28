@@ -1023,7 +1023,9 @@ class PictureTest(FixtureTest):
 
     @classmethod
     def setUpClass(cls) -> None:
-        gl()
+        from tests.python.support.render_stills import draws
+
+        draws()
         super().setUpClass()
         folder = cls.folder
         write_stl(folder / "part.stl", np.concatenate([box_soup((20, 10, 4)), cylinder_soup(3, 12, at=(0, 0, 2))]))
@@ -1042,9 +1044,11 @@ class PictureTest(FixtureTest):
         }
 
     def draw(self, path: Path, **fields) -> tuple[bytes, dict]:
+        """``path`` drawn as the engine draws it where the suite runs (``render_stills.core``)."""
         from cad.engine.render.service import holder
+        from tests.python.support.render_stills import core
 
-        held = holder(path)
+        held = holder(path, core())
         try:
             held.open()
             return held.draw(Still(**{"size": SIZE, **fields}))
@@ -1056,7 +1060,9 @@ class PictureTest(FixtureTest):
         for name, (path, fields) in self.rows.items():
             with self.subTest(row=name):
                 data, report = self.draw(path, **fields)
-                self.assertEqual((report["renderer"], report["width"], report["height"]), ("occt", *SIZE))
+                from tests.python.support.render_stills import renderer
+
+                self.assertEqual((report["renderer"], report["width"], report["height"]), (renderer(), *SIZE))
                 own = GOLDEN / PLATFORM / f"{name}.png"
                 golden = own if own.is_file() else GOLDEN / f"{name}.png"
                 if WRITE:
@@ -1204,7 +1210,9 @@ class DaemonFileTest(unittest.TestCase):
     def test_a_file_is_read_by_a_render_process_of_its_own_and_again_when_it_changes(self) -> None:
         write_stl(self.folder / "part.stl", box_soup((20, 10, 4)))
         first = self.snapshot("first.png")
-        self.assertEqual((first["renderer"], first["kind"]), ("occt", "stl"))
+        from tests.python.support.render_stills import renderer
+
+        self.assertEqual((first["renderer"], first["kind"]), (renderer(), "stl"))
         self.assertIn("openMs", first["timings"])
         warm = self.snapshot("warm.png")
         self.assertEqual(warm["process"]["pid"], first["process"]["pid"])

@@ -127,12 +127,6 @@ def scene(path: Path, buffers: dict, **given: Any) -> Any:
     return CoreScene(path, buffers, core=drawer, **given), drawer.stop
 
 
-def on_core(test: Any, what: str) -> None:
-    """Skip ``test``, saying so, where the view core draws: ``what`` is OCCT's alone (its own presentations), or what
-    the core refuses (``core.NOT_YET``), which the test asserts first."""
-    if core() is not None:
-        test.skipTest(f"OCCT's own on the WebAssembly kernel's view core: {what}")
-
 
 def pixels(data: bytes) -> np.ndarray:
     from PIL import Image

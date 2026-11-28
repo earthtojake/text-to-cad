@@ -337,7 +337,7 @@ class Held:
         from cad.engine.render.core import part_meshes
 
         found = part_meshes(prototype, mesh)
-        found.textures = dict(getattr(given, "textures", None) or {})
+        found.textures, found.uvs = dict(getattr(given, "textures", None) or {}), getattr(given, "uvs", None)
         return found
 
     def close(self) -> None:
@@ -378,17 +378,14 @@ class Held:
 
     def _not_drawn_yet(self, still: Any, shown: dict[str, Any]) -> None:
         """What the view core does not draw yet, refused in one line before anything is drawn (``core.NOT_YET``):
-        Preview's studio, and a part's base colour textures where the faces are lit."""
-        from cad.engine.render.core import NOT_YET
-        from cad.engine.snapshot import SnapshotRefused
+        Preview of a part's base colour textures. (Preview seen from under its floor is refused as it is drawn.)"""
+        from cad.engine.render.core import NOT_YET, NotDrawnYet
 
         if still.preview:
-            raise SnapshotRefused(NOT_YET["preview"])  # counted as ``other``: telemetry names no part for Preview
-        if still.display.get("mode", "solid") in ("solid", "shaded"):
             for prototype in shown["prototypes"]:
                 if getattr(self.shapes.get((prototype["key"], _paints(prototype))), "textures", None):
-                    raise SnapshotRefused(NOT_YET["textures"].format(name=prototype.get("name") or self.name),
-                                          part="display.mode")
+                    # Counted as ``other``: telemetry names no part for Preview.
+                    raise NotDrawnYet(NOT_YET["textures"].format(name=prototype.get("name") or self.name))
 
     def draw(self, still: Any) -> tuple[bytes, dict[str, Any]]:
         """``still`` (a ``snapshot.Still``) drawn: the PNG's bytes and what was drawn."""
@@ -494,14 +491,9 @@ def holder(path: Path, core: Any = None) -> Any:
 
         return Schematic(Path(path))
     if Path(path).suffix.lower() == formats.DRAWING:
-        if core is not None:
-            from cad.engine.render.core import NOT_YET
-            from cad.engine.snapshot import SnapshotRefused
-
-            raise SnapshotRefused(NOT_YET["drawing"], part="source")
         from cad.engine.render.drawing import Held as Drawing
 
-        return Drawing(Path(path))
+        return Drawing(Path(path), core=core)
     return Held(Path(path), core=core)
 
 

@@ -215,10 +215,12 @@ at once and the render process draws it, from the engine's meshes as ever, by th
 (`render/core.py`). That render process runs in the installation's own Python (numpy and Pillow, no kernel) beside
 the kernel folder's view core job server (`--core`, `base.drawing`); its scene is `occt.Scene`'s -- the same
 decisions (`Scene.plan`, the camera `Scene.aim` keeps, `clip.cut`, `grid.drawn`, the ink's geometry) -- written as
-the core's `render` job takes it, each part's mesh sent once by its key. Its pictures match OpenGL's to under a level
-on average. What it does not draw yet is refused in one line (`core.NOT_YET`): Preview's studio, the path tracer, a
-GLB's base colour textures on lit faces, a DXF's drawing; a folder with no view core refuses every still
-(`base.NO_DRAWING`).
+the core's `render` job takes it, each part's mesh sent once by its key. Preview is the same Python with the core
+under it (its floor and shadow as triangles, the shadow baked from the core's depth pictures, the backdrop, the key's
+shadow map, the tone mapping painted over), a GLB's base colour texture is drawn on its faces, and a DXF's drawing is
+its pens' fills and lines (`drawing.Sheet`). Its pictures match OpenGL's to under a level on average. What it does
+not draw yet is refused in one line (`core.NOT_YET`): the path tracer, Preview of a textured part, Preview seen from
+under its floor; a folder with no view core refuses every still (`base.NO_DRAWING`).
 
 `SRC` may also be a file the viewer opens that is no document, each read by its reader
 (`formats/`) and drawn by OCCT in the same look, through the daemon by a render process of its own

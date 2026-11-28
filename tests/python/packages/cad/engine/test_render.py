@@ -39,10 +39,9 @@ import numpy as np
 from cad.engine.render import context
 from cad.engine.snapshot import SnapshotRefused, Still, parse_display
 from tests.python.support.render_stills import (BENCH, PLATFORM, SIZE, X_VARIABLES, build, draws, drawn, gl, held,
-                                                mismatch, on_core, pixels, scene, served, shapes)
+                                                mismatch, pixels, scene, served, shapes)
 
 GOLDEN = Path(__file__).resolve().parent / "render_golden"
-NOT_YET_PREVIEW = "Preview's studio is refused there until the core draws it"
 WRITE = os.environ.get("CAD_RENDER_GOLDENS") == "write"
 
 # Ink on the plate (instance 1, in its own frame: its top face is z 2) and a dimension along its front.
@@ -430,21 +429,10 @@ class HeldTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotRefused, "--pose: .*hinge"):
             self.draw(display={}, pose={"hinge": 400})
 
-    def preview_refused_on_core(self) -> None:
-        """Preview's studio is OCCT's alone yet: the view core refuses it in one line (``core.NOT_YET``)."""
-        if self.held.core is not None:
-            from cad.engine.render.core import NOT_YET
-
-            with self.assertRaises(SnapshotRefused) as refused:
-                self.draw(display={}, preview=True)
-            self.assertEqual(str(refused.exception), NOT_YET["preview"])
-        on_core(self, NOT_YET_PREVIEW)
-
     def test_preview_stands_its_floor_at_the_model_s_lowest_point(self) -> None:
         """Preview's floor is under the model wherever it was authored (the viewer's default
         placement, Lowest point): the bench's block reaches 15 below Z=0, and the floor is there,
         not at the document's origin; a pose that moves the lowest point moves the floor with it."""
-        self.preview_refused_on_core()
         from cad.engine.render.explode import placed_box
 
         def lowest(scene) -> float:
@@ -464,7 +452,6 @@ class HeldTest(unittest.TestCase):
         self.assertGreater(len(floors), 1, "a pose that moves the lowest point moves the floor")
 
     def test_preview_keeps_its_studio_and_its_look_between_pictures(self) -> None:
-        self.preview_refused_on_core()
         first = pixels(self.draw(display={}, preview=True)[0])
         scene = self.held.scenes[True]
         stage = list(scene.stage)
@@ -477,7 +464,6 @@ class HeldTest(unittest.TestCase):
         """three's NeutralToneMapping, which OCCT's raster has none of: the sheen a dielectric adds taken
         off a dark colour, a middle one kept, a bright one eased under 1. Laid over the model's pixels
         alone, so the studio's floor and backdrop (drawn in the viewer's finished colours) stay as drawn."""
-        self.preview_refused_on_core()
         from cad.engine.render.occt import neutral
 
         mapped = neutral(np.array([[0.02, 0.02, 0.02], [0.5, 0.5, 0.5], [1.0, 1.0, 1.0], [4.0, 4.0, 4.0]]))
@@ -493,6 +479,13 @@ class HeldTest(unittest.TestCase):
         self.assertLess(found[model].mean(), bare[model].mean() - 2)
         np.testing.assert_array_equal(scene.canvas.frame(), bare, "the studio is put back behind the model")
         self.assertIsNone(scene._through(), "from above, the floor is behind the model")
+        if self.held.core is not None:  # from under the floor the core draws no Preview yet: refused in one line
+            from cad.engine.render.core import NOT_YET
+
+            with self.assertRaises(SnapshotRefused) as refused:
+                self.draw(display={}, preview=True, camera="bottom")
+            self.assertEqual(str(refused.exception), NOT_YET["under"])
+            return
         # From under the floor the model is seen through it (the viewer draws its floor from both sides), and
         # the curve changes the picture by the share of the model's light the floor lets through.
         from cad.engine.render.occt import FLOOR_OPACITY
@@ -510,7 +503,6 @@ class HeldTest(unittest.TestCase):
         """A version replaced: its scenes let go of whole between pictures and made again, and
         Preview's environment lights the new scene as it lit the last (a scene collected while
         another drew took that one's environment map with it)."""
-        self.preview_refused_on_core()
         from cad.engine.render.service import Held
 
         held = Held(self.document)

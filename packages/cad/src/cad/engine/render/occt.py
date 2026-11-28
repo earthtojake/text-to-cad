@@ -934,8 +934,6 @@ class Scene:
         its colour lifted toward white behind the middle of the frame (a little above it), shaded
         toward the corners and, above the horizon, by how far the view looks up. Drawn as a picture
         stretched over the view, in display colour, as the viewer draws it into its canvas."""
-        from OCP.Aspect import Aspect_FillMethod
-
         camera = self.camera
         width, height = 96, 72
         aspect = self.canvas.width / self.canvas.height
@@ -963,7 +961,12 @@ class Scene:
         shade = BACKDROP_SHADE[0] + (BACKDROP_SHADE[1] - BACKDROP_SHADE[0]) * luma
         colour = base + (1 - base) * (BACKDROP_LIFT * glow * glow)[..., None]
         colour = colour * (1 - shade * np.clip(corner + BACKDROP_WALL * wall, 0, 1))[..., None]
-        picture = np.rint(np.clip(colour, 0, 1) * 255).astype(np.uint8)
+        self._behind(np.rint(np.clip(colour, 0, 1) * 255).astype(np.uint8))
+
+    def _behind(self, picture: np.ndarray) -> None:
+        """``picture`` (RGB bytes, rows top first) stretched over the view behind everything: Preview's backdrop."""
+        from OCP.Aspect import Aspect_FillMethod
+
         # Shown behind the model, not lighting it: the image-based light stays the one baked from
         # the environment's cube map (V3d_View.SetBackgroundImage would bake it again from this).
         graphic = self.canvas.view.View()
@@ -998,35 +1001,59 @@ class Scene:
         full out to ``FLOOR_FADE[0]`` of the model's reach and fading (squared, a long tail) to
         nothing at ``FLOOR_FADE[1]`` of it, so it has no edge from any camera: a disc of rings, the
         fade in its vertices' alpha."""
-        from OCP.Graphic3d import Graphic3d_ArrayOfTriangles, Graphic3d_DisplayPriority
-        from OCP.collections import Vec4_uint8_t
-        from OCP.gp import gp_Pnt
-
         rings, segments = 48, 96
         outer = place["reach"] * FLOOR_FADE[1]
         cx, cy = place["centre"]
         rgb = [int(FLOOR_COLOUR[i:i + 2], 16) for i in (1, 3, 5)]
-        triangles = Graphic3d_ArrayOfTriangles(1 + rings * segments, 3 * segments * (2 * rings - 1), False, True, False)
+        nodes: list[tuple] = []
+        colours: list[tuple] = []
         angles = np.linspace(0, 2 * math.pi, segments, endpoint=False)
         for ring in range(rings + 1):
             fraction = ring / rings
             t = np.clip((fraction - FLOOR_FADE[0] / FLOOR_FADE[1]) / (1 - FLOOR_FADE[0] / FLOOR_FADE[1]), 0, 1)
             fade = (1 - t * t * (3 - 2 * t)) ** 2
-            colour = Vec4_uint8_t(*rgb, int(round(255 * FLOOR_OPACITY * fade)))
+            colour = (*rgb, int(round(255 * FLOOR_OPACITY * fade)))
             if ring == 0:
-                triangles.AddVertex(gp_Pnt(cx, cy, place["z"]), colour)
+                nodes.append((cx, cy, place["z"]))
+                colours.append(colour)
                 continue
             for angle in angles:
                 r = outer * fraction
-                triangles.AddVertex(gp_Pnt(cx + r * math.cos(angle), cy + r * math.sin(angle), place["z"]), colour)
-        for segment in range(segments):  # 1-based: the centre is 1, ring k's s-th point 2 + (k-1)*segments + s
+                nodes.append((cx + r * math.cos(angle), cy + r * math.sin(angle), place["z"]))
+                colours.append(colour)
+        triangles: list[tuple] = []
+        for segment in range(segments):  # the centre is 0, ring k's s-th point 1 + (k-1)*segments + s
             following = (segment + 1) % segments
-            triangles.AddEdges(1, 2 + segment, 2 + following)
+            triangles.append((0, 1 + segment, 1 + following))
             for ring in range(1, rings):
-                inner, outer_ring = 2 + (ring - 1) * segments, 2 + ring * segments
-                triangles.AddEdges(inner + segment, outer_ring + segment, outer_ring + following)
-                triangles.AddEdges(inner + segment, outer_ring + following, inner + following)
-        self._structure(triangles, self._unlit(), Graphic3d_DisplayPriority.Graphic3d_DisplayPriority_Below)
+                inner, outer_ring = 1 + (ring - 1) * segments, 1 + ring * segments
+                triangles.append((inner + segment, outer_ring + segment, outer_ring + following))
+                triangles.append((inner + segment, outer_ring + following, inner + following))
+        self._stage(nodes, triangles, colours=colours, below=True)
+
+    def _stage(self, nodes: list[tuple], triangles: list[tuple], *, colours: list[tuple] | None = None,
+               texels: list[tuple] | None = None, picture: np.ndarray | None = None, below: bool = False) -> None:
+        """Triangles of Preview's studio (its floor, the floor's shadow) shown: ``nodes``, 0-based ``triangles``, each
+        node's RGBA bytes (``colours``) or texture coordinates (``texels``) into ``picture``; unlit, blended, below the
+        model's display priority (``below``) or at its own, never cut (``_structure``)."""
+        from OCP.Graphic3d import Graphic3d_ArrayOfTriangles, Graphic3d_DisplayPriority
+        from OCP.collections import Vec4_uint8_t
+        from OCP.gp import gp_Pnt, gp_Pnt2d
+
+        array = Graphic3d_ArrayOfTriangles(len(nodes), 3 * len(triangles), False, colours is not None,
+                                           texels is not None)
+        for at, node in enumerate(nodes):
+            if colours is not None:
+                array.AddVertex(gp_Pnt(*node), Vec4_uint8_t(*colours[at]))
+            elif texels is not None:
+                array.AddVertex(gp_Pnt(*node), gp_Pnt2d(*texels[at]))
+            else:
+                array.AddVertex(gp_Pnt(*node))
+        for a, b, c in triangles:
+            array.AddEdges(a + 1, b + 1, c + 1)
+        priority = (Graphic3d_DisplayPriority.Graphic3d_DisplayPriority_Below if below
+                    else Graphic3d_DisplayPriority.Graphic3d_DisplayPriority_Normal)
+        self._structure(array, self._unlit(None if picture is None else self._texture(picture)), priority)
 
     def _depth(self, eye: Any, target: Any, up: Any, scale: float, size: int, z_range: Any = None,
                keep_above: float | None = None) -> np.ndarray:
@@ -1088,9 +1115,6 @@ class Scene:
         faded inside the square. Laid on the floor as an unlit black picture of that darkness at
         the floor's opacity, its alpha set so OCCT's blend in linear light leaves what three's blend
         of display colours leaves on the floor."""
-        from OCP.Graphic3d import Graphic3d_ArrayOfTriangles, Graphic3d_DisplayPriority
-        from OCP.gp import gp_Pnt, gp_Pnt2d
-
         size = SHADOW_TEXELS
         cx, cy = place["centre"]
         half, contact, floor = place["shadow_half"], place["range"], place["z"]
@@ -1158,14 +1182,11 @@ class Scene:
         alpha = 1 - linear((1 - alpha) * lum) / linear(lum)
         picture = np.zeros((size, size, 4), np.uint8)
         picture[..., 3] = np.rint(np.clip(alpha, 0, 1) * 255).astype(np.uint8)
-        quad = Graphic3d_ArrayOfTriangles(4, 6, False, False, True)
         lift = floor + place["radius"] * 1e-4
-        for x, y, uvx, uvy in ((cx - half, cy - half, 0, 0), (cx + half, cy - half, 1, 0), (cx + half, cy + half, 1, 1),
-                               (cx - half, cy + half, 0, 1)):
-            quad.AddVertex(gp_Pnt(x, y, lift), gp_Pnt2d(uvx, uvy))
-        quad.AddEdges(1, 2, 3)
-        quad.AddEdges(1, 3, 4)
-        self._structure(quad, self._unlit(self._texture(picture)), Graphic3d_DisplayPriority.Graphic3d_DisplayPriority_Normal)
+        corners = ((cx - half, cy - half, 0, 0), (cx + half, cy - half, 1, 0), (cx + half, cy + half, 1, 1),
+                   (cx - half, cy + half, 0, 1))
+        self._stage([(x, y, lift) for x, y, _u, _v in corners], [(0, 1, 2), (0, 2, 3)],
+                    texels=[(u, v) for _x, _y, u, v in corners], picture=picture)
 
     def _studio(self) -> None:
         """The viewer's Preview studio around the model: its floor and the floor's shadow (its
@@ -1351,6 +1372,17 @@ class Scene:
             self.backdrop(behind)
         return frames[0], frames[1]
 
+    def _under_floor(self) -> bool:
+        """Whether the camera framed looks at the model from under Preview's floor."""
+        camera = self.camera or {}
+        if not self.stage or "eye" not in camera:
+            return False
+        place = self._studio_place()
+        eye, target = camera["eye"], camera["target"]
+        # In perspective what the eye sees starts at the eye; an orthographic view looks along its
+        # direction from as far back as the scene reaches.
+        return bool(eye[2] < place["z"] if camera.get("projection") == "perspective" else eye[2] < target[2])
+
     def _through(self) -> np.ndarray | None:
         """The share of the model's light the studio lets through to the camera, a pixel (height,
         width, 1), for a camera under the floor, which sees the model through it (the viewer's floor
@@ -1361,16 +1393,9 @@ class Scene:
         from OCP.Graphic3d import Graphic3d_ClipPlane
         from OCP.gp import gp_Dir, gp_Pln, gp_Pnt
 
-        camera = self.camera or {}
-        if not self.stage or "eye" not in camera:
+        if not self._under_floor():
             return None
         place = self._studio_place()
-        eye, target = camera["eye"], camera["target"]
-        # In perspective what the eye sees starts at the eye; an orthographic view looks along its
-        # direction from as far back as the scene reaches.
-        under = eye[2] < place["z"] if camera.get("projection") == "perspective" else eye[2] < target[2]
-        if not under:
-            return None
         nothing = Graphic3d_ClipPlane(gp_Pln(gp_Pnt(0, 0, place["z"] - place["radius"]), gp_Dir(0, 0, -1)))
         view = self.canvas.view
         view.AddClipPlane(nothing)

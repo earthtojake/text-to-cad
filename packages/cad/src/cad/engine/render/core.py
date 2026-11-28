@@ -9,9 +9,11 @@ written as the core's scene, plain numbers and buffers, and drawn whole by the j
 (``CoreCanvas.frame``). Nothing here imports the kernel: it runs in a Python that has none (the server's own),
 beside the job server, a child process of its own (``Core``).
 
-What the core does not draw yet is refused in one line (``NOT_YET``) before anything is drawn: Preview's studio,
-the path tracer, a GLB's base colour textures on lit faces, a DXF's drawing. A camera tile (``Canvas.tile``,
-what a text mark's coverage is read from) is the whole frame drawn once without the marks, its rectangles cut out.
+Preview is cad's own Preview code with the core under it (``Scene._studio``: its floor and the floor's shadow as
+``triangles``, the shadow baked from the core's depth pictures, ``_depth``; ``_studio_backdrop``'s picture behind;
+the key light's shadow map; the painter's tone mapping over frames the core draws). A GLB's base colour texture is
+drawn on its faces (``texels``, ``texture``). What the core does not draw yet is refused in one line
+(``NOT_YET``): the path tracer, Preview of a textured part, Preview seen from under its floor.
 """
 
 from __future__ import annotations
@@ -29,30 +31,29 @@ from cad.engine.mesh_format import Mesh
 from cad.engine.render.look import LOOK
 from cad.engine.render.occt import BACKGROUND, EDGE, EDGES_WIN_OFFSET, SEE_THROUGH_OFFSET, Scene
 from cad.engine.render.shapes import _LINE_OF, LINES, FaceGroup
+from cad.engine.snapshot import SnapshotRefused
 
 __all__ = ["NOT_YET", "Core", "CoreCanvas", "CoreScene", "NotDrawnYet", "part_meshes"]
 
 # Samples a pixel: what cad asks of OpenGL (a software OpenGL gives 4).
 SAMPLES = 8
-# OCCT's default polygon offset (``Graphic3d_PolygonOffset``): what the ink's presentations step back by.
-INK_OFFSET = (1.0, 0.0)
+# What the ink's presentations step back by in OCCT's depth test (its shaded aspect's polygon offset).
+INK_OFFSET = (1.0, 1.0)
 _SIZES = struct.Struct(">QI")
 
 #: What the core does not draw yet, each refused in one line (``NotDrawnYet``) on the WebAssembly kernel.
 NOT_YET = {
-    "preview": "Preview's studio (its backdrop, floor, contact shadow and tone mapping) is not drawn on the "
-               "WebAssembly kernel yet: ask for the picture without --preview, or choose the native kernel",
     "path-trace": "the path tracer does not run on the WebAssembly kernel: ask for the picture without it, or "
                   "choose the native kernel",
-    "textures": "{name}'s base colour textures are not drawn on the WebAssembly kernel yet: ask for it in a mode "
-                "that draws no texture (parts, xray, hidden-line, wireframe), or choose the native kernel",
-    "drawing": "a DXF's drawing is not drawn on the WebAssembly kernel yet: see it on its page (cad show), or "
-               "choose the native kernel",
+    "textures": "Preview of {name}'s base colour textures is not drawn on the WebAssembly kernel yet: ask for it "
+                "without --preview, or choose the native kernel",
+    "under": "Preview seen from under its floor is not drawn on the WebAssembly kernel yet: ask for a camera above "
+             "the floor, or choose the native kernel",
 }
 
 
-class NotDrawnYet(RuntimeError):
-    """What the view core's renderer does not draw yet (``NOT_YET``), asked of it."""
+class NotDrawnYet(SnapshotRefused):
+    """What the view core's renderer does not draw yet (``NOT_YET``), asked of it: refused, as a request is."""
 
 
 # --- the job server ------------------------------------------------------------------------------------------
@@ -150,7 +151,8 @@ class PartMesh:
     faces: dict[Any, list[list[int]] | None] = field(default_factory=dict)
     edges: dict[str, bool] = field(default_factory=dict)
     materials: dict[Any, Any] = field(default_factory=dict)
-    textures: dict[Any, Any] = field(default_factory=dict)  # never: a textured part is refused (``NOT_YET``)
+    textures: dict[Any, Any] = field(default_factory=dict)  # group: its texture set (a GLB's, read by the kernel)
+    uvs: Any = None  # each node's texture coordinates, where the part has textures
 
 
 def _ranges(rows: np.ndarray, chosen: np.ndarray) -> list[list[int]]:
@@ -272,6 +274,7 @@ class CoreScene(Scene):
         self.buffers = buffers  # each part's mesh as the core is sent it
         self.ink: list[tuple[Any, ...]] = []  # the annotation's ribbons, lines and text quads, as made
         self.cut: list[float] | None = None  # the clip's plane, [a, b, c, d]: what is kept is where ax+by+cz+d >= 0
+        self.backdrop_picture: np.ndarray | None = None  # Preview's backdrop: the row OCCT shows (``_behind``)
         self.grid_bands: Any = None
         super().__init__(path, buffers, **given)
 
@@ -318,6 +321,8 @@ class CoreScene(Scene):
 
     def aim(self, camera: dict[str, Any]) -> dict[str, Any]:
         self.camera = camera  # the core fits near and far to what it draws
+        if self.studio:
+            self._studio_backdrop()  # the sweep's shading follows the camera
         return camera
 
     def project(self, points: np.ndarray) -> np.ndarray:
@@ -368,27 +373,74 @@ class CoreScene(Scene):
         return [bare[y0:y1, x0:x1] for x0, y0, x1, y1 in boxes]
 
     def preview_look(self, path_trace: int = 0) -> float:
-        raise NotDrawnYet(NOT_YET["path-trace" if path_trace else "preview"])
+        """Preview's look (``Scene.preview_look``): its rig (the key casting its shadow, the studio's environment at
+        full strength, ``describe``), its studio (the floor and its shadow, ``_studio``) and its backdrop."""
+        if path_trace:
+            raise NotDrawnYet(NOT_YET["path-trace"])
+        clock = time.perf_counter()
+        self._studio()
+        self.studio, self.traced = True, False
+        self._studio_backdrop()
+        return time.perf_counter() - clock
 
     def path_trace(self, out: Any, samples: int) -> float:
         raise NotDrawnYet(NOT_YET["path-trace"])
 
-    def restage(self) -> None:
-        raise NotDrawnYet(NOT_YET["preview"])
+    def _stage(self, nodes: list[tuple], triangles: list[tuple], *, colours: list[tuple] | None = None,
+               texels: list[tuple] | None = None, picture: np.ndarray | None = None, below: bool = False) -> None:
+        self.stage.append(_Staged(nodes, triangles, colours, texels, picture, below))
+
+    def _behind(self, picture: np.ndarray) -> None:
+        # OCCT stretches a background picture over the view reading its first texture row (v = 0), the picture's
+        # last, at every pixel: that row, the same all the way down.
+        self.backdrop_picture = np.ascontiguousarray(np.asarray(picture, np.uint8)[-1:, :, :3])
+
+    def _through(self) -> np.ndarray | None:
+        if self._under_floor():
+            raise NotDrawnYet(NOT_YET["under"])
+        return None
+
+    def _depth(self, eye: Any, target: Any, up: Any, scale: float, size: int, z_range: Any = None,
+               keep_above: float | None = None) -> np.ndarray:
+        """``Scene._depth`` by the core: the model's depth from an orthographic camera, a sample a pixel, as OCCT
+        reads it back (``occt_depth``). OCCT draws the square picture at the view's own aspect, the scale spanning
+        its height (its width where the view is taller than wide), so the model is squeezed by that aspect along
+        the camera's other side, as OCCT squeezes it into the square."""
+        aspect = self.canvas.width / self.canvas.height
+        back = np.asarray(eye, float) - np.asarray(target, float)
+        back /= np.linalg.norm(back)
+        right = np.cross(np.asarray(up, float), back)
+        right /= np.linalg.norm(right)
+        axis, squeeze = (right, 1 / aspect) if aspect >= 1 else (np.cross(back, right), aspect)
+        squeezed = np.eye(4)
+        squeezed[:3, :3] += (squeeze - 1) * np.outer(axis, axis)
+        squeezed[:3, 3] = (np.eye(3) - squeezed[:3, :3]) @ np.asarray(target, float)
+        found, payloads, keys = self.describe(placement=lambda index: squeezed @ self.placement(index), model=True)
+        camera = {"projection": "orthographic", "eye": [float(v) for v in eye], "target": [float(v) for v in target],
+                  "up": [float(v) for v in up], "height": float(scale)}
+        if z_range is not None:
+            camera["near"], camera["far"] = float(z_range[0]), float(z_range[1])
+        found.update(width=size, height=size, samples=1, format="depth", camera=camera)
+        if keep_above is not None:  # z >= keep_above, where the model was squeezed
+            normal = np.linalg.solve(squeezed[:3, :3].T, [0.0, 0.0, 1.0])
+            point = squeezed[:3, :3] @ [0.0, 0.0, float(keep_above)] + squeezed[:3, 3]
+            found["clip"] = [*map(float, normal), -float(normal @ point)]
+        data, _seconds = self.core.render(found, payloads, keys)
+        return occt_depth(np.frombuffer(data, np.float32).reshape(size, size))
 
     def save(self, out: Any) -> float:
         return self.canvas.save(str(out), self.painter())
 
     # --- the scene the core draws ---------------------------------------------------------------------------
 
-    def describe(self, *, text: bool = True) -> tuple[dict[str, Any], list[bytes], list[str | None]]:
+    def describe(self, *, text: bool = True, model: bool = False,
+                 placement: Any = None) -> tuple[dict[str, Any], list[bytes], list[str | None]]:
         """The frame as the core's ``render`` job takes it (shown, framed): the scene, its payloads in order and each
         one's key (a part's mesh by its geometry key, the environment by its name; else None). ``text`` off: the
-        text marks left out (``_bare``)."""
+        text marks left out (``_bare``); ``model``: the model alone (no studio, grid or ink: a depth picture's),
+        placed by ``placement`` where given."""
         from cad.engine.render import finish
 
-        if self.preview or self.studio:
-            raise NotDrawnYet(NOT_YET["preview"])
         payloads = _Payloads()
         mesh_at: dict[int, int] = {}
         meshes: list[int] = []
@@ -403,10 +455,12 @@ class CoreScene(Scene):
         placements: list[bytes] = []
         placed_at: dict[int, int] = {}
 
+        placing = placement or self.placement
+
         def placed(index: int) -> int:
             if index not in placed_at:
                 placed_at[index] = len(placements)
-                placements.append(np.ascontiguousarray(self.placement(index).T, "<f8").tobytes())
+                placements.append(np.ascontiguousarray(placing(index).T, "<f8").tobytes())
             return placed_at[index]
 
         look, mode = self.look(), self.mode
@@ -415,25 +469,36 @@ class CoreScene(Scene):
         draw: list[dict[str, Any]] = []
         for kind, index, p, which, color in self.shown:
             if kind == "faces":
-                draw.append(self._faces_draw(p, which, color, look, backdrop, mesh(p), placed(index)))
+                draw.append(self._faces_draw(p, which, color, look, backdrop, mesh(p), placed(index), payloads))
             elif kind == "edges":
                 draw.append({"edges": mesh(p), "classes": sorted(c for c, n in _LINE_OF.items() if n == which),
                              "matrix": placed(index), "color": _linear(EDGE[which]), "width": LOOK.edge_width,
                              "layer": layer})
             else:
                 draw.append({"cap": mesh(p), "matrix": placed(index), "color": [float(c) for c in color]})
-        if self.grid_bands is not None and len(self.grid_bands.triangles):
-            draw.append(self._grid_draw(payloads))
-        for item in self.ink:
-            if item[0] == "text" and not text:
-                continue
-            draw.append(self._ink_draw(item, payloads))
+        if not model:
+            if self.grid_bands is not None and len(self.grid_bands.triangles):
+                draw.append(self._grid_draw(payloads))
+            for item in self.ink:
+                if item[0] == "text" and not text:
+                    continue
+                draw.append(self._ink_draw(item, payloads))
+            # OCCT draws a layer's structures by display priority: the floor (below) before the model, the shadow after.
+            shown = [staged for staged in self.stage if staged.shown]
+            draw = ([staged.item(payloads) for staged in shown if staged.below] + draw
+                    + [staged.item(payloads) for staged in shown if not staged.below])
         found: dict[str, Any] = {
             "width": self.canvas.width, "height": self.canvas.height, "samples": SAMPLES, "format": "rgba",
             "background": [float(c) for c in self.behind] if self.behind is not None else backdrop,
             "camera": self._camera_of(),
         }
-        if look == "xray":
+        if self.studio and self.behind is None and self.backdrop_picture is not None:
+            picture = self.backdrop_picture
+            found["backdrop"] = {"payload": payloads.add(picture.tobytes()), "width": picture.shape[1],
+                                 "height": picture.shape[0]}
+        if self.studio:
+            found["light"] = _preview_light(payloads)
+        elif look == "xray":
             found["phong"] = {"ambient": LOOK.xray.ambient, "specular": LOOK.xray.specular,
                               "shininess": LOOK.xray.shininess,
                               "lights": [{"direction": list(light.direction), "intensity": light.intensity}
@@ -465,7 +530,7 @@ class CoreScene(Scene):
         return found
 
     def _faces_draw(self, p: int, group: Any, color: Any, look: str, backdrop: list[float], mesh: int,
-                    matrix: int) -> dict[str, Any]:
+                    matrix: int, payloads: _Payloads) -> dict[str, Any]:
         """A face group's draw: ``Scene._faces``'s presentation in the core's numbers."""
         from cad.engine.render import finish
 
@@ -479,6 +544,12 @@ class CoreScene(Scene):
         elif look == "xray":
             base = finish.linear(color if color is not None else LOOK.fill)
             item.update(shading="phong", color=[float(c) for c in base], alpha=LOOK.mode("xray").opacity)
+        elif look == "pbr" and (fill or self._material_of(p, group) is None):
+            # Preview's surface without a material (``Scene._material``): its colour as it is, opaque, OCCT's default
+            # PBR material at normalized roughness 0.5.
+            base = finish.linear(color if color is not None else LOOK.fill)
+            item.update(shading="pbr", color=[float(c) for c in base], alpha=1.0, metallic=0.0,
+                        roughness=0.01 + 0.99 * 0.5, ior=1.5, emission=[0.0, 0.0, 0.0])
         else:
             own = None if fill else self._material_of(p, group)
             if fill:  # a fill (Parts) keeps the part's opacity, as the viewer's does
@@ -488,6 +559,14 @@ class CoreScene(Scene):
             item.update(shading="pbr", color=[float(c) for c in made["color"]], alpha=float(made["alpha"]),
                         metallic=float(made["metallic"]), roughness=float(made["roughness"]), ior=float(made["ior"]),
                         emission=[float(c) for c in made["emission"]])
+        part = self.parts[p]
+        texture = part.textures.get(group) if look in ("lit", "pbr") and not fill else None
+        if texture is not None and part.uvs is not None:  # a GLB's base colour texture over its colour
+            key = self.prototypes[p]["key"]
+            picture = _texture_picture(texture)
+            item["texels"] = payloads.add(np.ascontiguousarray(part.uvs, "<f4").tobytes(), f"texels:{key}")
+            item["texture"] = {"payload": payloads.add(picture.tobytes(), f"texture:{key}:{group}"),
+                               "width": picture.shape[1], "height": picture.shape[0]}
         see_through = look == "xray" or (look != "hidden" and item["alpha"] < 1)
         item["offset"] = list(SEE_THROUGH_OFFSET if see_through else EDGES_WIN_OFFSET)
         return item
@@ -528,7 +607,97 @@ class CoreScene(Scene):
                 "color": [1.0, 1.0, 1.0, 1.0], "blend": True, "offset": list(INK_OFFSET), "clip": True, "layer": "top"}
 
 
-_KEPT: dict[str, Any] = {}
+class _Staged:
+    """A presentation of Preview's studio (``Scene._stage``), kept for the core: shown or put away as the scene puts
+    its structures away, drawn as an unlit, blended ``triangles`` draw, never cut, kept out of the near plane's fit."""
+
+    def __init__(self, nodes: list[tuple], triangles: list[tuple], colours: list[tuple] | None,
+                 texels: list[tuple] | None, picture: np.ndarray | None, below: bool) -> None:
+        self.nodes = np.asarray(nodes, np.float32)
+        self.triangles = np.asarray(triangles, np.uint32)
+        self.colours = None if colours is None else np.asarray(colours, np.uint8)
+        self.texels = None if texels is None else np.asarray(texels, np.float32)
+        self.picture = None if picture is None else np.asarray(picture, np.uint8)
+        self.below, self.shown = below, True
+
+    def Erase(self) -> None:  # noqa: N802 - OCCT's structure's words, which the scene's Preview code calls
+        self.shown = False
+
+    def Remove(self) -> None:  # noqa: N802
+        self.shown = False
+
+    def Display(self) -> None:  # noqa: N802
+        self.shown = True
+
+    def item(self, payloads: _Payloads) -> dict[str, Any]:
+        found: dict[str, Any] = {"positions": payloads.array(self.nodes, "<f4"),
+                                 "indices": payloads.array(self.triangles, "<u4")}
+        item: dict[str, Any] = {"triangles": found, "color": [1.0, 1.0, 1.0, 1.0], "blend": True, "offset": [1.0, 1.0],
+                                "clip": False, "infinite": True, "layer": "default"}
+        if self.colours is not None:
+            found["colors"] = payloads.array(self.colours, "u1")
+        if self.texels is not None:
+            found["texels"] = payloads.array(self.texels, "<f4")
+        if self.picture is not None:
+            picture = self.picture if self.picture.shape[2] == 4 else np.concatenate(
+                [self.picture, np.full(self.picture.shape[:2] + (1,), 255, np.uint8)], -1)
+            item["texture"] = {"payload": payloads.array(picture, "u1"), "width": picture.shape[1],
+                               "height": picture.shape[0]}
+        return item
+
+
+def _preview_light(payloads: _Payloads) -> dict[str, Any]:
+    """``Scene.preview_look``'s rig as the core's light: the key (its direction, its strength, the shadow map it casts
+    at 4096 texels with a bias of 0.002) and the environment at full strength, baked as ``STUDIO_BAKE`` asks."""
+    from cad.engine.render import finish
+    from cad.engine.render.occt import KEY_DIRECTION, KEY_ILLUMINANCE, STUDIO_BAKE
+
+    radiance = finish.environment()
+    key = -np.asarray(KEY_DIRECTION, float) / np.linalg.norm(KEY_DIRECTION)
+    return {"lights": [{"direction": [float(v) for v in key], "intensity": KEY_ILLUMINANCE,
+                        "shadow": {"resolution": 4096, "bias": 0.002}}],
+            "environment": {"payload": payloads.add(_radiance(), "environment:look"), "width": radiance.shape[1],
+                            "height": radiance.shape[0], "intensity": 1.0,
+                            "specularSize": STUDIO_BAKE["PbrEnvPow2Size"],
+                            "specularSamples": STUDIO_BAKE["PbrEnvBakingSpecNbSamples"]}}
+
+
+def occt_depth(depth: np.ndarray) -> np.ndarray:
+    """A depth picture as ``Scene._depth`` reads OCCT's back: the 8-bit picture OCCT dumps a depth into (stretched
+    from its least to its most, ``(BYTE)(scale * (value - least) + 0.5)``), the two ends read as floats where the
+    bytes are least and most, and the bytes put back between them."""
+    least, most = float(depth.min()), float(depth.max())
+    if most == least:
+        least, most = 0.0, 255.0
+    scale = 255.0 / (most - least)
+    levels = np.floor(scale * (depth - np.float32(least)).astype(np.float64) + 0.5).astype(np.uint8).astype(np.float64)
+    low_at, high_at = np.unravel_index(levels.argmin(), levels.shape), np.unravel_index(levels.argmax(), levels.shape)
+    low, high = float(depth[low_at]), float(depth[high_at])
+    return low + levels / 255.0 * (high - low)
+
+
+def _texture_picture(texture: Any) -> np.ndarray:
+    """A texture set's first texture (the base colour's) as RGBA bytes, the top row first: the image OCCT reads (a
+    GLB's, which only the kernel reads: where there is a texture, there is a kernel)."""
+    found = _KEPT.get(id(texture))
+    if found is not None and found[0] is texture:
+        return found[1]
+    from OCP.Image import Image_SupportedFormats
+
+    image = texture.First().GetImage(Image_SupportedFormats())
+    height, width = image.SizeY(), image.SizeX()
+    picture = np.zeros((height, width, 4), np.uint8)
+    for y in range(height):
+        for x in range(width):
+            colour = image.PixelColor(x, y, False)
+            rgb = colour.GetRGB()
+            picture[y, x] = [round(rgb.Red() * 255), round(rgb.Green() * 255), round(rgb.Blue() * 255),
+                             round(colour.Alpha() * 255)]
+    _KEPT[id(texture)] = (texture, picture)
+    return picture
+
+
+_KEPT: dict[Any, Any] = {}
 
 
 def _radiance() -> bytes:

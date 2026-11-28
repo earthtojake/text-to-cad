@@ -105,19 +105,24 @@ take one set of decisions -- what is shown and how (`Scene.plan`, `finish.finish
 `service.frame_camera`, kept by `Scene.aim`), the clip (`clip.cut`, `clip.cap_colour`), the grid (`grid.drawn`), the
 ink's ribbons, lines and text quads (`Scene._ink`, `_line`, `_quad`) -- and the core's are written as the `render`
 job's scene (`../node/README.md`, "The scene") each time a frame is asked, each part's mesh crossing the pipe once
-by its key. The painter (text marks laid as three lays them, Measure's marks) is the same Python; a text mark's
-bare pixels are a whole frame drawn without the marks, where OCCT draws camera tiles.
+by its key. The painter (text marks laid as three lays them, Measure's marks) is the same Python, a text mark's bare
+pixels a frame drawn without the marks. Preview is `Scene._studio`, `_studio_backdrop` and the painter's tone
+mapping with the core under them: the studio's floor and shadow are `Scene._stage`'s triangles, the shadow baked
+from the core's `"depth"` pictures squeezed by the view's aspect as OCCT squeezes them (`CoreScene._depth`), the
+backdrop the one row of its picture OCCT shows down the frame, the key light casting its shadow map. A GLB's base
+colour texture is the faces' `texels` and `texture`; a DXF's drawing is `drawing.Sheet`'s fills and lines.
 
-Not drawn by the core yet, each refused in one line before anything is drawn (`core.NOT_YET`): Preview's studio,
-the path tracer, a GLB's base colour textures on lit faces, a DXF's drawing. A foreign file whose reader needs the
-kernel (a GLB, a robot's primitives) is refused where the installation has none. A kernel folder with no view core
-refuses every still (`base.NO_DRAWING`).
+Not drawn by the core yet, each refused in one line (`core.NOT_YET`): the path tracer, Preview of a textured part,
+Preview seen from under its floor. A foreign file whose reader needs the kernel (a GLB, a robot's primitives, a
+DXF's splines) is refused where the installation has none. A kernel folder with no view core refuses every still
+(`base.NO_DRAWING`).
 
 Measured (juno, 249 parts and 363 instances, 1600 x 1200, solid, through `cad snapshot` on this kernel): 6.7 s for
 the first picture (serving and meshing included; 16.4 s natively with its Xvfb and kernel load), 0.66 s warm against
 0.53-0.59 s natively, the core's frame 0.40 s at 8 samples a pixel against OpenGL's 0.40 s (llvmpipe, 4); the two
 pictures differ by a mean 0.3 levels, 0.26% of the pixels by over 32 levels and 0.035% once a line a pixel aside is
-allowed for. `tests/python/packages/cad/engine/test_render.py` draws its goldens with the core where the suite runs
+allowed for. Preview of the material fixture at 800 x 600, the core against OpenGL in one process: a mean 0.33-0.45
+levels, under 0.03% of pixels over 32 levels. `tests/python/packages/cad/engine/test_render.py` draws its goldens with the core where the suite runs
 on this kernel (`scripts/test/test-python.sh --kernel`); `test_render_core.py` holds the scene and the job's
 traffic against a stand-in server wherever the suite runs.
 
@@ -137,7 +142,7 @@ is built), named in the setting's `folder`.
 
 ## What is open
 
-1. Stills: Preview's studio, the path tracer, a GLB's textures and a DXF's drawing on the view core (above).
+1. Stills on the view core: the path tracer, Preview of a textured part, Preview from under its floor (above).
 2. The view core's archive in the lock (above): until a release publishes one, an engine-made folder draws no still.
 3. Defects of the binding itself, found running the library's tests inside the kernel's Python: OCCT's glTF reader
    traps ("memory access out of bounds": a GLB read, `formats/glb.py`), and one sheet-metal fixture's division traps

@@ -194,19 +194,21 @@ class CoreSceneTest(unittest.TestCase):
         self.assertEqual((meshes[2], renders[2].get("keys")[:2]), ([0, 0], ["mesh:big", "mesh:small"]))
         self.assertTrue(all(meshes[3]), "sent again once the server said it lacked them")
 
-    def test_what_the_core_does_not_draw_yet_is_refused_in_one_line_before_anything_is_asked(self) -> None:
+    def test_what_the_core_does_not_draw_yet_is_refused_in_one_line(self) -> None:
+        from cad.engine.render.drawing import Held as Drawing
         from cad.engine.render.service import Held, holder
 
         held = Held(Path("boxes.xbf"), core=self.core)
         self.addCleanup(held.close)
         held.hold({**json.loads(json.dumps(STRUCTURE)), "version": "1"}, self.buffers)
-        with self.assertRaises(SnapshotRefused) as refused:
-            held.draw(Still({}, preview=True, size=(64, 48)))
-        self.assertEqual((str(refused.exception), refused.exception.part), (NOT_YET["preview"], None))
         data, report = held.draw(Still({"mode": "solid"}, size=(64, 48)))
         self.assertEqual((data[:8], report["renderer"]), (b"\x89PNG\r\n\x1a\n", "core"))
-        with self.assertRaisesRegex(SnapshotRefused, "DXF's drawing is not drawn on the WebAssembly kernel"):
-            holder(Path("plan.dxf"), self.core)
+        with self.assertRaises(SnapshotRefused) as refused:
+            held.scenes[False].preview_look(path_trace=16)
+        self.assertEqual(str(refused.exception), NOT_YET["path-trace"])
+        drawing = holder(Path("plan.dxf"), self.core)
+        self.assertIsInstance(drawing, Drawing)
+        self.assertIs(drawing.core, self.core, "a DXF's drawing is the core's too")
         for said in NOT_YET.values():
             self.assertNotIn("\n", said)
 
