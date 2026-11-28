@@ -163,6 +163,13 @@ manifest that is not:
   both together;
 - in both, each path relative and `/` separated: no empty, `.` or `..` segment, no leading `/`, no
   `\`, no drive (`C:`), well-formed text of at most 1024 bytes in UTF-8;
+- in both, no path in a version control's folder (`.git`, `.hg`, `.svn`, `.bzr`, `_darcs`, `.jj`,
+  `.pijul`, Fossil's `.fslckout` and `_FOSSIL_`), as any system compares a name: in any case, with the
+  dots and spaces Windows drops from its end, before an NTFS stream's `:`, without the code points HFS+
+  ignores, and as Windows' short name (`GIT~1`); and no `HEAD` beside an `objects` and a `refs` folder,
+  a repository's bare form, which git finds wherever it lies. An import writes the files into a folder,
+  and a command run there later (`git status`, a shell prompt's) would run what such a folder's
+  settings name;
 - in both, each file `sha256`, `bytes` and `at` alone: 64 lowercase hex characters, a whole number,
   and one or more ranges of a pack id and two whole numbers, each inside its pack (checked once the
   pack is found).

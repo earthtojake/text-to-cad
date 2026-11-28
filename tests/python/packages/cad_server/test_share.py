@@ -1326,6 +1326,29 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(sharing.share_name("x" * 300), "x" * 200)
         self.assertEqual(sharing.share_name("\x07"), "share")
 
+    def test_a_version_controls_file_the_build_read_is_left_out_and_said(self) -> None:
+        from cad_server import sharing
+
+        project = _write(self.base / "home" / "plate", {
+            "plate.py": "", ".git/config": "", "data/.GIT./x": "", "data/GIT~1/y": "", "data/.h‌g/z": "",
+            "store/HEAD": "", "store/objects/a": "", "store/refs/b": "", "data/ok.json": "", ".gitignore": ""})
+        reads = [".git/config", "data/.GIT./x", "data/GIT~1/y", "data/.h‌g/z", "store/HEAD", "store/objects/a",
+                 "store/refs/b", "data/ok.json", ".gitignore"]
+        found = self.sources(project, self.closure(["plate.py"], [["read", path, "c" * 64] for path in reads]))
+        self.assertEqual([file.path for file in found.files], [".gitignore", "data/ok.json", "plate.py", "plate.xbf",
+                                                               "store/objects/a", "store/refs/b"])
+        self.assertEqual(sorted(found.left_out), sorted((str(project / path), "control") for path in (
+            ".git/config", "data/.GIT./x", "data/GIT~1/y", "data/.h‌g/z", "store/HEAD")))
+        from cad_server.cli.share import _notes
+
+        self.assertIn("Left out, a version control's file (a .git folder's), which no share holds: ",
+                      _notes(found, "xbf", "plate")[0])
+        # As a share's manifest takes a path, and as an import judges what it writes.
+        for path in (".git/config", ".Git /HEAD", "a/GIT~1/b", ".svn/wc.db", "_darcs/x", ".jj/repo/config.toml"):
+            self.assertFalse(sharing.sharable(path), path)
+        self.assertEqual(sharing.controlled(["a.py", "x/HEAD", "x/Objects/1", "x/refs/heads/main"]), "x/HEAD")
+        self.assertIsNone(sharing.controlled(["a.py", "HEAD", "objects/1", ".github/x", "git/HEAD", "a.git"]))
+
     def test_a_file_changed_after_the_xbf_was_made_or_code_gone_is_refused(self) -> None:
         from cad_server import sharing
 
@@ -2013,6 +2036,53 @@ class ImportTest(unittest.TestCase):
                 self.assertIn(said, json.loads(refused.stdout)["error"])
                 self.assertEqual(list(self.here.iterdir()), [])
                 self.assertFalse((self.base / "escaped.py").exists())
+        # A version control's folder, or a repository's bare form, which would make a later command where it is
+        # written (git status, a shell prompt's) run what its settings name: refused whole, whoever made the zip (a
+        # share service of another origin may name its one folder too), and nothing is written.
+        config = b'[core]\n\tfsmonitor = "touch RAN; false"\n'
+        repository = [("HEAD", b"ref: refs/heads/main\n", regular), ("config", config, regular),
+                      ("objects/info/packs", b"", regular), ("refs/heads/.keep", b"", regular)]
+        for name, zipped in (
+                ("a .git", crafted(("plate/ok.py", b"", regular),
+                                   *((f"plate/.git/{path}", body, mode) for path, body, mode in repository))),
+                ("its one folder .git", crafted(*((f".git/{path}", body, mode) for path, body, mode in repository))),
+                ("a .git deeper", crafted(("plate/sub/.git/config", config, regular),)),
+                ("as Windows reads it", crafted(("plate/.GIT. /config", config, regular),)),
+                ("its short name", crafted(("plate/git~1/config", config, regular),)),
+                ("an NTFS stream", crafted(("plate/.git::$INDEX_ALLOCATION/config", config, regular),)),
+                ("as HFS+ reads it", crafted(("plate/.g‌it/config", config, regular),)),
+                ("Mercurial's", crafted(("plate/.hg/hgrc", b"[hooks]\npre-status = touch RAN\n", regular),)),
+                ("a bare repository", crafted(*((f"plate/{path}", body, mode) for path, body, mode in repository))),
+                ("a bare repository deeper", crafted(("plate/ok.py", b"", regular),
+                                                     *((f"plate/a/{path}", body, mode) for path, body, mode
+                                                       in repository)))):
+            with self.subTest(name):
+                self.service.zips[self.share.id] = zipped
+                refused = self.import_(self.share.view, "--json")
+                self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
+                said = json.loads(refused.stdout)
+                self.assertRegex(said["error"], r"^the share's files cannot be imported: it holds .+(, of a version "
+                                                r"control's folder| beside objects and refs, a repository's bare "
+                                                r"form), which would make a later command there, such as git status, "
+                                                r"run what it names; nothing was written$")
+                self.assertEqual(list(self.here.iterdir()), [])
+        # A FOLDER in a version control's folder, or one that would make its own a repository's bare form.
+        self.service.zips.pop(self.share.id)
+        downloaded = len(self.downloads())
+        (self.here / "repo" / ".git").mkdir(parents=True)
+        (self.here / "bare" / "refs").mkdir(parents=True)
+        (self.here / "bare" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+        for folder in ("repo/.git/hooks", ".git", "repo/.GIT.", "bare/objects", "bare/Objects"):
+            with self.subTest(folder=folder):
+                refused = self.import_(self.share.view, folder, "--json")
+                self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+                self.assertIn("cad import writes no version control's files, so nothing was written",
+                              json.loads(refused.stdout)["error"])
+        self.assertEqual(sorted(str(path.relative_to(self.here)) for path in self.here.rglob("*")),
+                         ["bare", "bare/HEAD", "bare/refs", "repo", "repo/.git"])
+        self.assertEqual(len(self.downloads()), downloaded)
+        shutil.rmtree(self.here)
+        self.here.mkdir()
         # A file whose bytes are not its CRC's: refused once it is read, and nothing of it, or of the others, stays.
         good = bytearray(_zipped("plate", [("a.py", gzip.compress(b"print(1)\n", mtime=0)),
                                            ("b.py", gzip.compress(b"print(2)\n" * 50, mtime=0))]))

@@ -395,7 +395,8 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
 
 # Why a file that made a document was left out of its share, in a line's words.
 _LEFT_OUT = {"outside": "left out, outside the project", "gone": "left out, no longer on the disk",
-             "name": "left out, named in a way a share cannot hold"}
+             "name": "left out, named in a way a share cannot hold",
+             "control": "left out, a version control's file (a .git folder's), which no share holds"}
 
 
 def _notes(sources: Any, kind: str, name: str) -> list[str]:

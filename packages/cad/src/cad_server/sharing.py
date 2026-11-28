@@ -20,7 +20,8 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   -- and the ``.xbf`` itself, at its path there; and a file document's (``file_sources``): the file itself, and a
   robot description's mesh files beside it; a KiCad board's or schematic's project (``kicad_sources``): its project
   file, its project's own libraries, a board's 3D model files and rules, a schematic's sheets, at their paths under the
-  files' root as a model's are. Never an installed library (``made`` names each by its version; KiCad's are KiCad's);
+  files' root as a model's are. Never an installed library (``made`` names each by its version; KiCad's are KiCad's),
+  nor a version control's file (``controlled``);
 - **the packs** (``Packer``): each file the share lacks as one gzip member (RFC 1952: mtime 0, no name), back to
   back, the view's files first, a pack closed at ``PACK_BYTES`` and a member that does not fit the room left going
   on into the next, so a file of any size travels; a pack is named by the lowercase hex SHA-256 of its bytes; two
@@ -35,7 +36,8 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   its ``error`` and ``hint``;
 - **an import** (``import_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``import_record``): a share's zip
   read as the service makes one, one folder of files, and written into a folder through one made beside it, refusing
-  any entry that would land outside it; nothing of it is run; the shared file found among them (a model's ``.xbf``, a
+  any entry that would land outside it, and any that would make a later command there run what a version control's
+  settings name (a ``.git``: ``controlled``, ``unsafe_folder``); nothing of it is run; the shared file found among them (a model's ``.xbf``, a
   file document's file), which the library keeps with the link it came from;
 - **a share's link as a document's name** (``document_link``, ``copy_of``, ``local``): wherever cad takes a
   document, a share's view link of the service this computer shares with or of cad.fun names this computer's copy of
@@ -120,6 +122,21 @@ IMPORT_BYTES = 4 * 1024 * 1024 * 1024
 # The names Windows gives its devices, which no file there takes (``con.py`` neither).
 _DEVICES = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)),
                       *(f"LPT{n}" for n in range(1, 10))})
+# The folders of a version control, whose settings name commands that an ordinary command run in the folder they
+# are in, or below it, runs: git's (``core.fsmonitor``, which ``git status`` runs; a hook, an alias, a pager,
+# ``core.sshCommand``), Mercurial's hooks, and the like of Subversion, Bazaar, Darcs, Jujutsu, Pijul and Fossil (a
+# checkout's database). Agents, shell prompts and editors run such commands unasked, so no share holds a file in one:
+# ``cad share`` leaves it out, saying so, the service refuses a manifest that names one, and ``cad import`` writes
+# none, whoever made the share. Each as ``_folded`` spells it.
+CONTROL = frozenset({".git", ".hg", ".svn", ".bzr", "_darcs", ".jj", ".pijul", ".fslckout", "_fossil_"})
+# Windows' short names of them (``GIT~1``, as git's ``core.protectNTFS`` refuses), the first six letters of each and
+# a number.
+_SHORT = re.compile(r"(?:git|hg|svn|bzr|jj|pijul|fslcko)~[0-9]+")
+# What git takes a folder for a repository by, wherever it lies, with no ``.git``: its bare form, a ``HEAD`` file
+# beside an ``objects`` and a ``refs`` folder.
+BARE = frozenset({"head", "objects", "refs"})
+# The code points HFS+ ignores in a name (git's ``core.protectHFS``): ``.g‌it`` opens ``.git`` there.
+_IGNORED = frozenset("‌‍‎‏‪‫‬‭‮⁪⁫⁬⁭⁮⁯﻿")
 # How many times a commit's 409 naming missing packs has their files sent again before the share fails.
 RESENDS = 2
 # A 429's waits for one request: each its ``Retry-After`` (``WAIT`` where it names none), of ``LONGEST_WAIT`` at most.
@@ -171,6 +188,11 @@ class Stale(Exception):
 
 class Damaged(ValueError):
     """A share's zip that is not one the service makes (``zip_entries``, ``unpack``, ``download``): its words."""
+
+
+class Unsafe(Damaged):
+    """A share's zip, or the folder an import would write it into, that would make a later command there run what a
+    version control's settings name (``controlled``, ``unsafe_folder``): the path, in its words."""
 
 
 def _token(size: int) -> str:
@@ -250,15 +272,51 @@ class File:
 
 def sharable(path: object) -> bool:
     """Whether ``path`` is one a share's manifest takes: relative, ``/`` separated, with no empty, ``.`` or ``..``
-    segment, at most ``PATH_BYTES`` bytes of UTF-8 (the protocol's); and, so that it names one file on every system,
-    printable, with no ``\\`` or ``:``."""
+    segment, at most ``PATH_BYTES`` bytes of UTF-8 (the protocol's); so that it names one file on every system,
+    printable, with no ``\\`` or ``:``; and in no version control's folder (``controls``)."""
     if not isinstance(path, str) or not path or not path.isprintable() or "\\" in path or ":" in path:
         return False
     try:
         size = len(path.encode("utf-8"))
     except UnicodeEncodeError:
         return False
-    return size <= PATH_BYTES and all(part not in ("", ".", "..") for part in path.split("/"))
+    parts = path.split("/")
+    return size <= PATH_BYTES and all(part not in ("", ".", "..") and not controls(part) for part in parts)
+
+
+def _folded(segment: str) -> str:
+    """A path's segment as the file systems that open it compare it: without the code points HFS+ ignores, before an
+    NTFS stream's ``:`` (``.git::$INDEX_ALLOCATION`` opens ``.git``), composed, without the dots and spaces Windows
+    drops from a name's end, case folded."""
+    name = "".join(character for character in segment if character not in _IGNORED).split(":", 1)[0]
+    return unicodedata.normalize("NFC", name).rstrip(". ").casefold()
+
+
+def controls(segment: str) -> bool:
+    """Whether a path's segment names a version control's folder (``CONTROL``) on some system: as any of them
+    compares it (``_folded``), or as Windows' short name of it (``GIT~1``)."""
+    name = _folded(segment)
+    return name in CONTROL or _SHORT.fullmatch(name) is not None
+
+
+def controlled(paths: list[str]) -> str | None:
+    """The first of ``paths`` (``/`` separated, under one folder) that would make a later command in that folder or
+    below it read settings that run commands, or None: one with a segment that names a version control's folder
+    (``controls``), or a ``HEAD`` beside an ``objects`` and a ``refs`` folder, which git takes for a repository
+    wherever it lies (its bare form, ``BARE``), the one folder too."""
+    children: dict[str, dict[str, str]] = {}
+    for path in paths:
+        parts = path.split("/")
+        if any(controls(part) for part in parts):
+            return path
+        for depth in range(len(parts)):
+            folder = "/".join(parts[:depth])
+            children.setdefault(folder, {}).setdefault(_folded(parts[depth]),
+                                                       path if depth == len(parts) - 1 else "")
+    for folder, names in children.items():
+        if BARE <= names.keys() and names["head"]:
+            return names["head"]
+    return None
 
 
 def reading(file: File) -> tuple[int, str]:
@@ -346,8 +404,8 @@ class Sources:
     by its path under the files' ``root``, in path order; the path among them of the script that builds it
     (``entry``: None for a file document, and for a model no closure names the code of); what built it (``made``:
     cad's release, the build's libraries and its platform, each as text; None where no closure says); each file left
-    out and why (``left_out``: ``(path, why)``, ``outside`` the files' root, ``gone`` from the disk, or a ``name`` no
-    share takes); whether the build read a file the engine could not see (``unseen``: its closure's key is null),
+    out and why (``left_out``: ``(path, why)``, ``outside`` the files' root, ``gone`` from the disk, a ``name`` no
+    share takes, or a version control's file, ``control``: ``controlled``); whether the build read a file the engine could not see (``unseen``: its closure's key is null),
     which an import may not rebuild it without; and the file shared, a model's ``.xbf`` or a file document's own file:
     its absolute path (``file``) and its path among ``files`` (``shared``)."""
 
@@ -447,6 +505,21 @@ def _taken(path: str, root: str) -> str | None:
     return relative if sharable(relative) else None
 
 
+def _untaken(path: str, root: str) -> str:
+    """Why a share does not take ``path``, which lies under ``root``: ``control``, in a version control's folder
+    (``controls``), else ``name``, a name no share holds."""
+    relative = Path(os.path.relpath(path, root)).as_posix()
+    return "control" if any(controls(part) for part in relative.split("/")) else "name"
+
+
+def _unbare(chosen: dict[str, str], root: str, left: list[tuple[str, str]]) -> None:
+    """Each ``HEAD`` among the files ``chosen`` (by their path as this system compares it) that would make a folder
+    of them a repository (``controlled``) left out of them, into ``left`` as ``control``."""
+    while (found := controlled([str(_taken(path, root)) for path in chosen.values()])) is not None:
+        key = next(key for key, path in chosen.items() if _taken(path, root) == found)
+        left.append((chosen.pop(key), "control"))
+
+
 def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources:
     """The files that made the model whose ``.xbf`` is at ``xbf`` (canonical), from the build closure that file holds
     (``previous.of``: every path relative to the ``.xbf``'s folder): the script, every module, and every input of kind
@@ -509,13 +582,14 @@ def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources
         if not _inside(path, root):
             left.append((path, "outside"))
         elif _taken(path, root) is None:
-            left.append((path, "name"))
+            left.append((path, _untaken(path, root)))
         else:
             chosen[os.path.normcase(path)] = path
     for path in fonts:
         if os.path.isfile(path) and _inside(path, root) and _taken(path, root) is not None \
                 and os.path.normcase(path) != os.path.normcase(xbf):
             chosen.setdefault(os.path.normcase(path), path)
+    _unbare(chosen, root, left)
     left += [(path, "gone") for path in dict.fromkeys(reads) if not os.path.isfile(path)]
     if os.path.normcase(code[0]) not in chosen:
         raise Unsharable(f"{os.path.basename(code[0])} is named in a way a share cannot hold: rename it")
@@ -726,6 +800,7 @@ def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
     root = root_of(real, [each for each in candidates if os.path.isfile(each)], home)
     found: list[File] = []
     left: list[tuple[str, str]] = []
+    chosen: dict[str, str] = {}
     for each in candidates:
         taken = _taken(each, root) if _inside(each, root) else None
         if not os.path.isfile(each):
@@ -733,10 +808,13 @@ def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
         elif not _inside(each, root):
             left.append((each, "outside"))
         elif taken is None:
-            left.append((each, "name"))
+            left.append((each, _untaken(each, root)))
         else:
-            sha256, size = _digest_of(Path(each))
-            found.append(File(taken, sha256, size, Path(each)))
+            chosen[os.path.normcase(each)] = each
+    _unbare(chosen, root, left)
+    for each in chosen.values():
+        sha256, size = _digest_of(Path(each))
+        found.append(File(str(_taken(each, root)), sha256, size, Path(each)))
     own = _taken(real, root)
     return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left), file=real,
                    shared=own if any(file.path == own for file in found) else None)
@@ -754,6 +832,7 @@ def file_sources(path: str, kind: str) -> Sources:
     found: list[File] = []
     left: list[tuple[str, str]] = []
     seen: set[str] = set()
+    chosen: dict[str, str] = {}
     for each in [real, *(os.path.realpath(more) for more in (_described(real, kind) if kind in ("urdf", "srdf")
                                                             else []))]:
         if os.path.normcase(each) in seen:
@@ -765,10 +844,13 @@ def file_sources(path: str, kind: str) -> Sources:
         elif not _inside(each, root):
             left.append((each, "outside"))
         elif taken is None:
-            left.append((each, "name"))
+            left.append((each, _untaken(each, root)))
         else:
-            sha256, size = _digest_of(Path(each))
-            found.append(File(taken, sha256, size, Path(each)))
+            chosen[os.path.normcase(each)] = each
+    _unbare(chosen, root, left)
+    for each in chosen.values():
+        sha256, size = _digest_of(Path(each))
+        found.append(File(str(_taken(each, root)), sha256, size, Path(each)))
     own = _taken(real, root)
     return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left), file=real,
                    shared=own if any(file.path == own for file in found) else None)
@@ -1185,7 +1267,9 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
     there (``/`` separated), in the zip's order. ``Damaged`` for anything else: an entry outside the folder; a path
     that is absolute, names a drive or holds a segment no folder here takes (``_plain``); a link, or anything but a
     file or a folder; an encrypted entry; a path twice, or a file where another's folder is; more entries than a
-    share's."""
+    share's. ``Unsafe`` for a folder or a file that would make a later command in the folder written, or below it,
+    run what a version control's settings name (``controlled``): one of a ``.git`` (its own name ``.git`` too), a
+    repository's bare form. Whoever made the zip, nothing of it is written then."""
     infos = archive.infolist()
     if len(infos) > 2 * MOST_FILES + 1:
         raise Damaged(f"it holds {len(infos)} entries, more than a share's files")
@@ -1205,6 +1289,8 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
         if info.compress_type not in (0, 8):  # stored or deflated: a share's member, or its bytes
             raise Damaged(f"{name!r} is compressed as no share's file is")
         segments = name.rstrip("/").split("/") if info.is_dir() else name.split("/")
+        if any(controls(segment) for segment in segments):
+            raise Unsafe(f"it holds {name}, of a version control's folder")
         if not all(_plain(segment) for segment in segments):
             raise Damaged(f"{name!r} is no path inside its folder")
         if top is None:
@@ -1216,6 +1302,9 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
     if top is None:
         raise Damaged("it holds nothing, not even its folder")
     paths = [path for path, _info in found]
+    unsafe = controlled([top, *(f"{top}/{path}" for path in paths)])
+    if unsafe is not None:
+        raise Unsafe(f"it holds {unsafe} beside objects and refs, a repository's bare form")
     if len(set(paths)) != len(paths):
         raise Damaged("it names a file twice")
     named = set(paths)
@@ -1224,6 +1313,25 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
         if any("/".join(parts[:end]) in named for end in range(1, len(parts))):
             raise Damaged(f"{path!r} lies in a folder that is a file of it")
     return top, found
+
+
+def unsafe_folder(folder: Path | str) -> str | None:
+    """Why an import may not write into ``folder``, or None: it lies in a version control's folder, or is one
+    (``controls``: any segment of its absolute path), or its name with what its parent holds would make that parent a
+    repository (``BARE``). Its files are written into it, and then a later command there or above it would run what
+    their settings name."""
+    folder = Path(os.path.abspath(folder))
+    named = next((part for part in folder.parts if controls(part)), None)
+    if named is not None:
+        return f"{folder} lies in a version control's folder ({named})"
+    if _folded(folder.name) in BARE:
+        try:
+            beside = {_folded(name) for name in os.listdir(folder.parent)}
+        except OSError:
+            beside = set()
+        if BARE <= beside | {_folded(folder.name)}:
+            return f"{folder} beside what its folder holds would make that folder a repository"
+    return None
 
 
 def _place(stage: Path, folder: Path) -> None:

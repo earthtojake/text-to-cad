@@ -96,8 +96,12 @@ checkout's root and the home folder):
   define, a model KiCad's 3D library holds): an installed library, which an importer's KiCad has;
 - a file outside the root, and one the project names that is gone, left out and said, as a model's are.
 
-Never: a file the build did not read (a README beside the script, another script, tests, `.env`), or an installed
-library (named by its version in `made`).
+Never: a file the build did not read (a README beside the script, another script, tests, `.env`), an installed
+library (named by its version in `made`), or a version control's file -- one in a `.git`, `.hg`, `.svn`, `.bzr`,
+`_darcs`, `.jj` or `.pijul` folder or a Fossil checkout's database, however a system spells the name (any case, the
+dots and spaces Windows drops, an NTFS stream, HFS+'s ignored code points, `GIT~1`), and the `HEAD` of a
+repository's bare form (beside `objects` and `refs`) -- which is left out and said (`sharing.controlled`): imported,
+it would make a later command in that folder, `git status` among them, run what its settings name.
 
 ## Where each step runs
 
@@ -129,8 +133,11 @@ share's id at the service `CAD_SHARE_URL` names. The command downloads `<origin>
 share` uploads, and writes its files into FOLDER, by default `./<name>`, the folder the zip holds. A FOLDER that is there and holds
 anything is refused (`invalid_argument`), before anything is downloaded. Every entry is refused that would land
 outside it -- an absolute path, a `..`, a drive, a link, anything but a file or a folder, a path twice, an entry
-outside the zip's one folder -- and every file is written into a folder made beside FOLDER, checked against its
-CRC-32, and moved in once all are whole, so a refused or broken zip leaves nothing. A share the service holds no
+outside the zip's one folder -- and so is the whole zip where it would write a version control's file (as `cad share`
+leaves out, the zip's one folder named `.git` too, and a repository's bare form at any depth, whoever served it), and a
+FOLDER in a version control's folder or that would make its own one (`sharing.unsafe_folder`): a later command there,
+`git status`, a shell prompt's, would run what their settings name. Every file is written into a folder made beside
+FOLDER, checked against its CRC-32, and moved in once all are whole, so a refused or broken zip leaves nothing. A share the service holds no
 more: "This shared model has expired or was deleted." (`not_found`).
 
 It finds the file the share is of among them (`sharing.shared_file`): of a model, whose share names its script

@@ -6,7 +6,10 @@ service ``CAD_SHARE_URL`` names (``https://cad.fun`` by default). This process d
 (``sharing.download``), as ``cad share`` uploads, so an agent app's sandbox sees the connection and its network rules
 apply; the server is never asked. Its files go into FOLDER (``./<its name>`` by default: the folder the zip holds),
 which is refused where it is there and holds anything, and every entry is refused that would land outside it (an
-absolute path, a ``..``, a drive, a link: ``sharing.zip_entries``); they are written beside it first and moved in once
+absolute path, a ``..``, a drive, a link: ``sharing.zip_entries``); a share, or a FOLDER, that would write a version
+control's files (a ``.git``, its name the zip's folder's too, or a repository's bare form) is refused whole, since a
+later command there, such as ``git status``, would run what their settings name (``sharing.controlled``,
+``sharing.unsafe_folder``); they are written beside it first and moved in once
 all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). A model's ``.xbf`` is among them, so the
 model is there at once, read as any ``.xbf`` is, with nothing run. The shared file it wrote (``sharing.shared_file``)
 goes into the library with the link it came from (``sharing.import_record``), asked of the running server as ``cad
@@ -85,9 +88,16 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 
 
 def _refused_folder(folder: Path) -> None:
-    """The failure of a FOLDER that is not one an import writes into: a file, or a folder that holds anything."""
+    """The failure of a FOLDER that is not one an import writes into: a file, a folder that holds anything, and one
+    whose files would make a later command there run what a version control's settings name
+    (``sharing.unsafe_folder``: one in a ``.git``)."""
+    from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
 
+    unsafe = sharing.unsafe_folder(folder)
+    if unsafe is not None:
+        raise Failure(f"{unsafe}: cad import writes no version control's files, so nothing was written",
+                      "invalid_argument")
     if folder.is_dir():
         if any(folder.iterdir()):
             raise Failure(f"{folder} holds files already: import into a new folder, or an empty one",
@@ -146,6 +156,9 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
                 if given is None:
                     _refused_folder(folder)
                 written = sharing.unpack(opened, entries, folder)
+        except sharing.Unsafe as error:
+            raise Failure(f"the share's files cannot be imported: {error}, which would make a later command there, "
+                          "such as git status, run what it names; nothing was written") from None
         except (zipfile.BadZipFile, sharing.Damaged) as error:
             raise Failure(f"the share's files did not arrive as a share's zip: {error}") from None
         except OSError as error:
