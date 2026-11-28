@@ -2,7 +2,8 @@
 //
 // Protocol (structured clone; ArrayBuffers are transferred):
 //   request  { id, op, ...args }
-//   reply    { id, ok: true, result, ms }  |  { id, ok: false, error }
+//   reply    { id, ok: true, result, ms }  |  { id, ok: false, error, fault?, gone? }  (fault: the module faulted, below;
+//            gone: the doc asked of is not open, as after a fault)
 // ops:
 //   init   { url } | { module }          -> { compileMs, fetchMs, instantiateMs, memoryBytes, occt }
 //          (`module`: a WebAssembly.Module the page compiled once, for several workers)
@@ -44,7 +45,7 @@ async function handle(m) {
     case "memory": return { memoryBytes: core.memoryBytes };
     default: {
       const doc = docs.get(m.doc);
-      if (!doc) throw new Error("no such doc " + m.doc);
+      if (!doc) throw Object.assign(new Error("no such doc " + m.doc), { gone: true });
       if (BINARY.has(m.op) || JSONOPS.has(m.op)) {
         const args = m.op === "structure" || m.op === "structureBytes" ? [] :
           m.op === "fact" || m.op === "factBytes" ? [m.part, m.kind, m.ordinal] :
@@ -56,7 +57,12 @@ async function handle(m) {
   }
 }
 
-self.onmessage = async (e) => {
+// One request at a time, in the order they came: a request that came while the module is started again after a fault
+// waits for the fresh one.
+let queue = Promise.resolve();
+self.onmessage = (e) => { queue = queue.then(() => answer(e)); };
+
+async function answer(e) {
   const m = e.data;
   const t = performance.now();
   try {
@@ -75,8 +81,8 @@ self.onmessage = async (e) => {
         error = `the view core faulted (${error}) and could not be started again: ${again && again.message || again}`;
       }
     }
-    self.postMessage({ id: m.id, ok: false, error });
+    self.postMessage({ id: m.id, ok: false, error, ...(core && isFault(err) ? { fault: true } : {}), ...(err?.gone ? { gone: true } : {}) });
   }
-};
+}
 
 self.postMessage({ ready: true });

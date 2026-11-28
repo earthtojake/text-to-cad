@@ -13,6 +13,11 @@
 // compiled once, in the page, and handed to each. A part's mesh goes to the least busy worker; everything else
 // to the first. A read of anything else -- another document (a preview of a model's parameters), a route this
 // does not answer -- goes to `fallback` (the engine's fetch) where there is one, counted (`stats.passthrough`).
+//
+// A worker whose module faults (a WebAssembly trap: OCCT reading what it cannot) starts its module again and lets its
+// document go; this opens the document there again from its bytes and asks once more. A request that faults the
+// module a second time, or a document that faults it as it opens again, is refused as a document this page cannot
+// read (`error.unreadable`), never asked again in a loop.
 
 // The engine's tessellation (`cad/engine/mesh_format.py`'s TESSELLATION): what its structure names and every part
 // URL carries. The core meshes by the same rule (`viewcore.h`'s vc_mesh).
@@ -93,7 +98,8 @@ export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, s
       if (!waiting) return;
       pending.delete(event.data.id);
       state.busy -= 1;
-      if (event.data.ok) waiting.resolve(event.data); else waiting.reject(new Error(`view core: ${event.data.error}`));
+      if (event.data.ok) waiting.resolve(event.data);
+      else waiting.reject(Object.assign(new Error(`view core: ${event.data.error}`), { fault: event.data.fault === true, gone: event.data.gone === true }));
     };
     worker.onerror = (event) => {
       console.error(`view core worker ${at}: ${event.message || 'failed'}`);
@@ -116,9 +122,14 @@ export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, s
     return streaming ? WebAssembly.compileStreaming(response) : WebAssembly.compile(await response.arrayBuffer());
   })();
   const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // The bytes kept, to open the document again in a worker whose module faulted.
+  const kept = source.slice();
   // Each worker its own copy, made now (a copy made once another has taken the bytes would be empty); the last
   // takes the bytes themselves.
   const copies = workers.map((_, at) => (at === workers.length - 1 ? source : source.slice()));
+  const unreadable = (error, how = 'again') => Object.assign(
+    new Error(`view core: ${stem || 'the document'} cannot be read in this page: the view core faulted on it ${how} (${error.message})`),
+    { unreadable: true, fault: true });
   const opened = workers.map(async (state, at) => {
     const module = await compiled;
     state.phase = 'init';
@@ -127,7 +138,13 @@ export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, s
     state.initMs = now() - started;
     state.init = init.result;
     const copy = copies[at];
-    const open = await send(state, { op: 'open', bytes: copy, stem }, [copy.buffer]);
+    let open;
+    try {
+      open = await send(state, { op: 'open', bytes: copy, stem }, [copy.buffer]);
+    } catch (error) {
+      state.phase = 'unreadable';
+      throw error.fault ? unreadable(error, 'as it was opened') : error;
+    }
     state.doc = open.result.doc;
     state.phase = 'ready';
     state.openMs = now() - started;
@@ -137,6 +154,46 @@ export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, s
   const first = opened[0];
   const all = Promise.all(opened);
   all.catch(() => {});
+  /** The document opened again in `state`'s worker, whose module faulted and let it go: once at a time. */
+  const reopen = (state) => state.reopening || (state.reopening = (async () => {
+    state.phase = 'reopen';
+    state.reopens = (state.reopens || 0) + 1;
+    try {
+      const copy = kept.slice();
+      const open = await send(state, { op: 'open', bytes: copy, stem }, [copy.buffer]);
+      state.doc = open.result.doc;
+      state.phase = 'ready';
+    } catch (error) {
+      state.doc = 0;
+      state.phase = 'unreadable';
+      throw error.fault ? unreadable(error) : error;
+    } finally {
+      state.reopening = null;
+    }
+  })());
+  /** `op` on `state`'s document; after a fault the document is opened again there and the call asked once more. */
+  const ask = async (state, op, args) => {
+    for (let attempt = 0; ; attempt += 1) {
+      if (state.reopening) await state.reopening;
+      if (state.phase === 'unreadable') throw unreadable(new Error('it faulted as it was opened again'));
+      // A request refused after faulting twice left the document let go: the next opens it again first.
+      if (state.lost) { state.lost = false; await reopen(state); }
+      const doc = state.doc;
+      try {
+        return await send(state, { op, doc, ...args });
+      } catch (error) {
+        // Asked of a document a fault let go (another call's, or one met in the worker otherwise): opened again and
+        // asked once more, as after a fault of its own, but not counted as this request's.
+        const stale = !error.fault && (error.gone || doc !== state.doc);
+        if (!error.fault && !stale) throw error;
+        if (attempt >= 1) {
+          if (error.fault) state.lost = true;
+          throw error.fault ? unreadable(error) : error;
+        }
+        if (state.doc === doc) await reopen(state);
+      }
+    }
+  };
   return {
     workers,
     ready: all,
@@ -148,7 +205,7 @@ export function connectViewCoreWorkers({ workerUrl, wasmUrl, count = 1, bytes, s
         const ready = workers.filter(candidate => candidate.doc);
         state = ready.reduce((best, candidate) => (candidate.busy < best.busy ? candidate : best), ready[0] || state);
       }
-      const reply = await send(state, { op, doc: state.doc, ...args });
+      const reply = await ask(state, op, args);
       return { result: reply.result, ms: reply.ms, worker: state.at };
     },
     dispose() {

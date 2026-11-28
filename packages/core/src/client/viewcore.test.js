@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fetchXbfElementFacts, fetchXbfPartGroups } from '../lib/xbf/xbfDocument.js';
-import { createViewCoreExports, createViewCoreFetch, VIEW_CORE_TESSELLATION, viewCoreStructure } from './viewcore.js';
+import { connectViewCoreWorkers, createViewCoreExports, createViewCoreFetch, VIEW_CORE_TESSELLATION, viewCoreStructure } from './viewcore.js';
 
 // A core made here, answering as the view core's Worker does (`hosts/web/worker.js`): an assembly of a plate and two
 // pegs of one geometry, by the prototypes' indices. A part's "mesh" is no XBM2 buffer: this reads routes, it draws nothing.
@@ -140,4 +140,91 @@ test('a document read by the core exports by the core, the .xbf as itself, and a
   exports.dispose();
   // With no engine, a format the core does not write is refused.
   await assert.rejects(createViewCoreExports({ core }).create(request('dxf')), /writes no dxf/);
+});
+
+// A stand-in for the view core's Worker (`hosts/web/worker.js`): it opens a document, meshes a part, and faults on a
+// mesh as many times as `faults` says, letting its documents go each time as the worker does when its module faults.
+function faultingWorker(faults, log) {
+  return class {
+    constructor() {
+      this.docs = new Set();
+      this.next = 1;
+      queueMicrotask(() => this.onmessage({ data: { ready: true } }));
+    }
+    postMessage(message) {
+      queueMicrotask(() => this.onmessage({ data: this.answer(message) }));
+    }
+    answer({ id, op, doc, bytes }) {
+      log.push(op);
+      if (op === 'init') return { id, ok: true, result: { occt: 'stand-in' } };
+      if (op === 'open') {
+        if (!bytes?.byteLength) return { id, ok: false, error: 'no bytes' };
+        if (faults.open) return { id, ok: false, fault: true, error: 'the view core faulted (unreachable) and was started again' };
+        const made = this.next++;
+        this.docs.add(made);
+        return { id, ok: true, result: { doc: made } };
+      }
+      if (!this.docs.has(doc)) return { id, ok: false, gone: true, error: `no such doc ${doc}` };
+      if (op === 'mesh' && faults.left > 0) {
+        faults.left -= 1;
+        this.docs.clear();
+        return { id, ok: false, fault: true, error: 'the view core faulted (memory access out of bounds) and was started again' };
+      }
+      return { id, ok: true, result: new Uint8Array([88, 66, 77, 50]), ms: 1 };
+    }
+    terminate() {}
+  };
+}
+
+
+async function workersFaulting(faults, log) {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+  try {
+    const core = connectViewCoreWorkers({ workerUrl: 'worker.js', wasmUrl: 'core.wasm', bytes: new Uint8Array([1, 2, 3]),
+      stem: 'bracket', Worker: faultingWorker(faults, log) });
+    await core.ready;
+    return core;
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+test('a request the view core faults on once is asked again of the document opened again, and answered', async () => {
+  const log = [];
+  const core = await workersFaulting({ left: 1 }, log);
+  const reply = await core.call('mesh', { part: 0 });
+  assert.deepEqual([...reply.result], [88, 66, 77, 50]);
+  assert.deepEqual(log, ['init', 'open', 'mesh', 'open', 'mesh']);
+  // And the next request is answered by the document opened again, with no further opening.
+  assert.deepEqual([...(await core.call('mesh', { part: 1 })).result], [88, 66, 77, 50]);
+  assert.equal(log.filter(op => op === 'open').length, 2);
+  core.dispose();
+});
+
+test('a request the view core faults on twice is refused as the document being unreadable, without a loop', async () => {
+  const log = [];
+  const core = await workersFaulting({ left: 99 }, log);
+  await assert.rejects(core.call('mesh', { part: 0 }), (error) => error.unreadable === true && /bracket cannot be read in this page/.test(error.message));
+  assert.deepEqual(log, ['init', 'open', 'mesh', 'open', 'mesh']);
+  // Another request is answered by the document opened again (it is its own request: one more try, no loop).
+  assert.deepEqual((await core.call('structure')).result.length, 4);
+  assert.deepEqual(log.slice(5), ['open', 'structure']);
+  core.dispose();
+});
+
+test('a document the view core faults on as it opens is refused as unreadable', async () => {
+  const log = [];
+  await assert.rejects(workersFaulting({ left: 0, open: true }, log),
+    (error) => error.unreadable === true && /faulted on it as it was opened/.test(error.message));
+  assert.deepEqual(log, ['init', 'open']);
+});
+
+test('a document the worker let go (its module faulted on something else) is opened again and the request answered', async () => {
+  const log = [];
+  const core = await workersFaulting({ left: 0 }, log);
+  core.workers[0].worker.docs.clear();  // as the worker does when its module faults
+  assert.deepEqual([...(await core.call('mesh', { part: 0 })).result], [88, 66, 77, 50]);
+  assert.deepEqual(log, ['init', 'open', 'mesh', 'open', 'mesh']);
+  core.dispose();
 });
