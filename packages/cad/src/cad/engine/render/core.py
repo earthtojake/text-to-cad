@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import struct
+from collections import OrderedDict
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -676,12 +677,29 @@ def occt_depth(depth: np.ndarray) -> np.ndarray:
     return low + levels / 255.0 * (high - low)
 
 
+# The textures' pictures read last (``_texture_picture``), each by its texture set, the least recently read let go of
+# first: a render process draws one document's few textures again and again, and holds no more than these.
+PICTURES = 32
+_PICTURES: "OrderedDict[int, tuple[Any, np.ndarray]]" = OrderedDict()
+
+
 def _texture_picture(texture: Any) -> np.ndarray:
-    """A texture set's first texture (the base colour's) as RGBA bytes, the top row first: the image OCCT reads (a
-    GLB's, which only the kernel reads: where there is a texture, there is a kernel)."""
-    found = _KEPT.get(id(texture))
+    """A texture set's first texture (the base colour's) as RGBA bytes, the top row first (``_read_picture``), kept
+    for the next frame among the last ``PICTURES`` read."""
+    found = _PICTURES.get(id(texture))
     if found is not None and found[0] is texture:
+        _PICTURES.move_to_end(id(texture))
         return found[1]
+    picture = _read_picture(texture)
+    _PICTURES[id(texture)] = (texture, picture)
+    while len(_PICTURES) > PICTURES:
+        _PICTURES.popitem(last=False)
+    return picture
+
+
+def _read_picture(texture: Any) -> np.ndarray:
+    """The image OCCT reads of a texture set (a GLB's, which only the kernel reads: where there is a texture, there is
+    a kernel)."""
     from OCP.Image import Image_SupportedFormats
 
     image = texture.First().GetImage(Image_SupportedFormats())
@@ -693,7 +711,6 @@ def _texture_picture(texture: Any) -> np.ndarray:
             rgb = colour.GetRGB()
             picture[y, x] = [round(rgb.Red() * 255), round(rgb.Green() * 255), round(rgb.Blue() * 255),
                              round(colour.Alpha() * 255)]
-    _KEPT[id(texture)] = (texture, picture)
     return picture
 
 

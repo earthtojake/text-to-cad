@@ -213,6 +213,26 @@ class CoreSceneTest(unittest.TestCase):
             self.assertNotIn("\n", said)
 
 
+class TexturePictureTest(unittest.TestCase):
+    def test_a_render_process_keeps_the_last_textures_pictures_alone(self) -> None:
+        from unittest import mock
+
+        read: list = []
+
+        def reading(texture: object) -> np.ndarray:
+            read.append(texture)
+            return np.zeros((1, 1, 4), np.uint8)
+
+        textures = [object() for _ in range(drawing.PICTURES + 5)]
+        with mock.patch.object(drawing, "_read_picture", reading), mock.patch.object(drawing, "_PICTURES", type(drawing._PICTURES)()):
+            for texture in textures:
+                drawing._texture_picture(texture)
+            drawing._texture_picture(textures[-1])
+            self.assertEqual(len(read), len(textures), "a texture read again is the one kept")
+            self.assertEqual(len(drawing._PICTURES), drawing.PICTURES)
+            self.assertNotIn(id(textures[0]), drawing._PICTURES, "the least recently read let go of")
+
+
 class NoKernelTest(unittest.TestCase):
     def test_the_core_path_loads_no_kernel(self) -> None:
         """A render process on the WebAssembly kernel runs in a Python with no kernel: its scene is made with every
