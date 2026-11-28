@@ -521,6 +521,7 @@ CONTROLS = frozenset({
     "menu_hide", "menu_reveal", "menu_expand", "menu_collapse", "menu_expand_all", "menu_collapse_all", "menu_zoom_fit",
     "menu_zoom_selection",
     "menu_select_tangent_faces", "menu_select_tangent_edges",
+    "selection_bar_isolate", "selection_bar_hide", "hidden_undo", "hidden_show_all", "hidden_exit_isolate",
     "look_at", "isolate", "view_cube", "view_cube_drag", "fit",
     "quick_edit_copy", "quick_edit_queue", "quick_edit_send", "quick_edit_shown", "quick_edit_dismissed", "board_side", "board_dimension",
     "navbar_back", "navbar_forward", "models", "models_open", "models_filter", "explorer", "explorer_filter",
