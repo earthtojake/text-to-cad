@@ -119,7 +119,7 @@ class KernelPoolTest(unittest.TestCase):
                 os.kill(pid, 0)
 
     def test_the_engine_s_pool_is_this_one_where_the_kernel_environment_is_webassembly(self) -> None:
-        found = {"python": sys.executable, "prefix": sys.prefix, "path": None, "own": True, "wasm": True}
+        found = {"python": sys.executable, "prefix": sys.prefix, "path": None, "own": False, "wasm": True}
         with mock.patch("cad.engine.places.kernel", return_value=found):
             pool = serve._process_pool(4, initializer=serve.exit_with_parent, max_tasks_per_child=1)
         self.addCleanup(pool.terminate_workers)

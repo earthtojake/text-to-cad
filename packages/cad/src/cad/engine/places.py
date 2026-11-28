@@ -739,8 +739,9 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     server's ``Daemon.caller``); ``own``: this interpreter's environment, whose engine folder a process
     started there is given and whose import path a spawned process is handed as it is; and ``wasm``, true
     where a person chose the WebAssembly kernel (its ``python`` a host that runs CPython compiled to
-    WebAssembly, given the engine's folder as an own environment's process is: every build is built there,
-    whatever Python its script was run with, and the pools are ``kernel_pool.KernelPool``) -- or None when it
+    WebAssembly; never ``own``, but its processes are given the engine's folder as an own environment's are:
+    every build is built there, whatever Python its script was run with, and the pools are
+    ``kernel_pool.KernelPool``) -- or None when it
     is not made and ``make`` is false. ``serve.KernelProcessesUnavailable`` when it cannot be made, saying
     why and with the cause the server gave its refusal (its ``cause``, else ``other``): no kernel process starts
     without it. What the server remembers of a failed making is the server's (``KERNEL``)."""

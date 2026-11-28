@@ -307,7 +307,9 @@ class Process:
             found = places.kernel(make=not standby)
             if found is None:
                 raise Gone(f"no {service.name} standby: the CAD kernel environment is not made yet")
-            python, own = found["python"], found["own"]
+            # The WebAssembly kernel carries no engine: its processes run this server's, given its folder as its
+            # own environment's are.
+            python, own = found["python"], found["own"] or bool(found.get("wasm"))
         else:
             python, own = service.environment, False
         env = dict(environment) if service.env == "lease" else dict(os.environ)

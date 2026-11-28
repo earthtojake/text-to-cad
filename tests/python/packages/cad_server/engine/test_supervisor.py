@@ -449,9 +449,32 @@ class SchedulingTest(unittest.TestCase):
         # Where the person's settings choose the WebAssembly kernel, every script is built there, whatever
         # Python ran it: no worker is started on a caller's native one.
         chosen = {"python": str(folder / "kernel" / "bin" / "python"), "prefix": str(folder / "kernel"),
-                  "path": None, "own": True, "wasm": True}
+                  "path": None, "own": False, "wasm": True}
         with mock.patch("cad.engine.places.kernel", return_value=chosen):
             self.assertEqual(engine.caller(order(str(venv / "bin" / "python"), venv, "0.10.0")), (None, None))
+
+    def test_a_webassembly_kernel_s_process_runs_this_server_s_engine_and_what_measures_there_is_its_own(self) -> None:
+        from cad.engine import places
+        from cad_server.engine import supervisor
+        from cad_server.engine.checks import Pool
+        from cad_server.engine.services import WORKER
+
+        chosen = {"python": "/kernel/bin/python", "prefix": "/kernel", "path": None, "own": False, "wasm": True}
+        started: dict = {}
+
+        def popen(argv, **options):
+            started.update(argv=argv, env=options["env"])
+            raise OSError("no kernel here")
+
+        with mock.patch("cad.engine.places.kernel", return_value=chosen), \
+                mock.patch.object(supervisor.subprocess, "Popen", popen), self.assertRaises(OSError):
+            supervisor.Process.start(WORKER, "/models/part.py", "/models/part.py", {"PYTHONPATH": "/mine"})
+        self.assertEqual(started["argv"][0], "/kernel/bin/python")
+        self.assertEqual(started["env"]["PYTHONPATH"].split(os.pathsep), [places.engine_root(), "/mine"],
+                         "given the engine's folder, as an own environment's process is")
+        # Its libraries are not this installation's: what measures a check there is what its process says.
+        with mock.patch("cad.engine.places.kernel", return_value=chosen):
+            self.assertIsNone(Pool.known(mock.MagicMock(measures=None)))
 
     def test_a_held_document_whose_own_python_s_worker_is_gone_is_not_held_and_asked_of_no_other(self) -> None:
         from cad_server.engine.daemon import Daemon

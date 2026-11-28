@@ -379,9 +379,9 @@ WASM_SCHEMA = "cad wasm kernel/1"
 def wasm_kernel() -> dict[str, Any] | None:
     """The WebAssembly kernel as the engine is handed it, where the person's settings choose it; None where they
     choose the base (no ``kernel`` section, or another kind). Its ``python`` is the kernel folder's own launcher;
-    it is ``own`` in what that means to a process started there (it is given the engine's folder, and runs the
-    engine's code as this server has it), and ``wasm``, which tells the engine's pools and the builds' leases what
-    it cannot be asked (``places.kernel``). ``Refused`` in one line where the folder named is no kernel folder:
+    it is not this installation's ``own`` (what measures there is its libraries, which its processes say), and it
+    is ``wasm``: a process started there is given the engine's folder and runs the engine's code as this server
+    has it, and the engine's pools and the builds' leases know what it cannot be asked (``places.kernel``). ``Refused`` in one line where the folder named is no kernel folder:
     nothing falls back to the base, which the person did not choose."""
     from cad_server import settings
 
@@ -404,7 +404,7 @@ def wasm_kernel() -> dict[str, Any] | None:
     if not isinstance(marker, dict) or marker.get("schema") != WASM_SCHEMA or not python.is_file():
         raise Refused(f"{folder} is no WebAssembly kernel folder (no {WASM_MARKER} of {WASM_SCHEMA} and bin/python "
                       "in it): make it again, or choose the native kernel in the settings", "other")
-    return {"python": str(python), "prefix": str(home), "path": None, "own": True, "wasm": True}
+    return {"python": str(python), "prefix": str(home), "path": None, "own": False, "wasm": True}
 
 
 def _span(seconds: float) -> str:

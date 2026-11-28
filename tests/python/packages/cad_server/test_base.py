@@ -535,7 +535,7 @@ class WasmKernelTest(unittest.TestCase):
     def test_the_kernel_folder_chosen_is_what_the_engine_is_handed_and_no_base_is_looked_for(self) -> None:
         self.make()
         self.choose({"kind": "wasm", "folder": str(self.home)})
-        chosen = {"python": str(self.home / "bin" / "python"), "prefix": str(self.home), "path": None, "own": True,
+        chosen = {"python": str(self.home / "bin" / "python"), "prefix": str(self.home), "path": None, "own": False,
                   "wasm": True}
         with mock.patch.object(base, "ensure", side_effect=AssertionError("the base is not the kernel chosen")):
             self.assertEqual(base.kernel(), chosen)

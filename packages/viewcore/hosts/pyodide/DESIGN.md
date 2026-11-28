@@ -16,10 +16,13 @@ folder on its import path (`supervisor.py:316`).
 
 The WebAssembly kernel enters there and nowhere else. A **kernel folder** (`make.mjs` makes it: Pyodide's core, the
 pinned packages unpacked with their bytecode, `kernel.json`, `bin/python`) has a launcher, `bin/python`, that takes
-CPython's command line (`python.mjs`). Where a person's settings choose it, `base.kernel()` answers that launcher,
-`own`, and one more word, `wasm`, which two places read: the pools (`serve._process_pool`,
-`packages/cad/src/cad/engine/serve.py:500`) and the builds' leases (`Daemon.caller`,
-`packages/cad/src/cad_server/engine/daemon.py:981`). The worker's protocol, its contract number and every request
+CPython's command line (`python.mjs`). Where a person's settings choose it, `base.kernel()` answers that launcher
+and one more word, `wasm`, which three places read: the supervisor, which gives its processes the engine's folder
+as it gives an `own` environment's (`supervisor.py:312`); the pools (`serve._process_pool`,
+`packages/cad/src/cad/engine/serve.py:500`); and the builds' leases (`Daemon.caller`,
+`packages/cad/src/cad_server/engine/daemon.py:981`). It is never `own`: its libraries are not the server's, so what
+measures a manufacturing check there is what its processes say (`packages/cad/src/cad_server/engine/checks.py:394`).
+The worker's protocol, its contract number and every request
 are unchanged; the server, the client and the door stay on the native Python that runs them.
 
 | Process | Command | On the WebAssembly kernel |
