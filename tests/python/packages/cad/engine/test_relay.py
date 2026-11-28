@@ -84,6 +84,44 @@ class RelayTest(unittest.TestCase):
         _taken, line = self.said(relay.named(self.relay.value)[1])
         self.assertEqual(line, b"")
 
+    def test_the_token_is_compared_in_constant_time(self) -> None:
+        import secrets
+
+        with mock.patch.object(secrets, "compare_digest", wraps=secrets.compare_digest) as compared:
+            self.said("0" * door.ID_CHARACTERS)
+        compared.assert_called_once()
+
+    def test_only_so_many_connections_wait_for_their_hello_and_the_rest_are_closed_at_once(self) -> None:
+        port, token = relay.named(self.relay.value)
+        idle = []
+        for _ in range(relay.WAITING):
+            one = socket.create_connection(("127.0.0.1", port), timeout=30)
+            self.addCleanup(one.close)
+            idle.append(one)
+        extra = socket.create_connection(("127.0.0.1", port), timeout=30)
+        self.addCleanup(extra.close)
+        self.assertEqual(extra.recv(1), b"", "closed as it came: no thread waits on it")
+        for one in idle:
+            one.close()  # each wait ends: room again
+        deadline = threading.Event()
+        for _ in range(200):
+            taken, line = self.said(token)
+            if line:
+                break
+            deadline.wait(0.05)
+        self.assertTrue(line, "a hello is heard again once the waiting ones are gone")
+
+    def test_a_connection_that_ends_is_let_go_of(self) -> None:
+        taken, line = self.said(relay.named(self.relay.value)[1])
+        self.assertTrue(line)
+        taken.close()
+        for _ in range(200):
+            with self.relay.lock:
+                if not self.relay.held:
+                    break
+            threading.Event().wait(0.05)
+        self.assertEqual(self.relay.held, [])
+
     def test_what_names_a_relay(self) -> None:
         self.assertEqual(relay.named("4711 abc"), (4711, "abc"))
         for text in (None, "", "4711", "port token", "1 2 3"):

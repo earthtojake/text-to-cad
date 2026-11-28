@@ -25,6 +25,9 @@ __all__ = ["VARIABLE", "Relay", "named"]
 # The relay a program asks the engine through: ``<port> <token>``, as a Windows engine's port file reads.
 VARIABLE = "CAD_ENGINE_RELAY"
 _CHUNK = 1 << 16
+# The connections a relay lets wait for their hello at once (each a thread, ``door.GREETING_SECONDS`` at most): one
+# more is closed as it comes, so no other user of the computer can pile threads up in the program's ``cad run``.
+WAITING = 8
 
 
 def named(text: str | None) -> tuple[int, str] | None:
@@ -46,6 +49,7 @@ class Relay:
         self.held: list[Any] = []
         self.lock = threading.Lock()
         self.closed = False
+        self.waiting = threading.BoundedSemaphore(WAITING)
         threading.Thread(target=self._listen, name="cad-relay", daemon=True).start()
 
     def _listen(self) -> None:
@@ -54,12 +58,15 @@ class Relay:
                 taken, _address = self.listener.accept()
             except OSError:
                 return  # closed
+            if not self.waiting.acquire(blocking=False):
+                taken.close()  # as many as may wait for their hello wait already
+                continue
             threading.Thread(target=self._serve, args=(taken,), name="cad-relay-connection", daemon=True).start()
 
     def _serve(self, taken: socket.socket) -> None:
         from cad.engine import client
 
-        engine = None
+        engine, waiting = None, True
         try:
             taken.settimeout(door.GREETING_SECONDS)
             line = b""
@@ -68,7 +75,10 @@ class Relay:
                 if not byte:
                     return
                 line += byte
-            if door.hello_id(line.rstrip(b"\r\n")) != self.token:
+            said = door.hello_id(line.rstrip(b"\r\n"))
+            self.waiting.release()
+            waiting = False
+            if not isinstance(said, str) or not secrets.compare_digest(said.encode(), self.token.encode()):
                 return
             engine = client._connect()
             if engine is None:
@@ -89,6 +99,10 @@ class Relay:
         except (OSError, ValueError):
             return
         finally:
+            if waiting:
+                self.waiting.release()
+            with self.lock:
+                self.held = [one for one in self.held if one is not taken and one is not engine]
             for one in (engine, taken):
                 try:
                     if one is not None:
