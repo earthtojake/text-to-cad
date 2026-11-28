@@ -167,7 +167,7 @@ class Service:
 
     name: str
     command: tuple[str, ...]  # ``"{python}"`` is the environment's interpreter, or the one a lease names
-    environment: str  # ``"kernel"`` (``places.kernel``), or an interpreter's absolute path
+    environment: str  # ``"kernel"`` (``places.kernel``), ``"drawing"`` (``places.drawing``), or an interpreter's path
     env: str  # ``"lease"`` (the caller's environment) or ``"daemon"`` (the daemon's ``os.environ``)
     words: Words
     set_env: tuple[tuple[str, str], ...] = ()
@@ -194,8 +194,9 @@ class Service:
     def __post_init__(self) -> None:
         if not self.name or not self.command:
             raise ValueError("a service has a name and a command")
-        if self.environment != "kernel" and not os.path.isabs(self.environment):
-            raise ValueError(f"environment is {self.environment!r}: 'kernel' or an interpreter's absolute path")
+        if self.environment not in ("kernel", "drawing") and not os.path.isabs(self.environment):
+            raise ValueError(f"environment is {self.environment!r}: 'kernel', 'drawing' or an interpreter's "
+                             "absolute path")
         _closed("env", self.env, ("lease", "daemon"))
         _closed("bytecode", self.bytecode, ("daemon", "read-only"))
         _closed("cwd", self.cwd, ("lease", "inherit"))
@@ -303,8 +304,8 @@ class Process:
         named = python
         if named is not None:
             own = False
-        elif service.environment == "kernel":
-            found = places.kernel(make=not standby)
+        elif service.environment in ("kernel", "drawing"):
+            found = (places.kernel if service.environment == "kernel" else places.drawing)(make=not standby)
             if found is None:
                 raise Gone(f"no {service.name} standby: the CAD kernel environment is not made yet")
             # The WebAssembly kernel carries no engine: its processes run this server's, given its folder as its

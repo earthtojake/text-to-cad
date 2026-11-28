@@ -541,6 +541,24 @@ class WasmKernelTest(unittest.TestCase):
             self.assertEqual(base.kernel(), chosen)
             self.assertEqual(base.kernel(make=False), chosen)
 
+    def test_a_render_process_runs_in_the_native_kernel_the_installation_has_beside_it_and_none_is_made_for_it(self) -> None:
+        native = {"python": "/base/bin/python", "prefix": "/base", "path": None, "own": False}
+        with mock.patch.object(base, "kernel", return_value=native) as asked:
+            self.assertEqual(base.drawing(), native, "no choice: where the kernel is")
+            asked.assert_called_once_with(True)
+        self.make()
+        self.choose({"kind": "wasm", "folder": str(self.home)})
+        own = base.Environment("/own/bin/python", "/own", True)
+        with mock.patch.object(base, "ensure", return_value=own) as asked:
+            self.assertEqual(base.drawing(), {"python": "/own/bin/python", "prefix": "/own", "path": None, "own": True})
+            asked.assert_called_once_with(make=False)
+        with mock.patch.object(base, "ensure", return_value=None), self.assertRaises(base.Refused) as refused:
+            base.drawing()
+        said = str(refused.exception)
+        self.assertEqual(said, base.NO_DRAWING)
+        self.assertNotIn("\n", said)
+        self.assertIn("cad show", said)
+
     def test_a_choice_that_names_no_kernel_folder_is_refused_in_one_line(self) -> None:
         for section in ({"kind": "wasm"}, {"kind": "wasm", "folder": "kernel"}, {"kind": "wasm", "folder": 3}):
             self.choose(section)

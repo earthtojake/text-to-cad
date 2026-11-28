@@ -37,7 +37,7 @@ from typing import Any, Callable
 
 __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
-           "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
+           "cache_dir", "current", "detached", "door_path", "drawing", "earlier_cache_dir", "earlier_state_dir", "endpoints",
            "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation", "kernel",
            "lock", "lock_path", "make_engine_dir", "port_path", "registered", "state_dir", "windowless"]
 
@@ -731,6 +731,29 @@ def bytecode_tag() -> str:
 # saying why, when it cannot be made. None (no server in this process: a model's own process, a worker):
 # this interpreter's own (``kernel``).
 KERNEL: Callable[[bool], dict[str, Any] | None] | None = None
+
+
+# The environment the processes that draw stills run in (the render processes: OCCT's OpenGL viewer), as the server
+# makes it (``cad_server._internal.base.drawing``): ``DRAWING(make)`` answers as ``KERNEL`` does. None: the kernel
+# environment itself (``drawing``), which is where they run wherever the kernel is the native one.
+DRAWING: Callable[[bool], dict[str, Any] | None] | None = None
+
+
+def drawing(make: bool = True) -> dict[str, Any] | None:
+    """The environment a render process runs in: the kernel's (``kernel``), but where the kernel is one that
+    carries no OpenGL viewer (the WebAssembly kernel) the native one this installation has beside it
+    (``DRAWING``) -- a render process draws the engine's mesh buffers and models nothing, so whichever
+    kernel made them. ``serve.KernelProcessesUnavailable``, in one line that says what to do, where the
+    installation has none."""
+    if DRAWING is None:
+        return kernel(make)
+    try:
+        return DRAWING(make)
+    except Exception as error:  # noqa: BLE001 - the server's refusal, carried in one line
+        from cad.engine.serve import KernelProcessesUnavailable
+
+        cause = getattr(error, "cause", None)
+        raise KernelProcessesUnavailable(str(error), cause if isinstance(cause, str) else "other") from error
 
 
 def kernel(make: bool = True) -> dict[str, Any] | None:

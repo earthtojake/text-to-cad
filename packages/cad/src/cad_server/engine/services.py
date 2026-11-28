@@ -14,7 +14,9 @@ its stderr the model's log. It counts toward the count cap, is drained of its do
 (``models.Models.drain``), and keeps a standby with the kernel loaded in the base (``worker.load_kernel``).
 
 ``RENDER``: a served document's render process (``cad.engine.render.service``), one per document by
-its id on the server (and per file no document, ``file:`` and its path: ``renders``), in the base,
+its id on the server (and per file no document, ``file:`` and its path: ``renders``), in the base (where the
+kernel is the WebAssembly one, in the native one the installation has beside it, ``places.drawing``: it draws
+the engine's mesh buffers and models nothing),
 with the daemon's environment and the engine's X display, and no bytecode written, standing where the daemon does; its stderr
 kept, its last lines said when it is gone. It does not count toward the count cap, is retired for
 memory before any worker, and its retirements are listed in ``status`` by its document.
@@ -72,7 +74,7 @@ WORKER = Service(
 RENDER = Service(
     name="render",
     command=("{python}", "-P", "-m", "cad.engine.render.service"),
-    environment="kernel",
+    environment="drawing",  # the kernel's, or the native one beside a kernel that carries no OpenGL viewer
     env="daemon",
     draws=True,
     bytecode="read-only",

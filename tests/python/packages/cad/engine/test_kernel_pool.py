@@ -228,6 +228,30 @@ class ThreadlessJobsTest(unittest.TestCase):
             self.assertEqual(manufacturing._watched(request), {"measured": request})
 
 
+class NoViewerTest(unittest.TestCase):
+    """A kernel process whose kernel carries no OpenGL viewer refuses a picture at once, by a type its asker
+    tells from a failure: the picture is drawn elsewhere."""
+
+    def test_a_picture_is_refused_before_anything_is_made_for_it_and_its_asker_knows_the_refusal(self) -> None:
+        from cad.engine import api, snapshot
+        from cad.engine.render import context, service
+
+        context.kernel_draws()  # this kernel has a viewer: nothing is said
+        with mock.patch.object(sys, "platform", "emscripten"), \
+                mock.patch("cad.engine.serve.Server", side_effect=AssertionError("a document was served")):
+            with self.assertRaises(context.KernelDrawsNothing) as refused:
+                service.draw_here_each(Path("part.xbf"), [])
+            with self.assertRaises(context.KernelDrawsNothing):
+                context.driver()
+        self.assertEqual(str(refused.exception), context.NO_VIEWER)
+        from cad.engine import frames
+
+        failed = api._failed({"failed": str(refused.exception), **frames.failed_type(refused.exception)})
+        self.assertTrue(snapshot.elsewhere(failed))
+        self.assertFalse(snapshot.no_gl(failed), "no context to wait for or to make here: another kernel's to draw")
+        self.assertFalse(snapshot.elsewhere(RuntimeError("any other failure")))
+
+
 class ThreadlessProgressTest(unittest.TestCase):
     def test_no_frame_is_held_where_no_thread_could_send_it_when_its_interval_is_up(self) -> None:
         # A build that says a body's name and then spends a minute in it: the page shows that name, not the one before.

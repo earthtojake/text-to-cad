@@ -472,6 +472,16 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual(started["argv"][0], "/kernel/bin/python")
         self.assertEqual(started["env"]["PYTHONPATH"].split(os.pathsep), [places.engine_root(), "/mine"],
                          "given the engine's folder, as an own environment's process is")
+        # A render process draws with a viewer that kernel does not carry: it runs where the engine draws.
+        from cad_server.engine.services import RENDER
+
+        native = {"python": "/base/bin/python", "prefix": "/base", "path": None, "own": False}
+        with mock.patch("cad.engine.places.kernel", return_value=chosen), \
+                mock.patch("cad.engine.places.drawing", return_value=native), \
+                mock.patch("cad_server.engine.display.environment", return_value={}), \
+                mock.patch.object(supervisor.subprocess, "Popen", popen), self.assertRaises(OSError):
+            supervisor.Process.start(RENDER, "document", "document", {})
+        self.assertEqual(started["argv"][:4], ["/base/bin/python", "-P", "-m", "cad.engine.render.service"])
         # Its libraries are not this installation's: what measures a check there is what its process says.
         with mock.patch("cad.engine.places.kernel", return_value=chosen):
             self.assertIsNone(Pool.known(mock.MagicMock(measures=None)))

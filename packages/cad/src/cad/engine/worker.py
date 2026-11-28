@@ -1044,8 +1044,13 @@ def main() -> int:
             except ExportIncomplete as error:  # an export that wrote some files: what failed, by its cause's type
                 send({"id": ident, "failed": str(error), **error.failed_type()})
             except BaseException as error:  # noqa: BLE001 - the worker answers every request
-                send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
-                                                                                error.__traceback__))})
+                if type(error).__name__ == "KernelDrawsNothing":
+                    # A picture asked of a kernel that draws none (``render.context``): by its type, in its one
+                    # line, so whoever asked has it drawn elsewhere (``snapshot.elsewhere``).
+                    send({"id": ident, "failed": str(error), **frames.failed_type(error)})
+                else:
+                    send({"id": ident, "failed": "".join(traceback.format_exception(type(error), error,
+                                                                                    error.__traceback__))})
                 if isinstance(error, (KeyboardInterrupt, SystemExit)):
                     return 1
             finally:

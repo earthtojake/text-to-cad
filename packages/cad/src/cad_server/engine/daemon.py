@@ -128,6 +128,13 @@ def _kernel(make: bool) -> dict[str, Any] | None:
     return made(make)
 
 
+def _drawing(make: bool) -> dict[str, Any] | None:
+    """The environment the engine's render processes run in (``cad_server._internal.engine_host.drawing``)."""
+    from cad_server._internal.engine_host import drawing as made
+
+    return made(make)
+
+
 def _making() -> Any:
     """The engine's making of the base when it is absent (``cad_server._internal.engine_host.making``)."""
     from cad_server._internal.engine_host import making
@@ -158,6 +165,7 @@ ALSO_FACTORY: Callable[[Any, str, int], Any] = _listen_also
 # worker, the meshing and reading pools, the render processes -- runs in the installation's base, which
 # the library's modules that start them are told here (``places.kernel``): the library knows no installation.
 _places.KERNEL = _kernel
+_places.DRAWING = _drawing
 
 # How often the daemon tends itself (``Daemon.tend``): its door, its pipes, and its processes'
 # memory against its cap. The server's pressure poller asks the system's signal more often.

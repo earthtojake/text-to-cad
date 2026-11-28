@@ -94,7 +94,7 @@ from typing import Any, Callable, TypeVar
 
 from cad.engine.atomic_replace import replace_atomic, staging
 
-__all__ = ["NO_GL", "SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "drawable_here",
+__all__ = ["NO_GL", "NO_VIEWER", "SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "drawable_here",
            "job_input", "job_pictures", "no_gl", "options", "parse_annotation", "parse_camera", "parse_display",
            "parse_job", "parse_measurements", "parse_pose",
            "parse_references", "picture_path", "refusing", "snapshot"]
@@ -1015,6 +1015,8 @@ def _occt(document: Path, out: Path, still: Still, daemon: bool, source: Any, st
                                        "draw_still": {"out": str(out), "still": still.as_json()},
                                        "cwd": os.getcwd()}, spec, lambda _text: None, daemon, progress)["drawn"]
             except Exception as error:
+                if daemon and elsewhere(error):
+                    return _held_here(document, out, still, started, here=False)
                 if not (daemon and _here_instead(error)):
                     raise
                 return _held_here(document, out, still, started)
@@ -1038,6 +1040,18 @@ def _occt(document: Path, out: Path, still: Still, daemon: bool, source: Any, st
 #: What an engine that has no OpenGL context to draw in fails a picture with (``render.context.Unavailable``,
 #: carried as the failure's type: ``api._failed``'s ``raised``).
 NO_GL = "cad.engine.render.context.Unavailable"
+
+
+#: What a kernel process whose kernel carries no OpenGL viewer (the WebAssembly kernel) refuses a picture with
+#: (``render.context.KernelDrawsNothing``).
+NO_VIEWER = "cad.engine.render.context.KernelDrawsNothing"
+
+
+def elsewhere(error: BaseException) -> bool:
+    """Whether ``error`` is a kernel process's refusal to draw at all (``NO_VIEWER``): the picture is then the
+    engine's render process's to draw, from an xbf of the document the engine exports (an export draws
+    nothing) -- which runs where the installation has a kernel with a viewer (``places.drawing``)."""
+    return getattr(error, "raised", None) == NO_VIEWER
 
 
 def no_gl(error: BaseException) -> bool:
@@ -1105,9 +1119,11 @@ def _draw_here(document: Path, still: Still, source: Any) -> tuple[bytes, dict[s
         raise SnapshotRefused(str(error), part="source") from None
 
 
-def _held_here(document: Path, out: Path, still: Still, started: float) -> dict[str, Any]:
+def _held_here(document: Path, out: Path, still: Still, started: float, *, here: bool = True) -> dict[str, Any]:
     """A held document's picture drawn in this process: the document exported by the engine to an xbf in a
-    temporary folder (an export draws nothing), read and drawn here, and named by its id."""
+    temporary folder (an export draws nothing), read and drawn here, and named by its id. Not ``here``: that
+    xbf drawn by the engine's render process (``_drawn_by_engine``), for a document whose worker's kernel draws
+    nothing (``elsewhere``)."""
     import tempfile
 
     from cad.engine import api
@@ -1116,7 +1132,7 @@ def _held_here(document: Path, out: Path, still: Still, started: float) -> dict[
     with tempfile.TemporaryDirectory(prefix="cad-snapshot-") as folder:
         saved = Path(folder) / "document.xbf"
         api.export(os.fspath(document), saved, progress=False)
-        data, report = _draw_here(saved, still, None)
+        data, report = _draw_here(saved, still, None) if here else _drawn_by_engine(saved, out, still, None)
         say("write", detail=out.name)
         found = _written(saved, out, data, report, started, named=None)
     return {**found, "document": os.fspath(document)}

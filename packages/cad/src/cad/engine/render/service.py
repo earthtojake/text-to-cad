@@ -494,8 +494,10 @@ def draw_here_each(document: Path, stills: list[Any], *, source: Any = None) -> 
     (``progress.say``): ``scene`` while the document is served, meshed and held, ``draw`` as each
     still is drawn."""
     from cad.engine.progress import say
+    from cad.engine.render.context import kernel_draws
     from cad.engine.serve import MESHES, Server
 
+    kernel_draws()  # refused before anything is served or meshed for a picture no canvas here can take
     started = time.perf_counter()
     say("scene", detail=document.name)
     # A worker's mesh export source holds triangles, no B-rep for shape_data. Its picture

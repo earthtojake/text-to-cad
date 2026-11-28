@@ -60,6 +60,13 @@ def kernel(make):
     return made(make)
 
 
+def drawing(make):
+    """The environment the engine's render processes run in (``cad_server._internal.base.drawing``)."""
+    from cad_server._internal.base import drawing as made
+
+    return made(make)
+
+
 def making():
     """The engine's making of that environment when it is absent (``cad_server._internal.base.MAKING``)."""
     from cad_server._internal.base import MAKING

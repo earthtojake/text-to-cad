@@ -407,6 +407,27 @@ def wasm_kernel() -> dict[str, Any] | None:
     return {"python": str(python), "prefix": str(home), "path": None, "own": False, "wasm": True}
 
 
+#: What a still is refused with where the kernel is the WebAssembly one and this installation has no native one.
+NO_DRAWING = ("a still is drawn by the native CAD kernel's OpenGL viewer, which this installation does not have: "
+              "its kernel is the WebAssembly one. See the model on its page instead (cad show), or choose the native "
+              'kernel ("kernel": {"kind": "native"} in settings.json) and ask again')
+
+
+def drawing(make: bool = True) -> dict[str, Any] | None:
+    """The environment the engine's render processes run in, as the engine is handed it
+    (``cad.engine.places.DRAWING``): the kernel's (``kernel``), but where a person chose the WebAssembly kernel,
+    which carries no OpenGL viewer, the native one this installation has -- its own environment's, or a base
+    already made -- and never one made for the drawing alone. ``Refused`` in one line (``NO_DRAWING``) where it
+    has none."""
+    if wasm_kernel() is None:
+        return kernel(make)
+    found = ensure(make=False)
+    if found is None:
+        raise Refused(NO_DRAWING, "other")
+    return {"python": found.python, "prefix": found.prefix, "path": None if found.path is None else list(found.path),
+            "own": found.own}
+
+
 def _span(seconds: float) -> str:
     """A wait in words: ``40 s``, ``5 min``."""
     return f"{max(1, round(seconds))} s" if seconds < 90 else f"{max(2, round(seconds / 60))} min"

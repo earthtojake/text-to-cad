@@ -56,6 +56,22 @@ class Unavailable(RuntimeError):
     """No OpenGL context can be made in this process, and why."""
 
 
+class KernelDrawsNothing(Unavailable):
+    """This process's CAD kernel carries no OpenGL viewer at all (the WebAssembly kernel): nothing is drawn in
+    it, on any computer. Whoever asked draws elsewhere (``snapshot.elsewhere``)."""
+
+
+#: What a kernel process of the WebAssembly kernel refuses a picture with, before it makes anything for one.
+NO_VIEWER = ("a still is drawn by the native CAD kernel's OpenGL viewer, which the WebAssembly kernel does not carry: "
+             "this process draws none")
+
+
+def kernel_draws() -> None:
+    """``KernelDrawsNothing`` where this process's kernel has no viewer to draw with."""
+    if sys.platform in ("emscripten", "wasi"):
+        raise KernelDrawsNothing(NO_VIEWER)
+
+
 def platform() -> str:
     """``darwin``, ``linux`` or ``windows``: which window a canvas draws through."""
     if sys.platform == "darwin":
@@ -239,6 +255,7 @@ def driver() -> Any:
     buffers, never swapping a window's. Raises ``Unavailable``, by name. A refusal is asked again
     at the next canvas, never remembered: an X server that refused one connection (Xvfb busy,
     say) is no reason to draw nothing for the rest of the process."""
+    kernel_draws()
     try:
         if platform() == "linux" and _has_xlib() and display() is None:
             raise Unavailable("no X display for OpenGL: OCP's Linux build draws through GLX on an X server, and "
