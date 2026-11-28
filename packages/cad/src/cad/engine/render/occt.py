@@ -1295,7 +1295,7 @@ class Scene:
         in linear light (its frame buffer is sRGB); three blends the sRGB values themselves (it
         encodes in the shader and draws into a plain 8-bit buffer), which leaves a glyph's partly
         covered pixels darker. So each quad's rectangle of the frame is drawn again without the
-        quads (a camera tile, ``Canvas.tile``), the quad's coverage as drawn (filtered, hidden
+        quads (``_bare``), the quad's coverage as drawn (filtered, hidden
         behind the model) is read back from the two in linear light, and the mark's colour is laid
         over the bare pixels by that coverage, in sRGB."""
         height, width = frame.shape[:2]
@@ -1327,15 +1327,16 @@ class Scene:
             drawn[touched] = np.rint((ink * cover + under * (1 - cover)) * 255).astype(np.uint8)
 
     def _bare(self, boxes: list[tuple[int, int, int, int]]) -> list[np.ndarray]:
-        """The frame's pixels in each of ``boxes`` (left, top, right, bottom) drawn without the text quads: a
-        camera tile each (``Canvas.tile``)."""
+        """The frame's pixels in each of ``boxes`` (left, top, right, bottom) drawn without the text quads: the
+        frame drawn once so, each box cut out of it (OCP's binding sets no camera tile's sizes)."""
         for structure in self.structures:
             structure.Erase()
         try:
-            return [self.canvas.tile(x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1 in boxes]
+            bare = self.canvas.frame()
         finally:
             for structure in self.structures:
                 structure.Display()
+        return [bare[y0:y1, x0:x1] for x0, y0, x1, y1 in boxes]
 
     def _on_black_and_white(self) -> tuple[np.ndarray, np.ndarray]:
         """The view drawn on black and then on white, each in linear light; its own backdrop is put

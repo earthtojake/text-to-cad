@@ -24,8 +24,7 @@ dropped). The window it draws through is the platform's:
   ``WNT_Window``.
 
 A picture leaves OCCT as sRGB bytes (``frame``: height x width x 3, for whatever paints over it)
-and is encoded as a PNG in memory (``png``); ``tile`` draws one rectangle of the frame alone, with
-the whole frame's projection.
+and is encoded as a PNG in memory (``png``).
 
 ``available()`` says whether a canvas can be made here, and why not when it cannot: what a test
 skips on (and, on CI with an X display, fails on). Only the macOS path is proven; ``test_render.py`` says what the first Linux and Windows
@@ -347,29 +346,6 @@ class Canvas:
     def frame(self) -> np.ndarray:
         """The view drawn, as sRGB bytes (height, width, 3)."""
         return pixels(self.pixmap())
-
-    def tile(self, left: int, top: int, width: int, height: int) -> np.ndarray:
-        """The view's pixels in one rectangle of the frame (``left``, ``top`` from its top-left),
-        drawn alone: a camera tile keeps the whole frame's projection, so the pixels are the
-        frame's there (to a level at an edge's multisample) at the cost of the rectangle."""
-        from OCP.Graphic3d import Graphic3d_BufferType, Graphic3d_CameraTile
-        from OCP.collections import Vec2_int
-        from OCP.Image import Image_AlienPixMap
-
-        camera = self.view.Camera()
-        tile = Graphic3d_CameraTile()
-        tile.TotalSize = Vec2_int(self.width, self.height)
-        tile.TileSize = Vec2_int(width, height)
-        tile.Offset = Vec2_int(left, self.height - top - height)  # counted from the lower left
-        camera.SetTile(tile)
-        try:
-            image = Image_AlienPixMap()
-            with pool():
-                if not self.view.ToPixMap(image, width, height, Graphic3d_BufferType.Graphic3d_BT_RGB, False):
-                    raise RuntimeError("OCCT drew nothing")
-        finally:
-            camera.SetTile(Graphic3d_CameraTile())
-        return pixels(image)
 
     def png(self, paint: Callable[[np.ndarray], None] | None = None) -> bytes:
         """The view drawn now as PNG bytes, encoded in memory; ``paint`` paints over the frame

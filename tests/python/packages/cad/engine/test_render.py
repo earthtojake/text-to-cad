@@ -387,6 +387,23 @@ class HeldTest(unittest.TestCase):
                 x, y = np.rint(start + (end - start) * share).astype(int)
                 self.assertTrue(ink[y - 1:y + 2, x - 1:x + 2].any(), f"segment {index}, {share:.0%} along")
 
+    def test_a_text_mark_is_drawn_in_its_colour_on_its_quad(self) -> None:
+        """A text mark's words on its quad, laid as three lays them (``Scene._relay_text``: the frame drawn again
+        without the quads, the coverage read off the two), in the mark's colour and nowhere off its quad."""
+        corners = [-15, 2, 2.05, 15, 2, 2.05, 15, -6, 2.05, -15, -6, 2.05]  # canvas top-left first, on the plate
+        text = {"units": "mm", "parts": {}, "marks": [{"id": "t", "kind": "text", "part": "i1", "text": "HELLO",
+                                                       "fontPx": 40, "color": "#ff00ff", "points": corners}]}
+        data, report = self.draw((640, 480), display={"mode": "solid"}, annotation=text)
+        self.assertIn("font", report)
+        found = pixels(data)
+        ink = np.abs(found - np.array([255, 0, 255])).max(-1) < 60
+        scene = self.held.scenes[False]
+        placement = scene.placement(1)
+        quad = scene.project(np.array(corners, float).reshape(4, 3) @ placement[:3, :3].T + placement[:3, 3])
+        (x0, y0), (x1, y1) = np.floor(quad.min(0)).astype(int) - 2, np.ceil(quad.max(0)).astype(int) + 2
+        self.assertGreater(ink[y0:y1, x0:x1].sum(), 100, "its words")
+        self.assertEqual(ink.sum(), ink[y0:y1, x0:x1].sum(), "on its quad alone")
+
     def test_a_portrait_still_is_framed_as_the_page_frames_it(self) -> None:
         """Taller than wide, OCCT spans its scale and its field of view across the width: a preset,
         a fitted camera and a view's own camera each keep the page's framing, the wide bench's
