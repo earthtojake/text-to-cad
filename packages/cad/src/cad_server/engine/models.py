@@ -102,6 +102,8 @@ class Models:
                 # (``cad.engine.parameters.rows``): kept here, in memory alone, while that worker lives (``live``),
                 # and never sent on.
                 rows = report.pop("parameters", None)
+                if not report.get("ok") and ident:
+                    self._failed(ident, worker)
                 if not report.get("ok") or not ident or not source:
                     continue
                 recorded = revision(report, rows)
@@ -139,6 +141,15 @@ class Models:
                 self.daemon.builders[ident] = worker
                 server = self.register_page(ident)
                 report["url"] = self.url(server, ident)
+
+    def _failed(self, ident: str, worker: Any) -> None:
+        """A run of ``worker``'s document ``ident`` that failed: the row stays the build before, and the ``.xbf`` the
+        run left is the engine's own (one it wrote before a declared file failed), never another process's. A new
+        row, so that a judgement of the one before (``held``) lets go of nothing."""
+        with self.lock:
+            row = self.records.get(ident)
+            if row is not None and row["worker"] is worker:
+                self.records[ident] = {**row, "written": file_version(row["source"]["xbf"])}
 
     def unsaved(self, report: dict[str, Any]) -> None:
         """A function with file decorators alone, built: no ``.xbf``, so no model document -- no row, no
@@ -268,13 +279,15 @@ class Models:
         """The row of the model document ``ident`` while a live worker holds it and its ``.xbf`` is the one its run
         left (``_holds``), else None: its file is the document then (``locate``), and the row is let go (``release``):
         a file another process wrote is read as the file it is, and an id whose file is gone names nothing, whatever
-        the worker holds. The server asks it before it serves a model from its worker (``serve.Server.model_held``)."""
-        with self.lock:
-            record = self.records.get(ident)
-        if record is None or self._holds(record):
-            return record
-        self.release(ident, record["worker"])
-        return None
+        the worker holds. The server asks it before it serves a model from its worker (``serve.Server.model_held``).
+        Only the row judged is let go: one a run's answer put in its place meanwhile is judged in turn."""
+        while True:
+            with self.lock:
+                record = self.records.get(ident)
+            if record is None or self._holds(record):
+                return record
+            if self.release(ident, row=record):
+                return None
 
     def live(self, ident: str, version: Any = None) -> dict[str, Any] | None:
         """What the worker that built model document ``ident`` recorded of its parameters while it is live
@@ -296,18 +309,20 @@ class Models:
 
     def _holds(self, row: dict[str, Any]) -> bool:
         """Whether ``row``'s worker holds its document still -- live in the supervisor, or out of it and alive --
-        and its ``.xbf`` is the one its last run left (``written``), or one a build of it is writing now (the
-        server's ``build_of``, until the build's answer gives the row its version): a document whose file is gone
-        is gone, and one whose file another process wrote is that file, whoever holds its build. A rewrite of the
-        same size within one tick of the file's clock keeps its version (``mtime_ns-size``), and is not seen."""
+        and its ``.xbf`` is the one its last run left (``written``), or one the worker may be writing now: a request
+        of it is under way (its lease, from before the request is sent until its answer gave the row the version
+        its run left, ``register``), which the daemon knows before any of the run's progress reaches it. A document
+        whose file is gone is gone, and one whose file another process wrote is that file, whoever holds its
+        build. The file is looked at before the lease: a version the worker wrote and a lease let go since mean
+        the answer is in, and the row judged is another's (``held``). A rewrite of the same size within one tick
+        of the file's clock keeps its version (``mtime_ns-size``), and is not seen."""
         worker = row["worker"]
         if worker is None or not (self.daemon.supervisor.holds(worker) or worker.alive()):
             return False
         found = file_version(row["source"]["xbf"])
         if found is None or found == row.get("written"):
             return found is not None
-        server = self.daemon.server
-        return server is not None and server.build_of(row["id"])["building"] is not None
+        return bool(getattr(worker, "leased", False))
 
     def locate(self, ident: str) -> Path | None:
         """The file of document ``ident`` where it is now, with no record of it: the ``.xbf`` its row names
@@ -338,13 +353,16 @@ class Models:
         for ident in self.paths(worker):
             self.release(ident, worker)
 
-    def release(self, ident: str, worker: Any = None) -> None:
+    def release(self, ident: str, worker: Any = None, *, row: dict[str, Any] | None = None) -> bool:
         """Model document ``ident`` held by no worker now (``worker``, where one is named: its row, unless a build
-        since gave it another): its row dropped, and its page its ``.xbf``'s, read as any file is."""
+        since gave it another; ``row``, where one is named: that row, unless an answer since put another in its
+        place): its row dropped, and its page its ``.xbf``'s, read as any file is. Whether a row was dropped."""
+        judged = row
         with self.lock:
             row = self.records.get(ident)
-            if row is None or (worker is not None and row["worker"] is not worker):
-                return
+            if row is None or (worker is not None and row["worker"] is not worker) or (
+                    judged is not None and row is not judged):
+                return False
             del self.records[ident]
             if self.daemon.builders.get(ident) is row["worker"]:
                 self.daemon.builders.pop(ident, None)
@@ -353,6 +371,7 @@ class Models:
             server.forget_model(ident)
             if os.path.isfile(row["source"].get("xbf") or ""):
                 server.remember(row["source"]["xbf"])
+        return True
 
     def serve(self, ident: str) -> tuple[Any, str]:
         """The server and the id of the model document ``ident`` a live worker holds; refused
@@ -398,11 +417,11 @@ class Models:
 
     def prune(self) -> None:
         """Each row whose worker is gone, or whose ``.xbf`` is, is released: its document is its ``.xbf``
-        (``release``), or nothing."""
+        (``release``), or nothing: each the row judged, never one an answer put in its place since."""
         with self.lock:
-            gone = [(ident, row["worker"]) for ident, row in self.records.items() if not self._holds(row)]
-        for ident, worker in gone:
-            self.release(ident, worker)
+            gone = [(ident, row) for ident, row in self.records.items() if not self._holds(row)]
+        for ident, row in gone:
+            self.release(ident, row=row)
 
     def listing(self) -> list[dict[str, Any]]:
         """The model documents a live worker holds, each with its ``state`` (``STATES``). One that declares files

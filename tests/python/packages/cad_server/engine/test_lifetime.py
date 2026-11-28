@@ -186,6 +186,93 @@ class ListingTest(unittest.TestCase):
             self.assertEqual(sorted(row["id"] for row in answers[-1]["models"]), sorted(idents), op)
 
 
+class _Supervisor:
+    """A supervisor whose one worker is live; ``landing``, once set, is run at its next look at the worker: what
+    the daemon does meanwhile on another thread (a run's answer) lands between a row's read and its judgement."""
+
+    def __init__(self) -> None:
+        self.landing = None
+
+    def holds(self, _worker) -> bool:
+        landing, self.landing = self.landing, None
+        if landing is not None:
+            landing()
+        return True
+
+
+class OwnRunsTest(unittest.TestCase):
+    """A live model's row is let go for an ``.xbf`` another process wrote, and never for one its own worker's run
+    wrote, wherever the run is when the page asks (``models.Models.held``): writing the file before the daemon
+    heard any of its progress, answering while the row is judged, or failing after it wrote the file. A row let go
+    hears no progress and no failure of the next run (the daemon tells the rows of the worker that ran it)."""
+
+    def setUp(self) -> None:
+        from types import SimpleNamespace
+
+        from cad_server.engine.models import Models
+
+        folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-own-runs-")))
+        self.addCleanup(shutil.rmtree, folder, True)
+        self.enterContext(mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(folder / "state"),
+                                                       "CAD_CACHE_DIR": str(folder / "cache")}))
+        self.server = Server(mesh_mode="inline")
+        self.addCleanup(self.server.stop)
+        self.supervisor = _Supervisor()
+        daemon = SimpleNamespace(supervisor=self.supervisor, server=self.server, builders={},
+                                 serve=lambda _request: self.server)
+        self.models = Models(daemon)
+        self.worker = SimpleNamespace(alive=lambda: True, leased=False)
+        script = folder / "part.py"
+        script.write_text("", encoding="utf-8")
+        self.xbf = folder / "part.xbf"
+        self.ident = model_id(script, "part")
+        self.source = {"script": str(script), "name": "part", "xbf": str(self.xbf)}
+        self.runs = 0
+        self.writes()
+        self.answer()
+
+    def writes(self) -> None:
+        """A run of the model under way, its lease taken: its worker writes the .xbf (each run's its own size)."""
+        self.runs += 1
+        self.worker.leased = True
+        self.xbf.write_bytes(b"x" * self.runs)
+
+    def answer(self, ok: bool = True) -> None:
+        """The run's answer, as the daemon takes it (``Daemon._built``), and then its lease let go."""
+        report = {"ok": ok, "id": self.ident, "model": "part.py::part", "source": self.source,
+                  "closure": {"key": f"{self.runs:064x}"}, "files": {str(self.xbf): {"kind": "xbf"}}}
+        self.models.register(self.worker, {"done": [report]})
+        self.server.built({ident: None if ok else {"model": "part.py::part"} for ident in
+                           self.models.paths(self.worker)})
+        self.worker.leased = False
+
+    def assertLive(self) -> None:
+        self.assertIsNotNone(self.models.held(self.ident))
+        self.assertEqual(self.models.paths(self.worker), [self.ident], "the next run's progress and failure reach it")
+        self.assertIn(self.ident, self.server.model_loaders, "its page is the model's")
+
+    def test_a_row_read_before_its_run_answered_is_judged_with_the_answer_s_row(self) -> None:
+        self.writes()
+        self.supervisor.landing = self.answer  # a page's read takes the row; the answer lands; then it is judged
+        self.assertLive()
+        from cad_server.engine.state import file_version
+
+        self.assertEqual(self.models.row(self.ident)["written"], file_version(self.xbf))
+
+    def test_what_its_own_runs_write_is_its_own_and_what_another_process_writes_is_the_file(self) -> None:
+        self.writes()  # written before the daemon heard any frame of the run
+        self.assertLive()
+        self.answer()
+        self.assertLive()
+        self.writes()
+        self.answer(ok=False)  # a run that wrote its .xbf, then failed on a declared file
+        self.assertLive()
+        self.xbf.write_bytes(b"another process's")
+        self.assertIsNone(self.models.held(self.ident))
+        self.assertNotIn(self.ident, self.server.model_loaders)
+        self.assertEqual(self.models.paths(self.worker), [])
+
+
 class StatusTextTest(unittest.TestCase):
     def test_the_serving_line_counts_what_was_opened_beside_the_documents_held(self) -> None:
         from cad_server.engine.cli import status_text
