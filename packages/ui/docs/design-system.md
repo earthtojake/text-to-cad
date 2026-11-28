@@ -147,7 +147,12 @@ The tokens are shadcn's neutral set (`styles/tokens.css`), greys with no hue, as
 - **The brand marks focus and state, never an action**: focus rings and a focused field's edge, a text selection, a
   selected row, the tool in hand's glyph, a search's match, the changed dot, the Home's chosen layout and its focused
   card, and the logo. It is never a button's fill or a link in the chrome, and the panel toggle stays neutral. Why:
-  blue says "on" only while nothing else is blue. `--brand-icon` is at least 3:1 on the pressed fill and on white;
+  blue says "on" only while nothing else is blue. The one brand fill is the update button's (`@cad/ui/update`: `--brand`, the logo's blue, not Tailwind's `blue-500`; its
+  hover `--brand-icon` in light and the brand at 75% in dark; its ring and spinner `--brand-icon`): a newer release is the one
+  thing the chrome asks a person to act on, so it is the one thing that stands out ([viewer layout](viewer-ux.md#the-navbar)).
+  Its glyph is white in light (3.0:1 on `--brand`, 4.1:1 on hover) and `--primary-foreground` in dark, as white on #62b7ec is
+  only 2.2:1 (the dark glyph is 8:1); its glyph is a download arrow, or a restart arrow where a release is installed and
+  only the restart is left, never words. `--brand-icon` is at least 3:1 on the pressed fill and on white;
   `--brand-text` is darker, for text, as that blue reads dark and odd on a glyph.
 - **A link in the chrome** (the app menu's version, "Made by") is muted `text-tiny` that turns the foreground and
   underlined under the pointer or keyboard focus. A slider's colours are its own `--slider-*` tokens.

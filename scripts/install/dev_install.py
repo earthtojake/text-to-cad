@@ -18,7 +18,8 @@ the cad step is scripts/install/install.py's, and the apps are cad's own table o
 3. installs that folder in each app with the app's own command (the table's ``local`` commands; an app that cannot
    install from a folder is skipped and says so), and only then removes the published copy of ours there.
 
-``--release`` uninstalls the editable tool (only where the ``cad`` tool is one), then runs install.py as it is: the
+``--release`` stops the checkout's cad server and uninstalls the editable tool (only where the ``cad`` tool is one),
+then runs install.py as it is: the
 newest release of cad, then that cad's own ``cad plugin install``, which moves every app back to the GitHub copy (the
 development copies, ``text-to-cad@earthtojake-dev`` and the rest, are among the old copies it removes); then turns
 cad's automatic updates on again (``cad update auto on``), which install.py leaves as they are. Run it again after a change; restart an app's session to load it. Run
@@ -149,6 +150,22 @@ def _json(data, name: str, release: str, version: str):
     return data
 
 
+def stop_server(uv: str) -> None:
+    """The checkout's server stopped before its tool goes (``--release``): it outlives the tool, and its version is
+    this release's or a newer one, so the published cad's ``cad server start`` would join it and leave the checkout's
+    code running. Stopped by the checkout's own ``cad``; one that is not there, or does not stop, changes nothing."""
+    cad = uv_folder(uv, "--bin") / ("cad.exe" if install.Here().windows else "cad")
+    if not cad.exists():
+        return
+    try:
+        done = subprocess.run([str(cad), "server", "stop"], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return
+    said = (done.stdout or "").strip().splitlines()
+    if done.returncode == 0 and said:
+        print(f"This checkout's cad server: {said[-1]}")
+
+
 def main(argv=None) -> int:
     keys = [app.key for app in cad_plugin.apps.APPS]
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], epilog=__doc__.split("\n\n", 1)[1],
@@ -166,8 +183,10 @@ def main(argv=None) -> int:
     if args.release:
         if args.apps:
             parser.error("--release takes no apps: it puts the published release into every app")
-        if editable(uv) and subprocess.call([uv, "tool", "uninstall", "cad"]) != 0:
-            return 1
+        if editable(uv):
+            stop_server(uv)
+            if subprocess.call([uv, "tool", "uninstall", "cad"]) != 0:
+                return 1
         code = install.main([])
         cad = uv_folder(uv, "--bin") / ("cad.exe" if install.Here().windows else "cad")
         if cad.exists() and subprocess.run([str(cad), "update", "auto", "on"], capture_output=True).returncode == 0:

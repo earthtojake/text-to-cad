@@ -1,6 +1,5 @@
 """How cad is installed and run: the uv tool ``cad`` (``uv tool install --managed-python --python 3.14 cad``), which the
-install command installs and cad's own update upgrades to PyPI's newest of its major (``uv tool install --upgrade
-"cad>=X,<N"``, ``auto_update``), and ``uvx``
+install command installs and cad's own update upgrades in place with the person's uv (``auto_update``), and ``uvx``
 for a line that runs a release from uv's cache (a plugin's server line, ``uvx ... cad@<version> mcp``).
 ``--managed-python --python 3.14`` (``PYTHON``) makes the environment the same on every machine, whatever interpreter
 a GUI app's PATH happens to find first, and ``--no-config`` keeps the user's own uv settings (an index, a cache
@@ -24,10 +23,8 @@ LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--fro
 COMMAND = "cad"
 
 
-def reinstall_command(version: str | None = None) -> str:
-    """``uv tool install --reinstall ... cad==<version>``: uv's own reinstall of the uv tool ``cad`` at ``version`` (by
-    default this one), which puts back what an installation lacks."""
-    if version is None:
-        from cad_server import __version__ as version
-    return " ".join(("uv", "tool", "install", "--reinstall", "--managed-python", "--python", PYTHON,
-                     f"{COMMAND}=={version}"))
+def reinstall_command() -> str:
+    """``uv tool install --force cad``: cad installed again whole, which puts back what an installation lacks. The one
+    repair, as cad's own update runs it and the skills' Setup line names it; it names no release, which would pin the
+    install and keep it from updating."""
+    return f"uv tool install --force {COMMAND}"

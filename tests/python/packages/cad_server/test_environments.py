@@ -1,11 +1,11 @@
 """The core and the base, end to end, with the real uv: an installation of the server alone (this
 checkout's server and library, editable, without the library's build123d extra) runs a model -- ``cadgen
-run`` makes the base once, the
+run`` makes the base once, with no uv in it, the
 script and its worker run there, and so do the engine's documents worker and meshing pool, while the
 engine's daemon runs the core.
 
-uv is reached through a wrapper first on PATH that logs what it is asked. The engine is this file's
-own (the runner's ``CAD_ENGINE_DIR``), the core registered as its state folder's current installation,
+uv is reached through a wrapper where uv's installer puts it (``UV_INSTALL_DIR``) that logs what it is
+asked. The engine is this file's own (the runner's ``CAD_ENGINE_DIR``), the core registered as its state folder's current installation,
 started by the core's ``cad server start`` -- with the core's Python -- and stopped by its ``cad stop``. The fake-uv
 contracts (keys, commands, refusals) are test_base.py's.
 """
@@ -53,12 +53,9 @@ def setUpModule() -> None:
 
 
 def _uv() -> str:
-    found = shutil.which("uv")
-    if found is None:
-        from uv import find_uv_bin  # cadgen's own dependency
+    from cad_server._internal.base import find_uv
 
-        found = find_uv_bin()
-    return found
+    return find_uv()
 
 
 class CoreAndBaseTest(unittest.TestCase):
@@ -79,18 +76,18 @@ class CoreAndBaseTest(unittest.TestCase):
         # uv's cache holding what the base's offline install reads, warmed before uv is counted: an environment
         # synced from a lock leaves it without, and the base would then ask uv a second time, from the network.
         uv_cache.warm(cls.root)
-        # A uv first on PATH that writes a line of what it is asked, then runs the real one.
+        # A uv where uv's installer puts it (``UV_INSTALL_DIR``, the first place cad looks: ``base.find_uv``) that
+        # writes a line of what it is asked, then runs the real one. Elsewhere than Windows: there cad runs no batch
+        # file as uv, and the real one is found (``asked`` says nothing).
         folder, cls.log = cls.root / "bin", cls.root / "uv.log"
         folder.mkdir()
-        if os.name == "nt":
-            (folder / "uv.bat").write_text(f'@echo off\r\necho %1>>"{cls.log}"\r\n"{real}" %*\r\n'
-                                           "exit /b %errorlevel%\r\n", encoding="utf-8")
-        else:
+        if os.name != "nt":
             wrapper = folder / "uv"
             wrapper.write_text(f"#!/bin/sh\necho \"$1\" >> '{cls.log}'\nexec '{real}' \"$@\"\n", encoding="utf-8")
             wrapper.chmod(0o755)
         environ = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-        cls.env = engine_daemon.watched({**environ, "PATH": os.pathsep.join((str(folder), os.environ["PATH"])),
+        cls.env = engine_daemon.watched({**environ, "UV_INSTALL_DIR": str(folder),
+                                         "PATH": os.pathsep.join((os.path.dirname(real), os.environ["PATH"])),
                                          "CAD_VIEWER_WARM": "0"}, cls.addClassCleanup, started=False)
         cls.cadgen = str(cls.core / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad"))
         # The core's server in place of the file's, which this interpreter's start started.
@@ -103,7 +100,10 @@ class CoreAndBaseTest(unittest.TestCase):
     def run_cadgen(self, *args: str, cwd: Path) -> subprocess.CompletedProcess:
         return engine_daemon.run([self.cadgen, *args], env=self.env, cwd=str(cwd))
 
-    def asked(self) -> list[str]:
+    def asked(self, expected: list[str]) -> list[str]:
+        """What uv was asked, where the wrapper counts it (not on Windows: ``expected`` then)."""
+        if os.name == "nt":
+            return expected
         return self.log.read_text(encoding="utf-8").split() if self.log.exists() else []
 
     @staticmethod
@@ -126,10 +126,17 @@ class CoreAndBaseTest(unittest.TestCase):
         self.assertIn("cad run: making the CAD kernel environment, once: cad[build123d] ", first.stderr)
         self.assertEqual(Path((project / "worker.txt").read_text(encoding="utf-8")).resolve(), made,
                          "the model's worker runs in the base")
-        self.assertEqual(self.asked(), ["venv", "pip"])
+        self.assertEqual(self.asked(["venv", "pip"]), ["venv", "pip"])
+        # The base holds no uv: neither its package nor its binary.
+        python = base.interpreter(made)
+        probe = subprocess.run([str(python), "-c", "import importlib.util, sys; "
+                                "sys.exit(importlib.util.find_spec('uv') is not None)"], env=self.env, capture_output=True)
+        self.assertEqual(probe.returncode, 0, "no uv package in the base")
+        self.assertFalse([path.name for path in python.parent.iterdir() if path.stem == "uv"], "no uv binary there")
+        self.assertTrue(list(python.parent.parent.glob("**/cad-*.dist-info")), "cad itself installed there")
         again = self.run_cadgen("run", "model.py", cwd=project)
         self.assertEqual((again.returncode, self.caller(again)), (0, made), again.stderr)
-        self.assertEqual(self.asked(), ["venv", "pip"], "made once: nothing asked of uv again")
+        self.assertEqual(self.asked(["venv", "pip"]), ["venv", "pip"], "made once: nothing asked of uv again")
         status = json.loads(self.run_cadgen("status", "--json", cwd=project).stdout)
         self.assertEqual(Path(status["prefix"]).resolve(), self.core.resolve(), "the engine runs the core")
 

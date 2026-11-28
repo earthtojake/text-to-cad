@@ -1,15 +1,21 @@
-"""``cad doctor``: one read-only report of this cad -- its release, its Python and where it is installed, its data
-folder, its cache folder and how much ``cad cache prune`` would free there, whether the CAD kernel environment is made
-(``cad_server._internal.base``) and loads -- where it is not, the environment ``cad run`` made for a program that a
-build ran in, if one was (``extras.last_with_kernel``) --, where each integration's operations run, whether the server runs and
-its release, and cad's own update (``cad_server._internal.auto_update``: the switches, whether this cad is a global
-install and by which installer, the newest release of this cad's major the version feed as last read names and,
-where it names a release of a higher major, the one line that says how to get it (``auto_update.MAJOR_LINE``), whether
-that installer is found, and the last attempt) and the plugin's
-record (``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for,
-and the last run of ``cad plugin install`` the server began for a newer cad, and how it went); on Windows, uv's folder in
-an app's private copy of AppData, a copy of cad or uv's leftovers, to delete (``private_folders``). It repairs,
-registers, starts, writes and deletes nothing: ``--check`` prints the same report.
+"""``cad doctor``: one read-only report of this cad -- its release, its Python and where it runs from (the environment
+its installer made and the release installed there: ``_install``), its data folder, its cache folder and how much ``cad cache prune`` would free
+there, whether the CAD kernel environment is made (``cad_server._internal.base``) and loads -- where it is not, the
+environment ``cad run`` made for a program that a build ran in, if one was (``extras.last_with_kernel``) --, where each
+integration's operations run, whether the server runs and its release, and cad's own update
+(``cad_server._internal.auto_update``: the switches, whether this cad is a global install and by which installer, and
+whether an update can begin at all, ``blocked``; the newest release PyPI, as last read, names, and when it was last
+asked for; the uv the update runs; and the last
+attempt: its outcome and uv's words, why in plain words where it did not install what it was for, a release held back,
+and where the worker's log of it is), each of the project's notices for this cad, a line each
+(``cad_server.notices``: none where none is posted), and the plugin's record
+(``cad_server._internal.plugin_catch_up``: the release of cad the plugin in the agent apps is up to date for, and
+the last run of ``cad plugin install`` the server began for a newer cad, and how it went); on
+Windows, uv's folder in an app's private copy of AppData, a copy of cad or uv's leftovers, to delete
+(``private_folders``). Where cad's update is not working -- no update can begin, its last attempt failed, or this cad
+has stayed behind for days (``auto_update.stayed_behind``) -- the line that says so has under it what to do
+(``auto_update.advice``), and a last check, ``fix``, says the one thing to do next; where all is well there is none. It
+repairs, registers, starts, writes and deletes nothing: ``--check`` prints the same report.
 
 The kernel is loaded in a fresh interpreter of its environment (``-P -B``: never this one, never a module of the
 working folder's, no bytecode written), so a refused load is named for what it is: on Windows 11, Smart App Control
@@ -17,9 +23,10 @@ blocking the unsigned ``.pyd``, which the bare ``ImportError`` never says (``cad
 A kernel environment not made is reported, not failed: it is made on first need, and a no-deps install of the wheel
 (what the release workflow smoke-tests) is a correct install.
 
-``--json`` is the report as one document on stdout, ``{"ok", "version", "checks": [{"name", "status", "detail"}]}``,
-each check's status ``ok``, ``info``, ``warning`` or ``failed``. Exit 0; 1 when the kernel is installed and does not
-load, the one ``failed`` check; 2 for the command line.
+``--json`` is the report as one document on stdout, ``{"ok", "version", "checks": [{"name", "status", "detail",
+"more"}]}`` (``more``, the lines under a check, where it has any), each check's status ``ok``, ``info``, ``warning``
+or ``failed``. Exit 0; 1 when the kernel is installed and does not load, the ``failed`` check; 2 for the command
+line.
 
 stdlib-only on purpose: this must work when the heavy dependency set is broken.
 """
@@ -61,7 +68,8 @@ def build_parser(prog: str = "cad doctor"):
                                                    "the CAD kernel is installed and does not load.")
     parser.add_argument("--check", action="store_true", help="the same report")
     parser.add_argument("--json", action="store_true", help="the report as one JSON document: each check's name, "
-                                                            "status (ok, info, warning, failed) and detail")
+                                                            "status (ok, info, warning, failed), detail and the "
+                                                            "lines under it")
     return parser
 
 
@@ -104,13 +112,39 @@ def _report() -> list[dict]:
         except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
             return _check(name, WARNING, f"unknown ({type(error).__name__}: {error})")
 
-    return [_check("python", INFO, f"{sys.version.split()[0]} ({sys.executable})"),
-            _check("install", INFO, str(Path(cad_server.__file__).resolve().parent)),
-            *(_check("private", WARNING, line) for line in private_folders()),
-            _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
-            *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
-            read("server", _server), read("update", _update), _newest(), _installer(), read("attempt", _attempt),
-            read("plugin", _catch_up)]
+    def install() -> tuple:
+        try:
+            return _install()
+        except Exception:  # noqa: BLE001 - where cad runs from is said all the same: the folder it imports from
+            return INFO, str(Path(cad_server.__file__).resolve().parent)
+
+    checks = [_check("python", INFO, f"{sys.version.split()[0]} ({sys.executable})"), _check("install", *install()),
+              *(_check("private", WARNING, line) for line in private_folders()),
+              _check("data", INFO, str(state_dir())), read("cache", _cache), _kernel(),
+              *(_check(line.split(" ", 1)[0], status, line.split(" ", 1)[1]) for status, line in _integrations()),
+              read("server", _server), read("update", _update), _newest(), *_notices(), _installer(),
+              read("attempt", _attempt),
+              read("plugin", _catch_up)]
+    return checks + _fix(checks)
+
+
+def _install() -> tuple:
+    """Where cad runs from: the environment its installer made (``sys.prefix``), the release installed there
+    (``auto_update.installed``) and who made it (``auto_update.global_install``); under it, where the release
+    installed is not the one this process runs (cad was updated since it started), that. Where the environment holds
+    no installed cad (a checkout), the folder ``cad_server`` is imported from."""
+    import cad_server
+
+    auto = _auto()
+    installed = auto.installed()
+    if installed is None:
+        return INFO, str(Path(cad_server.__file__).resolve().parent)
+    found = auto.global_install()
+    said = f"{sys.prefix} (cad {installed}{', installed by uv' if found is not None else ''})"
+    if installed == cad_server.__version__:
+        return INFO, said
+    return INFO, said, [f"this cad is {cad_server.__version__}, started before cad {installed} was installed: run it "
+                        "again for the release installed"]
 
 
 def private_folders() -> list[str]:
@@ -141,10 +175,11 @@ def _auto():
     return auto_update
 
 
-def _update() -> tuple[str, str]:
+def _update() -> tuple:
     """cad's own update: whether it updates itself (``cad update auto``), a global install alone (and by which
     installer), and whether the server runs ``cad plugin install`` once where cad is newer than the release the plugin
-    is up to date for (``cad plugin update auto``)."""
+    is up to date for (``cad plugin update auto``); a WARNING where no update can begin (``auto_update.blocked``), why
+    in plain words, and under it what to do (``auto_update.advice``)."""
     auto = _auto()
     found, word = auto.global_install(), {True: "on", False: "off"}
     plugin = f"plugin update auto {word[auto.plugin_switch()]}"
@@ -152,59 +187,134 @@ def _update() -> tuple[str, str]:
         return INFO, f"this cad is not a global install, so it never updates itself; {plugin}"
     kept = auto.switches()
     earlier = " (turned off in an earlier release)" if kept.get("earlier") else ""
-    return INFO, (f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by {found.installer.name} "
-                  f"({found.prefix})")
+    said = f"update auto {word[kept['on']]}{earlier}, {plugin}; a global install by uv ({found.prefix})"
+    stuck = auto.blocked(found)
+    if stuck is None:
+        return INFO, said
+    return WARNING, f"{said}; {auto.in_words(stuck)}", [auto.advice(stuck)]
 
 
 def _newest() -> dict:
-    """What the version feed as last read says of releases (read, never fetched): the newest release of this cad's
-    major it names, and, under it, the one line that says a release of a higher major is out and how to get it."""
+    """What PyPI, as last read, says of releases (read, never fetched): the newest release it names, and when it
+    was last asked."""
     try:
-        import cad_server
         from cad_server import updates
 
-        auto = _auto()
-        version = cad_server.__version__
         known = updates.feed(fetch=False)
-        numbers = auto.release(version)
         if known is None:
-            return _check("newest", INFO, "the version feed has not been read on this computer yet")
-        if numbers is None:
-            return _check("newest", INFO, f"cad {known['latest']} is the newest release the version feed names")
-        named = updates.newest_of_major(numbers[0], known)
-        said = (f"cad {named} is the newest {numbers[0]}.x release the version feed names" if named else
-                f"the version feed names no {numbers[0]}.x release; its newest is cad {known['latest']}")
-        higher = auto.higher(known, version)
-        return _check("newest", INFO, said, [auto.MAJOR_LINE.format(release=higher)] if higher else None)
+            return _check("newest", INFO, "PyPI has not been read on this computer yet")
+        return _check("newest", INFO, f"cad {known['latest']} is the newest release PyPI names"
+                                      + _asked(updates.asked()))
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return _check("newest", WARNING, f"unknown ({type(error).__name__}: {error})")
 
 
+def _notices() -> list[dict]:
+    """Each of the project's notices for this cad, as last read (``notices.applying``),
+    a line of its own, worth a look: its text, and its link in brackets where it has one. None where none is."""
+    from cad_server import notices
+
+    return [_check("notice", WARNING, notices.said(notice)) for notice in notices.applying()]
+
+
+def _asked(at: float | None, now: float | None = None) -> str:
+    """How long ago PyPI was last asked, in words, as the end of the newest line: `` (asked 3 hours
+    ago)``; nothing where it never was, or the clock was set back since."""
+    import time
+
+    if at is None:
+        return ""
+    seconds = (time.time() if now is None else now) - at
+    if seconds < 0:
+        return ""
+    if seconds < 60:
+        return " (asked less than a minute ago)"
+    for unit, size, below in (("minute", 60, 120 * 60), ("hour", 3600, 48 * 3600), ("day", 86400, float("inf"))):
+        if seconds < below:
+            count = int(seconds // size)
+            return f" (asked {count} {unit}{'' if count == 1 else 's'} ago)"
+    return ""
+
+
 def _installer() -> dict:
-    """The installer cad's update runs, as the update finds it: the global install's (uv, pipx), and uv where this cad
-    is none; the line named after it."""
+    """The person's uv, which cad runs everywhere (``base.find_uv``), or the line that says it is not found."""
     try:
-        auto = _auto()
-        found = auto.global_install()
-        if found is None:
-            return _check("uv", INFO, auto.find_uv() or "not found")
-        return _check(found.installer.name, INFO, " ".join(found.program) if found.program else "not found")
+        from cad_server._internal import base
+
+        try:
+            return _check("uv", INFO, base.find_uv())
+        except base.Refused as refused:
+            return _check("uv", INFO, str(refused))
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return _check("uv", WARNING, f"unknown ({type(error).__name__}: {error})")
 
 
-def _attempt() -> tuple[str, str]:
-    """The last update attempt: from which release to which, when, and its outcome (a failure's last line)."""
+def _attempt() -> tuple:
+    """The last update attempt: from which release to which, when, its outcome and uv's words for it (its ``detail``,
+    whatever the outcome), and, where it did not install what it was for, why in plain words (``auto_update.cause``,
+    ``auto_update.in_words``) and whether the release before runs again (``restored``); where the release the feed
+    calls for has been tried by itself (``auto_update.waiting``), how many times and when it is tried next, or that it
+    is held back (``auto_update.given_up``: its server did not start, and cad waits for the next release); then where
+    the worker's log of it is (``auto_update.LOG``), where there is one. A WARNING where an attempt of this
+    release failed, did not install what it was for, or was lost, where that release has been tried more than once, or
+    is held back; then, under it, the one line that says what to do (``auto_update.advice``, by who made the global
+    install). An attempt of another release is said as it was, and nothing more. Where no update can begin at all is the
+    update line's to say."""
     import time
 
-    last = _auto().last()
-    if last is None:
-        return INFO, "none"
-    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last["at"]))
-    failed = last.get("outcome") == "failed" and last.get("detail")
-    restored = {True: f"; {last.get('from')} put back", False: f"; {last.get('from')} not put back: cad is missing"}
-    return INFO, (f"{last.get('from')} to {last['release']} on {when}: {last.get('outcome')}"
-                  + (f" ({last['detail']})" if failed else "") + restored.get(last.get("restored"), ""))
+    import cad_server
+    from cad.engine.places import state_dir
+
+    auto = _auto()
+    last = auto.last()
+    warn, said, word = False, "none", None
+    log = state_dir() / auto.LOG
+    where = f"; its log: {log}" if log.is_file() else ""
+    if last is not None:
+        mine = last.get("from") == cad_server.__version__
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(last["at"]))
+        outcome, detail, word = last.get("outcome"), last.get("detail"), auto.cause(last)
+        restored = {True: f"; cad {last.get('from')} runs again", False: f"; cad {last.get('from')} did not start again"}
+        said = (f"{last.get('from')} to {last['release']} on {when}: {outcome}" + (f" ({detail})" if detail else "")
+                + (f": {auto.in_words(word)}" if word else "")
+                + restored.get(last.get("restored"), ""))
+        warn = mine and (outcome == "failed" or word is not None)
+        word = word if mine else None
+        wait = auto.waiting() if mine and (outcome != "underway" or word is not None) else None
+        if wait is not None:
+            wanted, entry, at = wait
+            count = entry["tries"]
+            said += f"; cad {wanted} has been tried {count} {'time' if count == 1 else 'times'} by itself, and is "
+            if auto.given_up(wanted, auto.tries()):
+                said += "held back: its server did not start, so cad waits for the next release"
+                warn, word = True, "start_failed"
+            else:
+                said += ((f"tried again from {time.strftime('%Y-%m-%d %H:%M', time.localtime(at))}" if at else
+                          "tried again at the next check") + ": `cad update` tries it now")
+                warn = warn or count > 1
+    said += where
+    if not warn:
+        return INFO, said
+    return WARNING, said, [auto.advice(word) if word is not None else auto.RETRIES]
+
+
+def _fix(checks: list[dict]) -> list[dict]:
+    """The last check, ``fix``, only where cad or its update is not working: the one thing to do next, by the first of
+    the install, update and attempt lines that fails or warns (the line under it: the reinstall line,
+    ``auto_update.advice``), else where this cad has stayed
+    behind a release for days by the rule of the line a cad command says then
+    (``auto_update.stayed_behind``). Nothing where all is well."""
+    for found in checks:
+        if found["name"] in ("install", "update", "attempt") and found["status"] in (WARNING, FAILED) \
+                and found.get("more"):
+            return [_check("fix", WARNING, found["more"][0])]
+    try:
+        behind = _auto().stayed_behind()
+    except Exception:  # noqa: BLE001 - a report line, never a reason for the report to fail
+        behind = None
+    if behind is None:
+        return []
+    return [_check("fix", WARNING, f"cad {behind} is out and this cad has stayed behind it: `cad update` updates it")]
 
 
 def _catch_up() -> tuple[str, str]:

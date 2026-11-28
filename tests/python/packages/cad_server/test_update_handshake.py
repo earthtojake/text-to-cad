@@ -10,8 +10,29 @@ failure it only logs (B has no ``cad plugin``); B reads the ``current`` file, th
 release folders and the token those releases wrote. And across the update, what A's pages and a host's kept card
 shell read of B's engine over HTTP (``http``): the page a tab is at (``/<id>``), the CAD app's module a kept shell
 imports (``/app``), and ``GET /api/v1/server``'s ``release`` and ``instance``, which a page reloads on (A's pages
-read its ``notice`` and ``update`` with optional chaining: B sends neither). So all of it must stay as it is across
-releases, and this test fails when any of it changes: a change here is one made on purpose, for every release still
+read its ``notice`` and ``update`` with optional chaining: B sends neither).
+
+And cad's own update from this release on (``update``), where release A, installed, starts release B's worker and
+reads what it writes: A has the person's uv build the newest cad in its cache and say its release (``build``: the
+last line, ``cad X.Y.Z``), then run B's worker from there by one line (``entry``, on the Python A names), handing it
+one JSON argument (``told``); B writes the attempt's record, whose keys A's server, button and ``cad update`` read
+(``record``, as A claims it: B adds its own beside them), and its phases (``phases``), on which A's commands wait or
+leave. So every later release installs and runs on that Python in uv's cache, answers ``cad --version`` so, keeps
+that module taking one JSON argument, and keeps writing that record. The two sides of it differ:
+
+- The record is written by the newer release and read by the older. A key or a phase may be added; none that an
+  installed release reads is removed or renamed. It cannot do without ``release``, ``at``, ``outcome``
+  (``outcomes``), ``beat``, ``phase`` and ``from``; the others it reads where they are there.
+- While B runs, A goes by its own clock and rules: how long without a beat before a server of the release being left
+  starts again, and before the attempt is lost (``silent_seconds``); the variable B sets for every command it runs,
+  so the server it starts on the way back is let through (``worker_env``); and the lock both hold for the record
+  (``lock``).
+- ``told`` is written by the older release and read by the newer: here, what this release sends. A worker may use
+  any key that every release still updating this way sends, and needs none of them (it can find each itself). A
+  later release may stop sending a key where the workers after it do without. What can never be done is the
+  reverse: a worker that needs a key some installed release does not send, since nothing shipped later adds it there.
+
+This test fails when any of it changes: a change here is one made on purpose, for every release still
 installed, never one made in passing. Change the golden file with it, and say in the change why releases before it
 still update.
 """
@@ -93,6 +114,12 @@ def surface() -> dict:
         except Started:
             pass
     started = popen.call_args.args[0]
+    # This release's own starter also names itself (``--starter <pid>``, which cad's own update spares where the
+    # start becomes it): optional, and no part of the handshake. The frozen helpers start the daemon by the bare
+    # line, which it takes as ever (``test_the_daemon_starts_by_the_bare_line_the_frozen_helpers_run``).
+    if "--starter" in started:
+        at = started.index("--starter")
+        started = started[:at] + started[at + 2:]
 
     # The engine's answers the helper reads.
     engine = daemon.Daemon(cap=1)
@@ -116,10 +143,37 @@ def surface() -> dict:
     installations.register("9.9.9", (str(console), str(python), str(folder)))
     installations.point("9.9.9")
     record = json.loads((root / installations.FOLDER / "9.9.9.json").read_text(encoding="utf-8"))
+
+    # cad's own update: what A runs of B and hands it, and the record's keys as A claims an attempt.
+    from cad_server import updates
+    from cad_server._internal import auto_update, file_lock
+
+    install = auto_update.Global(Path("ENV"), "UV")
+    line = auto_update.helper_command("9.9.9", now=1.0, version="0.0.1", record="RECORD", install=install, log="LOG")
+    _said, claimed = auto_update._claim(release="9.9.9", wanted="9.9.9", version="0.0.1", automatic=True)
+    for name in (auto_update.RECORD, auto_update.TRIED):
+        (root / name).unlink(missing_ok=True)
+    update = {
+        "build": auto_update.from_cache("UV", auto_update.NEWEST, "cad", "--version"),
+        "entry": auto_update.from_cache("UV", "cad==9.9.9", *line[:-1]),
+        "told": sorted(json.loads(line[-1])),
+        "record": sorted(claimed),
+        "phases": ["repairing", "switching"],
+        # What A reads of B's run beside the record's keys: the outcomes it knows, the variable B sets for every
+        # command it runs (A's server, started by B on the way back, does not stand aside for it), the lock both hold
+        # for the record, and how long A goes without a beat before a server of the release being left starts again
+        # (``leaving``) and before it takes the attempt for lost.
+        "outcomes": sorted({"underway", *auto_update.ENDED}),
+        "worker_env": auto_update.WORKER_ENV,
+        "lock": file_lock.STATE_LOCK,
+        "silent_seconds": {"leaving": auto_update.LEAVING_SECONDS, "lost": auto_update.LOST_SECONDS},
+        "notices": updates.ADDRESS,  # under the service's base: what ``apps/api`` keeps answering for A
+    }
     return {
         "setup": {"command": "setup", "engine_update_flag": "--engine-update", "prepare_env": setup_cli.PREPARE_ENV,
                   "flags": _flags(setup_cli.build_parser())},
         "daemon": {"arguments": started[1:], "module": client.DAEMON_MODULE},
+        "update": update,
         "http": http_surface(),
         "ops": {"status": sorted(key for key in ("ok", "pid", "prefix", "serving", "installation", "version")
                                  if key in status[0]),
@@ -149,6 +203,31 @@ class UpdateHandshakeTest(unittest.TestCase):
         golden["files"]["release_command"] = command
         self.assertEqual(found, golden, "the update's handshake between releases changed: see this module's "
                                         "docstring before changing update_handshake.json")
+
+
+    def test_the_worker_beats_well_inside_what_an_installed_release_waits(self) -> None:
+        """An installed release lets a server of the release being left start again once the worker has been silent
+        for ``silent_seconds.leaving``, and takes the attempt for lost after ``silent_seconds.lost``: both are its
+        own, on computers already. So every later worker beats at least twice within the shorter."""
+        from cad_server._internal import auto_update_helper
+
+        silent = json.loads(GOLDEN.read_text(encoding="utf-8"))["update"]["silent_seconds"]
+        self.assertLessEqual(auto_update_helper.BEAT_SECONDS * 2, min(silent.values()))
+
+    def test_the_daemon_starts_by_the_bare_line_the_frozen_helpers_run(self) -> None:
+        """``python -P -m cad_server._internal.engine_daemon`` with nothing after it, as the helpers of 0.10.0 to
+        0.11.11 start a release's engine: the daemon takes it, and the starter this release's own client names is
+        optional beside it."""
+        from cad_server.engine import daemon
+
+        golden = json.loads(GOLDEN.read_text(encoding="utf-8"))["daemon"]
+        self.assertEqual(golden["arguments"], ["-P", "-m", golden["module"]], "the bare line, frozen")
+        for argv in ([], ["--starter", "4242"]):
+            with self.subTest(argv=argv), mock.patch.object(daemon, "_restarted", return_value=None) as restarted, \
+                    mock.patch.object(daemon, "_leaving", return_value=False), \
+                    mock.patch.object(daemon, "lock", return_value=None):  # another daemon is up: it leaves, 0
+                self.assertEqual(daemon.main(argv), 0)
+            restarted.assert_called_once_with(4242 if argv else None)
 
 
 def setUpModule() -> None:

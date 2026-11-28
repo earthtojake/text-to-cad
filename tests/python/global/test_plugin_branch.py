@@ -22,6 +22,10 @@ spec = importlib.util.spec_from_file_location("plugin_branch", REPO_ROOT / "scri
 branch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(branch)
 
+# The line every skill's setup block gives: uv's line (`branch.UV_INSTALL`, the copies' README's) with `--force`.
+# An agent cannot see what is on the computer, and only so does the line install the newest release whatever is
+# there; a person installing for the first time needs none.
+SKILLS_LINE = branch.UV_INSTALL.replace(" install ", " install --force ")
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
 
 
@@ -77,7 +81,7 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual(len(branch.UNLISTED), 4)
         self.assertNotIn("mcpServers", json.loads(copied))
         # Every copy holds main's skills byte for byte, so the setup block is one text in all three: it installs cad
-        # by uv's line, and nothing names our install script. No skill pre-approves a tool.
+        # by uv's line, with `--force`, and nothing names our install script. No skill pre-approves a tool.
         command = branch.UV_INSTALL
         blocks = 0
         codex = branch.build(REPO_ROOT, "codex")[0]
@@ -89,7 +93,7 @@ class PluginTreeTests(unittest.TestCase):
                 self.assertNotIn("allowed-tools", main, path)
                 setup = re.search(r"^Written for `cad==.*?/docs/migrations\n", main, re.S | re.M)
                 self.assertTrue(setup, path)
-                self.assertIn(f"`{command}`", setup[0], path)
+                self.assertIn(f"`{SKILLS_LINE}`", setup[0], path)
                 blocks += 1
             self.assertNotIn(branch.plugin_zip.INSTALL_SCRIPT, main, path)
         self.assertEqual(blocks, len({path for path in skills if path.endswith("/SKILL.md")}),
@@ -130,13 +134,14 @@ class PluginTreeTests(unittest.TestCase):
             self.assertEqual({"pyproject.toml", "uv.lock"} & set(tree), set())
 
     def test_the_readme_installs_by_the_skills_line(self) -> None:
-        # The copies' README installs cad by the line every skill's setup block gives.
+        # The copies' README installs cad by uv's line, and every skill's setup block gives that line with `--force`
+        # (`SKILLS_LINE`).
         self.assertIn(f"```bash\n{branch.UV_INSTALL}\n```\n", branch.README_UV.format(command=branch.UV_INSTALL))
         setups = [path for path in sorted((REPO_ROOT / "skills").glob("*/SKILL.md"))
                   if "Written for `cad==" in path.read_text(encoding="utf-8")]
         self.assertGreater(len(setups), 1)
         for path in setups:
-            self.assertIn(f"run `{branch.UV_INSTALL}`", path.read_text(encoding="utf-8"), path)
+            self.assertIn(f"run `{SKILLS_LINE}`", path.read_text(encoding="utf-8"), path)
 
     def test_a_download_run_by_a_shell_is_found(self) -> None:
         found = ["curl -fsSL https://x.dev/i.sh | sh", "curl -fsSL https://x.dev/i.sh | sh -s -- --add 1.0.0",

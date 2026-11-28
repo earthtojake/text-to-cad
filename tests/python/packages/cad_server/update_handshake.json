@@ -76,5 +76,74 @@
    "--help",
    "-h"
   ]
+ },
+ "update": {
+  "build": [
+   "UV",
+   "tool",
+   "run",
+   "--isolated",
+   "--managed-python",
+   "--from",
+   "cad@latest",
+   "cad",
+   "--version"
+  ],
+  "entry": [
+   "UV",
+   "tool",
+   "run",
+   "--isolated",
+   "--managed-python",
+   "--from",
+   "cad==9.9.9",
+   "python",
+   "-P",
+   "-m",
+   "cad_server._internal.auto_update_helper"
+  ],
+  "told": [
+   "asked",
+   "at",
+   "cad",
+   "from",
+   "log",
+   "prefix",
+   "record",
+   "spare",
+   "start",
+   "target",
+   "tries",
+   "uv",
+   "wanted"
+  ],
+  "record": [
+   "asked",
+   "at",
+   "beat",
+   "from",
+   "outcome",
+   "phase",
+   "release",
+   "tries",
+   "wanted"
+  ],
+  "phases": [
+   "repairing",
+   "switching"
+  ],
+  "outcomes": [
+   "current",
+   "failed",
+   "installed",
+   "underway"
+  ],
+  "worker_env": "CAD_UPDATE_WORKER",
+  "lock": "settings.lock",
+  "silent_seconds": {
+   "leaving": 150.0,
+   "lost": 1200.0
+  },
+  "notices": "/notices"
  }
 }

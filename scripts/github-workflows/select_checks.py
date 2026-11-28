@@ -228,9 +228,14 @@ RULES: tuple[Rule, ...] = (
          select(flags=["installer"]), final=True),
     Rule(tuple(f"packages/cad/src/cad_server/{path}" for path in (
         "cli/setup.py", "cli/auto_update.py", "_internal/install_script.py", "_internal/arrival.py",
-        "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
-        "engine/daemon.py", "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/**")),
+        "_internal/auto_update.py", "_internal/auto_update_helper.py",
+        "_internal/installations.py", "engine/daemon.py", "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/**",
+        # ...and what a command says while the update switches releases: `cad update`'s steps and end, a failed
+        # start's update, a command that meets the next release's server.
+        "cli/update.py", "cli/server.py", "_internal/cli_errors.py")),
         select(flags=["installer"])),
+    # ...and the client, which waits for the next release's server while the update switches.
+    Rule(("packages/cad/src/cad/engine/client.py",), select(flags=["installer"])),
     # The one-line installer: the docs site serves copies of install.sh, install.ps1 and install.py. Its own
     # tests (tests/python/global/test_install_script.py) are a light contract: static runs them on every change.
     Rule(("scripts/install/install.sh", "scripts/install/install.ps1", "scripts/install/install.py"),

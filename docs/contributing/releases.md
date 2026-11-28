@@ -54,9 +54,9 @@ PyPI. `scripts/release/unavailable-versions.txt` is the machine-checked list. `c
 `bump-version.sh major` from a version below 1.0, which computes 1.0.0, is refused: the first release
 of that major is named as an exact version that is free.
 
-Every file of those releases is yanked on PyPI, and must stay so: uv and cad's own update skip a
-yanked release, and nothing else keeps a computer from taking the previous owner's 1.x for a higher
-major of ours.
+Every file of those releases is yanked on PyPI, and must stay so: uv, which picks what cad's own
+update installs, skips a yanked release, and nothing else keeps a computer from taking the previous
+owner's 1.x for the newest release of ours.
 
 ## Which number a release bumps
 
@@ -106,33 +106,34 @@ says what to change. A release that does not bump the breaking slot breaks nothi
 guide: `Test`'s version check refuses one there (`version_breaks_nothing` in
 `scripts/release/release-tags.sh`). An existing guide may be corrected or extended in any release.
 
-**Which releases install themselves** is another rule (`version_installs_itself`): every newer
-release of the major a computer is on, a patch and a minor alike, and never a higher major. So from
-1.0 a minor installs itself and must break nothing. Below 1.0 a minor installs itself and may break,
-with its guide: text-to-cad is in beta, and the skills tell the person when cad is a version ahead of
-them. The release to 1.0, and every major after it, waits for the person.
+**Every release installs itself**, on every computer whose automatic updates are on: a patch, a
+minor and a new major version alike ([Decisions](decisions.md#always-the-newest-release)). So a
+release that bumps the breaking slot reaches everyone by itself, with its guide: below 1.0 a minor,
+from 1.0 a major. The skills tell the person when cad is a version ahead of them. What the first 1.0
+must still mind is in [Before the first release of a higher
+major](#before-the-first-release-of-a-higher-major).
 
 ## How a release reaches a computer
 
-- **cad updates itself, inside its major.** A global install (`uv tool install cad`) does, unless
-  `cad update auto off`: when the version feed names a newer release of its major, its server runs
-  the installer's own upgrade bounded to that major, `uv tool install --upgrade
-  "cad>=<installed>,<<next major>"` (pipx: `pipx upgrade cad --pip-args=...`, the same range). uv
-  keeps the range, so a person's own `uv tool upgrade cad` stays inside the major too. A typed
-  `cad update` does the same at once, asking PyPI instead of the feed, and names a higher major where
-  one is out. Nothing installs an older release.
-- **A major is crossed only when a person asks**, with `cad update --major` (`uv tool install
-  --upgrade "cad>=<installed>"`); the automatic update then goes on inside the new major. What cad
-  runs of its own is bounded to a major: its update, and its install of itself where a computer has
-  none, by the plugin's server line and by the bridge (`tool_install`: `cad<N>`, never over a `cad`
-  of a higher major), and the install command's update of a cad that is there, which is that cad's
-  own `cad update`. Not bounded: the plugin, which `cad plugin install` takes from `latest`, the
-  newest of all; and the hosted install command where it has no working cad to ask, which installs
-  PyPI's newest `cad` of all where cad is missing or does not start, and runs the newest release's
-  `cad plugin install` from uv's cache (`uv tool run ... cad@latest plugin install`) where the cad
-  there has none. 0.11.12 and 0.11.13 run that command by themselves (their `cad plugin update`), and
-  so does the bridge:
-  [Before the first release of a higher major](#before-the-first-release-of-a-higher-major).
+- **cad updates itself, to the newest release.** A global install that uv made does, unless `cad update
+  auto off`, and only at a person's ask (the viewer's button, `cad update`) or as its server next
+  starts: nothing is done in the background. Where PyPI, as cad last read it, names a newer release, uv
+  builds the newest release in its cache (`cad@latest`), and a worker of that release, which uv runs
+  from there (an older release starts a newer one's worker by its entry, `auto_update.HELPER`, which
+  every release keeps), stops the server and runs the person's own uv on the installed cad, `uv tool
+  upgrade cad`, in place; on Windows after moving uv's `cad.exe` aside and stopping every process of
+  the environment, since uv deletes the old files one by one with no rollback and a running process
+  holds them. It checks that the new release runs and starts its server, goes back to the release
+  before where it does not, and where no cad runs installs cad again whole (`uv tool install --force
+  cad`). A typed `cad update` does the same at once. Only a cad `uv tool install` made updates itself:
+  one pipx or pip installed is updated the way it was installed, and one pinned to a release by hand is
+  left alone. Nothing installs an older release.
+- **Nothing names a release or holds a major back.** cad's update, its install of itself where a
+  computer has none (the plugin's server line and the bridge: `tool_install`, `uv tool install cad`),
+  the install command and `cad plugin install` (the plugin from `latest`) all take the newest. What
+  holds a release back is a yank on PyPI, for every one of them at once; what holds a computer back is
+  the person's own pin, or a range of their own in uv's record of the install (one that only caps the
+  major, as 0.11.18 and earlier wrote it, is replaced by the update that meets it).
 - **The plugin follows cad.** Where `cad plugin update auto` is on (the install command turns it on
   as its last step) and cad is newer than the release the plugin is up to date for (the one a run of
   the global install keeps where every app it found went well), cad's server runs `cad plugin
@@ -140,15 +141,16 @@ them. The release to 1.0, and every major after it, waits for the person.
   (`cad_server/_internal/plugin_catch_up.py`). It is cad's own code, the table of apps of the release
   installed, and downloads no script. That run has 15 minutes and a hard stop a minute past them; a
   failed run, or one where any app failed, is tried again an hour or more later, at most three times
-  for one release. One run goes at a time (a lock in the state folder), and cad's own update begins
-  none while one is going. `cad update` itself never runs it.
+  for one release. One run goes at a time (a lock in the state folder); cad's own update does not wait
+  for it. `cad update` itself never runs it.
 - **A correction to an agent app's row needs a release.** The table of apps ships in cad
   (`cad_server/plugin/apps.py`), so a fix reaches a computer when its cad updates, and a cad that
   does not update keeps its table while `latest` moves on. 0.11.12 and 0.11.13 carry no table: their
   `cad plugin update` downloads the hosted install command, which runs the newest release's `cad
   plugin install` from uv's cache.
-- **[The version feed](#the-version-feed) says when**: an hour after a release is on PyPI, unless
-  the project holds it back.
+- **PyPI says when**: a cad asks PyPI at most once an hour, so a release reaches it within the hour
+  it is on PyPI, unless the project yanks it there. 0.11.12 to 0.11.18 read
+  [the version feed](#the-version-feed) instead: an hour after, unless the project holds it back.
 - **A plugin store** (Codex's directory, claude.ai's) updates the copy it installed. Its skills may
   be older than cad, which the 30-day rule covers.
 - **Releases 0.10.0 to 0.11.11** are carried over once by their own updater
@@ -177,7 +179,8 @@ the agents running them reach for them, and nothing shipped later can change wha
    its `latest` alone, frozen, never naming 0.12.0 or later; `api.texttocad.dev/v1/releases`, its
    `latest` and its `lines`. Every release from 0.7.12 on reads one of them
    ([The version feed](#the-version-feed)), and 0.11.x installs by itself only a patch of its own
-   minor ([Decisions](decisions.md#old-releases-are-carried-through-the-newest-011)).
+   minor ([Decisions](decisions.md#old-releases-are-carried-through-the-newest-011)). And
+   `api.texttocad.dev/v1/notices` with its `notices`, which every later release reads.
 3. **`uv tool install cad`, with no flags, as the one line that installs cad.** Every skill's Setup
    block runs it, and the docs give it, so the newest `cad` on PyPI must install a working `cad`
    command on any Python from the floor up. `requires-python` takes no upper bound: with one, a
@@ -195,7 +198,55 @@ the agents running them reach for them, and nothing shipped later can change wha
    address answering (web links, and `git clone`, `fetch` and `push`) after a rename or a move to an
    organisation, until a repository is made at the old address again; whether a renamed branch
    redirects is not known, so the three branch names are held fixed.
+8. **cad's own update, as one release starts it and the next carries it out.** From the first release
+   that updates this way, the installed release has the person's uv build the newest cad in its cache
+   and say its release, then runs that release's worker from there:
 
+   ```text
+   uv tool run --isolated --managed-python --from cad@latest cad --version
+   uv tool run --isolated --managed-python --from "cad==<X>" python -P -m cad_server._internal.auto_update_helper <told>
+   ```
+
+   So every later release installs from PyPI with those uv options, prints `cad X.Y.Z` as the last
+   line of `cad --version`, keeps a worker at that module that takes one JSON argument, and writes the attempt's record with the keys and phases an earlier release's
+   server, button and `cad update` read. The two sides of it differ:
+
+   - **The record** is written by the newer release and read by the older. A key or a phase may be
+     added; none that an installed release reads is removed or renamed. Six keys it cannot do
+     without: `release` and `at` (a record without them is no record to it), `outcome` (`underway`,
+     then `installed`, `current` or `failed`), `beat`, `phase` (`switching`, `repairing`) and
+     `from`. The others (`tries`, `wanted`, `asked`, and the worker's `cause`, `detail`, `restored`,
+     `started`) it reads where they are there and does without where they are not; a `cause` it
+     does not know it takes for none.
+   - **While the worker runs, the installed release goes by its own clock and rules**, which are on
+     computers already. It lets a server of the release being left start again once the `beat` is
+     150 seconds old, and takes the attempt for lost after twenty minutes without one: a worker
+     beats at least every minute. It stands aside for no server but the worker's own: the worker
+     sets `CAD_UPDATE_WORKER` to the attempt's `at` for every command it runs, so the server it
+     starts on the way back to that release is let through. And both write the record under the
+     state folder's lock, `settings.lock`.
+   - **`told`** is written by the older release and read by the newer. A worker may use any key that
+     every release still updating this way sends, and needs none of them: it can find each itself.
+     A later release may stop sending a key where the workers after it do without. The one thing
+     that cannot be done is the reverse, a worker that needs a key some installed release does not
+     send: nothing shipped later adds it there.
+
+   The lines name no version of Python, on purpose: uv takes one the release's own
+   `requires-python` admits, and fetches it where the computer has none, so a release may raise
+   its floor and an installed release still starts its worker (measured, uv 0.11: with a version
+   named, a release that had left that version behind was refused as unsatisfiable, with no older
+   release taken in its place). A release still says truthfully which Pythons it runs on, since
+   that is all uv goes by.
+
+   And `api.texttocad.dev/v1/notices` keeps answering `{"notices": [...]}`.
+   `tests/python/packages/cad_server/test_update_handshake.py` holds the lines, what this release
+   sends in `told`, and the record against `update_handshake.json`, so a change to any of them is
+   made on purpose. It lasts as long as the releases that update this way are to update by
+   themselves. This is what lets everything else about the
+   update change: the worker is always the newest release's, so a fault in how cad upgrades, goes
+   back or repairs is fixed by the next release on every computer, and only a fault in these two
+   lines is not. Where one ever is, a notice tells every older cad the one line that does not depend
+   on them: `uv tool install --force cad`.
 **Everything else follows one rule: a new release carries the old ones, and an old release never
 needs to know a new one.** A name, a place or a layout may change in any release, on the condition
 that the release that changes it brings along every computer an earlier one is on, by its own code or
@@ -230,30 +281,33 @@ As many past releases as reasonable can reach the latest one:
   `remove_loose_skills`).
 - **0.11.12 and 0.11.13** update themselves, and their plugin's catch-up downloads the hosted install
   command, which finds no `cad plugin install` in them and runs the newest release's from uv's cache.
+- **0.11.12 to 0.11.17** update themselves in place with uv, by their own updater, which has none of this
+  release's safety steps: each makes its hop into this release that way, once; from then on this release's
+  update runs.
 
 Check a change to the install script, to `cad plugin install`, to cad's update or to the list above
 against these paths before it ships.
 
 ## Before the first release of a higher major
 
-No higher major exists today, and none of this is done. Before the first one ships:
+No higher major exists today. A new major version installs itself as any release does, so before the
+first one ships:
 
 - **Its number is given exactly**: `bump-version.sh major` computes 1.0.0, which is one of the
   [versions a release cannot take](#versions-a-release-cannot-take). The previous owner's releases
   there stay yanked.
-- **The hosted install command keeps an arriving computer inside its major** unless a person asked
-  for more. Today it installs PyPI's newest `cad` of all where cad is missing or does not start, and
-  runs the newest of all from uv's cache (`cad@latest`) where the cad there has no `cad plugin
-  install`; 0.11.12, 0.11.13 and the bridge run it by themselves. It is fetched at every run, so it
-  can ask the `cad` that is there for its release and bound both. One part is done: a cad run from
-  uv's cache keeps no release as the one the plugin is up to date for, so a release of a higher major
-  is never kept for a cad that cannot reach it.
-- **The plugin catch-up does not move a plugin across a major.** Today `cad plugin install` takes the
-  plugin from `latest`, the newest of all, whatever major the cad that runs it is. That branch name
-  is in cad (`cad_server/plugin/source.py`), so the last release of a major is where its plugin's
-  source is decided.
+- **Its migration guide is there**, and where every older cad should be told before or as it arrives,
+  a notice is posted for cads below it ([Posting a notice](../../apps/api/README.md#posting-a-notice)).
+- **uv's range is minded already.** uv keeps none for `uv tool install cad`, but keeps the one 0.11.12
+  to 0.11.17 gave it as they updated (`cad>=<release>,<1`) and the one the bridge and the repair of
+  0.11.18 and earlier wrote (`cad<1`). cad's update is `uv tool upgrade cad`, which keeps to uv's
+  record. So the worker, where uv built a newer release than the upgrade took and the record's range
+  only caps the major (`auto_update.capped`), installs cad over uv's record in place (`uv tool install
+  --upgrade cad`), which writes `cad` alone; `self-major` rehearses it. Nothing to do for 1.0 but
+  keep that step in the worker.
 - **The newest release below 0.12.0**, the stepping stone through which 0.10.0 to 0.11.11 computers
-  arrive (`/v1/versions`), is checked against the same rule: its bridge runs the install command.
+  arrive (`/v1/versions`), still carries them: its bridge runs the install command, which installs the
+  newest of all.
 
 ## Shipping a release
 
@@ -596,12 +650,20 @@ refuses.
 
 ## The version feed
 
-`api.texttocad.dev` (`apps/api`; its [README](../../apps/api/README.md) is the full account) serves
-the feed at two addresses, both from one read of PyPI:
+The releases after 0.11.18 read no feed: they ask PyPI itself (its index page for cad, `pypi.org/simple/cad/`, at most once
+an hour, in the background, and once more for `cad update`) whether a newer release is out, have uv
+install the newest it finds, which is never a yanked one, and read the project's notices from
+`api.texttocad.dev/v1/notices`. So **a release is held back from them by yanking it on PyPI**, and
+nothing else: no hour's wait, no list of holds, and a yank holds from the moment it is made, since no
+release is named to uv. Yank it within minutes of `Publish Release` where it
+must not spread.
+
+For the releases before them, `api.texttocad.dev` (`apps/api`; its [README](../../apps/api/README.md) is
+the full account) serves the feed at two addresses, both from one read of PyPI:
 
 - `/v1/releases` names `latest`, the newest release that has been on PyPI for at least an hour and is
-  not held back, and `lines`, the newest such release of each major version. Releases from 0.11.12
-  on read it (`cad_server/updates.py`, at most once an hour).
+  not held back, and `lines`, the newest such release of each major version. Releases 0.11.12 to
+  0.11.18 read it (at most once an hour).
 - `/v1/versions` names `latest` alone and, under the same rules, the newest such release below
   0.12.0. Releases 0.7.12 to 0.11.11 read it, and 0.10.0 to 0.11.11 install the release it names, so
   the newest 0.11.x carries them over.
@@ -611,15 +673,24 @@ What a release depends on:
 - **Nothing in a release touches the feed.** It reads the index of `cadgen`, the last of the four
   projects a release uploads, so a release it names is installable under every name. Its edge keeps
   an answer five minutes.
-- **It says when, not what.** An automatic update the feed starts installs PyPI's newest of the
-  installed major, even where the feed names none of that major and its `latest` is of a higher one.
-  The install command, `cad update`, the plugin's server line and the skills' `uv tool install cad`
-  read no feed: they take PyPI's newest (`cad update`, which the install command runs on a cad that is
-  there when a person ran it, and the server line: of the installed major).
-- **So a hold is a brake, not a wall.** Holding a release back (`CAD_HELD_RELEASES`, an environment
-  variable of the Vercel project, then `gh workflow run deploy-api.yml --ref main`:
-  [Holding a release](../../apps/api/README.md#holding-a-release)) stops automatic updates only on
-  computers already on the feed's release. To pull a release from everyone, yank it on PyPI.
+- **It says when.** 0.11.12 to 0.11.18 update when it names a newer release of their major, to
+  PyPI's newest of that major. The install command, `cad update`, the plugin's server line and the skills' `uv tool install cad`
+  read no feed: they take PyPI's newest (on 0.11.12 to 0.11.18, `cad update` and the server line: of
+  the installed major).
+- **So a hold slows 0.11.12 to 0.11.18, and nothing else.** Holding a release back
+  (`CAD_HELD_RELEASES`, an environment variable of the Vercel project, then `gh workflow run
+  deploy-api.yml --ref main`: [Holding a release](../../apps/api/README.md#holding-a-release)) keeps
+  the feed from naming it, but they install PyPI's newest of their major once the feed names any newer
+  one, and later releases read no feed. To pull a release from everyone, yank it on PyPI.
+- **A notice reaches the computers a release cannot.** Where an update keeps failing in a way no
+  message of cad's foresaw, or a change of how cad installs leaves computers behind, post a notice
+  (`CAD_NOTICES`, an environment variable of the Vercel project, served at `/v1/notices`, then the
+  same redeploy:
+  [Posting a notice](../../apps/api/README.md#posting-a-notice)): one line of text, and a link on
+  texttocad.dev or the repository, for every cad older than a release you name. cad says it after a
+  command's output once a day, in `cad doctor` and in the viewer, until it is taken down; releases
+  before notices existed never show one. It is for what a release cannot fix, not for news: with none
+  posted, nothing anywhere changes ([Decisions](decisions.md#notices-reach-what-a-release-cannot)).
 - **A new telemetry schema ships with its receiver.** Telemetry passes through the same API to
   PostHog. A release that sends a new schema carries the receiver that reads it, deployed by its
   merge (`Deploy API`, which needs the project's PostHog settings in Vercel: `/v1/health` checks

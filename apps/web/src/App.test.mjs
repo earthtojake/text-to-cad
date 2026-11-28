@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { build } from 'esbuild';
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import { createRequire } from 'node:module';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -33,6 +33,15 @@ await build({
 });
 const { App, EngineStopped, createWebCadClient, act, createElement, createRoot, snapshot, autoReloadOptions, createTabStore, sessionTabRecord, TAB_RECORD_KEY } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
+
+/** Awaits `check()`, the page's timers running meanwhile; fails after five seconds. */
+async function until(check) {
+  const by = Date.now() + 5000;
+  while (!check()) {
+    if (Date.now() > by) throw new Error(`not met in time: ${check}`);
+    await act(() => new Promise(resolve => setTimeout(resolve, 20)));
+  }
+}
 
 // Each file's document id, as the server derives it from the file's canonical path.
 const IDS = { '/m/one.step': '6f1c2a4e-1b2c-5d3e-8f4a-000000000001', '/m/folder/two.step': '6f1c2a4e-1b2c-5d3e-8f4a-000000000002',
@@ -152,8 +161,10 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await act(() => viewer().whatsNew.onDismiss());
     assert.equal(viewer().whatsNew.entry, null);
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/settings').at(-1), ['/api/v1/settings', { whats_new: { seen: ['0.11'] } }]);
-    // Nothing on the page tells of a newer release: no update nudge, and nothing is read for one.
-    assert.equal(viewer().update, undefined);
+    // A server that says nothing of cad's update (cad cannot update itself here): no update button, and nothing is
+    // read for one.
+    assert.equal(viewer().update, null);
+    assert.equal(viewer().alert, null);
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/server' || url.startsWith('/api/v1/local/update')), []);
     assert.deepEqual(guards, ['1', '1']);
 
@@ -296,6 +307,105 @@ test('a page whose engine is gone says so in its language, over the page, until 
     await act(() => client.refresh({ file: ONE }));
     assert.equal(alert() === null, true, 'gone with the first read that answers');
     assert.equal(window.document.querySelector('[inert]'), null, 'the page in reach again');
+  } finally {
+    globalThis.fetch = fetchBefore;
+    await act(() => root.unmount());
+    client.dispose();
+    dom.window.close();
+  }
+});
+
+test('the update button: from the server\'s description, a click begins the update, the server going for it is no notice, and the page reloads into the next', async () => {
+  // The page's reload, as jsdom says it: it navigates nowhere, and says so.
+  const reloads = [];
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', error => { if (/navigation/i.test(String(error?.message))) reloads.push(1); });
+  const dom = new JSDOM('<div id="root"></div>', { url: `http://cad.local/${ONE}`, virtualConsole });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  const fetchBefore = globalThis.fetch;
+  const posted = [];
+  let catalog = 'up';
+  globalThis.fetch = async (url, init = {}) => {
+    if (url === '/api/v1/local/update') {
+      posted.push([JSON.parse(init.body), init.headers?.['x-cad-viewer']]);
+      return new Response(JSON.stringify({ release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'working' } }),
+        { status: 202, headers: { 'content-type': 'application/json' } });
+    }
+    if (isCatalog(url, init) && catalog === 'stopped') throw new TypeError('Failed to fetch');
+    const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/documents' ? { documents: [] }
+      : url === '/api/v1/settings' ? { language: { locale: null }, telemetry: { share: false, reason: 'untold', policy: 'p' } } : { ok: true };
+    return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
+  };
+  // The server's description, read afresh while the page follows the update: gone while it installs, then another
+  // start of the server, on the new release.
+  const answers = [{ release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'working', at: 5, asked: true } },
+    null, { release: '0.9.1', instance: 'second', cadUpdate: { version: '0.9.1', latest: null, state: 'idle' } }];
+  const client = { ...createWebCadClient({ document: window.document }),
+    serverInfo: async () => { const next = answers.shift(); if (!next) throw new TypeError('Failed to fetch'); return next; } };
+  const root = createRoot(window.document.getElementById('root'));
+  const button = () => snapshot().update;
+  try {
+    const server = { start: '/m', release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'idle' } };
+    await act(() => root.render(createElement(App, { client, server, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
+    // The blue button, outermost in the navbar (the shared viewer's to place), from what the server said at the start.
+    assert.equal(button().props.state.latest, '0.9.1');
+    assert.equal(button().props.phase.phase, 'idle');
+    await act(() => button().props.onUpdate());
+    assert.deepEqual(posted, [[{}, '1']], 'a person\'s update, behind the guard header');
+    assert.equal(button().props.phase.phase, 'working');
+    await until(() => button().props.phase.done === 1);  // begun
+    catalog = 'stopped';
+    await act(() => client.refresh({ file: ONE }).catch(() => {}));
+    await until(() => button().props.phase.done === 2);  // the server gone while the release installs
+    assert.equal(window.document.querySelector('[role="alert"]'), null, 'the server going for the update is no notice of its own');
+    assert.equal(window.sessionStorage.getItem('text-to-cad.update.followed'), '0.9.0', 'the page after the reload follows it still');
+    await until(() => button().props.phase.phase === 'restarting' && reloads.length > 0);
+    assert.deepEqual(reloads, [1], 'into the server that came back, on the new release, once');
+  } finally {
+    globalThis.fetch = fetchBefore;
+    await act(() => root.unmount());
+    dom.window.close();
+  }
+});
+
+test('a failed update is the viewer\'s alert, from the server\'s description, and is put away on the server', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://cad.local/' });
+  const { window } = dom;
+  const matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  window.matchMedia = matchMedia;
+  const fetchBefore = globalThis.fetch;
+  const posted = [];
+  globalThis.fetch = async (url, init = {}) => {
+    if (url === '/api/v1/local/update') posted.push(JSON.parse(init.body));
+    const reply = url === '/api/v1/local/update' ? { release: '0.9.0', instance: 'first', cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'failed',
+      at: 42, cause: 'in_use', said: 'in use', dismissed: true } }
+      : url === '/api/v1/documents' ? { documents: [] }
+      : url === '/api/v1/settings' ? { language: { locale: null }, telemetry: { share: false, reason: 'untold', policy: 'p' } } : { ok: true };
+    return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
+  };
+  const client = createWebCadClient({ document: window.document });
+  const root = createRoot(window.document.getElementById('root'));
+  try {
+    const server = { start: '/m', release: '0.9.0', instance: 'first',
+      cadUpdate: { version: '0.9.0', latest: '0.9.1', state: 'failed', at: 42, cause: 'in_use', said: 'in use' } };
+    await act(() => root.render(createElement(App, { client, server, tabStore: createTabStore(sessionTabRecord(window.sessionStorage)) })));
+    // The shared viewer's alert card says it (`CadViewer`'s `alert`); the button stays as it is offered.
+    const { alert } = snapshot();
+    assert.deepEqual([alert.alert.title, alert.alert.message, alert.alert.details, alert.alert.retryLabel, alert.alert.reportable, alert.dismissed],
+      ['Couldn’t update to 0.9.1', 'A file uv was writing was in use by another program: try again.', 'cad update', 'Try again', false, false]);
+    assert.equal(snapshot().update.props.state.latest, '0.9.1');
+    await act(() => alert.onDismiss());
+    await until(() => posted.length > 0);
+    assert.deepEqual(posted, [{ dismiss: 42 }]);
+    assert.equal(snapshot().alert.dismissed, true, 'put away, behind its icon: the server keeps it so for every page');
+    await act(() => snapshot().alert.onReopen());
+    assert.equal(snapshot().alert.dismissed, false);
+    await act(() => snapshot().alert.onRetry());
+    assert.deepEqual(posted, [{ dismiss: 42 }, {}], 'Try again: a person\'s update');
   } finally {
     globalThis.fetch = fetchBefore;
     await act(() => root.unmount());

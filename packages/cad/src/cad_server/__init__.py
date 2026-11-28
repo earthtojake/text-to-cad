@@ -13,7 +13,8 @@ module is imported, never sooner (``_internal/attach.py``): importing the server
 import sys as _sys
 
 # uv's cad.exe runs `python cad.exe`, so the launcher (a zip) is sys.path[0]; once anything reads package metadata, this
-# process holds it open, and Windows will not let an update rename it. That one entry goes first, before anything reads.
+# process holds it open, and Windows will not let the install command rename it out of uv's way. That one entry goes
+# first, before anything reads.
 if _sys.path and _sys.path[0].replace("\\", "/").rsplit("/", 1)[-1].lower() == "cad.exe":
     del _sys.path[0]
 del _sys

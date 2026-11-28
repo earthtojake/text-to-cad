@@ -10,11 +10,17 @@ records, Recents and settings in the state folder, and anything else in the fold
 - ``dir``: the cache folder.
 - ``prune``: what this release of cad cannot use: the environments made for another release (their marker names it,
   ``base.marked``), and the release folders of the layout of 0.11.11 and earlier (``<state>/releases/<release>``,
-  ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start.
-- ``clean``: all of the cache, and what ``prune`` removes; refused while a server runs, which runs from it.
+  ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start;
+  and, where no update is underway (``_tidy``), on Windows each ``cad.exe`` cad's update moved aside in uv's bin
+  folder and could not remove then, and cad's own entries in uv's cache (``uv cache clean cad``: each past release
+  stays unpacked there; nothing of another package is touched).
+- ``clean``: all of the cache, and what ``prune`` removes of it; refused while a server runs, which runs from it.
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
-kept, and said (``releases.running``). Nothing else of cad deletes a past release's folders or environments.
+kept, and said (``base.unused``). Nothing else of cad deletes a past release's folders or environments but its
+server, once as it starts, which removes by the same rules, quietly, what ``prune`` removes of cad's own: the
+environments made for another release, the release folders of 0.11.11 and earlier, and the ``cad.exe`` files moved
+aside (``base.tidy``, ``releases.tidy``, ``auto_update.tidy``). uv's cache is touched by ``prune`` alone.
 """
 
 from __future__ import annotations
@@ -62,55 +68,14 @@ def _folders(parent: Path) -> list[Path]:
         return []
 
 
-def _inside(path: str, parent: Path) -> bool:
-    here = os.path.normcase(os.path.realpath(path))
-    return here == os.path.normcase(os.path.realpath(parent)) or here.startswith(
-        os.path.normcase(os.path.realpath(parent)).rstrip(os.sep) + os.sep)
-
-
 def prunable() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
     """What ``prune`` removes, each with what it is, and what it keeps of that, each with why: the environments made
-    for another release, and the release folders of 0.11.11 and earlier but ``installations/current``'s; a folder a
-    process runs from kept."""
-    from cad.engine.places import current
-    from cad.engine.previous import version
+    for another release, and the release folders of 0.11.11 and earlier but ``installations/current``'s
+    (``releases.past``); a folder a process runs from kept."""
     from cad_server._internal import base, releases
 
-    found: list[tuple[Path, str]] = []
-    kept: list[tuple[Path, str]] = []
-    for env in _folders(base.folder()):
-        release = _release(env)
-        if release is not None and release != version():
-            found.append((env, f"an environment of cad {release}"))
-    record = current()
-    for old in _folders(releases.root()):
-        if record is not None and _inside(record["prefix"], old):
-            kept.append((old, "the release 0.11.11 and earlier start (installations/current)"))
-        else:
-            found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier"))
-    return _running(found, kept)
-
-
-def _release(env: Path) -> str | None:
-    """The release the environment at ``env`` was made for, as its marker names it; None where none does."""
-    from cad_server._internal import base
-
-    marker = base.marked(env)
-    inputs = marker.get("inputs") if marker is not None else None
-    release = inputs.get("release") if isinstance(inputs, dict) else None
-    return release if isinstance(release, str) else None
-
-
-def _running(found: list[tuple[Path, str]], kept: list[tuple[Path, str]]):
-    from cad_server._internal.releases import running
-
-    going = []
-    for path, what in found:
-        if running(path, asking=os.getpid()):
-            kept.append((path, "a process runs from it"))
-        else:
-            going.append((path, what))
-    return going, kept
+    going, kept = releases.past()
+    return base.unused(base.others() + going, kept)
 
 
 def freed(paths: Iterable[Path]) -> int:
@@ -144,8 +109,32 @@ def _say(line: str) -> None:
     sys.stdout.flush()
 
 
-def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]]) -> int:
-    """``going`` removed, each said, and ``kept`` said; then what that freed. 1 where one could not be removed."""
+def _tidy() -> int:
+    """Where no update is underway: on Windows, each ``cad.exe`` cad's update moved aside and could not remove then
+    (``auto_update.tidy``), removed; and cad's own entries in uv's cache, where each past release stays unpacked
+    (``auto_update.tidy_cache``: ``uv cache clean cad``), removed: only here, where a person asked, never by the
+    server. Each said: how many."""
+    from cad_server._internal import auto_update
+
+    if auto_update.underway() is not None:
+        return 0
+    gone = auto_update.tidy()
+    for path in gone:
+        _say(f"removed {path} (a cad command cad's update moved aside)")
+    came = auto_update.tidy_cache()
+    if came == auto_update.CLEANED:
+        _say("removed cad's releases from uv's cache (`uv cache clean cad`)")
+    elif came == auto_update.BUSY:
+        _say("kept cad's releases in uv's cache: another uv process is running, and uv waits for it (run this again "
+             "once it has ended, or `uv cache clean cad`)")
+    elif came == auto_update.LINKED:
+        _say("kept cad's releases in uv's cache: cad's files are links into it (uv's link mode symlink)")
+    return len(gone) + (came == auto_update.CLEANED)
+
+
+def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]], *, tidy: bool = False) -> int:
+    """``going`` removed, each said, and ``kept`` said; ``tidy``: then what cad's update moved aside (``_tidy``); then
+    what that freed. 1 where one could not be removed."""
     from cad_server._internal import base
 
     space, failed, removed = freed(path for path, _what in going), False, 0
@@ -162,6 +151,8 @@ def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]]) -> int:
         _say(f"kept {path}: {why}")
     if failed:  # what stayed frees nothing
         space -= freed(path for path, _what in going if os.path.lexists(path))
+    if tidy:
+        removed += _tidy()
     _say(f"{removed} removed, {size(max(0, space))} freed" if removed else "nothing removed")
     return 1 if failed else 0
 
@@ -169,7 +160,7 @@ def _remove(going: list[tuple[Path, str]], kept: list[tuple[Path, str]]) -> int:
 def _clean() -> int:
     """All of the cache, and what ``prune`` removes, where no server runs (``client.connect``)."""
     from cad.engine import client
-    from cad_server._internal import base
+    from cad_server._internal import base, releases
 
     try:
         running = client.connect(start=False)
@@ -182,13 +173,13 @@ def _clean() -> int:
                          "first\n")
         return 1
     root, envs = folder(), base.folder()
-    found = [(env, f"an environment of cad {_release(env) or 'no release it names'}") for env in _folders(envs)]
+    found = [(env, f"an environment of cad {base.release_of(env) or 'no release it names'}") for env in _folders(envs)]
     found += [(root / name, f"cad's {name}") for name in OWN if name != base.BASE and os.path.lexists(root / name)]
-    going, kept = _running(found, [])
+    going, kept = base.unused(found, [])
     pruned, also = prunable()  # its release folders of 0.11.11 and earlier: the environments are all above
 
     def outside(entries: list[tuple[Path, str]]) -> list[tuple[Path, str]]:
-        return [entry for entry in entries if not _inside(str(entry[0]), envs)]
+        return [entry for entry in entries if not releases.inside(entry[0], envs)]
 
     code = _remove(going + outside(pruned), kept + outside(also))
     with contextlib.suppress(OSError):
@@ -206,7 +197,7 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
         _say(str(folder()))
         return 0
     if args.command == "prune":
-        return _remove(*prunable())
+        return _remove(*prunable(), tidy=True)
     return _clean()
 
 

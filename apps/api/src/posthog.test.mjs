@@ -148,6 +148,18 @@ test("each of cad's own updates is PostHog's cad_updated: by version, from, outc
   assert.ok(installed.uuid && installed.timestamp, 'named, so a batch sent again counts once');
 });
 
+test("from schema 13 cad_updated says why an update did not install a newer cad, and an installed one says nothing of it", async () => {
+  const [failed, blocked, installed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 13, process: 'cli', channel: undefined, app: 'unknown', events: [
+    { name: 'update', from: '0.11.12', outcome: 'failed', reason: 'upgrade', tries: 2, installer: 'uv', asked: false, plugin: 'none', cause: 'disk_full', count: 1 },
+    { name: 'update', from: '0.11.12', outcome: 'blocked', tries: 0, installer: 'pipx', asked: false, plugin: 'none', cause: 'no_installer', count: 1 },
+    { name: 'update', from: '0.11.12', outcome: 'installed', tries: 1, installer: 'uv', asked: false, plugin: 'ok', count: 1 },
+  ] })));
+  assert.deepEqual([failed.event, blocked.event, installed.event], ['cad_updated', 'cad_updated', 'cad_updated']);
+  assert.deepEqual([failed.properties.cause, blocked.properties.cause, blocked.properties.outcome, blocked.properties.tries],
+    ['disk_full', 'no_installer', 'blocked', 0]);
+  assert.ok(!('cause' in installed.properties), 'none is made up');
+});
+
 test("a run of the plugin's install is PostHog's plugin_installed, and each app where it failed plugin_app_failed, by that app", async () => {
   const [run, failed] = await at(JSON.parse(JSON.stringify({ ...NAMED, schema: 12, process: 'cli', channel: undefined, app: 'claude-code', events: [
     { name: 'install', by: 'script', outcome: 'ok', logo: 'played', colour: '24bit', seconds: 42, found: 2, failed: 1, count: 1 },

@@ -3656,8 +3656,8 @@
   },
   {
    "command": "cad update",
-   "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
-   "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
+   "summary": "update cad now to the newest release; `update auto`: whether it does so itself",
+   "usage": "cad update\ncad update auto [{status,on,off}]",
    "description": 152,
    "arguments": [
     {
@@ -3666,21 +3666,13 @@
       "auto"
      ]
     }
-   ],
-   "options": [
-    {
-     "flags": [
-      "--major"
-     ],
-     "help": 153
-    }
    ]
   },
   {
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 154,
+   "description": 153,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -3697,11 +3689,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 155,
+   "description": 154,
    "arguments": [
     {
      "name": "FILE",
-     "help": 156,
+     "help": 155,
      "optional": true,
      "repeatable": true
     }
@@ -3712,39 +3704,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 157
+     "help": 156
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 158
+     "help": 157
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 159
+     "help": 158
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 160
+     "help": 159
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 161
+     "help": 160
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 162
+     "help": 161
     }
    ]
   }
@@ -3887,7 +3879,7 @@
   "what was deleted (or would be) as JSON",
   "Report this cad: its release, its data and cache folders and what `cad cache prune` would free, the CAD kernel environment and the integrations', and the server. It changes nothing. Exit 1 when the CAD kernel is installed and does not load.",
   "the same report",
-  "the report as one JSON document: each check's name, status (ok, info, warning, failed) and detail",
+  "the report as one JSON document: each check's name, status (ok, info, warning, failed), detail and the lines under it",
   "Serve CAD to the agent app that started this process, over MCP on standard input and output: this release's cad server started first, as `cad server start` starts it, and every request passed on to it. The app starts it; there is nothing to configure.",
   "The plugin in your agent apps: install or update it in every app found on this computer, or say whether cad's own updates update it too.",
   "Install the plugin in every agent app found on this computer, each with that app's own command, or update it where it is installed; then remove the older copies of it there. One line is printed per app. It exits 1 where every app it found failed.",
@@ -3902,9 +3894,8 @@
   "what was stopped as JSON",
   "the server's answer as JSON",
   "Show or change the usage stats and crash reports cad sends from CAD's apps (the CAD app in an agent app, and the viewer) and its build daemon. By default, once a cad command has said so: a random install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the viewer's tools and settings are used (never a value or a name), files shown by format, builds and snapshots, how they ended and how long they took, and where cad's own code failed (never a message). `off` sends nothing. Never file names, paths, contents or prompts.",
-  "cad installs every newer release of its major version by itself, and a new major version only when you run `cad update --major`. `cad update` updates cad now to the newest release of its major version, even with automatic updates off: cad asks PyPI and, once nothing is running, installs it. A cad server that was running starts again; with none running, none is started. `cad update auto` shows or changes whether cad updates itself.",
-  "install the newest release of all, a new major version included, which may ask for changes (https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)",
-  "Show or change whether cad updates itself to the newest release of its major version: once nothing has run for a minute, the cad server stops, installs it and starts again. A new major version never installs itself: `cad update --major` installs it. On by default, for a global install (`uv tool install cad`).",
+  "cad installs every newer release by itself. `cad update` updates cad now to the newest release, even with automatic updates off: cad asks PyPI, and uv, which installed it, upgrades cad in place. A cad server that was running restarts on it at once, stopping what is in flight; with none running, none is started. By itself, cad updates as the server next starts once a newer release is out. `cad update auto` shows or changes whether cad updates itself.",
+  "Show or change whether cad updates itself to the newest release: once one is out, cad updates as its server next starts; the viewer's update button and `cad update` update it now. On by default, for a global install (`uv tool install cad`).",
   "Open the running server's viewer page: the home, or each file named (no server running: its one line, which says to run ``cad server start``). The page is the engine's one page, whose explorer opens where it was last, else your home folder. Each FILE (an on-disk CAD file, a relative one read from this folder, or a document id the engine holds) is registered and printed as its page, ``/<id>``.",
   "a CAD file to open (or a document id the engine holds): its page is /<id>",
   "Pin the engine bind address; default loopback.",

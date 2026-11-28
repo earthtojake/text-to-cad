@@ -169,9 +169,11 @@ PY
 
 step "import build123d is lazy from interpreter start: the library wheel's .pth is in site-packages"
 scratch_sp="$("$VENV/bin/python" -c 'import site; print(site.getsitepackages()[0])')"
-PTH="$scratch_sp/cad-lazy-kernel.pth"
-[ -f "$PTH" ] || fail "cad-lazy-kernel.pth is not in $scratch_sp"
-[ "$(cat "$PTH")" = "import cad._internal.lazy_kernel" ] || fail "cad-lazy-kernel.pth does not import the finder"
+PTH="$scratch_sp/cad.pth"
+[ -f "$PTH" ] || fail "cad.pth is not in $scratch_sp"
+[ "$(cat "$PTH")" = "import cad._internal.lazy_kernel" ] || fail "cad.pth does not import the finder"
+[ "$(grep -v '^#' "$scratch_sp/cad.start")" = "cad._internal.lazy_kernel:install" ] \
+  || fail "cad.start is not in $scratch_sp, naming the finder"
 # Bound, not loaded: the kernel is untouched until an attribute is read from it.
 lazy="$(cd "$EMPTY" && "$VENV/bin/python" -c "import build123d as bd; import sys; print('OCP' in sys.modules)")"
 [ "$lazy" = "False" ] || fail "import build123d loaded the kernel ($lazy)"

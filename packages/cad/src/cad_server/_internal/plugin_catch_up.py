@@ -5,7 +5,7 @@ once.
 What cad knows of agent apps, plugins and skills lives in one place, ``cad_server.plugin``, reached only by the ``cad
 plugin`` command (``cad_server.cli.plugin``). This module names none of them: it knows that command, when the server
 runs it, the release it is up to date for, and the lock one run of it holds. The rule holds on every route by which cad
-gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrade cad`` or ``pipx upgrade cad`` by hand
+gets newer -- its own automatic update, a typed ``cad update``, ``uv tool upgrade cad`` by hand
 -- because it is the server of the newer cad that asks, whatever brought it.
 
 **The record** (``RECORD``, in the state folder beside ``auto-update.json``): ``for``, the release of cad the plugin is
@@ -13,8 +13,8 @@ up to date for -- written by ``cad plugin install`` as it ends with every app it
 0 and no app ``failed``; a run that found no app counts), and as the switch is turned on (``noted``, from
 ``auto_update.change_plugin``), and only ever by this computer's global install of cad (``tool``): a cad run from
 anywhere else (the newest release from uv's cache, which the hosted install command runs for an installed cad with no
-``cad plugin install``) is not the cad whose server asks the rule below, and its release, which may be of a higher major
-than that cad ever reaches, is never kept. ``cad plugin install`` installs and leaves the switch as it is; the switch is
+``cad plugin install``) is not the cad whose server asks the rule below, and its release, which may be one
+that cad has not reached, is never kept. ``cad plugin install`` installs and leaves the switch as it is; the switch is
 the person's, turned on by the hosted install command they ran, as its last step (``cad plugin update auto on``), which
 says how its run is ending in the environment of that call (``FAILED_ENV``): every app gone well, the switch is turned
 on and ``for`` written; otherwise (the plugin's step ended non-zero, or an app failed), the switch is turned on and
@@ -41,12 +41,13 @@ and the other without), where an app's step kept failing, each began a run at ev
 end. It is a state record, not a choice, so it lives in the state
 folder, as the update's own record does, and not in the person's settings. ``cad doctor`` shows it.
 
-**The rule** (``due``), asked by the server as it tends itself, only once nothing is in flight, never in its first
+**The rule** (``due``), asked by the server as it tends itself, whatever is in flight (the run touches only the agent
+apps, never the server), never in its first
 ``START_SECONDS`` (by its monotonic clock) and never while a run holds the lock (``Catcher``): the switch on; the update
 check not turned off for this process (``updates.checking``: ``CAD_UPDATE_CHECK=0``, CI, a development build); no test
 saying to run nothing (``silenced``: ``CAD_ENGINE_UPDATE_INSTALLER`` set and empty, the variable that names the bridge's
 stand-in for the hosted install command -- ``cad plugin install`` itself runs no install command and reads no such
-variable); this cad a global install (``tool``: an installer of ``auto_update.INSTALLERS`` made its environment) of a
+variable); this cad a global install (``tool``: ``auto_update.global_install``) of a
 plain release; install mode not owed (BRIDGE-ONLY: a computer the bridge still carries gets that run,
 ``install_script``, and no other, until that run is done, which it is once cad is installed: an app that failed there
 is this rule's from then on); and this cad newer than ``for``, or owed a run (``owed``, of this release or an
@@ -65,7 +66,7 @@ keeps its run (``_wanted``), so two servers on one state folder never both begin
 (``auto_update.tool_command``) runs ``cad plugin install``, detached, with no window, in an environment that points at
 nothing of this one (``auto_update._UNSET``) and names the run (``SERVER_ENV``: its ``at``), its output in
 ``install-command.log`` (``auto_update.INSTALL_LOG``). Named so, and only so, that command is a server's run: it has
-``INSTALL_SECONDS`` (``deadline``), its hard stop, a server's place at the lock, and it closes the record's run as it
+``RUN_SECONDS`` (``deadline``), its hard stop, a server's place at the lock, and it closes the record's run as it
 ends (``ended``: ``ok`` only where every app it found went well, else ``failed``). No released cad sets
 ``SERVER_ENV``. The name 0.11.12 and 0.11.13 give their server's run,
 ``ATTEMPT_ENV``, is no such mark: their run is their own ``cad plugin update``, which runs the hosted install
@@ -94,9 +95,7 @@ run waits for it -- but one a server began (``SERVER_ENV``), which ends with exi
 The server begins none while the lock is held, and none in its first ``START_SECONDS``: a person's install command
 that updated cad restarted the server, and goes on to the plugin a moment later; it takes the lock and does the work,
 and keeps this release, so the server, asking after it, finds the plugin up to date and runs nothing. Where nobody ran
-that command (cad's own update, one by hand), the run begins that much later. cad's own update begins none while the
-lock is held (``auto_update.due``, ``auto_update.asked``): it would replace this environment's files under the
-run. Whether it is held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking``
+that command (cad's own update, one by hand), the run begins that much later. Whether it is held can only be asked by trying for it (``running``: neither ``flock`` nor Windows' ``locking``
 says who holds a lock without taking it), so a server that asks holds it for an instant. A run therefore tries for
 ``SETTLE_SECONDS`` before it takes the lock as another run's (``run_lock``): only then does a server's run answer
 ``BUSY``, and a person's say that it waits.
@@ -154,6 +153,8 @@ SETTLE_STEP = 0.25
 # of its tendings (``daemon.TEND_SECONDS``; on a test's computer, two of its own, ``daemon.catch_up_seconds``). A
 # person's install command that just updated cad, and with it restarted the server, goes on to the plugin within it.
 START_SECONDS = 60.0
+# How long a run a server began may take (``deadline``): 15 minutes.
+RUN_SECONDS = 15 * 60.0
 TRIES = 3  # how many runs one release gets: once, and twice more, each an hour or more after the one before
 RETRY_SECONDS = 60 * 60.0
 UNDERWAY, OK, FAILED = "underway", "ok", "failed"
@@ -172,12 +173,10 @@ def server_run() -> str | None:
 
 def deadline() -> float | None:
     """How long ``cad plugin install`` may take: where this release's server began this run (``server_run``),
-    ``INSTALL_SECONDS``, the bound cad's update helper puts on an install; any other run, none."""
+    ``RUN_SECONDS``; any other run, none."""
     if server_run() is None:
         return None
-    from cad_server._internal.auto_update_helper import INSTALL_SECONDS
-
-    return float(INSTALL_SECONDS)
+    return float(RUN_SECONDS)
 
 
 def _folder() -> Path:
@@ -397,14 +396,12 @@ class HardStop:
 
 
 def tool() -> Path | None:
-    """This cad's environment where it is a global install (an installer of ``auto_update.INSTALLERS`` made it), else
-    None. Only whether it is one: the installer's program need not be found, as the update's must."""
-    import sys
-
+    """This cad's environment where it is a global install (``auto_update.global_install``: uv made it), else
+    None. Only whether it is one: no uv need be found, as the update's must."""
     from cad_server._internal import auto_update
 
-    prefix = Path(sys.prefix)
-    return prefix if any(installer.owns(prefix) for installer in auto_update.INSTALLERS) else None
+    found = auto_update.global_install()
+    return found.prefix if found is not None else None
 
 
 def _stale(found: dict[str, Any], now: float) -> bool:

@@ -560,7 +560,10 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 "_internal/auto_update.py", "_internal/auto_update_helper.py", "_internal/installations.py",
                 "engine/daemon.py",
                 # ...and what the install command hands the apps to: `cad plugin install`, its table and its run.
-                "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/apps.py", "plugin/run.py")},
+                "cli/plugin.py", "_internal/plugin_catch_up.py", "plugin/apps.py", "plugin/run.py",
+                # ...and what a command says while the update switches releases.
+                "cli/update.py", "cli/server.py", "_internal/cli_errors.py")},
+            "packages/cad/src/cad/engine/client.py": packages | jobs_on("installer"),
             # A runner runs what it feeds.
             "scripts/test/test-js.sh": jobs_on("core_js", "web_ui", "web_client", "mcp"),
             "scripts/test/test-floor.sh": jobs_on("floor"),

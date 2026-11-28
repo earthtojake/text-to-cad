@@ -22,8 +22,8 @@ It does five things, and nothing else:
    for new terminals (on macOS and Linux in your shell's profile, on Windows in your user PATH).
    Setting `UV_NO_MODIFY_PATH` stops that.
 3. Where cad was installed already, brings it up to date with its own `cad update`: the newest
-   release of its major version ([Updating](#updating)). While cad's server is busy the update
-   waits for it, 11 minutes at most. It says one line as it begins, and in its place one line of what
+   release ([Updating](#updating)), which restarts a running cad server on it
+   at once; it waits for that 11 minutes at most. It says one line as it begins, and in its place one line of what
    came of it: the release cad was updated to, that it is the newest already, or why cad was not
    updated now, which never stops the run: cad updates itself.
 4. Hands the agent apps to cad, by running `cad plugin install`. That installs or updates the
@@ -375,23 +375,33 @@ cad and the plugin update separately.
 
 ### cad
 
-cad updates itself to every new release of its major version (the first number: 0 in 0.12.3). While
-its server runs, it looks for a new release about once an hour, and installs it once nothing has run
-for a minute. To update it now:
+cad updates itself to every new release, in place,
+with your own uv, as
+its server next starts, or when you ask: the viewer's update button, which shows
+while a newer release is out, does it with one click. It does nothing in the background. An update stops
+the server at once, as `cad server stop` does; a command it cuts short says cad updated itself while it
+ran, and runs again as it was. Where an update leaves cad unable to run, cad installs itself again. A cad
+you pinned to a release (`uv tool install cad==X`) is left as it is, and so is a cad something other
+than `uv tool install` put there (pipx, pip): move it onto uv (`pipx uninstall cad`, then
+`uv tool install cad`), or update it the way you installed it. To update it now:
 
 ```bash
 cad update
 ```
 
 That updates cad alone; the install command, run again, does the same and then updates the plugin.
-A new major version never installs itself, because it may need changes on your side: `cad update` and `cad doctor` say when one is out, and this installs it:
-
-```bash
-cad update --major
-```
-
-The [migration guides](https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations) say what
-changes. Automatic updates are on unless you turn them off. To see whether they are on, or to turn them
+The viewer and the CAD app show a blue update button, at the top right, while a newer release is out;
+clicking it does what `cad update` does.
+Where an update fails, the viewer says why and what to do.
+With automatic updates on, a `cad` command also says once a day when cad has stayed behind for three
+days, and what to do. Where it keeps failing, or cad no longer runs: run `cad update`, which says why and
+what to do; then `cad doctor`, which ends with the one thing to do next; then install cad again, which
+always gives a clean cad: `uv tool install --force cad`, or the install command where cad does not start.
+A new major version (the first number: 1 in 1.0.0) installs itself as any release does. It may need
+changes on your side, which the
+[migration guides](https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations) say. To stay
+on a release until you choose to move, pin it (`uv tool install cad==X`), or turn automatic updates
+off. Automatic updates are on unless you turn them off. To see whether they are on, or to turn them
 off or on:
 
 ```bash
@@ -410,15 +420,19 @@ uv tool upgrade cad
 cad server start
 ```
 
-Once cad has updated itself, uv keeps it inside its major version, so `uv tool upgrade cad` does too;
-`uv tool install cad@latest` takes the newest of all.
+cad's own update is that same `uv tool upgrade cad`: it takes the newest of all, a new major version
+included, and leaves uv's record of cad as it is, with one exception. cad 0.11.18 and earlier left uv a
+range there that only keeps cad below the next major (`cad<1`). cad holds no major back any more, so
+where that range is all that keeps a new major out, cad's update installs cad over uv's record, in
+place (`uv tool install --upgrade cad`), which replaces it. To stay on a release, pin it: `uv tool
+install cad==X`.
 
 ### The plugin
 
 The install command turns on the plugin's automatic updates as its last step: each time cad is
 newer than the release the plugin is up to date for, cad runs `cad plugin install` once, in the
 background, which puts the newest plugin in every agent app it finds. That holds however cad
-got newer: by itself, by `cad update`, or by `uv tool upgrade cad` or `pipx upgrade cad`. It happens
+got newer: by itself, by `cad update`, or by `uv tool upgrade cad`. It happens
 the next time cad's server starts or looks after itself with nothing running. A run that fails (any
 app failing counts, though the others went well), or that is still running after 15 minutes and is stopped (a minute later for certain, whatever it is
 doing), is tried again an hour or more later: at most three runs for one release. To update the plugin now:
@@ -429,8 +443,7 @@ cad plugin install
 
 That leaves cad as it is; the install command updates cad first, then runs `cad plugin install`.
 (`cad plugin update`, the name 0.11.12 and 0.11.13 give it, still does the same.) One such run goes
-at a time: a second waits for the first to end, and `cad update` typed while one is going says so and
-updates nothing, so run it again afterwards.
+at a time: a second waits for the first to end.
 
 To update one app alone, run the update command under its name. To see whether the plugin's
 automatic updates are on, or to turn them off or on:
@@ -450,7 +463,8 @@ skills may then be older than cad. That is fine: a command the skills used keeps
 
 ### Staying on an older release
 
-Turn automatic updates off, then install the release you want, for example 0.11.12:
+Turn automatic updates off, then install the release you want, for example 0.11.12 (what uv installs
+is what runs, whatever cad's own update installed beside it):
 
 ```bash
 cad update auto off
@@ -510,7 +524,15 @@ folders, which you can delete by hand:
 | Windows | `%USERPROFILE%\.local\state\cad` | `%USERPROFILE%\.cache\cad` |
 
 `cad doctor` and `cad cache dir` print where they are on your computer; run them before you remove
-cad. What uv downloaded stays in uv's cache until you run `uv cache prune`.
+cad. What uv downloaded stays in uv's cache until you clear it (`uv cache prune`; `cad cache prune`
+clears cad's own releases there). The data folder also
+holds cad's settings, the documents' records and the update's record and log. The cache folder holds
+the CAD kernel environment of the release that runs, its files links into uv's cache where both are
+on one file system. cad removes by itself, as its server starts, what no process runs from of the
+environments made for other releases and of the release folders cad 0.11.11 and earlier kept in the
+data folder. `cad cache prune` does the same now, and also clears cad's own entries from uv's cache
+(`uv cache clean cad`), where every release cad updated from stays unpacked, about 15 MB each; cad
+never touches uv's cache by itself.
 
 ## What it needs
 

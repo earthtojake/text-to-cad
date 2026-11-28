@@ -15,7 +15,7 @@ around it are few, and each stands in the same place for every file.
 
 | Region | Holds | Never holds | Why |
 |---|---|---|---|
-| **Navbar**, across the top | Left: the panel toggle, the logo's app menu, Back and Forward (the CAD app), the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions | Tools, a switch for one file type, the camera | One bar, the same over every file and the home, so each control is where the person last found it |
+| **Navbar**, across the top | Left: the panel toggle, the logo's app menu, Back and Forward (the CAD app), the file's name and its ⋯. Right: a put-away alert, Display, Preview, the host's actions, the update button | Tools, a switch for one file type, the camera | One bar, the same over every file and the home, so each control is where the person last found it |
 | **Panel**, at the left | The file's structure (Model, Links, Parts, Nets, Layers), then what the file declares (Params, Joints, Animation), and one search over its trees | Tools, how the picture is drawn, what is selected | It is where the file is read and where its own settings are set. One panel keeps structure and settings together and leaves the model the rest of the view |
 | **Tool strip**, top centre of the view | The file's own tools, and under it the row of the tool in hand | View controls (Display, Preview, projection, zoom), a tool the file cannot use | Tools are used most, so they stay in reach, in the same place and order in every file |
 | **The corner**, top right of the view | Camera navigation only: the cube on a 3D view, one "100%" zoom menu on a flat view | Display settings, tools, +/− buttons, a Home button | The corner is where the picture is looked at from. A setting or a tool there would mix moving the camera with changing the picture |
@@ -70,8 +70,26 @@ chrome that floats over the picture. The home is the navbar over the library.
   Forward where the host keeps the view's history (the CAD app; desktop only, disabled with nowhere to go); the file's
   name (no glyph; a chevron where it opens the name menu); its ⋯. Past the toggle they have no fill at rest, the
   accent fill on hover and while their menu is open, and no tooltip, since each says what it is.
-- **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning), Display, Preview,
-  then the host's actions (the CAD app's Full size).
+- **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning; a file's first,
+  then a failed update's), Display, Preview, the host's actions (the CAD app's Full size), then, outermost, the update
+  button. Over the home: a failed update's put-away icon, then the update button. The trailing controls keep the row's
+  right end over the home too, past the home's own controls on the grid's column, so the update button is always the
+  navbar's top-right corner.
+- **The update button** (`@cad/ui/update`), over every file and over the home, always the navbar's rightmost control:
+  a 24px brand-blue icon and nothing else, in one look, automatic updates on or off; none where cad cannot
+  update itself. While a global install of cad is behind a newer release of its own major, as 0.11.1 had it, a download
+  arrow, its tooltip "Update": a click updates cad in place and restarts onto it in one step, the icon a ring that fills
+  a stage at a time (asked, the update underway, the server gone while it restarts), each step eased, then a spinner.
+  The page then reloads into the new release once nothing on it is unsaved, and nothing opens: one click, no popover, no prompt. An
+  automatic update underway shows the same. The page reads the server again once a minute while it is seen, and as it
+  is shown again, so the button changes by itself, and never while it is hidden. Why: it is the one thing the chrome
+  asks a person to act on, so it is always in the same corner; cad updates only when the person asks
+  or as the server next starts, never in the background and never by how busy the server is, so no page, seen or
+  hidden, can hold an update off. A failed update, automatic or
+  not, is the viewer's alert card, the one every error is said in ([the alert card](#loading-and-status-screens)), and
+  the button shows as it is offered; the card's Try again is its click. Why: automatic updates fail on some
+  computers, and this is where the person learns why and what to do; nothing is blocked, and an error looks like every
+  other error.
 - The first glyph stands 16px in, on the page's gutter: the panel toggle's icon, on the panel's 16px line; else the
   logo's drawn mark (the row's 8px, the tile's 6px and the artwork's 2px).
 - The panel toggle is a 28px tile with the sidebar glyph, the same neutral button open or shut (`aria-expanded` says
@@ -446,6 +464,18 @@ model…"), or "Couldn't update view" with Retry. It never blocks anything. On a
 a tracker, and Details with a copy button. A card the model survives (a failed update, a warning) has an X; it then
 stays away while that alert stands, and its icon, first of the navbar's right-hand controls, brings it back.
 
+- **A failed update of cad** is the same card wherever the update button is: over a file, and over the home, centred
+  under the navbar as a view's card is over the view. Red, "Couldn't update to 0.12.3", the cause in plain words and
+  what to do; "Try again" in Retry's place, which is the button's click; Details holds `cad update`, the way on in a
+  terminal, and the path of the update's log as a comment line, so the copy pastes and runs. Report Issue only where
+  the cause is cad's own fault (the update's helper could not start, raised, went silent, or met a uv failure cad
+  does not recognize, or the new release did not run or start); a cause that is the person's to fix (a file in use, the
+  network, the disk, uv's settings) says what to do instead. Where the cause is a reinstall (an older Python, no uv, an install that cannot switch), the sentence names the command of whoever made the install: `uv tool install --force cad`, or `pipx install --force cad` where pipx did. It blocks nothing: its X, or Escape, puts it away behind its icon, for every page
+  and through a reload, until another attempt begins or fails anew. Why: the cause is said where every error is, and
+  an issue is asked for only where we must fix something.
+- **One card at a time.** A file's own card wins: a failed update's waits behind it, shown once the file's is put
+  away, and not over a file that would not open, whose page says why.
+
 **Status screens** (`EmptyState.jsx`) cover every state with nothing to show: a file that is not there, one that will
 not open, CAD not running, a replaced link, a server that does not answer.
 
@@ -664,7 +694,7 @@ A file shown in a page of its own takes the keyboard where nothing else has it, 
   **Delete** or Backspace deletes picked ink and measurements.
 - **A board**, while it has the keyboard: ⌘H (Ctrl+H) cycles Others, 3 switches 2D and 3D, ⇧F flips the board.
 - **Escape** undoes the innermost thing first: an open menu or dropdown, the Display card, the explorer, the panel's
-  search or its peek; then Preview; then the view's own steps, one a press and in the same order in every view: picked
+  search or its peek, a failed update's card; then Preview; then the view's own steps, one a press and in the same order in every view: picked
   ink, a box being drawn or a measurement under way, the tool in hand going back to Select (its effect kept), the
   measurements picked, then the selection, then (in a view that isolates) the isolation. Why: Escape leaves the tool first, as in design tools, and the
   selection, which feeds Quick Edit's chips, survives it. The pinned panel never closes on Escape. Quick Edit's note has its own Enter and Escape ([Quick Edit](#quick-edit)).

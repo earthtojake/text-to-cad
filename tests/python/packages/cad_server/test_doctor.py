@@ -72,7 +72,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(f"  cache    {self.root / 'cache'}: nothing for `cad cache prune` to remove\n", out)
         self.assertRegex(out, r"  server   not running \(.+\): run `cad server start`\n"
                               r"  update   this cad is not a global install, so it never updates "
-                              r"itself; plugin update auto off\n  newest   the version feed has not been read on this "
+                              r"itself; plugin update auto off\n  newest   PyPI has not been read on this "
                               r"computer yet\n  uv       .+\n  attempt  none\n"
                               r"  plugin   no record of the plugin being up to date on this computer\n$")
 
@@ -178,10 +178,63 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual((code, code_json, found["ok"], found["version"], err), (0, 0, True, version(), ""))
         self.assertEqual(said.count("\n"), 1, "one line")
         names = [check["name"] for check in found["checks"]]
-        self.assertEqual(names[:5], ["python", "install", "data", "cache", "kernel"])
+        self.assertEqual(names[:5], ["python", "install", "data", "cache", "kernel"], "a checkout: no release check")
+        self.assertNotIn("fix", names, "all is well: no fix")
         self.assertLessEqual({"trimesh", "kicad", "server"}, set(names))
         self.assertTrue(all(check["status"] in ("ok", "info", "warning", "failed") for check in found["checks"]))
         self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]], out.splitlines()[1:])
+
+
+class WhereCadRunsFromTests(unittest.TestCase):
+    """The install line says where cad runs from: the environment its installer made and the release installed there
+    (``auto_update.installed``), and under it where this process runs another (cad updated since it started). A
+    checkout says the folder it imports from."""
+
+    def setUp(self) -> None:
+        root = TemporaryDirectory()
+        self.addCleanup(root.cleanup)
+        self.root = Path(root.name).resolve()
+        self.prefix = self.root / "tools" / "cad"
+        info = self.prefix / "lib" / "python3.12" / "site-packages" / "cad-0.12.0.dist-info"
+        info.mkdir(parents=True)
+        for name in ("RECORD", "METADATA"):
+            (info / name).write_text("", encoding="utf-8")
+        from cad_server._internal import auto_update
+
+        for patcher in (mock.patch.dict("os.environ", {"CAD_STATE_DIR": str(self.root / "state"),
+                                                       "CAD_CACHE_DIR": str(self.root / "cache"),
+                                                       "CAD_ENGINE_DIR": str(self.root / "engine"),
+                                                       "CAD_UPDATE_CHECK": "0"}),
+                        mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd")),
+                        mock.patch.object(sys, "prefix", str(self.prefix)),
+                        mock.patch.object(auto_update, "global_install",
+                                          return_value=auto_update.Global(self.prefix, "/bin/uv"))):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def checks(self) -> tuple[int, dict]:
+        code, out, _err = _run(["--json"])
+        return code, {check["name"]: check for check in json.loads(out)["checks"]}
+
+    def test_the_install_line_says_the_environment_and_the_release_installed_there(self) -> None:
+        import cad_server
+        from cad_server._internal import auto_update
+
+        with mock.patch.object(cad_server, "__version__", "0.12.0"):
+            code, found = self.checks()
+        self.assertEqual((code, found["install"]), (0, {"name": "install", "status": "info",
+                                                        "detail": f"{self.prefix} (cad 0.12.0, installed by uv)"}))
+        self.assertNotIn("release", found, "no check of its own: what runs is what uv installed")
+        with mock.patch.object(cad_server, "__version__", "0.11.9"):
+            install = self.checks()[1]["install"]
+        self.assertEqual(install["more"], ["this cad is 0.11.9, started before cad 0.12.0 was installed: run it again "
+                                           "for the release installed"])
+        with mock.patch.object(auto_update, "global_install", return_value=None), \
+                mock.patch.object(cad_server, "__version__", "0.12.0"):
+            self.assertEqual(self.checks()[1]["install"]["detail"], f"{self.prefix} (cad 0.12.0)")
+        with mock.patch.object(auto_update, "installed", return_value=None):
+            self.assertEqual(self.checks()[1]["install"]["detail"], str(Path(cad_server.__file__).resolve().parent),
+                             "a checkout: the folder it imports from")
 
 
 class PrivateFolderTests(unittest.TestCase):

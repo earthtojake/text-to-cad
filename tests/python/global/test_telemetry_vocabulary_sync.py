@@ -132,5 +132,34 @@ class TheInstallWordsAreOneVocabulary(unittest.TestCase):
         self.assertEqual(fields["install_failure"], ["plugin_app", "reason", "seconds", "count"], "no status")
 
 
+
+class TheUpdateWordsAreOneVocabulary(unittest.TestCase):
+    def test_cadgen_the_receiver_and_the_update_s_record_name_the_same_outcomes_and_causes(self) -> None:
+        # How one of cad's own updates ended and, from schema 13, why it did not install a newer cad: a word the
+        # receiver does not read refuses the batch; a word of the attempt's record that cadgen cannot send is a cause
+        # never counted. Every word of the record (``auto_update_helper.CAUSES``) is sent, for one outcome or another.
+        import sys
+
+        sys.path.insert(0, str(ROOT / "packages/cad/src"))
+        from cad_server import analytics
+        from cad_server._internal import auto_update_helper
+
+        receiver = RECEIVER.read_text(encoding="utf-8")
+        self.assertEqual(sorted(names(CADGEN, "UPDATE_OUTCOMES = frozenset({", "})")),
+                         sorted(names(RECEIVER, "const UPDATE_OUTCOMES = new Set([", "]);") + ["lost", "blocked"]))
+        self.assertIn("const UPDATE_OUTCOMES_13 = new Set([...UPDATE_OUTCOMES, 'lost', 'blocked']);", receiver)
+        ended = names(CADGEN, "UPDATE_ENDED = frozenset({", "})")
+        self.assertEqual(sorted(ended), sorted(names(RECEIVER, "const UPDATE_ENDED = new Set([", "]);")))
+        self.assertEqual(set(ended), analytics.UPDATE_ENDED)
+        table = receiver.split("const UPDATE_CAUSES = {", 1)[1].split("};", 1)[0]
+        theirs = {outcome: set(re.findall(r"'([a-z_]+)'", words)) | ({*ended} if "UPDATE_ENDED" in words else set())
+                  for outcome, words in re.findall(r"(\w+): (new Set\(\[[^\]]*\]\)|UPDATE_ENDED)", table)}
+        self.assertEqual(theirs, {outcome: set(words) for outcome, words in analytics.UPDATE_CAUSES.items()})
+        self.assertEqual(set(analytics.UPDATE_CAUSES), analytics.UPDATE_OUTCOMES - {"installed"})
+        sent = set().union(*analytics.UPDATE_CAUSES.values())
+        self.assertEqual(sent - {"already", "none"}, set(auto_update_helper.CAUSES))
+        self.assertIn("updateCauses: true", receiver.split("[13, {", 1)[1].split("}],", 1)[0])
+
+
 if __name__ == "__main__":
     unittest.main()

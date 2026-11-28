@@ -15,8 +15,9 @@ engine and the same installation by the same rules, from the standard library al
   marker naming the installation of a process that runs in the base (``HOME``), and the current one the
   clients of 0.11.11 and earlier start (``current``).
 - **Starting a process** of the engine's: with no window on Windows (``windowless``), outliving its
-  starter (``detached``), its bytecode kept in the cache folder (``bytecode``), and on the Python of the
-  environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's base,
+  starter (``detached``), on Windows outside any app package by Task Scheduler (``outside_package``: the server and
+  cad's update; its go-between, ``cad.engine.handoff``), its bytecode kept in the cache folder (``bytecode``), and
+  on the Python of the environment the kernel is in (``kernel``, which the server makes as ``KERNEL``: the installation's base,
   the library with its ``build123d`` extra).
 """
 
@@ -25,8 +26,10 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import logging
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -38,8 +41,9 @@ from typing import Any, Callable
 __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "XAUTHORITY", "Endpoint", "address",
            "alive", "appdata_cache_dir", "appdata_engine_dir", "appdata_state_dir", "bytecode", "bytecode_tag",
            "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir", "endpoints",
-           "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation", "kernel",
-           "lock", "lock_path", "make_engine_dir", "port_path", "registered", "run_with", "state_dir", "windowless"]
+           "engine_dir", "engine_root", "extras", "failure_path", "folder_refusal", "home", "installation",
+           "kernel", "lock", "lock_path", "make_engine_dir", "outside_package", "packaged", "port_path", "registered",
+           "run_with", "state_dir", "tidy_handoff", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -647,6 +651,7 @@ def engine_root() -> str:
 # Windows' process creation flags, by number: ``subprocess`` names them on Windows alone.
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+CREATE_BREAKAWAY_FROM_JOB = getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0x01000000)
 
 
 def windowless() -> dict[str, Any]:
@@ -674,14 +679,286 @@ def standard_input_aside() -> int:
     return kept
 
 
-def detached() -> dict[str, Any]:
+def detached(*, breakaway: bool = False) -> dict[str, Any]:
     """How the daemon is started: outliving the command that needed it. On Windows a console of its
     own with no window and a process group of its own, never no console at all (``DETACHED_PROCESS``),
-    which would give each console program it starts a window of its own (#597); elsewhere a session
-    of its own (``start_new_session`` is POSIX's: Windows takes it as nothing)."""
+    which would give each console program it starts a window of its own (#597); with ``breakaway``,
+    out of the job its starter is in too (``CREATE_BREAKAWAY_FROM_JOB``: an agent app that closes the
+    job of the commands it ran ends every process in it), which only ``outside_package`` is handed,
+    since it starts again without it where the job allows no breakaway. Elsewhere a session of its own
+    (``start_new_session`` is POSIX's: Windows takes it as nothing)."""
     if os.name == "nt":
-        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+                | (CREATE_BREAKAWAY_FROM_JOB if breakaway else 0)}
     return {"start_new_session": True}
+
+
+# Windows: ``GetCurrentPackageFullName``'s answer for a process no app package started (APPMODEL_ERROR_NO_PACKAGE).
+NO_PACKAGE = 15700
+# What ``outside_package`` hands Task Scheduler: the folder in the state folder where a start's request, its task's
+# definition and the go-between's answer are kept while it lasts (never under AppData, which a packaged caller sees
+# a private copy of and the task does not), and how long the go-between is waited for, from ``/Run`` to its answer:
+# measured, 0.8 to 1.6 s from the task's creation to the go-between's first line.
+HANDOFF = "handoff"
+HANDOFF_SECONDS = 5.0
+# How long the go-between is waited for to end, once it has answered, before its task is deleted; and how old a file
+# in ``HANDOFF`` is when it is a crash's leftover (``tidy_handoff``): no hand-off lasts a minute.
+BETWEEN_MS = 2000
+HANDOFF_STALE_SECONDS = 60.0
+# The task's definition: Task Scheduler's schema, and the access a handle on a process started needs (``Started``).
+TASK = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+SYNCHRONIZE, PROCESS_QUERY_LIMITED_INFORMATION = 0x00100000, 0x1000
+LOG = logging.getLogger("cad.engine.places")
+
+
+def packaged() -> bool:
+    """Whether this process runs inside a Windows app package (an MSIX app such as a desktop app from the Store, or a
+    process one started): ``GetCurrentPackageFullName`` says a package. False elsewhere, and where it cannot be
+    asked."""
+    if not WINDOWS:
+        return False
+    try:
+        import ctypes
+
+        length = ctypes.c_uint32(0)
+        return ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None) != NO_PACKAGE
+    except (AttributeError, OSError):
+        return False
+
+
+class Started:
+    """The process ``outside_package`` had Task Scheduler start, as much of ``subprocess.Popen`` as a starter asks of
+    it: ``pid``, ``poll``. ``handle``: a handle on it (``SYNCHRONIZE``, ``PROCESS_QUERY_LIMITED_INFORMATION``), or
+    None where none could be opened, and then ``poll`` says it runs: its door says the rest."""
+
+    def __init__(self, handle: Any, pid: int, kernel: Any) -> None:
+        self.handle, self.pid, self.kernel, self.returncode = handle, pid, kernel, None
+
+    def poll(self) -> int | None:
+        import ctypes
+        from ctypes import wintypes
+
+        if self.returncode is None and self.handle and self.kernel.WaitForSingleObject(self.handle, 0) == 0:
+            code = wintypes.DWORD(0)
+            self.kernel.GetExitCodeProcess(self.handle, ctypes.byref(code))
+            self.returncode = code.value
+            self.kernel.CloseHandle(self.handle)
+        return self.returncode
+
+
+def outside_package(command: list[str], **options: Any) -> Any:
+    """``command`` started as ``subprocess.Popen(command, ..., **options)`` starts it -- but on Windows, from inside an
+    app package (``packaged``), outside it: inside one, new files under AppData land in the app's private copy while
+    deletes are real, so a server or an update started there would leave cad broken for every other program. Task
+    Scheduler starts it (``_hand_off``): a task's process is the scheduler's, never the app's child, so no package
+    holds it. Its standard streams are the null device, as every caller's are. Where the hand-off cannot be made (no
+    ``schtasks``, a policy that refuses it, no session the task can start in, a go-between that never answers), that
+    is logged once and ``command`` is started as it would be elsewhere (cad's update then refuses by itself). Out of
+    the starter's job where ``creationflags`` asks it (``detached(breakaway=True)``) and the job allows it: where it
+    does not, Windows refuses the start and ``command`` starts in the job, as ``cad.engine.handoff`` does. The
+    process started: what ``poll`` and ``pid`` are asked of. Raises only as ``subprocess.Popen`` does."""
+    flags = options.get("creationflags", 0)
+    if packaged():
+        env = options.get("env")
+        try:
+            # The go-between asks for the breakaway itself, and starts without it where it is refused.
+            return _hand_off(command, env=dict(os.environ) if env is None else env,
+                             cwd=options.get("cwd") or os.getcwd(), flags=flags & ~CREATE_BREAKAWAY_FROM_JOB)
+        except Exception as error:  # noqa: BLE001 - started as elsewhere: what runs there refuses what it must not do
+            LOG.warning("Task Scheduler could not start %s outside this Windows app package, so it starts inside it: "
+                        "%s: %s", Path(command[0]).name, type(error).__name__, error)
+    try:
+        return subprocess.Popen(command, **options)
+    except OSError:
+        if not flags & CREATE_BREAKAWAY_FROM_JOB:
+            raise
+    return subprocess.Popen(command, **{**options, "creationflags": flags & ~CREATE_BREAKAWAY_FROM_JOB})
+
+
+def _hand_off(command: list[str], *, env: dict[str, str], cwd: str | None, flags: int,
+              run: Callable[..., Any] | None = None, kernel: Any = None, seconds: float = HANDOFF_SECONDS) -> Started:
+    """``command`` started by Task Scheduler (``outside_package``): its request (``argv``, ``env`` -- only the variables
+    cad and the tools it runs need, ``handoff.carried``, never the whole environment --, ``cwd``, ``flags``) written
+    to ``HANDOFF`` in the state folder, what a crash left there first removed (``tidy_handoff``), a task of the
+    current user's that runs it registered from a definition (``_task_definition``: no trigger, run only by ``/Run``),
+    run, and its go-between (``cad.engine.handoff``) waited for until it says the process it started (``seconds`` at
+    most); then the task deleted and every file of it removed, whatever happened. ``run``: ``schtasks`` with its
+    arguments (``_schtasks``; a test's stand-in), ``kernel``: kernel32 (a test's). ``OSError`` where a ``schtasks``
+    call fails or the go-between could not start ``command``, ``TimeoutError`` where it never answered."""
+    from cad.engine.handoff import carried
+
+    run = run or _schtasks
+    kernel = kernel or _kernel32()
+    folder = state_dir() / HANDOFF
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tidy_handoff()
+    name = f"cad-{os.getpid()}-{secrets.token_hex(6)}"
+    request, definition, reply = (folder / f"{name}{suffix}" for suffix in (".json", ".xml", ".pid"))
+    made = False
+    try:
+        told = {"argv": command, "env": {name: value for name, value in env.items() if carried(name)}, "cwd": cwd,
+                "flags": flags, "reply": str(reply), "wait": seconds}
+        with open(os.open(request, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as handle:
+            json.dump(told, handle)  # its owner's alone where the system says so: on Windows the folder's permissions
+        definition.write_bytes(_task_definition(_between(request), user=_user()))
+        run("/Create", "/XML", str(definition), "/TN", name, "/F")
+        made = True
+        run("/Run", "/TN", name)
+        answer = _answer(request, reply, seconds)
+        if "error" in answer:
+            raise OSError(f"the go-between could not start it: {answer['error']}")
+        pid, middle = answer["pid"], _open(kernel, answer.get("between"))
+        started = Started(_open(kernel, pid), pid, kernel)
+        reply.unlink(missing_ok=True)  # the go-between's word to end
+        if middle:
+            kernel.WaitForSingleObject(middle, BETWEEN_MS)
+            kernel.CloseHandle(middle)
+        return started
+    finally:
+        for path in (request, definition, reply, reply.with_name(f"{reply.name}.part"),
+                     request.with_name(f"{request.name}.taken")):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if made:
+            try:
+                run("/Delete", "/TN", name, "/F")
+            except Exception:  # noqa: BLE001 - a task left behind runs only on /Run
+                pass
+
+
+def tidy_handoff(now: float | None = None) -> list[Path]:
+    """What a hand-off that crashed left in ``HANDOFF`` (a request, which can carry a proxy's credentials, a definition,
+    an answer): each file older than ``HANDOFF_STALE_SECONDS`` removed, at each hand-off and at the server's start.
+    The paths removed. Never raises."""
+    removed, now = [], time.time() if now is None else now
+    try:
+        entries = list(os.scandir(state_dir() / HANDOFF))
+    except OSError:
+        return removed
+    for entry in entries:
+        try:
+            if entry.is_file(follow_symlinks=False) and now - entry.stat(follow_symlinks=False).st_mtime > \
+                    HANDOFF_STALE_SECONDS:
+                os.remove(entry.path)
+                removed.append(Path(entry.path))
+        except OSError:
+            continue  # in use: the next tidying
+    return removed
+
+
+def _between(request: Path) -> list[str]:
+    """The go-between's command (``cad.engine.handoff``), its ``request`` file named: this environment's ``pythonw.exe``
+    where there is one (no console, so no window flashes), else its Python, running the module's file isolated
+    (``-I``), so nothing of the caller's environment or of a ``PYTHONPATH`` decides what it imports."""
+    python = Path(sys.executable)
+    windowless_python = python.with_name("pythonw.exe")
+    return [str(windowless_python if WINDOWS and windowless_python.is_file() else python), "-I",
+            str(Path(__file__).with_name("handoff.py")), str(request)]
+
+
+def _task_definition(command: list[str], *, user: str | None = None) -> bytes:
+    """The task ``_hand_off`` registers (``schtasks /Create /XML``, which reads UTF-16), running ``command``: no
+    trigger, so it runs only when ``/Run`` asks; ``user`` (the current one, ``DOMAIN\\name``) by an interactive token,
+    with least privilege and no password stored, so it runs in their session while they are logged on and never
+    elevated; on battery as on mains; instances in parallel; hidden; a minute at most (the go-between ends at once);
+    and at normal priority (a task's default, 7, is below normal, and the processes it starts would inherit it)."""
+    from xml.sax.saxutils import escape
+
+    def quoted(part: str) -> str:
+        return f'"{part}"' if " " in part else part
+
+    executable, arguments = quoted(command[0]), subprocess.list2cmdline(command[1:])
+    named = f"<UserId>{escape(user)}</UserId>" if user else ""
+    text = ('<?xml version="1.0" encoding="UTF-16"?>\n'
+            f'<Task version="1.2" xmlns="{TASK}">'
+            "<RegistrationInfo><Description>cad starts a process of its own outside an app package</Description>"
+            "</RegistrationInfo>"
+            f'<Principals><Principal id="Author">{named}<LogonType>InteractiveToken</LogonType>'
+            "<RunLevel>LeastPrivilege</RunLevel></Principal></Principals>"
+            "<Settings><MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy>"
+            "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>"
+            "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>true</AllowHardTerminate>"
+            "<StartWhenAvailable>false</StartWhenAvailable><RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>"
+            "<IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>"
+            "<AllowStartOnDemand>true</AllowStartOnDemand><Enabled>true</Enabled><Hidden>true</Hidden>"
+            "<RunOnlyIfIdle>false</RunOnlyIfIdle><WakeToRun>false</WakeToRun>"
+            "<ExecutionTimeLimit>PT1M</ExecutionTimeLimit><Priority>5</Priority></Settings>"
+            f'<Actions Context="Author"><Exec><Command>{escape(executable)}</Command>'
+            f"<Arguments>{escape(arguments)}</Arguments></Exec></Actions>"
+            "</Task>\n")
+    return b"\xff\xfe" + text.encode("utf-16-le")
+
+
+def _answer(request: Path, reply: Path, seconds: float) -> dict[str, Any]:
+    """The go-between's answer (``reply``), awaited ``seconds`` at most. Where none came, the request is taken back
+    (deleted) so no go-between that starts later starts ``command`` too; where the go-between took it first (renamed
+    it), it is waited for as long again. ``TimeoutError`` where no answer comes."""
+    deadline, extended = time.monotonic() + seconds, False
+    while True:
+        try:
+            answer = json.loads(reply.read_text(encoding="utf-8"))
+            if isinstance(answer, dict):
+                return answer
+        except (OSError, ValueError):
+            pass
+        if time.monotonic() > deadline:
+            try:
+                request.unlink()
+            except FileNotFoundError:  # taken: the go-between is starting it
+                if not extended:
+                    deadline, extended = time.monotonic() + seconds, True
+                    continue
+            raise TimeoutError(f"Task Scheduler's task did not answer within {seconds:g} s")
+        time.sleep(0.02)
+
+
+def _schtasks(*arguments: str) -> None:
+    """Windows' ``schtasks.exe`` run with ``arguments``, with no window; ``OSError`` saying its last line where it
+    fails."""
+    program = Path(os.environ.get("SystemRoot") or r"C:\Windows") / "System32" / "schtasks.exe"
+    done = subprocess.run([str(program), *arguments], stdin=subprocess.DEVNULL, capture_output=True, timeout=30,
+                          check=False, **windowless())
+    if done.returncode != 0:
+        said = (done.stderr or done.stdout or b"").decode(errors="replace").strip().splitlines()
+        raise OSError(f"schtasks {arguments[0]} exited {done.returncode}: {said[-1] if said else 'nothing said'}")
+
+
+def _user() -> str | None:
+    """The current user as Task Scheduler names them, ``DOMAIN\\name`` (``GetUserNameExW``, else the environment);
+    None where neither says."""
+    try:
+        import ctypes
+
+        size = ctypes.c_ulong(512)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        if ctypes.windll.secur32.GetUserNameExW(2, buffer, ctypes.byref(size)):  # NameSamCompatible
+            return buffer.value
+    except (AttributeError, OSError):
+        pass
+    domain, name = os.environ.get("USERDOMAIN"), os.environ.get("USERNAME")
+    return f"{domain}\\{name}" if domain and name else None
+
+
+def _kernel32() -> Any:
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    return kernel
+
+
+def _open(kernel: Any, pid: Any) -> Any:
+    """A handle on process ``pid`` (``SYNCHRONIZE``, ``PROCESS_QUERY_LIMITED_INFORMATION``), or None."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    return kernel.OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, False, pid) or None
 
 
 def bytecode(env: dict[str, str]) -> dict[str, str]:

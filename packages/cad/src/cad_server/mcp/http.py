@@ -201,7 +201,7 @@ class Sessions:
                 if agent:
                     with self.lock:
                         session.calls -= 1
-                    # The end of a command, which the quiet hour an automatic update waits for counts from.
+                    # The end of a command (the engine's ``Daemon.stamp``), as a command through its door is.
                     worked = getattr(self.engine, 'worked', None)
                     if callable(worked):
                         worked()

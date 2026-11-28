@@ -292,9 +292,10 @@ class TabServerTest(_Session):
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
     def test_no_page_and_no_launch_says_a_newer_release_is_out(self) -> None:
-        """The update nudge is gone: ``/api/v1/server`` and each launch carry the release this server runs and no
-        ``notice``, whatever the feed as last read says, for every session alike (a launcher's ``pin`` is read for
-        nothing)."""
+        """``/api/v1/server`` and each launch carry the release this server runs and no ``notice`` or ``update`` (what
+        the pages of 0.10.0 to 0.11.11 read), whatever the feed as last read says, for every session alike (a
+        launcher's ``pin`` is read for nothing); the update button's state, ``cadUpdate``, is none where cad cannot
+        update itself (a checkout, no global install)."""
         import cad_server
         from cad_server import updates
 
@@ -303,7 +304,9 @@ class TabServerTest(_Session):
             read = self.http("GET", "/api/v1/server")[1]
             self.assertEqual(read["release"], cad_server.__version__)
             self.assertFalse({"notice", "update"} & set(read))
+            self.assertIsNone(read["cadUpdate"])
             self.assertNotIn("notice", self.launch("cad_home"))
+            self.assertNotIn("cadUpdate", self.launch("cad_home"))
             self.assertNotIn("notice", self.launch("cad_open", {"source": self.bracket}))
             store = Server(page=self.server.page, recents=self.server.recents)
             params = initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX})

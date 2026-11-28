@@ -43,7 +43,9 @@
  *             step failed (`UPDATE_FAILURES`), a word cad chose, its tries, the installer (`UPDATE_INSTALLERS`),
  *             whether it was typed (`asked`), and for a newer cad installed how the install command's run for it
  *             ended (`plugin`, `UPDATE_PLUGIN`: `underway` where a new attempt began before it ended; `none` for any
- *             other outcome).
+ *             other outcome). From schema 13, where it did not install a newer cad, why (`cause`, `UPDATE_CAUSES`),
+ *             a word cad chose; and two more outcomes, an attempt whose worker never said how it ended (`lost`) and
+ *             an update that could not begin (`blocked`, no try made: `tries` 0).
  *   install   one run of the plugin's install in the agent apps (schema 12's; `cad plugin install`, `cad plugin
  *             update`): who began it (`INSTALL_BY`), how it ended (`INSTALL_OUTCOMES`), what its terminal showed
  *             (`INSTALL_LOGOS`, `INSTALL_COLOURS`), the whole seconds it took, how many apps it found and how many
@@ -92,6 +94,11 @@
  * Schema 12 is schema 11 with `install` and `install_failure`, which no schema before it sends: cad installs the
  * plugin in the agent apps itself (`cad plugin install`), so it counts each run and names each app where one failed,
  * where before the install command did that work and counted nothing.
+ *
+ * Schema 13 is schema 12 with an update's `cause`: on every outcome but `installed`, one word of a closed list for why
+ * it did not install a newer cad (`UPDATE_CAUSES`, by outcome; `none` where the attempt's record names none), never
+ * uv's words; and two outcomes no schema before it sends, `lost` and `blocked`. A row of schema 12 or
+ * earlier keeps its key, and carries no cause.
  */
 
 import { createHash } from 'node:crypto';
@@ -261,14 +268,26 @@ const EARLIER = /^(?:none|[0-9][0-9A-Za-z.+_-]{0,31})$/;
 const MAX_ATTEMPTS = 1000;
 // How cad's own update of itself ended, schema 11's (`cad_server/analytics.py`: `UPDATE_OUTCOMES`, `UPDATE_FAILURES`,
 // `UPDATE_INSTALLERS`, `UPDATE_PLUGIN`): a newer cad installed, nothing newer, failed, or failed and the release
-// before put back; for a failure which step, a word cad chose (the installer's upgrade, a release it may not end on,
-// and for one not put back the put-back too); the installer that made the global install; and the install command's
+// before put back; for a failure which step, a word cad chose (`upgrade`: the installer's upgrade, and from schema 13
+// the release not built, not run, or its server not started; a release it may not end on; and for one not put back
+// the put-back too); the installer that made the global install; and the install command's
 // run for the cad an update installed (`ok`, `failed`, `underway` where a new attempt began before it ended; `none`
 // where none ran for it, and for any other outcome). Tries from 1, as many as attempts.
 const UPDATE_OUTCOMES = new Set(['installed', 'current', 'failed', 'restored']);
 const UPDATE_FAILURES = { failed: new Set(['upgrade', 'older', 'put_back']), restored: new Set(['upgrade', 'older']) };
 const UPDATE_INSTALLERS = new Set(['uv', 'pipx']);
 const UPDATE_PLUGIN = new Set(['none', 'ok', 'failed', 'underway']);
+// Schema 13's: an update's worker gone without saying how it ended (`lost`), or an update that could not begin
+// (`blocked`); and, on every outcome but `installed`, why it did not install a newer cad (`cad_server/analytics.py`:
+// `UPDATE_ENDED`, `UPDATE_CAUSES`) -- an attempt that ended, by what its worker told (`current` also `already`: the
+// environment ran the release already), `none` where its record names none; a lost one, whether its worker stopped
+// with an error; a blocked one, no uv to build with or an environment that does not read cad's pointer.
+const UPDATE_OUTCOMES_13 = new Set([...UPDATE_OUTCOMES, 'lost', 'blocked']);
+const UPDATE_ENDED = new Set(['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'network', 'offline',
+  'no_release', 'python', 'platform', 'config_exclude', 'config_index', 'config_tls', 'cad_running', 'broken', 'start_failed',
+  'helper_start', 'packaged', 'unknown', 'none']);
+const UPDATE_CAUSES = { current: new Set([...UPDATE_ENDED, 'already']), failed: UPDATE_ENDED, restored: UPDATE_ENDED,
+  lost: new Set(['lost', 'helper_crash']), blocked: new Set(['no_installer', 'no_switch', 'pinned']) };
 // One run of the plugin's install in the agent apps, schema 12's (`cad_server/analytics.py`): who began it -- a person
 // who typed the command, the install command handing over, or cad's server; how it ended -- well, every app found
 // failed, its deadline stopped it before it was done (a run the server began has one), or another run held the lock
@@ -302,7 +321,8 @@ export const FIELDS = {
   control: ['control', 'count', 'seconds'],
   exception: ['where', 'tool', 'type', 'handled', 'status', 'frames', 'count'],
   arrival: ['step', 'route', 'from', 'outcome', 'reason', 'attempts', 'count'], // `reason`, `attempts` where they apply
-  update: ['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'count'], // `reason` for a failure
+  // `reason` for a failure; `cause` from schema 13, on every outcome but `installed`
+  update: ['from', 'outcome', 'reason', 'tries', 'installer', 'asked', 'plugin', 'cause', 'count'],
   install: ['by', 'outcome', 'logo', 'colour', 'seconds', 'found', 'failed', 'count'],
   // `plugin_app`: the event's `app`, the app where the plugin's install failed (a row's `app` is the batch's)
   install_failure: ['plugin_app', 'reason', 'seconds', 'count'],
@@ -488,22 +508,33 @@ const READERS = {
     return { key: `arrival ${JSON.stringify([step, route, from, outcome, reason, attempts])}`,
       fields: { step, route, from, outcome, reason, attempts, count } };
   },
-  // A reason only with a failure (`failed`, `restored`), the install command's run only for a newer cad installed.
-  update(event, at) {
-    only(event, ['name', ...FIELDS.update], at);
+  // A reason only with a failure (`failed`, `restored`), the install command's run only for a newer cad installed;
+  // from schema 13 a cause with every other outcome, of that outcome's words, and no try only where none could begin.
+  update(event, at, { updateCauses = false }) {
+    only(event, ['name', ...FIELDS.update.filter(field => updateCauses || field !== 'cause')], at);
     const from = matches(event.from, EARLIER, `${at}.from`);
-    const outcome = oneOf(event.outcome, UPDATE_OUTCOMES, `${at}.outcome`);
+    const outcome = oneOf(event.outcome, updateCauses ? UPDATE_OUTCOMES_13 : UPDATE_OUTCOMES, `${at}.outcome`);
     const reason = Object.hasOwn(UPDATE_FAILURES, outcome) ? oneOf(event.reason, UPDATE_FAILURES[outcome], `${at}.reason`)
       : (event.reason === undefined ? null : fail(`${at}.reason: only a failed update names one`));
-    const tries = Number.isInteger(event.tries) && event.tries >= 1 && event.tries <= MAX_ATTEMPTS
-      ? event.tries : fail(`${at}.tries is not an update's tries`);
+    const tries = outcome === 'blocked'
+      ? (event.tries === 0 ? 0 : fail(`${at}.tries: an update that could not begin made no try`))
+      : (Number.isInteger(event.tries) && event.tries >= 1 && event.tries <= MAX_ATTEMPTS
+        ? event.tries : fail(`${at}.tries is not an update's tries`));
     const installer = oneOf(event.installer, UPDATE_INSTALLERS, `${at}.installer`);
     if (typeof event.asked !== 'boolean') fail(`${at}.asked is not true or false`);
     const plugin = oneOf(event.plugin, UPDATE_PLUGIN, `${at}.plugin`);
     if (plugin !== 'none' && outcome !== 'installed') fail(`${at}.plugin: only an update that installed a newer cad ran it`);
     const count = some(event.count, `${at}.count`);
-    return { key: `update ${JSON.stringify([from, outcome, reason, tries, installer, event.asked, plugin])}`,
-      fields: { from, outcome, reason, tries, installer, asked: event.asked, plugin, count } };
+    const key = [from, outcome, reason, tries, installer, event.asked, plugin];
+    // Before schema 13 an update names no cause, and its row's key is as it ever was.
+    if (!updateCauses) {
+      return { key: `update ${JSON.stringify(key)}`, fields: { from, outcome, reason, tries, installer, asked: event.asked, plugin, count } };
+    }
+    const cause = outcome === 'installed'
+      ? (event.cause === undefined ? null : fail(`${at}.cause: an update that installed a newer cad names none`))
+      : oneOf(event.cause, UPDATE_CAUSES[outcome], `${at}.cause`);
+    return { key: `update ${JSON.stringify([...key, cause])}`,
+      fields: { from, outcome, reason, tries, installer, asked: event.asked, plugin, cause, count } };
   },
   // A run that ended failed where every app it found failed, and nowhere else; one that found the lock held looked
   // for none; one its deadline stopped says what it had found by then, whatever that was.
@@ -597,6 +628,14 @@ const SCHEMAS = new Map([
       legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
     current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
     snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true }],
+  // Schema 12 with why an update did not install a newer cad (`cause`), and the updates that never said how they ended
+  // (`lost`) or could not begin (`blocked`).
+  [13, { fields: ['app', 'process', 'batch', 'at'], events: new Set([...NAMED_EVENTS, 'control', 'arrival', 'update', 'install', 'install_failure']), kinds: KINDS_8,
+    origin: batch => ({ channel: null, app: matches(batch.app, APP, 'app'),
+      legacy_channel: null, source: null, process: oneOf(batch.process, PROCESSES_6, 'process') }),
+    current: true, named: true, maxEvents: MAX_EVENTS_7, parts: true,
+    snapshotFailures: SNAPSHOT_FAILURES_9, buildFailures: BUILD_FAILURES_10, toolFailures: FAILURES_10, causes: true,
+    updateCauses: true }],
 ]);
 const NEWEST = Math.max(...SCHEMAS.keys()); // a later schema is a newer release's (`Later`), never a refusal
 

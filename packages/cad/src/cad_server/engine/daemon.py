@@ -1,8 +1,8 @@
 """The engine daemon: the computer's one server, behind the engine folder's one door, lock and port file, which
 every client reaches (``client``) and only ``cad server start`` starts (``client.start``); its greeting names its
 release (``door.greeting``). It is never stopped by a timer: it stops on ``cad server stop`` (or a terminate), once
-it has drained (``drain``: nothing in flight; asked by the switch of 0.11.11 and earlier), when its door is gone and
-no one can reach it (``tend``), and with the machine. Idleness sheds memory instead.
+it has drained (``drain``: nothing in flight; asked by the switch of 0.11.11 and earlier, while cad's own update now
+stops it at once, as ``cad server stop`` does), when its door is gone and no one can reach it (``tend``), and with the machine. Idleness sheds memory instead.
 
 Every process it starts is a service it declares (``services``): a model script's warm worker (the
 documents worker among them) and a served document's render process. One supervisor runs them by
@@ -618,6 +618,7 @@ def _reportable(report: dict[str, Any]) -> bool:
         return True
 
 
+
 class Daemon:
     def __init__(self, cap: int | None = None, port: int | None = None) -> None:
         self.port = port  # ``cad server start --port``: the HTTP port this engine must take, or None
@@ -653,17 +654,15 @@ class Daemon:
         self.busy = 0
         self.busy_lock = threading.Lock()
         # When the last command ended (monotonic): a build, draw, export or request that serves, any other request
-        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``).
+        # through a door but the server's own asks (``ended``), an agent's tool call (``stamp``). BRIDGE-ONLY: the
+        # bridge's part of the tending waits for a quiet moment by it (``tend``); cad's own update never does.
         self.worked = self.began = self.last
         self.stopping = threading.Event()
         # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
         # runs), which ``status`` counts.
         self.holders = 0
-        # Draining for an update (``drain``): it stops once nothing is in flight.
+        # Draining for the update of 0.11.11 and earlier (``drain``): it stops once nothing is in flight.
         self.draining = False
-        # The update ``cad update`` asked for, until it begins (``update``): its release (None: whatever the upgrade
-        # gets), when it was asked, and whether it is ``--major``.
-        self.asked_update: tuple[str | None, float, bool] | None = None
         self.listener: socket.socket | None = None  # on Windows, the port clients reach it by
         self.hosts: dict[str, int] = {}  # the holders per agent host they serve (``hold``)
         self.door = None  # on POSIX, the door clients reach it by (``door.Door``)
@@ -693,6 +692,7 @@ class Daemon:
         from cad_server._internal.plugin_catch_up import Catcher
 
         self.catching = Catcher(self.began, wait=catch_up_seconds())
+        self.tidied = False  # whether this server has tidied what cad's update leaves: once, as it starts (``caught_up``)
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1096,6 +1096,8 @@ class Daemon:
                 self.server.parameters = self.models.live
                 self.server.set_parameters = self.setting.set
                 self.server.preview_parameters = self.previewing.preview
+                # The viewer's update button: ``cad update``, asked from the page (``update``).
+                self.server.update = lambda begin=True: self.update({"op": "update", **({} if begin else {"begin": False})})
                 application = getattr(self.server.http, "app", None)
                 if application is not None:
                     application.worked = self.stamp  # an agent's tool call is a command too (``mcp.http.Sessions``)
@@ -1405,7 +1407,7 @@ class Daemon:
     def handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """One request, answered through ``send``. One that serves -- binding the HTTP server, a
         launch, a page's read -- counts in ``status``'s ``busy`` until it is answered, as builds and
-        draws do: a drain for an update waits for it (``drain``)."""
+        draws do: a drain waits for it (``drain``)."""
         if request.get("op") not in SERVING:
             return self._handle(request, send)
         with self.busy_lock:
@@ -1771,7 +1773,8 @@ class Daemon:
         elif op == "update":
             send(self.update(request))
         elif op == "stop":
-            # ``drain``: an update's switch (0.11.11's and earlier's), which waits for what is in flight; else at once.
+            # ``drain``: the switch of 0.11.11 and earlier, which waits for what is in flight; else at once (``cad
+            # server stop``, and cad's own update as it switches releases).
             send({"ok": True, "draining": True} if request.get("drain") else {"ok": True})
             if request.get("drain"):
                 self.drain()
@@ -1781,53 +1784,34 @@ class Daemon:
             send({"failed": f"unknown request {op!r}"})
 
     def update(self, request: dict[str, Any]) -> dict[str, Any]:
-        """``cad update`` (``{"op": "update"}``, ``"major": true`` for ``cad update --major``): judged
-        (``auto_update.asked``: PyPI asked now, this request's thread waiting), then, where a newer release is out or
-        PyPI could not say, the attempt underway joined, or the update begun as soon as nothing is in flight
-        (``_update_when_idle``) -- not after the idle minute, whatever the switch says. ``{"ok": true, "updating",
-        "from", "since"}`` (``updating``: the release PyPI names, or null; ``since``: when the attempt that serves it
-        began, or was asked for; ``higher``, where ``asked`` names a release of a higher major), else what ``asked``
-        answers. A second ``cad update`` while one waits to begin joins it, ``--major`` or not. ``{"op": "update",
-        "begin": false}`` begins nothing: ``{"ok": true, "version", "last", "waiting"}``, this release, the last
-        attempt (``auto_update.last``) and whether an update waits to begin (the release it waits for, or
-        ``latest``), which ``cad update`` asks while it waits."""
+        """``cad update`` (``{"op": "update"}``):
+        judged (``auto_update.asked``: PyPI asked now, this request's thread waiting), then, where a newer release is out
+        or PyPI could not say, the attempt underway joined, or the update begun
+        at once (``auto_update.begin``), whatever the switch says: it stops this server at once, whatever is in
+        flight, and upgrades cad in place. ``pid``: the ``cad update`` that asks,
+        which the switch leaves running (``auto_update.spared``). ``{"ok": true, "updating", "from", "since"}``
+        (``updating``: the release it is for, or null; ``since``: when the attempt that serves it began), else what
+        ``asked`` answers, or
+        ``{"failed"}`` where it could not begin. ``{"op": "update", "begin": false}`` begins nothing: ``{"ok": true,
+        "version", "last", "waiting": null}``, this release and the last attempt (``auto_update.last``), which ``cad
+        update`` asks while it waits (``waiting``: what the releases before this one say of an update not begun yet;
+        none waits here)."""
         from cad_server._internal import auto_update
 
         if request.get("begin") is False:
-            with self.busy_lock:
-                waiting = self.asked_update
-            return {"ok": True, "version": auto_update._version(), "last": auto_update.last(),
-                    "waiting": (waiting[0] or auto_update.LATEST) if waiting else None}
-        judged = auto_update.asked(major=request.get("major") is True)
+            return {"ok": True, "version": auto_update._version(), "last": auto_update.last(), "waiting": None}
+        judged = auto_update.asked()
         if "updating" not in judged:
             return judged
-        found = auto_update.underway()
-        if found is not None:
-            return {**judged, "updating": found["release"], "since": found["at"]}
-        with self.busy_lock:
-            first = self.asked_update is None
-            asked = self.asked_update = self.asked_update or (judged["updating"], time.time(),
-                                                              judged.get("major") is True)
-        target, since, major = asked
-        if first:
-            threading.Thread(target=self._update_when_idle, args=(target, major), name="cad-update",
-                             daemon=True).start()
-        return {**judged, "updating": target, "since": since}
-
-    def _update_when_idle(self, target: str | None, major: bool = False) -> None:
-        """The update ``cad update`` asked for (``major``: ``--major``), begun once nothing is in flight (``working``),
-        on a thread of its own (``auto_update.begin``); never on a server that stops."""
-        from cad_server._internal import auto_update
-
-        try:
-            while self.working() and not self.stopping.is_set():
-                time.sleep(0.05)
-            if not (self.draining or self.stopping.is_set()) and auto_update.begin(target, major=major) is not None:
-                print("cad: updating cad, as `cad update` asked: this server stops, and the update starts the next",
-                      file=sys.stderr, flush=True)
-        finally:
-            with self.busy_lock:
-                self.asked_update = None
+        pid = request.get("pid")
+        found = auto_update.begin(judged["updating"], waiting=pid if type(pid) is int and pid > 0 else None)
+        if found is None:
+            return {"failed": f"the update could not begin, so cad {judged['from']} stays as it is"}
+        named = "the newest release" if found["release"] == auto_update.LATEST else f"cad {found['release']}"
+        if found.get("outcome") == "underway":  # else uv could not build it, and the attempt has ended
+            print(f"cad: updating cad to {named}, as `cad update` asked: this server stops, what is in flight with "
+                  "it, and the next starts", file=sys.stderr, flush=True)
+        return {**judged, "updating": found["release"], "since": found["at"]}
 
     def retoken(self) -> dict[str, Any]:
         """The user's page token read again from this server's data (``{"op": "token"}``, which ``cad server
@@ -1938,22 +1922,36 @@ class Daemon:
 
     def watch(self) -> None:
         seconds = tend_seconds()
-        self.caught_up()  # at its start: nothing has run
+        self.caught_up(starting=True)  # nothing has run
         while not self.stopping.wait(seconds):
             self.tend()
 
-    def caught_up(self) -> None:
-        """What follows cad's own update, at the server's start and at each quiet tending (``tend``): the install
-        command run once where cad is newer than the release it is up to date for and the person's switch says so
-        (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its lock),
-        then the last update attempt counted once, where it ended and nothing it waits for is
-        underway (``auto_update.report``). Never on a server that stops; never fails the server."""
+    def caught_up(self, *, starting: bool = False) -> None:
+        """What follows cad's own update, at the server's start and at every tending (``tend``), whatever is in flight
+        -- each part minds only its own: where no attempt is underway, on Windows each ``cad.exe`` an update moved
+        aside and could not remove then (``auto_update.tidy``), the cache's environments made for another release
+        and the release folders of 0.11.11 and earlier, as ``cad cache prune`` removes them, quietly (``base.tidy``,
+        ``releases.tidy``: never one a process runs from, never this release's), once for each server: as it starts,
+        or, where the update that started it is still underway then, at the first tending after it has ended (what is
+        in use at that moment waits for the next start); at the start, what a
+        start outside a Windows app package that crashed left in the state folder (``places.tidy_handoff``); the
+        install command run once where cad is newer than the release it is up to date for and the person's switch
+        says so (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its
+        lock), then the last update attempt counted once, where it ended and nothing it waits for is underway
+        (``auto_update.report``). Never on a server that stops; never fails the server."""
         if self.draining or self.stopping.is_set():
             return
         told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
         try:
-            from cad_server._internal import auto_update
+            from cad_server._internal import auto_update, base, releases
 
+            if not self.tidied and auto_update.underway() is None:
+                self.tidied = True
+                auto_update.tidy()
+                base.tidy()
+                releases.tidy()
+            if starting:
+                _places.tidy_handoff()
             self.catching.tend(told)
             auto_update.report()
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for what follows an update
@@ -1971,11 +1969,11 @@ class Daemon:
         the memory budget sends unwatched documents out of memory, least recently used
         first, to the cache, as they are loaded (``serve.Server.trim``); telemetry's spool is handed to a sender
         once it has waited a window (``_send_counts``); the version check's feed is read in the background where it
-        is due (``updates.refresh``), and cad updated where that is due and nothing is in flight
-        (``auto_update.tend``: the update stops this server and starts the next); then, BRIDGE-ONLY, the install
-        command run once where it is owed for a computer a shipped updater brought (``install_script.Carrier``), and
-        the bridge's part (``cli.setup.Tending``: such a server, once cad is installed globally, hands over to the
-        global cad's); then, where nothing is in flight, what follows cad's update (``caught_up``). The engine stops on
+        is due (``updates.refresh``) -- cad's own update is a person's ask or the server's next start
+        (``auto_update.restart``), never a tending's --; then, BRIDGE-ONLY, the install command run once where it is owed for a computer a shipped updater brought
+        (``install_script.Carrier``), and the bridge's part (``cli.setup.Tending``, where nothing is in flight and no
+        command has run for ``setup.QUIET_SECONDS``: such a server, once cad is installed globally, hands over to the
+        global cad's); then what follows cad's update (``caught_up``), whatever is in flight. The engine stops on
         ``stop``, a terminate, another installation's
         retiring it (``bind``), and here when its door is gone (its folder removed, a temporary
         folder cleaned up) or another's: no one can reach it, so it stops as ``stop`` does, saving
@@ -1993,25 +1991,22 @@ class Daemon:
         if self.draining or self.stopping.is_set():
             return
         from cad_server import updates
-        from cad_server._internal import auto_update
+        from cad_server.cli import setup
 
         updates.refresh()
-        working, ran, quiet_for = self.working(), self.worked != self.began, time.monotonic() - self.worked
-        if auto_update.tend(working=working, ran=ran, quiet_for=quiet_for):
-            print("cad: updating cad: this server stops, and the update starts the next", file=sys.stderr, flush=True)
-            return
         told = lambda line: print(f"cad: {line}", file=sys.stderr, flush=True)  # noqa: E731
-        quiet = not working and (not ran or quiet_for >= auto_update.IDLE_SECONDS)
+        # BRIDGE-ONLY: the bridge's moment, by what is in flight and the last command (``worked``).
+        quiet = not self.working() and (self.worked == self.began
+                                        or time.monotonic() - self.worked >= setup.QUIET_SECONDS)
         try:
             self.handover.tend(version(), told)
             self.bridge.tend(version(), told, quiet=quiet)
         except Exception as error:  # noqa: BLE001 - the engine's tending never fails for the install command
             told(f"the install command's run could not be looked after: {type(error).__name__}: {error}")
-        if quiet:
-            self.caught_up()
+        self.caught_up()
 
     def working(self) -> bool:
-        """Whether anything an update's drain waits for is in flight: a build, a draw, an export, a
+        """Whether anything a drain waits for is in flight (and the bridge's quiet moment): a build, a draw, an export, a
         request that serves (``busy``), and the HTTP application's exports and agents' MCP calls
         (``serve.Server.clients_working``). Open pages and held sessions are not: a page reconnects,
         and a session is opened again on its next request."""
@@ -2022,7 +2017,8 @@ class Daemon:
         return server is not None and bool(server.clients_working())
 
     def drain(self, then: Callable[[], None] | None = None) -> None:
-        """Stop once nothing is in flight (``working``), for an update: in the background, so the
+        """Stop once nothing is in flight (``working``), for the update of 0.11.11 and earlier (``{"op": "stop",
+        "drain": true}``; cad's own update now stops a server at once): in the background, so the
         request that asked for it is answered first. Its door (on Windows its port) closes once it is
         idle, so no new connection reaches it, and what came in before that is waited for too; then
         ``then`` (the update's switch helper, started) and the stop. A second drain joins the first."""
@@ -2271,8 +2267,8 @@ def _accept(daemon: Daemon, listener: socket.socket) -> None:
         except socket.timeout:
             continue
         except OSError:
-            # An update's drain closed the port: it starts the switch helper next, on a daemon
-            # thread this process's exit would end, so the loop waits for the drain to stop it.
+            # A drain (the update of 0.11.11 and earlier) closed the port: it starts the switch helper
+            # next, on a daemon thread this process's exit would end, so the loop waits for the drain to stop it.
             if daemon.draining:
                 daemon.stopping.wait()
             break
@@ -2401,22 +2397,57 @@ def resumed() -> int | None:
     return port if type(port) is int and 0 < port < 65536 else None
 
 
+def _leaving() -> bool:
+    """Whether cad's own update is switching away from this release right now (``auto_update.leaving``). Never raises:
+    what cannot be told is no reason for a server not to start."""
+    try:
+        from cad_server._internal import auto_update
+
+        return auto_update.leaving()
+    except Exception:  # noqa: BLE001 - see above
+        return False
+
+
+def _restarted(starter: int | None = None) -> dict[str, Any] | None:
+    """cad's own update, begun as this server starts where PyPI as last read calls for one and automatic updates
+    allow it (``auto_update.restart``): the attempt begun, its record ``switching`` with a fresh beat,
+    so the start stands aside for it (``_leaving``); else None. ``starter``: the command that started this server
+    (``client._spawn``), which waits for the next one: the update leaves it running. Never raises: what cannot be told
+    is no reason for a server not to start."""
+    try:
+        from cad_server._internal import auto_update
+
+        return auto_update.restart(waiting=starter)
+    except Exception:  # noqa: BLE001 - see above
+        return None
+
+
 def main(argv: list[str] | None = None, *, port: int | None = None, foreground: bool = False,
          rotated: bool = False) -> int:
     """Run the engine here. ``port``: the HTTP port it must take (``cad server start --port``, which hands a server
-    it starts ``--port N`` in ``argv``); ``foreground`` (``cad server start --foreground``): its HTTP server bound
+    it starts ``--port N`` in ``argv``, with ``--starter PID``, the command that started it: ``_restarted``);
+    ``foreground`` (``cad server start --foreground``): its HTTP server bound
     before anything else, so a port another process holds fails the command at once (``bind``). One started
     detached binds on the first request that serves, which may name its own port (``cad viewer --port``) -- but where
     the server it replaced served pages (``resumed``), it serves them there at once, as one in the foreground does,
-    unless a port is named (``Daemon.resume``). The release it starts as is recorded (``started``)."""
+    unless a port is named (``Daemon.resume``). The release it starts as is recorded (``started``). It starts none
+    while cad's own update switches away from this release (``_leaving``): the next server is the update's to start.
+    Where cad's own update is due, a detached start is that update (``_restarted``), begun before this server serves
+    anything, and stands aside for it so; a start in the foreground, or one that names its port (``cad
+    server start --port``: the person's word for where this server serves, which the next release's server the
+    update starts would not take), is the person's own, and starts as it is: the update waits for a later start, or a
+    person's ask."""
     from cad.engine.serve import Pressure
 
+    starter = None
     if argv:
         from cad_server._internal.cli_parser import parser
 
         named = parser("cad server start")
         named.add_argument("--port", type=int)
-        port = named.parse_args(argv).port
+        named.add_argument("--starter", type=int)
+        given = named.parse_args(argv)
+        port, starter = given.port, given.starter
     try:
         Pressure.override(os.environ)
     except ValueError as error:  # refused at the start, in its one line, before anything is held
@@ -2425,6 +2456,19 @@ def main(argv: list[str] | None = None, *, port: int | None = None, foreground: 
     bytecode(os.environ)  # its own (``client.start`` set it), or made here: a daemon run in the foreground
     sys.pycache_prefix = os.environ.get("PYTHONPYCACHEPREFIX") or None
     sys.dont_write_bytecode = sys.pycache_prefix is None
+    if not foreground and port is None:
+        begun = _restarted(starter)
+        if begun is not None:
+            named = "the newest release" if begun["release"] == "latest" else f"cad {begun['release']}"
+            print(f"cad: {named} is out, so this start updates cad to it: its server starts in a moment",
+                  file=sys.stderr)
+    if _leaving():
+        # cad's own update is between the server it stopped and the next release's: this one starts none in its
+        # place, as where another daemon is up, and its starter waits for the server that answers (``client.start``).
+        if foreground:
+            print("cad: cad is updating itself, and its update starts the next release's server in a moment: "
+                  "`cad server status` says when it runs", file=sys.stderr)
+        return 0
     try:
         held = lock()
     except OSError as error:

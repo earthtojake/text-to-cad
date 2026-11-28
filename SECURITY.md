@@ -135,6 +135,14 @@ work is bounded as a run's is: one preview builds per document at a time, a newe
 request replaces the one waiting, and the server holds at most two per page and
 sixteen in all.
 
+**The route that updates cad.** The update button's `POST /api/v1/local/update` is behind the
+same Host check, guard header and credentials as every route that changes something. Its body is
+`{}` or `{"dismiss": <a number>}` (1 KiB at most): it names no release, index, path or command. It
+asks the server what `cad update` asks: the newest release there is, from
+the package index uv already uses, never an older one; or it marks a
+failed attempt put away in the update's record. So whoever holds a credential can have cad update
+itself now, as it would by itself, and nothing more.
+
 **The CAD app in agent hosts.** The page's own tools (`cad_sync`,
 `cad_capture_reply` and `cad_http`, its requests of the viewer's routes) need a
 capability, one for each host connection. The server delivers it in tool-result metadata, which
@@ -171,8 +179,7 @@ and nothing asked:
   (on Windows, your user PATH); `UV_NO_MODIFY_PATH` stops that, and a cad that runs
   the command sets it. A `cad` that is installed and starts is brought up to date
   where a person ran the command, by that cad's own `cad update`: PyPI's newest
-  release of its major version, at once, under neither the version feed's hour nor a
-  hold (below). Where cad ran the command, cad is left as it is.
+  release, at once. Where cad ran the command, cad is left as it is.
 - `cad plugin install`, run by the cad that is now installed: code from the `cad`
   package on PyPI, not from texttocad.dev. Where that cad has no such command (0.11.12
   and 0.11.13), or cad could not be installed, `install.py` runs the newest release's
@@ -200,50 +207,52 @@ It starts no server. To read the scripts first, take the copies attached to a
 release on GitHub and check them against the release's `SHA256SUMS`; they install
 the newest release, not that one.
 
-**Automatic updates.** A cad installed globally (`uv tool install cad`) installs
-new releases of its own major version by itself, with no one asked, unless you turn
-that off with `cad update auto off`; a new major version installs only when a person
-runs `cad update --major`. At most once an hour, and as its server starts, cad asks
-`api.texttocad.dev/v1/releases` which release is newest, of each major (releases before
-0.11.12 ask `api.texttocad.dev/v1/versions`, which names nothing from 0.12.0 on). The feed
-names a release only once it has been on PyPI for an hour, and we can hold a release back
-from it. When the feed names a release of cad's major newer than cad's and nothing has
-run for a minute, cad stops its server, runs its installer's own upgrade bounded to that
-major (`uv tool install --upgrade "cad>=<installed>,<<next major>"`), which downloads
-PyPI's newest release of `cad` in that range, and starts the server again. It never
-installs an older release; where a failed upgrade left no `cad`, it puts back the
-release that ran. A typed `cad update` asks PyPI which release of its major is newest
-and runs the same upgrade; `cad update --major` runs `uv tool install --upgrade
-"cad>=<installed>"`, PyPI's newest of all. Then, where `cad plugin update auto` is on, the
+**Automatic updates.** A cad installed globally with uv (`uv tool install cad`) installs
+new releases by itself, a new major version too, unless you turn that off with `cad update
+auto off`, and only at two moments: as its server starts, or when you ask (`cad update`, the
+viewer's update button). At most once an hour, in the background, cad asks PyPI
+(its index page for `cad`, `pypi.org/simple/cad/`, the page uv installs from) which release is newest, leaving out every release we yanked there,
+and asks `api.texttocad.dev/v1/notices` for the project's notices, which are text it shows and
+never runs (releases 0.11.12 to 0.11.18 ask `api.texttocad.dev/v1/releases` instead, and
+releases before them `api.texttocad.dev/v1/versions`). PyPI's answer only says that there is
+something newer. When it does, cad, at its server's next start or when you ask, has your own
+uv, with your uv's settings, find and download the newest release (`uv tool run --from
+cad@latest`, into uv's cache), stops its server at once and runs `uv tool upgrade cad` on its
+own environment, which replaces cad's files where they are with the newest release the package
+index uv uses holds, never one yanked there; then it checks that it runs and starts the server
+again. It names no release and sets no limit: what your uv would install for `cad` is what is
+installed. It never installs an older release, and leaves uv's record of the install as it is,
+so a range you gave uv there (`uv tool install "cad<0.13"`) still holds, but for one that only keeps
+cad below a major version (`cad<1`, as cad 0.11.18 and earlier wrote it), which the update replaces
+(`uv tool install --upgrade cad`) when a new major is out; a cad you pinned
+to a release is left alone, and so is one pipx or pip installed, which you update the way you
+installed it. A typed `cad update` does the same, at once. It is what you could run
+yourself, so whoever can write cad's environment can change what `cad` runs, as always. Then, where `cad plugin update auto` is on, the
 server of the newer cad (however it got newer: by itself, by `cad update`, or by an
-upgrade by hand) runs its own `cad plugin install` once, unattended: code of the cad
+install by hand) runs its own `cad plugin install` once, unattended: code of the cad
 just installed, which fetches the plugin from GitHub and runs each agent app's own
 command-line program, as a typed `cad plugin install` does (above). It downloads no script
 and runs nothing from texttocad.dev. A run that fails is tried again an hour or more
 later, at most three runs for one release, and one still running after 15 minutes is
 stopped, by its own thread a minute later where a step of it never came back. One such
-run goes at a time, and cad's own update begins none while one is
-going. So with automatic updates on, whoever controls `api.texttocad.dev` (which
-decides only when), the `cad` project on PyPI or this repository's `latest` branch
-can run code as you.
+run goes at a time. So with automatic updates on, whoever controls the `cad` project on PyPI or this
+repository's `latest` branch can run code as you. `api.texttocad.dev` decides nothing of it
+for these releases: it only carries the notices.
 
 **What else installs by itself.** The CAD app's server line in Codex's plugin
-(`uvx ... cad@<release> mcp`) runs `uv tool install` for PyPI's newest `cad` of that
-release's major where the computer has no global cad, and never over a `cad` of a higher
-major. The hosted install command is still downloaded from texttocad.dev and run
+(`uvx ... cad@<release> mcp`) runs `uv tool install cad`, PyPI's newest, where the
+computer has no global cad. The hosted install command is still downloaded from texttocad.dev and run
 unattended in two places. Releases 0.11.12 and 0.11.13 run it as their `cad plugin
 update`, which their server runs once after cad got newer, where `cad plugin update
 auto` is on: nothing shipped later can change that, and it ends when that cad has
 updated. And a computer that the updater of 0.10.0 to 0.11.11 brought to this release
 runs it where our install command or an earlier release's update had put our plugin
-there, and otherwise installs cad itself the same bounded way. On those computers,
+there, and otherwise installs cad itself the same way. On those computers,
 whoever controls `texttocad.dev` can run code as you too. Run that way the command
-updates no cad that works, but it is not bounded by major: where cad is missing or
-does not start it installs PyPI's newest `cad` of all, where the cad there has no
-`cad plugin install` it runs PyPI's newest `cad` of all from uv's cache for that one
-step, and the plugin it installs, like the one `cad plugin install` installs, is
-`latest`, the newest of all. No higher major exists today, and both are to keep a
-computer inside its major before one ships.
+updates no cad that works: where cad is missing or does not start it installs PyPI's
+newest `cad`, where the cad there has no `cad plugin install` it runs PyPI's newest
+`cad` from uv's cache for that one step, and the plugin it installs, like the one `cad
+plugin install` installs, is `latest`, the newest of all.
 
 ### What we treat as a vulnerability
 

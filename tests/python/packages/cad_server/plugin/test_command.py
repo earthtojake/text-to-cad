@@ -20,7 +20,7 @@ from unittest import mock
 
 import cad_server
 from cad_server import analytics, updates
-from cad_server._internal import auto_update, auto_update_helper, plugin_catch_up
+from cad_server._internal import auto_update, plugin_catch_up
 from cad_server.cli import plugin as command
 from cad_server.plugin import apps, computer, run, source
 from tests.python.support.agent_apps import CODEX_ADD, PluginRuns
@@ -33,7 +33,7 @@ ADD = [["plugin", "marketplace", "add", "earthtojake/text-to-cad#latest"],
 STUCK = """
 import sys, threading
 sys.prefix = sys.argv.pop(1)
-from cad_server._internal import auto_update_helper, plugin_catch_up, telemetry_send
+from cad_server._internal import plugin_catch_up, telemetry_send
 from cad_server.cli import main
 from cad_server.plugin import apps, run
 
@@ -45,7 +45,7 @@ def never(here, source, live=None, each=None):
     threading.Event().wait()
 
 run.install_apps = never
-auto_update_helper.INSTALL_SECONDS, plugin_catch_up.GRACE_SECONDS = 0, 0.01
+plugin_catch_up.RUN_SECONDS, plugin_catch_up.GRACE_SECONDS = 0, 0.01
 stop = plugin_catch_up.HardStop._stop
 plugin_catch_up.HardStop._stop = lambda self: (stuck.wait(), stop(self))
 telemetry_send._spawn = lambda settings: None
@@ -333,7 +333,7 @@ class InstallTests(PluginRuns):
         underway = {"release": "0.0.2", "at": 7.0, "tries": 1, "outcome": "underway"}
         self.keep(**{"for": "0.0.1"}, **underway)
         with mock.patch.object(plugin_catch_up, "HardStop") as stop, \
-                mock.patch.object(auto_update_helper, "INSTALL_SECONDS", 0):
+                mock.patch.object(plugin_catch_up, "RUN_SECONDS", 0):
             for name in ("install", "update"):
                 failed = self.cad_plugin(name, **EARLIER, FAKE_FAIL="claude")
                 self.assertEqual(1, failed.returncode, failed.stdout)
@@ -359,7 +359,7 @@ class InstallTests(PluginRuns):
         # This release's server's own name is the one that makes a server's run: its deadline, and its record closed.
         self.keep(**{"for": "0.0.1"}, **underway)
         with self.on_this_computer(**SERVER):
-            self.assertEqual(plugin_catch_up.deadline(), float(auto_update_helper.INSTALL_SECONDS))
+            self.assertEqual(plugin_catch_up.deadline(), float(plugin_catch_up.RUN_SECONDS))
             self.assertEqual(run.began_by(os.environ), run.SERVER)
         self.assertEqual(0, self.cad_plugin("install", **SERVER).returncode)
         record = self.kept()["record"]
@@ -454,9 +454,9 @@ class UpdateTests(PluginRuns):
         done = self.cad_plugin("install", **SERVER)
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual(ended(), (version, "ok", 0))
-        # Its time up (INSTALL_SECONDS): no command is started, no app begun, the switch left as it is, and it failed.
+        # Its time up (RUN_SECONDS): no command is started, no app begun, the switch left as it is, and it failed.
         self.keep(**underway)
-        with mock.patch.object(auto_update_helper, "INSTALL_SECONDS", 0):
+        with mock.patch.object(plugin_catch_up, "RUN_SECONDS", 0):
             done = self.cad_plugin("install", **SERVER)
         self.assertEqual((computer.STOPPED, 124, []), (done.returncode, done.returncode, self.calls()))
         self.assertEqual(done.stderr, "cad plugin install: stopped after 0 seconds, all a run the cad server began may "
@@ -471,7 +471,7 @@ class UpdateTests(PluginRuns):
         self.assertEqual(ended(), ("0.0.1", "failed", 75))
         # A person's own run has no deadline, and ends no run of a server's.
         self.keep(**underway)
-        with mock.patch.object(auto_update_helper, "INSTALL_SECONDS", 0):
+        with mock.patch.object(plugin_catch_up, "RUN_SECONDS", 0):
             done = self.cad_plugin("install")
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertEqual(ended(), (version, "underway", None))

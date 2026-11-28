@@ -18,10 +18,11 @@ name: Publish Release
 # installers follow name it: the
 # `latest` branch, claude.ai's `claude-plugin` and Codex's `codex-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
-# version, and the tag and the GitHub Release go out. The version feed the install command and
-# cad's own update read (apps/api) asks PyPI itself -- `cadgen`'s index, which the release
-# lists last -- and names a release only once every file of it is an hour old there, its edge keeping an
-# answer five minutes: nothing here purges or waits on it. main has the new pins from
+# version, and the tag and the GitHub Release go out. cad's own update asks PyPI itself, within the
+# hour, so a release that must not spread is yanked there. The version feed 0.11.12 to 0.11.18 read
+# (apps/api) asks PyPI too -- `cadgen`'s index, which the release lists last -- and names a release only
+# once every file of it is an hour old there, its edge keeping an answer five minutes: nothing here
+# purges or waits on it. main has the new pins from
 # the merge on, so only an install of main itself -- a command that names no branch -- can see
 # a version minutes before PyPI has it.
 #

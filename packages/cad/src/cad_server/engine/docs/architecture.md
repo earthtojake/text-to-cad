@@ -117,8 +117,8 @@ older release's server, an older one joins a newer server that runs (`client.sta
 `cad mcp` that is not the global `cad` installed on the computer (Codex's plugin line runs it from uvx's cache) starts
 none of its own: it runs the installed cad's `cad server start` and joins the server that leaves, whatever the two
 releases are, so the server is always the one that updates itself. Where no global cad is installed, one run from uv's
-cache installs it first (`cad_server._internal.tool_install`: `uv tool install "cad<N>"`, PyPI's newest of its own
-major, never `--force`, and never over a `cad` tool of a higher major).
+cache installs it first (`cad_server._internal.tool_install`: `uv tool install cad`, PyPI's newest, never
+`--force`).
 Every other command, `cad run` and a model run directly among them, attaches to the one that runs, and says so in one
 line where none does (`not_running`). A model's own process -- the library, which never starts a server of its own
 environment -- starts none. No client starts another release's engine beside the device's: an engine runs on until
@@ -131,25 +131,30 @@ server where the bridge pointed it there (below). Such a client's builds are ref
 (`contract.refusal`).
 
 The version feed (`cad_server.updates`): the server reads it in the background at most once an hour as it tends
-itself (`updates.refresh`), never waited on, for cad's automatic update alone; `cad update` asks PyPI instead
-(`updates.pypi`), at once; nothing says a newer release to a person or an agent unasked (`cad update` and `cad
-doctor` name a release of a higher major, which never installs itself).
+itself (`updates.refresh`), never waited on, for the update at a start and the button's release alone; `cad update` asks PyPI instead
+(`updates.pypi`), at once; nothing says a newer release to a person or an agent unasked.
 
-A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself
-to newer releases of its own major unless the person turned it off (`cad update auto off`), or when asked (`cad
-update`: `Daemon.update`, the update begun once nothing is in flight, whatever the switch says; `cad update --major`
-to the newest of all): first thing as a server starts, before its door opens, and as it tends itself once nothing
-has run for a minute (or nothing since it started), where the version feed as last read names a newer release of
-its major, a detached helper that is not cad (`auto_update_helper`, run by the Python cad's environment was made
-from) stops the server, runs the installer's upgrade bounded to that major (`uv tool install --upgrade
-"cad>=<installed>,<<next major>"`), tried again on failure, and starts the server with whatever cad is there. A server that hands its start over exits
-`UPDATING`, and its starter waits for the next one; a `cad server start` that fails asks for the update before it
-gives up; a start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With
-`cad plugin update auto` on, the server, at its start and at each quiet tending, runs `cad plugin install` (which
-updates the plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is
-newer than the release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then counts the last update attempt once (`auto_update.report`); the
-helper and `cad update` run none, and no update of cad begins while a run of it is going. Where no server runs, a typed `cad update` begins the update itself
-(`cli/update.py`), and its helper starts no server after it.
+A global install of cad (`uv tool install cad`; `cad_server._internal.auto_update.global_install`) updates itself to
+the newest release, a new major version too, in place, with the person's own uv (`base.find_uv`), at two moments
+alone: when asked (`cad update`, the viewer's button: `Daemon.update`, begun at once, whatever the switch says), and,
+unless the person turned it off (`cad update auto off`), as the server next starts where PyPI as last read names a
+newer release (the start is the update, begun before it serves anything:
+`daemon.main`, never in the foreground nor on a port the start names; `auto_update.restart`). Nothing runs in the
+background: the server's tending only reads the feed. A detached worker (`auto_update_helper`, the release it updates
+to, run by uv from its cache and outside any Windows app package) stops the server at once, as `cad server stop`
+does, runs `uv tool upgrade cad` (on Windows after moving uv's `cad.exe` aside
+and stopping every process of the environment, since a process holds the files uv deletes one by one with no
+rollback), checks that the release runs and starts its server, and
+repairs the environment where it does not, installing it again whole where only that brings cad back. A command it
+cuts short says cad updated itself while it ran (`client._cut_short`). Meanwhile a command that finds no server
+waits for the next (`client.SWITCHING`), and a server of the release being left starts none in its place
+(`daemon.main`, `auto_update.leaving`); a `cad server start` that fails asks for the update before it gives up; a
+start never replaces a newer server, it joins it (`client.start`, `cad_mcp.shim.start_server`). With `cad plugin
+update auto` on, the server, at its start and at each tending, whatever is in flight, runs `cad plugin install` (which updates the
+plugin in each agent app with that app's own command, with 15 minutes at most) once where its cad is newer than the
+release that command last went well in every app for, however it got newer (`_internal/plugin_catch_up.py`), then
+counts the last update attempt once (`auto_update.report`); the worker and `cad update` run none. Where no server
+runs, a typed `cad update` begins the update itself (`cli/update.py`), and its worker starts no server after it.
 
 The updaters of 0.10.0 to 0.11.11 are frozen on computers, though, and update by running a newer release's hidden
 `cad setup --engine-update` from a flat release folder they made (`<state>/releases/X`). The bridge
@@ -170,8 +175,9 @@ once. 0.10.0's updater on
 Windows keeps its state in the local application data, so its switch could only go back: there the run stops 0.10.0's
 server by its own stop command first, moves its data once, points the records in both state folders at X, and starts
 X's server on the port and with the token it took in. Plain `cad setup`, which `cad update` typed on those releases
-runs, is the install command in install mode. Nothing of a past release is deleted by cad: the release folders stay
-until `cad cache prune`. A server asked for `{"op": "http",
+runs, is the install command in install mode. The release folders of 0.11.11 and earlier stay until the computer is
+on the global cad: that cad's server removes them as it starts, but the one `installations/current`
+names and any a process runs from, as `cad cache prune` does (`releases.tidy`). A server asked for `{"op": "http",
 "port": P}` while it serves pages on another port Q -- an updater handing the pages' port on, 0.11.10's switch helper
 among them, to a server that started while 0.11.10 still held P -- takes P too, a second listener of the same
 application and token, and P is its own from then on (what `status` says, what its record keeps for the next start,
@@ -185,8 +191,8 @@ the port is rolled from as above, or refused where the port is named, as below.
 A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
 `cad server` binds at its start, so the command fails at once with that line on stderr and exits
 1, no engine left. An engine a client starts binds on the first request that serves, but for one that replaces
-a server that served pages: a client that stops a server (`client.sweep`: `cad server stop`, which cad's own update
-and the bridge's move run before they start the next, and a start that replaces an older server) first asks it where
+a server that served pages: a client that stops a server (`client.sweep`: `cad server stop`, the bridge's move
+before it starts the next, a start that replaces an older server, and cad's own update's switch) first asks it where
 it serves pages, any release's server alike, and notes the port (`places.pages_path`); the next server to start takes
 the note and serves pages there at once with the user's token (`daemon.resumed`, `Daemon.resume`), so a page open in a
 browser reconnects with nobody doing anything. A port named (`--port`, `CAD_ENGINE_PORT`) comes first; where the port noted is taken,

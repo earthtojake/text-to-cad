@@ -1,7 +1,11 @@
 """Reaching the server: connect through its door (on Windows, its loopback port). Nothing here starts one but
 ``start`` (``cad server start``, ``cad mcp``): a client that finds none is told so in one line (``NotRunning``), and a
-``cad`` command that finds one of another release is too (``OtherRelease``, ``RELEASE``). A start never replaces a
-server of its own release or a newer one, whenever it finds it: it joins it (forward only)."""
+``cad`` command that finds one of another release is too (``OtherRelease``, ``RELEASE``) -- unless cad's own update is
+switching releases just then (``SWITCHING``): the server it starts is waited for. A start never replaces a server of
+its own release or a newer one, whenever it finds it: it joins it (forward only), and while cad's own update switches
+away from its release it launches none of its own (``LEAVING``): the next server is the update's to start. cad's own
+update stops the server at once, as ``cad server stop`` does (``sweep``), and a request it cuts short in a ``cad``
+command meets the next release's server as one of another release (``_cut_short``)."""
 
 from __future__ import annotations
 
@@ -36,8 +40,13 @@ NOT_RUNNING = f"the {COMMAND} server is not running: run `{START}`"
 SANDBOXED = (f"the {COMMAND} server is not running, and this shell's sandbox cannot start one: run `{START}` outside "
              "the sandbox, and every later command finds it running")
 # How long a start waits for a server of another release to go once told to stop: an agent app gives the server
-# line that starts one 30 seconds in all. And how long it waits for its own server's door.
-STOP_SECONDS = 10.0
+# line that starts one 30 seconds in all, and one that ends its workers and pools has been seen to take more than
+# ten. And how long it waits for its own server's door.
+STOP_SECONDS = 20.0
+# What a start says where the server it told to stop is still going after that: it is on its way, and the start
+# after it finds room.
+STOPPING = (f"the {COMMAND} server of an earlier release was told to stop and is still stopping: run `{START}` again "
+            "in a few seconds")
 START_SECONDS = 60.0
 # The release a ``cad`` command holds the server it reaches to: its own, which the command line sets
 # (``cad_server.cli``). None, every other process's -- a person's own Python, a model ``cad run`` runs, a worker --
@@ -45,9 +54,15 @@ START_SECONDS = 60.0
 RELEASE: str | None = None
 # The release a process reaches a server of, or of a newer one (``cad mcp``, which joins a newer server).
 AT_LEAST: str | None = None
-# The exit status of a server that handed its start to cad's own update (``cad_server._internal.auto_update``): its
-# starter waits for the server the update starts, never starts another.
-UPDATING = 75
+# Whether cad's own update is switching releases now: its server stopped, or about to be, and the next starting
+# (``cad_server._internal.auto_update.switching``, which the ``cad`` command sets beside ``RELEASE``). A command that
+# then finds no server, or one older than its own release, waits for the next ``SWITCH_SECONDS`` at most. None: never.
+SWITCHING: Callable[[], bool] | None = None
+SWITCH_SECONDS = 30.0
+# Whether cad's own update is switching away from this process's release right now
+# (``cad_server._internal.auto_update.leaving``, which the ``cad`` command sets): the next server is the update's to
+# start, so ``start`` launches none meanwhile and waits for the one that answers. None: never.
+LEAVING: Callable[[], bool] | None = None
 
 
 def newer(theirs: str | None, mine: str) -> bool:
@@ -62,8 +77,21 @@ class NotRunning(ConnectionError):
     """No server answers: ``NOT_RUNNING``, which every command says as its failure (``not_running``)."""
 
 
+class StillThere(ConnectionError):
+    """A server told to stop that had not gone within the wait (``sweep``): it may be on its way still."""
+
+
 class OtherRelease(ConnectionError):
-    """A ``cad`` command's server is of another release (``RELEASE``): both said, and the two ways on."""
+    """A ``cad`` command's server is of another release (``RELEASE``): both said, and the two ways on (``met``).
+    ``theirs`` and ``mine``: the server's release (None: one that names none) and the command's."""
+
+    def __init__(self, words: str, *, theirs: str | None = None, mine: str | None = None) -> None:
+        super().__init__(words)
+        self.theirs, self.mine = theirs, mine
+
+    @classmethod
+    def met(cls, theirs: str | None, mine: str) -> OtherRelease:
+        return cls(_other(theirs, mine), theirs=theirs, mine=mine)
 
 
 def _other(theirs: str | None, mine: str) -> str:
@@ -81,6 +109,13 @@ def _joined(release: str | None) -> str:
     if release == version():
         return f"the {COMMAND} server ({COMMAND} {version()}) is already running"
     return f"the {COMMAND} server ({COMMAND} {release}, newer than this {COMMAND} {version()}) is already running"
+
+
+def _updated(release: str | None) -> str:
+    """What a start says that stood by while cad's own update switched releases (``LEAVING``), and whose server is
+    the next release's, which the update started."""
+    return (f"started the {COMMAND} server ({COMMAND} {release}): {COMMAND} updated itself from {version()} as the "
+            "server started")
 
 
 def _connect(address: Path | None = None, *, stopping: bool = False) -> Connection | None:
@@ -225,21 +260,24 @@ def environment() -> dict[str, str]:
 def _spawn(port: int | None) -> subprocess.Popen:
     """A server started, detached, by this process's own Python (``sys.executable``: the environment's
     interpreter, never the ``cad`` launcher), its standard streams the null device and a session of its own --
-    on Windows a process group and a console of its own, with no window (``places.detached``) -- so it holds
+    on Windows a process group and a console of its own, with no window, out of the starter's job where it allows
+    it (``places.detached``) -- so it holds
     nothing of the command that started it, and that command, and on Windows its ``cad.exe``, exits as soon as
     the server answers. ``port``: the HTTP port it must take. The engine's folder is first on its ``PYTHONPATH``
     only where this environment would not find it -- a source tree --, so no process the daemon starts in the
-    base inherits it."""
+    base inherits it. On Windows, from inside an app package, it starts outside it (``places.outside_package``). It is
+    told which process started it (``--starter``, this one): where its start becomes cad's own update, that update
+    leaves this process running on Windows, whoever the daemon's parent is (inside an app package, Task Scheduler)."""
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
     root, path = places.engine_root(), env.get("PYTHONPATH", "")
     inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
     if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):
         env["PYTHONPATH"] = os.pathsep.join(item for item in (root, path) if item)
     places.bytecode(env)
-    return subprocess.Popen([sys.executable, "-P", "-m", DAEMON_MODULE, *(["--port", str(port)] if port is not None
-                                                                         else [])],
-                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
-                            cwd=_working_folder(), **places.detached())
+    return places.outside_package([sys.executable, "-P", "-m", DAEMON_MODULE, "--starter", str(os.getpid()),
+                                   *(["--port", str(port)] if port is not None else [])],
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  env=env, cwd=_working_folder(), **places.detached(breakaway=True))
 
 
 def _working_folder() -> str | None:
@@ -267,7 +305,8 @@ def make_way() -> str | None:
     started it --: the stop is asked of the server it reaches only once that server's own greeting names an older
     release (``sweep``'s ``leave``), so no start stops a server of this release or a newer one, however the moments
     fall. ``ConnectionError`` in one line where room cannot be made: in a shell whose sandbox refuses the loopback port
-    a server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop did not go."""
+    a server needs (``SANDBOXED``), before anything is stopped, and where the server told to stop has not gone yet
+    (``STOPPING``: what to do, never the door's path)."""
     found = _connect()
     if found is not None:
         found.close()
@@ -276,7 +315,10 @@ def make_way() -> str | None:
     if _sandboxed():
         raise ConnectionError(SANDBOXED)
     if found is not None:
-        sweep(stop=True, seconds=STOP_SECONDS, leave=version())
+        try:
+            sweep(stop=True, seconds=STOP_SECONDS, leave=version())
+        except StillThere:
+            raise ConnectionError(STOPPING) from None
         found = _connect()
         if found is not None:
             found.close()
@@ -289,11 +331,16 @@ def start(port: int | None = None) -> str:
     """This release's server running: the one function that starts a server (``cad server start``, ``cad mcp``),
     once room is made for it (``make_way``) -- started (``_spawn``; ``port``, the HTTP port it must take) and waited
     for until its door answers. Starts at the same moment end with one server, by the daemon's lock, and none of them
-    stops the server another of them started (``make_way``): each says it ran or joined it. A server that
-    hands its start to cad's own update (``UPDATING``) is not started again: the update's server is waited for, and
-    joined where it is newer. What was done, in one line. ``ConnectionError`` in one line where it could not be: room
-    not made (``make_way``), a server that did not start (its note, ``places.failure_path``), and one of an older
-    release that a start at the same moment started (``OtherRelease``)."""
+    stops the server another of them started (``make_way``): each says it ran or joined it. While cad's own update
+    switches away from this release (``LEAVING``: the daemon launched stood aside for it, or this start became the
+    update) it launches nothing and takes no exit of what it launched for a failure: a daemon launched then would run
+    from files uv is replacing, and one that fails would fail this start a moment before the update starts its own.
+    It waits for the server the update starts, the next release's or, where its repair went back, this one's, as long
+    as the update switches (``START_SECONDS`` at a time, its build included while the daemon launched begins it). What
+    was done, in one line. ``ConnectionError`` in one line
+    where it could not be: room not made (``make_way``), a server that did not start (its note,
+    ``places.failure_path``), and one of an older release that a start at the same moment started
+    (``OtherRelease``)."""
     running = make_way()
     if running is not None:
         return running
@@ -311,27 +358,35 @@ def start(port: int | None = None) -> str:
     process = _spawn(port)
     began = time.monotonic()
     deadline = began + START_SECONDS
-    updating = False
+    stood_by = waited = False  # ever stood by for the update's switch; the daemon launched last left during one
     while (answered := _connect()) is None:
         if time.monotonic() > deadline:
-            raise ConnectionError(f"the engine server did not start{': cad is updating' if updating else ''}")
+            if not _leaving():
+                raise ConnectionError("the engine server did not start")
+            # cad's own update is switching away from this release, its worker beating: uv's build of the next
+            # release, its upgrade and its server's start may outlast a start's wait on a slow computer. Waited for
+            # while it beats (``LEAVING``), a start's wait at a time.
+            stood_by, deadline = True, time.monotonic() + START_SECONDS
         time.sleep(0.02)
-        if updating:
-            continue
         code = process.poll()
-        updating = code == UPDATING
-        if code and not updating:  # it could not take its lock or listen: said now, not after the timeout
-            raise _not_started(code)
-        if code == 0 and time.monotonic() - began > 1.0:
-            # A daemon that is stopping still holds the lock, and the one just started left at once: started
-            # again once the lock is free.
-            process = _spawn(port)
+        if code is not None and _leaving():
+            # The next server is the update's to start: nothing is launched, how the daemon launched before left
+            # says nothing of now (it stood aside, or ran from files being replaced), and the
+            # second a daemon is given before another is launched begins once the switch has ended.
+            stood_by = waited = True
             began = time.monotonic()
+            continue
+        if code and not waited:  # it could not take its lock or listen: said now, not after the timeout
+            raise _not_started(code)
+        if code is not None and time.monotonic() - began > 1.0:
+            # A daemon that is stopping still holds the lock, and the one just started left at once; or the update's
+            # switch has ended and left no server: started again once the lock is free.
+            process, began, waited = _spawn(port), time.monotonic(), False
     answered.close()
     if newer(answered.release, version()):
-        return _joined(answered.release)
+        return _updated(answered.release) if stood_by else _joined(answered.release)
     if answered.release != version():
-        raise OtherRelease(_other(answered.release, version()))
+        raise OtherRelease.met(answered.release, version())
     if _another_s(process):
         return _joined(version())
     return f"started the {COMMAND} server ({COMMAND} {version()})"
@@ -357,19 +412,57 @@ def connect(*, start: bool = True) -> Connection | None:
     """A connection to the server, which a connection never starts (the module's ``start()`` alone does): with none
     answering, ``NotRunning`` in its one line -- or None, with ``start`` false, for a client that needs none and
     asks whether one runs. In a ``cad`` command (``RELEASE``) a server of another release is refused too, in the one
-    line that says both releases (``OtherRelease``)."""
+    line that says both releases (``OtherRelease``). Where none answers, or one older than the command's release, while
+    cad's own update switches releases (``SWITCHING``), the server it starts is waited for first (``_switched``)."""
     found = _connect()
+    if (found is None or RELEASE is not None and newer(RELEASE, found.release)) and _switching():
+        if found is not None:
+            found.close()
+        found = _switched()
     if found is None:
         if not start:
             return None
         raise NotRunning(NOT_RUNNING)
     if RELEASE is not None and found.release != RELEASE:
         found.close()
-        raise OtherRelease(_other(found.release, RELEASE))
+        raise OtherRelease.met(found.release, RELEASE)
     if AT_LEAST is not None and found.release != AT_LEAST and not newer(found.release, AT_LEAST):
         found.close()
-        raise OtherRelease(_other(found.release, AT_LEAST))
+        raise OtherRelease.met(found.release, AT_LEAST)
     return found
+
+
+def _switching() -> bool:
+    """Whether cad's own update is switching releases now (``SWITCHING``); False where nothing says, or it cannot."""
+    try:
+        return SWITCHING is not None and SWITCHING() is True
+    except Exception:  # noqa: BLE001 - a hook that fails is no switch
+        return False
+
+
+def _leaving() -> bool:
+    """Whether cad's own update is switching away from this release now (``LEAVING``); False where nothing says, or
+    it cannot."""
+    try:
+        return LEAVING is not None and LEAVING() is True
+    except Exception:  # noqa: BLE001 - a hook that fails is no switch
+        return False
+
+
+def _switched() -> Connection | None:
+    """The server that answers once cad's own update has switched releases: polled until one of the command's release
+    or a newer one answers (any, with no ``RELEASE``), the switch has ended either way (``SWITCHING``), or
+    ``SWITCH_SECONDS`` have passed; then what answers, or None."""
+    deadline = time.monotonic() + SWITCH_SECONDS
+    while True:
+        found = _connect()
+        if found is not None and (RELEASE is None or _at_least(found.release, RELEASE)):
+            return found
+        if time.monotonic() >= deadline or not _switching():
+            return found
+        if found is not None:
+            found.close()
+        time.sleep(0.1)
 
 
 def wait_gone(timeout: float = 60.0, endpoint: places.Endpoint | None = None, *, leave: str | None = None) -> bool:
@@ -475,23 +568,50 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
         # never the port file read again, which a server stopping meanwhile has removed and one starting rewritten
         message = {"token": connection.token, **message}
     with connection:
-        connection.writer.write((json.dumps(message) + "\n").encode())
-        connection.writer.flush()
-        for line in connection.reader:
-            answer = json.loads(line)
-            if answer.get("stream") == "making":  # an environment the request waits on, made meanwhile: said here
-                print(f"cad: {answer.get('log', '')}", file=sys.stderr, flush=True)
-                continue
-            if "log" in answer:
-                on_log(answer)
-                continue
-            if set(answer) == {"progress"}:
-                if on_progress is not None:
-                    on_progress(answer["progress"])
-                continue
-            _notice(answer.pop("notice", None))
-            return answer
+        try:
+            connection.writer.write((json.dumps(message) + "\n").encode())
+            connection.writer.flush()
+            for line in connection.reader:
+                answer = json.loads(line)
+                if answer.get("stream") == "making":  # an environment the request waits on, made meanwhile: said here
+                    print(f"cad: {answer.get('log', '')}", file=sys.stderr, flush=True)
+                    continue
+                if "log" in answer:
+                    on_log(answer)
+                    continue
+                if set(answer) == {"progress"}:
+                    if on_progress is not None:
+                        on_progress(answer["progress"])
+                    continue
+                _notice(answer.pop("notice", None))
+                return answer
+        except ConnectionError:
+            _cut_short()
+            raise
+    _cut_short()
     raise ConnectionError("the engine server closed the connection")
+
+
+def _cut_short() -> None:
+    """A request its server closed unanswered, in a command held to its release (``RELEASE``), while cad's own update
+    switches releases (``SWITCHING``): the switch stopped that server at once, its work cut short. The next server is
+    waited for, ``SWITCH_SECONDS`` at most, as a command that finds none then waits (``_switched``), and where one
+    newer than the command answers, the command meets it as it would any server of another release
+    (``OtherRelease``): cad updated itself while it ran. Else nothing, and the closed connection is said as it is."""
+    if RELEASE is None or not _switching():
+        return
+    deadline = time.monotonic() + SWITCH_SECONDS
+    while True:
+        switching = _switching()
+        found = _connect()
+        theirs = found.release if found is not None else None
+        if found is not None:
+            found.close()
+        if theirs is not None and newer(theirs, RELEASE):
+            raise OtherRelease.met(theirs, RELEASE)
+        if not switching or time.monotonic() >= deadline:
+            return
+        time.sleep(0.1)
 
 
 def _notice(notice: str | None) -> None:
@@ -510,8 +630,8 @@ def _notice(notice: str | None) -> None:
 def _note_pages(address: Path) -> None:
     """Where the server at ``address`` serves pages, noted before it is told to stop (``places.pages_path``), for the
     server that comes next to serve them there at once (``daemon.resumed``): a page open in a browser then reconnects
-    by itself, whichever way its server was replaced -- cad's own update and the bridge's move (``cad server stop``,
-    then ``cad server start``), a start that replaces an older server (``make_way``). Asked as no command
+    by itself, whichever way its server was replaced -- cad's own update and the bridge's hand-over (``sweep``, then
+    ``cad server start``), a start that replaces an older server (``make_way``). Asked as no command
     (``internal``), of a server of any release (0.11.10's ``status`` says it too), ``PAGES_SECONDS`` at most; nothing
     noted where it serves no pages or does not say, and nothing here ever fails the stop."""
     try:
@@ -565,7 +685,7 @@ def sweep(*, stop: bool, seconds: float = 60.0, leave: str | None = None) -> dic
             except ConnectionError:
                 pass  # it closed the connection unanswered: stopping already (another start told it), as asked
             if not wait_gone(seconds, endpoint=endpoint, leave=leave):
-                raise ConnectionError(f"the engine server at {endpoint.address} did not exit")
+                raise StillThere(f"the engine server at {endpoint.address} did not exit")
             found["stopped"].append(str(endpoint.address))
             _remove_dead(endpoint)  # what it left, should it have died before removing its files
             continue

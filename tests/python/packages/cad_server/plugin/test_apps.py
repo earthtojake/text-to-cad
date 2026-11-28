@@ -235,6 +235,33 @@ class AppTableTests(PluginRuns):
         self.assertIn("Cursor: updated", done.stdout)
         self.assertIn("Grok Build: updated", done.stdout)
 
+    def test_grok_s_copy_installed_from_our_folder_is_ours_and_is_replaced_by_the_published_one(self) -> None:
+        """A development install puts the plugin into Grok Build from a folder, and Grok's registry then names no
+        source for it. Going back to the release, that copy is ours by its own manifests and is replaced; a plugin of
+        the same name whose folder is not ours is still left alone."""
+        self.programs("grok")
+        copy = self.home / ".grok/installed-plugins/text-to-cad-f2768976"
+        self.write(".grok/installed-plugins/text-to-cad-f2768976/.claude-plugin/plugin.json",
+                   {"name": "text-to-cad", "repository": source.URL})
+        self.write(".grok/installed-plugins/registry.json", {"repos": {"x": {
+            "kind": {"type": "Local"}, "path": str(copy), "plugins": {"text-to-cad": {"version": "0.11.19-dev.1"}}}}})
+        found = apps.grok_plugins(computer.Here(self.environ()))
+        self.assertEqual([(each["name"], each["source"], each["path"]) for each in found],
+                         [("text-to-cad", "", str(copy))])
+        done = self.run_install()
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertEqual(self.calls("grok"), [["plugin", "uninstall", "text-to-cad"],
+                                              ["plugin", "install", "earthtojake/text-to-cad@latest", "--trust"],
+                                              ["plugin", "enable", "text-to-cad"]])
+        self.assertIn("Grok Build: updated", done.stdout)
+        self.assertNotIn("left alone", done.stdout)
+        # Someone else's plugin of that name, from a folder that is not ours: left alone, as before.
+        self.write(".grok/installed-plugins/text-to-cad-f2768976/.claude-plugin/plugin.json",
+                   {"name": "text-to-cad", "repository": "https://example.com/theirs"})
+        done = self.run_install()
+        self.assertIn("Grok Build: failed: another plugin named text-to-cad is installed (from ): left alone",
+                      done.stdout)
+
     def test_a_cursor_clone_with_work_of_its_own_or_a_link_is_left_alone(self) -> None:
         clone = self.home / ".cursor/plugins/local/text-to-cad"
         self.write(".cursor/plugins/local/text-to-cad/.git/config", f'[remote "origin"]\n\turl = {source.URL}.git\n')

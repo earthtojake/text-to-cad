@@ -121,7 +121,7 @@ export function shownModels<Model extends LibraryModel>(items: readonly Model[],
 }
 
 const message = (failure: unknown) => failure instanceof Error ? failure.message : String(failure);
-/** How often the home reads its list again while it is up. */
+/** How often the home reads its list again while it is up and seen. */
 const LIST_MS = 2_000;
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
 
@@ -231,11 +231,12 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // The same list again is not news: the cards keep their state and are not drawn again.
   const refresh = useCallback(() => current.current.list().then(next =>
     setItems(previous => previous && JSON.stringify(previous) === JSON.stringify(next) ? previous : next)), []);
-  // Read on mount, again every couple of seconds while the home is up (a model rebuilt meanwhile
-  // is updated later than its picture, and is pictured again), and when the page is shown.
+  // Read on mount, again every couple of seconds while the home is up and seen (a model rebuilt meanwhile
+  // is updated later than its picture, and is pictured again), and when the page is shown. A hidden home asks
+  // nothing: it has nothing to show.
   useEffect(() => {
     void refresh().catch(failure => { setItems([]); setError(message(failure)); });
-    const again = () => { void refresh().catch(() => {}); };
+    const again = () => { if (document.visibilityState !== "hidden") void refresh().catch(() => {}); };
     const timer = setInterval(again, LIST_MS);
     document.addEventListener("visibilitychange", again);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", again); };
