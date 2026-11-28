@@ -143,9 +143,13 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **Moving between documents** is the navbar's and the keys', never a tab in the panel: the project's name goes to its
   page on the home, at the document's folder; `[` and `]` step through the documents of that folder, in the order its page
   lists them (passing a file no page opens), stopping at its ends; and the search (⌘K) reaches the whole project and every document the library knows
-  ([Search](#search)). Why: a tab of documents pushes the model's own tree aside on every document of a project, to
+  ([Search](#search)). The order is the one the folder's page listed as the person came to its documents (the page they
+  opened one from, else the folder as first read), held while they stay among them, until they go home or to a
+  document of another folder. Why: a tab of documents pushes the model's own tree aside on every document of a project, to
   offer what a key or the search does without taking room; and the documents beside one are those of its folder, as
-  a file manager's are.
+  a file manager's are. Why held: opening a document moves it to the front under Last activity, the default order, so
+  an order taken again at each step put the one just opened first, and the keys went back and forth between two
+  documents.
 
 #### Search
 

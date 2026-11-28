@@ -9,7 +9,7 @@ import { I18nProvider, translator } from '../i18n/index.js';
 import type { HomeLocation, ViewerHost } from '../host/types.js';
 import { folderPlace } from '../host/addresses.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, RECENTS, isDocument, sortDocuments, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
+import { ModelLibrary, RECENTS, isDocument, sortDocuments, type LibraryListing, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { cadRenderers } from './renderers.js';
 import type { LibraryLayout, LibrarySort } from '../tab-store/tabRecord.js';
@@ -55,6 +55,21 @@ function useProjectFolder(client: CadWorkspaceService, ref: CadEntryProject | nu
     return () => { controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', again); };
   }, [client, key]);
   return read?.key === key ? read : null;
+}
+
+/** One folder of a project, as one word. */
+const folderKey = (project: string, path: string) => JSON.stringify([project, path]);
+const slashed = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '');
+
+/**
+ * A folder's documents (`documents`, in its page's order now) in the order `held` names their paths, held from when
+ * the person came to them: a document the folder has gained since comes after them, in the page's order, and one it no
+ * longer has is gone.
+ */
+function heldOrder<Row extends { path: string }>(documents: readonly Row[], held: readonly string[]): Row[] {
+  const at = new Map(held.map((path, index) => [slashed(path), index]));
+  const rank = (row: Row, index: number) => at.get(slashed(row.path)) ?? held.length + index;
+  return documents.map((row, index) => ({ row, rank: rank(row, index) })).sort((a, b) => a.rank - b.rank).map(({ row }) => row);
 }
 
 /** The folder a path is in, `/`-separated. */
@@ -275,15 +290,34 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const folderRead = useProjectFolder(client, projectRef);
   // The home's order, by which the folder's files are stepped through as its page lists them.
   const { layout, sort, panel: libraryPanel } = settings.library;
+  // `[` and `]` step through the folder in the order its page listed its documents when the person came to them (the
+  // page's own, where they left it for one of them: `listed`; else the first read's), held while they stay among them,
+  // until the home or a document elsewhere is shown. Opening a document moves it under Last activity, the default
+  // order, so an order taken again at every step put the document just opened first and walked back and forth.
+  const listed = useRef<{ key: string; documents: readonly string[] } | null>(null);
+  const onListed = useCallback((listing: LibraryListing | null) => {
+    listed.current = listing ? { key: folderKey(listing.project, listing.path), documents: listing.documents } : null;
+  }, []);
+  const held = useRef<{ key: string; documents: readonly string[] } | null>(null);
+  const stay = projectRef ? folderKey(projectRef.id, projectRef.folder ?? '') : null;
+  // Left for the home, or for a document known to be elsewhere; a document the catalog has yet to answer for leaves nothing.
+  if (!path || (entry && held.current && held.current.key !== stay)) held.current = null;
   const project = useMemo<FileProject | null>(() => {
     if (!projectRef) return null;
+    const key = folderKey(projectRef.id, projectRef.folder ?? '');
+    const stepOrder = <Row extends { path: string }>(documents: Row[]) => {
+      if (held.current?.key !== key) {
+        held.current = { key, documents: listed.current?.key === key ? listed.current.documents : documents.map(row => row.path) };
+      }
+      return heldOrder(documents, held.current.documents);
+    };
     const folder = projectRef.folder ?? '';
     const place = folderPlace(projectRef.id, folder);
     const read = folderRead?.folder ?? null;
     return {
       id: projectRef.id, name: projectRef.name, root: projectRef.root,
       // The documents of the folder: a file in it that no page opens is no step of `[` and `]`.
-      documents: read ? sortDocuments(read.documents.filter(isDocument), sort, locale) : null,
+      documents: read ? stepOrder(sortDocuments(read.documents.filter(isDocument), sort, locale)) : null,
       missing: Boolean(read?.project?.missing), error: read ? null : folderRead?.error ?? null,
       href: hrefOf?.({ home: place }) ?? null,
       onShow: () => {
@@ -316,7 +350,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const goHome = useMemo(() => homed ? <StatusAction onClick={() => home()}>{t("file.goHome")}</StatusAction> : null, [homed, home, t]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} sort={sort} onSortChange={changeSort}
-      fileActions={host.fileActions} place={place} onPlaceChange={home} onPlaceShown={placeShown} from={origin} onBack={back} navigation={links}
+      fileActions={host.fileActions} place={place} onPlaceChange={home} onPlaceShown={placeShown} onListed={onListed} from={origin} onBack={back} navigation={links}
       panel={libraryPanel ?? null} onPanelChange={changeLibraryPanel} /> : undefined,
     // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
@@ -326,7 +360,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
       ? <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
         title={isDocumentId(path) ? t("file.notHeld") : t("file.missing")} description={isDocumentId(path) ? message : undefined} />
       : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
-  }), [library, layout, changeLayout, sort, changeSort, path, host.fileActions, place, home, placeShown, origin, back, links, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
+  }), [library, layout, changeLayout, sort, changeSort, path, host.fileActions, place, home, placeShown, onListed, origin, back, links, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
   // The search of every document (⌘K, and Search documents in a document's ⋯), over a document and the home alike,
   // where the host has a library (`search/`).
   const search = useDocumentSearch();

@@ -89,7 +89,8 @@ filtered rows; nesting adds indentation inside that gutter.
 Moving between documents is the navbar's, the keys' and the search's, never the panel's: a document in a project
 has the project's name before its own in the navbar, which goes to the project's page on the home at the document's
 folder (a link, where the host gives it an address); `[` and `]` step to the previous and next file of that folder
-(`file-viewer/projectKeys.js`); and ⌘K (Ctrl+K) searches the project on screen and every document of the library
+(`file-viewer/projectKeys.js`), in the order its page listed them as the person came to them, held while they stay
+among them (`cad-viewer/CadViewer.tsx`); and ⌘K (Ctrl+K) searches the project on screen and every document of the library
 (`search/DocumentSearch.tsx`). The browser's tabs are the
 viewer's tabs: a document or a project opens in a new one from its link, Open in new tab, or ⌘Enter. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
