@@ -326,15 +326,17 @@ renumbers the list and every citation in the same change.
     page asks: its Save of a model's parameters (law 30), and its preview of values before it saves them.
     And one reads a model's files outside a run and builds nothing: `cad share` reads them in its own
     process, never the engine's, to send them as the build closure its `.xbf` holds names them, and refuses
-    any that changed since that `.xbf` was written (or since the model's last run in the engine, where that
-    is later: a run that takes the `.xbf` whole writes nothing), naming the run that makes them the model's
-    again. A file document is the disk by definition and is read again when its bytes change. A project's page
+    any that are not what that `.xbf` was made from -- a file the build read whose bytes are not the ones the
+    closure holds the digest of, whatever its time, and its script or a module modified since that `.xbf` was
+    written (or since the model's last run in the engine, where that is later: a run that takes the `.xbf` whole
+    writes nothing) -- naming the run that makes them the model's again. A file document is the disk by definition and is read again when its bytes change. A project's page
     lists its folder, which is the disk's too, and reads no file of it.
     *Pressure-test*: build a model, then edit its script, its modules and the files its bodies read
     without running it: every page, command and tool answers as before the edit, and no process of the
     engine has opened a file of the model's code since its run, but a page's Save and preview, which
     read the script and refuse since it changed (`script_changed`), and `cad share` of its `.xbf`, which
-    refuses the files that changed, naming `cad run SCRIPT`.
+    refuses the files that changed (a file the bodies read by its bytes, even with its time put back), naming
+    `cad run SCRIPT`.
 22. **One table names every document type and integration.** *The package.* The registry
     (`cad.registry`) is the single source for every layer: each type's id, extensions, MIME type, view,
     content and operations, with the integration each needs; each integration's name, extra, process

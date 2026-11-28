@@ -1271,6 +1271,14 @@ def _xbf(path: Path, closure: dict[str, Any] | None) -> Path:
     return path
 
 
+def _read(folder: Path, path: str, kind: str = "read") -> list[str]:
+    """An input of a build closure as the engine records the file at ``path`` (relative to ``folder``, the ``.xbf``'s)
+    as it is now: a file a body read itself by its bytes' BLAKE2b of 32 bytes, one read through the engine by their
+    SHA-256."""
+    data = (folder / path).read_bytes()
+    return [kind, path, hashlib.blake2b(data, digest_size=32).hexdigest() if kind == "read" else _sha(data)]
+
+
 class SourcesTest(unittest.TestCase):
     """The files that made a document, with no engine: a model's from the build closure an ``.xbf`` of this test's
     making holds, the ``.xbf`` among them, its root and the two caps on it, what is left out and the refusals; a file
@@ -1323,7 +1331,7 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(self.sources(project / "src", closure, projects=[project / "src"]).left_out,
                          ((str(project / "lib" / "parts.py"), "outside"),))
         _write(home / "work", {"common.json": "{}"})
-        found = self.sources(project / "src", self.closure(["plate.py"], [["read", "../../common.json", "c" * 64]]),
+        found = self.sources(project / "src", self.closure(["plate.py"], [_read(project / "src", "../../common.json")]),
                              projects=[home / "work", project / "XBF"])
         self.assertEqual((found.root, [file.path for file in found.files]),
                          (str(home / "work"), ["common.json", "plate/src/plate.py", "plate/src/plate.xbf"]))
@@ -1379,7 +1387,7 @@ class SourcesTest(unittest.TestCase):
         project = _write(self.base / "home" / "plate", {"plate.py": "", "data/hole.json": "{}", "fonts/a.ttf": "f"})
         _write(self.base, {"system/b.ttf": "f"})
         found = self.sources(project, self.closure(["plate.py"], [
-            ["read", "data/hole.json", "c" * 64], ["file", "data/gone.step", "c" * 32],
+            _read(project, "data/hole.json"), ["file", "data/gone.step", "c" * 64],
             ["read", "data/never.json", None],  # found missing by the build: it read nothing of it
             ["font", "A", "fonts/a.ttf", "REGULAR", "f:1"], ["font", "B", "../../system/b.ttf", None, "f:2"],
             ["font", "Arial", None, None, "f:3"]]))
@@ -1406,7 +1414,7 @@ class SourcesTest(unittest.TestCase):
             "store/HEAD": "", "store/objects/a": "", "store/refs/b": "", "data/ok.json": "", ".gitignore": ""})
         reads = [".git/config", "data/.GIT./x", "data/GIT~1/y", "data/.h‌g/z", "store/HEAD", "store/objects/a",
                  "store/refs/b", "data/ok.json", ".gitignore"]
-        found = self.sources(project, self.closure(["plate.py"], [["read", path, "c" * 64] for path in reads]))
+        found = self.sources(project, self.closure(["plate.py"], [_read(project, path) for path in reads]))
         self.assertEqual([file.path for file in found.files], [".gitignore", "data/ok.json", "plate.py", "plate.xbf",
                                                                "store/objects/a", "store/refs/b"])
         self.assertEqual(sorted(found.left_out), sorted((str(project / path), "control") for path in (
@@ -1421,20 +1429,38 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(sharing.controlled(["a.py", "x/HEAD", "x/Objects/1", "x/refs/heads/main"]), "x/HEAD")
         self.assertIsNone(sharing.controlled(["a.py", "HEAD", "objects/1", ".github/x", "git/HEAD", "a.git"]))
 
-    def test_a_file_changed_after_the_xbf_was_made_or_code_gone_is_refused(self) -> None:
+    def test_a_file_changed_since_the_xbf_was_made_by_its_bytes_or_code_by_its_time_or_gone_is_refused(self) -> None:
         from cad_server import sharing
 
-        project = _write(self.base / "home" / "plate", {"plate.py": "", "lib/parts.py": "", "data/a.json": "{}"})
+        project = _write(self.base / "home" / "plate", {"plate.py": "", "lib/parts.py": "", "data/a.json": "{}",
+                                                        "data/b.step": "ISO-10303-21;"})
         built = time.time()
         later = built + 5
+        closure = self.closure(["plate.py", "lib/parts.py"], [_read(project, "data/a.json"),
+                                                              _read(project, "data/b.step", "file")])
+        # A file the build read is judged by its bytes, which its closure holds the digest of: touched, it is the
+        # same file; changed with its time put back (a copy that keeps times, an unzip), it is refused.
         os.utime(project / "data" / "a.json", (later, later))
+        self.assertEqual([file.path for file in self.sources(project, closure, built).files],
+                         ["data/a.json", "data/b.step", "lib/parts.py", "plate.py", "plate.xbf"])
+        for path, changed_to in (("data/a.json", b'{"r": 5}'), ("data/b.step", b"ISO-10303-21;\n")):
+            with self.subTest(path=path):
+                was = (project / path).read_bytes()
+                stamp = os.stat(project / path).st_mtime_ns
+                (project / path).write_bytes(changed_to)
+                os.utime(project / path, ns=(stamp - 10**10, stamp - 10**10))
+                with self.assertRaises(sharing.Stale) as changed:
+                    self.sources(project, closure, built)
+                self.assertEqual((changed.exception.path, changed.exception.why), (str(project / path), "changed"))
+                (project / path).write_bytes(was)
+        # The code is judged by its time (its closure's digest is of what the build reached in it): a module modified
+        # after the model was made is refused, and the same made later (a run that took the .xbf whole, writing
+        # nothing) is what made it.
+        os.utime(project / "lib" / "parts.py", (later, later))
         with self.assertRaises(sharing.Stale) as changed:
-            self.sources(project, self.closure(["plate.py", "lib/parts.py"], [["read", "data/a.json", "c" * 64]]),
-                         built)
-        self.assertEqual((changed.exception.path, changed.exception.why), (str(project / "data" / "a.json"), "changed"))
-        # Made later than the edit (a run that took the .xbf whole, writing nothing): the files are what made it.
-        self.assertIn("data/a.json", [file.path for file in self.sources(
-            project, self.closure(["plate.py", "lib/parts.py"], [["read", "data/a.json", "c" * 64]]), later + 1).files])
+            self.sources(project, closure, built)
+        self.assertEqual((changed.exception.path, changed.exception.why), (str(project / "lib" / "parts.py"), "changed"))
+        self.assertIn("lib/parts.py", [file.path for file in self.sources(project, closure, later + 1).files])
         for gone, closure in (("lib/gone.py", self.closure(["plate.py", "lib/gone.py"])),
                               ("nothere.py", self.closure(["lib/parts.py"], script="nothere.py"))):
             with self.subTest(gone=gone), self.assertRaises(sharing.Stale) as missing:

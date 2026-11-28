@@ -73,12 +73,16 @@ the `.xbf`'s folder:
   outside the project: ...`). An `.xbf` and a script that no folder but the home folder (or a disk's root) holds are
   refused in one line, naming the two ways to share them: a folder of their own, or their folder opened as a
   project. A `font` input goes only where it lies in the root: a system font is recorded nowhere else needed;
-- **none changed since the model was made**: the `.xbf`'s time, or, where a live worker of the running engine holds
-  the model and its last run is later, that run's (a run that takes the `.xbf` whole, its key the model's, writes
-  nothing: an edit no key sees, a comment, is made by that run). A file modified after it is not what the `.xbf` was
-  made from, and the share is refused in one line naming it and the run of its script (`failed`, exit 1, with
-  `next`: `cad run SCRIPT`): run it, then share. A script or a module the closure names that is gone from the disk is
-  refused the same way (`not_found`, exit 2); an input gone is left out, and said;
+- **none changed since the model was made**: a file the build read, by its bytes, against the digest its closure
+  holds (BLAKE2b of 32 bytes for one a body read, SHA-256 for one read through the engine), whatever its time, so one
+  touched goes and one changed with its time put back (`cp -p`, `rsync -a`, an unzip) is refused; the script and its
+  modules, whose closure digests are of what the build reached in them, which only running them tells, and a font,
+  by time: the `.xbf`'s, or, where a live worker of the running engine holds the model and its last run is later,
+  that run's (a run that takes the `.xbf` whole, its key the model's, writes nothing: an edit no key sees, a comment,
+  is made by that run). A file that is not what the `.xbf` was made from refuses the share in one line naming it and
+  the run of its script (`failed`, exit 1, with `next`: `cad run SCRIPT`): run it, then share. A script or a module
+  the closure names that is gone from the disk is refused the same way (`not_found`, exit 2); an input gone is left
+  out, and said;
 - a build that read a file the engine could not see leaves the closure's key null (**Body retention**): the share
   goes, and a line says an import may not rebuild it without that file. An `.xbf` that holds no closure (a shape a
   program handed over, a file exported from another document) goes alone, at its own name, said.
@@ -111,7 +115,8 @@ it would make a later command in that folder, `git status` among them, run what 
 ## Where each step runs
 
 1. The command turns FILE into the file's path, and, of a model, reads the closure its `.xbf` holds and its files,
-   checking each against the time the model was made (the engine's `model_info`, for a live worker's last run).
+   checking each input against its digest there and the code against the time the model was made (the engine's
+   `model_info`, for a live worker's last run).
 2. The command holds the file's lock in cad's cache: one `cad share` of a file at a time. Another says so in a
    line, waits for it 60 seconds at most, then is refused in one.
 3. The running server writes the bundle into the file's folder in cad's cache (`{"op": "bundle"}`, `api.bundle`),

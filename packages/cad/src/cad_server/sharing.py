@@ -344,6 +344,16 @@ def reading(file: File) -> tuple[int, str]:
     return place, path
 
 
+def _read_digest(path: str) -> str:
+    """A file's digest as a build's closure records one it read itself (an input of kind ``read``): BLAKE2b of 32
+    bytes, in lowercase hex (``memo._read_digest``); one read through the engine (``file``) is its SHA-256."""
+    found = hashlib.blake2b(digest_size=32)
+    with open(path, "rb") as handle:
+        while chunk := handle.read(1 << 20):
+            found.update(chunk)
+    return found.hexdigest()
+
+
 def _digest_of(path: Path) -> tuple[str, int]:
     found, size = hashlib.sha256(), 0
     with open(path, "rb") as handle:
@@ -606,8 +616,9 @@ def model_sources(xbf: str, built: float, *, home: str | None = None, projects: 
     so an import has the model with nothing run. ``built`` is when the model was last made here: the ``.xbf``'s time, or
     its last run's where that is later (a run that took the ``.xbf`` whole writes nothing). A file outside the root is
     left out, as is an input gone from the disk, each said (``left_out``). ``Stale`` for the script or a module gone
-    from the disk, and for any file of them modified after ``built``: those are not the files the ``.xbf`` was made
-    from. An ``.xbf`` that holds no closure (a shape a program handed over, a file another document exported) goes
+    from the disk, for an input whose bytes are not the ones its closure holds the digest of, whatever its time, and
+    for the script, a module or a font modified after ``built`` (the closure's digest of code is of what the build
+    reached in it, which only running it tells): those are not the files the ``.xbf`` was made from. An ``.xbf`` that holds no closure (a shape a program handed over, a file another document exported) goes
     alone, at its own name. ``Unsharable`` for an ``.xbf`` and a script that no folder but the home folder holds."""
     from cad.engine import previous
 
@@ -635,11 +646,14 @@ def model_sources(xbf: str, built: float, *, home: str | None = None, projects: 
         if path is not None:
             code.append(path)
     reads, fonts = [], []
+    held: dict[str, list[tuple[str, str]]] = {}  # each input's digests as the build recorded them, by its path
     for row in closure.get("inputs") or []:
         if not isinstance(row, list) or not row or row[-1] is None:
             continue  # a file the build found missing: it read nothing of it
         if row[0] in ("file", "read") and len(row) >= 3 and at(row[1]):
             reads.append(at(row[1]))
+            if isinstance(row[2], str) and _HEX.fullmatch(row[2]):
+                held.setdefault(os.path.normcase(at(row[1])), []).append((row[0], row[2]))
         elif row[0] == "font" and len(row) >= 5 and at(row[2]):
             fonts.append(at(row[2]))
     for path in code:
@@ -671,13 +685,19 @@ def model_sources(xbf: str, built: float, *, home: str | None = None, projects: 
     if os.path.normcase(code[0]) not in chosen:
         raise Unsharable(f"{os.path.basename(code[0])} is named in a way a share cannot hold: rename it")
     found: list[File] = []
+    coded = {os.path.normcase(path) for path in code}
     for path in chosen.values():
+        digests = held.get(os.path.normcase(path), [])
         try:
             sha256, size = _digest_of(Path(path))
             modified = os.stat(path).st_mtime  # after the read: a file written meanwhile is newer still
+            if any(digest != (sha256 if kind == "file" else _read_digest(path)) for kind, digest in digests):
+                raise Stale(path, "changed")
         except OSError:
             raise Stale(path, "gone") from None
-        if modified > built:
+        # A file the build read is judged by its bytes, which its closure holds the digest of; the code (whose
+        # digest is of what the build reached in it, which only running it tells) and a font, by time.
+        if (not digests or os.path.normcase(path) in coded) and modified > built:
             raise Stale(path, "changed")
         found.append(File(str(_taken(path, root)), sha256, size, Path(path)))
     sha256, size = _digest_of(Path(xbf))

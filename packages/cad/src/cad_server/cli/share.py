@@ -11,9 +11,10 @@ made it, with no sign-in, for 7 days after its last share (``cad_server.sharing`
   server writes the view bundle into the file's folder in cad's cache, over the one it wrote there last, from what it
   answers the file's page. This process uploads the files the share lacks, in packs, and commits the share
   (``sharing.send``) -- never the server, so an agent app's sandbox sees the connection and its network rules apply. A
-  model whose files changed after its ``.xbf`` was written (or its last run here, a run that takes the ``.xbf`` whole
-  writing nothing), or whose script or a module is gone, is refused in a line naming the file and ``cad run`` of its
-  script: its files would not be the ones its ``.xbf`` was made from. A script is refused in a line naming the
+  model whose files are not what its ``.xbf`` was made from -- a file its build read whose bytes are not the ones its
+  closure holds the digest of, its script or a module modified after the ``.xbf`` was written (or its last run here, a
+  run that takes the ``.xbf`` whole writing nothing) --, or whose script or a module is gone, is refused in a line
+  naming the file and ``cad run`` of its script. A script is refused in a line naming the
   ``.xbf`` to share. One ``cad share`` of a file runs at a time: another waits ``LOCK_SECONDS``, saying so, then is
   refused in a line. It prints one line of what travelled, the folder its files go from (``sharing.root_of``: the
   file's project, never the home folder) with each file's path there, a line for what was left out, the view link,
