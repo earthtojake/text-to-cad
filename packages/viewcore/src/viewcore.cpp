@@ -15,6 +15,7 @@
 #include "core.hpp"
 #include "exports.hpp"
 #include "profile.hpp"
+#include "render.hpp"
 
 namespace {
 
@@ -240,6 +241,14 @@ uint8_t* vc_3mf(int32_t doc, uint32_t* out_len) {
 
 uint8_t* vc_glb(int32_t doc, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] { return result(vc::glb_bytes(whole(doc)), out_len); });
+}
+
+uint8_t* vc_render(const char* scene, uint32_t scene_len, const uint8_t* blob, uint32_t blob_len, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] {
+    if (!scene) throw std::invalid_argument("no scene");
+    if (!blob && blob_len) throw std::invalid_argument("no payloads");
+    return result(vc::render(std::string(scene, scene_len), blob, blob_len), out_len);
+  });
 }
 
 }  // extern "C"

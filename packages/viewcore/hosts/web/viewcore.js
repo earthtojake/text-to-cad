@@ -114,7 +114,7 @@ export class Core {
     const core = new Core(instance, memory);
     if (instance.exports._initialize) instance.exports._initialize();
     core.instantiateMs = performance.now() - t0;
-    if (core.x.vc_abi_version() !== 3) throw new ViewCoreError("unsupported ABI version " + core.x.vc_abi_version());
+    if (core.x.vc_abi_version() !== 4) throw new ViewCoreError("unsupported ABI version " + core.x.vc_abi_version());
     return core;
   }
 

@@ -75,7 +75,7 @@ class Core:
         self.instantiate_s = time.perf_counter() - t
         self._len = self._call("vc_alloc", 4)  # the out-length cell, reused
         abi = self.abi_version
-        if abi != 3:
+        if abi != 4:
             raise ViewCoreError(f"unsupported ABI version {abi}")
 
     # -- plumbing -----------------------------------------------------------------------------------------------

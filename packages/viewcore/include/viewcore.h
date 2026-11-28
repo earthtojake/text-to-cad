@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-#define VC_ABI_VERSION 3u
+#define VC_ABI_VERSION 4u
 
 enum { VC_FACE = 0, VC_EDGE = 1, VC_VERTEX = 2 };
 
@@ -109,6 +109,22 @@ uint8_t *vc_3mf(int32_t doc, uint32_t *out_len);
 /* The document's GLB, export/glb.py's: a mesh per part, its looks as glTF materials, the assembly as nodes, every
  * configuration sequence and animation as a glTF animation. */
 uint8_t *vc_glb(int32_t doc, uint32_t *out_len);
+
+/* A still, drawn in software (src/render.cpp): the picture cad's OpenGL renderer draws from the same inputs. `scene`
+ * is JSON (UTF-8, `scene_len` bytes) and `blob` its payloads end to end, their lengths the scene's "payloads"; no
+ * document is opened and nothing is meshed. The scene (hosts/node/README.md, "Stills", says each member):
+ *   {"width", "height", "samples" (1, 2, 4 or 8; 8), "background": [r, g, b], "format" ("rgba", or "png"),
+ *    "camera": {"projection" ("orthographic" | "perspective"), "eye", "target", "up", "height" | "fov"},
+ *    "light": {"lights": [{"direction", "intensity"}...], "environment": {"payload", "width", "height", "intensity"}}
+ *      or "phong": {"ambient", "specular", "shininess", "lights"},
+ *    "clip": [a, b, c, d], "payloads": [length...], "meshes": [payload...],
+ *    "draw": [{"faces": mesh, "ranges", "matrix", "shading", "color", "alpha", "metallic", "roughness", "ior",
+ *              "emission", "offset", "layer"} | {"edges": mesh, "classes", "matrix", "color", "width", "layer"} |
+ *             {"cap": mesh, "matrix", "color"} | {"triangles": {"positions", "texels", "indices"}, "texture",
+ *              "color", "blend", "offset", "clip", "layer"}...]}
+ * A mesh is a part's XBM2 buffer (vc_mesh); colours are linear. The result is width x height RGBA bytes, sRGB, the
+ * top row first, or a PNG of them. The same scene gives the same bytes wherever the module runs. */
+uint8_t *vc_render(const char *scene, uint32_t scene_len, const uint8_t *blob, uint32_t blob_len, uint32_t *out_len);
 
 #ifdef __cplusplus
 }
