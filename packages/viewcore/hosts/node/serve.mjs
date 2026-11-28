@@ -28,8 +28,11 @@
 //   read_xbf   {path}                                         -> {path, version: [mtime_ns as text, size],
 //              parts: [{key, name}, ...]} + [structure JSON, each part's shape bytes in the parts' order]
 //   export     {path, format: step | stl | threemf | glb}     -> [the file's bytes]
-//   render     {scene} + [the buffers the scene names, in order] -> {width, height, format, seconds} + [the picture:
-//              RGBA bytes, or a PNG where scene.format is "png"]
+//   render     {scene, keys?} + [the buffers the scene names, in order] -> {width, height, format, seconds} + [the
+//              picture: RGBA bytes, or a PNG where scene.format is "png"]. `keys` names buffers to keep, by their
+//              place: one sent with a key is kept under it (the last KEPT_BYTES of them), one sent empty with a key
+//              is the one kept; where a key names nothing kept the answer is {missing: [keys]} and no picture
+//   forget     {keys?}                                        -> {kept, keptBytes}: those buffers (or all) let go
 //   close      {}                                             -> {} and the process ends
 // A part named by "key" keeps its topology for the next job naming it (the last KEPT parts), as an engine pool
 // process does; an .xbf read stays open for an export of the same file as it stood (the last DOCUMENTS).
@@ -41,11 +44,48 @@ import { DEFAULT_WASM, EXPORTS, loadCore } from "./viewcore.mjs";
 const MAX_FRAME = 2 ** 31; // more than the module's memory could take in
 const KEPT = 32;
 const DOCUMENTS = 2;
+const KEPT_BYTES = 768 * 2 ** 20; // a still's buffers kept by key: meshes, the environment
 const KINDS = { face: 0, edge: 1, vertex: 2 };
 
 const core = await loadCore(process.argv[2] || DEFAULT_WASM);
 const parts = new Map(); // key -> Doc of one part, the least recently used first
 const documents = new Map(); // "realpath\0mtime_ns\0size" -> { doc, path, version }
+const buffers = new Map(); // key -> a still's buffer (its own copy), the least recently used first
+let buffersBytes = 0;
+
+/** A still's buffers, in the scene's order: each as sent, or the one kept under its key; the keys nothing answers. */
+function stillBuffers(keys, payloads) {
+  if (keys === undefined || keys === null) return { parts: payloads, missing: [] };
+  if (!Array.isArray(keys) || keys.length > payloads.length || !keys.every((k) => k === null || typeof k === "string"))
+    throw new Error("keys is a list of keys (or null), one for each buffer it names");
+  const missing = [];
+  const parts = payloads.map((sent, at) => {
+    const key = keys[at] ?? null;
+    if (key === null) return sent;
+    if (sent.byteLength) {
+      const old = buffers.get(key);
+      if (old) { buffersBytes -= old.byteLength; buffers.delete(key); }
+      const own = Uint8Array.from(sent); // the frame's bytes are not held past the job
+      buffers.set(key, own);
+      buffersBytes += own.byteLength;
+      return own;
+    }
+    const kept = buffers.get(key);
+    if (!kept) { missing.push(key); return sent; }
+    buffers.delete(key);
+    buffers.set(key, kept);
+    return kept;
+  });
+  // The budget, kept after the still's own buffers are in hand: the oldest go first, never one this still uses.
+  const used = new Set(keys.filter((k) => k !== null));
+  for (const [key, held] of buffers) {
+    if (buffersBytes <= KEPT_BYTES) break;
+    if (used.has(key)) continue;
+    buffers.delete(key);
+    buffersBytes -= held.byteLength;
+  }
+  return { parts, missing };
+}
 
 /** The part of `key` and these bytes, kept (or opened for this job alone where no key names it). */
 function part(key, bytes) {
@@ -169,10 +209,22 @@ const JOBS = {
   render(header, payloads) {
     const scene = header.scene;
     if (scene === null || typeof scene !== "object" || Array.isArray(scene)) throw new Error("render takes a scene");
+    const { parts, missing } = stillBuffers(header.keys, payloads);
+    if (missing.length) return { header: { missing } };
     const started = performance.now();
-    const picture = core.render(scene, payloads);
+    const picture = core.render(scene, parts);
     const seconds = (performance.now() - started) / 1000;
     return { header: { width: scene.width, height: scene.height, format: scene.format ?? "rgba", seconds }, payloads: [picture] };
+  },
+
+  forget(header) {
+    const keys = header.keys ?? [...buffers.keys()];
+    if (!Array.isArray(keys)) throw new Error("forget takes a list of keys, or none for all");
+    for (const key of keys) {
+      const held = buffers.get(key);
+      if (held) { buffers.delete(key); buffersBytes -= held.byteLength; }
+    }
+    return { header: { kept: buffers.size, keptBytes: buffersBytes } };
   },
 
   close: () => ({ header: {}, last: true }),

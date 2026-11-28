@@ -401,20 +401,27 @@ class Node:
 
     name = "wasm"
 
-    def __init__(self, node: str, wasm: Path) -> None:
+    def __init__(self, node: str, wasm: Path, kept: bool = False) -> None:
         self.process = subprocess.Popen([node, str(HERE / "hosts/node/serve.mjs"), str(wasm)], stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE)
         self.ids = 0
+        self.kept = kept  # buffers are sent once, under their keys, and named after
+        self.sent: set[str] = set()
+        self.wire = 0  # bytes written to the host by the last job
+        self.round_trip = 0.0  # and the seconds from asking to the answer read
 
     def job(self, name: str, payloads: tuple = (), **header) -> tuple[dict, list[bytes]]:
         self.ids += 1
         head = json.dumps({"id": self.ids, "job": name, **header, "payloads": [len(p) for p in payloads]}).encode()
         body = struct.pack(">I", len(head)) + head + b"".join(payloads)
+        clock = time.perf_counter()
         self.process.stdin.write(struct.pack(">Q", len(body)) + body)
         self.process.stdin.flush()
+        self.wire = 8 + len(body)
         (length,) = struct.unpack(">Q", self._read(8))
         answer = self._read(length)
         (head_length,) = struct.unpack(">I", answer[:4])
+        self.round_trip = time.perf_counter() - clock
         found = json.loads(answer[4:4 + head_length])
         if not found.get("ok"):
             raise RuntimeError(f"{name}: {found.get('error')}")
@@ -435,8 +442,19 @@ class Node:
         for length in scene.get("payloads") or []:
             parts.append(blob[at:at + length])
             at += length
-        found, answer = self.job("render", tuple(parts), scene={k: v for k, v in scene.items() if k != "payloads"})
-        return answer[0], found["seconds"]
+        plain = {k: v for k, v in scene.items() if k != "payloads"}
+        if not self.kept:
+            found, answer = self.job("render", tuple(parts), scene=plain)
+            return answer[0], found["seconds"]
+        keys = [hashlib.sha256(part).hexdigest()[:24] for part in parts]
+        for _ in range(2):  # a second time with what the host says it lacks
+            found, answer = self.job("render", tuple(b"" if key in self.sent else part for key, part in zip(keys, parts)),
+                                     scene=plain, keys=keys)
+            self.sent.update(keys)
+            if "missing" not in found:
+                return answer[0], found["seconds"]
+            self.sent.difference_update(found["missing"])
+        raise RuntimeError("the host keeps no buffer it is sent")
 
     def memory(self) -> int:
         return self.job("about")[0]["memoryBytes"]
@@ -512,7 +530,7 @@ def compare(args: argparse.Namespace) -> int:
     from PIL import Image
 
     root = Path(args.out)
-    core = Native(args.native) if args.native else Node(args.node, Path(args.wasm))
+    core = Native(args.native) if args.native else Node(args.node, Path(args.wasm), kept=args.kept)
     table = []
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and p.name != "payloads"):
         if args.models and folder.name not in args.models:
@@ -570,6 +588,8 @@ def main(argv: list[str] | None = None) -> int:
     held.add_argument("--wasm", default=str(HERE / "dist/viewcore.wasm"))
     held.add_argument("--only", action="append")
     held.add_argument("--models", action="append")
+    held.add_argument("--kept", action="store_true",
+                      help="send each buffer to the Node host once, under a key, and name it after (render's keys)")
     held.add_argument("--times", type=int, default=2)
     held.add_argument("--samples", type=int, default=4,
                       help="samples a pixel: 4 is what a software OpenGL gave the reference pictures, of the 8 asked")

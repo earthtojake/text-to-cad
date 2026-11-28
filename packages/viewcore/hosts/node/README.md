@@ -40,9 +40,16 @@ Each answers what the engine's own job answers, in the engine's bytes: JSON is s
 | `fact` | `{key?, method, args}`, shape bytes | the JSON | `serve._topology_fact`: `face`, `edge`, `vertex` (`args: [ordinal]`), `groups` (`[]`), `elements` (`[[ordinals]]`), `measured` (`[]`) |
 | `read_xbf` | `{path}` | `{path, version: [mtime_ns as text, size], parts: [{key, name}...]}`, the structure's JSON, then each part's shape bytes in the parts' order | `serve._read_document` |
 | `export` | `{path, format}` (`step`, `stl`, `threemf`, `glb`) | the file's bytes | `export.translate(path, kind, ...)` at the engine's own tessellation |
-| `render` | `{scene}`, the buffers the scene names, in order | `{width, height, format, seconds}`, the picture: RGBA bytes, or a PNG | `render.occt`'s frame: `Scene.show`, `frame`, `grid`, `Canvas.frame` (below) |
+| `render` | `{scene, keys?}`, the buffers the scene names, in order | `{width, height, format, seconds}`, the picture: RGBA bytes, or a PNG; or `{missing: [keys]}` and no picture | `render.occt`'s frame: `Scene.show`, `frame`, `grid`, `Canvas.frame` (below) |
+| `forget` | `{keys?}` | `{kept, keptBytes}`: those kept buffers let go, or all | |
 | `close` | | `{}`, and the process ends | |
 
+- **`render`'s `keys`** keep a still's buffers in the server, so a part's mesh crosses the pipe once: `keys[i]`
+  (a string, or null) names the buffer at place `i`. A buffer sent with a key is kept under it; one sent empty with a
+  key is the one kept. Where a key names nothing kept (never sent, or let go: the server keeps the last 768 MiB of
+  them, and none past `forget` or its end) the answer is `{missing: [keys]}`, and the caller sends the still again
+  with those buffers. A mesh's key is its part's geometry key at its tessellation; the environment's any name of the
+  image. Without `keys` every buffer is sent, as before.
 - **A part's shape bytes** are `mesh.shape_bytes(shape, read=True)`: what `read_xbf` answers for each part, and what
   the engine keeps by the part's geometry key.
 - **`key`** names the part for the jobs that follow: its topology is kept (the last 32 parts), as an engine pool
