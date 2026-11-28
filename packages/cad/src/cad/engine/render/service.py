@@ -383,7 +383,7 @@ class Held:
         from cad.engine.snapshot import SnapshotRefused
 
         if still.preview:
-            raise SnapshotRefused(NOT_YET["preview"], part="preview")
+            raise SnapshotRefused(NOT_YET["preview"])  # counted as ``other``: telemetry names no part for Preview
         if still.display.get("mode", "solid") in ("solid", "shaded"):
             for prototype in shown["prototypes"]:
                 if getattr(self.shapes.get((prototype["key"], _paints(prototype))), "textures", None):

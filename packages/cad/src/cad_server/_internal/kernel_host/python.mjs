@@ -291,7 +291,11 @@ let code = 0;
 try {
   code = pyodide.runPython("import _cad_bootstrap; _cad_bootstrap.main(_host, _host_files, _host_net)");
 } catch (error) {
-  fs.writeSync(2, `${String(error?.message ?? error)}\n`);
-  code = 1;
+  if (["Exit", "ExitStatus"].includes(error?.name) && Number.isInteger(error.status)) {
+    code = error.status;  // os._exit(n): the program's own status, as CPython's process ends with it
+  } else {
+    fs.writeSync(2, `${String(error?.message ?? error)}\n`);
+    code = 1;
+  }
 }
 process.exit(typeof code === "number" ? code : 0);

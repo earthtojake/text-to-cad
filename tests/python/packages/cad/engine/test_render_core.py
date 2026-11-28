@@ -202,7 +202,7 @@ class CoreSceneTest(unittest.TestCase):
         held.hold({**json.loads(json.dumps(STRUCTURE)), "version": "1"}, self.buffers)
         with self.assertRaises(SnapshotRefused) as refused:
             held.draw(Still({}, preview=True, size=(64, 48)))
-        self.assertEqual((str(refused.exception), refused.exception.part), (NOT_YET["preview"], "preview"))
+        self.assertEqual((str(refused.exception), refused.exception.part), (NOT_YET["preview"], None))
         data, report = held.draw(Still({"mode": "solid"}, size=(64, 48)))
         self.assertEqual((data[:8], report["renderer"]), (b"\x89PNG\r\n\x1a\n", "core"))
         with self.assertRaisesRegex(SnapshotRefused, "DXF's drawing is not drawn on the WebAssembly kernel"):
