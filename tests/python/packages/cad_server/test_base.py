@@ -605,6 +605,26 @@ class WasmKernelTest(unittest.TestCase):
         self.assertEqual(made, ["made", "made"])
         self.assertEqual(lines, ["downloading Pyodide"] * 2)
 
+    def test_the_door_s_base_asks_for_the_kernel_folder_only_where_that_kernel_is_chosen(self) -> None:
+        """``{"op": "base", "key"}``: on the native kernel no Node is asked for the WebAssembly folder's key; where that
+        kernel is chosen, its key is its making's, followed."""
+        from cad_server._internal import kernel_folder
+        from cad_server.engine.daemon import Daemon
+
+        engine = Daemon(cap=1)
+        self.addCleanup(engine.shutdown)
+        sent: list = []
+        with mock.patch.object(kernel_folder, "where", side_effect=AssertionError("no Node asked on the native kernel")):
+            engine.base({"op": "base", "key": "elsewhere"}, sent.append)
+        self.assertEqual(sent, [{"ok": False, "other": True}])
+        self.choose({"kind": "wasm"})
+        making, followed = base.KernelMaking(), []
+        with mock.patch.object(kernel_folder, "where", lambda *_args: self.home), \
+                mock.patch.object(base, "KERNEL_MAKING", making), \
+                mock.patch.object(making, "follow", lambda told: followed.append(told) and None):
+            engine.base({"op": "base", "key": self.home.name}, sent.append)
+        self.assertEqual((len(followed), sent[-1]), (1, {"ok": True, "base": True}))
+
     def test_a_choice_that_names_no_kernel_folder_is_refused_in_one_line(self) -> None:
         for section in ({"kind": "wasm", "folder": "kernel"}, {"kind": "wasm", "folder": 3}):
             self.choose(section)

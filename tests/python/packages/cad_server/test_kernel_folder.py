@@ -177,6 +177,9 @@ class KernelFolderTest(unittest.TestCase):
     def test_no_node_or_an_old_one_is_one_line_before_anything_is_fetched(self) -> None:
         import subprocess
 
+        kernel_folder._version.cache_clear()
+        self.addCleanup(kernel_folder._version.cache_clear)
+
         for found, version, word in ((None, "", "no node is on PATH"), ("/usr/bin/node", "v22.11.0\n", "is v22.11.0")):
             with mock.patch.object(kernel_folder, "node", kernel_folder.node.__wrapped__
                                    if hasattr(kernel_folder.node, "__wrapped__") else self._real_node), \
@@ -188,6 +191,18 @@ class KernelFolderTest(unittest.TestCase):
                 self.assertIn(f"Node {kernel_folder.NODE} or later", str(refused.exception))
                 self.assertIsNone(self.ensure(self.locked(), make=False))
         self.assertEqual(_Quiet.fetched, [])
+
+    def test_a_node_is_asked_its_version_once_a_process(self) -> None:
+        """Every kernel process's start asks for the folder, which names its Node: ``node --version`` runs once."""
+        import subprocess
+
+        kernel_folder._version.cache_clear()
+        self.addCleanup(kernel_folder._version.cache_clear)
+        with mock.patch("shutil.which", return_value="/opt/node24/bin/node"), \
+                mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "v24.1.0\n", "")) as run:
+            for _ in range(3):
+                self.assertEqual(self._real_node(), "/opt/node24/bin/node")
+        self.assertEqual(run.call_count, 1)
 
     _real_node = staticmethod(kernel_folder.node)
 

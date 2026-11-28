@@ -18,6 +18,7 @@ cannot be fetched, a file that is not the one the lock names.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -52,21 +53,28 @@ def lock() -> dict[str, Any]:
 
 
 def node() -> str:
-    """The Node on ``PATH``, ``NODE`` or later; ``base.Refused`` in one line where there is none."""
+    """The Node on ``PATH``, ``NODE`` or later; ``base.Refused`` in one line where there is none. Each Node's version
+    is asked of it once a process (``_version``)."""
     found = shutil.which("node")
     if found is None:
         raise base.Refused(f"the WebAssembly kernel runs under Node {NODE} or later, and no node is on PATH: install "
                            "Node (nodejs.org) and ask again", "other")
-    try:
-        said = subprocess.run([found, "--version"], capture_output=True, text=True, timeout=30).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        said = ""
+    said = _version(found)
     major = re.match(r"v(\d+)\.", said)
     if major is None or int(major[1]) < NODE:
         raise base.Refused(f"the WebAssembly kernel runs under Node {NODE} or later, and the node on PATH "
                            f"({found}) is {said or 'one that does not say its version'}: install a newer Node and "
                            "ask again", "other")
     return found
+
+
+@functools.lru_cache(maxsize=8)
+def _version(program: str) -> str:
+    """What ``program --version`` says, asked once a process for each Node (a kernel process starts on each)."""
+    try:
+        return subprocess.run([program, "--version"], capture_output=True, text=True, timeout=30).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
 
 
 def _key(pinned: dict[str, Any], runs: str) -> str:

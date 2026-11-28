@@ -145,7 +145,8 @@ def _drawing(make: bool) -> dict[str, Any] | None:
 
 
 def _kernel_making() -> Any:
-    """The engine's making of the WebAssembly kernel's folder (``cad_server._internal.engine_host.kernel_making``)."""
+    """The engine's making of the WebAssembly kernel's folder where it is chosen, else None
+    (``cad_server._internal.engine_host.kernel_making``)."""
     from cad_server._internal.engine_host import kernel_making
 
     return kernel_making()
@@ -806,9 +807,9 @@ class Daemon:
                 return
         else:
             making = _making()
-            kernel = _kernel_making()
-            if request.get("key") is not None and request.get("key") == kernel.key():
-                making = kernel  # the WebAssembly kernel's folder (``base.KERNEL_MAKING``)
+            kernel = _kernel_making() if request.get("key") is not None else None
+            if kernel is not None and request.get("key") == kernel.key():
+                making = kernel  # the WebAssembly kernel's folder (``base.KERNEL_MAKING``), where it is chosen
         if request.get("key") != making.key():
             send({"ok": False, "other": True})
             return
