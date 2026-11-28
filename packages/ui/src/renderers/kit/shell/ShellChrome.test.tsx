@@ -352,13 +352,13 @@ it("a click on the toggle while it peeks pins it: open, pushing and kept, as a c
   vi.useRealTimers();
 });
 
-it("on a phone the panel is a sheet from the bottom behind the navbar's toggle, closed at the start, and the strip is centred in the view", async () => {
+it("on a phone the panel is a sheet from the left behind the navbar's toggle, closed at the start, and the strip is centred in the view", async () => {
   frame({ mobile: true, viewer: true });
   const column = document.querySelector<HTMLElement>('[data-cad-tool-groups]')!;
   expect(column.style).toMatchObject({ left: '8px', right: '8px' });
   expect(column.className).toMatch(/\bitems-center\b/);
   // No docked panel and nothing over the model until the toggle opens the sheet: the same panel, its tabs and search, a
-  // phone page's sizes; Escape (or a tap outside, a swipe down its grip, its Back) puts it away. ⌘\ is its key too; / is none.
+  // phone page's sizes; Escape (or a tap outside, a swipe back, its Back) puts it away. ⌘\ is its key too; / is none.
   expect(document.querySelector('[data-flat-panel]')).toBeNull();
   fireEvent.keyDown(document.querySelector('[data-slot="cad-file-view"]')!, { key: '/' });
   expect(document.querySelector('[data-flat-panel]')).toBeNull();
@@ -368,15 +368,11 @@ it("on a phone the panel is a sheet from the bottom behind the navbar's toggle, 
     sheet.querySelector('[data-flat-panel-search-open]') !== null, document.querySelector('[data-navbar-panel="left"]')!.getAttribute('aria-label')]).toEqual(['dialog', 'page', true, true, 'Hide panel']);
   fireEvent.keyDown(sheet, { key: 'Escape' });
   await waitFor(() => expect(document.querySelector('[data-panel-sheet]')).toBeNull());
-  // A swipe down on its grip closes it too; one on the rows under it is theirs (they scroll).
+  // A swipe back towards its edge closes it too.
   fireEvent.keyDown(document.querySelector('[data-slot="cad-file-view"]')!, { key: '\\', ctrlKey: true });
   const again = await waitFor(() => { const found = document.querySelector<HTMLElement>('[data-panel-sheet]'); expect(found).not.toBeNull(); return found!; });
-  fireEvent.pointerDown(again, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 300 });
-  fireEvent.pointerUp(again, { pointerId: 2, pointerType: 'touch', clientX: 205, clientY: 400 });
-  expect(document.querySelector('[data-panel-sheet]')).not.toBeNull();
-  const grip = again.querySelector<HTMLElement>('[data-panel-sheet-grip]')!;
-  fireEvent.pointerDown(grip, { pointerId: 3, pointerType: 'touch', clientX: 200, clientY: 300 });
-  fireEvent.pointerUp(grip, { pointerId: 3, pointerType: 'touch', clientX: 210, clientY: 380 });
+  fireEvent.pointerDown(again, { pointerId: 3, pointerType: 'touch', clientX: 200, clientY: 300 });
+  fireEvent.pointerUp(again, { pointerId: 3, pointerType: 'touch', clientX: 100, clientY: 310 });
   await waitFor(() => expect(document.querySelector('[data-panel-sheet]')).toBeNull());
   fireEvent.click(tool('Draw'));
   expect(tool('Draw').getAttribute('aria-pressed')).toBe('true');
