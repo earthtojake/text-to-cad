@@ -49,7 +49,7 @@ block), `kernel/bounds.py` and the writers in `export/` are the reference until 
 ## The kernel's own wheel (`scripts/ocp.sh`)
 
 `hosts/pyodide` runs cad's build on OCP, the Python binding of OCCT, built for Pyodide. `scripts/ocp.sh` builds that
-wheel from OCCT's source as released and OCP's generated binding sources, everything it fetches pinned in
+wheel from OCCT's source and OCP's generated binding sources, everything it fetches pinned in
 `scripts/kernel-pins.json` (URL and sha256, or repository and commit): a bump of OCCT, OCP or Pyodide edits that file
 only.
 
@@ -59,13 +59,22 @@ scripts/ocp.sh EMSDK_DIR OCCT_SRC XBUILDENV_DIR scripts/ocp-modules.txt WORK_DIR
 
 `scripts/ocp-modules.txt` lists the OCP submodules to bind: those cad, build123d, ocpsvg and ocp_gordon import, and
 what their bindings need to import. Importing one left out raises `ModuleNotFoundError` naming it and the list. `all`
-builds every module, the same steps. `--plib-fast` applies `scripts/patches/occt-plib-max-opt-dim.patch` to one OCCT
-file and compiles that file with SIMD (off by default). `ocp.sh --help` has the rest; a cold build takes about two hours
-on 4 cores and needs about 6.5 GB of memory.
+builds every module, the same steps. OCCT is compiled as released but for one file: `PLib.cxx` gets
+`scripts/patches/occt-plib-max-opt-dim.patch` (its polynomial evaluation stays on the fixed-size path up to dimension
+48; results bit-identical) and is compiled with WebAssembly SIMD; `--plib-stock` leaves both out. The module therefore
+needs an engine with WebAssembly SIMD (Chrome 91, Firefox 89, Safari 16.4, Node 16.4 and later). A cold build takes
+about two hours on 4 cores and needs about 6.5 GB of memory; `ocp.sh --help` has the rest.
+
+Text: OCCT reads fonts with FreeType, built in. Under Emscripten OCCT finds fonts only in `/usr/share/fonts`,
+`/usr/local/share/fonts` and `/system/fonts` (no fontconfig), plus what build123d registers (its bundled single-line
+font). Where the host mounts the machine's filesystem (the engine's kernel host) that is the machine's own fonts, as
+natively; in a page there are none, and a font asked for by name falls back to build123d's single-line font.
 
 The wheel contains OCCT (GNU LGPL 2.1 with the Open CASCADE exception 1.0), OCP's generated sources (Apache-2.0),
-pybind11 (BSD-3-Clause), fmt and RapidJSON (MIT); their texts are in its `.dist-info/licenses`. Whatever ships it
-offers OCCT's source at the pinned tag and these scripts.
+pybind11 (BSD-3-Clause), fmt and RapidJSON (MIT), and FreeType (the FreeType License; with its bundled zlib, zlib
+licence); their texts are in its `.dist-info/licenses`. Whatever ships it offers OCCT's source at the pinned tag with
+the patch and these scripts, and says in its documentation: "Portions of this software are copyright © 2024 The
+FreeType Project (www.freetype.org). All rights reserved."
 
 ## Licence
 

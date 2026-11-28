@@ -48,11 +48,14 @@
     "pyodide_build": "0.39.0"
   },
   "freetype": {
-    "comment": "Emscripten's FreeType port's tag, for --freetype-src",
-    "tag": "VER-2-13-3"
+    "comment": "OCCT's fonts (text to shapes): built here, static; the tag Emscripten's own FreeType port uses",
+    "repository": "https://github.com/freetype/freetype.git",
+    "ref": "VER-2-13-3",
+    "commit": "42608f77f20749dd6ddc9e0536788eaad70ea4b5",
+    "licenses": ["LICENSE.TXT", "docs/FTL.TXT"]
   },
   "flags": {
-    "comment": "Flags that change the module's code. common: every compile and the link. occt: OCCT's compiles, after its CMake's own (build type Release: -O3 -DNDEBUG). cxx: the binding's compiles. plib_fast_patch and plib_fast: --plib-fast's patch of PLib.cxx and the flags added to that one file's compile.",
+    "comment": "Flags that change the module's code. common: every compile and the link. occt: OCCT's compiles, after its CMake's own (build type Release: -O3 -DNDEBUG). cxx: the binding's compiles. plib_fast_patch and plib_fast: the patch of OCCT's PLib.cxx the default build applies (--plib-stock leaves it out) and the flags added to that one file's compile. freetype: FreeType's CMake options.",
     "common": ["-fPIC", "-fwasm-exceptions", "-sSUPPORT_LONGJMP=wasm", "-fvisibility=hidden", "-fvisibility-inlines-hidden", "-g0"],
     "occt_build_type": "Release",
     "occt": ["-UOCC_CONVERT_SIGNALS"],
@@ -60,7 +63,8 @@
     "link": ["-O1", "-sSIDE_MODULE=1", "-Wl,--allow-multiple-definition"],
     "wasm_opt": ["--post-emscripten", "-O3"],
     "plib_fast_patch": "occt-plib-max-opt-dim.patch",
-    "plib_fast": ["-msimd128"]
+    "plib_fast": ["-msimd128"],
+    "freetype": ["-DFT_DISABLE_ZLIB=TRUE", "-DFT_DISABLE_BZIP2=TRUE", "-DFT_DISABLE_PNG=TRUE", "-DFT_DISABLE_HARFBUZZ=TRUE", "-DFT_DISABLE_BROTLI=TRUE"]
   },
   "wheel": {
     "name": "cad-ocp-wasm"

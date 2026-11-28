@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build OCP, the Python binding of Open CASCADE Technology (OCCT), as a Pyodide wheel (prototype recipe).
-# Usage: ocp.sh [--plib-fast] [--no-opt] [--freetype-src DIR] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR
+# Usage: ocp.sh [--plib-stock] [--no-opt] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR
 #   Every version, URL, hash and flag that decides what is built is in kernel-pins.json beside this script: a bump of
 #   OCCT, OCP or Pyodide edits that file only. The arguments are directories:
 #   EMSDK_DIR      an emsdk with the pinned Emscripten installed and activated (the version Pyodide's own build used,
@@ -11,11 +11,10 @@
 #   MODULES        the OCP submodules to bind, one per line (ocp-modules.txt beside this script), or `all`
 #   WORK_DIR       downloads, build trees, logs/ and dist/ (the wheel and its .sha256); a rerun resumes after the
 #                  last step that finished with the same inputs
-#   --plib-fast    OCCT's PLib.cxx with flags.plib_fast_patch, compiled with flags.plib_fast (SIMD) and linked ahead
-#                  of OCCT's own: one file differs. Off by default: the default build compiles OCCT as released. SIMD
-#                  in one function makes the whole module need WebAssembly SIMD (every current engine has it)
-#   --freetype-src a checkout of FreeType at the pinned freetype.tag (Emscripten's port) for OCCT's fonts (text to
-#                  shapes); without it OCCT is built without FreeType and Font_FTFont reports no font
+#   --plib-stock   OCCT's PLib.cxx as released. By default that one file is compiled with flags.plib_fast_patch
+#                  (polynomial evaluation kept on its fixed-size path up to dimension 48; results bit-identical) and
+#                  flags.plib_fast (WebAssembly SIMD), and linked ahead of OCCT's own; every other OCCT file is as
+#                  released. SIMD in one function makes the whole module need WebAssembly SIMD
 #   -j N           parallel jobs (default: nproc); a job compiling the binding's largest files takes up to ~1.7 GB
 #   --no-opt       skip Binaryen's pass (flags.wasm_opt), for a machine short of the memory it takes (~5.6 GB at
 #                  its peak, ~20 min with BINARYEN_CORES=2); the wheel's version says so (+...noopt)
@@ -25,7 +24,7 @@
 # The steps: fetch OCP's generated binding sources (an archive the OCP project attaches to its release) and the
 # binding's header-only dependencies; prepare the binding's sources for the module list (OCP.cpp registers the
 # listed modules only, the instantiated collections keep the entries whose types the list holds, and importing a
-# module left out raises ModuleNotFoundError naming it and the list); build the OCCT toolkits those modules live in,
+# module left out raises ModuleNotFoundError naming it and the list); build FreeType, then the OCCT toolkits those modules live in,
 # static, position independent; compile the binding; link one Pyodide side module; check that every function it
 # imports is one Pyodide's main module exports; optimise it with Binaryen (the emsdk's wasm-opt); write the wheel
 # with the licences of all it contains, and its sha256.
@@ -47,14 +46,13 @@
 # Licences of what the wheel contains, written into its .dist-info/licenses: OCCT (GNU LGPL 2.1 with the Open
 # CASCADE exception 1.0; whoever ships the wheel offers OCCT's source at the pinned tag, and this script), OCP's
 # generated sources (Apache-2.0), pybind11 (BSD-3-Clause), fmt (MIT), RapidJSON (MIT; OCCT's glTF writer), and
-# with --freetype-src FreeType (the FreeType License).
+# FreeType (the FreeType License, chosen of its two; OCCT's fonts).
 set -euo pipefail
 
-PLIB=0 FREETYPE_SRC="" JOBS=$(nproc) KEYS=0 NOOPT=0
+PLIB=1 JOBS=$(nproc) KEYS=0 NOOPT=0
 while [ $# -gt 0 ]; do
   case $1 in
-    --plib-fast) PLIB=1; shift ;;
-    --freetype-src) FREETYPE_SRC=$(cd "$2" && pwd); shift 2 ;;
+    --plib-stock) PLIB=0; shift ;;
     -j) JOBS=$2; shift 2 ;;
     --keys) KEYS=1; shift ;;
     --no-opt) NOOPT=1; shift ;;
@@ -63,7 +61,7 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
-[ $# -eq 5 ] || { echo "usage: ocp.sh [--plib-fast] [--no-opt] [--freetype-src DIR] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR" >&2; exit 2; }
+[ $# -eq 5 ] || { echo "usage: ocp.sh [--plib-stock] [--no-opt] [-j N] EMSDK_DIR OCCT_SRC XBUILDENV_DIR MODULES WORK_DIR" >&2; exit 2; }
 EMSDK_DIR=$(cd "$1" && pwd) OCCT_SRC=$(cd "$2" && pwd) XBUILDENV=$(cd "$3" && pwd) WORK=$5
 MODULES=$4; [ "$MODULES" = all ] || MODULES=$(cd "$(dirname "$4")" && pwd)/$(basename "$4")
 mkdir -p "$WORK"; WORK=$(cd "$WORK" && pwd)
@@ -94,8 +92,11 @@ out = {
     "WHEEL_NAME": need("wheel", "name"),
 }
 for k, v in out.items(): print(f"{k}={shlex.quote(str(v))}")
-for k, key in (("COMMON", "common"), ("OCCTFLAGS", "occt"), ("CXXFLAGS", "cxx"), ("LINKFLAGS", "link"), ("OPTFLAGS", "wasm_opt"), ("PLIBFLAGS", "plib_fast")):
+for k, key in (("COMMON", "common"), ("OCCTFLAGS", "occt"), ("CXXFLAGS", "cxx"), ("LINKFLAGS", "link"), ("OPTFLAGS", "wasm_opt"), ("PLIBFLAGS", "plib_fast"), ("FTFLAGS", "freetype")):
     print(f"{k}=({' '.join(shlex.quote(x) for x in need('flags', key))})")
+ft = need("freetype")
+print(f"FT_REPO={shlex.quote(ft['repository'])} FT_REF={shlex.quote(ft['ref'])} FT_COMMIT={shlex.quote(ft['commit'])}")
+print("FT_LICENSES=(" + " ".join(shlex.quote(x) for x in ft["licenses"]) + ")")
 deps = need("binding_deps")
 print("DEPS=(" + " ".join(shlex.quote(n) for n in deps) + ")")
 for n, d in deps.items():
@@ -129,7 +130,7 @@ MAIN_WASM=$PYROOT/dist/pyodide.asm.wasm
 WASM_OPT=$EMSDK_DIR/upstream/bin/wasm-opt
 
 FLAGS=("${COMMON[@]}")
-VARIANT=base; [ -n "$FREETYPE_SRC" ] && VARIANT=$VARIANT-ft
+VARIANT=base
 STAMPS=$WORK/stamps; mkdir -p "$STAMPS"
 key() { printf '%s\n' "$@" | sha256sum | cut -c1-12; }
 done_() { [ -f "$STAMPS/$1" ]; }
@@ -143,8 +144,8 @@ fetch() { # url sha256 dest
   echo "$2  $3.part" | sha256sum -c --quiet - 2>/dev/null || die "$1 does not match its sha256 in kernel-pins.json (got $(sha256sum "$3.part" | cut -c1-64))"
   mv "$3.part" "$3"
 }
-SOURCES_KEY=$(key "$OCP_URL" "$OCP_SHA256" "$(for d in "${DEPS[@]}"; do u=${d^^}; eval "echo $d \$DEP_${u}_COMMIT \${DEP_${u}_PATCHES[*]}"; done)" \
-  "$(cat "$HERE"/patches/*.patch | sha256sum)")
+BINDING_SRC_KEY=$(key "$OCP_URL" "$OCP_SHA256" "$(for d in "${DEPS[@]}"; do u=${d^^}; eval "echo $d \$DEP_${u}_COMMIT; for p in \${DEP_${u}_PATCHES[@]+\"\${DEP_${u}_PATCHES[@]}\"}; do sha256sum <\"\$HERE/patches/\$p\"; done"; done)")
+SOURCES_KEY=$(key "$BINDING_SRC_KEY" "$FT_COMMIT")
 if ! done_ "sources-$SOURCES_KEY"; then
   log "fetching sources (OCP $OCP_VERSION)"
   fetch "$OCP_URL" "$OCP_SHA256" "$SRC/OCP_src.zip"
@@ -161,20 +162,20 @@ if ! done_ "sources-$SOURCES_KEY"; then
       git -C "$SRC/$d" apply "$HERE/patches/$p"
     done
   done
+  rm -rf "$SRC/freetype"; git init -q "$SRC/freetype"
+  git -C "$SRC/freetype" fetch -q --depth 1 "$FT_REPO" "$FT_REF" || die "could not fetch FreeType $FT_REF from $FT_REPO"
+  git -C "$SRC/freetype" checkout -q FETCH_HEAD
+  [ "$(git -C "$SRC/freetype" rev-parse HEAD)" = "$FT_COMMIT" ] || die "FreeType $FT_REF is $(git -C "$SRC/freetype" rev-parse HEAD), kernel-pins.json says $FT_COMMIT"
   rm -rf "$SRC/OCP"; mkdir -p "$SRC/OCP"; (cd "$SRC/OCP" && unzip -q ../OCP_src.zip)
   [ -f "$SRC/OCP/OCP.cpp" ] || die "the OCP archive has no OCP.cpp at its top: its layout changed ($(ls "$SRC/OCP" | head -5 | tr '\n' ' '))"
   rm -f "$STAMPS"/prepare-*
   mark "sources-$SOURCES_KEY"
 fi
-if [ -n "$FREETYPE_SRC" ]; then
-  # Emscripten's FreeType port, built from the given checkout instead of its download.
-  export EMCC_LOCAL_PORTS="freetype=$FREETYPE_SRC"
-fi
 
 # ---- 2. the binding's sources for the list ----
 OCPSRC=$WORK/ocp-src
 LISTSUM=$([ "$MODULES" = all ] && echo all || sha256sum <"$MODULES" | cut -c1-12)
-PREP_KEY=$(key "$SOURCES_KEY" "$LISTSUM" "$OCCT_TAG" "$(sed -n '/^# ---- 2\./,/^PY$/p' "$0" | sha256sum)")  # this step's own code
+PREP_KEY=$(key "$BINDING_SRC_KEY" "$LISTSUM" "$OCCT_TAG" "$(sed -n '/^# ---- 2\./,/^PY$/p' "$0" | sha256sum)")  # this step's own code
 if ! done_ "prepare-$PREP_KEY"; then
   log "preparing OCP's sources for $( [ "$MODULES" = all ] && echo all modules || basename "$MODULES")"
   python3 -I - "$SRC/OCP" "$OCPSRC" "$MODULES" "$OCCT_SRC" <<'PY'
@@ -343,37 +344,41 @@ LIST_ID=$(cat "$OCPSRC/list-id.txt")
 
 # Each later stage's key: what changes its output. A rerun redoes a stage only when its key changed.
 HEADERS=$WORK/occt-headers-$OCCT_TAG
-OCCT_KEY=$(key "$OCCT_TAG" "$OCCT_BUILD_TYPE" "${FLAGS[*]} ${OCCTFLAGS[*]}" "$TOOLKITS" "$FREETYPE_SRC" "$(sed -n '/^# ---- 3\./,/^# ---- 4\./p' "$0" | sha256sum)")
-OCCT_BUILD=$WORK/occt-$OCCT_KEY OCCT=$WORK/occt-$OCCT_KEY-install
+FT_KEY=$(key "$FT_COMMIT" "${FLAGS[*]}" "${FTFLAGS[*]}")
+OCCT_KEY=$(key "$OCCT_TAG" "$OCCT_BUILD_TYPE" "${FLAGS[*]} ${OCCTFLAGS[*]}" "$TOOLKITS" "freetype $FT_KEY" "$(sed -n '/^# ---- 3\./,/^# ---- 4\./p' "$0" | sha256sum)")
+OCCT_BUILD=$WORK/occt-$OCCT_KEY OCCT=$WORK/occt-$OCCT_KEY-install FT=$WORK/freetype-$FT_KEY-install
 CXX="em++ ${CXXFLAGS[*]} ${FLAGS[*]} -w -I$OCPSRC -I$SRC/pybind11/include -I$SRC/fmt/include -I$SRC/rapidjson/include \
 -I$OCCT/include/opencascade -I$HEADERS -I$PYINC"
 # The binding reads OCCT's headers only: its key is OCCT's tag and toolkits, not OCCT's flags.
 COMPILE_KEY=$(key "$PREP_KEY" "$OCCT_TAG" "$TOOLKITS" "${CXX//$OCCT/OCCT}")
 OBJ=$WORK/obj-$COMPILE_KEY
 LINK_KEY=$(key "$COMPILE_KEY" "$OCCT_KEY" "${LINKFLAGS[*]}" "$([ $NOOPT = 1 ] && echo noopt || echo "${OPTFLAGS[*]}")" \
-  "$([ $PLIB = 1 ] && echo "plib ${PLIBFLAGS[*]} $(sha256sum <"$HERE/patches/$PLIB_PATCH")")")
+  "$([ $PLIB = 1 ] && echo "plib ${PLIBFLAGS[*]} $(sha256sum <"$HERE/patches/$PLIB_PATCH")")" "$FT_KEY" \
+  "$(sed -n '/^#include <stdio.h>$/,/^C$/p' "$0" | sha256sum)")
 OUT=$WORK/link-$LINK_KEY
 if [ $KEYS = 1 ]; then echo "occt $OCCT_KEY"; echo "compile $COMPILE_KEY"; echo "link $LINK_KEY"; exit 0; fi
 
 # ---- 3. OCCT ----
 if ! done_ "occt-$OCCT_KEY"; then
   log "building OCCT $OCCT_TAG ($VARIANT, $OCCT_KEY): $TOOLKITS"
-  FT=(-DUSE_FREETYPE=OFF)
-  if [ -n "$FREETYPE_SRC" ]; then
-    embuilder build freetype --pic >"$WORK/logs/freetype.log" 2>&1 || die "FreeType's port did not build, see $WORK/logs/freetype.log"
-    SYSROOT=$(em-config CACHE)/sysroot
-    FT=(-DUSE_FREETYPE=ON -D3RDPARTY_FREETYPE_DIR="$SYSROOT" -D3RDPARTY_FREETYPE_INCLUDE_DIR_ft2build="$SYSROOT/include/freetype2"
-        -D3RDPARTY_FREETYPE_INCLUDE_DIR_freetype2="$SYSROOT/include/freetype2"
-        -D3RDPARTY_FREETYPE_LIBRARY="$SYSROOT/lib/wasm32-emscripten/pic/libfreetype.a"
-        -D3RDPARTY_FREETYPE_LIBRARY_DIR="$SYSROOT/lib/wasm32-emscripten/pic")
+  if ! done_ "freetype-$FT_KEY"; then
+    log "building FreeType $FT_REF"
+    emcmake cmake -S "$SRC/freetype" -B "$WORK/freetype-$FT_KEY" -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_C_FLAGS="${FLAGS[*]}" -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX="$FT" "${FTFLAGS[@]}" \
+      >"$WORK/logs/freetype.log" 2>&1 && make -C "$WORK/freetype-$FT_KEY" -j"$JOBS" install >>"$WORK/logs/freetype.log" 2>&1 ||
+      die "FreeType did not build, see $WORK/logs/freetype.log"
+    mark "freetype-$FT_KEY"
   fi
+  FTOPT=(-DUSE_FREETYPE=ON -D3RDPARTY_FREETYPE_DIR="$FT" -D3RDPARTY_FREETYPE_INCLUDE_DIR_ft2build="$FT/include/freetype2"
+         -D3RDPARTY_FREETYPE_INCLUDE_DIR_freetype2="$FT/include/freetype2"
+         -D3RDPARTY_FREETYPE_LIBRARY="$FT/lib/libfreetype.a" -D3RDPARTY_FREETYPE_LIBRARY_DIR="$FT/lib")
   emcmake cmake -S "$OCCT_SRC" -B "$OCCT_BUILD" -G "Unix Makefiles" -DCMAKE_BUILD_TYPE="$OCCT_BUILD_TYPE" \
     -DCMAKE_C_FLAGS="${FLAGS[*]} ${OCCTFLAGS[*]}" -DCMAKE_CXX_FLAGS="${FLAGS[*]} ${OCCTFLAGS[*]}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DBUILD_LIBRARY_TYPE=Static -DINSTALL_DIR="$OCCT" \
     -DBUILD_MODULE_FoundationClasses=ON -DBUILD_MODULE_ModelingData=OFF -DBUILD_MODULE_ModelingAlgorithms=OFF \
     -DBUILD_MODULE_Visualization=OFF -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF \
     -DBUILD_MODULE_Draw=OFF -DBUILD_MODULE_DETools=OFF -DBUILD_ADDITIONAL_TOOLKITS="$TOOLKITS" \
-    "${FT[@]}" -DUSE_RAPIDJSON=ON -D3RDPARTY_RAPIDJSON_DIR="$SRC/rapidjson" -D3RDPARTY_RAPIDJSON_INCLUDE_DIR="$SRC/rapidjson/include" \
+    "${FTOPT[@]}" -DUSE_RAPIDJSON=ON -D3RDPARTY_RAPIDJSON_DIR="$SRC/rapidjson" -D3RDPARTY_RAPIDJSON_INCLUDE_DIR="$SRC/rapidjson/include" \
     -DUSE_OPENGL=OFF -DUSE_GLES2=OFF -DUSE_XLIB=OFF -DUSE_DRACO=OFF -DUSE_TBB=OFF -DUSE_FREEIMAGE=OFF -DUSE_OPENVR=OFF \
     -DUSE_FFMPEG=OFF -DUSE_VTK=OFF -DUSE_TK=OFF -DUSE_EIGEN=OFF -DUSE_JEMALLOC=OFF -DUSE_D3D=OFF \
     -DBUILD_DOC_Overview=OFF -DBUILD_GTEST=OFF -DBUILD_SAMPLES_QT=OFF >"$WORK/logs/occt-cmake.log" 2>&1 ||
@@ -410,29 +415,41 @@ fi
 
 # ---- 5. link, check, optimise ----
 if ! done_ "link-$LINK_KEY"; then
-  log "linking the module ($VARIANT$([ $PLIB = 1 ] && echo ', --plib-fast'), $LINK_KEY)"
+  log "linking the module ($VARIANT$([ $PLIB = 0 ] && echo ', --plib-stock'), $LINK_KEY)"
   rm -rf "$OUT"; mkdir -p "$OUT"
   EXTRA=()
   if [ $PLIB = 1 ]; then
     # The patched PLib.cxx, compiled with the command OCCT's build used for its own, linked before libTKMath.a: the
     # archive's PLib object is then never taken (every symbol it defines is already defined).
     PLIB_REL=$(cd "$OCCT_SRC" && find src -name PLib.cxx | head -1)
-    [ -n "$PLIB_REL" ] || die "--plib-fast: OCCT $OCCT_TAG has no PLib.cxx"
+    [ -n "$PLIB_REL" ] || die "PLib: OCCT $OCCT_TAG has no PLib.cxx"
     mkdir -p "$OUT/plib/$(dirname "$PLIB_REL")"; cp "$OCCT_SRC/$PLIB_REL" "$OUT/plib/$PLIB_REL"
     (cd "$OUT/plib" && patch -s -p1 --dry-run <"$HERE/patches/$PLIB_PATCH" >/dev/null 2>&1) ||
-      die "--plib-fast: patches/$PLIB_PATCH does not apply to OCCT $OCCT_TAG's $PLIB_REL"
+      die "PLib: patches/$PLIB_PATCH does not apply to OCCT $OCCT_TAG's $PLIB_REL"
     (cd "$OUT/plib" && patch -s -p1 <"$HERE/patches/$PLIB_PATCH")
     read -r DIR CMD < <(python3 -I -c 'import json,sys; e = next(e for e in json.load(open(sys.argv[1])) if e["file"].endswith("/PLib/PLib.cxx")); print(e["directory"], e["command"])' "$OCCT_BUILD/compile_commands.json")
     CMD=${CMD/"$OCCT_SRC/$PLIB_REL"/"$OUT/plib/$PLIB_REL"}
     CMD="$(echo "$CMD" | sed "s| -o [^ ]*| -o $OUT/plib/PLib.o|") ${PLIBFLAGS[*]}"
-    (cd "$DIR" && eval "$CMD") || die "--plib-fast: the patched PLib.cxx did not compile"
-    EXTRA=("$OUT/plib/PLib.o")
+    (cd "$DIR" && eval "$CMD") || die "PLib: the patched PLib.cxx did not compile"
+    EXTRA+=("$OUT/plib/PLib.o")
   fi
+  # OCCT defines a few functions in JavaScript (EM_JS) for Emscripten builds; a side module cannot carry JavaScript,
+  # so they would stay unresolved imports and calling one (OSD_MemInfo's heap size, Message_PrinterSystemLog's
+  # output) would abort the runtime. Their stand-ins in C, linked ahead of OCCT:
+  cat >"$OUT/emjs.c" <<'C'
+#include <stdio.h>
+double OSD_MemInfo_getModuleHeapLength(void) { return (double)__builtin_wasm_memory_size(0) * 65536.0; }
+void occJSConsoleDebug(const char* s) { fprintf(stdout, "%s\n", s); }
+void occJSConsoleInfo(const char* s) { fprintf(stdout, "%s\n", s); }
+void occJSConsoleWarn(const char* s) { fprintf(stderr, "%s\n", s); }
+void occJSConsoleError(const char* s) { fprintf(stderr, "%s\n", s); }
+C
+  emcc -O2 "${FLAGS[@]}" -c "$OUT/emjs.c" -o "$OUT/emjs.o" || die "the EM_JS stand-ins did not compile"
+  EXTRA+=("$OUT/emjs.o")
   LIBS=$(cd "$OCCT/lib" && ls libTK*.a | sed 's/^lib\(.*\)\.a$/-l\1/' | tr '\n' ' ')
-  FTLINK=(); [ -n "$FREETYPE_SRC" ] && FTLINK=(-sUSE_FREETYPE=1)
   # The link's own optimisation is low (flags.link); Binaryen optimises the module below, once (flags.wasm_opt).
   em++ "${LINKFLAGS[@]}" "${FLAGS[@]}" ${EXTRA[@]+"${EXTRA[@]}"} "$OBJ"/*.o -L"$OCCT/lib" -Wl,--start-group $LIBS -Wl,--end-group \
-    ${FTLINK[@]+"${FTLINK[@]}"} -o "$OUT/linked.wasm" >"$WORK/logs/link.log" 2>&1 ||
+    "$FT/lib/libfreetype.a" -o "$OUT/linked.wasm" >"$WORK/logs/link.log" 2>&1 ||
     die "the link failed, see $WORK/logs/link.log: $(grep -m5 -E 'error|undefined' "$WORK/logs/link.log" | tr '\n' ' ')"
   EMJS=$(grep -rhoE 'EM_JS\([^,]+, *[A-Za-z_][A-Za-z0-9_]*' "$OCCT_SRC/src" --include='*.cxx' | sed 's/.*, *//' | sort -u | tr '\n' ' ')
   python3 -I - "$OUT/linked.wasm" "$MAIN_WASM" "${MAIN_WASM%.wasm}.mjs" "$EMJS" <<'PY' | tee "$OUT/imports.txt"
@@ -481,8 +498,9 @@ missing = [f for f in unresolved if f not in fromjs and f not in oc]
 print(f"functions {funcs}; env function imports {len(fn)}, of them C++ {len(cxx)}, defined in the module itself {len(self_)}; "
       f"from Pyodide's JavaScript {len(fromjs)}")
 if oc:
-    print("note: OCCT's EM_JS functions, which a side module cannot carry, stay unresolved (calling one fails, as in any "
-          "Pyodide build of OCCT; OSD_MemInfo's heap query and Message_PrinterSystemLog): " + " ".join(sorted(oc)))
+    print("ocp.sh: OCCT's JavaScript (EM_JS) functions without a stand-in in ocp.sh's emjs.c; calling one would abort "
+          "the runtime: " + " ".join(sorted(oc)))
+    sys.exit(1)
 if missing:
     print(f"ocp.sh: {len(missing)} functions the module imports are not exported by Pyodide's main module (it would fail "
           "when one is called): an OCCT toolkit missing from the build, or a Pyodide/Emscripten mismatch:",
@@ -501,14 +519,13 @@ fi
 # ---- 6. the wheel ----
 DIST=$WORK/dist; mkdir -p "$DIST"
 LOCAL=""; [ "$LIST_ID" = all ] || LOCAL=$LIST_ID
-[ $PLIB = 1 ] && LOCAL=${LOCAL:+$LOCAL.}plib
-[ -n "$FREETYPE_SRC" ] || LOCAL=${LOCAL:+$LOCAL.}noft
+[ $PLIB = 0 ] && LOCAL=${LOCAL:+$LOCAL.}plibstock
 [ $NOOPT = 1 ] && LOCAL=${LOCAL:+$LOCAL.}noopt
 VERSION=$OCP_VERSION${LOCAL:++$LOCAL}
 log "writing the wheel, version $VERSION"
 LICENCES=("$OCCT_SRC/LICENSE_LGPL_21.txt" "$OCCT_SRC/OCCT_LGPL_EXCEPTION.txt" "$SRC/OCP-LICENSE")
 for d in "${DEPS[@]}"; do u=${d^^}; eval "LICENCES+=(\"\$SRC/$d/\$DEP_${u}_LICENSE\")"; done
-[ -n "$FREETYPE_SRC" ] && LICENCES+=("$FREETYPE_SRC/docs/FTL.TXT")
+for l in "${FT_LICENSES[@]}"; do LICENCES+=("$SRC/freetype/$l"); done
 python3 -I - "$OUT/$SO" "$DIST" "$WHEEL_NAME" "$VERSION" "$PYTHON_TAG-$PYTHON_TAG-$PLATFORM_TAG" "$OCPSRC/modules.txt" \
   "$OCCT_TAG" "$PYTHON_VERSION" "${LICENCES[@]}" <<'PY'
 import base64, hashlib, os, re, sys, zipfile
@@ -518,7 +535,8 @@ info = f"{name}-{version}.dist-info"
 labels = []
 for p in licences:
     parent, base = os.path.basename(os.path.dirname(p)), os.path.basename(p)
-    label = base if base.startswith(("OCP", "LICENSE_LGPL", "OCCT_LGPL")) else f"{parent}-{base}"
+    label = base if base.startswith(("OCP", "LICENSE_LGPL", "OCCT_LGPL")) else \
+        f"freetype-{base}" if "/freetype/" in p else f"{parent}-{base}"
     labels.append(label)
 expr = "LGPL-2.1-only WITH OCCT-exception-1.0 AND Apache-2.0 AND BSD-3-Clause AND MIT" + (" AND FTL" if any(l.endswith("FTL.TXT") for l in labels) else "")
 metadata = "\n".join([
