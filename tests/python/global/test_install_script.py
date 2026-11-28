@@ -1338,9 +1338,13 @@ class InstallScriptTests(AgentApps):
                 self.assertEqual(dev_install.main(["--release"]), 0)
             self.assertEqual([argv for argv in self.calls("uv") if argv[1] in ("install", "uninstall")],
                              [["tool", "uninstall", "cad"], ["tool", "install", *install.UV_TOOL_ARGS, "cad"]])
-            # install.py hands the apps to the published cad, and leaves cad's own automatic updates as they are:
-            # --release turns them on again.
-            self.assertEqual(self.calls("cad"), [ASKED, HANDED, AUTO_ON, ["update", "auto", "on"]])
+            # First the checkout's server is stopped, by the checkout's cad, before its tool goes: it would outlive
+            # it, and the published cad's start would join it. Then install.py hands the apps to the published cad,
+            # and leaves cad's own automatic updates as they are: --release turns them on again.
+            self.assertEqual(self.calls("cad"), [["server", "stop"], ASKED, HANDED, AUTO_ON, ["update", "auto", "on"]])
+            order = [argv for argv in self.calls() if argv in (["server", "stop"], ["tool", "uninstall", "cad"])]
+            self.assertEqual(order, [["server", "stop"], ["tool", "uninstall", "cad"]],
+                             "stopped before the tool is uninstalled")
             self.assertFalse(dev_install.editable(str(self.bin / "uv")))
 
     def test_install_ps1_ends_a_failure_in_a_terminating_error(self) -> None:

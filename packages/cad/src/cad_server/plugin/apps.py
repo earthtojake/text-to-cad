@@ -629,7 +629,9 @@ def grok(app: App, here: Here, context: Context) -> Outcome:
     """Grok Build: ``grok plugin install earthtojake/text-to-cad@latest --trust``, then enabled; updated by ``grok
     plugin update``. Grok Build loads Claude Code's plugins (its docs), so where Claude Code has ours its own copy of
     ours goes. Removed, once ours is in: a plugin named ``cad`` from our repository (0.5.0-0.7.6). A copy of ours from
-    another source is replaced (same name), GitHub checked first and the old one put back where the new one fails.
+    another source is replaced (same name), GitHub checked first and the old one put back where the new one fails;
+    one installed from a folder, whose registry entry names no source (a development install: seen left in place
+    when going back to the release), is ours by its own manifests.
     Verified: `grok plugin --help` and its subcommands (`install <source>` with `@ref`, `--trust`; `enable`; `update
     [name]`; `uninstall`); docs https://docs.x.ai/build/features/skills-plugins-marketplaces (it reads Claude Code's
     marketplaces and plugins)."""
@@ -640,7 +642,10 @@ def grok(app: App, here: Here, context: Context) -> Outcome:
     removed: List[str] = []
     old_cad, mine, other = False, None, None
     for plugin in grok_plugins(here):
-        ours = our_repository(plugin["source"]) or our_folder(here, plugin["source"])
+        # A copy installed from a folder (a development install) names no source in the registry: it is ours where
+        # the copy itself is, by its manifests (``path``).
+        ours = (our_repository(plugin["source"]) or our_folder(here, plugin["source"])
+                or our_folder(here, plugin["path"]))
         if plugin["name"] == "cad" and ours:
             old_cad = True
         elif plugin["name"] == PLUGIN:
@@ -674,11 +679,12 @@ def grok(app: App, here: Here, context: Context) -> Outcome:
             here.must(install)
             here.must([cli, "plugin", "enable", PLUGIN])
         except Failed as error:
-            back = [cli, "plugin", "install", other["source"] + (f"@{other['ref']}" if other["ref"] else ""), "--trust"]
+            back = [cli, "plugin", "install",
+                    (other["source"] or other["path"]) + (f"@{other['ref']}" if other["ref"] else ""), "--trust"]
             put = here.run(back).ok and here.run([cli, "plugin", "enable", PLUGIN]).ok
             raise Failed(f"{error}; the earlier copy was {'put back' if put else 'not put back: run this again'}",
                          error.reason) from error
-        removed.append(f"{PLUGIN} from {other['source']}" + (f"@{other['ref']}" if other["ref"] else ""))
+        removed.append(f"{PLUGIN} from {other['source'] or 'a folder'}" + (f"@{other['ref']}" if other["ref"] else ""))
         drop_cad()
         return Outcome("updated", removed=removed)
     here.must(install)
