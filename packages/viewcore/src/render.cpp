@@ -369,10 +369,19 @@ struct Environment {
     float fx = (s * 0.5f + 0.5f) * found.n - 0.5f, fy = (u * 0.5f + 0.5f) * found.n - 0.5f;
     int i = (int)std::floor(fx), j = (int)std::floor(fy);
     float tx = fx - i, ty = fy - j;
-    const float* a = texel(index, found, face, i, j);
-    const float* b = texel(index, found, face, i + 1, j);
-    const float* c = texel(index, found, face, i, j + 1);
-    const float* e = texel(index, found, face, i + 1, j + 1);
+    const float *a, *b, *c, *e;
+    const int n = found.n;
+    const size_t at = ((size_t)face * n + j) * n + i;
+    if (i >= 0 && j >= 0 && i + 1 < n && j + 1 < n &&
+        (found.done[at] & found.done[at + 1] & found.done[at + n] & found.done[at + n + 1])) {
+      // The four texels within the face and baked already: read as they lie.
+      a = &found.t[at * 3], b = a + 3, c = a + (size_t)n * 3, e = c + 3;
+    } else {
+      a = texel(index, found, face, i, j);
+      b = texel(index, found, face, i + 1, j);
+      c = texel(index, found, face, i, j + 1);
+      e = texel(index, found, face, i + 1, j + 1);
+    }
     for (int k = 0; k < 3; ++k)
       out[k] = (a[k] * (1 - tx) + b[k] * tx) * (1 - ty) + (c[k] * (1 - tx) + e[k] * tx) * ty;
   }
@@ -1576,15 +1585,30 @@ struct Renderer {
 
   // A triangle's colour at a pixel's centre (linear, and its alpha), its attributes read there as OpenGL reads
   // them: by the pixel's place in the triangle, through the perspective.
+  // What a triangle's lighting asks once, kept while its pixels follow one another: its place in the picture as
+  // the rasterizer placed it (to 1/256 of a pixel), and its corners' view directions.
+  struct Kept {
+    uint32_t index = ~0u;
+    float x0, y0, ax, ay, bx, by, area;
+    float view[3][3];
+  };
+  mutable Kept kept;
+
   inline void shade(const Triangle& t, int px, int py, float out[4]) const {
     const Item& m = items[t.item];
     const Point &p0 = points[t.v[0]], &p1 = points[t.v[1]], &p2 = points[t.v[2]];
-    // The points as the rasterizer placed them, to 1/256 of a pixel.
-    const float x0 = snap(p0.x) * (1.0f / 256.0f), y0 = snap(p0.y) * (1.0f / 256.0f);
-    const float ax = snap(p1.x) * (1.0f / 256.0f) - x0, ay = snap(p1.y) * (1.0f / 256.0f) - y0;
-    const float bx = snap(p2.x) * (1.0f / 256.0f) - x0, by = snap(p2.y) * (1.0f / 256.0f) - y0;
-    const float area = ax * by - bx * ay;
-    const float qx = px + 0.5f - x0, qy = py + 0.5f - y0;
+    const uint32_t index = (uint32_t)(&t - triangles.data());
+    if (kept.index != index) {
+      kept.index = index;
+      kept.x0 = snap(p0.x) * (1.0f / 256.0f), kept.y0 = snap(p0.y) * (1.0f / 256.0f);
+      kept.ax = snap(p1.x) * (1.0f / 256.0f) - kept.x0, kept.ay = snap(p1.y) * (1.0f / 256.0f) - kept.y0;
+      kept.bx = snap(p2.x) * (1.0f / 256.0f) - kept.x0, kept.by = snap(p2.y) * (1.0f / 256.0f) - kept.y0;
+      kept.area = kept.ax * kept.by - kept.bx * kept.ay;
+      if (perspective && m.shading != UNLIT)
+        view_at(p0.x, p0.y, kept.view[0]), view_at(p1.x, p1.y, kept.view[1]), view_at(p2.x, p2.y, kept.view[2]);
+    }
+    const float ax = kept.ax, ay = kept.ay, bx = kept.bx, by = kept.by, area = kept.area;
+    const float qx = px + 0.5f - kept.x0, qy = py + 0.5f - kept.y0;
     float l1 = (qx * by - bx * qy) / area, l2 = (ax * qy - qx * ay) / area;
     float l0 = 1.0f - l1 - l2;
     if (perspective) {
@@ -1616,9 +1640,7 @@ struct Renderer {
     // The view direction is the program's: a vertex's own, read across the triangle like its normal.
     float v[3];
     if (perspective) {
-      float v0[3], v1[3], v2[3];
-      view_at(p0.x, p0.y, v0), view_at(p1.x, p1.y, v1), view_at(p2.x, p2.y, v2);
-      for (int c = 0; c < 3; ++c) v[c] = v0[c] * l0 + v1[c] * l1 + v2[c] * l2;
+      for (int c = 0; c < 3; ++c) v[c] = kept.view[0][c] * l0 + kept.view[1][c] * l1 + kept.view[2][c] * l2;
       float m = 1.0f / std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
       v[0] *= m, v[1] *= m, v[2] *= m;
     } else {
