@@ -51,6 +51,13 @@ SERVER = textwrap.dedent("""
             send({"id": header["id"], "ok": False, "job": job, "error": "vc_open_shape: no shape in these bytes"})
         elif payloads and payloads[0] == b"die":
             os._exit(7)
+        elif payloads and payloads[0] == b"hang":
+            import time
+            time.sleep(3600)
+        elif payloads and payloads[0] == b"garbage":
+            out.write(sizes.pack(12, 8) + b"not json"); out.flush()
+        elif payloads and payloads[0] == b"trap":
+            send({"id": header["id"], "ok": False, "job": job, "error": "RuntimeError: memory access out of bounds"})
         elif job == "about":
             send({**said, "abi": 1, "pid": os.getpid()})
         elif job == "mesh":
@@ -76,6 +83,18 @@ SERVER = textwrap.dedent("""
 
 def _pid() -> int:
     return os.getpid()
+
+
+def _alive(pid: int) -> bool:
+    import time
+
+    for _ in range(200):  # killed and waited for: gone at once, or within moments where the system is slow to say so
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        time.sleep(0.01)
+    return True
 
 
 class _Kernel:
@@ -161,6 +180,22 @@ class CorePoolTest(unittest.TestCase):
         with self.assertRaises(BrokenProcessPool):
             pool.submit(serve._timed, b"die", True).result(60)
         self.assertEqual(pool.submit(serve._timed, b"shape", True).result(60)[0], b"XBM2shape")
+
+    def test_a_host_late_garbled_or_trapped_is_killed_its_job_refused_and_the_next_job_has_another(self) -> None:
+        """A job past its deadline, an answer that is no frame, and a trapped module's refusal: the host killed (by its
+        process) and waited for, the job refused in one line, the next job answered by a fresh host."""
+        pool = self.pool(1)
+        for given, said in ((b"hang", "^the view core took longer than 1 s for its mesh job, and was stopped"),
+                            (b"garbage", "^the view core's job server answered its mesh job with what is no answer"),
+                            (b"trap", "^the view core failed its mesh .*memory access out of bounds.*started afresh")):
+            with self.subTest(host=given.decode()):
+                pool.submit(serve._ready).result(60)
+                [before] = [child.pid for child in pool._children.values()]
+                with mock.patch.dict(core_pool.SECONDS, {"mesh": 1.0}), self.assertRaisesRegex(ValueError, said):
+                    pool.submit(serve._timed, given, True).result(60)
+                self.assertFalse(_alive(before), "the host is gone")
+                self.assertEqual(pool.submit(serve._timed, b"shape", True).result(60)[0], b"XBM2shape")
+                self.assertNotEqual([child.pid for child in pool._children.values()], [before], "a fresh host")
 
     def test_a_job_the_core_does_not_answer_is_a_kernel_process_s_started_for_the_first_of_them(self) -> None:
         pool = self.pool()

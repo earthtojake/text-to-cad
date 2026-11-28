@@ -12,26 +12,153 @@ A frame, both ways: 8 bytes, the length of the rest (big-endian); 4 bytes, the h
 object; then the payloads end to end, their lengths the header's ``payloads``. A request is ``{"id", "job", ...}``;
 its answer ``{"id", "ok": true, ...}`` or ``{"id", "ok": false, "error"}``: what the core refuses (bytes that are no
 shape, an ordinal the part has not) is the job's error, a ``ValueError`` in its words, and the process goes on.
+
+Each job has a deadline by its kind (``SECONDS``): a host that has not answered by then -- a job that never ends on
+input it cannot handle, which would hold every job behind it, since a host serves one at a time --, one that answers
+what is no frame, and one whose module trapped (``TRAPS``: its instance may be damaged) is killed and waited for
+(``exchange``, ``HostFailed``), and the job answered in one line; the next job starts another host, which is sent what
+the last kept (each job carries its part's bytes; the stills' meshes by key, ``render.core.Core``).
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import select
 import struct
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Callable
 
 from cad.engine.kernel_pool import KernelPool, _Job
 
-__all__ = ["PROCESSES", "CorePool", "request"]
+__all__ = ["PROCESSES", "SECONDS", "TRAPS", "CorePool", "HostEnded", "HostFailed", "exchange", "request"]
 
 # The most processes one pool holds: each is a small host, and meshing is what a page waits for.
 PROCESSES = 4
 _SIZES = struct.Struct(">QI")
 # The pools' first jobs, which load a kernel process's kernel: the core's process is ready as it starts.
 _WARMERS = {"_ready": True, "int": 0}
+#: How long a job of each kind may take the host, in seconds: many times what the largest part or picture measured
+#: takes on a loaded machine (a 249-part assembly's every part meshed in seconds, a Preview at full size 1.5 s).
+SECONDS = {"about": 30.0, "mesh": 300.0, "table": 120.0, "measured": 120.0, "fact": 60.0, "read_xbf": 300.0,
+           "export": 300.0, "render": 120.0, "forget": 30.0, "close": 10.0}
+#: What a host says when its WebAssembly module trapped: its instance may be damaged, so the host is started afresh.
+TRAPS = re.compile(r"RuntimeError|memory access out of bounds|unreachable|signature mismatch|call stack|out of memory|"
+                   r"integer overflow|divide by zero", re.IGNORECASE)
+# A frame no host writes: longer than this is garbage (the host passes a longer one over itself).
+_LONGEST = 1 << 34
+
+
+class HostFailed(Exception):
+    """The view core's job server stopped answering in time, answered what is no frame, or ended: it has been killed
+    and waited for. Its words are the job's answer, in one line."""
+
+
+class HostEnded(HostFailed):
+    """The view core's job server ended during a job (its pipe closed): waited for."""
+
+
+def _killed(child: subprocess.Popen) -> None:
+    """``child`` killed (by its process) and waited for, its pipes closed."""
+    try:
+        child.kill()
+    except OSError:
+        pass
+    try:
+        child.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        pass
+    for stream in (child.stdin, child.stdout):
+        try:
+            if stream is not None:
+                stream.close()
+        except OSError:
+            pass
+
+
+def _write(fd: int, frame: bytes, deadline: float | None) -> None:
+    view = memoryview(frame)
+    while view:
+        if deadline is not None:
+            left = deadline - time.monotonic()
+            if left <= 0 or not select.select([], [fd], [], left)[1]:
+                raise TimeoutError
+        try:
+            view = view[os.write(fd, view[:1 << 16]):]
+        except BlockingIOError:
+            continue
+
+
+def _read(fd: int, count: int, deadline: float | None) -> bytes:
+    found = bytearray()
+    while len(found) < count:
+        if deadline is not None:
+            left = deadline - time.monotonic()
+            if left <= 0 or not select.select([fd], [], [], left)[0]:
+                raise TimeoutError
+        chunk = os.read(fd, min(count - len(found), 1 << 20))
+        if not chunk:
+            raise EOFError
+        found += chunk
+    return bytes(found)
+
+
+def exchange(child: subprocess.Popen, header: dict[str, Any], payloads: list[bytes],
+             seconds: float | None = None) -> tuple[dict[str, Any], list[bytes]]:
+    """``header`` (with its ``payloads``) asked of the host ``child`` and its answer read, within ``seconds`` (by the
+    job's kind, ``SECONDS``): the answer's header and payloads, a refusal (``ok`` false) among them. ``HostFailed``,
+    the host killed and waited for, where it is late, ends, or answers what is no frame. Where pipes cannot be waited
+    on with a deadline (Windows), the job has none."""
+    job = str(header.get("job"))
+    seconds = SECONDS.get(job, 120.0) if seconds is None else seconds
+    head = _text({**header, "payloads": [len(payload) for payload in payloads]})
+    frame = b"".join([_SIZES.pack(4 + len(head) + sum(map(len, payloads)), len(head)), head, *payloads])
+    deadline = None if os.name == "nt" else time.monotonic() + seconds
+    try:
+        written, reading = child.stdin.fileno(), child.stdout.fileno()
+        child.stdin.flush()
+        if deadline is not None:
+            os.set_blocking(written, False)
+        _write(written, frame, deadline)
+        length, head_length = _SIZES.unpack(_read(reading, _SIZES.size, deadline))
+        if length < 4 or head_length > length - 4 or length > _LONGEST:
+            raise ValueError("no frame")
+        body = _read(reading, length - 4, deadline)
+        said = json.loads(body[:head_length])
+        if not isinstance(said, dict):
+            raise ValueError("no frame")
+        found, at = [], head_length
+        for size in said.get("payloads") or ():
+            found.append(body[at:at + int(size)])
+            at += int(size)
+        if at > len(body):
+            raise ValueError("no frame")
+        return said, found
+    except TimeoutError:
+        _killed(child)
+        raise HostFailed(f"the view core took longer than {seconds:g} s for its {job} job, and was stopped: ask "
+                         "again (a smaller picture, or fewer parts, is sooner)") from None
+    except (EOFError, BrokenPipeError, ConnectionError):
+        _killed(child)
+        raise HostEnded(f"the view core's job server ended during its {job} job") from None
+    except (ValueError, TypeError, struct.error):  # json's errors are ValueErrors
+        _killed(child)
+        raise HostFailed(f"the view core's job server answered its {job} job with what is no answer, and was "
+                         "stopped") from None
+
+
+def trapped(child: subprocess.Popen, said: dict[str, Any]) -> str | None:
+    """Where the host refused a job because its module trapped (``TRAPS``): the host killed and waited for, and the
+    job's answer in one line; else None."""
+    error = str(said.get("error") or "")
+    if said.get("ok") or not TRAPS.search(error):
+        return None
+    _killed(child)
+    return f"the view core failed its {said.get('job') or 'job'} ({error.splitlines()[0] if error else 'a trap'}), " \
+           "and was started afresh: ask again"
 
 
 def _text(value: Any) -> bytes:
@@ -142,26 +269,19 @@ class CorePool(KernelPool):
                                 **places.windowless())
 
     def _ask(self, child: subprocess.Popen, job: _Job) -> tuple[str, Any]:
+        """The job asked of ``child`` (``exchange``): its answer; a host that was late, garbled or trapped is killed
+        here (the pool's next job starts another) and the job refused in one line."""
         header, payloads, answered = request(job.fn, job.args)  # type: ignore[misc] - asked in ``submit``
         self._asked += 1
-        head = _text({**header, "id": self._asked, "payloads": [len(payload) for payload in payloads]})
-        child.stdin.write(_SIZES.pack(4 + len(head) + sum(map(len, payloads)), len(head)))
-        child.stdin.write(head)
-        for payload in payloads:
-            child.stdin.write(payload)
-        child.stdin.flush()
-        sizes = child.stdout.read(_SIZES.size)
-        if len(sizes) < _SIZES.size:
-            raise EOFError
-        length, head_length = _SIZES.unpack(sizes)
-        body = child.stdout.read(length - 4)
-        if len(body) < length - 4:
-            raise EOFError
-        said = json.loads(body[:head_length])
+        try:
+            said, found = exchange(child, {**header, "id": self._asked}, payloads)
+        except HostEnded:
+            raise EOFError from None  # a process that died fails its job alone, as a kernel process's does
+        except HostFailed as failed:
+            return "failed", ValueError(str(failed))
+        broken = trapped(child, said)
+        if broken is not None:
+            return "failed", ValueError(broken)
         if not said.get("ok"):
             return "failed", ValueError(str(said.get("error") or "the view core refused the job"))
-        found, at = [], head_length
-        for size in said.get("payloads") or ():
-            found.append(body[at:at + size])
-            at += size
         return "done", answered(said, found)

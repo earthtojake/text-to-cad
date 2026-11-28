@@ -19,7 +19,6 @@ drawn on its faces (``texels``, ``texture``). What the core does not draw yet is
 from __future__ import annotations
 
 import json
-import struct
 from collections import OrderedDict
 import subprocess
 import time
@@ -34,13 +33,12 @@ from cad.engine.render.occt import BACKGROUND, EDGE, EDGES_WIN_OFFSET, SEE_THROU
 from cad.engine.render.shapes import _LINE_OF, LINES, FaceGroup
 from cad.engine.snapshot import SnapshotRefused
 
-__all__ = ["NOT_YET", "Core", "CoreCanvas", "CoreScene", "NotDrawnYet", "part_meshes"]
+__all__ = ["NOT_YET", "Core", "CoreCanvas", "CoreScene", "CoreStopped", "NotDrawnYet", "part_meshes"]
 
 # Samples a pixel: what cad asks of OpenGL (a software OpenGL gives 4).
 SAMPLES = 8
 # What the ink's presentations step back by in OCCT's depth test (its shaded aspect's polygon offset).
 INK_OFFSET = (1.0, 1.0)
-_SIZES = struct.Struct(">QI")
 
 #: What the core does not draw yet, each refused in one line (``NotDrawnYet``) on the WebAssembly kernel.
 NOT_YET = {
@@ -55,6 +53,11 @@ NOT_YET = {
 
 class NotDrawnYet(SnapshotRefused):
     """What the view core's renderer does not draw yet (``NOT_YET``), asked of it: refused, as a request is."""
+
+
+class CoreStopped(SnapshotRefused):
+    """A picture the view core's job server did not draw in time, or failed: the server stopped and started afresh
+    for the next one; refused, in one line."""
 
 
 # --- the job server ------------------------------------------------------------------------------------------
@@ -82,36 +85,25 @@ class Core:
         return self.child
 
     def job(self, header: dict[str, Any], payloads: list[bytes]) -> tuple[dict[str, Any], list[bytes]]:
-        """``header`` and ``payloads`` asked of the server, in its frames: its answer's header and payloads. A job it
-        refuses is a ``RuntimeError`` in its words; a server that ends while asked is let go of (the next job starts
-        another) and the job fails."""
+        """``header`` and ``payloads`` asked of the server within its job's deadline (``core_pool.exchange``): its
+        answer's header and payloads. A job it refuses is a ``RuntimeError`` in its words; a server that is late,
+        ends, answers what is no frame or trapped is killed (the next job starts another, sent again what it keeps) and
+        the job refused in one line (``CoreStopped``)."""
+        from cad.engine.core_pool import HostFailed, exchange, trapped
+
         child = self._started()
         self.asked += 1
-        head = json.dumps({**header, "id": self.asked, "payloads": [len(data) for data in payloads]},
-                          separators=(",", ":")).encode()
         try:
-            child.stdin.write(_SIZES.pack(4 + len(head) + sum(map(len, payloads)), len(head)) + head)
-            for data in payloads:
-                child.stdin.write(data)
-            child.stdin.flush()
-            sizes = child.stdout.read(_SIZES.size)
-            if len(sizes) < _SIZES.size:
-                raise EOFError
-            length, head_length = _SIZES.unpack(sizes)
-            body = child.stdout.read(length - 4)
-            if len(body) < length - 4:
-                raise EOFError
-        except (EOFError, OSError):
-            self.stop()
-            raise RuntimeError(f"the view core's job server ({self.program}) ended during its {header.get('job')} "
-                               "job") from None
-        said = json.loads(body[:head_length])
+            said, found = exchange(child, {**header, "id": self.asked}, payloads)
+        except HostFailed as failed:
+            self.child, self.sent = None, set()
+            raise CoreStopped(str(failed)) from None
+        broken = trapped(child, said)
+        if broken is not None:
+            self.child, self.sent = None, set()
+            raise CoreStopped(broken)
         if not said.get("ok"):
             raise RuntimeError(f"the view core refused the {header.get('job')} job: {said.get('error')}")
-        found, at = [], head_length
-        for size in said.get("payloads") or ():
-            found.append(body[at:at + size])
-            at += size
         return said, found
 
     def render(self, scene: dict[str, Any], payloads: list[bytes], keys: list[str | None]) -> tuple[bytes, float]:

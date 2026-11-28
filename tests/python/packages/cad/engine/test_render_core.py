@@ -55,6 +55,14 @@ SERVER = textwrap.dedent("""
             payloads.append(body[at:at + size]); at += size
         log.write(json.dumps({"job": header["job"], "keys": header.get("keys"), "sizes": header["payloads"],
                               "scene": header.get("scene")}) + "\\n"); log.flush()
+        width = (header.get("scene") or {}).get("width")
+        if width == 13:  # a job that never ends
+            import time
+            time.sleep(3600)
+        if width == 17:  # what is no frame
+            out.write(sizes.pack(12, 8) + b"not json"); out.flush(); continue
+        if width == 19:  # a trapped module's refusal
+            send({"id": header["id"], "ok": False, "job": "render", "error": "RuntimeError: unreachable"}); continue
         if header["job"] == "forget":
             kept.clear(); send({"id": header["id"], "ok": True}); continue
         keys = header.get("keys") or [None] * len(payloads)
@@ -193,6 +201,34 @@ class CoreSceneTest(unittest.TestCase):
         self.assertEqual(meshes[1], [0, 0], "named only")
         self.assertEqual((meshes[2], renders[2].get("keys")[:2]), ([0, 0], ["mesh:big", "mesh:small"]))
         self.assertTrue(all(meshes[3]), "sent again once the server said it lacked them")
+
+    def test_a_host_late_garbled_or_trapped_is_killed_the_picture_refused_and_the_next_one_drawn_afresh(self) -> None:
+        """Past its deadline, answering what is no frame, or trapped: the job server killed by its process and waited
+        for, the picture refused in one line (``CoreStopped``), and the next picture drawn by a fresh one, which is sent
+        the meshes the last one kept."""
+        from unittest import mock
+
+        from cad.engine import core_pool
+        from cad.engine.render.core import CoreStopped
+
+        self.scene.show({"mode": "shaded"})
+        self.scene.frame("iso")
+        self.scene.canvas.frame()
+        for width, said in ((13, "^the view core took longer than 1 s for its render job"),
+                            (17, "^the view core's job server answered its render job with what is no answer"),
+                            (19, "^the view core failed its render .*unreachable.*started afresh")):
+            with self.subTest(width=width):
+                host = self.core.child
+                scene, payloads, keys = self.scene.describe()
+                with mock.patch.dict(core_pool.SECONDS, {"render": 1.0}), self.assertRaisesRegex(CoreStopped, said):
+                    self.core.render({**scene, "width": width}, payloads, keys)
+                self.assertIsNotNone(host.poll(), "killed and waited for")
+                self.assertIsNone(self.core.child)
+                before = len(self.asked())
+                self.scene.canvas.frame()
+                [again] = [line for line in self.asked()[before:] if line["job"] == "render"]
+                self.assertTrue(all(again["sizes"][:2]), "a fresh server is sent the meshes the last one kept")
+                self.assertIsNot(self.core.child, host)
 
     def test_what_the_core_does_not_draw_yet_is_refused_in_one_line(self) -> None:
         from cad.engine.render.drawing import Held as Drawing
