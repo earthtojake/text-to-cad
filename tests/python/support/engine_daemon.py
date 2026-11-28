@@ -42,6 +42,11 @@ STACK_LINES = 30  # a thread's innermost frames: where it waits
 # declared beside the code, as they would with no record; and What's new
 # (``cad_server.whats_new``) too, so a test's fresh device is a new person's, shown no notes.
 TEST_INSTALLATION = "0.0.0+test"
+# A run of the suites on the WebAssembly kernel (``scripts/test/test-python.sh --kernel FOLDER``): the kernel
+# folder every test's server runs its kernel processes in. Each state folder a test registers (``register``) is
+# then one whose person chose that kernel in its settings, as a person does: the server reads its own setting,
+# and nothing of the product knows a test runs.
+KERNEL = "CAD_TEST_KERNEL"
 
 
 def register(state: str | os.PathLike, python: str | None = None, prefix: str | None = None) -> bool:
@@ -78,6 +83,27 @@ def register(state: str | os.PathLike, python: str | None = None, prefix: str | 
     (folder / f"{TEST_INSTALLATION}.json").write_text(json.dumps(record, indent=1, sort_keys=True) + "\n",
                                                       encoding="utf-8")
     (folder / "current").write_text(TEST_INSTALLATION, encoding="utf-8")
+    choose_kernel(state)
+    return True
+
+
+def choose_kernel(state: str | os.PathLike) -> bool:
+    """Where the run is one on the WebAssembly kernel (``KERNEL`` names its folder), the state folder
+    ``state``'s settings choose it (``settings.json``'s ``kernel`` section), unless they choose a kernel
+    already: a test's own choice stands. The file's other settings are kept. Whether it was written."""
+    folder = os.environ.get(KERNEL, "").strip()
+    if not folder:
+        return False
+    path = Path(state) / "settings.json"
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        settings = {}
+    if not isinstance(settings, dict) or "kernel" in settings:
+        return False
+    settings["kernel"] = {"kind": "wasm", "folder": os.path.abspath(folder)}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     return True
 
 

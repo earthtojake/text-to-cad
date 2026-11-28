@@ -3,7 +3,7 @@ set -euo pipefail
 
 # The repo's Python suites.
 #
-#   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]
+#   scripts/test/test-python.sh [--keep-going] [--select GROUP] [--print-weights] [--kernel FOLDER] [PATH...]
 #
 # --select picks one group instead of all of them:
 #   cadgen   the packages' suites: the library's, the server's (the viewer backend included)
@@ -14,6 +14,12 @@ set -euo pipefail
 #
 # --print-weights prints one `WEIGHT<TAB>path<TAB>seconds` line per slow file on
 # stdout: the first thing to read when a run is slow.
+#
+# --kernel FOLDER runs the suites on the WebAssembly kernel in FOLDER (a kernel folder: its
+# kernel.json and bin/python): every test's server runs its kernel processes there, by the
+# setting a person chooses it with, which each test's state folder is given as it is
+# registered (tests/python/support/engine_daemon.py). The tests' own processes stay on this
+# interpreter. docs/contributing/testing.md says what such a run shows.
 #
 # PATHs narrow the group to the test files at or under them (repo-relative); CI passes
 # the files and directories a change selected.
@@ -39,11 +45,22 @@ while [ "$#" -gt 0 ]; do
     --select) SELECT="${2:?--select wants a group}"; shift ;;
     --select=*) SELECT="${1#--select=}" ;;
     --print-weights) PYTHON_TEST_PRINT_WEIGHTS=1 ;;
+    --kernel) CAD_TEST_KERNEL="${2:?--kernel wants a kernel folder}"; shift ;;
+    --kernel=*) CAD_TEST_KERNEL="${1#--kernel=}" ;;
     -*) echo "test-python.sh: unknown argument $1" >&2; exit 2 ;;
     *) TEST_PATHS+=("$1") ;;
   esac
   shift
 done
+
+if [ -n "${CAD_TEST_KERNEL:-}" ]; then
+  if [ ! -f "$CAD_TEST_KERNEL/kernel.json" ] || [ ! -x "$CAD_TEST_KERNEL/bin/python" ]; then
+    echo "test-python.sh: --kernel wants a kernel folder (its kernel.json and bin/python), not '$CAD_TEST_KERNEL'" >&2
+    exit 2
+  fi
+  CAD_TEST_KERNEL="$(cd "$CAD_TEST_KERNEL" && pwd)"
+  export CAD_TEST_KERNEL
+fi
 
 case "$SELECT" in
   all|cadgen|viewer|skills) ;;

@@ -107,6 +107,53 @@ class PythonTestRunnerIsolation(unittest.TestCase):
         self.assertIn("CAD_ENGINE_DIR", env)
 
 
+class KernelChoice(unittest.TestCase):
+    """A run on the WebAssembly kernel (``test-python.sh --kernel``): each state folder a test registers is one
+    whose settings choose that kernel, as a person's would, and the server reads them itself."""
+
+    def setUp(self) -> None:
+        from tests.python.support import engine_daemon
+
+        self.support = engine_daemon
+        scratch = tempfile.TemporaryDirectory(prefix="cadgen-kernel-choice-")
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name).resolve()
+        self.state, self.kernel = self.root / "state", self.root / "kernel"
+
+    def settings(self) -> dict:
+        return json.loads((self.state / "settings.json").read_text(encoding="utf-8"))
+
+    def test_a_registered_state_folder_chooses_the_run_s_kernel_and_an_ordinary_run_writes_no_setting(self) -> None:
+        with mock.patch.dict(os.environ):
+            os.environ.pop(self.support.KERNEL, None)
+            self.support.register(self.state)
+            self.assertFalse((self.state / "settings.json").exists(), "an ordinary run: the native kernel, by no setting")
+            os.environ[self.support.KERNEL] = str(self.kernel)
+            self.support.register(self.state)
+        self.assertEqual(self.settings(), {"kernel": {"kind": "wasm", "folder": str(self.kernel)}})
+
+    def test_a_test_s_own_settings_are_kept_and_its_own_choice_of_kernel_stands(self) -> None:
+        self.state.mkdir()
+        (self.state / "settings.json").write_text(json.dumps({"viewer": {"theme": "dark"}}), encoding="utf-8")
+        with mock.patch.dict(os.environ, {self.support.KERNEL: str(self.kernel)}):
+            self.assertTrue(self.support.choose_kernel(self.state))
+            self.assertEqual(self.settings(), {"viewer": {"theme": "dark"},
+                                               "kernel": {"kind": "wasm", "folder": str(self.kernel)}})
+            (self.state / "settings.json").write_text(json.dumps({"kernel": {"kind": "native"}}), encoding="utf-8")
+            self.assertFalse(self.support.choose_kernel(self.state))
+        self.assertEqual(self.settings(), {"kernel": {"kind": "native"}})
+
+    def test_the_server_reads_that_setting_as_a_person_s(self) -> None:
+        from cad_server._internal import base
+
+        (self.kernel / "bin").mkdir(parents=True)
+        (self.kernel / base.WASM_MARKER).write_text(json.dumps({"schema": base.WASM_SCHEMA}), encoding="utf-8")
+        (self.kernel / "bin" / "python").write_text("#!/bin/sh\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {self.support.KERNEL: str(self.kernel), "CAD_STATE_DIR": str(self.state)}):
+            self.support.register(self.state)
+            self.assertEqual(base.wasm_kernel()["python"], str(self.kernel / "bin" / "python"))
+
+
 class DefaultEngineGuard(unittest.TestCase):
     """A test never leaves an engine where nothing names its folder (the developer's engine's
     place): one found as a file ends is stopped, and fails the run naming the files running."""

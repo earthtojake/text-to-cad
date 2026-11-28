@@ -360,6 +360,18 @@ and skills are outside it. Shard 1 of the packages' jobs runs it on each platfor
 uv run pyrefly check --config packages/cad/pyproject.toml
 ```
 
+**On the WebAssembly kernel.** `scripts/test/test-python.sh --kernel FOLDER [PATH...]` runs the Python
+suites with every test's server running its kernel processes (workers, the meshing and reading pools,
+the checks processes) on the WebAssembly kernel in `FOLDER`, a kernel folder
+([how one is made](../../packages/viewcore/hosts/pyodide/README.md)). Nothing in the product knows a
+test runs: each state folder a test registers (`engine_daemon.register`, which the runner, `isolate`
+and `watched` all go through) is given the setting a person chooses that kernel with, `settings.json`'s
+`kernel` section, and the server reads its own settings as ever; a test that writes a `kernel` section
+of its own keeps it. The tests' own processes, and the fixtures they build in them, stay on the native
+kernel, so such a run is a mixed install's: it shows what the engine's kernel processes do there, not
+what a library call in the test's process does. A kernel process is a whole host (over 1.5 GB each), so
+run it with `CAD_TEST_JOBS=1` or 2. No CI job runs it yet: the kernel folder is made by hand.
+
 **In an agent app.** Claude Code, Codex and Cursor are tested by hand before a change to the plugin,
 the skills, the server or the CAD app ships:
 [Test In Agent Apps](../../CONTRIBUTING.md#test-in-agent-apps).
