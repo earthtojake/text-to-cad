@@ -131,20 +131,27 @@ def _takes_values(verb: str) -> dict[str, int]:
     return found
 
 
-def _source(verb: str, argv: list[str]) -> str | None:
-    """The command line's first positional word, its source: past each option and the words it takes."""
+def _source_at(verb: str, argv: list[str]) -> int | None:
+    """Where in the command line its first positional word, its source, stands: past each option and the words it
+    takes."""
     takes = _takes_values(verb)
     index = 0
     while index < len(argv):
         token = argv[index]
         if token == "--":
-            return argv[index + 1] if index + 1 < len(argv) else None
+            return index + 1 if index + 1 < len(argv) else None
         if token.startswith("-") and token != "-":
             flag, equals, _value = token.partition("=")
             index += 1 + (0 if equals else takes.get(flag, 0))
             continue
-        return token
+        return index
     return None
+
+
+def _source(verb: str, argv: list[str]) -> str | None:
+    """The command line's first positional word, its source."""
+    at = _source_at(verb, argv)
+    return None if at is None else argv[at]
 
 
 def _mode(verb: str, argv: list[str]) -> str | None:
@@ -176,6 +183,19 @@ def _type_of(verb: str, source: str) -> str:
 
         raise Failure(f"{source} is a model's script, not a document: `cad run {shlex.quote(script)}` builds its models, "
                       f"writes each one's .xbf and prints each one's id, which cad {verb} takes", "wrong_type")
+    if named.lower().startswith(("http://", "https://")):
+        # A link that ``linked`` left as it was: no share's, and no page of this server's. Said by where it points,
+        # never by its query: a page's link carries the server's token.
+        from urllib.parse import urlsplit
+
+        try:
+            where = urlsplit(named)
+            shown = f"{where.scheme}://{where.netloc.rpartition('@')[2]}{where.path}"
+        except ValueError:
+            shown = named.partition("?")[0]
+        raise Failure(f"{shown} is a web link, not a file cad {verb} takes: it takes {_files_said(verb)}, a model's id, "
+                      "a share's link (https://cad.fun/<id>) or a page of this server's own (a run's view: link)",
+                      "wrong_type")
     suffix = Path(named).suffix
     found = by_extension(suffix) if suffix else None
     if found is None:
@@ -314,6 +334,7 @@ def dispatch(verb: str, argv: list[str], prog: str | None = None) -> int:
     """``cad <verb> ...``: its source's type's runner, the command line handed to it whole."""
     from cad_server._internal.cli_errors import Failure, wants_json, write
     from cad_server.cli.document_types import pull_value
+    from cad_server.engine.cli import linked
 
     prog = prog or f"cad {verb}"
     argv = pull_value(list(argv)) if verb == "dfm" else list(argv)
@@ -333,6 +354,11 @@ def dispatch(verb: str, argv: list[str], prog: str | None = None) -> int:
 
         return answered(VERBS["snapshot"][2], parser_for("snapshot", prog).parse_args(argv), prog)
     try:
+        # The source as it is resolved (a share's link, a page of this server's: the file or the id it names), for
+        # every runner to read alike: a generated parser reads its source as a path, which would mangle a link.
+        at = _source_at(verb, argv)
+        if at is not None and (named := str(linked(argv[at]))) != argv[at]:
+            argv = [*argv[:at], named, *argv[at + 1:]]
         document_type, operation, mode = resolve(verb, argv)
     except Failure as failure:
         return write(failure, prog=prog, as_json=wants_json(argv))

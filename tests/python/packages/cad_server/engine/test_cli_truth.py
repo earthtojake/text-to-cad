@@ -74,6 +74,7 @@ class VerbsTest(unittest.TestCase):
         built = cls.run_("parts.py")
         assert built.returncode == 0, built.stderr
         cls.box, cls.bad = [line.split()[1] for line in built.stdout.splitlines() if line.strip().startswith("id:")]
+        cls.views = [line.split()[1] for line in built.stdout.splitlines() if line.strip().startswith("view:")]
         assert cls.run_("-m", "cad_server.engine", "inspect", cls.bad).returncode == 0
         script.write_text(textwrap.dedent(SCRIPT.format(fail=True)), encoding="utf-8")
         cls.failed = cls.run_("parts.py")
@@ -162,6 +163,42 @@ class VerbsTest(unittest.TestCase):
                 self.assertRegex(done.stdout, r"\((\d+ B|\d+\.\d KB)\) in ", done.stdout)
             else:  # a model's picture says its display as a file's does
                 self.assertRegex(done.stdout, r"\(64x48, solid\) in ", done.stdout)
+
+    def test_the_page_link_a_run_prints_names_its_document_and_no_other_link_does(self) -> None:
+        """The ``view:`` of a run -- this server's page of a document, its token in the query -- is the document's id
+        wherever a verb takes a document, a generated parser's (``dfm``) too; a link to another address, to a page of
+        this server that is no document's, and one of a document it holds none of, are refused in one line, none of
+        them saying the token."""
+        link = self.views[0]
+        self.assertRegex(link, rf"^http://127\.0\.0\.1:\d+/{self.box}\?token=\S+$")
+        token = link.partition("token=")[2]
+
+        def command(verb: str, *args: str):
+            done = self.run_("-m", "cad_server.cli", verb, *args)
+            self.assertNotIn(token, done.stdout + done.stderr, f"cad {verb} {args[:1]} says the token")
+            return done
+
+        out = self.folder / "linked.glb"
+        done = command("export", link, str(out))
+        self.assertEqual((done.returncode, out.is_file()), (0, True), done.stderr)
+        done = command("inspect", link + "#box/link")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('"path": "box/link"', done.stdout)
+        done = command("dfm", link, "--process", "cnc", "--json")
+        self.assertEqual(json.loads(done.stdout)["path"], self.box, done.stderr)
+        port = link.split(":")[2].split("/")[0]
+        other = {"another address": link.replace(f":{port}/", ":9/"),
+                 "a web page": f"http://example.com/{self.box}?token={token}",
+                 "a page of this server that is no document's": f"http://127.0.0.1:{port}/?token={token}"}
+        for what, text in other.items():
+            with self.subTest(what):
+                done = command("export", text, str(self.folder / "refused.glb"))
+                self.assertEqual((done.returncode, done.stdout), (2, ""))
+                self.assertRegex(done.stderr, r"^cad export: http://[^?\s]+ is a web link, not a file cad export takes: it takes "
+                                              r".xbf, [^\n]*\n$")
+        unheld = "01234567-89ab-cdef-0123-456789abcdef"
+        done = command("export", link.replace(self.box, unheld), str(self.folder / "refused.glb"))
+        self.assertEqual((done.returncode, done.stderr), (2, f"cad export: no document {unheld} is held\n"))
 
     def test_a_step_cadgen_exported_holds_no_closure_because_the_format_carries_none(self) -> None:
         self.assertEqual(self.cli("export", self.box, str(self.folder / "box.step")).returncode, 0)

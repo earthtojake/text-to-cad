@@ -418,16 +418,50 @@ def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
 def linked(text: str | None, *, ref: bool = False) -> str | None:
     """``text`` -- a document's name, or with ``ref`` a ref's -- with the share's link it starts with in the name of
     this computer's copy of that share (``sharing.local``), a ``#<selector>`` after it kept; refused in one line where
-    this computer has none (``not_found``, with the command that makes one). Any other text, and None, as it is."""
+    this computer has none (``not_found``, with the command that makes one). So with the link to a page of this
+    server, the ``view:`` of a run, its document's id (``_own_page``). Any other text, and None, as it is."""
     if text is None:
         return None
     from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
 
     try:
-        return sharing.local(str(text), ref=ref)
+        named = sharing.local(str(text), ref=ref)
     except sharing.NoCopy as missing:
         raise Failure(str(missing), "not_found", next=missing.next) from None
+    return named if named != str(text) else _own_page(named)
+
+
+def _own_page(text: str) -> str:
+    """``text`` as the id it names where it is a link to a page of THIS server -- ``http://127.0.0.1:<port>/<id>?token=...``,
+    the ``view:`` a run prints -- with a ``#<selector>`` kept; any other text, and any other link, as it is. The link's
+    token is never read, kept or said: the id is what is taken, and the server says whether it holds a document by it.
+    The server is asked its address only of a link of this computer's loopback with a document's id for its path, and
+    never started for one: with none running, the link is no page of it."""
+    from urllib.parse import urlsplit
+
+    from cad.engine.ids import is_id
+
+    head, hashed, selector = text.strip().partition("#")
+    try:
+        parts = urlsplit(head)
+        port = parts.port
+    except ValueError:
+        return text
+    ident = parts.path.strip("/")
+    if parts.scheme not in ("http", "https") or parts.hostname not in ("127.0.0.1", "localhost", "::1") or port is None \
+            or not is_id(ident):
+        return text
+    from cad.engine.client import request
+
+    try:
+        answer = request({"op": "http"}, start=False)
+    except OSError:  # no server answering, or one of another release: no page of it, and the verb says which
+        return text
+    served = urlsplit(str((answer or {}).get("url") or ""))
+    if (served.scheme, served.port) != (parts.scheme, port):
+        return text
+    return f"{ident}#{selector}" if hashed else ident
 
 
 def _linked_inputs(found: Any) -> Any:
