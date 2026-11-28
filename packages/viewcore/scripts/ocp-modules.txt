@@ -1,0 +1,145 @@
+# OCP submodules ocp.sh binds: one per line, '#' starts a comment. A module left out fails at import
+# (ModuleNotFoundError naming it and this file); ocp.sh refuses a list that leaves out a module a listed one
+# needs to import (a base class, a default argument). Pass a list of all of OCP's modules for a full build.
+#
+# This list: the modules that build123d 0.13.0, cad, ocpsvg 0.7.0 and ocp_gordon 0.3.1 import, then
+# (marked 'needed by') those their bindings need to import.
+
+Adaptor2d            # needed by Geom2dAdaptor
+Adaptor3d            # needed by IntTools
+AdvApp2Var           # needed by GeomPlate
+AIS
+APIHeaderSection
+AppBlend             # needed by GeomFill
+AppCont              # needed by BRepFill
+AppParCurves         # needed by Approx
+Approx               # needed by GeomFill
+Aspect
+BinDrivers           # needed by BinXCAFDrivers
+BinLDrivers          # needed by BinDrivers
+BinTools
+BinXCAFDrivers
+Bnd
+BOPAlgo
+BRep
+BRepAdaptor
+BRepAlgoAPI
+BRepBndLib
+BRepBuilderAPI
+BRepCheck
+BRepClass
+BRepClass3d
+BRepExtrema
+BRepFeat
+BRepFill
+BRepFilletAPI
+BRepGProp
+BRepIntCurveSurface
+BRepLib
+BRepLProp
+BRepMesh
+BRepOffset
+BRepOffsetAPI
+BRepPrimAPI
+BRepProj
+BRepTools
+BSplCLib
+CDF                  # needed by TDocStd
+CDM                  # needed by TDocStd
+ChFi3d               # needed by BRepFilletAPI
+Convert
+Extrema
+Font
+GC
+GccEnt
+gce
+GCPnts
+Geom
+Geom2d
+Geom2dAdaptor
+Geom2dAPI
+Geom2dGcc
+Geom2dInt            # needed by BRepClass
+GeomAbs
+GeomAdaptor
+GeomAPI
+GeomConvert
+GeomFill
+GeomLib
+GeomPlate            # needed by BRepFill
+GeomProjLib
+gp
+GProp
+Graphic3d
+HLRAlgo
+HLRBRep
+IFSelect
+IGESCAFControl
+IGESControl
+IGESToBRep           # needed by IGESControl
+Image
+IMeshData            # needed by IMeshTools
+IMeshTools
+IntAna2d
+IntCurvesFace
+IntCurveSurface      # needed by HLRBRep
+Interface
+Intf                 # needed by HLRBRep
+IntRes2d             # needed by HLRBRep
+IntTools
+LocOpe
+math
+Message
+NCollection
+OSD                  # needed by BRepTools
+PCDM
+Poly                 # needed by RWMesh
+Precision
+Prs3d                # needed by StdPrs
+PrsMgr               # needed by AIS
+Quantity
+Resource             # needed by StepData
+RWGltf
+RWMesh
+RWStl
+Select3D             # needed by AIS
+SelectBasics         # needed by SelectMgr
+SelectMgr            # needed by AIS
+ShapeAnalysis
+ShapeBuild           # needed by ShapeCustom
+ShapeCustom
+ShapeExtend
+ShapeFix
+ShapeUpgrade
+Standard
+StdFail
+StdPrs
+StepBasic
+STEPCAFControl
+STEPConstruct
+STEPControl
+StepData             # needed by StepVisual
+StepGeom             # needed by StepVisual
+StepRepr             # needed by StepVisual
+StepShape            # needed by StepVisual
+StepVisual
+StlAPI
+TCollection
+TDataStd
+TDF
+TDocStd
+TNaming
+TopAbs
+TopExp
+TopLoc
+TopoDS
+TopTools
+TPrsStd              # needed by XCAFPrs
+Transfer             # needed by STEPControl
+UnitsMethods
+V3d
+XCAFApp
+XCAFDoc
+XCAFPrs              # needed by RWMesh
+XSControl
+Xw

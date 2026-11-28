@@ -1,0 +1,67 @@
+{
+  "comment": "The WebAssembly kernel's pins, read by ocp.sh: a bump of OCCT, OCP or Pyodide edits this file only. Every URL is fetched and checked against its sha256; every git source against its commit.",
+  "occt": {
+    "repository": "https://github.com/Open-Cascade-SAS/OCCT.git",
+    "tag": "V8_0_1"
+  },
+  "ocp": {
+    "version": "8.0.1.1",
+    "sources": {
+      "url": "https://github.com/CadQuery/OCP/releases/download/8.0.1.1/OCP_src_stubs_Linux.zip",
+      "sha256": "bbab4dc85fdba87ac8f024e13a3e9dba0e268f4b204c9c60c53edf2522ced46e"
+    },
+    "license": {
+      "url": "https://raw.githubusercontent.com/CadQuery/OCP/8.0.1.1/LICENSE",
+      "sha256": "a13caea71627202ad33cc4cafafdd18e667e16716488f8d9c568127121fb89fd"
+    }
+  },
+  "binding_deps": {
+    "pybind11": {
+      "repository": "https://github.com/pybind/pybind11.git",
+      "ref": "v3.1.0",
+      "commit": "97bf890db679505a14dfe547a5e77bb2bd05dc90",
+      "license": "LICENSE",
+      "patches": ["pybind11-wasm32-ssize-cast.patch"]
+    },
+    "fmt": {
+      "repository": "https://github.com/fmtlib/fmt.git",
+      "ref": "12.2.0",
+      "commit": "1be298e1bd68957e4cd352e1f676f00e07dcfb57",
+      "license": "LICENSE",
+      "patches": []
+    },
+    "rapidjson": {
+      "repository": "https://github.com/Tencent/rapidjson.git",
+      "ref": "24b5e7a8b27f42fa16b96fc70aade9106cf7102f",
+      "commit": "24b5e7a8b27f42fa16b96fc70aade9106cf7102f",
+      "license": "license.txt",
+      "patches": []
+    }
+  },
+  "pyodide": {
+    "version": "314.0.8",
+    "python": "3.14",
+    "python_tag": "cp314",
+    "abi": "2026_0",
+    "platform_tag": "pyemscripten_2026_0_wasm32",
+    "emscripten": "5.0.3",
+    "pyodide_build": "0.39.0"
+  },
+  "freetype": {
+    "comment": "Emscripten's FreeType port's tag, for --freetype-src",
+    "tag": "VER-2-13-3"
+  },
+  "flags": {
+    "comment": "Flags that change the module's code. common: every compile and the link. cxx: the binding's compiles (OCCT's own come from its CMake, Release: -O3 -DNDEBUG). simd: added by --simd. plib_fast_patch: applied by --plib-fast.",
+    "common": ["-fPIC", "-fwasm-exceptions", "-sSUPPORT_LONGJMP=wasm", "-fvisibility=hidden", "-fvisibility-inlines-hidden", "-g0"],
+    "occt_build_type": "Release",
+    "cxx": ["-std=c++17", "-O3", "-DNDEBUG", "-DFMT_HEADER_ONLY"],
+    "link": ["-O1", "-sSIDE_MODULE=1", "-Wl,--allow-multiple-definition"],
+    "wasm_opt": ["--post-emscripten", "-O3"],
+    "simd": ["-msimd128"],
+    "plib_fast_patch": "occt-plib-max-opt-dim.patch"
+  },
+  "wheel": {
+    "name": "cad-ocp-wasm"
+  }
+}

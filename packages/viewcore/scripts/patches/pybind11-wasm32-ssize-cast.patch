@@ -1,0 +1,15 @@
+pybind11 v3.1.0: ssize_t_cast refuses at compile time an integer wider than Py_ssize_t. On wasm32 Py_ssize_t
+is 32 bits and OCP's generated bindings pass 64-bit integers to it, so the check is dropped and the cast narrows.
+Applied by ocp.sh to its own checkout of pybind11.
+
+--- a/include/pybind11/detail/common.h
++++ b/include/pybind11/detail/common.h
+@@ -548,7 +548,7 @@
+
+ template <typename IntType>
+ inline ssize_t ssize_t_cast(const IntType &val) {
+-    static_assert(sizeof(IntType) <= sizeof(ssize_t), "Implicit narrowing is not permitted.");
++    // wasm32: Py_ssize_t is 32 bits; OCP's bindings pass 64-bit integers here, which the cast narrows.
+     return static_cast<ssize_t>(val);
+ }
+

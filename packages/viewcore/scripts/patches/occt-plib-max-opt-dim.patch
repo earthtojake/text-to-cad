@@ -1,0 +1,16 @@
+OCCT V8_0_1, PLib.cxx: polynomial evaluation (PLib::EvalPolynomial, NoDerivativeEvalPolynomial) has a
+fixed-size path per dimension up to THE_MAX_OPT_DIM and a slow runtime loop above it. B-spline evaluation
+in WebAssembly reaches dimensions above 15; 48 keeps it on the fixed-size path. Applied by
+`ocp.sh --plib-fast` only, to a copy of this one file; the default build compiles OCCT as released.
+
+--- a/src/FoundationClasses/TKMath/PLib/PLib.cxx
++++ b/src/FoundationClasses/TKMath/PLib/PLib.cxx
+@@ -711,7 +711,7 @@
+ namespace
+ {
+ // Maximum dimension for optimized template dispatch
+-constexpr int THE_MAX_OPT_DIM = 15;
++constexpr int THE_MAX_OPT_DIM = 48;
+
+ // Evaluation of only value using local array (register-friendly).
+ // Writes to output only at the end.
