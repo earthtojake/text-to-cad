@@ -16,7 +16,9 @@
 // A request's header: {"id": any, "job": NAME, ..., "payloads": [lengths]}. Its answer carries the same "id" and
 // either {"ok": true, ..., "payloads": [lengths]} or {"ok": false, "job": NAME, "error": TEXT}: a job the kernel
 // refuses, an unknown job and a frame this cannot read are each an answer, never the server's end. A frame longer
-// than MAX_FRAME is passed over as it comes, unbuffered, and answered so.
+// than MAX_FRAME is passed over as it comes, unbuffered, and answered so. A job the module faults on (a WebAssembly
+// trap: bytes OCCT reads out of bounds) is refused, and the module is started again from its compiled code before
+// the next, its kept parts, documents and buffers let go; so is a module left over RENEW_BYTES by a job.
 //
 // Jobs (README.md says each one's engine counterpart):
 //   about      {}                                             -> {abi, occt, memoryBytes}
@@ -36,12 +38,15 @@
 //   close      {}                                             -> {} and the process ends
 // A part named by "key" keeps its topology for the next job naming it (the last KEPT parts), as an engine pool
 // process does; an .xbf read stays open for an export of the same file as it stood (the last DOCUMENTS).
+import { createHash } from "node:crypto";
 import { realpathSync, readFileSync, statSync } from "node:fs";
 import { basename, extname } from "node:path";
 
+import { isFault } from "../web/viewcore.js";
 import { DEFAULT_WASM, EXPORTS, loadCore } from "./viewcore.mjs";
 
-const MAX_FRAME = 2 ** 31; // more than the module's memory could take in
+const MAX_FRAME = 512 * 2 ** 20; // a still's meshes sent whole, or a large part's shape bytes, with room
+const RENEW_BYTES = 512 * 2 ** 20; // a module's memory never shrinks: past this after a job, it is started again
 const KEPT = 32;
 const DOCUMENTS = 2;
 const KEPT_BYTES = 768 * 2 ** 20; // a still's buffers kept by key: meshes, the environment
@@ -87,12 +92,17 @@ function stillBuffers(keys, payloads) {
   return { parts, missing };
 }
 
-/** The part of `key` and these bytes, kept (or opened for this job alone where no key names it). */
+/**
+ * The part of `key` and these bytes, kept (or opened for this job alone where no key names it). A part is kept under
+ * its key and its bytes' digest, so the same key sent with other bytes is another part, never the one kept.
+ */
 function part(key, bytes) {
   if (key === undefined || key === null) return { doc: core.openShape(bytes), kept: false };
-  let doc = parts.get(key);
-  if (doc) parts.delete(key); else doc = core.openShape(bytes);
-  parts.set(key, doc);
+  if (typeof key !== "string") throw new Error("key is a part's key, a string");
+  const id = `${key}\0${createHash("sha256").update(bytes).digest("hex")}`;
+  let doc = parts.get(id);
+  if (doc) parts.delete(id); else doc = core.openShape(bytes);
+  parts.set(id, doc);
   while (parts.size > KEPT) {
     const [oldest, held] = parts.entries().next().value;
     parts.delete(oldest);
@@ -107,7 +117,7 @@ function withPart(key, bytes, work) {
   try {
     return work(doc);
   } catch (error) {
-    if (kept) { parts.delete(key); doc.close(); }
+    if (kept) for (const [id, held] of parts) if (held === doc) { parts.delete(id); doc.close(); break; }
     throw error;
   } finally {
     if (!kept) doc.close();
@@ -136,9 +146,10 @@ const one = (payloads, job) => {
   if (payloads.length !== 1) throw new Error(`${job} takes one payload, a part's shape bytes (${payloads.length} given)`);
   return payloads[0];
 };
+const ordinal = (value) => Number.isInteger(value) && value >= 1 && value < 2 ** 31;
 const ordinals = (value, what) => {
   if (value === undefined || value === null) return [];
-  if (!Array.isArray(value) || !value.every(Number.isInteger)) throw new Error(`${what} is a list of ordinals`);
+  if (!Array.isArray(value) || !value.every(ordinal)) throw new Error(`${what} is a list of ordinals, each 1 to 2^31 - 1`);
   return value;
 };
 
@@ -178,7 +189,7 @@ const JOBS = {
     return withPart(header.key, bytes, (doc) => {
       switch (header.method) {
         case "face": case "edge": case "vertex":
-          if (!Number.isInteger(args[0])) throw new Error(`${header.method} takes an ordinal`);
+          if (!ordinal(args[0])) throw new Error(`${header.method} takes an ordinal, 1 to 2^31 - 1`);
           if (header.method === "face" && args[1] === false) throw new Error("a face without its check is its table's row: ask elements");
           return { payloads: [doc.factBytes(0, KINDS[header.method], args[0])] };
         case "groups": return { payloads: [doc.groupsBytes(0)] };
@@ -265,39 +276,72 @@ async function answer(body) {
     if (!job || !Object.hasOwn(JOBS, job)) throw new Error(`no job ${JSON.stringify(header.job)}: ${Object.keys(JOBS).join(", ")}`);
     const found = JOBS[job](header, payloads);
     await send(frame({ id, ok: true, ...(found.header || {}) }, found.payloads || []));
+    if (core.memoryBytes > RENEW_BYTES) await renew();
     return !found.last;
   } catch (error) {
-    await send(frame({ id, ok: false, job, error: String(error?.message || error) }));
+    let said = String(error?.message || error);
+    if (isFault(error)) {
+      await renew();
+      said = `the view core faulted on this job (${said}) and was started again; the parts, documents and buffers it kept are let go`;
+    } else if (core.memoryBytes > RENEW_BYTES) {
+      await renew();
+    }
+    await send(frame({ id, ok: false, job, error: said }));
     return true;
   }
 }
 
-// The input read frame by frame: what has come and is not yet a whole frame is held; an oversized frame is let by.
-let held = Buffer.alloc(0);
+/** The module started again from its compiled code: what it kept is let go with its memory. */
+async function renew() {
+  parts.clear();
+  documents.clear();
+  buffers.clear();
+  buffersBytes = 0;
+  await core.renew();
+}
+
+// The input read frame by frame: the chunks of a frame not yet whole are held as they came and joined once, when
+// the frame is whole (joining at every chunk would copy a large frame over and over); an oversized frame is let by.
+const pending = []; // chunks held, in order
+let pendingBytes = 0;
+let need = 8; // the bytes the next step waits for: a frame's length, then the whole frame
 let skipping = 0n;
 let open = true;
+const passedOver = () => send(frame({ id: null, ok: false, job: null, error: `a frame longer than ${MAX_FRAME} bytes was passed over` }));
+/** The first `count` bytes held, taken out as one buffer. */
+function take(count) {
+  const joined = pending.length === 1 ? pending[0] : Buffer.concat(pending, pendingBytes);
+  pending.length = 0;
+  const rest = joined.subarray(count);
+  if (rest.length) pending.push(rest);
+  pendingBytes = rest.length;
+  return joined.subarray(0, count);
+}
 for await (let chunk of process.stdin) {
   if (skipping > 0n) {
     const passed = BigInt(chunk.length) < skipping ? BigInt(chunk.length) : skipping;
     skipping -= passed;
     chunk = chunk.subarray(Number(passed));
     if (skipping > 0n) continue;
-    await send(frame({ id: null, ok: false, job: null, error: `a frame longer than ${MAX_FRAME} bytes was passed over` }));
+    await passedOver();
   }
-  held = held.length ? Buffer.concat([held, chunk]) : chunk;
-  while (open && held.length >= 8) {
-    const length = held.readBigUInt64BE(0);
-    if (length > BigInt(MAX_FRAME)) {
-      const here = BigInt(held.length - 8);
-      if (here >= length) { held = held.subarray(8 + Number(length)); await send(frame({ id: null, ok: false, job: null, error: `a frame longer than ${MAX_FRAME} bytes was passed over` })); continue; }
-      skipping = length - here;
-      held = Buffer.alloc(0);
-      break;
+  if (chunk.length) pending.push(chunk), pendingBytes += chunk.length;
+  while (open && pendingBytes >= need) {
+    if (need === 8) {
+      const length = take(8).readBigUInt64BE(0);
+      if (length > BigInt(MAX_FRAME)) {
+        const here = BigInt(pendingBytes);
+        if (here >= length) { take(Number(length)); await passedOver(); continue; }
+        skipping = length - here;
+        pending.length = 0, pendingBytes = 0;
+        break;
+      }
+      need = Number(length);
+      if (need === 0) { need = 8; open = await answer(Buffer.alloc(0)); }
+      continue;
     }
-    const whole = 8 + Number(length);
-    if (held.length < whole) break;
-    const body = held.subarray(8, whole);
-    held = held.subarray(whole);
+    const body = take(need);
+    need = 8;
     open = await answer(body);
   }
   if (!open) break;

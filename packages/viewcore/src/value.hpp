@@ -9,6 +9,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -184,6 +185,7 @@ class Parser {
       ++at_;
       space();
       if (at_ < s_.size() && s_[at_] == '}') { ++at_; --depth_; return v; }
+      std::unordered_map<std::string, size_t> places;  // each key's place, once the object has more than a few
       while (true) {
         space();
         std::string key = string();
@@ -192,9 +194,17 @@ class Parser {
         ++at_;
         Value item = value();
         // json.loads keeps a repeated key's last value, at its first place.
+        if (v.keys.size() == 16)
+          for (size_t at = 0; at < v.keys.size(); ++at) places.emplace(v.keys[at].first, at);
         bool replaced = false;
-        for (auto& [held, value] : v.keys)
-          if (held == key) { value = std::move(item); replaced = true; break; }
+        if (v.keys.size() >= 16) {
+          auto found = places.find(key);
+          if (found != places.end()) v.keys[found->second].second = std::move(item), replaced = true;
+          else places.emplace(key, v.keys.size());
+        } else {
+          for (auto& [held, value] : v.keys)
+            if (held == key) { value = std::move(item); replaced = true; break; }
+        }
         if (!replaced) v.keys.emplace_back(std::move(key), std::move(item));
         space();
         if (at_ < s_.size() && s_[at_] == ',') { ++at_; continue; }

@@ -5,7 +5,9 @@
     doc.structure(); doc.mesh(0); doc.fact(0, "face", 1); doc.close()
 
 Every Core holds one Store and one instance (one thread): use one Core per thread/process, or `Pool` for batches.
-Errors raise `ViewCoreError` carrying vc_last_error's text.
+Errors raise `ViewCoreError` carrying vc_last_error's text. A call the module faults on (a trap: bytes OCCT reads out
+of bounds) raises it too, and the Core starts a fresh instance of the same compiled module: a Doc opened before refuses
+from then on. The module needs WebAssembly's 128-bit SIMD (wasmtime has it on by default).
 """
 from __future__ import annotations
 
@@ -29,6 +31,18 @@ def _i32(v: int) -> int:
     """An unsigned 32-bit value as wasm's i32 argument."""
     v &= 0xFFFFFFFF
     return v - (1 << 32) if v >= 1 << 31 else v
+
+
+def _int32(value, what: str) -> int:
+    """A signed 32-bit argument (an ordinal, a part's place): a whole number in range, never one wrapped."""
+    if isinstance(value, bool) or not isinstance(value, int) or not -(1 << 31) <= value < 1 << 31:
+        raise ViewCoreError(f"{what} is not a 32-bit whole number: {value!r}")
+    return value
+
+
+# The least WebAssembly module with a 128-bit SIMD instruction: an engine that cannot validate it cannot run the core.
+SIMD_PROBE = bytes([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 22, 1, 20, 0, 253, 12]
+                   + [0] * 16 + [11])
 
 
 def make_engine() -> wasmtime.Engine:
@@ -57,8 +71,16 @@ class Core:
                  cache: str | None = None):
         t = time.perf_counter()
         self.engine = engine or make_engine()
+        try:
+            wasmtime.Module.validate(self.engine, SIMD_PROBE)
+        except wasmtime.WasmtimeError:
+            raise ViewCoreError("this wasmtime has no 128-bit SIMD, which the view core needs") from None
         self.module = module or compile_module(self.engine, path, cache)
         self.compile_s = time.perf_counter() - t
+        self.generation = 0  # a Doc opened in another generation is gone with the instance it lived in
+        self._instantiate()
+
+    def _instantiate(self):
         t = time.perf_counter()
         self.store = wasmtime.Store(self.engine)
         linker = wasmtime.Linker(self.engine)
@@ -80,7 +102,17 @@ class Core:
 
     # -- plumbing -----------------------------------------------------------------------------------------------
     def _call(self, name, *args):
-        r = self._x[name](self.store, *[_i32(a) for a in args])
+        return self._raw(name, *[_i32(a) for a in args])
+
+    def _raw(self, name, *args):
+        """A call into the module as it is; a trap starts a fresh instance and is refused."""
+        try:
+            r = self._x[name](self.store, *args)
+        except wasmtime.Trap as trap:
+            self.generation += 1
+            self._instantiate()
+            raise ViewCoreError(f"the view core faulted in {name} ({trap.message.splitlines()[0] if trap.message else 'a trap'}) "
+                                "and was started again; documents opened before are let go") from None
         return None if r is None else r & 0xFFFFFFFF
 
     def _read(self, ptr: int, n: int) -> bytes:
@@ -182,10 +214,19 @@ EXPORTS = {"step": "vc_step", "stl": "vc_stl", "threemf": "vc_3mf", "glb": "vc_g
 
 class Doc:
     def __init__(self, core: Core, handle: int):
-        self.core, self.handle = core, handle
+        self.core, self.handle, self.generation = core, handle, core.generation
+
+    @property
+    def h(self) -> int:
+        """The handle, where the document still lives (not closed, not let go with a faulted instance)."""
+        if not self.handle:
+            raise ViewCoreError("the document is closed")
+        if self.generation != self.core.generation:
+            raise ViewCoreError("the document was let go when the core faulted: open it again")
+        return self.handle
 
     def _j(self, what, name, *args):
-        return json.loads(self.core._result(what, name, self.handle, *args))
+        return json.loads(self.core._result(what, name, self.h, *args))
 
     def structure(self) -> dict:
         return self._j("vc_structure", "vc_structure")
@@ -193,18 +234,18 @@ class Doc:
     def export(self, kind: str) -> bytes:
         """The whole document as a file, as ``cad export`` writes it: ``kind`` one of ``EXPORTS``."""
         name = EXPORTS[kind]
-        return self.core._result(name, name, self.handle)
+        return self.core._result(name, name, self.h)
 
     def shape_bytes(self, part: int) -> bytes:
-        return self.core._result("vc_shape_bytes", "vc_shape_bytes", self.handle, part)
+        return self.core._result("vc_shape_bytes", "vc_shape_bytes", self.h, _int32(part, "a part"))
 
     def mesh(self, part: int) -> bytes:
-        return self.core._result("vc_mesh", "vc_mesh", self.handle, part)
+        return self.core._result("vc_mesh", "vc_mesh", self.h, _int32(part, "a part"))
 
     def mesh_at(self, part: int, tolerance: float | None = None, angle: float | None = None) -> bytes:
         """The part meshed to an export's own ceilings (mm, degrees), never kept: ``mesh_shape(..., tolerance, angle)``."""
-        ptr = self.core._x["vc_mesh_at"](self.core.store, self.handle, part, float(tolerance or 0.0),
-                                         float(angle or 0.0), self.core._len) & 0xFFFFFFFF
+        ptr = self.core._raw("vc_mesh_at", self.h, _int32(part, "a part"), float(tolerance or 0.0), float(angle or 0.0),
+                             _i32(self.core._len))
         if not ptr:
             self.core._fail("vc_mesh_at")
         n = struct.unpack("<I", self.core._read(self.core._len, 4))[0]
@@ -214,48 +255,50 @@ class Doc:
 
     def unmeshed(self, part: int) -> dict:
         """The faces the part's last mesh left without triangles: ``{ordinal: what was said of it}``."""
-        found = self._j("vc_unmeshed", "vc_unmeshed", part)
+        found = self._j("vc_unmeshed", "vc_unmeshed", _int32(part, "a part"))
         return {int(ordinal): text for ordinal, text in found.items()}
 
     def table_bytes(self, part: int, unmeshed=()) -> bytes:
         """The part's whole table with the caller's unmeshed ordinals checked: ``Topology.elements(unmeshed)``."""
-        ordinals = struct.pack(f"<{len(unmeshed)}i", *unmeshed)
+        ordinals = struct.pack(f"<{len(unmeshed)}i", *(_int32(o, "an unmeshed ordinal") for o in unmeshed))
         ptr = self.core._call("vc_alloc", len(ordinals))
         try:
             self.core.memory.write(self.core.store, ordinals, ptr)
-            return self.core._result("vc_table", "vc_table", self.handle, part, ptr, len(unmeshed))
+            return self.core._result("vc_table", "vc_table", self.h, _int32(part, "a part"), ptr, len(unmeshed))
         finally:
             self.core._call("vc_free", ptr)
 
     def fact_bytes(self, part: int, kind, ordinal: int) -> bytes:
         k = KINDS[kind] if isinstance(kind, str) else kind
-        return self.core._result("vc_fact", "vc_fact", self.handle, part, k, ordinal)
+        if k not in (0, 1, 2):
+            raise ViewCoreError(f"no kind {kind!r}: face, edge or vertex")
+        return self.core._result("vc_fact", "vc_fact", self.h, _int32(part, "a part"), k, _int32(ordinal, "an ordinal"))
 
     def fact(self, part: int, kind, ordinal: int) -> dict:
         return json.loads(self.fact_bytes(part, kind, ordinal))
 
     def groups_bytes(self, part: int) -> bytes:
-        return self.core._result("vc_groups", "vc_groups", self.handle, part)
+        return self.core._result("vc_groups", "vc_groups", self.h, _int32(part, "a part"))
 
     def groups(self, part: int) -> dict:
         return json.loads(self.groups_bytes(part))
 
     def elements_bytes(self, part: int) -> bytes:
-        return self.core._result("vc_elements", "vc_elements", self.handle, part)
+        return self.core._result("vc_elements", "vc_elements", self.h, _int32(part, "a part"))
 
     def elements(self, part: int) -> dict:
         return json.loads(self.elements_bytes(part))
 
     def measure_bytes(self, part: int) -> bytes:
-        return self.core._result("vc_measure", "vc_measure", self.handle, part)
+        return self.core._result("vc_measure", "vc_measure", self.h, _int32(part, "a part"))
 
     def measure(self, part: int) -> dict:
         return json.loads(self.measure_bytes(part))
 
     def close(self):
-        if self.handle:
+        if self.handle and self.generation == self.core.generation:
             self.core._call("vc_close", self.handle)
-            self.handle = 0
+        self.handle = 0
 
     def __enter__(self):
         return self

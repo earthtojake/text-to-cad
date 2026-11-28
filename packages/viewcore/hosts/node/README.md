@@ -1,8 +1,11 @@
 # hosts/node (prototype)
 
 The view core under Node: `viewcore.mjs` loads the module with the browser host's own loader and WASI shim, and
-`serve.mjs` is a job server that answers the engine's pool jobs from it, in one long-lived process of a few tens of
-megabytes.
+`serve.mjs` is a job server that answers the engine's pool jobs from it, in one long-lived process. Measured under
+Node 24: about 90 MiB resident at rest; a still's working memory on top, at its peak about 1.0 GiB for 4096 x 4096 at
+4 samples and 1.4 to 1.6 GiB for 8192 x 8192 at 1 sample (each the most a still may ask, 2^26 samples); a module left over
+512 MiB of memory by a job is started again (a module's memory never shrinks), so the process goes back to about
+100 MiB.
 
     node serve.mjs [VIEWCORE_WASM]        # default: ../../dist/viewcore.wasm (scripts/core.sh)
 
@@ -23,8 +26,11 @@ Both ways, on the standard streams:
 A request's header is `{"id": ..., "job": NAME, ..., "payloads": [...]}`. Its answer carries the same `id` and either
 `{"ok": true, ..., "payloads": [...]}` or `{"ok": false, "job": NAME, "error": TEXT}`. What the kernel refuses (bytes
 that are no shape, an ordinal the part has not, a file that is no `.xbf`), a job this does not know and a frame it
-cannot read are each an answer: the server goes on with the next frame. A frame longer than 2 GiB is passed over
-as it comes and answered so.
+cannot read are each an answer: the server goes on with the next frame. A frame longer than 512 MiB is passed over
+as it comes and answered so. A job the module faults on (a WebAssembly trap: OCCT reading damaged shape bytes out of
+bounds) is answered as a refusal that says so, and the module is started again from its compiled code before the next
+job: the parts, documents and buffers it kept are let go, and the next job is answered as by a fresh process. The core
+cannot be interrupted inside a job (one thread, no worker): a deadline is the caller's, by ending the process.
 
 ## Jobs
 
@@ -53,8 +59,9 @@ Each answers what the engine's own job answers, in the engine's bytes: JSON is s
 - **A part's shape bytes** are `mesh.shape_bytes(shape, read=True)`: what `read_xbf` answers for each part, and what
   the engine keeps by the part's geometry key.
 - **`key`** names the part for the jobs that follow: its topology is kept (the last 32 parts), as an engine pool
-  process keeps it, so a table, its measure and a pick's facts read the shape once. Without it the part is opened
-  for the job alone.
+  process keeps it, so a table, its measure and a pick's facts read the shape once. A part is kept under its key and
+  its bytes' sha256, so a key sent with other bytes is another part. Without it the part is opened for the job alone.
+  An ordinal is a whole number from 1 to 2^31 - 1; any other is refused.
 - **`read_xbf`'s structure** is the core's (`vc_structure`): the engine's `Loaded.structure()` once `path` and
   `version` (`"<mtime_ns>-<size>"`) are put in and `tessellation` and `closure`, which the server adds itself, are
   taken out. Colours are lists, as JSON has them, where the engine's own holds tuples. The file stays open for an
@@ -167,6 +174,13 @@ A draw is one of:
 (above everything, a depth of its own: X-ray's and Wireframe's edges). `tools/render_parity.py`'s `scene_of` builds
 the scene from a `render.occt.Scene` shown and framed: the decisions of `Scene.show`, `clip.apply` and `grid.show`
 without the OCCT calls.
+
+What a scene may ask, with room over what cad sends, is checked before anything is drawn and refused by name past it:
+a picture 1 to 16384 pixels a side and at most 2^26 samples in all (4096 x 4096 at 4 samples; a larger still asks
+fewer samples); a texture, the backdrop and the environment at most 16384 a side, their bytes exactly width x height
+of them; a line at most 64 pixels wide; `specularSize` at most 9 and `specularSamples` at most 4096; a shadow map at
+most 4096 a side; `fov` over 0 and under 180 degrees; given planes `0 < near < far` in perspective (`near < far`
+orthographic); counts, places and lengths whole numbers; `format` one of the three.
 
 ### How it is held to OpenGL's picture
 

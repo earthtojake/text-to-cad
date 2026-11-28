@@ -14,9 +14,11 @@
 //   exportBytes { doc, format }          -> Uint8Array: the document as a file (format: step, stl, threemf, glb)
 //   close  { doc }
 //   memory {}                            -> { memoryBytes }
+// A call the module faults on (a WebAssembly trap) is refused, and the module is started again from its compiled
+// code: every doc opened before is let go (it answers "no such doc"), and the page opens what it needs again.
 // `ms` is the time the worker spent in the call. Once its handler is set the worker says so, once: { ready: true }
 // (a page waits for it before its first request, so none is sent to a worker still loading its modules).
-import { Core } from "./viewcore.js";
+import { Core, isFault } from "./viewcore.js";
 
 let core = null;
 const docs = new Map();
@@ -62,7 +64,18 @@ self.onmessage = async (e) => {
     const transfer = result instanceof Uint8Array ? [result.buffer] : [];
     self.postMessage({ id: m.id, ok: true, result, ms: performance.now() - t }, transfer);
   } catch (err) {
-    self.postMessage({ id: m.id, ok: false, error: String(err && err.message || err) });
+    let error = String(err && err.message || err);
+    if (core && isFault(err)) {
+      docs.clear();
+      try {
+        await core.renew();
+        error = `the view core faulted (${error}) and was started again; the documents opened before are let go`;
+      } catch (again) {
+        core = null;
+        error = `the view core faulted (${error}) and could not be started again: ${again && again.message || again}`;
+      }
+    }
+    self.postMessage({ id: m.id, ok: false, error });
   }
 };
 

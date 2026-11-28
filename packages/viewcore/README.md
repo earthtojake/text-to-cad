@@ -25,6 +25,10 @@ pictures against the OpenGL renderer's.
 In cad's Python, as now: building and rebuilding models (build123d), writing the `.xbf`, the server and its
 caches, sharing, the command line, and every integration (KiCad, MuJoCo, FEA, DFM, renders).
 
+The module needs WebAssembly's standard (exnref) exceptions and its 128-bit SIMD (the stills' rasterizer lights four
+pixels at a time), with no fallback: Node 22 or later, and a browser or wasmtime with both; a host on an engine without
+SIMD refuses in one line before compiling the module (SIMD alone: Node 16.4, Chrome 91, Firefox 89, Safari 16.4).
+
 The rules are cad's: `packages/cad/src/cad/engine/mesh.py`, `mesh_format.py`, `document.py`, `mechanism.py` (read and
 block), `kernel/bounds.py` and the writers in `export/` are the reference until the core replaces them. `include/viewcore.h` is the ABI.
 
@@ -35,7 +39,7 @@ block), `kernel/bounds.py` and the writers in `export/` are the reference until 
 | `include/viewcore.h` | The C ABI |
 | `src/` | The core |
 | `scripts/occt.sh` | OCCT's static libraries for WebAssembly, the subset the core links |
-| `scripts/core.sh` | The core linked into `dist/viewcore.wasm` (the stills' rasterizer in WebAssembly's 128-bit SIMD, which Node, current browsers and wasmtime run) |
+| `scripts/core.sh` | The core linked into `dist/viewcore.wasm` |
 | `hosts/wasmtime/`, `hosts/web/` | Loading the module in Python (wasmtime) and in a page |
 | `hosts/node/` | Loading it in Node, and a job server that answers the engine's pool jobs (meshing, tables, measures, a pick's facts, reading and exporting an `.xbf`, drawing a still) from it |
 | `tools/` | The core built natively, and the checks that hold it to cad's own code: the pool jobs (`pool_parity.py`), the stills (`render_parity.py`) |

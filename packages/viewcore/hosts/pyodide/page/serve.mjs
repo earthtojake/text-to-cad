@@ -37,7 +37,8 @@ http.createServer((request, response) => {
   for (const [prefix, folder] of ROUTES) {
     if (!at.startsWith(prefix)) continue;
     const file = path.join(folder, at.slice(prefix.length) || "index.html");
-    if (!file.startsWith(folder) || !fs.existsSync(file) || !fs.statSync(file).isFile()) break;
+    const inside = path.relative(folder, file);
+    if (inside.startsWith("..") || path.isAbsolute(inside) || !fs.existsSync(file) || !fs.statSync(file).isFile()) break;
     return send(fs.readFileSync(file), TYPES[path.extname(file)] || "application/octet-stream");
   }
   response.writeHead(404); response.end("not found");

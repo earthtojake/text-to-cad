@@ -10,6 +10,33 @@
 
 export class ViewCoreError extends Error {}
 
+/**
+ * Whether `error` is the module faulting (a WebAssembly trap: memory out of bounds, unreachable, the stack
+ * overflowed) rather than refusing: the instance's memory and its stack pointer are left as the trap found them, so
+ * it must not run again. Core.renew() starts a fresh one from the same compiled module.
+ */
+export function isFault(error) {
+  return error instanceof WebAssembly.RuntimeError || (error instanceof RangeError && /call stack/i.test(error.message));
+}
+
+// The least WebAssembly module with a 128-bit SIMD instruction: an engine that cannot validate it cannot run the core.
+const SIMD_PROBE = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 22, 1, 20, 0,
+  253, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11]);
+
+/** Refused in one line where this WebAssembly engine has no 128-bit SIMD, which the module is built with. */
+export function needSimd() {
+  if (!WebAssembly.validate(SIMD_PROBE)) {
+    throw new ViewCoreError("this WebAssembly engine has no 128-bit SIMD, which the view core needs (Node 16.4, Chrome 91, " +
+      "Firefox 89, Safari 16.4, wasmtime 0.33 or later)");
+  }
+}
+
+// An int32 the core is given (an ordinal, a part's place): a whole number in range, never one ToInt32 would wrap.
+function int32(value, what) {
+  if (!Number.isInteger(value) || value < -(2 ** 31) || value >= 2 ** 31) throw new ViewCoreError(`${what} is not a 32-bit whole number: ${value}`);
+  return value;
+}
+
 const KINDS = { face: 0, edge: 1, vertex: 2 };
 const ERRNO = { SUCCESS: 0, BADF: 8, INVAL: 28, NOSYS: 52 };
 
@@ -67,6 +94,7 @@ function makeWasi(getMemory, log) {
 export class Core {
   /** Load from a URL (streaming compile when the server sends application/wasm), or from bytes / a Module. */
   static async load(source, opts = {}) {
+    needSimd();
     const t0 = performance.now();
     let module, fetchMs = 0, bytes = 0;
     if (source instanceof WebAssembly.Module) {
@@ -112,6 +140,8 @@ export class Core {
     const instance = await WebAssembly.instantiate(module, imports);
     memory = instance.exports.memory;
     const core = new Core(instance, memory);
+    core.module = module;
+    core.opts = opts;
     if (instance.exports._initialize) instance.exports._initialize();
     core.instantiateMs = performance.now() - t0;
     if (core.x.vc_abi_version() !== 4) throw new ViewCoreError("unsupported ABI version " + core.x.vc_abi_version());
@@ -123,9 +153,24 @@ export class Core {
     this.x = instance.exports;
     this.memory = memory;
     this.module = null;
+    this.opts = {};
+    this.generation = 0; // a Doc opened in another generation is gone with the instance it lived in
     this.compileMs = 0;
     this.instantiateMs = 0;
     this.lenPtr = this.x.vc_alloc(4) >>> 0; // out-length cell, reused
+  }
+
+  /**
+   * A fresh instance of the same compiled module in place of this one, after a fault (isFault): its memory, its
+   * documents and parts are let go, and a Doc opened before refuses from now on.
+   */
+  async renew() {
+    const fresh = await Core.instantiate(this.module, this.opts);
+    this.instance = fresh.instance;
+    this.x = fresh.x;
+    this.memory = fresh.memory;
+    this.lenPtr = fresh.lenPtr;
+    this.generation += 1;
   }
 
   get memoryBytes() { return this.memory.buffer.byteLength; }
@@ -225,39 +270,50 @@ const json = (u8) => JSON.parse(new TextDecoder().decode(u8));
 export const EXPORTS = Object.freeze({ step: "vc_step", stl: "vc_stl", threemf: "vc_3mf", glb: "vc_glb" });
 
 export class Doc {
-  constructor(core, handle) { this.core = core; this.handle = handle; }
-  structureBytes() { return this.core.result("vc_structure", this.handle); }
+  constructor(core, handle) { this.core = core; this.handle = handle; this.generation = core.generation; }
+  /** The handle, where the document still lives (not closed, not let go with a faulted instance). */
+  get h() {
+    if (!this.handle) throw new ViewCoreError("the document is closed");
+    if (this.generation !== this.core.generation) throw new ViewCoreError("the document was let go when the core faulted: open it again");
+    return this.handle;
+  }
+  structureBytes() { return this.core.result("vc_structure", this.h); }
   structure() { return json(this.structureBytes()); }
-  shapeBytes(part) { return this.core.result("vc_shape_bytes", this.handle, part); }
-  mesh(part) { return this.core.result("vc_mesh", this.handle, part); }
+  shapeBytes(part) { return this.core.result("vc_shape_bytes", this.h, int32(part, "a part")); }
+  mesh(part) { return this.core.result("vc_mesh", this.h, int32(part, "a part")); }
   /** The part meshed to an export's own ceilings (mm, degrees; none where not a positive number); never kept. */
   meshAt(part, tolerance, angle) {
-    return this.core.result("vc_mesh_at", this.handle, part, tolerance > 0 ? tolerance : 0, angle > 0 ? angle : 0);
+    return this.core.result("vc_mesh_at", this.h, int32(part, "a part"), tolerance > 0 ? tolerance : 0, angle > 0 ? angle : 0);
   }
   /** The faces the part's last mesh left without triangles, each with what was said of it: { ordinal: text }. */
-  unmeshedBytes(part) { return this.core.result("vc_unmeshed", this.handle, part); }
+  unmeshedBytes(part) { return this.core.result("vc_unmeshed", this.h, int32(part, "a part")); }
   unmeshed(part) { return json(this.unmeshedBytes(part)); }
   /** The part's whole table with the caller's unmeshed ordinals checked (the engine's `elements(unmeshed)`). */
   tableBytes(part, unmeshed = []) {
-    const ordinals = new Int32Array(unmeshed);
+    const ordinals = Int32Array.from(unmeshed, (ordinal) => int32(ordinal, "an unmeshed ordinal"));
     return this.core.given(new Uint8Array(ordinals.buffer), (ptr) =>
-      this.core.result("vc_table", this.handle, part, ptr, ordinals.length));
+      this.core.result("vc_table", this.h, int32(part, "a part"), ptr, ordinals.length));
   }
   factBytes(part, kind, ordinal) {
-    return this.core.result("vc_fact", this.handle, part, typeof kind === "string" ? KINDS[kind] : kind, ordinal);
+    const code = typeof kind === "string" ? KINDS[kind] : kind;
+    if (code !== 0 && code !== 1 && code !== 2) throw new ViewCoreError(`no kind ${kind}: face, edge or vertex`);
+    return this.core.result("vc_fact", this.h, int32(part, "a part"), code, int32(ordinal, "an ordinal"));
   }
   fact(part, kind, ordinal) { return json(this.factBytes(part, kind, ordinal)); }
-  groupsBytes(part) { return this.core.result("vc_groups", this.handle, part); }
+  groupsBytes(part) { return this.core.result("vc_groups", this.h, int32(part, "a part")); }
   groups(part) { return json(this.groupsBytes(part)); }
-  elementsBytes(part) { return this.core.result("vc_elements", this.handle, part); }
+  elementsBytes(part) { return this.core.result("vc_elements", this.h, int32(part, "a part")); }
   elements(part) { return json(this.elementsBytes(part)); }
-  measureBytes(part) { return this.core.result("vc_measure", this.handle, part); }
+  measureBytes(part) { return this.core.result("vc_measure", this.h, int32(part, "a part")); }
   measure(part) { return json(this.measureBytes(part)); }
   /** The whole document as a file, as `cad export` writes it: `format` one of EXPORTS' keys. */
   exportBytes(format) {
     const fn = EXPORTS[format];
     if (!fn) throw new ViewCoreError(`the core exports no ${format}`);
-    return this.core.result(fn, this.handle);
+    return this.core.result(fn, this.h);
   }
-  close() { if (this.handle) { this.core.x.vc_close(this.handle); this.handle = 0; } }
+  close() {
+    if (this.handle && this.generation === this.core.generation) this.core.x.vc_close(this.handle);
+    this.handle = 0;
+  }
 }

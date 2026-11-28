@@ -55,6 +55,9 @@ inline T load(const uint8_t* at) {
 }
 
 inline float clamp01(float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+// A texel coordinate a whole number of texels can stand for: itself within 2^24 texels, else (beyond any texture, or
+// no number) 0, so the index made of it is never out of an int's range.
+inline float reachable(float v) { return v >= -16777216.0f && v <= 16777216.0f ? v : 0.0f; }
 
 // Four pixels lit at once: four lanes of single floats, each lane doing exactly what one pixel's lighting does, in
 // the same order, so a pixel's colour is the same however it was lit (WebAssembly's 128-bit SIMD where the module
@@ -562,10 +565,40 @@ double need(const Value& from, const char* name) {
   if (!value || !value->is_number()) throw std::invalid_argument(std::string("the scene has no ") + name);
   return value->number();
 }
+// What the scene may ask, each with room over what cad sends: a picture's side and its samples in all (cad draws
+// at most 16384 a side, a still at most 8 samples; the buffers are 8 bytes a sample), a texture's or a picture's
+// side, a line's width in pixels, the specular map's side (2^SPECULAR_POW2_MOST) and its samples a texel (Preview
+// bakes 4096), a shadow map's side (Preview asks 4096).
+const int64_t SIDE_MOST = 16384;
+const int64_t SAMPLES_MOST = (int64_t)1 << 26;  // a picture's samples in all: 512 MiB of depth and colour
+const int64_t TEXTURE_SIDE_MOST = 16384;
+const double WIDTH_MOST = 64;
+const int SPECULAR_POW2_MOST = 9;
+const int SPECULAR_SAMPLES_MOST = 4096;
+const int SHADOW_MOST = 4096;
+
+// A whole number the scene gives, from `low` to `high`; anything else (no number, a fraction, out of range) is
+// refused by its name.
+int64_t whole(const Value* value, const std::string& name, int64_t low, int64_t high) {
+  if (!value || !value->is_number()) throw std::invalid_argument("the scene's " + name + " is no number");
+  const double v = value->number();
+  if (!(v >= (double)low && v <= (double)high) || v != std::floor(v))
+    throw std::invalid_argument("the scene's " + name + " is not a whole number from " + std::to_string(low) + " to " +
+                                std::to_string(high));
+  return (int64_t)v;
+}
+int64_t whole_or(const Value* value, const std::string& name, int64_t low, int64_t high, int64_t fallback) {
+  return value ? whole(value, name, low, high) : fallback;
+}
+
 void numbers(const Value* value, double* out, size_t count, const char* name) {
   if (!value || value->kind != Value::LIST || value->items.size() < count)
     throw std::invalid_argument(std::string("the scene's ") + name + " is not " + std::to_string(count) + " numbers");
-  for (size_t at = 0; at < count; ++at) out[at] = value->items[at].number();
+  for (size_t at = 0; at < count; ++at) {
+    if (!value->items[at].is_number() || !std::isfinite(value->items[at].number()))
+      throw std::invalid_argument(std::string("the scene's ") + name + " is not " + std::to_string(count) + " numbers");
+    out[at] = value->items[at].number();
+  }
 }
 std::string text(const Value* value, const char* fallback) {
   return value && value->kind == Value::STRING ? value->text : std::string(fallback);
@@ -770,7 +803,8 @@ struct Renderer {
   // --- reading ---
 
   Span payload(const Value* index, const char* name) const {
-    if (!index || !index->is_number() || index->number() < 0 || index->number() >= payloads.size())
+    if (!index || !index->is_number() || !(index->number() >= 0) || index->number() >= (double)payloads.size() ||
+        index->number() != std::floor(index->number()))
       throw std::invalid_argument(std::string("the scene's ") + name + " names no payload");
     return payloads[(size_t)index->number()];
   }
@@ -784,13 +818,16 @@ struct Renderer {
   }
 
   void read(const Value& scene, const uint8_t* blob, size_t size) {
-    width = (int)need(scene, "width"), height = (int)need(scene, "height");
-    if (width < 1 || height < 1 || width > 16384 || height > 16384)
-      throw std::invalid_argument("the scene's picture is not 1 to 16384 pixels a side");
-    samples = (int)number(scene.get("samples"), 8);
+    width = (int)whole(scene.get("width"), "width", 1, SIDE_MOST);
+    height = (int)whole(scene.get("height"), "height", 1, SIDE_MOST);
+    samples = (int)whole_or(scene.get("samples"), "samples", 1, 8, 8);
     if (shadow_pass) width = height = shadow_size, samples = 1;
     if (samples != 1 && samples != 2 && samples != 4 && samples != 8)
       throw std::invalid_argument("the scene's samples are not 1, 2, 4 or 8");
+    if ((int64_t)width * height * samples > SAMPLES_MOST)
+      throw std::invalid_argument("the scene's picture is " + std::to_string(width) + " x " + std::to_string(height) +
+                                  " at " + std::to_string(samples) + " samples, more than " +
+                                  std::to_string(SAMPLES_MOST) + " samples in all: fewer samples, or a smaller picture");
     // OpenGL's y runs up the picture, and its samples and its fill rule with it.
     for (int s = 0; s < samples; ++s) {
       sx[s] = SAMPLE_AT[samples][s][0] * 16, sy[s] = (16 - SAMPLE_AT[samples][s][1]) * 16;
@@ -803,12 +840,12 @@ struct Renderer {
       numbers(scene.get("background"), three, 3, "background");
       for (int c = 0; c < 3; ++c) background[c] = (float)three[c];
     }
-    size_t at = 0;
+    uint64_t at = 0;
     if (const Value* lengths = scene.get("payloads"))
       for (const Value& length : lengths->items) {
-        size_t bytes = (size_t)length.number();
+        const uint64_t bytes = (uint64_t)whole(&length, "payload's length", 0, (int64_t)UINT32_MAX);
         if (at + bytes > size) throw std::invalid_argument("the scene's payloads are longer than what came with it");
-        payloads.push_back({blob + at, bytes});
+        payloads.push_back({blob + at, (size_t)bytes});
         at += bytes;
       }
     if (const Value* list = scene.get("meshes"))
@@ -816,8 +853,9 @@ struct Renderer {
     if (const Value* shared = scene.get("matrices")) matrices = payload(shared, "matrices");
     if (const Value* picture = scene.get("backdrop")) {
       backdrop = payload(picture->get("payload"), "backdrop");
-      backdrop_width = (int)need(*picture, "width"), backdrop_height = (int)need(*picture, "height");
-      if (backdrop_width < 1 || backdrop_height < 1 || (size_t)backdrop_width * backdrop_height * 3 != backdrop.size)
+      backdrop_width = (int)whole(picture->get("width"), "backdrop's width", 1, TEXTURE_SIDE_MOST);
+      backdrop_height = (int)whole(picture->get("height"), "backdrop's height", 1, TEXTURE_SIDE_MOST);
+      if ((uint64_t)backdrop_width * (uint64_t)backdrop_height * 3 != backdrop.size)
         throw std::invalid_argument("the scene's backdrop is not width x height RGB bytes");
     }
     if (const Value* plane = scene.get("clip")) {
@@ -826,8 +864,12 @@ struct Renderer {
     }
     read_lights(scene);
     const Value* draw = scene.get("draw");
+    if (draw && draw->kind != Value::LIST) throw std::invalid_argument("the scene's draw is not a list");
     if (draw)
-      for (const Value& entry : draw->items) read_item(entry);
+      for (const Value& entry : draw->items) {
+        if (entry.kind != Value::OBJECT) throw std::invalid_argument("the scene draws something that is no object");
+        read_item(entry);
+      }
     if (!shadow_pass) read_camera(scene);
   }
 
@@ -845,10 +887,8 @@ struct Renderer {
         for (int c = 0; c < 3; ++c) found.to[c] = (float)(-d[c] / m);
         found.intensity = (float)number(entry.get("intensity"), 1);
         if (const Value* cast = entry.get("shadow")) {
-          found.shadow_size = (int)number(cast->get("resolution"), 4096);
+          found.shadow_size = (int)whole_or(cast->get("resolution"), "shadow map's side", 16, SHADOW_MOST, 4096);
           found.shadow_bias = (float)number(cast->get("bias"), 0.002);
-          if (found.shadow_size < 16 || found.shadow_size > 8192)
-            throw std::invalid_argument("the scene's shadow map is not 16 to 8192 texels a side");
           if (shadow_light < 0) shadow_light = (int)lights.size();
         }
         lights.push_back(found);
@@ -857,13 +897,14 @@ struct Renderer {
       lit = true;
       if (const Value* image = light->get("environment")) {
         Span span = payload(image->get("payload"), "environment");
-        int w = (int)need(*image, "width"), h = (int)need(*image, "height");
-        if (w < 1 || h < 1 || (size_t)w * h * 12 != span.size)
+        const int w = (int)whole(image->get("width"), "environment's width", 1, TEXTURE_SIDE_MOST);
+        const int h = (int)whole(image->get("height"), "environment's height", 1, TEXTURE_SIDE_MOST);
+        if ((uint64_t)w * (uint64_t)h * 12 != span.size)
           throw std::invalid_argument("the scene's environment is not width x height x 3 floats");
-        int pow2 = (int)number(image->get("specularSize"), SPECULAR_POW2);
-        int baked = (int)number(image->get("specularSamples"), SPECULAR_SAMPLES);
-        if (pow2 < 1 || pow2 > 11 || baked < 1 || baked > 65536)
-          throw std::invalid_argument("the scene's environment is baked at no size OCCT bakes one");
+        const int pow2 = (int)whole_or(image->get("specularSize"), "environment's specularSize", 1, SPECULAR_POW2_MOST,
+                                       SPECULAR_POW2);
+        const int baked = (int)whole_or(image->get("specularSamples"), "environment's specularSamples", 1,
+                                        SPECULAR_SAMPLES_MOST, SPECULAR_SAMPLES);
         if (!shadow_pass) env = &environment(span.data, span.size, w, h, pow2, baked);
         ambient = (float)number(image->get("intensity"), 1);
       }
@@ -883,11 +924,18 @@ struct Renderer {
     throw std::invalid_argument("the scene has no layer " + name);
   }
 
+  static double line_width(const Value& entry) {
+    const double width = number(entry.get("width"), 1);
+    if (!(width > 0 && width <= WIDTH_MOST))
+      throw std::invalid_argument("a line's width is not over 0 and at most " + std::to_string((int)WIDTH_MOST) + " pixels");
+    return width;
+  }
+
   void read_texture(Item& item, const Value& picture) {
     item.texture = payload(picture.get("payload"), "texture");
-    item.texture_width = (int)need(picture, "width"), item.texture_height = (int)need(picture, "height");
-    if (item.texture_width < 1 || item.texture_height < 1 ||
-        (size_t)item.texture_width * item.texture_height * 4 != item.texture.size)
+    item.texture_width = (int)whole(picture.get("width"), "texture's width", 1, TEXTURE_SIDE_MOST);
+    item.texture_height = (int)whole(picture.get("height"), "texture's height", 1, TEXTURE_SIDE_MOST);
+    if ((uint64_t)item.texture_width * (uint64_t)item.texture_height * 4 != item.texture.size)
       throw std::invalid_argument("the scene's texture is not width x height RGBA bytes");
     item.textured = true;
   }
@@ -898,8 +946,7 @@ struct Renderer {
     std::memcpy(item.matrix, identity, sizeof identity);
     if (const Value* given = entry.get("matrix")) {
       if (given->is_number()) {  // its place in the scene's "matrices"
-        double at = given->number();
-        if (at < 0 || (at + 1) * 128 > matrices.size) throw std::invalid_argument("the scene has no matrix " + given->text);
+        const int64_t at = whole(given, "matrix's place", 0, (int64_t)(matrices.size / 128) - 1);
         for (int k = 0; k < 16; ++k) item.matrix[k] = load<double>(matrices.data + (size_t)at * 128 + k * 8);
       } else {
         numbers(given, item.matrix, 16, "matrix");
@@ -967,10 +1014,10 @@ struct Renderer {
       numbers(entry.get("color"), four, 3, "color");
       for (int c = 0; c < 3; ++c) item.color[c] = (float)four[c];
       item.flat = flat_of(item.color);
-      item.width = (float)number(entry.get("width"), 1);
+      item.width = (float)line_width(entry);
       uint32_t classes = 0;
       if (const Value* list = entry.get("classes"))
-        for (const Value& code : list->items) classes |= 1u << ((unsigned)code.number() & 31u);
+        for (const Value& code : list->items) classes |= 1u << (unsigned)whole(&code, "edge class", 0, 31);
       else classes = ~0u;
       place_edges(item, classes);
     } else if ((named = entry.get("lines"))) {
@@ -978,7 +1025,7 @@ struct Renderer {
       numbers(entry.get("color"), four, 3, "color");
       for (int c = 0; c < 3; ++c) item.color[c] = (float)four[c];
       item.flat = flat_of(item.color);
-      item.width = (float)number(entry.get("width"), 1);
+      item.width = (float)line_width(entry);
       const Value* cut = entry.get("clip");
       item.cut = !(cut && cut->kind == Value::BOOL && !cut->flag);
       place_triangles(item, *named);
@@ -1135,9 +1182,15 @@ struct Renderer {
     up[0] = back[1] * right[2] - back[2] * right[1];
     up[1] = back[2] * right[0] - back[0] * right[2];
     up[2] = back[0] * right[1] - back[1] * right[0];
-    if (perspective) focal = (height / 2.0) / std::tan(need(*camera, "fov") * PI / 360.0);
-    else pixel = need(*camera, "height") / height;
-    if (!(perspective ? focal > 0 : pixel > 0)) throw std::invalid_argument("the scene's camera sees nothing");
+    if (perspective) {
+      const double fov = need(*camera, "fov");
+      if (!(fov > 0 && fov < 180)) throw std::invalid_argument("the scene's camera's fov is not over 0 and under 180 degrees");
+      focal = (height / 2.0) / std::tan(fov * PI / 360.0);
+    } else {
+      pixel = need(*camera, "height") / height;
+    }
+    if (!(perspective ? focal > 0 && std::isfinite(focal) : pixel > 0 && std::isfinite(pixel)))
+      throw std::invalid_argument("the scene's camera sees nothing");
     // Graphic3d_Camera::ZFitAll at scale 1: the box of all that is drawn between the planes; in perspective the
     // near plane no nearer than the primary box's middle allows.
     auto reach = [&](const double* lo, const double* hi, double& least, double& most) {
@@ -1160,9 +1213,15 @@ struct Renderer {
       if (near < 1e-9) near = 1e-9;
       if (far <= near) far = near * 2;
     }
-    if (const Value* given = camera->get("near")) near = given->number();
-    if (const Value* given = camera->get("far")) far = given->number();
     if (!(far > near)) far = near + 1;
+    const Value *given_near = camera->get("near"), *given_far = camera->get("far");
+    if (given_near || given_far) {  // the planes given: in front of the eye in perspective, the far beyond the near
+      if (given_near) near = need(*camera, "near");
+      if (given_far) far = need(*camera, "far");
+      if (!std::isfinite(near) || !std::isfinite(far) || !(far > near) || (perspective && !(near > 0)))
+        throw std::invalid_argument(perspective ? "the scene's camera's near and far are not 0 < near < far"
+                                                : "the scene's camera's near and far are not near < far");
+    }
   }
 
   // A point of the model, placed: view coordinates (right, up, depth along the view).
@@ -1427,6 +1486,9 @@ struct Renderer {
           for (const Value& range : wait.ranges->items) {
             double pair[2];
             numbers(&range, pair, 2, "range");
+            if (!(pair[0] >= 0 && pair[1] >= 0 && pair[0] <= UINT32_MAX && pair[1] <= UINT32_MAX) ||
+                pair[0] != std::floor(pair[0]) || pair[1] != std::floor(pair[1]))
+              throw std::invalid_argument("a face's range is not two whole numbers");
             run((uint32_t)pair[0], (uint32_t)pair[1]);
           }
         } else {
@@ -1836,7 +1898,7 @@ struct Renderer {
   // A texture's colour at a coordinate: sRGB texels decoded, then bilinear, clamped at its edges; v up.
   inline void texel(const Item& m, float u, float v, float out[4]) const {
     const Tone& t = tone();
-    float fx = u * m.texture_width - 0.5f, fy = (1.0f - v) * m.texture_height - 0.5f;
+    float fx = reachable(u * m.texture_width - 0.5f), fy = reachable((1.0f - v) * m.texture_height - 0.5f);
     int x0 = (int)std::floor(fx), y0 = (int)std::floor(fy);
     float tx = fx - x0, ty = fy - y0;
     int x1, y1;
@@ -1861,9 +1923,12 @@ struct Renderer {
   inline void texel4(const Item& m, f4 u, f4 v, int count, f4 out[4]) const {
     const Tone& t = tone();
     const f4 half = splat(0.5f), one = splat(1.0f);
-    const f4 fx = u * splat((float)m.texture_width) - half, fy = (one - v) * splat((float)m.texture_height) - half;
+    f4 fx = u * splat((float)m.texture_width) - half, fy = (one - v) * splat((float)m.texture_height) - half;
     f4 low_x, low_y;
-    for (int k = 0; k < 4; ++k) low_x[k] = std::floor(fx[k]), low_y[k] = std::floor(fy[k]);
+    for (int k = 0; k < 4; ++k) {
+      fx[k] = reachable(fx[k]), fy[k] = reachable(fy[k]);
+      low_x[k] = std::floor(fx[k]), low_y[k] = std::floor(fy[k]);
+    }
     const f4 tx = fx - low_x, ty = fy - low_y;
     f4 ta[4], tb[4], tc[4], td[4];
     for (int k = 0; k < 4; ++k) {
@@ -1871,9 +1936,14 @@ struct Renderer {
         for (int c = 0; c < 4; ++c) ta[c][k] = tb[c][k] = tc[c][k] = td[c][k] = 0;
         continue;
       }
-      int x0 = (int)low_x[k], y0 = (int)low_y[k];
-      int x1 = std::min(m.texture_width - 1, std::max(0, x0 + 1)), y1 = std::min(m.texture_height - 1, std::max(0, y0 + 1));
-      x0 = std::min(m.texture_width - 1, std::max(0, x0)), y0 = std::min(m.texture_height - 1, std::max(0, y0));
+      int x0 = (int)low_x[k], y0 = (int)low_y[k], x1, y1;
+      if (m.repeat) {  // GL_REPEAT, as texel
+        const int w = m.texture_width, h = m.texture_height;
+        x1 = ((x0 + 1) % w + w) % w, y1 = ((y0 + 1) % h + h) % h, x0 = (x0 % w + w) % w, y0 = (y0 % h + h) % h;
+      } else {
+        x1 = std::min(m.texture_width - 1, std::max(0, x0 + 1)), y1 = std::min(m.texture_height - 1, std::max(0, y0 + 1));
+        x0 = std::min(m.texture_width - 1, std::max(0, x0)), y0 = std::min(m.texture_height - 1, std::max(0, y0));
+      }
       const uint8_t* a = m.texture.data + ((size_t)y0 * m.texture_width + x0) * 4;
       const uint8_t* b = m.texture.data + ((size_t)y0 * m.texture_width + x1) * 4;
       const uint8_t* c = m.texture.data + ((size_t)y1 * m.texture_width + x0) * 4;
@@ -2250,7 +2320,7 @@ struct Renderer {
       if (item.layer != 0 || item.blend) continue;
       if (item.kind != TRIANGLES && item.count) depth_written = true;
       if (item.kind == FACES) {
-        const bool flat = item.shading == UNLIT;
+        const bool flat = item.shading == UNLIT && !item.textured;  // one colour all over
         for (uint32_t at = item.first; at < item.first + item.count; ++at) {
           const uint32_t id = flat ? item.flat : at + 1;
           raster_triangle(triangles[at], item.offset_factor, item.offset_units, has_clip && item.cut,
@@ -2713,8 +2783,21 @@ std::string render(const std::string& scene_text, const uint8_t* blob, size_t si
   RENDER_CLOCK(started);
   Value scene = Value::parse(scene_text);
   if (scene.kind != Value::OBJECT) throw std::invalid_argument("the scene is no object");
+  const std::string format = text(scene.get("format"), "rgba");
+  if (format != "rgba" && format != "png" && format != "depth")
+    throw std::invalid_argument("the scene asks for a picture as " + format + ": rgba, png or depth");
+  // A very large still's buffers are given back however it ends (and once drawn, before its picture is written out);
+  // an ordinary one's are kept for the next.
+  struct GiveBack {
+    static void now() {
+      if (Renderer::depths().capacity() > (size_t)1 << 24) {
+        std::vector<float>().swap(Renderer::depths());
+        std::vector<uint32_t>().swap(Renderer::colors());
+      }
+    }
+    ~GiveBack() { now(); }
+  } give_back;
   Renderer renderer;
-  std::string format = text(scene.get("format"), "rgba");
   renderer.depth_only = format == "depth";
   renderer.read(scene, blob, size);
   RENDER_SAY("read", started);
@@ -2761,6 +2844,7 @@ std::string render(const std::string& scene_text, const uint8_t* blob, size_t si
   renderer.background_stored = tone().pack(clamp01(renderer.background[0]), clamp01(renderer.background[1]),
                                            clamp01(renderer.background[2]));
   renderer.draw();
+  if (format != "depth") GiveBack::now();
   RENDER_CLOCK(writing);
   std::string out;
   if (format == "depth") {
@@ -2771,18 +2855,11 @@ std::string render(const std::string& scene_text, const uint8_t* blob, size_t si
     out.assign((const char*)values.data(), values.size() * 4);
   } else if (format == "png") {
     out = png(renderer.picture, renderer.width, renderer.height);
-  } else if (format == "rgba") {
-    out.assign((const char*)renderer.picture.data(), renderer.picture.size() * 4);
   } else {
-    throw std::invalid_argument("the scene asks for a picture as " + format + ": rgba, png or depth");
+    out.assign((const char*)renderer.picture.data(), renderer.picture.size() * 4);
   }
   RENDER_SAY("write", writing);
   RENDER_SAY("all", started);
-  // A very large still's buffers are given back; an ordinary one's are kept for the next.
-  if (Renderer::depths().capacity() > (size_t)1 << 24) {
-    std::vector<float>().swap(Renderer::depths());
-    std::vector<uint32_t>().swap(Renderer::colors());
-  }
   return out;
 }
 
