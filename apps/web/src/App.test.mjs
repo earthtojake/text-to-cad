@@ -108,6 +108,11 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(viewer().host.fileActions.platform, 'darwin', 'Reveal is labeled for the machine the server runs on');
     await viewer().host.fileActions.perform.reveal({ path: '/m/one.step', kind: 'file' });
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/reveal'), [['/api/v1/local/reveal', { path: '/m/one.step' }]]);
+    // A computer with no file manager to open (a Linux without xdg-open: the server's `reveal`) is offered none.
+    const linux = { start: '/m', pick: true, pickAny: false, platform: 'linux', reveal: false };
+    await act(() => root.render(createElement(App, { client, server: linux, tabStore })));
+    assert.deepEqual(Object.keys(viewer().host.fileActions.perform).sort(), ['copy-link', 'copy-path']);
+    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, pickAny: true, platform: 'darwin' }, tabStore })));
     assert.equal(viewer().host.links.version, '0.7.4');
     // Navigation is the shared viewer's: the host only shows what it is asked to. What it adds is what only a page
     // knows: each target's own address, and Open in new tab.

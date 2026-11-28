@@ -26,6 +26,7 @@ from urllib.parse import quote
 import cad_server
 from cad_server._internal.picker import FilePicker, PickerFailed
 from cad_server.viewer import handler as handler_module
+from cad_server.viewer import reveal
 from cad_server.viewer.http_app import create_cad_app, host_is_allowed, hostname_only
 
 
@@ -229,10 +230,12 @@ class ServerInfo(HttpLayerTestCase):
         self.assertIsInstance(info["pick"], bool)
         # One chooser of a file or a folder (a Mac's), where the computer has a chooser: Import is then one button.
         self.assertEqual(info["pickAny"], info["pick"] and sys.platform == "darwin")
+        # Whether it has a file manager Reveal can open: the page offers Reveal only where it does.
+        self.assertEqual(info["reveal"], reveal.available())
         # The release the engine runs: a page that reconnects to another reloads into it.
         self.assertEqual(info["release"], cad_server.__version__)
         self.assertEqual(list(info), ["app", "release", "identityToken", "platform", "user", "home",
-                                      "start", "pick", "pickAny", "port", "pid", "instance", "cadUpdate", "cadNotices",
+                                      "start", "pick", "reveal", "pickAny", "port", "pid", "instance", "cadUpdate", "cadNotices",
                                       "kinds"])
         self.assertEqual(headers["cache-control"], "no-store")
         # This start of the engine: a page that sees another one reloads. One per process, so it is
@@ -315,10 +318,23 @@ class Documents(HttpLayerTestCase):
             with self.subTest(file=missing):
                 self.assertEqual(self.by_path(missing)[1]["documents"], [])
 
+    def test_the_id_of_a_file_that_went_says_which_file_it_was(self):
+        part = Path(self.fixture.root, "gone.stl")
+        part.write_bytes(b"solid p\nendsolid p\n")
+        [envelope] = self.by_path(part)[1]["documents"]
+        part.unlink()
+        # A page that showed it says that file is not there, by its path, not that an id names nothing.
+        status, _, body = self.fixture.request("GET", f"/api/v1/documents/{envelope['id']}")
+        self.assertEqual((status, json.loads(body)["path"]), (404, str(part).replace(os.sep, "/")))
+        # An id nothing here ever named has none.
+        status, _, body = self.fixture.request("GET", "/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ff")
+        self.assertEqual((status, "path" in json.loads(body)), (404, False))
+
     def test_a_model_by_its_id_is_its_envelope_at_the_build_held_and_one_not_held_names_nothing(self):
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
         script = os.path.join(self.fixture.root, "parts", "cube.py")
-        answers = {"model_info": {"model": {"source": {"name": "cube", "script": script}, "version": "v1",
+        xbf = os.path.join(self.fixture.root, "parts", "cube.xbf")
+        answers = {"model_info": {"model": {"source": {"name": "cube", "script": script, "xbf": xbf}, "version": "v1",
                                             "builtAt": 12.5, "state": "held"}}}
         app = self.fixture.app
 
@@ -334,8 +350,10 @@ class Documents(HttpLayerTestCase):
             self.assertEqual(status, 200)
             row = found["entry"]
             self.assertEqual((row["id"], row["file"], row["sourcePath"], row["hash"]), (ident, ident, None, "model:v1"))
-            self.assertEqual((found["kind"], found["name"], found["version"], found["state"], found["held"]),
-                             ("xbf", "cube", "v1", "held", True))
+            # Named by its .xbf's file name, as its card is and as the same file read from disk is; the function's
+            # name is its source's.
+            self.assertEqual((found["kind"], found["name"], row["name"], found["version"], found["state"], found["held"]),
+                             ("xbf", "cube.xbf", "cube.xbf", "v1", "held", True))
             # Its script, and whether it is there now: one named but gone (or never kept) is not.
             self.assertEqual(found["source"], {"type": "script", "path": script.replace(os.sep, "/"), "function": "cube",
                                               "present": False})
@@ -593,10 +611,18 @@ class StaticDistAndSpa(HttpLayerTestCase):
         self.assertEqual(headers["content-type"], "text/html; charset=utf-8")
         self.assertIn(b"<!doctype html>", body)
 
-    def test_unknown_path_falls_back_to_the_spa(self):
-        status, _, body = self.fixture.request("GET", "/Users/someone/models")
+    def test_unknown_path_falls_back_to_the_spa_at_the_root_only(self):
+        status, _, body = self.fixture.request("GET", "/some-page")
         self.assertEqual(status, 200)
         self.assertIn(b"<!doctype html>", body)
+        # Below the root the page's relative scripts (./assets/) name a folder that is not there: a blank page.
+        # It is a 404 that says so instead.
+        for path in ("/Users/someone/models", "/documents/model/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab",
+                     "/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/extra", "/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/"):
+            with self.subTest(path=path):
+                status, headers, body = self.fixture.request("GET", path)
+                self.assertEqual((status, headers["content-type"]), (404, "text/plain; charset=utf-8"))
+                self.assertEqual(body, b"Not found: the viewer's pages are / and /<document id>")
 
     def test_existing_asset_is_served_with_its_type(self):
         status, headers, body = self.fixture.request("GET", "/assets/app.js")

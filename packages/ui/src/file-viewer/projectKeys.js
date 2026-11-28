@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useRef } from "react";
 
 /**
  * Moving through the folder of its project a document is in, one file at a time: `[` the previous and `]` the next,
- * in the order that folder's page lists them, stopping at its ends.
+ * in the order that folder's page lists them, stopping at its ends. The host hands that order (`project.documents`):
+ * `CadViewer` holds the one the page listed as the person came to the folder's documents while they stay among them.
  *
  * `FileViewer` works the two out of its `project` (`projectNeighbours`) and hands them to the view under it
  * (`ProjectKeysContext`, a ref that never changes, so a project read again re-renders no view) and to its ⋯ (Previous

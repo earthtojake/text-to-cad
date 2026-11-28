@@ -615,6 +615,37 @@ test('an id deleted while it is on screen leaves the catalog: asked again, it is
   client.dispose();
 });
 
+test('a file deleted or moved while it is on screen leaves the catalog, asked by its path or its id, and is missing by its path', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ac';
+  let there = true;
+  const entry = { id, file: '/m/part.stl', name: 'part.stl' };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => {
+    const asked = new URL(url);
+    if (asked.searchParams.has('path')) return json({ documents: there ? [{ id, kind: 'stl', entry, revision: 'r1' }] : [] });
+    // The server names the file an id was, where it knows it.
+    return there ? json({ id, kind: 'stl', entry, revision: 'r1' }) : Response.json({ error: `no document ${id} is held`, hint: '', path: '/m/part.stl' }, { status: 404 });
+  } });
+  assert.equal((await client.resolveEntry(id)).id, id);
+  await client.refresh({ file: '/m/part.stl' });
+  there = false;
+  // Read again by its path, as a view reading a file is: no document there, so its row goes.
+  await client.refresh({ file: '/m/part.stl' });
+  assert.deepEqual([client.entryOf(id), client.entryOf('/m/part.stl')], [null, null], 'its row is gone');
+  const byPath = await client.resolveEntry('/m/part.stl').catch((error) => error);
+  assert.deepEqual([isMissingFileError(byPath), byPath.path], [true, '/m/part.stl']);
+  const byId = await client.resolveEntry(id).catch((error) => error);
+  assert.deepEqual([isMissingFileError(byId), byId.path], [true, '/m/part.stl']);
+  // An id nothing named: missing, with no path.
+  const unknown = await createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async () => missing('no document is held') })
+    .resolveEntry('6f1c2a4e-1b2c-5d3e-8f4a-0123456789ad').catch((error) => error);
+  assert.deepEqual([isMissingFileError(unknown), unknown.path], [true, '']);
+  // Back where it was: its row again.
+  there = true;
+  await client.refresh({ file: id });
+  assert.equal(client.entryOf(id)?.id, id);
+  client.dispose();
+});
+
 test("a model's parameters are saved by one guarded POST of names and numbers, and a refusal carries the engine's code", async (t) => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   const calls = [];

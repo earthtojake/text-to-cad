@@ -466,6 +466,11 @@ export interface LibraryOrigin {
   id?: string | null;
   name: string;
 }
+/**
+ * The documents a project's folder's page lists, in the order it lists them (`ModelLibrary`'s `onListed`): the project,
+ * the folder below its root (`""` its root) and each document's path.
+ */
+export interface LibraryListing { project: string; path: string; documents: readonly string[] }
 /** A folder's read on a project's page: the folder and the words it was asked with, and what came of it. */
 interface FolderRead<Model extends LibraryModel> { at: string; words: string; folder: LibraryFolder<Model> | null; failed: boolean }
 
@@ -528,7 +533,7 @@ interface FolderRead<Model extends LibraryModel> { at: string; words: string; fo
  * library takes no other open until the host has opened it or failed to.
  */
 export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, sort = "activity", onSortChange, fileActions,
-  place: placed, onPlaceChange, onPlaceShown, from = null, onBack, navigation, panel = null, onPanelChange }: {
+  place: placed, onPlaceChange, onPlaceShown, onListed, from = null, onBack, navigation, panel = null, onPanelChange }: {
   library: ModelLibrarySource<Model>;
   /** What the host can do with a file on disk (Copy path, Reveal): each file's menu offers it, and each project's. */
   fileActions?: FileActions;
@@ -544,6 +549,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   onPlaceChange?(place: HomeLocation): void;
   /** The place on screen by its name, as the person reads it ("Recents", a project's folder's name): what a host titles its page with. */
   onPlaceShown?(name: string): void;
+  /**
+   * The documents the place on screen lists, in its order, as they change: a project's folder's (none while a search
+   * replaces them), and null for any other place. What `[` and `]` step through once a document of it is opened.
+   */
+  onListed?(listing: LibraryListing | null): void;
   /** The document the person just left for this place: ringed, with the way back to it. */
   from?: LibraryOrigin | null;
   onBack?(): void;
@@ -743,6 +753,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const folders = listing && !searching ? listing.folders : [];
   const inPlace = place.view === "project" ? listing?.documents ?? [] : place.view === "pinned" ? pinned : all;
   const ordered = sortDocuments(inPlace, sort, locale);
+  // The folder's documents as its page lists them, for the host: the order `[` and `]` take once one is opened. A
+  // search's answer is not the folder's, and leaves the last one said.
+  const listedOrder = place.view === "project" && listing && !query.trim()
+    ? JSON.stringify({ project: place.project, path: folderPath, documents: ordered.filter(item => isDocument(item)).map(item => item.path) })
+    : place.view === "project" ? "" : "null";
+  const listedTo = useRef(onListed);
+  listedTo.current = onListed;
+  useEffect(() => { if (listedOrder) listedTo.current?.(JSON.parse(listedOrder) as LibraryListing | null); }, [listedOrder]);
   // On a project's page by the path below its folder, as the host's answer is, so the listing narrowed meanwhile is the answer's.
   const matching = filterModels(ordered, query, shownProject?.root);
   // A project's top page leads with what was opened or built below its top folder (`recentBelow`), as Drive's Home leads

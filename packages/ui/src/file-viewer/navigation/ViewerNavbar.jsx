@@ -194,11 +194,14 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
 /**
  * The open document's name, with no glyph: until the host knows it, a file's path's last segment; a document named by
  * its id is never named by the id, its name's place empty until its name is known. After a project's name (`after`) it
- * keeps its width, up to 65% of the row's, and the project's name gives way instead.
+ * keeps its width, up to 65% of the row's, and the project's name gives way first (`ProjectCrumb`); then, the project
+ * a tile, the name truncates, down to nothing, so its ⋯ and the row's right-hand controls always keep their room. Its
+ * padding is the text's, inside the part that gives way.
  */
 function FileName({ path, name: given, after = false }) {
   const name = given || (isDocumentId(path) ? "" : path.split("/").pop() || path);
-  return <span className={cn("flex min-w-0 items-center gap-1", after && "max-w-[65%] shrink-0", "px-[calc(var(--cad-pad)-4px)]")} data-file-name=""><span className="truncate">{name}</span></span>;
+  return <span className={cn("flex min-w-0 items-center gap-1 overflow-hidden", after && "max-w-[65%]")} data-file-name="">
+    <span className="truncate px-[calc(var(--cad-pad)-4px)]">{name}</span></span>;
 }
 
 /** The least room the project's name keeps as text: under it (and on a phone) it is the folder tile instead. */
@@ -259,7 +262,8 @@ function ProjectCrumb({ project }) {
       className={cn(NAV_ITEM_CLASS, "w-control justify-center text-muted-foreground")}><Folder className="size-4" aria-hidden="true" /></Element></TooltipHint>
     : <Element {...own} onClick={onClick} className={cn(NAV_ITEM_CLASS, "min-w-0 shrink text-muted-foreground", "px-[calc(var(--cad-pad)-4px)]")}>
       <span className="truncate">{project.name}</span></Element>;
-  return <span ref={wrapper} className={cn("relative flex min-w-0 items-center", tile ? "shrink-0" : "shrink")} data-navbar-project="">
+  // As text it gives way first: its share of what the row lacks is a thousand times the document's name's.
+  return <span ref={wrapper} className={cn("relative flex min-w-0 items-center", tile ? "shrink-0" : "shrink-[1000]")} data-navbar-project="">
     {control}
     <span className="shrink-0 text-muted-foreground" aria-hidden="true">/</span>
     {/* The whole name as the text would draw it, out of sight: what the tile weighs the room against (a desktop's). */}

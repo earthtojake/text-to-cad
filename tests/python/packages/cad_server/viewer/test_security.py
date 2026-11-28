@@ -278,14 +278,15 @@ class MalformedPercentEncoding(SecurityTestCase):
     def test_the_routing_table(self):
         cases = [
             # (target, expected status, expected body fragment)
-            ("/api/../etc/passwd", 200, b"<!doctype html>"),
-            ("/api/%2e%2e/etc/passwd", 200, b"<!doctype html>"),
+            # Below the root no page is served: its relative scripts would name a folder that is not there.
+            ("/api/../etc/passwd", 404, b"Not found: the viewer's pages are"),
+            ("/api/%2e%2e/etc/passwd", 404, b"Not found: the viewer's pages are"),
             ("/api/v1/%2e%2e/etc/passwd", 404, b'"error":"no route /api/etc/passwd"'),
             ("/__tess_cache/../escape.tess", 200, b"<!doctype html>"),
             ("/api", 404, b'"error":"no route /api"'),
             ("/api/v1/", 404, b'"error":"no route /api/v1/"'),
             ("/api/v1//server", 404, b'"error":"no route /api/v1//server"'),
-            ("/API/v1/server", 200, b"<!doctype html>"),
+            ("/API/v1/server", 404, b"Not found: the viewer's pages are"),
         ]
         for target, status, fragment in cases:
             with self.subTest(target=target):

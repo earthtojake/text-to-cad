@@ -97,6 +97,10 @@ chrome that floats over the picture. The home is the navbar over the library: it
   click shows it in this view, and ⌘ or Ctrl and a click, a middle click or the link's own menu open it in a new tab. It
   truncates as the row narrows down to 80px; under that, and always on a phone, it is a control-sized folder tile named
   by the project (its name in a hint), so the way to the project is never lost, and the file's name keeps its width.
+- **The file's name gives way next**: where the row is still short, it truncates, down to nothing on the narrowest
+  phone, never its ⋯ or a control at the right (a put-away alert's icon, Display, Preview, the update button), which
+  keep their room at every width from 320px. Why: the name is in the page's title too, and a control that cannot be
+  pressed is lost.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning; a file's first,
   then a failed update's), Display, Preview, the host's actions (the CAD app's Full size), then, outermost, the update
   button. Over the home: a failed update's put-away icon, then the update button, after the home's own controls (the
@@ -145,9 +149,13 @@ chrome that floats over the picture. The home is the navbar over the library: it
 - **Moving between documents** is the navbar's and the keys', never a tab in the panel: the project's name goes to its
   page on the home, at the document's folder; `[` and `]` step through the documents of that folder, in the order its page
   lists them (passing a file no page opens), stopping at its ends; and the search (⌘K) reaches the whole project and every document the library knows
-  ([Search](#search)). Why: a tab of documents pushes the model's own tree aside on every document of a project, to
+  ([Search](#search)). The order is the one the folder's page listed as the person came to its documents (the page they
+  opened one from, else the folder as first read), held while they stay among them, until they go home or to a
+  document of another folder. Why: a tab of documents pushes the model's own tree aside on every document of a project, to
   offer what a key or the search does without taking room; and the documents beside one are those of its folder, as
-  a file manager's are.
+  a file manager's are. Why held: opening a document moves it to the front under Last activity, the default order, so
+  an order taken again at each step put the one just opened first, and the keys went back and forth between two
+  documents.
 
 #### Search
 
@@ -811,7 +819,14 @@ not open, CAD not running, a replaced link, a server that does not answer.
   one small outline button 12px under that (`StatusAction`). No icon, no tinted tile, no colour for the tone, in the
   app's theme. Why: the words say how serious it is, and a page state has no picture to take a Background from.
 - A file that will not open shows under the navbar ("File does not exist" with its path, "Could not open that file"
-  with the reason), with Go home where the host has a home. "CAD is not running" covers the whole page, and the page
+  with the reason), with Go home where the host has a home. A document's id that names nothing here says "This
+  document is not known", never the engine's words.
+- **A file deleted or moved while it is on screen is gone at once**, whatever its kind (a model's `.xbf`, an STL, a
+  STEP): at the catalog's next read of it (two seconds) the view gives way to the same "File does not exist" with its
+  path, the project's name still before the file's (the way back to its folder), and no Report Issue: nothing of
+  cad's failed. Put back at that path (a model's script run again), it opens again by itself. Why: a document is its
+  file, so its page says what became of the file, in the one place it says so for a file that will not open, and not
+  as a fault of the view's. "CAD is not running" covers the whole page, and the page
   under it is inert, so no tools or panel show.
 
 ## Selection and gestures

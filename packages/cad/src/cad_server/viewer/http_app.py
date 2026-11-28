@@ -297,6 +297,7 @@ class CadApp:
 
         from .drawings import DrawingRenders
         from .plots import BoardAnswers
+        from .reveal import available as reveal_available
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -308,9 +309,11 @@ class CadApp:
         self._exports = None
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
         # Whether this computer has a chooser for the home's Import (``POST /api/v1/local/pick``), and whether
-        # one chooser takes a file or a folder there (a Mac's: ``{"any": true}``), so Import is one button.
+        # one chooser takes a file or a folder there (a Mac's: ``{"any": true}``), so Import is one button; and
+        # whether it has a file manager Reveal can open (``reveal.available``).
         self.pick = available()
         self.pick_any = self.pick and takes_either()
+        self.reveal = reveal_available()
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -370,6 +373,8 @@ class CadApp:
             # The folder of the most recent launch, its relative files' folder. Not a boundary.
             "start": self.start,
             "pick": self.pick,
+            # Whether this computer has a file manager Reveal can open: the page offers it only where it does.
+            "reveal": self.reveal,
             # Whether that chooser takes a file or a folder in one (a Mac's): the home's Import is one button.
             "pickAny": self.pick_any,
             "port": self.port,
@@ -517,7 +522,11 @@ class CadApp:
         an ordinary static server: serve the file if the bundle has it,
         otherwise fall back to index.html — EXCEPT under ``/assets/``, where a
         miss must be a 404 rather than HTML, or a stale hashed bundle reference
-        turns into an ES-module parse error instead of a readable status.
+        turns into an ES-module parse error instead of a readable status, and
+        at an address below the root (``/a/b``, ``/<id>/``): the page reads its
+        scripts at ``./assets/`` (the build's base is relative, so the share
+        service and the CAD app can serve it from roots of their own), which from
+        there is a folder that does not exist, and the page would be blank.
         """
         if not self.dist_dir:
             # No built client. Answering here rather than joining against an
@@ -543,6 +552,9 @@ class CadApp:
             return
         if request_path.startswith("/assets/"):
             response.send_plain(404, "Not found")
+            return
+        if "/" in pathname[1:]:
+            response.send_plain(404, "Not found: the viewer's pages are / and /<document id>")
             return
         index_html = os.path.join(self.dist_dir, "index.html")
         if not self._serve_file(response, index_html, content_type_for_static_asset(index_html)):
@@ -757,13 +769,20 @@ class CadApp:
         return self._envelope(*self._known(ident))
 
     def _known(self, ident) -> tuple[dict, dict | None]:
-        """``_catalog`` of the document of id ``ident``; 404 for an id no document has (``envelope``)."""
+        """``_catalog`` of the document of id ``ident``; 404 for an id no document has (``envelope``), with the
+        ``path`` of the file it named where this server knows it (``_named``): a page says that file is gone."""
         if not is_id(ident):
             raise ApiError(404, f"{ident} is not a document id", "a document's id is the one its page, /<id>, names")
         catalog, model = self._catalog(None, ident)
         if not catalog["entries"]:
-            raise ApiError(404, catalog["missing"], "run the model's script again, or open the file from where it is now")
+            named = self._named(ident)
+            raise ApiError(404, catalog["missing"], "run the model's script again, or open the file from where it is now",
+                           **({"path": to_posix_path(named)} if named else {}))
         return catalog, model
+
+    def _named(self, ident) -> str | None:
+        """The file document ``ident`` was, there or not: the one this app was named for it, else its library entry's."""
+        return self.file_of(ident) or (self.library.read()["files"].get(ident) or {}).get("path") or None
 
     def _envelope(self, catalog: dict, model: dict | None) -> dict:
         """A document as every page reads it first: its ``id`` and ``kind``, its ``name``, its
@@ -785,7 +804,8 @@ class CadApp:
             source = model.get("source") or {}
             state = str(model.get("state") or "held")
             kind = XBF
-            found = {"name": str(source.get("name") or row.get("name") or ""),
+            # Named by its .xbf's file name, as its row is and as the same document read from that file is.
+            found = {"name": str(row.get("name") or source.get("name") or ""),
                      "version": str(model.get("version") if model.get("version") is not None else row.get("hash") or ""),
                      "state": state,
                      # `/`-separated, as a file's path is (its row's ``file``), whichever way its id was found.
@@ -1203,7 +1223,7 @@ class CadApp:
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
 
     def _reveal(self, request, response) -> None:
-        from .reveal import reveal_path
+        from .reveal import CannotReveal, reveal_path
 
         self._limit(request, 8192)
         payload = json.loads(request.body())
@@ -1211,6 +1231,10 @@ class CadApp:
             raise ValueError("Reveal requires a path")
         try:
             reveal_path(payload["path"])
+        except CannotReveal:
+            # Not the file's fault: there is nothing here to show it in (`reveal` in /api/v1/server says so).
+            raise ApiError(501, "No file manager can be opened on this computer.",
+                           "copy the file's path and open its folder another way") from None
         except FileNotFoundError:
             raise ApiError(404, "That file is no longer there.", "open it from where it is now") from None
         response.send_empty(204)

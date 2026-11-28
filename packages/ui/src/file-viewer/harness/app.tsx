@@ -23,7 +23,7 @@ const FOLDER = "/work";
  * searches; the renderer reads a file's text as it prepares it (`read`).
  */
 function memorySource(id: string) {
-  const files = new Map<string, string>(["notes", "next", "slow"].map(name => [`${FOLDER}/${name}.txt`, `${id} ${name}`]));
+  const files = new Map<string, string>(["notes", "next", "slow", "an-enclosure-with-a-long-name"].map(name => [`${FOLDER}/${name}.txt`, `${id} ${name}`]));
   const metadata = (path: string): FileMetadata => ({ path, name: path.split("/").pop()!, kind: "file", extension: "txt", size: 20, mediaType: "text", revision: files.get(path) });
   const source: FileSource = {
     id,

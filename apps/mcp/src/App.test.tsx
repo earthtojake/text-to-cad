@@ -184,6 +184,10 @@ it('every view has the home and its projects, but the host\'s file handler shows
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step', surface: 'file' }} />);
   // No home, and so no project: a file handler's own file tree is its navigation.
   expect([viewer.props!.file, viewer.props!.library]).toEqual(['/work/a.step', undefined]);
+  cleanup();
+  // A computer with no file manager to open (a Linux without xdg-open: the launch's `reveal`) is offered none.
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 7, page: 'viewer', model: '/work/a.step', surface: 'file', reveal: false }} />);
+  expect(Object.keys(viewer.props!.host.fileActions!.perform!).sort()).toEqual(['copy-path']);
 });
 
 it("the home's projects came with its launch; a project's folder is read through the tunnel, each row as the library reads one; Import's Folder opens the folder chosen as a project", async () => {

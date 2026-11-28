@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ExportControls, SharedFilesItem } from '../export/ExportControls.js';
-import type { CadEntryProject, CadProjectFolder, CadWorkspaceService } from '@cad/core/client';
+import type { CadEntry, CadEntryProject, CadProjectFolder, CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
@@ -9,13 +9,13 @@ import { I18nProvider, translator } from '../i18n/index.js';
 import type { HomeLocation, ViewerHost } from '../host/types.js';
 import { folderPlace } from '../host/addresses.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, RECENTS, isDocument, sortDocuments, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
+import { ModelLibrary, RECENTS, isDocument, sortDocuments, type LibraryListing, type LibraryModel, type LibraryOrigin, type LibraryPanel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { cadRenderers } from './renderers.js';
 import type { LibraryLayout, LibrarySort } from '../tab-store/tabRecord.js';
 import type { TabStore } from '../tab-store/tabStore.js';
 import { useTabViewerState } from '../tab-store/useTabViewerState.js';
-import { normalizePath } from './catalog.js';
+import { baseName, normalizePath } from './catalog.js';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
@@ -55,6 +55,21 @@ function useProjectFolder(client: CadWorkspaceService, ref: CadEntryProject | nu
     return () => { controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', again); };
   }, [client, key]);
   return read?.key === key ? read : null;
+}
+
+/** One folder of a project, as one word. */
+const folderKey = (project: string, path: string) => JSON.stringify([project, path]);
+const slashed = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '');
+
+/**
+ * A folder's documents (`documents`, in its page's order now) in the order `held` names their paths, held from when
+ * the person came to them: a document the folder has gained since comes after them, in the page's order, and one it no
+ * longer has is gone.
+ */
+function heldOrder<Row extends { path: string }>(documents: readonly Row[], held: readonly string[]): Row[] {
+  const at = new Map(held.map((path, index) => [slashed(path), index]));
+  const rank = (row: Row, index: number) => at.get(slashed(row.path)) ?? held.length + index;
+  return documents.map((row, index) => ({ row, rank: rank(row, index) })).sort((a, b) => a.rank - b.rank).map(({ row }) => row);
 }
 
 /** The folder a path is in, `/`-separated. */
@@ -197,6 +212,17 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // own (a model's). `file` may name it either way: a host addresses documents by id.
   const shown = entry ? (entry.sourcePath === null ? path : normalizePath(entry.file)) : null;
   const shownId = entry ? String(entry.id || '') || null : null;
+  // The document on screen as the catalog last had it, while it is the one on screen: after it has gone (deleted or
+  // moved while it was shown) the page still names it and keeps the way back to its project's folder. Gone: the catalog
+  // had its row, and read again it has none (`client.js`'s `publishCatalog`), whatever the renderer watches; FileViewer
+  // opens it again (`gone`), and the page says that file is not there until it is back.
+  const lastRow = useRef<{ path: string; entry: CadEntry } | null>(null);
+  if (entry) lastRow.current = { path, entry };
+  else if (lastRow.current && lastRow.current.path !== path) lastRow.current = null;
+  const known = entry ?? lastRow.current?.entry ?? null;
+  // Its name: its row's, else (a file's row has none) its file's.
+  const knownName = known ? String(known.name || '') || (known.sourcePath === null ? '' : baseName(normalizePath(String(known.file || '')))) : '';
+  const gone = Boolean(path && !entry && lastRow.current && catalog.hydrated && !catalog.error && !catalog.engineGone);
   latest.current.shown = shown;
   useEffect(() => { latest.current.onShown?.(shown, shownId); }, [shown, shownId]);
 
@@ -270,20 +296,39 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const forgotten = Boolean(left) && (path ? path !== left?.file : !origin);
   useEffect(() => { if (forgotten) setLeft(null); }, [forgotten]);
   const back = useCallback(() => { if (left) latest.current.onShow(left.file); }, [left]);
-  const shownName = String(entry?.name || '') || name || '';
-  const projectRef = homed ? (entry?.project as CadEntryProject | null | undefined) ?? null : null;
+  const shownName = knownName || name || '';
+  const projectRef = homed ? (known?.project as CadEntryProject | null | undefined) ?? null : null;
   const folderRead = useProjectFolder(client, projectRef);
   // The home's order, by which the folder's files are stepped through as its page lists them.
   const { layout, sort, panel: libraryPanel } = settings.library;
+  // `[` and `]` step through the folder in the order its page listed its documents when the person came to them (the
+  // page's own, where they left it for one of them: `listed`; else the first read's), held while they stay among them,
+  // until the home or a document elsewhere is shown. Opening a document moves it under Last activity, the default
+  // order, so an order taken again at every step put the document just opened first and walked back and forth.
+  const listed = useRef<{ key: string; documents: readonly string[] } | null>(null);
+  const onListed = useCallback((listing: LibraryListing | null) => {
+    listed.current = listing ? { key: folderKey(listing.project, listing.path), documents: listing.documents } : null;
+  }, []);
+  const held = useRef<{ key: string; documents: readonly string[] } | null>(null);
+  const stay = projectRef ? folderKey(projectRef.id, projectRef.folder ?? '') : null;
+  // Left for the home, or for a document known to be elsewhere; a document the catalog has yet to answer for leaves nothing.
+  if (!path || (entry && held.current && held.current.key !== stay)) held.current = null;
   const project = useMemo<FileProject | null>(() => {
     if (!projectRef) return null;
+    const key = folderKey(projectRef.id, projectRef.folder ?? '');
+    const stepOrder = <Row extends { path: string }>(documents: Row[]) => {
+      if (held.current?.key !== key) {
+        held.current = { key, documents: listed.current?.key === key ? listed.current.documents : documents.map(row => row.path) };
+      }
+      return heldOrder(documents, held.current.documents);
+    };
     const folder = projectRef.folder ?? '';
     const place = folderPlace(projectRef.id, folder);
     const read = folderRead?.folder ?? null;
     return {
       id: projectRef.id, name: projectRef.name, root: projectRef.root,
       // The documents of the folder: a file in it that no page opens is no step of `[` and `]`.
-      documents: read ? sortDocuments(read.documents.filter(isDocument), sort, locale) : null,
+      documents: read ? stepOrder(sortDocuments(read.documents.filter(isDocument), sort, locale)) : null,
       missing: Boolean(read?.project?.missing), error: read ? null : folderRead?.error ?? null,
       href: hrefOf?.({ home: place }) ?? null,
       onShow: () => {
@@ -316,17 +361,22 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const goHome = useMemo(() => homed ? <StatusAction onClick={() => home()}>{t("file.goHome")}</StatusAction> : null, [homed, home, t]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} sort={sort} onSortChange={changeSort}
-      fileActions={host.fileActions} place={place} onPlaceChange={home} onPlaceShown={placeShown} from={origin} onBack={back} navigation={links}
+      fileActions={host.fileActions} place={place} onPlaceChange={home} onPlaceShown={placeShown} onListed={onListed} from={origin} onBack={back} navigation={links}
       panel={libraryPanel ?? null} onPanelChange={changeLibraryPanel} /> : undefined,
     // On the viewport's Background as the tab has it, as the view's own cover and its picture are: no flash between them.
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading background={settings.viewportBackground} /></div>,
-    // A document named by its id that the engine does not hold says so, in the engine's words; a file that is not
-    // there, its path.
-    error: ({ message, missing, reload }: { message: string; missing: boolean; reload?: () => void }) => missing
-      ? <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
-        title={isDocumentId(path) ? t("file.notHeld") : t("file.missing")} description={isDocumentId(path) ? message : undefined} />
-      : <EmptyState title={t("file.openFailed")} description={message} action={goHome} />,
-  }), [library, layout, changeLayout, sort, changeSort, path, host.fileActions, place, home, placeShown, origin, back, links, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
+    // A file that is not there says so by its path, as the page names files: the one the server says the id was, else
+    // the one the page last showed, else the path asked for; an id that names nothing here says it is not known. Either
+    // opens by itself once the catalog has it again (a file put back, a model's script run again).
+    error: ({ message, missing, error, reload }: { message: string; missing: boolean; error?: unknown; reload?: () => void }) => {
+      if (!missing) return <EmptyState title={t("file.openFailed")} description={message} action={goHome} />;
+      const said = (error as { path?: unknown } | null)?.path;
+      const last = lastRow.current?.path === path && lastRow.current.entry.sourcePath !== null ? normalizePath(lastRow.current.entry.file) : '';
+      const where = typeof said === 'string' && said ? said : last || (isDocumentId(path) ? '' : path);
+      return <MissingCadFile file={path} entry={entry} reload={reload} action={goHome}
+        title={where ? t("file.missing") : t("file.notKnown")} description={where || t("file.notKnownDetail")} />;
+    },
+  }), [library, layout, changeLayout, sort, changeSort, path, host.fileActions, place, home, placeShown, onListed, origin, back, links, libraryPanel, changeLibraryPanel, entry, goHome, t, settings.viewportBackground]);
   // The search of every document (⌘K, and Search documents in a document's ⋯), over a document and the home alike,
   // where the host has a library (`search/`).
   const search = useDocumentSearch();
@@ -341,7 +391,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} update={update} alert={hostAlert}
       fileMenuItems={menu || host.sharedFiles ? <>{menu}{host.sharedFiles ? <SharedFilesItem url={host.sharedFiles.url} /> : null}</> : null}
       overlay={<>{overlay}{library ? <DocumentSearch search={search} library={library} navigation={viewerHost.navigation} current={searchCurrent} onError={onError} /> : null}</>}
-      onSearch={library ? search.show : null} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+      onSearch={library ? search.show : null} file={path || null} name={knownName || name} filePath={shown} gone={gone} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} project={project} onImportFolder={onImportFolder} notice={notice} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}

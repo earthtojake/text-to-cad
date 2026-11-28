@@ -32,6 +32,8 @@ export interface Launch {
   pick?: boolean;
   /** Whether one chooser there takes a file or a folder (a Mac's): the home's Import is then one button. */
   pickAny?: boolean;
+  /** Whether this computer has a file manager Reveal can open: the file menus offer it only where it does. */
+  reveal?: boolean;
   /** What the update button shows, as the server last knew it (`auto_update.button`), so it draws with the card; null where cad cannot update itself. */
   cadUpdate?: CadUpdateState | null;
   /**

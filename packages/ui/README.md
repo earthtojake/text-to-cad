@@ -89,7 +89,8 @@ filtered rows; nesting adds indentation inside that gutter.
 Moving between documents is the navbar's, the keys' and the search's, never the panel's: a document in a project
 has the project's name before its own in the navbar, which goes to the project's page on the home at the document's
 folder (a link, where the host gives it an address); `[` and `]` step to the previous and next file of that folder
-(`file-viewer/projectKeys.js`); and ⌘K (Ctrl+K) searches the project on screen and every document of the library
+(`file-viewer/projectKeys.js`), in the order its page listed them as the person came to them, held while they stay
+among them (`cad-viewer/CadViewer.tsx`); and ⌘K (Ctrl+K) searches the project on screen and every document of the library
 (`search/DocumentSearch.tsx`). The browser's tabs are the
 viewer's tabs: a document or a project opens in a new one from its link, Open in new tab, or ⌘Enter. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
@@ -378,7 +379,9 @@ out from its heading row, each with its star and a ⋯ menu (Open, Open in new t
 deletes or forgets a file); a card is a real link where the host gives documents an address
 ([the home](docs/viewer-ux.md#the-home)). A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
-"Could not open that file" and why, each with Go home where the host has a home. A
+"Could not open that file" and why, each with Go home where the host has a home; a file that goes while it is shown
+says the same within the catalog's next read (`CadViewer`'s `gone`, FileViewer opening it again), its project's name
+kept, and opens again once it is back. A
 renderer's loading and update status is its own, in its viewport. An error appears as a
 card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own

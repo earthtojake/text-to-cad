@@ -123,10 +123,12 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // and, in a view with a home, the document's page in the browser (Open in › Browser).
   const fileActions = useMemo(() => {
     // Open in's apps too, through the tunnel as Reveal is: the server opens them on this computer.
-    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path), openIn: client,
+    // Reveal only where this computer has a file manager to open (`launch.reveal`).
+    const actions = createCadFileActions({ platform, clipboard: frameClipboard, openIn: client,
+      ...(launch.reveal !== false ? { reveal: (path: string) => client.reveal(path) } : {}),
       ...(engineOrigin ? { link: { origin: engineOrigin, client } } : {}) });
     return homed && openInBrowser ? { ...actions, perform: { ...actions.perform, browser: (entry: { path: string }) => openInBrowser(entry.path) } } : actions;
-  }, [platform, client, homed, openInBrowser, engineOrigin]);
+  }, [platform, client, homed, openInBrowser, engineOrigin, launch.reveal]);
 
   // The agent's show of a file is a step in the view's history, as a person's is.
   useEffect(() => { navigate(launched()); }, [launch, sequence]);

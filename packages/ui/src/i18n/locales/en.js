@@ -221,7 +221,8 @@ export default {
   // The file view: opening, and the states where it stops.
   "file.opening": "Opening…",
   "file.missing": "File does not exist",
-  "file.notHeld": "This model is no longer held",
+  "file.notKnown": "This document is not known",
+  "file.notKnownDetail": "Nothing on this computer has this document's id: its link may be from another computer.",
   "file.openFailed": "Could not open that file",
   "file.displayFailed": "Could not display that file",
   "file.goHome": "Go home",

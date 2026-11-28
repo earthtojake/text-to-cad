@@ -67,6 +67,49 @@ test("a document in a project has the project's name before its own: in a narrow
   await page.waitForFunction(() => document.querySelector('[data-testid="primary"] [data-project-tile]')?.getBoundingClientRect().width === 36);
 });
 
+// A document in a project, its name too long for the row, and a failed update put away (its icon the first of the
+// right-hand controls): the name gives way, so the ⋯ and every control at the right keep their room at every width.
+test("a long name gives way at every width from 320 up: the ⋯ and every right-hand control keep their room", async () => {
+  await reset();
+  await page.evaluate(() => window.harness.open("/work/an-enclosure-with-a-long-name.txt"));
+  await waitPayload("root-a an-enclosure-with-a-long-name");
+  await page.evaluate(() => window.harness.project({ id: "p1", name: "proj", root: "/work", documents: [] }));
+  await page.evaluate(() => window.harness.update("put away"));
+  // The view's own settings, as a 3D view portals them in: Display and Preview.
+  await page.evaluate(() => window.harness.rendererCallbacks.get("root-a").onNavigationActionsChange([
+    { id: "display", label: "Display", icon: "span", onInvoke() {} }, { id: "preview", label: "Preview", icon: "span", onInvoke() {} }]));
+  const navbar = pane().locator("[data-viewer-navbar]");
+  await navbar.getByRole("button", { name: "Couldn’t update to 0.9.1" }).waitFor();
+  await navbar.getByRole("button", { name: "Preview" }).waitFor();
+  for (const width of [1000, 600, 430, 390, 360, 320]) {
+    await page.evaluate((next) => { document.querySelector("#root > div").style.width = `${next}px`; }, width);
+    await settle();
+    const drawn = await navbar.evaluate((row) => {
+      const box = (node) => node.getBoundingClientRect();
+      const lead = row.querySelector("nav");
+      const menu = row.querySelector('[data-testid="file-actions"]');
+      const right = [...row.lastElementChild.querySelectorAll("button")];
+      // What a press at a control's centre reaches: the control itself, uncovered.
+      const reached = (node) => { const at = box(node); const hit = document.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2); return node === hit || node.contains(hit); };
+      return { row: box(row).toJSON(), lead: box(lead).toJSON(), menu: box(menu).toJSON(), menuReached: reached(menu),
+        right: right.map((node) => ({ name: node.getAttribute("aria-label") || node.textContent, box: box(node).toJSON(), reached: reached(node) })),
+        name: (({ scrollWidth, clientWidth }) => ({ scrollWidth, clientWidth }))(row.querySelector("[data-file-name] span")) };
+    });
+    const at = `at ${width}: ${JSON.stringify(drawn)}`;
+    assert.equal(drawn.right.length, 4, `the alert's icon, Display, Preview and the update button ${at}`);
+    assert.ok(drawn.menuReached, `the ⋯ uncovered ${at}`);
+    assert.ok(drawn.menu.right <= drawn.lead.right + 0.5, `the ⋯ whole, inside its side of the row ${at}`);
+    assert.ok(drawn.menu.right <= drawn.right[0].box.left, `the ⋯ short of the right-hand controls ${at}`);
+    for (const [index, control] of drawn.right.entries()) {
+      assert.ok(control.reached, `${control.name} uncovered ${at}`);
+      assert.ok(control.box.width >= 24 && control.box.right <= drawn.row.right + 0.5, `${control.name} whole, in the row ${at}`);
+      if (index) assert.ok(drawn.right[index - 1].box.right <= control.box.left + 0.5, `${control.name} after the one before ${at}`);
+    }
+    if (width <= 390) assert.ok(drawn.name.scrollWidth > drawn.name.clientWidth, `the name the one to give way ${at}`);
+  }
+  await page.evaluate(() => { document.querySelector("#root > div").style.width = "1000px"; window.harness.update("none"); window.harness.project(null); window.harness.open("/work/notes.txt"); });
+});
+
 test("the renderer is not re-rendered by the frame's own chrome: a navbar action it published or a resize within a layout", async () => {
   await reset();
   await settle();

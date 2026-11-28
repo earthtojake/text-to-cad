@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
-from cad_server.viewer.reveal import reveal_path
+from cad_server.viewer.reveal import CannotReveal, available, reveal_path
 from .test_http_layer import ServerFixture
 
 
@@ -34,13 +34,32 @@ class RevealTests(unittest.TestCase):
                 reveal_path(target)
                 self.assertEqual(run.call_args.args[0][0], '/usr/bin/xdg-open')
                 # A helper is run by the absolute path PATH's absolute folders give it, or not at all.
+                # With neither, nothing can show it: said as that, never as the file being gone.
                 run.side_effect, found['dbus-send'], found['xdg-open'] = None, None, None
-                with self.assertRaisesRegex(FileNotFoundError, 'xdg-open'):
+                with self.assertRaisesRegex(CannotReveal, 'xdg-open') as raised:
                     reveal_path(target)
+                self.assertNotIsInstance(raised.exception, FileNotFoundError)
         with mock.patch('cad_server.viewer.reveal.sys.platform', 'win32'), mock.patch('cad_server.viewer.reveal.subprocess.Popen') as spawn, \
                 mock.patch.dict('os.environ', {'SystemRoot': 'C:\\Windows'}):
             reveal_path(target)
             self.assertEqual(spawn.call_args.args[0], [str(Path('C:\\Windows') / 'explorer.exe'), '/select,' + str(self.target.resolve())])
+
+    def test_a_file_manager_is_offered_only_where_one_can_be_opened(self):
+        found = {'dbus-send': None, 'xdg-open': None}
+        with mock.patch('cad_server.viewer.reveal.executables.find', side_effect=lambda name: found[name]), \
+                mock.patch.dict('os.environ', {'DBUS_SESSION_BUS_ADDRESS': '', 'XDG_RUNTIME_DIR': ''}):
+            for platform in ('darwin', 'win32'):
+                with mock.patch('cad_server.viewer.reveal.sys.platform', platform):
+                    self.assertTrue(available())
+            with mock.patch('cad_server.viewer.reveal.sys.platform', 'linux'):
+                self.assertFalse(available())
+                # dbus-send with no session's bus to ask is none.
+                found['dbus-send'] = '/usr/bin/dbus-send'
+                self.assertFalse(available())
+                with mock.patch.dict('os.environ', {'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1/bus'}):
+                    self.assertTrue(available())
+                found['dbus-send'], found['xdg-open'] = None, '/usr/bin/xdg-open'
+                self.assertTrue(available())
 
     def test_a_name_explorer_would_split_at_its_comma_opens_its_folder_through_the_shell(self):
         named = Path(self.server.root, 'part.step,other.step')
@@ -70,6 +89,10 @@ class RevealTests(unittest.TestCase):
             self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=b'{}')[0], 400)
             self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=b'x' * 8193)[0], 413)
             reveal.assert_not_called()
+        # A file that is there, on a computer with no file manager to open: said as that, never as the file gone.
+        with mock.patch('cad_server.viewer.reveal.reveal_path', side_effect=CannotReveal('xdg-open is not installed')):
+            status, _, answer = self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=body)
+            self.assertEqual((status, json.loads(answer)['error']), (501, 'No file manager can be opened on this computer.'))
         gone = json.dumps({'path': str(self.target.with_name('gone.step'))}).encode()
         self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=gone)[0], 404)
         relative = json.dumps({'path': self.target.name}).encode()
