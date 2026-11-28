@@ -740,11 +740,11 @@ DRAWING: Callable[[bool], dict[str, Any] | None] | None = None
 
 
 def drawing(make: bool = True) -> dict[str, Any] | None:
-    """The environment a render process runs in: the kernel's (``kernel``), but where the kernel is one that
-    carries no OpenGL viewer (the WebAssembly kernel) the native one this installation has beside it
-    (``DRAWING``) -- a render process draws the engine's mesh buffers and models nothing, so whichever
-    kernel made them. ``serve.KernelProcessesUnavailable``, in one line that says what to do, where the
-    installation has none."""
+    """The environment a render process runs in, as the server answers it (``DRAWING``): the kernel's
+    (``kernel``), but where the kernel is one that carries no OpenGL viewer (the WebAssembly kernel) this
+    installation's own Python with that kernel's view core (``core``), which draws the stills. A refusal is
+    ``kernel``'s, in its words: ``serve.KernelProcessesUnavailable``, in one line, with the cause the server
+    gave it."""
     if DRAWING is None:
         return kernel(make)
     try:
@@ -753,7 +753,8 @@ def drawing(make: bool = True) -> dict[str, Any] | None:
         from cad.engine.serve import KernelProcessesUnavailable
 
         cause = getattr(error, "cause", None)
-        raise KernelProcessesUnavailable(str(error), cause if isinstance(cause, str) else "other") from error
+        raise KernelProcessesUnavailable(f"the server has no CAD kernel environment: {error}",
+                                         cause if isinstance(cause, str) else "other") from error
 
 
 def kernel(make: bool = True) -> dict[str, Any] | None:

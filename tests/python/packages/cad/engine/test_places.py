@@ -211,5 +211,27 @@ class WindowsTest(Folders):
         self.assertEqual(places.adopt_earlier(), [], "once")
 
 
+class DrawingTest(unittest.TestCase):
+    """The render processes' environment as a server answers it (``places.DRAWING``): a refusal of it reads as the
+    kernel's (``places.kernel``), whichever the server's kernel is, its cause kept."""
+
+    def test_a_refused_drawing_environment_reads_as_the_kernel_s(self) -> None:
+        from cad.engine.serve import KernelProcessesUnavailable
+
+        class Refused(Exception):
+            cause = "resolve"
+
+        def refusing(_make: bool) -> None:
+            raise Refused("uv could not install the kernel's packages")
+
+        for name in ("KERNEL", "DRAWING"):
+            with self.subTest(seam=name), mock.patch.object(places, name, refusing), \
+                    self.assertRaises(KernelProcessesUnavailable) as raised:
+                getattr(places, name.lower())(True)
+            self.assertEqual(str(raised.exception),
+                             "the server has no CAD kernel environment: uv could not install the kernel's packages")
+            self.assertEqual(raised.exception.cause, "resolve")
+
+
 if __name__ == "__main__":
     unittest.main()
