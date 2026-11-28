@@ -18,7 +18,7 @@ __all__ = ["MEASURING", "measure", "measuring"]
 # (``api.check``), so its libraries name nothing here.
 MEASURING: dict[str, tuple[str, ...]] = {
     "build123d": ("build123d",), "OCP": ("cadquery-ocp-novtk", "cadquery-ocp"), "bd_materials": ("bd_materials",),
-    "numpy": ("numpy",)}
+    "numpy": ("numpy",), "shapely": ("shapely",)}
 # What a code edited since this process loaded it is said as (``measuring``): no other process's.
 EDITED = "+edited"
 

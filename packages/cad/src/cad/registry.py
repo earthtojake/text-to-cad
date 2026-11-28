@@ -408,7 +408,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         "trimesh", "trimesh, the triangle-mesh library: a mesh's manufacturing check measures it with trimesh for "
                    "3D printing -- its walls, overhangs and support; every other process is judged on exact "
                    "geometry", extra="trimesh", process="in-process",
-        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx"), identity=("trimesh",),
+        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy", "networkx", "shapely"), identity=("trimesh",),
         holds="trimesh", download_mb=40),
     "mujoco": Integration(
         "mujoco", "MuJoCo, the physics engine, as its headless core (mujoco-core: the compiler and the bindings, no "

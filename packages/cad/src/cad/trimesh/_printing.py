@@ -1135,18 +1135,14 @@ def _orientation_facts(mesh: trimesh.Trimesh, angle_limit: float, technology: st
 
     V, F = np.asarray(mesh.vertices, dtype=float), np.asarray(mesh.faces, dtype=int)
     rows = mo.orientation_rows(V, F, mo.ROTATIONS, angle_limit, mo.raster_pitch(mesh.extents), SHALLOW_DEG,
-                               at_limit=lambda R: _at_limit(mesh, angle_limit, R))
-    volume = np.array((machine or rules.machine_volume({"technology": technology}))["volume_mm"], dtype=float)
+                               at_limit=lambda R: _at_limit(mesh, angle_limit, R),
+                               machine=machine or rules.machine_volume({"technology": technology}))
     for row in rows:
         m = mesh.copy()
         m.vertices = V @ np.array(row["rotation"]).T
         ov = _overhang_facts(m, angle_limit, regions=False, near=_at_limit(mesh, angle_limit, np.array(row["rotation"])))
         row["support_area_mm2"] = ov["down_facing_area_below_limit_mm2"]
         row["support_area_pct"] = ov["down_facing_area_below_limit_pct"]
-        box = np.array(row["bbox_mm"])
-        xy = max(float(sorted(box[:2])[k]) / float(sorted(volume[:2])[k]) for k in range(2))
-        row["fill_ratio"] = round(max(xy, float(box[2]) / float(volume[2])), 4)
-        row["fits"] = bool(row["fill_ratio"] <= 1.0 + 1e-9)
     weights = mo.WEIGHTS["powder" if technology in rules.POWDER else "support"]
     rows = mo.ranked(rows, weights)
     return {

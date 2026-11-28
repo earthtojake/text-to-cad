@@ -21,6 +21,7 @@ settings: ``--printer``), else a typical machine of the technology's, assumed an
 from __future__ import annotations
 
 import json
+import math
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -468,9 +469,14 @@ def machine_volume(resolved: dict[str, Any]) -> dict[str, Any]:
     largest the same page lists (``LARGEST_VOLUMES``)."""
     if resolved.get("build_volume") is not None:
         printer = resolved.get("printer")
-        origin = "given" if not isinstance(printer, dict) or "build_volume" not in printer["supplied"] else (
-            f"printer {printer['name']} ({printer['file']}, bed bounding box)")
-        return {"volume_mm": list(build_volume(resolved["build_volume"])), "origin": origin}
+        machine: dict[str, Any] = {"volume_mm": list(build_volume(resolved["build_volume"])), "origin": "given"}
+        if isinstance(printer, dict) and "build_volume" in printer["supplied"]:
+            radius = printer.get("bed_radius_mm")
+            boundary = "bed bounding box" if radius is None else f"round bed, diameter {2 * radius:g} mm"
+            machine["origin"] = f"printer {printer['name']} ({printer['file']}, {boundary})"
+            if radius is not None:
+                machine["bed_radius_mm"] = radius
+        return machine
     volume, source = BUILD_VOLUMES[resolved["technology"]]
     return {"volume_mm": [float(value) for value in volume], "origin": f"assumed ({SOURCES[source].url})",
             "largest_mm": [float(value) for value in LARGEST_VOLUMES[resolved["technology"]]]}
@@ -515,7 +521,7 @@ PROJECT_SETTINGS = "Metadata/project_settings.config"
 
 def printer_settings(path: str | Path) -> dict[str, Any]:
     """What ``--printer`` names of a printer, read once: ``name``, ``file``, ``volume_mm`` (the bed polygon's
-    bounding box by ``printable_height``) and ``nozzle`` (the first extruder's, or None where the file gives
+    bounding box by ``printable_height``), ``bed_radius_mm`` for a circle, and ``nozzle`` (the first extruder's, or None where the file gives
     none). The file is a 3MF a slicer saved (OrcaSlicer, Bambu Studio: ``PROJECT_SETTINGS``) or a JSON of a
     printer's complete settings (an exported machine preset, or the project settings themselves).
     ``ArgumentRefused`` naming the file for one that is none of these or lacks the bed or the height."""
@@ -551,7 +557,42 @@ def printer_settings(path: str | Path) -> dict[str, Any]:
         raise ArgumentRefused(f"--printer {file}: nozzle_diameter is a length in millimetres, not "
                               f"{settings['nozzle_diameter']!r}") from None
     name = next((str(settings[key]) for key in ("printer_settings_id", "name") if settings.get(key)), file.name)
-    return {"name": name, "file": str(file), "volume_mm": list(volume), "nozzle": nozzle}
+    printer: dict[str, Any] = {"name": name, "file": str(file), "volume_mm": list(volume), "nozzle": nozzle}
+    radius = _round_bed_radius(points)
+    if radius is not None:
+        printer.update(bed_radius_mm=radius, volume_mm=[2 * radius, 2 * radius, height])
+    return printer
+
+
+def _round_bed_radius(points: list[tuple[float, ...]]) -> float | None:
+    """A slicer's circular outline: dense, ordered points around one full circle."""
+    if points[0] == points[-1]:
+        points = points[:-1]
+    if len(points) < 8 or any(not math.isfinite(value) for point in points for value in point):
+        return None
+    # Pick three well-spaced points so exported coordinate rounding does not distort the radius.
+    x, y = points[0]
+    relative = [(px - x, py - y) for px, py in points]
+    ux, uy = max(relative, key=lambda p: math.hypot(*p))
+    vx, vy = max(relative, key=lambda p: abs(ux * p[1] - uy * p[0]))
+    twice_area = 2 * (ux * vy - uy * vx)
+    if twice_area == 0:
+        return None
+    uu, vv = ux * ux + uy * uy, vx * vx + vy * vy
+    cx, cy = (uu * vy - vv * uy) / twice_area, (ux * vv - vx * uu) / twice_area
+    radius = math.hypot(cx, cy)
+    centred = [(px - cx, py - cy) for px, py in relative]
+    # OrcaSlicer permits 0.005 mm radial rounding and up to 3 mm of chord sagitta.
+    if any(abs(math.hypot(*point) - radius) > 0.005 for point in centred):
+        return None
+    angles = [math.atan2(py, px) for px, py in centred]
+    turns = [math.remainder(b - a, math.tau) for a, b in zip(angles, angles[1:] + angles[:1])]
+    total = sum(turns)
+    if abs(abs(total) - math.tau) > 1e-6 or any(turn * total <= 0 for turn in turns):
+        return None
+    if any(abs(turn) > math.pi / 4 or radius * (1 - math.cos(turn / 2)) > 3 for turn in turns):
+        return None
+    return radius
 
 
 def _printer_file(file: Path) -> dict[str, Any]:
@@ -597,6 +638,8 @@ def apply_printer(resolved: dict[str, Any], printer: dict[str, Any]) -> None:
         resolved["nozzle"] = printer["nozzle"]
         supplied.append("nozzle")
     resolved["printer"] = {"name": printer["name"], "file": printer["file"], "supplied": supplied}
+    if "build_volume" in supplied and "bed_radius_mm" in printer:
+        resolved["printer"]["bed_radius_mm"] = printer["bed_radius_mm"]
 
 
 def build_volume(text: str) -> tuple[float, float, float]:

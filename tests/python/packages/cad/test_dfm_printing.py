@@ -974,6 +974,49 @@ class PrinterFileTest(unittest.TestCase):
         resolved = manufacturing.options("stl", "printing", {"printer": self.preset(settings, "b.json")})
         self.assertEqual(resolved["nozzle"], 0.6)
 
+    def test_orientation_fit_uses_the_same_unrounded_height_for_both_beds(self) -> None:
+        import trimesh
+
+        machine = {"volume_mm": [300.0, 300.0, 100.0], "origin": "test"}
+        for height, fits in ((100, True), (100.00005, True), (100.001, False)):
+            mesh = trimesh.creation.box(extents=(20, 20, height))
+            for bed in (machine, {**machine, "bed_radius_mm": 150.0}):
+                with self.subTest(height=height, bed=bed):
+                    [row] = mo.orientation_rows(mesh.vertices, mesh.faces, {"drawn": np.eye(3)},
+                                                45.0, 1.0, machine=bed)
+                    self.assertEqual(row["fill_ratio"], 1.0)
+                    self.assertEqual(row["fits"], fits)
+
+    def test_round_bed_volume_does_not_report_inferred_diameter_noise(self) -> None:
+        machine = {"volume_mm": [299.9996, 299.9996, 400.0], "origin": "test", "bed_radius_mm": 149.9998}
+        fit = mo.build_fit(np.zeros(3), np.array([10.0, 10.0, 10.0]), machine)
+        self.assertEqual(fit["volume_mm"], [300.0, 300.0, 400.0])
+
+    def test_round_bed_rejects_a_cube_that_fits_its_bounding_box(self) -> None:
+        settings = {**self.SETTINGS, "printable_height": 200, "printable_area": [
+            f"{20 + 100 * math.cos(math.radians(angle)):.4f}x{-30 + 100 * math.sin(math.radians(angle)):.4f}"
+            for angle in range(0, 360, 5)
+        ]}
+        preset = self.preset(settings)
+        cube = bd.Box(190, 190, 190, align=A)
+        mesh = self.root / "cube.stl"
+        self.assertTrue(bd.export_stl(cube, str(mesh)))
+        for source, printer, measure in (("B-rep", preset, lambda **options: check(cube, "cube", **options)),
+                                        ("STL", self.threemf(settings), lambda **options: _dfm(mesh, **options))):
+            with self.subTest(source=source):
+                result = measure(printer=printer)
+                fit = result.measurements["build_volume"]
+                self.assertFalse(fit["fits"], fit)
+                self.assertGreater(fit["as_placed_fill_ratio"], 1.0)
+                self.assertIn("round bed", fit["volume_origin"])
+                self.assertIn("printing.build_volume", codes(result))
+                candidates = measure(printer=printer, candidates=True).measurements["orientations"]
+                self.assertTrue(candidates["candidates"])
+                self.assertTrue(all(not row["fits"] for row in candidates["candidates"]))
+        self.assertTrue(check(cube, "cube", printer=preset, build_volume="200x200x200").measurements["build_volume"]["fits"])
+        disk = bd.Cylinder(96, 10, align=A)
+        self.assertTrue(check(disk, "disk", printer=preset).measurements["build_volume"]["fits"])
+
     def test_over_the_printer_s_volume_is_an_error_naming_the_printer(self) -> None:
         path = self.threemf(self.SETTINGS)
         long_bar = bd.Box(500, 20, 10, align=A)
