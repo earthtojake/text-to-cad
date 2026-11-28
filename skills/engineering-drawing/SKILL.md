@@ -64,7 +64,7 @@ cad run enclosure_drawing.py
 ```
 
 1. **Get the part.** Call the model and take its `.shape`; for a part with no model, read its file
-   (`step.read`, `model.read`, the path anchored on `Path(__file__).parent`). Any build123d shape works.
+   (`step.read`, `xbf.read`, the path anchored on `Path(__file__).parent`). Any build123d shape works.
 2. **Import the model's facts** (hole pitch, overall size, wall) instead of retyping them, so moving a
    feature moves its dimension.
 3. **Place views.** `sheet.three_views(part, iso=True)` returns four views: top, front and right in

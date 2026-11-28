@@ -122,7 +122,7 @@ if __name__ == "__main__":
 - **A jointed child brings its mechanism.** An assembly that places a child model's
   `.shape` holds the child's joints, states and sequences in its own document too, a
   joint two placements share named by its path as above. A part read from a file
-  (`model.read`, `step.read`) brings none.
+  (`xbf.read`, `step.read`) brings none.
 
 ## Mechanism states
 

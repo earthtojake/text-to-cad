@@ -28,6 +28,10 @@ OPERATIONS = re.compile(rf"(?<![\w])(?:cad\.)?{TYPES}\.(?:export|snapshot|inspec
 # ``@step("x.step")`` or ``xbf("XBF/arm.xbf")``, takes a string, or nothing).
 CALLED = re.compile(r"(?<![@\w.])(?:cad\.)?(?:xbf|model|step|stl|glb|threemf|dxf)\(\s*(?!(?:out|name)=)"
                     r"[A-Za-z_][\w.]+(?:\([^()]*\))?\s*[,)]")
+# The model type under its earlier name (``cad.model`` is ``cad.xbf``, and warns): its decorator, its reader and its
+# parameter, and the name in an import. "A model" is prose, so only these spellings are held, and only in the skills.
+MODEL = re.compile(r"(?<![\w.])(?:cad\.)?model\.(?:read|param)\b|(?<!\w)@model\b|(?<![\w.])cad\.model\b|"
+                   r"\bfrom cad import [^\n`]*\bmodel\b")
 # What else is read beside the skills: every tracked document (the migration guides, which name the earlier spellings
 # on purpose, aside). The sample models are no test's to read (tests/python/global/test_tests_are_self_contained.py).
 _LISTED = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files", "*.md"], capture_output=True, text=True, check=True)
@@ -89,10 +93,12 @@ class SkillsUseCurrentNamesTest(unittest.TestCase):
         self.assertGreater(len(paths), 40)
         for path in paths:
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if OPERATIONS.search(line) or CALLED.search(line):
+                earlier = OPERATIONS.search(line) or CALLED.search(line)
+                if earlier or (path.is_relative_to(SKILLS) and MODEL.search(line)):
                     found.append(f"{path.relative_to(REPO_ROOT)}:{number}: {line.strip()[:100]}")
-        self.assertEqual([], found, "an earlier spelling of a verb, which warns: cad.export, cad.inspect, cad.snapshot, "
-                                    "cad.dfm, cad.fea, cad.kicad.drc, cad.kicad.erc; a shape's .xbf is cad.save")
+        self.assertEqual([], found, "an earlier spelling, which warns: the verbs are cad.export, cad.inspect, "
+                                    "cad.snapshot, cad.dfm, cad.fea, cad.kicad.drc, cad.kicad.erc; a shape's .xbf is cad.save; "
+                                    "the model type is xbf (@xbf, xbf.read, xbf.param)")
 
     def test_the_patterns_tell_an_earlier_spelling_from_a_declaration(self) -> None:
         for line in ("xbf.export(handle, 'a.step')", "cad.kicad_pcb.drc(BOARD)", "step.dfm(path, process='cnc')",
@@ -104,6 +110,15 @@ class SkillsUseCurrentNamesTest(unittest.TestCase):
                      "a step(s)", "@stl(out='a.stl')", "step(out='arm.step', name='arm')"):
             with self.subTest(line=line):
                 self.assertFalse(OPERATIONS.search(line) or CALLED.search(line))
+        for line in ("`step.read`, `model.read` or `stl.read`", "the number `model.param` returns", "@model",
+                     "from cad import model", "from cad import step, model, joints", "cad.model.read(path)"):
+            with self.subTest(line=line):
+                self.assertTrue(MODEL.search(line))
+        for line in ("xbf.read(path)", "@xbf", "a model.", "the model's `.xbf`", "from cad import xbf",
+                     "from plate import THICKNESS, plate      # src/plate.py: a part model", "model-contract.md",
+                     "plate.model.read"):
+            with self.subTest(line=line):
+                self.assertFalse(MODEL.search(line))
 
 
 if __name__ == "__main__":

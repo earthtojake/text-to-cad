@@ -31,7 +31,7 @@ Any other CAD file exports the same way, by its path, and a mesh file (`.stl`, `
 converts to either of the other two mesh formats, keeping what the target can hold:
 
 ```bash
-cad export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which model.read loads many times faster
+cad export vendor/motor.step vendor/motor.xbf   # a vendor STEP as an xbf, which xbf.read loads many times faster
 cad export scan.stl scan.3mf
 ```
 
@@ -130,7 +130,7 @@ materials, element names and mechanism, read back losslessly, and the compiled t
 the model's animations, which only a GLB exported from it reads. Every run writes it, beside the
 script or at the path `@xbf("../XBF/arm.xbf")` gives, relative to the script. A copy of the file
 is a model of its own: copy it to share a model without its code, or to compose it in another
-project, where `model.read` reads it as an input.
+project, where `xbf.read` reads it as an input.
 
 ## Formats
 

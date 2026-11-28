@@ -39,7 +39,7 @@ files into a model, or working out why a run ran what it ran.
 ## Parameters a person tunes
 
 A number a person will tune is declared at the top level of the model's own script, and the code
-goes on with the plain number `model.param` returns:
+goes on with the plain number `xbf.param` returns:
 
 ```python
 WALL = xbf.param("wall", 2.0, min=1, max=5, unit="mm")   # unit "mm" or "deg"; step= too
@@ -228,7 +228,7 @@ def rig():
   never `located` or `moved` on a node of it, which copies the whole assembly
   ([opening geometry](inspection-and-validation.md#opening-geometry)).
 - **A vendor STEP is converted once**: `cad export vendor.step vendor.xbf` writes an
-  xbf of it, which `model.read` reads many times faster than `step.read` parses the STEP
+  xbf of it, which `xbf.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
 - **A STEP that names other files as its parts** (an external reference, written by a
@@ -241,7 +241,7 @@ def rig():
   `json.load`, `Path.read_text`, `np.loadtxt`. A file opened only for writing is not.
 - **build123d's `import_step`, `import_brep` and `import_stl`** are inputs by the file's
   bytes as the server's readers are. Prefer `step.read` (names, colours, materials, the
-  assembly tree) and `model.read` (fastest); `import_stl` makes a mesh, which no model
+  assembly tree) and `xbf.read` (fastest); `import_stl` makes a mesh, which no model
   holds.
 - **A read past the server runs the body on every run**: OCCT's readers driven directly
   (`BRepTools.Read_s`, `STEPControl_Reader`, ...) read files where the server cannot hear
