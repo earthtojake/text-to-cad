@@ -176,7 +176,7 @@ class RunOnTheKernelTest(KernelPackagesTest):
 
         uv = Uv("tabulate==0.9.0\n")
         with mock.patch.object(kernel_packages, "_uv", uv), mock.patch.object(base, "find_uv", return_value="uv"), \
-                mock.patch.object(subprocess, "call", call), mock.patch.dict(os.environ, {"PYTHONPATH": "/mine"}):
+                mock.patch.object(run, "_waited", call), mock.patch.dict(os.environ, {"PYTHONPATH": "/mine"}):
             code = run._on_the_kernel(self.plan(), extras.Spec(requirements=("tabulate",)), self.kernel, self.said.append)
         self.assertEqual(code, 7, "the program's exit code")
         self.assertEqual(ran["command"], [self.kernel["python"], "-P", "-m", run.PROGRAM, "model.py", "--size", "3"])
@@ -186,6 +186,33 @@ class RunOnTheKernelTest(KernelPackagesTest):
 
         with self.assertRaises(OSError):
             socket.create_connection(("127.0.0.1", ran["relay"][0]), timeout=5)  # gone with the program
+
+    def test_it_ends_as_the_program_ends_and_the_terminal_s_interrupt_is_the_program_s(self) -> None:
+        """As the native ``exec`` of the program: a program killed by a signal kills ``cad run`` by it (a shell's 137),
+        and Ctrl-C, which the terminal sends both, is the program's to answer: ``cad run`` says nothing of it."""
+        import signal
+        import sys
+        import textwrap
+
+        from tests.python.support.paths import SOURCE_PATH
+
+        probe = textwrap.dedent("""
+            import os, sys
+            from cad_server.cli import run
+            code = run._waited(["sh", "-c", sys.argv[1]], dict(os.environ))
+            print(code, flush=True)
+            sys.exit(run._ended(code))
+        """)
+        env = {**os.environ, "PYTHONPATH": SOURCE_PATH}
+        killed = subprocess.run([sys.executable, "-c", probe, "kill -KILL $$"], env=env, capture_output=True, text=True,
+                                timeout=60)
+        self.assertEqual((killed.returncode, killed.stdout.strip()), (-signal.SIGKILL, str(-signal.SIGKILL)))
+        # Ctrl-C reaches the whole foreground group: here, the program sends it to its parent and itself goes on.
+        interrupted = subprocess.run([sys.executable, "-c", probe, "kill -INT $PPID; sleep 0.2; exit 5"], env=env,
+                                     capture_output=True, text=True, timeout=60)
+        self.assertEqual((interrupted.returncode, interrupted.stdout.strip()), (5, "5"))
+        self.assertNotIn("Traceback", interrupted.stderr)
+        self.assertEqual(subprocess.run([sys.executable, "-c", probe, "exit 7"], env=env, timeout=60).returncode, 7)
 
 
 if __name__ == "__main__":

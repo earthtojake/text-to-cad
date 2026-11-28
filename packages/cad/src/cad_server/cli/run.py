@@ -465,9 +465,8 @@ def _on_the_kernel(plan: Plan, spec, chosen: dict, said) -> int:
     """A program run on the WebAssembly kernel's Python (law 11: the program, not the engine, decides what it
     calls): the library on its path as a kernel process has it, then the script's own pure-Python packages
     (``kernel_packages``), and the engine asked through a relay this process holds while it runs
-    (``cad.engine.relay``: that Python has no pipes to dial the door with). Its exit code."""
-    import subprocess
-
+    (``cad.engine.relay``: that Python has no pipes to dial the door with). Its exit code; a program ended by a signal
+    ends this process by the same signal (``_ended``), as the native ``exec`` of it would."""
     from cad.engine import places, relay
 
     from cad_server._internal import kernel_packages
@@ -484,12 +483,50 @@ def _on_the_kernel(plan: Plan, spec, chosen: dict, said) -> int:
         assert command is not None
         sys.stdout.flush()
         try:
-            return subprocess.call(command, env=env)
+            code = _waited(command, env)
         except OSError as error:
             said(f"cannot run {command[0]}: {error.strerror or error}")
             return 1
     finally:
         between.close()
+    return _ended(code)
+
+
+def _waited(command: list[str], env: dict[str, str]) -> int:
+    """``command`` run as this process's child and waited for, this process standing aside as a shell does while it
+    runs: the terminal's interrupt and quit are the program's alone (this process ignores them), and a termination
+    or hang-up sent to this process is passed on to it. Its exit status, negative for a signal that ended it."""
+    import signal
+    import subprocess
+
+    child = subprocess.Popen(command, env=env)
+    kept: dict = {}
+    try:
+        for name in ("SIGINT", "SIGQUIT"):
+            if hasattr(signal, name):
+                kept[getattr(signal, name)] = signal.signal(getattr(signal, name), signal.SIG_IGN)
+        for name in ("SIGTERM", "SIGHUP"):
+            if hasattr(signal, name):
+                kept[getattr(signal, name)] = signal.signal(getattr(signal, name),
+                                                            lambda number, _frame: child.send_signal(number))
+        return child.wait()
+    finally:
+        for number, handler in kept.items():
+            signal.signal(number, handler)
+
+
+def _ended(code: int) -> int:
+    """An exit status as this process's: a program ended by a signal (``code`` negative) ends this one by it too,
+    so whoever ran ``cad run`` sees what the program's own process would have shown (a shell's 137 for a kill)."""
+    if code < 0 and os.name != "nt":
+        import signal
+
+        try:
+            signal.signal(-code, signal.SIG_DFL)
+        except (OSError, ValueError):  # one no process can catch (a kill): its default already
+            pass
+        os.kill(os.getpid(), -code)
+    return code
 
 
 def _homes(names: tuple[str, ...], environ: dict[str, str]) -> dict[str, str]:
