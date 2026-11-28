@@ -16,6 +16,11 @@ export function shareApiUrl(id, origin = window.location.origin) {
   return new URL(`/v1/shares/${encodeURIComponent(id)}`, origin).href;
 }
 
+/** The files' zip of share `id`, on `origin` (the page's own): `<origin>/<id>.zip`, the files that made it. */
+export function shareFilesUrl(id, origin = window.location.origin) {
+  return new URL(`/${encodeURIComponent(id)}.zip`, origin).href;
+}
+
 /**
  * What a prompt from share `id`'s view names the model by, on `origin` (the page's own), as the viewer host's
  * `promptSubject`: the share's link (`<origin>/<id>`), which an agent on any computer can reach (`cad import` gets the

@@ -238,7 +238,8 @@ class Service:
     commit's expiry is a second later than the one before, as if time passed between them. Its knobs: ``most_pack``
     (the most a pack may be), ``limited`` (how many requests to answer 429 next, with ``Retry-After: retry_after``),
     ``conflicts`` (how many commits to refuse as if another replaced the manifest meanwhile), ``losing`` (how many
-    commits find every pack of their share gone) and ``zips`` (a zip to answer for an id in place of the share's)."""
+    commits find every pack of their share gone), ``zips`` (a zip to answer for an id in place of the share's) and
+    ``cut`` (how many bytes of a zip to send before the connection closes, its length said whole)."""
 
     def __init__(self) -> None:
         self.shares: dict[str, dict[str, Any]] = {}
@@ -324,6 +325,15 @@ class Service:
                 if manifest and manifest["made"]:
                     headers["Cad-Share-Made"] = ", ".join(f"{_header(key)}={_header(value)}"
                                                           for key, value in manifest["made"].items())
+                if service.cut is not None:  # the answer's headers, its length whole, then part of it and no more
+                    self.send_response(200)
+                    for name, value in {**headers, "Content-Length": str(len(body))}.items():
+                        self.send_header(name, value)
+                    self.end_headers()
+                    self.wfile.write(body[:service.cut])
+                    self.wfile.flush()
+                    self.close_connection = True
+                    return None
                 return self.raw(200, body, headers)
 
             do_HEAD = do_GET  # noqa: N815
@@ -423,6 +433,7 @@ class Service:
             self.most_pack, self.limited, self.retry_after = 8 * MIB, 0, "1"
             self.conflicts = self.losing = self.commits = 0
             self.zips: dict[str, bytes] = {}
+            self.cut: int | None = None
 
     def puts(self, kind: str) -> list[tuple[str, str, dict[str, str], float]]:
         """The PUTs seen of ``kind``: ``pack`` or ``commit``."""
@@ -566,6 +577,20 @@ class ShareTest(unittest.TestCase):
 
         return sharing.folder_of(file_id(self.base / target))
 
+    def unplaced(self, found: dict[str, Any]) -> str:
+        """The share's view names no place of this computer's -- no folder of it, and not the id this computer names
+        the file by, a digest of its path that anyone could test guesses against -- but names the document by the
+        share's own id for it (``document_of``): that id."""
+        from cad_server import sharing
+
+        for path in self.service.shares[found["id"]]["manifest"]["view"]:
+            data = self.service.read(found["id"], path)
+            self.assertNotIn(str(self.base).encode(), data, path)
+            self.assertNotIn(found["document"]["id"].encode(), data, path)
+        named = sharing.document_of(sharing.Share(self.service.url, found["id"], "", ""))
+        self.assertEqual(json.loads(self.service.read(found["id"], "manifest.json"))["document"]["id"], named)
+        return named
+
     def import_(self, *args: str, cwd: Path, elsewhere: bool = False) -> Any:
         """``cad import``, on this computer, or ``elsewhere``: on another, with a state, a cache and an engine folder of
         its own (no server runs there, so the import's record is kept by the command), which keep no record of this
@@ -584,12 +609,15 @@ class ShareTest(unittest.TestCase):
         self.assertEqual(refused.stdout, "")
         words = refused.stderr
         for said in ("cad share tetra.stl --yes", "the file itself, which anyone with the link can download",
-                     "Never an installed library", self.service.url,
+                     "Never an installed library", f"\n  Its files, from {self.base}: tetra.stl\n", self.service.url,
                      "anyone with the link can open it and download its files", "7 days", "delete link",
                      "Ask the person"):
             self.assertIn(said, words)
         self.assertNotIn("never its code", words)
         self.assertEqual(self.service.seen, [])
+        # As its help says: the first share never asks, and is refused without --yes, wherever it runs.
+        self.assertIn("the first share on a computer never asks, and without it is refused",
+                      " ".join(self.cad("--help").stdout.split()))
         as_json = json.loads(self.cad("tetra.stl", "--json").stdout)
         self.assertEqual((as_json["ok"], as_json["reason"], as_json["userActionRequired"], as_json["next"]),
                          (False, "confirmation_required", True, ["cad share tetra.stl --json --yes"]))
@@ -598,9 +626,11 @@ class ShareTest(unittest.TestCase):
         done = self.cad("tetra.stl", "--yes")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         lines = done.stdout.splitlines()
-        self.assertEqual(len(lines), 5, done.stdout)
+        self.assertEqual(len(lines), 6, done.stdout)
         self.assertRegex(lines[0], r"^Shared tetra\.stl, an STL: the file itself and its view; 3 files, [\d.]+ "
                                    r"(B|KiB) uploaded$")
+        self.assertEqual(lines[1], f"Its files, from {self.base}: tetra.stl")
+        lines = lines[1:]
         self.assertRegex(lines[1], rf"^View: +{re.escape(self.service.url)}/[A-Za-z0-9_-]{{22}}$")
         self.assertEqual(lines[2], f"Files:   {lines[1].split()[1]}.zip")
         self.assertRegex(lines[3], rf"^Delete: +{re.escape(self.service.url)}/[A-Za-z0-9_-]{{22}}#delete="
@@ -664,8 +694,13 @@ class ShareTest(unittest.TestCase):
         paths = sorted(["manifest.json", *(path for path in listed if path != "thumbnail.png")])
         share = self.service.shares[found["id"]]
         self.assertEqual(sorted(share["manifest"]["view"]), paths)
+        # As the engine wrote them, but that the share names the document by its own id, not this computer's.
+        named = self.unplaced(found)
         for path in paths:
-            self.assertEqual(self.service.read(found["id"], path), (bundle / path).read_bytes(), path)
+            local = json.loads((bundle / path).read_bytes()) if path == "manifest.json" else None
+            self.assertEqual(self.service.read(found["id"], path), (bundle / path).read_bytes() if local is None else
+                             json.dumps({**local, "document": {**local["document"], "id": named}},
+                                        separators=(",", ":")).encode(), path)
         packs = self.service.puts("pack")
         self.assertEqual(found["sent"]["files"], len(paths) + 1)  # and the file itself
         self.assertEqual((found["sent"]["packs"], found["sent"]["bytes"]),
@@ -682,7 +717,7 @@ class ShareTest(unittest.TestCase):
         stamps = {path: (bundle / path).stat().st_mtime_ns for path in paths}
         again = self.shared()
         self.assertEqual({path: (bundle / path).stat().st_mtime_ns for path in paths}, stamps)
-        self.assertEqual((again["id"], again["sent"]["files"]), (found["id"], 0))
+        self.assertEqual((again["id"], again["sent"]["files"], self.unplaced(again)), (found["id"], 0, named))
         shutil.rmtree(self.cache / "documents")
         remade = self.shared()
         self.assertEqual((remade["id"], remade["again"]), (found["id"], True))
@@ -703,7 +738,7 @@ class ShareTest(unittest.TestCase):
         self.assertEqual([record["expires"] for record in self.records()], [second["expires"]])
         unchanged = self.cad("tetra.stl").stdout.splitlines()
         self.assertRegex(unchanged[0], r"; nothing changed, nothing uploaded \([\d.]+ (B|KiB) in all\)$")
-        self.assertIn("(the same link as before)", unchanged[4])
+        self.assertIn("(the same link as before)", unchanged[5])
 
         # An edit of the file: its new bytes travel, once for the view's copy and the file itself, and the bundle's
         # manifest that lists them; nothing else.
@@ -713,7 +748,7 @@ class ShareTest(unittest.TestCase):
         self.assertEqual(edited.returncode, 0, edited.stdout + edited.stderr)
         self.assertRegex(edited.stdout.splitlines()[0], r"; 3 files changed, [\d.]+ (B|KiB) uploaded \([\d.]+ (B|KiB) "
                                                         r"in all\)$")
-        self.assertEqual(edited.stdout.splitlines()[1].split()[1], first["view"])
+        self.assertEqual(edited.stdout.splitlines()[2].split()[1], first["view"])
         manifest = self.service.shares[first["id"]]["manifest"]
         new = [name for name in self.service.shares[first["id"]]["packs"] if name not in before]
         self.assertEqual({(kept, path) for kept in ("view", "files") for path, entry in manifest[kept].items()
@@ -730,7 +765,8 @@ class ShareTest(unittest.TestCase):
         # The view's copy of the file is the same bytes: one member, named twice.
         self.assertEqual(manifest["files"]["tetra.stl"], manifest["view"]["source.stl"])
         self.assertEqual(found["files"], {"count": 1, "bytes": len(STL), "entry": None, "file": "tetra.stl",
-                                          "left_out": [], "unseen": False})
+                                          "root": str(self.base), "paths": ["tetra.stl"], "left_out": [],
+                                          "unseen": False})
         self.assertEqual(found["document"]["path"], str(self.base / "tetra.stl"))
         # Named by its document's id, it is the same share, and the file itself goes.
         from cad.engine.ids import file_id
@@ -761,10 +797,12 @@ class ShareTest(unittest.TestCase):
         lines = done.stdout.splitlines()
         self.assertRegex(lines[0], r"^Shared arm\.urdf, a URDF: the file itself with 1 file it draws from and its view "
                                    r"\(its links and joints, with 2 mesh files\); ")
-        self.assertEqual(lines[1], f"Left out, outside the project: {self.base / 'parts' / 'tip.stl'}")
+        self.assertEqual(lines[1], f"Its files, from {robot}: arm.urdf, meshes/base.stl")
+        self.assertEqual(lines[2], f"Left out, outside the project: {self.base / 'parts' / 'tip.stl'}")
         (ident,) = self.service.shares
         manifest = self.service.shares[ident]["manifest"]
         self.assertEqual(sorted(manifest["files"]), ["arm.urdf", "meshes/base.stl"])
+        self.unplaced(json.loads(self.cad("arm.urdf", "--json", cwd=robot).stdout))
         self.assertEqual(self.service.read(ident, "meshes/base.stl", "files"), STL.encode())
 
     # --- a model -------------------------------------------------------------------------------------------------
@@ -813,11 +851,17 @@ class ShareTest(unittest.TestCase):
                                             **previous._platform()})
         for path in expected:
             self.assertEqual(self.service.read(found["id"], path, "files"), (project / path).read_bytes(), path)
+        # Its view names the model by the share's id for it, in its manifest and its structure, never by this
+        # computer's (its .xbf's path's digest), nor any folder of this computer.
+        named = self.unplaced(found)
+        self.assertEqual({name: json.loads(self.service.read(found["id"], "structure.json"))[name]
+                          for name in ("path", "id")}, {"path": named, "id": named})
         stock = str(workspace / "stock.json")
         self.assertEqual(found["files"], {"count": 5, "bytes": sum(len((project / path).read_bytes())
                                                                    for path in expected),
-                                          "entry": "plate.py", "file": "plate.xbf",
-                                          "left_out": [{"path": stock, "reason": "outside"}], "unseen": False})
+                                          "entry": "plate.py", "file": "plate.xbf", "root": str(project),
+                                          "paths": expected, "left_out": [{"path": stock, "reason": "outside"}],
+                                          "unseen": False})
         self.assertEqual(found["document"], {"id": ident, "kind": "xbf", "name": found["document"]["name"],
                                              "path": str(xbf)})
         # By its document's id, the same file and the same share; and so after the engine restarts, when no worker
@@ -825,8 +869,9 @@ class ShareTest(unittest.TestCase):
         said = self.cad(ident, cwd=project).stdout.splitlines()
         self.assertRegex(said[0], r"^Shared plate(\.xbf)?, a model: its \.xbf and the 4 files that made it and its view "
                                   r"\(1 part as meshes, with their names and measurements\); nothing changed")
-        self.assertEqual(said[1], f"Left out, outside the project: {stock}")
-        self.assertEqual(said[3], f"Files:   {found['zip']}")
+        self.assertEqual(said[1], f"Its files, from {project}: {', '.join(expected)}")
+        self.assertEqual(said[2], f"Left out, outside the project: {stock}")
+        self.assertEqual(said[4], f"Files:   {found['zip']}")
         parts = [path for path in self.service.shares[found["id"]]["manifest"]["view"] if path.startswith("parts/")]
         bundle = self.folder("workspace/plate/plate.xbf") / "view"
         stamps = {path: (bundle / path).stat().st_mtime_ns for path in parts}
@@ -864,11 +909,17 @@ class ShareTest(unittest.TestCase):
         self.assertEqual(written, expected)
         for path in expected:
             self.assertEqual((place / "copy" / path).read_bytes(), (project / path).read_bytes(), path)
+        # The .xbf's build closure, which travels in it, names its files relative to its folder: no folder of this
+        # computer's.
+        self.assertNotIn(str(self.base).encode(), (place / "copy" / "plate.xbf").read_bytes())
         lines = imported.stdout.splitlines()
         self.assertRegex(lines[0], r"^Imported plate into copy: 5 files, [\d.]+ (B|KiB); it is plate\.xbf; its script "
                                    r"is plate\.py$")
-        self.assertEqual(lines[1], "Made with the cad and libraries this computer has")
-        self.assertEqual(lines[2], "Nothing was run: the code is someone else's, the person's to read and run. Next: "
+        # The file its build read that the share left out, which a build here needs where its closure names it.
+        self.assertEqual(lines[1], "Its build read 1 file the share does not hold: ../stock.json (from plate.xbf's "
+                                   "folder); a build here needs it there")
+        self.assertEqual(lines[2], "Made with the cad and libraries this computer has")
+        self.assertEqual(lines[3], "Nothing was run: the code is someone else's, the person's to read and run. Next: "
                                    f"cad viewer {os.path.join('copy', 'plate.xbf')} shows it as it was shared; "
                                    f"cad run {os.path.join('copy', 'plate.py')} builds it here")
 
@@ -1106,7 +1157,9 @@ class ShareTest(unittest.TestCase):
         self.assertEqual(found["document"]["kind"], "stl")
         self.assertEqual(found["document"]["name"], "tetra.stl")
         self.assertEqual(found["document"]["path"], str(self.base / "tetra.stl"))
-        self.assertEqual(set(found["files"]), {"count", "bytes", "entry", "file", "left_out", "unseen"})
+        self.assertEqual(set(found["files"]), {"count", "bytes", "entry", "file", "root", "paths", "left_out",
+                                               "unseen"})
+        self.assertEqual((found["files"]["root"], found["files"]["paths"]), (str(self.base), ["tetra.stl"]))
         self.assertEqual(set(found["sent"]), {"what", "parts", "files", "bytes", "packs", "format"})
         self.assertEqual(found["sent"]["format"], "cad-share/2")
         self.assertEqual(set(found["stored"]), {"files", "bytes"})
@@ -1232,6 +1285,14 @@ def _xbf(path: Path, closure: dict[str, Any] | None) -> Path:
     return path
 
 
+def _read(folder: Path, path: str, kind: str = "read") -> list[str]:
+    """An input of a build closure as the engine records the file at ``path`` (relative to ``folder``, the ``.xbf``'s)
+    as it is now: a file a body read itself by its bytes' BLAKE2b of 32 bytes, one read through the engine by their
+    SHA-256."""
+    data = (folder / path).read_bytes()
+    return [kind, path, hashlib.blake2b(data, digest_size=32).hexdigest() if kind == "read" else _sha(data)]
+
+
 class SourcesTest(unittest.TestCase):
     """The files that made a document, with no engine: a model's from the build closure an ``.xbf`` of this test's
     making holds, the ``.xbf`` among them, its root and the two caps on it, what is left out and the refusals; a file
@@ -1253,34 +1314,67 @@ class SourcesTest(unittest.TestCase):
                 "bodies": 1, "key": key}
 
     def sources(self, folder: Path, closure: dict[str, Any] | None, built: float | None = None,
-                name: str = "plate.xbf") -> Any:
-        """The files that made the model whose .xbf, holding ``closure``, is written in ``folder`` now."""
+                name: str = "plate.xbf", projects: list[Path] | None = None) -> Any:
+        """The files that made the model whose .xbf, holding ``closure``, is written in ``folder`` now, the viewer
+        having ``projects``."""
         from cad_server import sharing
 
         xbf = _xbf(folder / name, closure)
-        return sharing.model_sources(str(xbf), time.time() + 60 if built is None else built, home=self.home)
+        return sharing.model_sources(str(xbf), time.time() + 60 if built is None else built, home=self.home,
+                                     projects=[str(project) for project in projects or ()])
 
-    def test_the_root_is_the_deepest_folder_that_holds_them_under_a_checkout_and_the_home_folder(self) -> None:
-        project = _write(self.base / "home" / "work" / "plate", {"src/plate.py": "", "lib/parts.py": ""})
-        found = self.sources(project / "src", self.closure(["plate.py", "../lib/parts.py"]))
+    def test_the_root_is_the_models_project_else_the_folder_that_holds_them_never_the_home_folder(self) -> None:
+        from cad_server import sharing
+
+        home = Path(self.home)
+        project = _write(home / "work" / "plate", {"src/plate.py": "", "lib/parts.py": ""})
+        closure = self.closure(["plate.py", "../lib/parts.py"])
+        # No project and no checkout: the deepest folder that holds them all.
+        found = self.sources(project / "src", closure)
         self.assertEqual((found.root, found.entry, found.shared), (str(project), "src/plate.py", "src/plate.xbf"))
         self.assertEqual([file.path for file in found.files], ["lib/parts.py", "src/plate.py", "src/plate.xbf"])
         self.assertEqual(found.file, str(project / "src" / "plate.xbf"))
-        # Never above the checkout the script is in: what lies outside it is left out, and said.
+        # A checkout's root over the .xbf that holds its script is its project: what lies outside it is left out.
         (project / "src" / ".git").mkdir()
-        found = self.sources(project / "src", self.closure(["plate.py", "../lib/parts.py"]))
+        found = self.sources(project / "src", closure)
         self.assertEqual((found.root, found.entry, [file.path for file in found.files]),
                          (str(project / "src"), "plate.py", ["plate.py", "plate.xbf"]))
         self.assertEqual(found.left_out, ((str(project / "lib" / "parts.py"), "outside"),))
-        # Never above the home folder: a module elsewhere on the disk is left out, and the root stays in the home.
         (project / "src" / ".git").rmdir()
+        # So is a project the viewer has, the nearest over the .xbf that holds its script, whatever the files are.
+        self.assertEqual(self.sources(project / "src", closure, projects=[project / "src"]).left_out,
+                         ((str(project / "lib" / "parts.py"), "outside"),))
+        _write(home / "work", {"common.json": "{}"})
+        found = self.sources(project / "src", self.closure(["plate.py"], [_read(project / "src", "../../common.json")]),
+                             projects=[home / "work", project / "XBF"])
+        self.assertEqual((found.root, [file.path for file in found.files]),
+                         (str(home / "work"), ["common.json", "plate/src/plate.py", "plate/src/plate.xbf"]))
+        # One that holds the .xbf and not its script is not the model's.
+        found = self.sources(project / "XBF", self.closure(["../src/plate.py"], script="../src/plate.py"),
+                             projects=[project / "XBF"])
+        self.assertEqual((found.root, found.left_out), (str(project), ()))
+        # Never the home folder, nor a folder over it, though the build read a file elsewhere in it (the person's
+        # documents) or elsewhere on the disk: the root holds the model, and those files are left out and named.
+        _write(home, {"Documents/private.json": "{}"})
         _write(self.base, {"elsewhere/shared.py": ""})
-        found = self.sources(project / "src", self.closure(["plate.py", "../lib/parts.py",
-                                                            "../../../../elsewhere/shared.py"]))
-        self.assertEqual(found.root, self.home)
-        self.assertEqual([file.path for file in found.files], ["work/plate/lib/parts.py", "work/plate/src/plate.py",
-                                                               "work/plate/src/plate.xbf"])
-        self.assertEqual(found.left_out, ((str(self.base / "elsewhere" / "shared.py"), "outside"),))
+        far = self.closure(["plate.py", "../lib/parts.py", "../../../../elsewhere/shared.py"],
+                           [["read", "../../../Documents/private.json", "c" * 64]])
+        for projects in ([], [home]):
+            found = self.sources(project / "src", far, projects=projects)
+            self.assertEqual(found.root, str(project))
+            self.assertEqual([file.path for file in found.files], ["lib/parts.py", "src/plate.py", "src/plate.xbf"])
+            self.assertEqual(sorted(found.left_out), [(str(self.base / "elsewhere" / "shared.py"), "outside"),
+                                                      (str(home / "Documents" / "private.json"), "outside")])
+            (home / ".git").mkdir(exist_ok=True)  # a checkout at the home folder is no model's project either
+        # A model that no folder but the home folder holds, .xbf and script, is refused, saying how to share it.
+        _write(home, {"arm.py": ""})
+        with self.assertRaisesRegex(sharing.Unsharable, r"^no folder but .* \(the home folder, or a folder over it\) "
+                                                        r"holds arm\.xbf and arm\.py.*open the folder that holds them "
+                                                        r"as a project in the viewer$"):
+            self.sources(home, self.closure(["arm.py"], script="arm.py"), name="arm.xbf")
+        with self.assertRaisesRegex(sharing.Unsharable, r"^no folder but .* holds plate\.xbf and plate\.py"):
+            self.sources(home / "elsewhere", self.closure(["../work/plate/src/plate.py"],
+                                                          script="../work/plate/src/plate.py"))
 
     def test_the_closures_paths_are_its_xbfs_folders_and_an_xbf_with_none_goes_alone(self) -> None:
         from cad_server import sharing
@@ -1295,9 +1389,9 @@ class SourcesTest(unittest.TestCase):
         alone = self.sources(self.base / "home" / "shapes", None, name="crate.xbf")
         self.assertEqual(([file.path for file in alone.files], alone.entry, alone.made, alone.shared),
                          (["crate.xbf"], None, None, "crate.xbf"))
-        # An .xbf outside the folder that holds the files that made it is refused: a share holds one folder's files.
+        # An .xbf that no folder but the home folder holds with its script is refused: a share holds a project's.
         (project / ".git").mkdir()
-        with self.assertRaisesRegex(sharing.Unsharable, "lies outside the folder that holds the files that made it"):
+        with self.assertRaisesRegex(sharing.Unsharable, "no folder but .* holds plate.xbf and plate.py"):
             self.sources(self.base / "home" / "elsewhere", self.closure(["../plate/src/plate.py"],
                                                                         script="../plate/src/plate.py"))
 
@@ -1307,7 +1401,7 @@ class SourcesTest(unittest.TestCase):
         project = _write(self.base / "home" / "plate", {"plate.py": "", "data/hole.json": "{}", "fonts/a.ttf": "f"})
         _write(self.base, {"system/b.ttf": "f"})
         found = self.sources(project, self.closure(["plate.py"], [
-            ["read", "data/hole.json", "c" * 64], ["file", "data/gone.step", "c" * 32],
+            _read(project, "data/hole.json"), ["file", "data/gone.step", "c" * 64],
             ["read", "data/never.json", None],  # found missing by the build: it read nothing of it
             ["font", "A", "fonts/a.ttf", "REGULAR", "f:1"], ["font", "B", "../../system/b.ttf", None, "f:2"],
             ["font", "Arial", None, None, "f:3"]]))
@@ -1326,20 +1420,61 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(sharing.share_name("x" * 300), "x" * 200)
         self.assertEqual(sharing.share_name("\x07"), "share")
 
-    def test_a_file_changed_after_the_xbf_was_made_or_code_gone_is_refused(self) -> None:
+    def test_a_version_controls_file_the_build_read_is_left_out_and_said(self) -> None:
         from cad_server import sharing
 
-        project = _write(self.base / "home" / "plate", {"plate.py": "", "lib/parts.py": "", "data/a.json": "{}"})
+        project = _write(self.base / "home" / "plate", {
+            "plate.py": "", ".git/config": "", "data/.GIT./x": "", "data/GIT~1/y": "", "data/.h‌g/z": "",
+            "store/HEAD": "", "store/objects/a": "", "store/refs/b": "", "data/ok.json": "", ".gitignore": ""})
+        reads = [".git/config", "data/.GIT./x", "data/GIT~1/y", "data/.h‌g/z", "store/HEAD", "store/objects/a",
+                 "store/refs/b", "data/ok.json", ".gitignore"]
+        found = self.sources(project, self.closure(["plate.py"], [_read(project, path) for path in reads]))
+        self.assertEqual([file.path for file in found.files], [".gitignore", "data/ok.json", "plate.py", "plate.xbf",
+                                                               "store/objects/a", "store/refs/b"])
+        self.assertEqual(sorted(found.left_out), sorted((str(project / path), "control") for path in (
+            ".git/config", "data/.GIT./x", "data/GIT~1/y", "data/.h‌g/z", "store/HEAD")))
+        from cad_server.cli.share import _notes
+
+        self.assertIn("Left out, a version control's file (a .git folder's), which no share holds: ",
+                      _notes(found, "xbf", "plate")[1])
+        # As a share's manifest takes a path, and as an import judges what it writes.
+        for path in (".git/config", ".Git /HEAD", "a/GIT~1/b", ".svn/wc.db", "_darcs/x", ".jj/repo/config.toml"):
+            self.assertFalse(sharing.sharable(path), path)
+        self.assertEqual(sharing.controlled(["a.py", "x/HEAD", "x/Objects/1", "x/refs/heads/main"]), "x/HEAD")
+        self.assertIsNone(sharing.controlled(["a.py", "HEAD", "objects/1", ".github/x", "git/HEAD", "a.git"]))
+
+    def test_a_file_changed_since_the_xbf_was_made_by_its_bytes_or_code_by_its_time_or_gone_is_refused(self) -> None:
+        from cad_server import sharing
+
+        project = _write(self.base / "home" / "plate", {"plate.py": "", "lib/parts.py": "", "data/a.json": "{}",
+                                                        "data/b.step": "ISO-10303-21;"})
         built = time.time()
         later = built + 5
+        closure = self.closure(["plate.py", "lib/parts.py"], [_read(project, "data/a.json"),
+                                                              _read(project, "data/b.step", "file")])
+        # A file the build read is judged by its bytes, which its closure holds the digest of: touched, it is the
+        # same file; changed with its time put back (a copy that keeps times, an unzip), it is refused.
         os.utime(project / "data" / "a.json", (later, later))
+        self.assertEqual([file.path for file in self.sources(project, closure, built).files],
+                         ["data/a.json", "data/b.step", "lib/parts.py", "plate.py", "plate.xbf"])
+        for path, changed_to in (("data/a.json", b'{"r": 5}'), ("data/b.step", b"ISO-10303-21;\n")):
+            with self.subTest(path=path):
+                was = (project / path).read_bytes()
+                stamp = os.stat(project / path).st_mtime_ns
+                (project / path).write_bytes(changed_to)
+                os.utime(project / path, ns=(stamp - 10**10, stamp - 10**10))
+                with self.assertRaises(sharing.Stale) as changed:
+                    self.sources(project, closure, built)
+                self.assertEqual((changed.exception.path, changed.exception.why), (str(project / path), "changed"))
+                (project / path).write_bytes(was)
+        # The code is judged by its time (its closure's digest is of what the build reached in it): a module modified
+        # after the model was made is refused, and the same made later (a run that took the .xbf whole, writing
+        # nothing) is what made it.
+        os.utime(project / "lib" / "parts.py", (later, later))
         with self.assertRaises(sharing.Stale) as changed:
-            self.sources(project, self.closure(["plate.py", "lib/parts.py"], [["read", "data/a.json", "c" * 64]]),
-                         built)
-        self.assertEqual((changed.exception.path, changed.exception.why), (str(project / "data" / "a.json"), "changed"))
-        # Made later than the edit (a run that took the .xbf whole, writing nothing): the files are what made it.
-        self.assertIn("data/a.json", [file.path for file in self.sources(
-            project, self.closure(["plate.py", "lib/parts.py"], [["read", "data/a.json", "c" * 64]]), later + 1).files])
+            self.sources(project, closure, built)
+        self.assertEqual((changed.exception.path, changed.exception.why), (str(project / "lib" / "parts.py"), "changed"))
+        self.assertIn("lib/parts.py", [file.path for file in self.sources(project, closure, later + 1).files])
         for gone, closure in (("lib/gone.py", self.closure(["plate.py", "lib/gone.py"])),
                               ("nothere.py", self.closure(["lib/parts.py"], script="nothere.py"))):
             with self.subTest(gone=gone), self.assertRaises(sharing.Stale) as missing:
@@ -1354,7 +1489,7 @@ class SourcesTest(unittest.TestCase):
         self.assertEqual(_notes(sharing.Sources((file,), "arm.py", {}, "/p", (("/q/a.json", "outside"),
                                                                               ("/p/b.json", "gone")), True),
                                 "xbf", "arm"), [
-            "Left out, outside the project: /q/a.json", "Left out, no longer on the disk: /p/b.json",
+            "Its files, from /p: arm.py", "Left out, outside the project: /q/a.json", "Left out, no longer on the disk: /p/b.json",
             "Its build read a file cad could not see, which the share does not hold: an import may not rebuild it "
             "without that file"])
         self.assertEqual(_notes(sharing.Sources(), "xbf", "crate"), [
@@ -1816,9 +1951,9 @@ class ImportTest(unittest.TestCase):
         self.assertEqual(as_json.returncode, 0, as_json.stdout + as_json.stderr)
         self.assert_written(self.here / "by id")
         found = json.loads(as_json.stdout)
-        self.assertEqual(set(found), {"ok", "local", "folder", "name", "files", "file", "entry", "made", "here",
-                                      "differs", "next"})
-        self.assertFalse(found["local"])
+        self.assertEqual(set(found), {"ok", "local", "folder", "name", "files", "file", "entry", "missing", "made",
+                                      "here", "differs", "next"})
+        self.assertEqual((found["local"], found["missing"]), (False, []))
         self.assertEqual((found["folder"], found["name"], found["file"], found["entry"]),
                          (str(self.here / "by id"), "plate__the_first", "plate.xbf", "modèle.py"))
         self.assertEqual(found["files"], {"count": 5, "bytes": size, "paths": sorted(self.files)})
@@ -1956,6 +2091,18 @@ class ImportTest(unittest.TestCase):
                                                              "environment is made with its first build, so those were "
                                                              "not compared")
 
+    def test_a_download_cut_off_part_way_says_so_and_writes_nothing(self) -> None:
+        self.service.cut = 100
+        cut = self.import_(self.share.view, "--json")
+        self.assertEqual(cut.returncode, 1, cut.stdout + cut.stderr)
+        error = json.loads(cut.stdout)["error"]
+        self.assertRegex(error, r"^the transfer with the share service was cut off part way: 127\.0\.0\.1:\d+ began "
+                                r"to answer, then stopped \(\d+ bytes short\)\. Try again$")
+        self.assertNotIn("sandbox", error)
+        self.assertEqual(list(self.here.iterdir()), [])
+        self.service.cut = None
+        self.assertEqual(self.import_(self.share.view).returncode, 0)
+
     def test_a_folder_that_holds_files_is_refused_and_a_share_gone_is_said(self) -> None:
         (self.here / "taken").mkdir()
         (self.here / "taken" / "mine.txt").write_text("mine", encoding="utf-8")
@@ -2013,6 +2160,53 @@ class ImportTest(unittest.TestCase):
                 self.assertIn(said, json.loads(refused.stdout)["error"])
                 self.assertEqual(list(self.here.iterdir()), [])
                 self.assertFalse((self.base / "escaped.py").exists())
+        # A version control's folder, or a repository's bare form, which would make a later command where it is
+        # written (git status, a shell prompt's) run what its settings name: refused whole, whoever made the zip (a
+        # share service of another origin may name its one folder too), and nothing is written.
+        config = b'[core]\n\tfsmonitor = "touch RAN; false"\n'
+        repository = [("HEAD", b"ref: refs/heads/main\n", regular), ("config", config, regular),
+                      ("objects/info/packs", b"", regular), ("refs/heads/.keep", b"", regular)]
+        for name, zipped in (
+                ("a .git", crafted(("plate/ok.py", b"", regular),
+                                   *((f"plate/.git/{path}", body, mode) for path, body, mode in repository))),
+                ("its one folder .git", crafted(*((f".git/{path}", body, mode) for path, body, mode in repository))),
+                ("a .git deeper", crafted(("plate/sub/.git/config", config, regular),)),
+                ("as Windows reads it", crafted(("plate/.GIT. /config", config, regular),)),
+                ("its short name", crafted(("plate/git~1/config", config, regular),)),
+                ("an NTFS stream", crafted(("plate/.git::$INDEX_ALLOCATION/config", config, regular),)),
+                ("as HFS+ reads it", crafted(("plate/.g‌it/config", config, regular),)),
+                ("Mercurial's", crafted(("plate/.hg/hgrc", b"[hooks]\npre-status = touch RAN\n", regular),)),
+                ("a bare repository", crafted(*((f"plate/{path}", body, mode) for path, body, mode in repository))),
+                ("a bare repository deeper", crafted(("plate/ok.py", b"", regular),
+                                                     *((f"plate/a/{path}", body, mode) for path, body, mode
+                                                       in repository)))):
+            with self.subTest(name):
+                self.service.zips[self.share.id] = zipped
+                refused = self.import_(self.share.view, "--json")
+                self.assertEqual(refused.returncode, 1, refused.stdout + refused.stderr)
+                said = json.loads(refused.stdout)
+                self.assertRegex(said["error"], r"^the share's files cannot be imported: it holds .+(, of a version "
+                                                r"control's folder| beside objects and refs, a repository's bare "
+                                                r"form), which would make a later command there, such as git status, "
+                                                r"run what it names; nothing was written$")
+                self.assertEqual(list(self.here.iterdir()), [])
+        # A FOLDER in a version control's folder, or one that would make its own a repository's bare form.
+        self.service.zips.pop(self.share.id)
+        downloaded = len(self.downloads())
+        (self.here / "repo" / ".git").mkdir(parents=True)
+        (self.here / "bare" / "refs").mkdir(parents=True)
+        (self.here / "bare" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+        for folder in ("repo/.git/hooks", ".git", "repo/.GIT.", "bare/objects", "bare/Objects"):
+            with self.subTest(folder=folder):
+                refused = self.import_(self.share.view, folder, "--json")
+                self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+                self.assertIn("cad import writes no version control's files, so nothing was written",
+                              json.loads(refused.stdout)["error"])
+        self.assertEqual(sorted(str(path.relative_to(self.here)) for path in self.here.rglob("*")),
+                         ["bare", "bare/HEAD", "bare/refs", "repo", "repo/.git"])
+        self.assertEqual(len(self.downloads()), downloaded)
+        shutil.rmtree(self.here)
+        self.here.mkdir()
         # A file whose bytes are not its CRC's: refused once it is read, and nothing of it, or of the others, stays.
         good = bytearray(_zipped("plate", [("a.py", gzip.compress(b"print(1)\n", mtime=0)),
                                            ("b.py", gzip.compress(b"print(2)\n" * 50, mtime=0))]))

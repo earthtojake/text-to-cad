@@ -238,6 +238,7 @@ export default {
   // file manager by its name — Finder, a product's, is the same in every language and no key).
   "file.copyPath": "Copy path",
   "file.copyLink": "Copy link",
+  "file.downloadFiles": "Download files",
   "file.revealFinder": "Reveal in Finder",
   "file.revealExplorer": "Show in Explorer",
   "file.revealFileManager": "Show in file manager",

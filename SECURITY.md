@@ -286,6 +286,11 @@ plugin install` installs, is `latest`, the newest of all.
 - The share service (`cad.fun`, [apps/share](apps/share/README.md)): a way to read a
   share without its link, to replace or delete one without its secrets, to make it keep
   or log a link, a key or a secret, or to make its page fetch from another origin.
+- A share that `cad import` writes outside the folder it names, or whose files make a
+  command later run in that folder, which the person did not choose to run, run code: a
+  version control's folder (`.git` and the like, which `git status` reads) or a
+  repository's bare form is refused, whatever origin served it. A model's scripts travel
+  in its share and run only when the person runs them (`cad run`).
 
 Out of scope: what someone who already has your token, a link or
 your session cookie, or already runs code as you, can do; and effects on your

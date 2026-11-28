@@ -372,8 +372,9 @@ def _engine_document(bundle: _Bundle, envelope: dict) -> str:
         raise _Changed()
     # The two things a structure says of the computer it was answered on, which a bundle never holds: where
     # a file is (in a bundle, the file's name alone; a model's ``path`` is its id, as a live worker answers it,
-    # whether a worker holds it or its ``.xbf`` is read), and a model's build closure, which names the code that
-    # built it -- its script and modules by path, their names, its inputs.
+    # whether a worker holds it or its ``.xbf`` is read, which a share names by its own id: ``sharing.view_files``),
+    # and a model's build closure, which names the code that built it -- its script and modules by path, their
+    # names, its inputs.
     structure["path"] = envelope["id"] if envelope["kind"] == "xbf" else envelope["name"]
     structure.pop("closure", None)
     # The mechanism is held once: ``kinematics.json`` is the structure's own, which a reader puts back.

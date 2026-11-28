@@ -89,6 +89,12 @@ export interface ViewerHost {
   /** What a prompt names the document on screen by. Absent: as the view names it. */
   promptSubject?: PromptSubject;
   /**
+   * The files that made the document on screen, where a share holds them: its files' link (a share's
+   * `<origin>/<id>.zip`, of the page's own origin), which the document's ⋯ offers as Download files. Absent: no item,
+   * as on every page an engine serves, where the files are the person's own.
+   */
+  sharedFiles?: { url: string };
+  /**
    * Show a file, by its absolute path, in this view: a pick in the explorer, a renderer's link.
    * `home` shows the host's home in this view: its recent models, what it shows with no file. A
    * host with a home offers it, and the navbar's logo is the way to it from a file. A view that

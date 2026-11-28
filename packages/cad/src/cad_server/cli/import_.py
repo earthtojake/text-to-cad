@@ -6,13 +6,18 @@ service ``CAD_SHARE_URL`` names (``https://cad.fun`` by default). This process d
 (``sharing.download``), as ``cad share`` uploads, so an agent app's sandbox sees the connection and its network rules
 apply; the server is never asked. Its files go into FOLDER (``./<its name>`` by default: the folder the zip holds),
 which is refused where it is there and holds anything, and every entry is refused that would land outside it (an
-absolute path, a ``..``, a drive, a link: ``sharing.zip_entries``); they are written beside it first and moved in once
+absolute path, a ``..``, a drive, a link: ``sharing.zip_entries``); a share, or a FOLDER, that would write a version
+control's files (a ``.git``, its name the zip's folder's too, or a repository's bare form) is refused whole, since a
+later command there, such as ``git status``, would run what their settings name (``sharing.controlled``,
+``sharing.unsafe_folder``); they are written beside it first and moved in once
 all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). A model's ``.xbf`` is among them, so the
 model is there at once, read as any ``.xbf`` is, with nothing run. The shared file it wrote (``sharing.shared_file``)
 goes into the library with the link it came from (``sharing.import_record``), asked of the running server as ``cad
 share`` keeps a share, so that it is among the viewer's Recents and the share's link names it here wherever cad takes a
-document (``sharing.copy_of``). It says what it wrote, the file it is of and the script that builds it, and where what built it (``Cad-Share-Made``)
-differs from this computer's cad and libraries, which a build here records (``_here``). It runs nothing, and makes no
+document (``sharing.copy_of``). It says what it wrote, the file it is of and the script that builds it, the files a
+model's build read that the share does not hold (``sharing.unheld``: left out of it), which a build here needs, and
+where what built it (``Cad-Share-Made``) differs from this computer's cad and libraries, which a build here records
+(``_here``). It runs nothing, and makes no
 project: the next steps it prints are ``cad viewer FOLDER/<file>``, which shows it as it was shared, and, of a model,
 ``cad run FOLDER/<script>``, which builds it here, since someone else's code is the person's to run. ``--json``
 answers in one object.
@@ -27,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import shlex
 import subprocess
 import sys
@@ -85,9 +91,16 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 
 
 def _refused_folder(folder: Path) -> None:
-    """The failure of a FOLDER that is not one an import writes into: a file, or a folder that holds anything."""
+    """The failure of a FOLDER that is not one an import writes into: a file, a folder that holds anything, and one
+    whose files would make a later command there run what a version control's settings name
+    (``sharing.unsafe_folder``: one in a ``.git``)."""
+    from cad_server import sharing
     from cad_server._internal.cli_errors import Failure
 
+    unsafe = sharing.unsafe_folder(folder)
+    if unsafe is not None:
+        raise Failure(f"{unsafe}: cad import writes no version control's files, so nothing was written",
+                      "invalid_argument")
     if folder.is_dir():
         if any(folder.iterdir()):
             raise Failure(f"{folder} holds files already: import into a new folder, or an empty one",
@@ -146,6 +159,9 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
                 if given is None:
                     _refused_folder(folder)
                 written = sharing.unpack(opened, entries, folder)
+        except sharing.Unsafe as error:
+            raise Failure(f"the share's files cannot be imported: {error}, which would make a later command there, "
+                          "such as git status, run what it names; nothing was written") from None
         except (zipfile.BadZipFile, sharing.Damaged) as error:
             raise Failure(f"the share's files did not arrive as a share's zip: {error}") from None
         except OSError as error:
@@ -162,6 +178,7 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
         except OSError as error:
             print(f"{prog}: warning: this computer's library could not keep the import ({error}), so the share's link "
                   "names no copy of it here: name its files by their paths", file=sys.stderr, flush=True)
+    missing = sharing.unheld(folder, paths, shared)
     made, here = said["made"], _here()
     differs = [{"name": name, "made": value, "here": here[name]} for name, value in (made or {}).items()
                if name in here and here[name] is not None and here[name] != value]
@@ -172,7 +189,8 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     if as_json:
         print(json.dumps({"ok": True, "local": False, "folder": os.path.abspath(folder), "name": top,
                           "files": {"count": len(written), "bytes": size, "paths": paths}, "file": shared,
-                          "entry": entry, "made": made, "here": here, "differs": differs, "next": step},
+                          "entry": entry, "missing": missing, "made": made, "here": here, "differs": differs,
+                          "next": step},
                          separators=(",", ":")), flush=True)
         return 0
     from cad_server.cli.share import _size
@@ -180,6 +198,11 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     print(f"Imported {top} into {shown}: {len(written)} file{'s' if len(written) != 1 else ''}, {_size(size)}"
           + (f"; it is {shared}" if shared is not None else "")
           + (f"; its script is {entry}" if entry is not None else ""), flush=True)
+    if missing:
+        name = posixpath.basename(shared or "")
+        print(f"Its build read {len(missing)} file{'s' if len(missing) != 1 else ''} the share does not hold: "
+              f"{', '.join(missing)} (from {name}'s folder); a build here needs {'them' if len(missing) != 1 else 'it'} "
+              "there", flush=True)
     if made is not None:
         if differs:
             there = ", ".join(f"{row['name']} {row['made']}" for row in differs)

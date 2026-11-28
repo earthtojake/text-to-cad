@@ -527,7 +527,7 @@ CONTROLS = frozenset({
     "quick_edit_copy", "quick_edit_queue", "quick_edit_send", "quick_edit_shown", "quick_edit_dismissed", "board_side", "board_dimension",
     "navbar_back", "navbar_forward", "models", "models_open", "models_filter", "explorer", "explorer_filter",
     "file_copy_path", "file_copy_link", "file_reveal", "file_open_app", "home",
-    "file_import_folder", "file_open_beside", "project_crumb", "project_previous", "project_next",
+    "file_import_folder", "file_open_beside", "file_download_files", "project_crumb", "project_previous", "project_next",
     "search_open", "search_pick", "search_new_tab",
     "theme_system", "theme_light", "theme_dark", "language", "feedback",
     "export_step", "export_stl", "export_threemf", "export_glb", "export_dxf", "export_xbf", "export_original",

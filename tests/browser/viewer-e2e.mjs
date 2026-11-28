@@ -772,6 +772,11 @@ async function promptGate() {
       failures.push(`prompt: the copied prompt does not carry its snapshot inline: ${JSON.stringify(prompt)}`);
     }
     if (args.prompt) fs.writeFileSync(args.prompt, prompt);
+    // The engine's page offers no Download files: the files are the person's own.
+    await page.getByTestId("file-actions").click();
+    await page.getByRole("menu").waitFor();
+    if (await page.locator("[data-share-files]").count()) failures.push("prompt: Download files in the engine page's file menu");
+    await page.keyboard.press("Escape");
   } finally {
     await context.close();
   }
@@ -870,7 +875,20 @@ async function shareGate() {
     if (!/(?:^|;\s*)connect-src 'self'/.test(view.policy) || /'unsafe-inline'/.test(scripts)) {
       failures.push(`share: the page's content security policy is not the service's: ${JSON.stringify(view.policy)}`);
     }
-    if (await view.getByTestId("file-actions").count()) failures.push("share: a file menu over a shared model");
+    // Its ⋯ holds one item, Download files: the share's zip of the files that made it, which the service sends as an
+    // attachment, so the browser saves it and the page stays where it is.
+    await view.getByTestId("file-actions").click();
+    const download = view.locator("[data-share-files]");
+    await download.waitFor({ timeout: 30_000 });
+    const items = await view.getByRole("menuitem").allTextContents();
+    if (await download.getAttribute("href") !== `${origin}/${id}.zip` || items.length !== 1 || items[0] !== "Download files") {
+      failures.push(`share: the file menu is ${JSON.stringify(items)}, not Download files of the share's zip`);
+    }
+    const [saved] = await Promise.all([view.waitForEvent("download", { timeout: 30_000 }), download.click()]);
+    const zipped = fs.readFileSync(await saved.path());
+    if (zipped.subarray(0, 2).toString("latin1") !== "PK" || !saved.suggestedFilename().endsWith(".zip") || view.url() !== `${origin}/${id}`) {
+      failures.push(`share: Download files saved ${JSON.stringify(saved.suggestedFilename())} and left the page at ${view.url().replaceAll(id, "<id>")}`);
+    }
     // A prompt copied from the shared view names the share's link, never this computer's model, and tells the
     // agent how to get the files that made it.
     await view.locator("[data-quick-edit-note]").click();

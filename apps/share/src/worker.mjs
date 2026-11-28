@@ -844,8 +844,52 @@ function checkManifest(body) {
       const problem = pathProblem(path, map) ?? entryProblem(entry, packs);
       if (problem) return { problem: `${map}[${quote(path)}]: ${problem}.` };
     }
+    const bare = bareHead(Object.keys(manifest[map]));
+    if (bare !== null) return { problem: `${map}[${quote(bare)}]: ${CONTROL_PROBLEM}.` };
   }
   return { files: count, packs };
+}
+
+// The folders of a version control, whose settings name commands that an ordinary command run in the folder,
+// or below it, runs (git's `core.fsmonitor`, which `git status` runs; a hook, an alias; Mercurial's hooks, and
+// the like): a share's files, which an import writes into a folder, hold none. Each as `folded` spells it, and
+// Windows' short names of them (`GIT~1`).
+const VERSION_CONTROL = new Set([".git", ".hg", ".svn", ".bzr", "_darcs", ".jj", ".pijul", ".fslckout", "_fossil_"]);
+const CONTROL_SHORT = /^(?:git|hg|svn|bzr|jj|pijul|fslcko)~[0-9]+$/;
+// The code points HFS+ ignores in a name: `.g\u200cit` opens `.git` there.
+const IGNORED = /[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/gu;
+const CONTROL_PROBLEM = "a path is in no version control's folder (.git, .hg, .svn and the like) nor a repository's " +
+  "bare form (HEAD beside objects and refs), whose settings would run commands where an import writes it";
+
+/** A path's segment as the file systems that open it compare it: without the code points HFS+ ignores, before
+ * an NTFS stream's `:`, composed, without the dots and spaces Windows drops from a name's end, in lower case. */
+function folded(segment) {
+  return segment.replace(IGNORED, "").split(":")[0].normalize("NFC").replace(/[. ]+$/, "").toLowerCase();
+}
+
+function isControl(segment) {
+  const name = folded(segment);
+  return VERSION_CONTROL.has(name) || CONTROL_SHORT.test(name);
+}
+
+/** The path of a `HEAD` among `paths` that sits beside an `objects` and a `refs` folder, which git takes for a
+ * repository wherever it lies; or null. */
+function bareHead(paths) {
+  const folders = new Map();
+  for (const path of paths) {
+    const parts = path.split("/");
+    parts.forEach((part, depth) => {
+      const folder = parts.slice(0, depth).join("/");
+      if (!folders.has(folder)) folders.set(folder, new Map());
+      const names = folders.get(folder);
+      const name = folded(part);
+      if (!names.has(name)) names.set(name, depth === parts.length - 1 ? path : "");
+    });
+  }
+  for (const names of folders.values()) {
+    if (names.get("head") && names.has("objects") && names.has("refs")) return names.get("head");
+  }
+  return null;
 }
 
 /** What is wrong with `made`, or null: it is null (a file document's), or what built the model, each value text. */
@@ -873,6 +917,7 @@ function pathProblem(path, map) {
   if (path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
     return "a path has no empty, . or .. segment";
   }
+  if (path.split("/").some(isControl)) return CONTROL_PROBLEM;
   // The bundle's own thumbnail may show an earlier version of the document; a file of that name the build
   // read is one of the files.
   if (map === "view" && path === "thumbnail.png") return "the bundle's thumbnail.png is left out of a share";

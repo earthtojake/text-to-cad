@@ -658,6 +658,16 @@ describe("a commit", () => {
       [withFile("lib//head.py", entry, "files"), /^files\[.*empty/],
       [withFile("é".repeat(513), entry, "files"), /^files\[.*at most 1024 bytes/],
       [withFile("lib/head.py", null, "files"), /^files\["lib\/head\.py"\]: a file is an object/],
+      // No version control's folder, whose settings would run commands where an import writes it, however a
+      // system spells it; nor a repository's bare form.
+      ...[".git/config", "lib/.git/hooks/post-checkout", ".git", ".GIT/config", ".Git./HEAD", ".git /HEAD",
+        "GIT~1/config", "git~2/config", ".git::$INDEX_ALLOCATION/config", ".g‌it/config", ".gi﻿t/config",
+        ".hg/hgrc", ".svn/wc.db", ".bzr/branch.conf", "_darcs/prefs/defaults", ".jj/repo/config.toml",
+        ".pijul/config", ".fslckout", "a/_FOSSIL_"].map((path) => [withFile(path, entry, "files"), /no version control's folder/]),
+      [withFile(".git/config"), /^view\[.*no version control's folder/],
+      [withMember({ entry: null, files: { "sub/HEAD": entry, "sub/objects/info/packs": entry, "sub/refs/heads/main": entry } }),
+        /^files\["sub\/HEAD"\]: a path is in no version control's folder/],
+      [withMember({ entry: null, files: { HEAD: entry, "Objects/x": entry, "REFS/y": entry } }), /^files\["HEAD"\]: .*bare form/],
       [withEntry({ bytes: -1 }, "files"), /^files\["juno\.py"\]: bytes is a whole number/],
       [withEntry({ sha256: "x" }, "files"), /^files\["juno\.py"\]: sha256/],
       [withEntry({ at: [] }, "files"), /^files\["juno\.py"\]: at is one or more/],
@@ -713,6 +723,9 @@ describe("a commit", () => {
       manifestOf(files, { name: "🙂".repeat(200), files: { "juno.py": entry }, entry: "juno.py", made }),
       // A path of the view's again, and a thumbnail.png the build read: the files' own.
       manifestOf(files, { files: { "manifest.json": entry, "thumbnail.png": entry, "é/ü.py": entry }, entry: "é/ü.py", made: MADE }),
+      // Names beside a version control's, which are no folder of one; a HEAD with no objects or refs beside it.
+      manifestOf(files, { files: { ".gitignore": entry, ".gitattributes": entry, ".github/x.yml": entry, "git/HEAD": entry,
+        "HEAD": entry, "objects/a.py": entry, "a.git/b": entry, ".git2/c": entry } }),
     ];
     for (const manifest of accepted) {
       const answer = await commit(svc, share, manifest);

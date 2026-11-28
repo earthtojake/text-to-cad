@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 27, 2026">
+    <LegalPage title="Privacy Policy" updated="November 28, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -385,7 +385,11 @@ export default function PrivacyPolicyPage() {
               </li>
             </ul>
             Nothing outside the project goes, and no installed library: a file outside the project is left
-            out, and said. A file the build did not read, such as a README or a settings file, does not go.
+            out, and said. The project is the folder you opened as one in the viewer, or the checkout the file is
+            in, else the folder that holds the files, and never your home folder itself; <code>cad share</code> says
+            that folder and the path there of every file that goes, the first time before anything is uploaded. A
+            file the build did not read, such as a README or a settings file, does not go, nor a version
+            control&rsquo;s folder (such as <code>.git</code>).
           </li>
           <li>
             <strong>Where it goes.</strong> To cad.fun, a service we run as a Cloudflare Worker, which keeps

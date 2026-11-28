@@ -230,6 +230,7 @@ export default {
 
   "file.copyPath": "경로 복사",
   "file.copyLink": "링크 복사",
+  "file.downloadFiles": "파일 다운로드",
   "file.revealFinder": "Finder에서 보기",
   "file.revealExplorer": "파일 탐색기에서 보기",
   "file.revealFileManager": "파일 관리자에서 보기",

@@ -13,14 +13,16 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   and ``<origin>/<id>#delete=<secret>``, whose part after ``#`` no browser sends to a server;
 - **the view** (``view_files``): ``manifest.json`` and every file it lists but ``LEFT_OUT``'s, each a path the
   protocol takes (``sharable``), a regular file inside the bundle and the bytes the manifest says, in reading order
-  (``reading``): the bundle is taken as its manifest lists it, and nothing else of it is read;
+  (``reading``): the bundle is taken as its manifest lists it, and nothing else of it is read; its document named by
+  the share's own id for it (``document_of``), never this computer's, a digest of the file's path;
 - **the files that made it** (``Sources``): a model's (``model_sources``) from the build closure its ``.xbf``
   holds -- its script, every module of the project its build imported and every file it read, at their paths under
-  the files' root (``root_of``), none of them changed since the ``.xbf`` was written or the model last ran, nor gone
-  -- and the ``.xbf`` itself, at its path there; and a file document's (``file_sources``): the file itself, and a
+  the files' root (``root_of``: its project, never the home folder; a file outside it is left out, and said), none
+  of them changed since the ``.xbf`` was written or the model last ran, nor gone -- and the ``.xbf`` itself, at its path there; and a file document's (``file_sources``): the file itself, and a
   robot description's mesh files beside it; a KiCad board's or schematic's project (``kicad_sources``): its project
   file, its project's own libraries, a board's 3D model files and rules, a schematic's sheets, at their paths under the
-  files' root as a model's are. Never an installed library (``made`` names each by its version; KiCad's are KiCad's);
+  files' root as a model's are. Never an installed library (``made`` names each by its version; KiCad's are KiCad's),
+  nor a version control's file (``controlled``);
 - **the packs** (``Packer``): each file the share lacks as one gzip member (RFC 1952: mtime 0, no name), back to
   back, the view's files first, a pack closed at ``PACK_BYTES`` and a member that does not fit the room left going
   on into the next, so a file of any size travels; a pack is named by the lowercase hex SHA-256 of its bytes; two
@@ -35,7 +37,8 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   its ``error`` and ``hint``;
 - **an import** (``import_link``, ``zip_entries``, ``unpack``, ``shared_file``, ``import_record``): a share's zip
   read as the service makes one, one folder of files, and written into a folder through one made beside it, refusing
-  any entry that would land outside it; nothing of it is run; the shared file found among them (a model's ``.xbf``, a
+  any entry that would land outside it, and any that would make a later command there run what a version control's
+  settings name (a ``.git``: ``controlled``, ``unsafe_folder``); nothing of it is run; the shared file found among them (a model's ``.xbf``, a
   file document's file), which the library keeps with the link it came from;
 - **a share's link as a document's name** (``document_link``, ``copy_of``, ``local``): wherever cad takes a
   document, a share's view link of the service this computer shares with or of cad.fun names this computer's copy of
@@ -120,6 +123,21 @@ IMPORT_BYTES = 4 * 1024 * 1024 * 1024
 # The names Windows gives its devices, which no file there takes (``con.py`` neither).
 _DEVICES = frozenset({"CON", "PRN", "AUX", "NUL", *(f"COM{n}" for n in range(1, 10)),
                       *(f"LPT{n}" for n in range(1, 10))})
+# The folders of a version control, whose settings name commands that an ordinary command run in the folder they
+# are in, or below it, runs: git's (``core.fsmonitor``, which ``git status`` runs; a hook, an alias, a pager,
+# ``core.sshCommand``), Mercurial's hooks, and the like of Subversion, Bazaar, Darcs, Jujutsu, Pijul and Fossil (a
+# checkout's database). Agents, shell prompts and editors run such commands unasked, so no share holds a file in one:
+# ``cad share`` leaves it out, saying so, the service refuses a manifest that names one, and ``cad import`` writes
+# none, whoever made the share. Each as ``_folded`` spells it.
+CONTROL = frozenset({".git", ".hg", ".svn", ".bzr", "_darcs", ".jj", ".pijul", ".fslckout", "_fossil_"})
+# Windows' short names of them (``GIT~1``, as git's ``core.protectNTFS`` refuses), the first six letters of each and
+# a number.
+_SHORT = re.compile(r"(?:git|hg|svn|bzr|jj|pijul|fslcko)~[0-9]+")
+# What git takes a folder for a repository by, wherever it lies, with no ``.git``: its bare form, a ``HEAD`` file
+# beside an ``objects`` and a ``refs`` folder.
+BARE = frozenset({"head", "objects", "refs"})
+# The code points HFS+ ignores in a name (git's ``core.protectHFS``): ``.g‌it`` opens ``.git`` there.
+_IGNORED = frozenset("‌‍‎‏‪‫‬‭‮⁪⁫⁬⁭⁮⁯﻿")
 # How many times a commit's 409 naming missing packs has their files sent again before the share fails.
 RESENDS = 2
 # A 429's waits for one request: each its ``Retry-After`` (``WAIT`` where it names none), of ``LONGEST_WAIT`` at most.
@@ -144,6 +162,11 @@ class Unsharable(ValueError):
 
 class Unreachable(ConnectionError):
     """No answer of the service's: the connection could not be made, or something else answered for it."""
+
+
+class Cut(Unreachable):
+    """An answer of the service's that stopped part way: its status and headers came, then the connection was closed,
+    reset or went silent before its body was whole."""
 
 
 class Refused(Exception):
@@ -171,6 +194,11 @@ class Stale(Exception):
 
 class Damaged(ValueError):
     """A share's zip that is not one the service makes (``zip_entries``, ``unpack``, ``download``): its words."""
+
+
+class Unsafe(Damaged):
+    """A share's zip, or the folder an import would write it into, that would make a later command there run what a
+    version control's settings name (``controlled``, ``unsafe_folder``): the path, in its words."""
 
 
 def _token(size: int) -> str:
@@ -233,16 +261,18 @@ class Share:
 @dataclass(frozen=True)
 class File:
     """One file a share holds: its path in the share (in the view bundle, or under the files' root), its bytes'
-    SHA-256 and size, and where it is."""
+    SHA-256 and size, and where it is; or, for a file a share holds as it made it (``view_files``: the bundle's
+    manifest and structure, named by the share), its bytes (``data``)."""
 
     path: str
     sha256: str
     size: int
     source: Path
+    data: bytes | None = None
 
     def read(self) -> bytes:
         """Its bytes, still the ones that were read of it (``Unsharable`` for a file changed since)."""
-        data = self.source.read_bytes()
+        data = self.source.read_bytes() if self.data is None else self.data
         if len(data) != self.size or hashlib.sha256(data).hexdigest() != self.sha256:
             raise Unsharable(f"{self.path} changed while it was shared: share it again")
         return data
@@ -250,15 +280,51 @@ class File:
 
 def sharable(path: object) -> bool:
     """Whether ``path`` is one a share's manifest takes: relative, ``/`` separated, with no empty, ``.`` or ``..``
-    segment, at most ``PATH_BYTES`` bytes of UTF-8 (the protocol's); and, so that it names one file on every system,
-    printable, with no ``\\`` or ``:``."""
+    segment, at most ``PATH_BYTES`` bytes of UTF-8 (the protocol's); so that it names one file on every system,
+    printable, with no ``\\`` or ``:``; and in no version control's folder (``controls``)."""
     if not isinstance(path, str) or not path or not path.isprintable() or "\\" in path or ":" in path:
         return False
     try:
         size = len(path.encode("utf-8"))
     except UnicodeEncodeError:
         return False
-    return size <= PATH_BYTES and all(part not in ("", ".", "..") for part in path.split("/"))
+    parts = path.split("/")
+    return size <= PATH_BYTES and all(part not in ("", ".", "..") and not controls(part) for part in parts)
+
+
+def _folded(segment: str) -> str:
+    """A path's segment as the file systems that open it compare it: without the code points HFS+ ignores, before an
+    NTFS stream's ``:`` (``.git::$INDEX_ALLOCATION`` opens ``.git``), composed, without the dots and spaces Windows
+    drops from a name's end, case folded."""
+    name = "".join(character for character in segment if character not in _IGNORED).split(":", 1)[0]
+    return unicodedata.normalize("NFC", name).rstrip(". ").casefold()
+
+
+def controls(segment: str) -> bool:
+    """Whether a path's segment names a version control's folder (``CONTROL``) on some system: as any of them
+    compares it (``_folded``), or as Windows' short name of it (``GIT~1``)."""
+    name = _folded(segment)
+    return name in CONTROL or _SHORT.fullmatch(name) is not None
+
+
+def controlled(paths: list[str]) -> str | None:
+    """The first of ``paths`` (``/`` separated, under one folder) that would make a later command in that folder or
+    below it read settings that run commands, or None: one with a segment that names a version control's folder
+    (``controls``), or a ``HEAD`` beside an ``objects`` and a ``refs`` folder, which git takes for a repository
+    wherever it lies (its bare form, ``BARE``), the one folder too."""
+    children: dict[str, dict[str, str]] = {}
+    for path in paths:
+        parts = path.split("/")
+        if any(controls(part) for part in parts):
+            return path
+        for depth in range(len(parts)):
+            folder = "/".join(parts[:depth])
+            children.setdefault(folder, {}).setdefault(_folded(parts[depth]),
+                                                       path if depth == len(parts) - 1 else "")
+    for folder, names in children.items():
+        if BARE <= names.keys() and names["head"]:
+            return names["head"]
+    return None
 
 
 def reading(file: File) -> tuple[int, str]:
@@ -283,6 +349,16 @@ def reading(file: File) -> tuple[int, str]:
     return place, path
 
 
+def _read_digest(path: str) -> str:
+    """A file's digest as a build's closure records one it read itself (an input of kind ``read``): BLAKE2b of 32
+    bytes, in lowercase hex (``memo._read_digest``); one read through the engine (``file``) is its SHA-256."""
+    found = hashlib.blake2b(digest_size=32)
+    with open(path, "rb") as handle:
+        while chunk := handle.read(1 << 20):
+            found.update(chunk)
+    return found.hexdigest()
+
+
 def _digest_of(path: Path) -> tuple[str, int]:
     found, size = hashlib.sha256(), 0
     with open(path, "rb") as handle:
@@ -292,25 +368,53 @@ def _digest_of(path: Path) -> tuple[str, int]:
     return found.hexdigest(), size
 
 
-def view_files(folder: Path) -> list[File]:
+def document_of(share: Share) -> str:
+    """The id a share's view names its document by, in place of the one this computer names it by (``ids.file_id``,
+    a digest of the file's path that anyone could test guesses of the person's folders against): one made from the
+    share's id alone, so the same in every commit of the share, which a page keeps what it remembers of the document
+    by, and of no path."""
+    import uuid
+
+    return str(uuid.UUID(bytes=hashlib.sha256(f"{FORMAT} document {share.id}".encode("ascii")).digest()[:16],
+                         version=4))
+
+
+def _named(raw: bytes, local: str, ident: str, members: tuple[str, ...]) -> bytes:
+    """A bundle's JSON object (``raw``) with each of its ``members`` that names the document by ``local`` naming it by
+    ``ident``, written compactly, as the bundle writes it; ``raw`` as it is where none does."""
+    found = json.loads(raw.decode("utf-8"))
+    if not isinstance(found, dict) or not any(found.get(member) == local for member in members):
+        return raw
+    return json.dumps({name: ident if name in members and value == local else value for name, value in found.items()},
+                      separators=(",", ":")).encode("utf-8")
+
+
+def view_files(folder: Path, share: Share | None = None) -> list[File]:
     """The files of the bundle in ``folder`` that a share holds, in reading order (``reading``): ``manifest.json``, and
     every file it lists but ``LEFT_OUT``'s, each a path a share takes (``sharable``), a regular file inside the folder
-    and the bytes the manifest says (its ``sha256`` and ``bytes``). Anything else is ``Unsharable``, in its words."""
+    and the bytes the manifest says (its ``sha256`` and ``bytes``). Anything else is ``Unsharable``, in its words.
+
+    For ``share``, the bundle names its document as the share does (``document_of``), never as this computer does:
+    the manifest's ``document.id`` and the structure's ``path`` and ``id`` that are the file's id here, a digest of
+    its path, are the share's id for it, the manifest listing the structure's bytes as they are then."""
     manifest = folder / MANIFEST
     try:
         raw = manifest.read_bytes()
     except FileNotFoundError:
         raise Unsharable("the folder holds no view bundle: it has no manifest.json") from None
     try:
-        listed = json.loads(raw.decode("utf-8")).get("files")
+        told = json.loads(raw.decode("utf-8"))
+        listed = told.get("files")
     except (UnicodeDecodeError, ValueError, AttributeError):
-        listed = None
+        told, listed = None, None
     if not isinstance(listed, dict):
         raise Unsharable("the view bundle's manifest.json lists no files")
     if len(listed) + 1 > MOST_FILES:
         raise Unsharable(f"the view bundle holds {len(listed) + 1} files, more than the {MOST_FILES} a share holds")
+    local = (told.get("document") or {}).get("id") if isinstance(told.get("document"), dict) else None
+    renamed = share is not None and isinstance(local, str) and bool(local)
     root = os.path.realpath(folder)
-    found = [File(MANIFEST, hashlib.sha256(raw).hexdigest(), len(raw), manifest)]
+    found: list[File] = []
     for path, entry in listed.items():
         if path in LEFT_OUT or path == MANIFEST:
             continue
@@ -323,7 +427,23 @@ def view_files(folder: Path) -> list[File]:
         sha256, size = _digest_of(source)
         if not isinstance(entry, dict) or (entry.get("sha256"), entry.get("bytes")) != (sha256, size):
             raise Unsharable(f"the view bundle's {path} is not what its manifest says: share it again")
+        if renamed and path == "structure.json":
+            data = File(path, sha256, size, source).read()
+            try:
+                made = _named(data, str(local), document_of(share), ("path", "id"))
+            except (UnicodeDecodeError, ValueError):
+                made = data
+            if made != data:
+                listed = {**listed, path: {**entry, "sha256": hashlib.sha256(made).hexdigest(), "bytes": len(made)}}
+                found.append(File(path, listed[path]["sha256"], len(made), source, made))
+                continue
         found.append(File(path, sha256, size, source))
+    if renamed:
+        raw = json.dumps({**told, "document": {**told["document"], "id": document_of(share)}, "files": listed},
+                         separators=(",", ":")).encode("utf-8")
+        found.append(File(MANIFEST, hashlib.sha256(raw).hexdigest(), len(raw), manifest, raw))
+    else:
+        found.append(File(MANIFEST, hashlib.sha256(raw).hexdigest(), len(raw), manifest))
     return sorted(found, key=reading)
 
 
@@ -346,8 +466,8 @@ class Sources:
     by its path under the files' ``root``, in path order; the path among them of the script that builds it
     (``entry``: None for a file document, and for a model no closure names the code of); what built it (``made``:
     cad's release, the build's libraries and its platform, each as text; None where no closure says); each file left
-    out and why (``left_out``: ``(path, why)``, ``outside`` the files' root, ``gone`` from the disk, or a ``name`` no
-    share takes); whether the build read a file the engine could not see (``unseen``: its closure's key is null),
+    out and why (``left_out``: ``(path, why)``, ``outside`` the files' root, ``gone`` from the disk, a ``name`` no
+    share takes, or a version control's file, ``control``: ``controlled``); whether the build read a file the engine could not see (``unseen``: its closure's key is null),
     which an import may not rebuild it without; and the file shared, a model's ``.xbf`` or a file document's own file:
     its absolute path (``file``) and its path among ``files`` (``shared``)."""
 
@@ -412,33 +532,63 @@ def _inside(path: str, folder: str) -> bool:
         return False
 
 
-def root_of(script: str, paths: list[str], home: str | None = None) -> str:
-    """The files' root of a model's files -- ``script`` (absolute) and ``paths``, the others' -- the deepest folder
-    that holds all of them, but never above the nearest folder over the script's that holds a ``.git`` (a checkout's
-    root) and never above the user's home folder (``home``, else this user's): where those forbid it, the shallowest
-    folder over the script's that neither does, and the files outside it are left out."""
-    folder = os.path.dirname(os.path.normpath(script))
-    drive = os.path.normcase(os.path.splitdrive(folder)[0])
+def project_roots() -> list[str]:
+    """The folders the viewer has as projects (the library's ``projects``: each a folder a person opened as one), each
+    canonical; none where the library cannot be read (a sandbox may refuse it): a checkout's root still names one."""
     try:
-        deepest = os.path.commonpath([folder, *(os.path.dirname(os.path.normpath(path)) for path in paths
-                                                if os.path.normcase(os.path.splitdrive(path)[0]) == drive)])
-    except ValueError:
-        deepest = folder
-    chain = [folder]
-    while os.path.dirname(chain[-1]) != chain[-1]:
-        chain.append(os.path.dirname(chain[-1]))
-    checkout = next((os.path.realpath(at) for at in chain if os.path.lexists(os.path.join(at, ".git"))), None)
+        found = _library().read().get("projects") or {}
+    except OSError:
+        return []
+    return [str(entry["root"]) for entry in found.values() if isinstance(entry, dict) and isinstance(entry.get("root"), str)]
+
+
+def root_of(core: list[str], paths: list[str], *, home: str | None = None, projects: list[str] | None = None) -> str:
+    """The files' root of a document's files -- ``core`` (absolute: the file shared first, a model's ``.xbf``, then
+    the files that must go with it, its script) and ``paths``, the others -- its project: the nearest folder over the
+    first of ``core`` that holds all of ``core`` and is a project the viewer has (``projects``: ``project_roots``) or a
+    checkout's root (it holds a ``.git``). Where there is none, the deepest folder that holds them all. Never the
+    home folder (``home``, else this user's) or a folder over it, nor a disk's root: where none holds them all, the
+    deepest that holds ``core`` and those of ``paths`` that the highest folder allowed over ``core`` holds; the files
+    outside the root are left out by the caller. ``Unsharable`` where ``core`` alone needs a folder never allowed (a
+    model in the home folder itself)."""
     home = home if home is not None else os.path.expanduser("~")
     homes = [os.path.realpath(home)] if os.path.isabs(home) else []
+    held = {os.path.normcase(os.path.realpath(root)) for root in projects or ()}
 
-    def above(at: str, folder: str) -> bool:  # ``at`` holds ``folder`` and is not it
-        return _inside(folder, at) and os.path.normcase(folder) != os.path.normcase(at)
-
-    for at in reversed(chain):  # from the top: the shallowest folder allowed
+    def allowed(at: str) -> bool:  # neither a disk's root nor the home folder or one over it
         real = os.path.realpath(at)
-        if _inside(at, deepest) and not any(above(real, cap) for cap in [*([checkout] if checkout else []), *homes]):
+        return os.path.dirname(real) != real and not any(_inside(each, real) for each in homes)
+
+    def chain(at: str) -> list[str]:
+        found = [at]
+        while os.path.dirname(found[-1]) != found[-1]:
+            found.append(os.path.dirname(found[-1]))
+        return found
+
+    first = os.path.normpath(core[0])
+    drive = os.path.normcase(os.path.splitdrive(first)[0])
+    core = [os.path.normpath(path) for path in core]
+    for at in chain(os.path.dirname(first)):
+        if not allowed(at):
+            break
+        if (os.path.normcase(os.path.realpath(at)) in held or os.path.lexists(os.path.join(at, ".git"))) \
+                and all(_inside(path, at) for path in core):
             return at
-    return folder
+    same = [os.path.normpath(path) for path in paths if os.path.normcase(os.path.splitdrive(path)[0]) == drive]
+    try:
+        centre = os.path.commonpath([os.path.dirname(path) for path in core])
+    except ValueError:  # another drive
+        centre = os.path.dirname(first)
+    room = [at for at in chain(centre) if allowed(at)]
+    if not room or room[0] != centre:
+        above = ("the home folder, or a folder over it" if homes and _inside(homes[0], os.path.realpath(centre))
+                 else "a disk's root")
+        names = " and ".join(dict.fromkeys(os.path.basename(path) for path in core))
+        raise Unsharable(f"no folder but {centre} ({above}) holds {names}, and a share holds a project's files, never "
+                         "those of the home folder or a disk: move them into a folder of their own, or open the "
+                         "folder that holds them as a project in the viewer")
+    top = room[-1]
+    return os.path.commonpath([centre, *(os.path.dirname(path) for path in same if _inside(path, top))])
 
 
 def _taken(path: str, root: str) -> str | None:
@@ -447,17 +597,34 @@ def _taken(path: str, root: str) -> str | None:
     return relative if sharable(relative) else None
 
 
-def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources:
+def _untaken(path: str, root: str) -> str:
+    """Why a share does not take ``path``, which lies under ``root``: ``control``, in a version control's folder
+    (``controls``), else ``name``, a name no share holds."""
+    relative = Path(os.path.relpath(path, root)).as_posix()
+    return "control" if any(controls(part) for part in relative.split("/")) else "name"
+
+
+def _unbare(chosen: dict[str, str], root: str, left: list[tuple[str, str]]) -> None:
+    """Each ``HEAD`` among the files ``chosen`` (by their path as this system compares it) that would make a folder
+    of them a repository (``controlled``) left out of them, into ``left`` as ``control``."""
+    while (found := controlled([str(_taken(path, root)) for path in chosen.values()])) is not None:
+        key = next(key for key, path in chosen.items() if _taken(path, root) == found)
+        left.append((chosen.pop(key), "control"))
+
+
+def model_sources(xbf: str, built: float, *, home: str | None = None, projects: list[str] | None = None) -> Sources:
     """The files that made the model whose ``.xbf`` is at ``xbf`` (canonical), from the build closure that file holds
     (``previous.of``: every path relative to the ``.xbf``'s folder): the script, every module, and every input of kind
-    ``file`` or ``read`` the build found, each at its path under the files' root (``root_of``); a ``font`` only where
+    ``file`` or ``read`` the build found, each at its path under the files' root (``root_of``: the model's project, of
+    ``projects``, a checkout's root, else the folder that holds them, never the home folder); a ``font`` only where
     it lies in that root (a system font is recorded nowhere else needed); and the ``.xbf`` itself, at its path there,
     so an import has the model with nothing run. ``built`` is when the model was last made here: the ``.xbf``'s time, or
     its last run's where that is later (a run that took the ``.xbf`` whole writes nothing). A file outside the root is
     left out, as is an input gone from the disk, each said (``left_out``). ``Stale`` for the script or a module gone
-    from the disk, and for any file of them modified after ``built``: those are not the files the ``.xbf`` was made
-    from. An ``.xbf`` that holds no closure (a shape a program handed over, a file another document exported) goes
-    alone, at its own name. ``Unsharable`` for an ``.xbf`` outside the folder that holds its files."""
+    from the disk, for an input whose bytes are not the ones its closure holds the digest of, whatever its time, and
+    for the script, a module or a font modified after ``built`` (the closure's digest of code is of what the build
+    reached in it, which only running it tells): those are not the files the ``.xbf`` was made from. An ``.xbf`` that holds no closure (a shape a program handed over, a file another document exported) goes
+    alone, at its own name. ``Unsharable`` for an ``.xbf`` and a script that no folder but the home folder holds."""
     from cad.engine import previous
 
     xbf = os.path.normpath(xbf)
@@ -484,21 +651,23 @@ def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources
         if path is not None:
             code.append(path)
     reads, fonts = [], []
+    held: dict[str, list[tuple[str, str]]] = {}  # each input's digests as the build recorded them, by its path
     for row in closure.get("inputs") or []:
         if not isinstance(row, list) or not row or row[-1] is None:
             continue  # a file the build found missing: it read nothing of it
         if row[0] in ("file", "read") and len(row) >= 3 and at(row[1]):
             reads.append(at(row[1]))
+            if isinstance(row[2], str) and _HEX.fullmatch(row[2]):
+                held.setdefault(os.path.normcase(at(row[1])), []).append((row[0], row[2]))
         elif row[0] == "font" and len(row) >= 5 and at(row[2]):
             fonts.append(at(row[2]))
     for path in code:
         if not os.path.isfile(path):
             raise Stale(path, "gone")
     present = [path for path in reads if os.path.isfile(path)]
-    root = root_of(code[0], [*code[1:], *present, xbf], home)
-    if not _inside(xbf, root) or _taken(xbf, root) is None:
-        raise Unsharable(f"{xbf} lies outside the folder that holds the files that made it ({root}), or is named in a "
-                         "way a share cannot hold: save it inside its project, beside its script")
+    root = root_of([xbf, code[0]], [*code[1:], *present], home=home, projects=projects)
+    if _taken(xbf, root) is None:
+        raise Unsharable(f"{xbf} is named in a way a share cannot hold: rename it")
     left: list[tuple[str, str]] = []
     chosen: dict[str, str] = {}  # each file that goes, by its path as this system compares paths
     seen: set[str] = {os.path.normcase(xbf)}  # the .xbf goes, and is no file of the code
@@ -509,24 +678,31 @@ def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources
         if not _inside(path, root):
             left.append((path, "outside"))
         elif _taken(path, root) is None:
-            left.append((path, "name"))
+            left.append((path, _untaken(path, root)))
         else:
             chosen[os.path.normcase(path)] = path
     for path in fonts:
         if os.path.isfile(path) and _inside(path, root) and _taken(path, root) is not None \
                 and os.path.normcase(path) != os.path.normcase(xbf):
             chosen.setdefault(os.path.normcase(path), path)
+    _unbare(chosen, root, left)
     left += [(path, "gone") for path in dict.fromkeys(reads) if not os.path.isfile(path)]
     if os.path.normcase(code[0]) not in chosen:
         raise Unsharable(f"{os.path.basename(code[0])} is named in a way a share cannot hold: rename it")
     found: list[File] = []
+    coded = {os.path.normcase(path) for path in code}
     for path in chosen.values():
+        digests = held.get(os.path.normcase(path), [])
         try:
             sha256, size = _digest_of(Path(path))
             modified = os.stat(path).st_mtime  # after the read: a file written meanwhile is newer still
+            if any(digest != (sha256 if kind == "file" else _read_digest(path)) for kind, digest in digests):
+                raise Stale(path, "changed")
         except OSError:
             raise Stale(path, "gone") from None
-        if modified > built:
+        # A file the build read is judged by its bytes, which its closure holds the digest of; the code (whose
+        # digest is of what the build reached in it, which only running it tells) and a font, by time.
+        if (not digests or os.path.normcase(path) in coded) and modified > built:
             raise Stale(path, "changed")
         found.append(File(str(_taken(path, root)), sha256, size, Path(path)))
     sha256, size = _digest_of(Path(xbf))
@@ -691,7 +867,7 @@ def _model_files(board: str) -> list[str]:
     return found
 
 
-def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
+def kicad_sources(path: str, kind: str, *, home: str | None = None, projects: list[str] | None = None) -> Sources:
     """The files an import of a KiCad board or schematic needs to open it and work on it (``kind``: ``kicad_pcb`` or
     ``kicad_sch``), each at its path under the files' root (``root_of``, from the file's folder): the file itself;
     of a board, its project file (``<board>.kicad_pro``) and custom rules (``.kicad_dru``) beside it, its project's
@@ -723,9 +899,10 @@ def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
     if kind == "kicad_pcb":
         named += _model_files(real)
     candidates = list({os.path.normcase(each): each for each in named}.values())
-    root = root_of(real, [each for each in candidates if os.path.isfile(each)], home)
+    root = root_of([real], [each for each in candidates if os.path.isfile(each)], home=home, projects=projects)
     found: list[File] = []
     left: list[tuple[str, str]] = []
+    chosen: dict[str, str] = {}
     for each in candidates:
         taken = _taken(each, root) if _inside(each, root) else None
         if not os.path.isfile(each):
@@ -733,27 +910,31 @@ def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
         elif not _inside(each, root):
             left.append((each, "outside"))
         elif taken is None:
-            left.append((each, "name"))
+            left.append((each, _untaken(each, root)))
         else:
-            sha256, size = _digest_of(Path(each))
-            found.append(File(taken, sha256, size, Path(each)))
+            chosen[os.path.normcase(each)] = each
+    _unbare(chosen, root, left)
+    for each in chosen.values():
+        sha256, size = _digest_of(Path(each))
+        found.append(File(str(_taken(each, root)), sha256, size, Path(each)))
     own = _taken(real, root)
     return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left), file=real,
                    shared=own if any(file.path == own for file in found) else None)
 
 
-def file_sources(path: str, kind: str) -> Sources:
+def file_sources(path: str, kind: str, *, projects: list[str] | None = None) -> Sources:
     """The files that made a file document (``kind``: its type's id): the file itself, at its own name; a URDF's mesh
     files too, and an SRDF's URDF with that one's (``_described``), each at its path under the file's folder. One
     outside that folder is left out, as is one gone from the disk, each said (``left_out``). A KiCad board's or
     schematic's are its project's (``kicad_sources``)."""
     if kind in _LIBRARY_TABLES:
-        return kicad_sources(path, kind)
+        return kicad_sources(path, kind, projects=projects)
     real = os.path.realpath(path)
     root = os.path.dirname(real)
     found: list[File] = []
     left: list[tuple[str, str]] = []
     seen: set[str] = set()
+    chosen: dict[str, str] = {}
     for each in [real, *(os.path.realpath(more) for more in (_described(real, kind) if kind in ("urdf", "srdf")
                                                             else []))]:
         if os.path.normcase(each) in seen:
@@ -765,10 +946,13 @@ def file_sources(path: str, kind: str) -> Sources:
         elif not _inside(each, root):
             left.append((each, "outside"))
         elif taken is None:
-            left.append((each, "name"))
+            left.append((each, _untaken(each, root)))
         else:
-            sha256, size = _digest_of(Path(each))
-            found.append(File(taken, sha256, size, Path(each)))
+            chosen[os.path.normcase(each)] = each
+    _unbare(chosen, root, left)
+    for each in chosen.values():
+        sha256, size = _digest_of(Path(each))
+        found.append(File(str(_taken(each, root)), sha256, size, Path(each)))
     own = _taken(real, root)
     return Sources(tuple(sorted(found, key=lambda file: file.path)), None, None, root, tuple(left), file=real,
                    shared=own if any(file.path == own for file in found) else None)
@@ -847,13 +1031,18 @@ def _scrubbed(text: str, share: Share) -> str:
 
 
 def _streamed(answer: Any, into: BinaryIO) -> None:
-    """An answer's body written into ``into`` as it arrives: ``ZIP_BYTES`` at most, else ``Damaged``."""
+    """An answer's body written into ``into`` as it arrives: ``ZIP_BYTES`` at most, else ``Damaged``; one that ends
+    short of the length it said (a read in parts says so in no other way) is ``http.client.IncompleteRead``."""
+    import http.client
+
     size = 0
     while chunk := answer.read(1 << 20):
         size += len(chunk)
         if size > ZIP_BYTES:
             raise Damaged(f"it is larger than the {ZIP_BYTES // (1024 * 1024)} MiB a share's files are at most")
         into.write(chunk)
+    if getattr(answer, "length", None):
+        raise http.client.IncompleteRead(b"", answer.length)
 
 
 def _call(method: str, share: Share, path: str, headers: dict[str, str], body: bytes | None = None,
@@ -862,7 +1051,8 @@ def _call(method: str, share: Share, path: str, headers: dict[str, str], body: b
     """One request of the API, from this process -- at ``/v1/shares/<id><path>``, or at ``address`` -- its status,
     its JSON answer (None for none) and its headers; with ``into``, a successful answer's body is written there
     (``_streamed``) rather than read as JSON. A connection that cannot be made, or a refusal that is not the
-    service's -- no JSON ``error``, as a proxy's is -- is ``Unreachable``, in words that hold no name of the share's."""
+    service's -- no JSON ``error``, as a proxy's is -- is ``Unreachable``, and an answer cut off part way ``Cut``, in
+    words that hold no name of the share's."""
     import http.client
     import urllib.error
     import urllib.request
@@ -873,10 +1063,17 @@ def _call(method: str, share: Share, path: str, headers: dict[str, str], body: b
     try:
         try:
             with urllib.request.urlopen(request, timeout=timeout) as answer:  # noqa: S310 - http(s) only (``share_url``)
-                if into is not None:
-                    _streamed(answer, into)
-                    return answer.status, None, answer.headers
-                return answer.status, _answer(answer.read(ANSWER_BYTES)), answer.headers
+                try:
+                    if into is not None:
+                        _streamed(answer, into)
+                        return answer.status, None, answer.headers
+                    return answer.status, _answer(answer.read(ANSWER_BYTES)), answer.headers
+                except (OSError, http.client.HTTPException) as error:  # the network reached it: the answer stopped
+                    if isinstance(error, http.client.IncompleteRead):
+                        detail = f"{error.expected} bytes short" if error.expected else "it ended before its last part"
+                    else:
+                        detail = f"{type(error).__name__}{': ' + _scrubbed(str(error), share) if str(error) else ''}"
+                    raise Cut(f"{host} began to answer, then stopped ({detail})") from None
         except urllib.error.HTTPError as refusal:
             found = _answer(refusal.read(ANSWER_BYTES))
             if found is None or not isinstance(found.get("error"), str):
@@ -1185,7 +1382,9 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
     there (``/`` separated), in the zip's order. ``Damaged`` for anything else: an entry outside the folder; a path
     that is absolute, names a drive or holds a segment no folder here takes (``_plain``); a link, or anything but a
     file or a folder; an encrypted entry; a path twice, or a file where another's folder is; more entries than a
-    share's."""
+    share's. ``Unsafe`` for a folder or a file that would make a later command in the folder written, or below it,
+    run what a version control's settings name (``controlled``): one of a ``.git`` (its own name ``.git`` too), a
+    repository's bare form. Whoever made the zip, nothing of it is written then."""
     infos = archive.infolist()
     if len(infos) > 2 * MOST_FILES + 1:
         raise Damaged(f"it holds {len(infos)} entries, more than a share's files")
@@ -1205,6 +1404,8 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
         if info.compress_type not in (0, 8):  # stored or deflated: a share's member, or its bytes
             raise Damaged(f"{name!r} is compressed as no share's file is")
         segments = name.rstrip("/").split("/") if info.is_dir() else name.split("/")
+        if any(controls(segment) for segment in segments):
+            raise Unsafe(f"it holds {name}, of a version control's folder")
         if not all(_plain(segment) for segment in segments):
             raise Damaged(f"{name!r} is no path inside its folder")
         if top is None:
@@ -1216,6 +1417,9 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
     if top is None:
         raise Damaged("it holds nothing, not even its folder")
     paths = [path for path, _info in found]
+    unsafe = controlled([top, *(f"{top}/{path}" for path in paths)])
+    if unsafe is not None:
+        raise Unsafe(f"it holds {unsafe} beside objects and refs, a repository's bare form")
     if len(set(paths)) != len(paths):
         raise Damaged("it names a file twice")
     named = set(paths)
@@ -1224,6 +1428,25 @@ def zip_entries(archive: zipfile.ZipFile) -> tuple[str, list[tuple[str, zipfile.
         if any("/".join(parts[:end]) in named for end in range(1, len(parts))):
             raise Damaged(f"{path!r} lies in a folder that is a file of it")
     return top, found
+
+
+def unsafe_folder(folder: Path | str) -> str | None:
+    """Why an import may not write into ``folder``, or None: it lies in a version control's folder, or is one
+    (``controls``: any segment of its absolute path), or its name with what its parent holds would make that parent a
+    repository (``BARE``). Its files are written into it, and then a later command there or above it would run what
+    their settings name."""
+    folder = Path(os.path.abspath(folder))
+    named = next((part for part in folder.parts if controls(part)), None)
+    if named is not None:
+        return f"{folder} lies in a version control's folder ({named})"
+    if _folded(folder.name) in BARE:
+        try:
+            beside = {_folded(name) for name in os.listdir(folder.parent)}
+        except OSError:
+            beside = set()
+        if BARE <= beside | {_folded(folder.name)}:
+            return f"{folder} beside what its folder holds would make that folder a repository"
+    return None
 
 
 def _place(stage: Path, folder: Path) -> None:
@@ -1325,6 +1548,29 @@ def shared_file(folder: Path | str, paths: list[str], entry: str | None) -> str 
     if sheet is not None:
         return sheet
     return paths[0] if len(paths) == 1 else None
+
+
+def unheld(folder: Path | str, paths: list[str], shared: str | None) -> list[str]:
+    """The files a model's build read that its share does not hold, among the ``paths`` an import wrote into
+    ``folder``: each input of kind ``file`` or ``read`` the build found (its digest not null) that the build closure of
+    the ``.xbf`` ``shared`` names, as it names it (relative to the ``.xbf``'s folder), where no file of ``paths`` is
+    it. A build here reads them where the closure says, so it needs each there. Nothing is run: a closure is text."""
+    from cad.engine import previous
+
+    if shared is None or not shared.lower().endswith(".xbf"):
+        return []
+    try:
+        closure = previous.of(Path(folder, *shared.split("/")))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return []
+    held, found = set(paths), []
+    for row in (closure or {}).get("inputs") or []:
+        if isinstance(row, list) and len(row) >= 3 and row[0] in ("file", "read") and isinstance(row[1], str) \
+                and row[-1] is not None:
+            at = posixpath.normpath(posixpath.join(posixpath.dirname(shared), row[1]))
+            if at not in held and row[1] not in found:
+                found.append(row[1])
+    return found
 
 
 # A sheet a schematic draws, by the file its sheet symbol names (KiCad's ``Sheetfile``, once ``Sheet file``).
