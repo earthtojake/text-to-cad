@@ -39,7 +39,9 @@ __all__ = ["NODE", "ensure", "lock", "node"]
 NODE = 24
 _HOST = Path(__file__).with_name("kernel_host")
 _SERVE = "hosts/node/serve.mjs"  # the view core's job server, in its archive and in ``core/``
-_TEXTURES = re.compile(r"\.(png|jpe?g|webp|exr|hdr|ktx2?|tiff?)$", re.IGNORECASE)
+# A texture image a slim wheel leaves out: any but a colour map (``color.png``), which a material's colour is read off
+# (threejs-materials' ``interpolate_color``, as a part is given one).
+_TEXTURES = re.compile(r"(^|/)(?!color\.)[^/]*\.(png|jpe?g|webp|exr|hdr|ktx2?|tiff?)$", re.IGNORECASE)
 _BY_HAND = ("or make the folder by hand and name it in the settings (\"kernel\": {\"kind\": \"wasm\", \"folder\": "
             "PATH})")
 
@@ -111,7 +113,7 @@ def _fetched(item: dict[str, Any], downloads: Path, told: Callable[[str], None])
 
 
 def _unpacked(wheel: Path, site: Path, slim: bool) -> None:
-    """A wheel's files in ``site``; ``slim``: without its texture images, which no build reads."""
+    """A wheel's files in ``site``; ``slim``: without its texture images but its colour maps (``_TEXTURES``)."""
     with zipfile.ZipFile(wheel) as archive:
         for member in archive.infolist():
             if member.is_dir() or (slim and _TEXTURES.search(member.filename)):

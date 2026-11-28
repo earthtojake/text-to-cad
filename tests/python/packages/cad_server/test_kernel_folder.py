@@ -59,7 +59,8 @@ class KernelFolderTest(unittest.TestCase):
             "pyodide.mjs": b"export const loadPyodide = 1;\n",
             "python_stdlib.zip": b"the standard library",
             "part-1.0-py3-none-any.whl": _wheel({"part/__init__.py": b"SIZE = 3\n", "part-1.0.dist-info/WHEEL": b"pure\n"}),
-            "looks-2.0-py3-none-any.whl": _wheel({"looks/__init__.py": b"", "looks/maps/wood.png": b"\x89PNG" * 100}),
+            "looks-2.0-py3-none-any.whl": _wheel({"looks/__init__.py": b"", "looks/maps/wood.png": b"\x89PNG" * 100,
+                                                   "looks/oak/color.png": b"\x89PNG", "looks/oak/normal.png": b"\x89PNG"}),
         }
         for name, data in self.files.items():
             (index / name).write_bytes(data)
@@ -126,6 +127,8 @@ class KernelFolderTest(unittest.TestCase):
         self.assertEqual((site / "part" / "__init__.py").read_bytes(), b"SIZE = 3\n")
         self.assertTrue((site / "looks" / "__init__.py").is_file())
         self.assertFalse((site / "looks" / "maps" / "wood.png").exists(), "a slim wheel's texture images are left out")
+        self.assertFalse((site / "looks" / "oak" / "normal.png").exists())
+        self.assertTrue((site / "looks" / "oak" / "color.png").is_file(), "but its colour maps: a material's colour")
         self.assertEqual(sorted(path.name for path in (folder / "host").iterdir()), ["bootstrap.py", "python.mjs"])
         launcher = (folder / "bin" / "python").read_text(encoding="utf-8")
         self.assertIn(f'CAD_KERNEL_HOME="{folder}" exec "/usr/bin/node" "{folder / "host" / "python.mjs"}" "$@"', launcher)

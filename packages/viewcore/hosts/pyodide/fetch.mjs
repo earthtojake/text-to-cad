@@ -4,8 +4,9 @@
 // sha256 lock.json names. Usage: node fetch.mjs PACKAGES_DIR
 //   PACKAGES_DIR/pyodide/   Pyodide's core (its loader, its module, the standard library)
 //   PACKAGES_DIR/wheels/    one wheel per package
-// A wheel lock.json marks `slim` is kept without its texture images (a material library's maps, 90 MB that no build
-// reads): the wheel as downloaded is checked, then written again without them.
+// A wheel lock.json marks `slim` is kept without its texture images but its colour maps (a material library's maps:
+// 86 MB, of which the colour maps are the 21 MB a build reads, to average a material's colour): the wheel as
+// downloaded is checked, then written again without them.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,7 +18,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The kernel's host as cad ships it: its Python's stand-in, what that runs first, and the lock of what a kernel
 // folder is made of.
 const HOST = path.join(HERE, "..", "..", "..", "cad", "src", "cad_server", "_internal", "kernel_host");
-const TEXTURES = /\.(png|jpe?g|webp|exr|hdr|ktx2?|tiff?)$/i;
+// A texture image left out of a slim wheel: any but a colour map (``color.png``), which a material's colour is read off.
+const TEXTURES = /(^|\/)(?!color\.)[^/]*\.(png|jpe?g|webp|exr|hdr|ktx2?|tiff?)$/i;
 
 async function fetched(url, sha256) {
   const response = await fetch(url);
