@@ -15,7 +15,8 @@ colours, materials, frames and declarations, placements, the tree, the mechanism
 parameters, the build closure), meshing a part by cad's rule into the XBM2 buffer, one element's facts and a
 part's groups (what a pick asks), a part's whole table (what a view bundle holds), a part's measures, and the whole
 document exported as `cad export` writes it: STEP (OCCT's STEP writer, then cad's settling of its bytes), STL, 3MF and
-GLB (`src/exports.cpp`, `src/step.cpp`, `src/glb.cpp`). The viewer's Export asks the core for them behind
+GLB (`src/exports.cpp`, `src/step.cpp`, `src/glb.cpp`). A part's canonical shape bytes can be opened by themselves
+(`vc_open_shape`), as the engine's pool jobs hand a part over, and meshed to an export's own tolerance (`vc_mesh_at`). The viewer's Export asks the core for them behind
 `?viewcore=N`; a DXF is still the engine's.
 
 In cad's Python, as now: building and rebuilding models (build123d), writing the `.xbf`, the server and its
@@ -33,6 +34,7 @@ block), `kernel/bounds.py` and the writers in `export/` are the reference until 
 | `scripts/occt.sh` | OCCT's static libraries for WebAssembly, the subset the core links |
 | `scripts/core.sh` | The core linked into `dist/viewcore.wasm` |
 | `hosts/wasmtime/`, `hosts/web/` | Loading the module in Python (wasmtime) and in a page |
+| `hosts/node/` | Loading it in Node, and a job server that answers the engine's pool jobs (meshing, tables, measures, a pick's facts, reading and exporting an `.xbf`) from it |
 | `bench/` | Reference outputs from cad's engine, the comparison, the benchmarks |
 | `licenses/` | OCCT's licence: the GNU LGPL 2.1 and the Open CASCADE exception, shipped beside the module |
 

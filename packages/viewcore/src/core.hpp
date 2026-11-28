@@ -89,8 +89,11 @@ struct Topology {
 void measured(Json& out, const std::string& data, Topology* shared = nullptr);
 
 // --- the mesh (mesh.cpp)
-// mesh.mesh_shape(data, parallel=False).to_bytes(); `unmeshed`, the faces it left without triangles.
-std::string mesh_bytes(const std::string& data, std::set<int>* unmeshed = nullptr);
+// mesh.mesh_shape(data, parallel=False, tolerance=, angle=).to_bytes(); `unmeshed`, the faces it left without
+// triangles, each with what the mesher and the checker say of it (Mesh.unmeshed). `tolerance` (mm) and `angle`
+// (degrees) are an export's own ceilings, none for the engine's one tessellation.
+std::string mesh_bytes(const std::string& data, std::map<int, std::string>* unmeshed = nullptr,
+                       std::optional<double> tolerance = std::nullopt, std::optional<double> angle = std::nullopt);
 
 // --- the document (document.cpp)
 struct Part {
@@ -110,6 +113,9 @@ struct Part {
   std::string bytes;  // shape_bytes(shape), made once on open (the key is its digest)
   std::unique_ptr<Topology> topology;  // made on the first pick (or whole-part answer)
   std::set<int> unmeshed;              // the faces its mesh left without triangles, once meshed
+  std::map<int, std::string> unmeshed_said;  // and what was said of each (Mesh.unmeshed)
+  std::map<int, std::string> last_said;      // the same of the last mesh asked of it, an export's own too
+  bool loose = false;                  // opened from shape bytes alone (vc_open_shape): no document around it
   std::string mesh;                    // its XBM2 buffer, once an export or vc_mesh made it (part_mesh)
   bool meshed = false;
 };
@@ -125,6 +131,7 @@ struct Instance {
 using Occurrence = std::vector<int>;
 
 struct Document {
+  bool loose = false;                  // one part opened from its shape bytes (open_shape): no structure, no exports
   occ::handle<TDocStd_Document> xcaf;  // the document as read: what an export writes from
   std::string name;  // the tree root's name (one root), else the name the host gave (the file's stem)
   Value tree;
@@ -142,6 +149,9 @@ struct Document {
 
 // `stem` names the document where its file does not (Python's path.stem): an unnamed root, several roots.
 std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size, const std::string& stem);
+// A part's canonical shape bytes (mesh.shape_bytes) as a document of that one part, index 0: what the engine's
+// pool jobs hand over. It has no structure and no exports.
+std::unique_ptr<Document> open_shape(const uint8_t* data, size_t size);
 
 // mechanism.cpp: mechanism.read then mechanism.block, as JSON; none where the document holds no mechanism.
 std::optional<std::string> kinematics(const TDF_Label& main, const std::map<std::string, Occurrence>& occurrences,

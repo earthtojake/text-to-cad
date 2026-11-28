@@ -502,6 +502,22 @@ occ::handle<TDocStd_Application> application() {
 
 }  // namespace
 
+std::unique_ptr<Document> open_shape(const uint8_t* data, size_t size) {
+  auto doc = std::make_unique<Document>();
+  auto part = std::make_unique<Part>();
+  part->bytes.assign(reinterpret_cast<const char*>(data), size);
+  part->shape = read_shape(part->bytes);  // read once here, so bytes that are no shape are refused at the door
+  if (part->shape.IsNull()) throw std::runtime_error("the bytes hold no shape");
+  part->key = blake2b_hex(part->bytes.data(), part->bytes.size());
+  part->name = "part1";
+  part->loose = true;
+  doc->parts.push_back(std::move(part));
+  doc->loose = true;
+  doc->tree.kind = Value::OBJECT;
+  doc->parameters.kind = Value::LIST;
+  return doc;
+}
+
 std::unique_ptr<Document> open_xbf(const uint8_t* data, size_t size, const std::string& given_stem) {
   occ::handle<TDocStd_Application> app = application();
   occ::handle<TDocStd_Document> xdoc = new TDocStd_Document(TCollection_ExtendedString("BinXCAF"));

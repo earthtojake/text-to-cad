@@ -15,9 +15,11 @@ namespace vc {
 
 const std::string& part_mesh(Part& part) {
   if (!part.meshed) {
-    std::set<int> unmeshed;
-    part.mesh = mesh_bytes(part.bytes, &unmeshed);
-    part.unmeshed = unmeshed;
+    std::map<int, std::string> said;
+    part.mesh = mesh_bytes(part.bytes, &said);
+    part.unmeshed.clear();
+    for (const auto& [ordinal, text] : said) part.unmeshed.insert(ordinal);
+    part.unmeshed_said = std::move(said);
     part.meshed = true;
   }
   return part.mesh;

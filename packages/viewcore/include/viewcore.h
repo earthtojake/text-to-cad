@@ -24,7 +24,7 @@
 extern "C" {
 #endif
 
-#define VC_ABI_VERSION 2u
+#define VC_ABI_VERSION 3u
 
 enum { VC_FACE = 0, VC_EDGE = 1, VC_VERTEX = 2 };
 
@@ -40,6 +40,11 @@ void vc_free(void *ptr);
  * "document") is what document.Loaded names the document by where its file does not: the file's stem, for an
  * unnamed root or a file of several roots. */
 int32_t vc_open_xbf(const uint8_t *data, uint32_t size, const char *stem, uint32_t stem_len);
+/* A part's canonical shape bytes (mesh.shape_bytes, what vc_shape_bytes answers) opened by themselves, as the
+ * engine's pool jobs hand a part over: a handle > 0, or 0, of one part, index 0. It answers vc_shape_bytes (the bytes
+ * as given), vc_mesh, vc_mesh_at, vc_unmeshed, vc_fact, vc_groups, vc_table, vc_elements and vc_measure; it has no
+ * structure and no exports. */
+int32_t vc_open_shape(const uint8_t *data, uint32_t size);
 void vc_close(int32_t doc);
 
 /* The document's structure, JSON, as document.Loaded.structure() writes it, with the build closure its file holds
@@ -61,6 +66,16 @@ uint8_t *vc_shape_bytes(int32_t doc, int32_t part, uint32_t *out_len);
  * tessellation (DEVIATION, ANGULAR), meshed from a fresh shape read from the canonical bytes, one thread. */
 uint8_t *vc_mesh(int32_t doc, int32_t part, uint32_t *out_len);
 
+/* A part meshed to an export's own ceilings: mesh.mesh_shape(shape_bytes, tolerance=, angle=), `tolerance` the linear
+ * deflection's in millimetres and `angle` the angular's in degrees, each the finer of itself and the part's own; a
+ * value <= 0 gives none. Not kept: vc_mesh, the exports and vc_elements stay at cad's one tessellation. */
+uint8_t *vc_mesh_at(int32_t doc, int32_t part, double tolerance, double angle, uint32_t *out_len);
+
+/* The faces the part's last mesh (vc_mesh or vc_mesh_at) left without triangles, JSON: mesh_shape(...).unmeshed, each
+ * ordinal with what the mesher and the checker say of it ({"7": "BRepMesh: no status; BRepCheck: valid"}); {} for
+ * none, and for a part not meshed yet. */
+uint8_t *vc_unmeshed(int32_t doc, int32_t part, uint32_t *out_len);
+
 /* One element's facts, JSON: mesh.Topology(bytes).face/edge/vertex(ordinal). What a pick asks. */
 uint8_t *vc_fact(int32_t doc, int32_t part, int32_t kind, int32_t ordinal, uint32_t *out_len);
 
@@ -69,6 +84,11 @@ uint8_t *vc_groups(int32_t doc, int32_t part, uint32_t *out_len);
 
 /* A part's whole table, JSON: mesh.Topology(bytes).elements(). What a view bundle holds; a page asks per pick. */
 uint8_t *vc_elements(int32_t doc, int32_t part, uint32_t *out_len);
+
+/* A part's whole table with the caller's unmeshed faces checked, JSON: mesh.Topology(bytes).elements(unmeshed), the
+ * `count` ordinals at `unmeshed` those of the faces its mesh left without triangles (the engine keeps them with the
+ * mesh). vc_elements is this with the ordinals of the part's own vc_mesh. */
+uint8_t *vc_table(int32_t doc, int32_t part, const int32_t *unmeshed, uint32_t count, uint32_t *out_len);
 
 /* A part measured as a whole, JSON: mesh.measured(bytes). */
 uint8_t *vc_measure(int32_t doc, int32_t part, uint32_t *out_len);

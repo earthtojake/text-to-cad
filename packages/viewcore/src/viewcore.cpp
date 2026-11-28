@@ -106,6 +106,16 @@ int32_t vc_open_xbf(const uint8_t* data, uint32_t size, const char* stem, uint32
   });
 }
 
+int32_t vc_open_shape(const uint8_t* data, uint32_t size) {
+  return guarded<int32_t>(0, [&] {
+    if (!data || !size) throw std::invalid_argument("no data");
+    auto doc = vc::open_shape(data, size);
+    int32_t handle = next_handle++;
+    documents[handle] = std::move(doc);
+    return handle;
+  });
+}
+
 void vc_close(int32_t doc) {
   guarded<int>(0, [&] {
     documents.erase(doc);
@@ -113,8 +123,15 @@ void vc_close(int32_t doc) {
   });
 }
 
+// A document read from a file: one opened from shape bytes alone has no structure and nothing to export.
+static vc::Document& whole(int32_t doc) {
+  vc::Document& d = document(doc);
+  if (d.loose) throw std::invalid_argument("the handle is of shape bytes alone (vc_open_shape): it holds no document");
+  return d;
+}
+
 uint8_t* vc_structure(int32_t doc, uint32_t* out_len) {
-  return guarded<uint8_t*>(nullptr, [&] { return result(vc::structure(document(doc)), out_len); });
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::structure(whole(doc)), out_len); });
 }
 
 uint8_t* vc_shape_bytes(int32_t doc, int32_t index, uint32_t* out_len) {
@@ -125,7 +142,33 @@ uint8_t* vc_mesh(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
     VC_SCOPE(mesh_rest);
     // Kept on the part: its exports read it again, and its whole table checks the faces it left unmeshed.
-    return result(vc::part_mesh(part(doc, index)), out_len);
+    vc::Part& p = part(doc, index);
+    const std::string& body = vc::part_mesh(p);
+    p.last_said = p.unmeshed_said;
+    return result(body, out_len);
+  });
+}
+
+uint8_t* vc_mesh_at(int32_t doc, int32_t index, double tolerance, double angle, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] {
+    VC_SCOPE(mesh_rest);
+    vc::Part& p = part(doc, index);
+    // Never kept: the part's own mesh is the engine's one tessellation, this one an export's.
+    std::map<int, std::string> said;
+    std::string body = vc::mesh_bytes(p.bytes, &said, tolerance > 0 ? std::optional<double>(tolerance) : std::nullopt,
+                                      angle > 0 ? std::optional<double>(angle) : std::nullopt);
+    p.last_said = std::move(said);
+    return result(body, out_len);
+  });
+}
+
+uint8_t* vc_unmeshed(int32_t doc, int32_t index, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] {
+    vc::Json out;
+    out.open();
+    for (const auto& [ordinal, text] : part(doc, index).last_said) out.key(ordinal).str(text);
+    out.close();
+    return result(out.out, out_len);
   });
 }
 
@@ -159,6 +202,16 @@ uint8_t* vc_elements(int32_t doc, int32_t index, uint32_t* out_len) {
   });
 }
 
+uint8_t* vc_table(int32_t doc, int32_t index, const int32_t* unmeshed, uint32_t count, uint32_t* out_len) {
+  return guarded<uint8_t*>(nullptr, [&] {
+    VC_SCOPE(elements_rest);
+    if (!unmeshed && count) throw std::invalid_argument("no ordinals");
+    std::set<int> given(unmeshed, unmeshed + count);
+    return with_topology(doc, index, out_len,
+                         [&](vc::Topology& t, vc::Json& out, vc::Part&) { t.elements(out, given); });
+  });
+}
+
 uint8_t* vc_measure(int32_t doc, int32_t index, uint32_t* out_len) {
   return guarded<uint8_t*>(nullptr, [&] {
     VC_SCOPE(measure_rest);
@@ -174,19 +227,19 @@ uint8_t* vc_measure(int32_t doc, int32_t index, uint32_t* out_len) {
 }
 
 uint8_t* vc_step(int32_t doc, uint32_t* out_len) {
-  return guarded<uint8_t*>(nullptr, [&] { return result(vc::step_bytes(document(doc)), out_len); });
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::step_bytes(whole(doc)), out_len); });
 }
 
 uint8_t* vc_stl(int32_t doc, uint32_t* out_len) {
-  return guarded<uint8_t*>(nullptr, [&] { return result(vc::stl_bytes(document(doc)), out_len); });
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::stl_bytes(whole(doc)), out_len); });
 }
 
 uint8_t* vc_3mf(int32_t doc, uint32_t* out_len) {
-  return guarded<uint8_t*>(nullptr, [&] { return result(vc::threemf_bytes(document(doc)), out_len); });
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::threemf_bytes(whole(doc)), out_len); });
 }
 
 uint8_t* vc_glb(int32_t doc, uint32_t* out_len) {
-  return guarded<uint8_t*>(nullptr, [&] { return result(vc::glb_bytes(document(doc)), out_len); });
+  return guarded<uint8_t*>(nullptr, [&] { return result(vc::glb_bytes(whole(doc)), out_len); });
 }
 
 }  // extern "C"

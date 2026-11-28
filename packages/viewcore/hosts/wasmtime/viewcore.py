@@ -75,7 +75,7 @@ class Core:
         self.instantiate_s = time.perf_counter() - t
         self._len = self._call("vc_alloc", 4)  # the out-length cell, reused
         abi = self.abi_version
-        if abi != 2:
+        if abi != 3:
             raise ViewCoreError(f"unsupported ABI version {abi}")
 
     # -- plumbing -----------------------------------------------------------------------------------------------
@@ -143,6 +143,20 @@ class Core:
             self._fail("vc_open_xbf")
         return Doc(self, h)
 
+    def open_shape(self, data: bytes) -> "Doc":
+        """A part's canonical shape bytes opened by themselves (the engine's pool jobs): a Doc of one part, index 0."""
+        ptr = self._call("vc_alloc", len(data))
+        if not ptr and data:
+            self._fail("vc_alloc")
+        try:
+            self.memory.write(self.store, data, ptr)
+            h = self._call("vc_open_shape", ptr, len(data))
+        finally:
+            self._call("vc_free", ptr)
+        if not h:
+            self._fail("vc_open_shape")
+        return Doc(self, h)
+
     def memory_bytes(self) -> int:
         return self.memory.data_len(self.store)
 
@@ -171,6 +185,32 @@ class Doc:
 
     def mesh(self, part: int) -> bytes:
         return self.core._result("vc_mesh", "vc_mesh", self.handle, part)
+
+    def mesh_at(self, part: int, tolerance: float | None = None, angle: float | None = None) -> bytes:
+        """The part meshed to an export's own ceilings (mm, degrees), never kept: ``mesh_shape(..., tolerance, angle)``."""
+        ptr = self.core._x["vc_mesh_at"](self.core.store, self.handle, part, float(tolerance or 0.0),
+                                         float(angle or 0.0), self.core._len) & 0xFFFFFFFF
+        if not ptr:
+            self.core._fail("vc_mesh_at")
+        n = struct.unpack("<I", self.core._read(self.core._len, 4))[0]
+        data = self.core._read(ptr, n)
+        self.core._call("vc_free", ptr)
+        return data
+
+    def unmeshed(self, part: int) -> dict:
+        """The faces the part's last mesh left without triangles: ``{ordinal: what was said of it}``."""
+        found = self._j("vc_unmeshed", "vc_unmeshed", part)
+        return {int(ordinal): text for ordinal, text in found.items()}
+
+    def table_bytes(self, part: int, unmeshed=()) -> bytes:
+        """The part's whole table with the caller's unmeshed ordinals checked: ``Topology.elements(unmeshed)``."""
+        ordinals = struct.pack(f"<{len(unmeshed)}i", *unmeshed)
+        ptr = self.core._call("vc_alloc", len(ordinals))
+        try:
+            self.core.memory.write(self.core.store, ordinals, ptr)
+            return self.core._result("vc_table", "vc_table", self.handle, part, ptr, len(unmeshed))
+        finally:
+            self.core._call("vc_free", ptr)
 
     def fact_bytes(self, part: int, kind, ordinal: int) -> bytes:
         k = KINDS[kind] if isinstance(kind, str) else kind

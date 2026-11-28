@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <optional>
 #include <tuple>
 
 #include <BRepBndLib.hxx>
@@ -86,20 +87,32 @@ double deflection(const TopoDS_Shape& shape) {
   return std::max(value, 1e-4);
 }
 
-std::string mesh_bytes(const std::string& data, std::set<int>* unmeshed) {
+std::string mesh_bytes(const std::string& data, std::map<int, std::string>* unmeshed, std::optional<double> tolerance,
+                       std::optional<double> angle) {
   TopoDS_Shape shape;
   VC_TIMED(read, shape = read_shape(data));
   double linear = 0;
   VC_TIMED(mesh_deflection, linear = deflection(shape));
-  const double angular = ANGULAR;
+  // An export's own ceilings (mesh.mesh_shape's tolerance and angle): the finer of each and the part's own.
+  if (tolerance) linear = std::min(linear, *tolerance);
+  const double angular = angle ? std::min(ANGULAR, *angle * (3.141592653589793 / 180.0)) : ANGULAR;
   IMeshTools_Parameters parameters;
   parameters.Deflection = linear;
   parameters.Angle = angular;
   parameters.Relative = false;
   parameters.InParallel = false;
   parameters.EnableControlSurfaceDeflectionAllSurfaces = true;
-  parameters.ForceFaceDeflection = false;
-  VC_TIMED(mesh_brepmesh, BRepMesh_IncrementalMesh mesher(shape, parameters));
+  parameters.ForceFaceDeflection = tolerance.has_value();
+  // mesh._MESH_FLAGS: what the mesher says of the whole part, which an unmeshed face's verdict begins with.
+  std::string mesher_status;
+  VC_TIMED(mesh_brepmesh, {
+    BRepMesh_IncrementalMesh mesher(shape, parameters);
+    const int flags = mesher.GetStatusFlags();
+    const std::pair<int, const char*> names[] = {{1, "Failure"}, {2, "ReMesh"}, {4, "SelfIntersectingWire"}, {8, "UserBreak"}};
+    for (const auto& [bit, name] : names)
+      if (flags & bit) mesher_status += (mesher_status.empty() ? "" : ", ") + std::string(name);
+    if (mesher_status.empty()) mesher_status = "no status";
+  });
   VC_PHASES();
   VC_PHASE(mesh_extract);
 
@@ -115,6 +128,7 @@ std::string mesh_bytes(const std::string& data, std::set<int>* unmeshed) {
     const occ::handle<Poly_Triangulation>& triangulation = BRep_Tool::Triangulation(face, location);
     if (triangulation.IsNull() || triangulation->NbTriangles() == 0) {
       face_rows.push_back({ordinal, -1, Transform(), false});
+      if (unmeshed) (*unmeshed)[ordinal] = "BRepMesh: " + mesher_status + "; BRepCheck: " + check(face);
       continue;
     }
     const TopoDS_TShape* tshape = face.TShape().get();
@@ -335,7 +349,6 @@ std::string mesh_bytes(const std::string& data, std::set<int>* unmeshed) {
     put_u32(out, first);
     put_u32(out, face_count[row]);
     first += face_count[row];
-    if (unmeshed && !face_count[row]) unmeshed->insert(face_rows[row].ordinal);
   }
   for (uint32_t v : edge_table) put_u32(out, v);
   for (float v : lines) put_f32(out, v);

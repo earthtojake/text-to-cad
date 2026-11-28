@@ -114,7 +114,7 @@ export class Core {
     const core = new Core(instance, memory);
     if (instance.exports._initialize) instance.exports._initialize();
     core.instantiateMs = performance.now() - t0;
-    if (core.x.vc_abi_version() !== 2) throw new ViewCoreError("unsupported ABI version " + core.x.vc_abi_version());
+    if (core.x.vc_abi_version() !== 3) throw new ViewCoreError("unsupported ABI version " + core.x.vc_abi_version());
     return core;
   }
 
@@ -171,6 +171,27 @@ export class Core {
     if (!h) this.fail("vc_open_xbf");
     return new Doc(this, h);
   }
+
+  /** Bytes copied into the module, handed to `use(ptr, length)` and freed after it. */
+  given(bytes, use) {
+    const n = bytes.length;
+    const ptr = this.x.vc_alloc(n) >>> 0;
+    if (!ptr && n) this.fail("vc_alloc");
+    try {
+      new Uint8Array(this.memory.buffer, ptr, n).set(bytes);
+      return use(ptr, n);
+    } finally {
+      this.x.vc_free(ptr);
+    }
+  }
+
+  /** A part's canonical shape bytes opened by themselves (the engine's pool jobs): a Doc of one part, index 0. */
+  openShape(data) {
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const h = this.given(bytes, (ptr, n) => this.x.vc_open_shape(ptr, n));
+    if (!h) this.fail("vc_open_shape");
+    return new Doc(this, h);
+  }
 }
 
 const json = (u8) => JSON.parse(new TextDecoder().decode(u8));
@@ -184,6 +205,19 @@ export class Doc {
   structure() { return json(this.structureBytes()); }
   shapeBytes(part) { return this.core.result("vc_shape_bytes", this.handle, part); }
   mesh(part) { return this.core.result("vc_mesh", this.handle, part); }
+  /** The part meshed to an export's own ceilings (mm, degrees; none where not a positive number); never kept. */
+  meshAt(part, tolerance, angle) {
+    return this.core.result("vc_mesh_at", this.handle, part, tolerance > 0 ? tolerance : 0, angle > 0 ? angle : 0);
+  }
+  /** The faces the part's last mesh left without triangles, each with what was said of it: { ordinal: text }. */
+  unmeshedBytes(part) { return this.core.result("vc_unmeshed", this.handle, part); }
+  unmeshed(part) { return json(this.unmeshedBytes(part)); }
+  /** The part's whole table with the caller's unmeshed ordinals checked (the engine's `elements(unmeshed)`). */
+  tableBytes(part, unmeshed = []) {
+    const ordinals = new Int32Array(unmeshed);
+    return this.core.given(new Uint8Array(ordinals.buffer), (ptr) =>
+      this.core.result("vc_table", this.handle, part, ptr, ordinals.length));
+  }
   factBytes(part, kind, ordinal) {
     return this.core.result("vc_fact", this.handle, part, typeof kind === "string" ? KINDS[kind] : kind, ordinal);
   }
