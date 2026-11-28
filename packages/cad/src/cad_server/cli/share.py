@@ -331,8 +331,11 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
             manifest = sharing.bundle(path, folder / sharing.VIEW)
         except (ValueError, RuntimeError, OSError) as error:
             # The engine's refusal or failure of the bundle (``ExportRefused``, ``NotHeld``, ``EngineError``), said by
-            # the failure contract in its words.
-            raise classify(error) from None
+            # the failure contract in its words: a refusal is of the file given (one that does not read, an .xbf that
+            # is no document cad wrote), the command line's input, as every verb refuses it.
+            found = classify(error)
+            raise (Failure(str(found), "invalid_argument") if isinstance(error, ValueError)
+                   and found.reason == "failed" else found) from None
         if made is not None and _made(path) != made:
             sources, made = _sources(path, kind)  # built again meanwhile: the files of the model its view shows
         try:

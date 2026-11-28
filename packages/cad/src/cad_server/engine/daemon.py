@@ -1599,10 +1599,13 @@ class Daemon:
                     found, _payload = self.document(named)  # a file this engine knows by its id, or refused
                     ident = server.add(Path(found["path"]))
             except Exception as error:  # noqa: BLE001
+                from cad.engine.document import NoXbf
                 from cad.engine.serve import NotHeld
 
-                # A document id the engine does not hold is a refusal, which the caller raises as its type.
-                send(refused(error) if isinstance(error, NotHeld) else {"failed": f"cannot serve {named}: {error}"})
+                # A document id the engine does not hold, and an .xbf that is no document cad wrote, are refusals,
+                # which the caller raises as their type.
+                send(refused(error) if isinstance(error, (NotHeld, NoXbf)) else
+                     {"failed": f"cannot serve {named}: {error}"})
                 return
             app = getattr(server.http, "app", None)
             token = app.token if app is not None else ""
@@ -1756,6 +1759,7 @@ class Daemon:
         caller as it draws, a snapshot's progress frames (``progress.py``: ``scene`` while the
         document is served, meshed and held by its render process, ``draw`` while the frame is drawn),
         as a build's frames go to its caller."""
+        from cad.engine.document import NoXbf
         from cad.engine.progress import Progress
         from cad_server.engine.renders import Refused, Renders, answer_png
 
@@ -1772,6 +1776,9 @@ class Daemon:
                 data, report = self.renders.draw(Path(request["path"]), request["still"], said)
             except Refused as error:
                 send({"refused": str(error), **({"part": error.part} if error.part else {})})
+                return
+            except NoXbf as error:  # an .xbf that is no document cad wrote: its source refused, as any bad input
+                send({"refused": str(error), "part": "source"})
                 return
             except Exception as error:  # noqa: BLE001 - a picture that could not be drawn is the answer
                 # A render process's failure by the type it failed with (``renders._failed``), any other by its own.

@@ -1073,7 +1073,7 @@ def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None)
         global held_reads
         held_reads += 1
         try:
-            found = _read_held(payload, name)
+            found = _read_held(payload, name, (origin or {}).get("path"))
             found.origin = origin
         except DocumentCompatibilityError:
             # Unsupported or failed conversions leave the saved snapshot recoverable. Only
@@ -1096,13 +1096,14 @@ def held_source(payload: bytes, name: str, origin: dict[str, Any] | None = None)
     return found
 
 
-def _read_held(payload: bytes, name: str) -> Any:
+def _read_held(payload: bytes, name: str, path: str | None = None) -> Any:
+    """``held_source``'s read of ``payload``; ``path``, the ``.xbf`` its bytes are, where they are a file's."""
     import tempfile
 
     from cad.engine import document, export
 
     stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in name).strip(".") or "document"
-    loaded = document.Loaded(Path(tempfile.gettempdir()) / f"{stem}.xbf", document.read_bytes(payload))
+    loaded = document.Loaded(Path(tempfile.gettempdir()) / f"{stem}.xbf", document.read_bytes(payload, path))
     structure = {**loaded.structure(), "path": ""}
     return export.Source(structure, {p.key: p.shape for p in loaded.prototypes}, live=False,
                          xcaf=loaded.doc, world=lambda occurrence: loaded.worlds.get(occurrence),
@@ -1226,7 +1227,7 @@ def _taken(model: Any, context: Any, shown: str, remembered: Any) -> tuple[dict,
         # class's note), so what is asked of it is answered from them (``held``).
         try:
             data = xbf.read_bytes()
-            doc = document.read_bytes(data)
+            doc = document.read_bytes(data, str(xbf))
             held = previous.read_record(doc)
         except Exception as error:  # noqa: BLE001 - a file that does not read is built again, and written
             return {"used": False, "reason": f"its .xbf does not read: {error}"}, None

@@ -32,6 +32,7 @@ REASONS: dict[tuple[str, str], str] = {
     ("cad._internal.refused", "ArgumentRefused"): "invalid_argument",
     ("cad.engine.serve", "NotHeld"): "not_found",
     ("cad.engine.snapshot", "NoSuchFile"): "not_found",
+    ("cad.engine.document", "NoXbf"): "invalid_argument",
 }
 
 

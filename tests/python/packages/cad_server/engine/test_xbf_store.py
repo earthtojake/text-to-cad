@@ -259,6 +259,25 @@ class XbfStoreTest(store_fixtures.StoreCase):
         self.run_script("cube")
         self.assertEqual(answered(), ("live", [3.0, 2.0, 1.0], [3.0, 2.0, 1.0]))
 
+    def test_an_xbf_that_is_no_document_cad_wrote_is_refused_in_one_line_by_every_verb(self) -> None:
+        self.write("cube")
+        self.run_script("cube")
+        whole = self.xbf("cube").read_bytes()
+        for name, data, why in (("garbage", b"garbage", "another file"), ("cut", whole[:len(whole) // 2], "cut short")):
+            path = self.project / f"{name}.xbf"
+            path.write_bytes(data)
+            said = f"{path} is no .xbf cad wrote: it is {why}"
+            for verb, *rest in (("inspect",), ("export", "out.step"), ("snapshot", "out.png")):
+                with self.subTest(name=name, verb=verb):
+                    refused = self.cli(verb, str(path), *rest)
+                    lines = refused.stderr.strip().splitlines()
+                    self.assertEqual((refused.returncode, len(lines), lines[-1].endswith(f" {verb}: {said}")),
+                                     (2, 1, True), refused.stderr)
+            refused = self.cli("export", str(path), "out.step", "--json")
+            self.assertEqual((refused.returncode, json.loads(refused.stdout)),
+                             (2, {"ok": False, "error": said, "reason": "invalid_argument"}))
+            self.assertEqual(self.cli("inspect", str(self.xbf("cube"))).returncode, 0, "the engine reads on")
+
     def test_two_unchanged_runs_leave_one_generation_and_the_page_idle(self) -> None:
         # A document is what its last run made: nothing ran, nothing changed, so a page has nothing to fetch.
         self.said()

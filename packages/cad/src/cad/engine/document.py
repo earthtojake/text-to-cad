@@ -1248,6 +1248,40 @@ _END_ATTRIBUTES, _END_LABEL = -1, -2
 _STRING_TYPE = "TDataStd_AsciiString"
 
 
+class NoXbf(ValueError):
+    """A file or bytes read as an ``.xbf`` that are no document cad wrote: cut short, or another file. Refused
+    before OCCT's reader is handed them (``_whole``), which ends its process on such input rather than report it,
+    and in place of what that reader raises or reports of a body it cannot read."""
+
+
+def _whole(named: str, size: int, read: Callable[[int, int], bytes]) -> None:
+    """Refuse (``NoXbf``) what is no ``.xbf`` cad wrote, from its header and its last bytes alone (``read(at,
+    count)``, ``size`` bytes in all): no BinOcaf magic and byte order is another file; a header whose sections end
+    past the file, or, in the layout cad writes (its shapes inline: ``_TOC_END``), a root label whose declared size
+    ends past the file or on no label's end, is cut short. A file of another layout is left to the reader."""
+    import struct
+
+    head = read(0, 27)
+    cut = NoXbf(f"{named} is no .xbf cad wrote: it is cut short")
+    if len(head) < 11 and (_MAGIC + struct.pack("<i", _ORDER)).startswith(head):
+        raise cut
+    if head[:len(_MAGIC)] != _MAGIC or struct.unpack_from("<i", head, 7)[0] != _ORDER:
+        raise NoXbf(f"{named} is no .xbf cad wrote: it is another file")
+    if len(head) < 27:
+        raise cut
+    info, info_end, comments_end = (struct.unpack_from("<i", head, at)[0] for at in (11, 15, 23))
+    root = comments_end + len(_TOC_END)
+    if not 0 < info <= info_end <= comments_end or root + 12 + 4 > size:
+        raise cut
+    if read(comments_end, len(_TOC_END)) == _TOC_END:
+        # Where the root label says it ends; bytes after it, which the reader never reads, are let be.
+        label = read(root, 12)
+        end = root + 4 + struct.unpack_from("<Q", label, 4)[0]
+        if struct.unpack_from("<i", label)[0] != 0 or end > size \
+                or struct.unpack_from("<i", read(end - 4, 4))[0] != _END_LABEL:
+            raise cut
+
+
 def relabel(data: bytes, texts: dict[str, str]) -> bytes:
     """An xbf's bytes with each ASCII string of its main label named here by GUID holding the text
     given: those attributes' bytes made again where they are, the sizes of the two labels that
@@ -1735,17 +1769,28 @@ def _read(path: Path) -> Any:
         doc = _new_document()
         if suffix == ".xbf":
             # The application's Open and GetDocument leave the Python-side document empty:
-            # the retrieval driver reads into the one handed to it. A file it cannot read
-            # whole (cut short, garbage) it says so of, or raises: either is an error here.
+            # the retrieval driver reads into the one handed to it. It ends the process on some input
+            # that is no document (no header, a file cut short), so that is refused first (``_whole``);
+            # a body it still cannot read it says so of, or raises: either is the same refusal.
             from OCP.PCDM import PCDM_ReaderStatus
 
+            with open(path, "rb") as handle:
+                def read(at: int, count: int) -> bytes:
+                    handle.seek(at)
+                    return handle.read(count)
+
+                _whole(str(path), path.stat().st_size, read)
             driver = BinXCAFDrivers_DocumentRetrievalDriver()
-            driver.Read(TCollection_ExtendedString(str(path), True), doc, _application(), None,
-                        Message_ProgressRange())
+            try:
+                driver.Read(TCollection_ExtendedString(str(path), True), doc, _application(), None,
+                            Message_ProgressRange())
+            except Exception as error:  # noqa: BLE001 - OCCT's own failures (Standard_Failure, Storage_*)
+                raise NoXbf(f"{path} is no .xbf cad wrote: it is cut short or damaged "
+                            f"({type(error).__name__})") from None
             status = driver.GetStatus()
             del driver
             if status != PCDM_ReaderStatus.PCDM_RS_OK:
-                raise ValueError(f"cannot read {path}: {status.name}")
+                raise NoXbf(f"{path} is no .xbf cad wrote: it is cut short or damaged ({status.name})")
         elif suffix in (".step", ".stp"):
             from OCP.IFSelect import IFSelect_RetDone
             from OCP.Interface import Interface_Static
@@ -1905,19 +1950,26 @@ def refuse_external_files(reader: Any, path: Any) -> None:
                          f"reference); the engine reads a STEP's own geometry only")
 
 
-def read_bytes(data: bytes) -> Any:
+def read_bytes(data: bytes, named: str | None = None) -> Any:
     """An xbf's bytes read into a document, in memory: the application's stream read, overwriting
     into a document made here (``PCDM_ReaderFilter.AppendMode_e.AppendMode_Overwrite``), since the document a
-    plain stream read makes is one OCP cannot hand back (``_new_document``)."""
+    plain stream read makes is one OCP cannot hand back (``_new_document``). Bytes that are no document cad wrote
+    are refused first, as a file's are (``_whole``), ``named`` as the refusal says them (an ``.xbf``'s path)."""
     import io
 
     from OCP.PCDM import PCDM_ReaderFilter, PCDM_ReaderStatus
 
+    named = named or "the document read"
+    _whole(named, len(data), lambda at, count: data[at:at + count])
     with _XCAF_LOCK:
         doc = _new_document()
-        status = _application().Open(io.BytesIO(data), doc, PCDM_ReaderFilter(PCDM_ReaderFilter.AppendMode_e.AppendMode_Overwrite))
+        try:
+            status = _application().Open(io.BytesIO(data), doc,
+                                         PCDM_ReaderFilter(PCDM_ReaderFilter.AppendMode_e.AppendMode_Overwrite))
+        except Exception as error:  # noqa: BLE001 - OCCT's own failures (Standard_Failure, Storage_*)
+            raise NoXbf(f"{named} is no .xbf cad wrote: it is cut short or damaged ({type(error).__name__})") from None
     if status != PCDM_ReaderStatus.PCDM_RS_OK:
-        raise ValueError(f"cannot read the document's bytes: {status.name}")
+        raise NoXbf(f"{named} is no .xbf cad wrote: it is cut short or damaged ({status.name})")
     return doc
 
 

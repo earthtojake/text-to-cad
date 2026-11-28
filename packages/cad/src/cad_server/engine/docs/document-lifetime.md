@@ -151,7 +151,12 @@ An `xbf/8` `.xbf` is converted in memory when read (**Document compatibility**).
 imports and exports require no model source or execution. The file's bytes remain unchanged;
 loading a conversion rewrites nothing. Unsupported or failed format conversion preserves those bytes
 and reports a clear error. Explicitly running the model still compares the current build key and rebuilds
-where it differs.
+where it differs. A file or bytes that are no `.xbf` cad wrote are refused before OCCT's reader is handed them,
+since that reader ends its process on such input rather than report it (`document.NoXbf`, `document._whole`): no
+BinOcaf header is another file; a header, or a root label whose declared size, that does not end where the file
+does is a file cut short. What the reader still cannot read of a body is the same refusal, so every verb, a
+script's `xbf.read` and the page say it in one line (a verb exits 2). A file damaged inside at its full length can
+still end the process reading it (the documents worker, the page's reader, a build's worker), never the engine.
 
 **The last run.** A document is what its model's last run made, and that is all the engine knows
 of the code: it never compares a script, a module or an input file on disk with what a build read,
