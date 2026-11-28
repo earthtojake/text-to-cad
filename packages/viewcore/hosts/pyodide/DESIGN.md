@@ -38,7 +38,7 @@ The worker's protocol, its contract number and every request are unchanged.
 | worker, standby, checks process | `{python} -X faulthandler -P -m cad.engine.worker` | the kernel's Python (done) |
 | meshing and reading pools | a `multiprocessing` spawn pool | the view core's job server; a kernel process for what it does not answer (done) |
 | a program (`cad run model.py`) | the environment's Python | the kernel's Python, asking the engine through a relay (done) |
-| render process (stills) | `{python} -P -m cad.engine.render.service` | cannot draw: see Stills |
+| render process (stills) | `{python} -P -m cad.engine.render.service` | the installation's own Python, drawing with the view core (`--core`): see Stills (done) |
 
 ## The setting
 
@@ -64,7 +64,7 @@ one line; nothing falls back to the kernel the person did not choose. The suites
 | 8 | Builds in the caller's own Python (a lease) | `daemon.py:989` | Every script is built in the kernel's worker | done, tested |
 | 9 | A program's own run: `cad run model.py` runs the program, which decides what it calls (law 11) | `cad_server/cli/run.py:447,464` | The program runs on the kernel's Python; that Python has no pipes to dial the door with, so its `cad run` holds a relay it connects to (`cad/engine/relay.py`, `cad/engine/client.py:96`) | done, tested, measured (4.7 s a warm run) |
 | 10 | A script's own packages (`# /// script`, `--with`) | `cad_server/_internal/kernel_packages.py` | uv resolves them; what the kernel folder does not carry is installed, pure Python alone, in a folder of the cache on the program's path; one with native code is refused in one line naming it | done, tested |
-| 11 | Stills: OCCT's viewer draws through OpenGL; the binding has no `OCP.OpenGl` | `cad/engine/render/context.py:69` | A kernel process refuses a picture at once (`KernelDrawsNothing`); see Stills | refusal done; drawing open |
+| 11 | Stills: OCCT's viewer draws through OpenGL; the binding has no `OCP.OpenGl` | `cad/engine/render/context.py:69` | A kernel process refuses a picture at once (`KernelDrawsNothing`); the render process draws it with the view core's software renderer (`cad/engine/render/core.py`); see Stills | done, tested, measured |
 | 12 | Integrations that are other programs (KiCad, CalculiX, MuJoCo, Netgen, Blender) | `cad/kicad/`, `calculix/`, `mujoco/`, `netgen/` | Not kernel processes: `cad run` gives a program that uses one its own native environment, as before | unchanged |
 | 13 | The build closure's libraries | `cad/engine/previous.py:130` | The WebAssembly binding's distribution is named: nothing built on one kernel is taken as built on the other | done |
 | 14 | Start-up: the binding's 104 MB module, build123d's imports of scipy, scikit-learn, IPython; Node 22 holding over 4 GB | `make.mjs`, `bootstrap.py`, `python.mjs:27` | Packages unpacked once with bytecode; imports a build calls nothing of deferred to first use by a finder that imports the real package then; Node 24 required, refused in one line under it | done, measured |
@@ -95,62 +95,50 @@ mesh with three kernel processes holding 5,155 MB, against 1.1 s and 1.0 s with 
 
 ## Stills
 
-**What draws today.** `cad/engine/render/` is 6,660 lines. A render process holds a document as the engine serves
-it: the structure (JSON), each part's XBM2 mesh buffer (positions, normals, triangles by face, feature-edge
-polylines), its paints (`faceColors`, `faceMaterials`), and draws a `snapshot.Still` to PNG bytes and a report.
-Nothing in it models: `shapes.py` makes triangulation-only OCCT shapes of the buffers so that OCCT's viewer has
-something to present.
+A still is the render process's, as on the native kernel: a kernel process refuses one at once
+(`render.context.KernelDrawsNothing`) and the client has the render process draw an `.xbf` the engine exports
+(`snapshot.elsewhere`). Where the kernel is the WebAssembly one, `base.drawing` (`cad_server/_internal/base.py`)
+answers the installation's own Python -- numpy and Pillow, no kernel: a render process models nothing -- and the
+kernel folder's view core, which the supervisor hands the process as `--core` (`cad_server/engine/supervisor.py`).
+Its `Held` then draws with `render.core.CoreScene`: `occt.Scene` with the OCCT calls taken out, so both renderers
+take one set of decisions -- what is shown and how (`Scene.plan`, `finish.finish`), the camera (`Scene.frame`,
+`service.frame_camera`, kept by `Scene.aim`), the clip (`clip.cut`, `clip.cap_colour`), the grid (`grid.drawn`), the
+ink's ribbons, lines and text quads (`Scene._ink`, `_line`, `_quad`) -- and the core's are written as the `render`
+job's scene (`../node/README.md`, "The scene") each time a frame is asked, each part's mesh crossing the pipe once
+by its key. The painter (text marks laid as three lays them, Measure's marks) is the same Python; a text mark's
+bare pixels are a whole frame drawn without the marks, where OCCT draws camera tiles.
 
-| Part | Lines | Files | For a new renderer |
-|---|---|---|---|
-| OCCT drawing | 2,688 | `occt.py` (`Scene`, 1,494), `context.py` (the OpenGL canvas, 454), `finish.py` (materials as OCCT aspects, 275), `shapes.py` (252), `clip.py` (clip planes and capping, 213) | replaced |
-| Partly OCCT | 1,455 | `service.py` (what a renderer holds, the frames, the camera's fitting: 2 imports of OCCT), `grid.py` (7), `drawing.py` (a DXF drawn: 4) | kept, their OCCT calls moved behind the seam |
-| Plain Python | 2,517 | `board.py`, `schematic.py`, `text.py` (text by Pillow), `overlay.py` (ink over pixels), `explode.py`, `look.py` (the lights and the environment image), `board_refs.py`, `meshes.py` | kept as they are |
+Not drawn by the core yet, each refused in one line before anything is drawn (`core.NOT_YET`): Preview's studio,
+the path tracer, a GLB's base colour textures on lit faces, a DXF's drawing. A foreign file whose reader needs the
+kernel (a GLB, a robot's primitives) is refused where the installation has none. A kernel folder with no view core
+refuses every still (`base.NO_DRAWING`).
 
-**The seam a renderer fills** is `occt.Scene`'s: made of `(structure, {key: XBM2 buffer}, size)`, then
-`show(display, preview)` (the display modes: shaded, with or without edges, hidden parts, transparency),
-`_clip(clip)` (a plane, its cut capped), `explode(amount)`, `grid(on)`, `frame(camera, projection, focal_length)`
-(a preset, `az:el`, or a view's own camera: position, target, up; orthographic or perspective) answering the camera
-used, `project(points)`, `placed_points()`, `box_corners()` and `rest_bounds()` (what `service.frame_camera` fits a
-camera with, and what `overlay.py` places ink by), `annotate(annotation)` and `measure(marks)` (ribbons, polylines
-and text quads in the scene), `backdrop(colour)` (or none: a picture on nothing, its alpha kept),
-`preview_look()` (the Preview look: image-based lighting from `studio.hdr`, a floor, a contact shadow, tone
-mapping) and `path_trace(out, samples)`, `painter()`/`save(out)` (the frame as RGBA pixels, `width` x `height`,
-supersampled where the still asks), `close()`. It answers pixels and a report (size, camera, timings, unmeshed
-faces, warnings).
-
-**Three ways to fill it**, by cost:
-
-1. *A software rasterizer in the view core.* It already holds the meshes and the structure. A z-buffered triangle
-   rasterizer with per-face colour, feature edges as lines, one clip plane with capping, alpha, supersampling and a
-   projected grid covers the display modes; the Preview look (image lighting, contact shadow, tone mapping) is a
-   second step, and path tracing is not on offer. No new dependency, the same pictures on every computer, about the
-   2,700 lines above to write again in C++ behind a `still` job, and every picture the tests pin drawn anew.
-2. *The viewer's own renderer in a headless browser.* The page already draws the same structure and buffers with
-   every mode, clip, explode, grid and annotation. A still is then a page loaded with the still as its state and its
-   canvas read. Nothing to write in the renderer, and stills match what a person sees; it needs a browser on the
-   computer (Chromium is 150-300 MB, or the person's own by the DevTools protocol) and software WebGL where there
-   is no GPU.
-3. *A native render process as a drawing-only dependency.* In a mixed install this works today
-   (`places.drawing`, `base.py:418`: the render process runs in the native kernel the installation has beside it,
-   and a worker's own picture is redrawn there from an exported `.xbf`: `snapshot.elsewhere`). It is not a
-   destination: one kernel everywhere excludes it.
-
-**An installation with no native kernel** refuses a still in one line (`base.NO_DRAWING`): "a still is drawn by
-the native CAD kernel's OpenGL viewer, which this installation does not have: its kernel is the WebAssembly one.
-See the model on its page instead (cad show), or choose the native kernel ... and ask again".
+Measured (juno, 249 parts and 363 instances, 1600 x 1200, solid, through `cad snapshot` on this kernel): 6.7 s for
+the first picture (serving and meshing included; 16.4 s natively with its Xvfb and kernel load), 0.66 s warm against
+0.53-0.59 s natively, the core's frame 0.40 s at 8 samples a pixel against OpenGL's 0.40 s (llvmpipe, 4); the two
+pictures differ by a mean 0.3 levels, 0.26% of the pixels by over 32 levels and 0.035% once a line a pixel aside is
+allowed for. `tests/python/packages/cad/engine/test_render.py` draws its goldens with the core where the suite runs
+on this kernel (`scripts/test/test-python.sh --kernel`); `test_render_core.py` holds the scene and the job's
+traffic against a stand-in server wherever the suite runs.
 
 ## How the kernel folder is obtained
 
-By hand today: `node fetch.mjs PACKAGES_DIR` (every file checked against the sha256 `pins.json` names), then
-`node make.mjs PACKAGES_DIR KERNEL_DIR`. Node 24 or later is found on `PATH` and refused in one line otherwise;
-shipping one is a person's decision. Open: the engine making the folder itself on first need, as it makes the
-native base, from a lock shipped with cad.
+With no `folder` in the setting the engine makes it on first need (`cad_server/_internal/kernel_folder.py`): every
+file the lock shipped with cad names (`kernel_host/lock.json`) downloaded into the cache and checked against its
+sha256, the wheels unpacked, cad's host put beside them, a launcher written for the Node 24+ on `PATH`. It is made
+by the engine's one making, as the native base is (`base.KERNEL_MAKING`, a `Making`): one making for every asker,
+its lines said to each request that waits on it, a failure remembered and told at once until it can have cleared;
+`cad run` asks the server for it over the door (`{"op": "base", "key"}`) as it asks for the base. Where the lock
+names the view core (`viewcore`: one archive of `core/` as `make.mjs` lays it out) it is unpacked into the folder
+with `bin/viewcore`; the lock names none yet -- publishing that archive with a release is the view core's owners'
+step -- so an engine-made folder's pools are kernel processes and its stills are refused (`base.NO_DRAWING`).
+By hand: `node fetch.mjs PACKAGES_DIR`, then `node make.mjs PACKAGES_DIR KERNEL_DIR` (with the view core where one
+is built), named in the setting's `folder`.
 
 ## What is open
 
-1. Stills on an installation with no native kernel (above).
-2. The engine making the kernel folder itself; `folder` optional in the setting.
+1. Stills: Preview's studio, the path tracer, a GLB's textures and a DXF's drawing on the view core (above).
+2. The view core's archive in the lock (above): until a release publishes one, an engine-made folder draws no still.
 3. 32-bit integers: numpy's default integer is 32 bits here. The sites that failed loudly in the suites are fixed;
    code that relied on a 64-bit default silently is not audited (the manufacturing checks and `ranges.py` use
    explicit 64-bit keys where they multiply cell indexes).

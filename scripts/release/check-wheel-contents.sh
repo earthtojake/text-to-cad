@@ -75,6 +75,10 @@ REQUIRED=(
   "cad/engine/places.py"
   # The engine's data: the environment image its look lights the display modes with.
   "cad/engine/render/studio.hdr"
+  # The WebAssembly kernel's host and lock, which the engine makes a kernel folder with (kernel_folder.py).
+  "cad_server/_internal/kernel_host/python.mjs"
+  "cad_server/_internal/kernel_host/lock.json"
+  "cad_server/_internal/kernel_host/bootstrap.py"
   # The server, and the `cad` command's code.
   "cad_server/__init__.py"
   "cad_server/assets.py"

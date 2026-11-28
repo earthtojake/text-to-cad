@@ -5,7 +5,10 @@ it makes the native base: every file the lock shipped with cad names (``kernel_h
 and one wheel per package, each with its URL and its sha256) is downloaded into the cache and checked against its
 sha256, the wheels are unpacked into the folder's ``site-packages``, cad's own host is put beside them
 (``python.mjs``, ``bootstrap.py``), and a launcher is written that runs it under the Node found on ``PATH``
-(24 or later). The folder is ``kernel/<key>`` in the cache, its key a digest of the lock, the host and the Node:
+(24 or later). Where the lock names the view core (``viewcore``: one archive of its folder as ``make.mjs`` lays it
+out, its job server ``hosts/node/serve.mjs`` and its module ``dist/viewcore.wasm``), it is unpacked into ``core/``
+and ``bin/viewcore`` runs its job server: the engine's pools and its stills are the view core's then
+(``core_pool``, ``render.core``); without it the pools are kernel processes and a still is refused. The folder is ``kernel/<key>`` in the cache, its key a digest of the lock, the host and the Node:
 another release's lock makes another folder. It is made beside its place and moved there whole, so one that
 exists is complete; a download kept from an earlier try is used again once its sha256 is checked.
 
@@ -35,6 +38,7 @@ __all__ = ["NODE", "ensure", "lock", "node"]
 #: The Node a kernel folder runs under, by its major version (``python.mjs`` refuses an earlier one).
 NODE = 24
 _HOST = Path(__file__).with_name("kernel_host")
+_SERVE = "hosts/node/serve.mjs"  # the view core's job server, in its archive and in ``core/``
 _TEXTURES = re.compile(r"\.(png|jpe?g|webp|exr|hdr|ktx2?|tiff?)$", re.IGNORECASE)
 _BY_HAND = ("or make the folder by hand and name it in the settings (\"kernel\": {\"kind\": \"wasm\", \"folder\": "
             "PATH})")
@@ -153,8 +157,9 @@ def ensure(*, make: bool = True, told: Callable[[str], None] | None = None) -> P
 
     downloads = places.cache_dir() / "kernel" / "downloads"
     downloads.mkdir(parents=True, exist_ok=True)
+    viewcore = pinned.get("viewcore")
     told(f"making the WebAssembly CAD kernel, once: {len(pinned['core']) + len(pinned['packages'])} files of "
-         f"Pyodide {pinned['pyodide']}")
+         f"Pyodide {pinned['pyodide']}" + (", and the view core" if viewcore else ""))
     staged = folder.with_name(f"{folder.name}.making-{os.getpid()}")
     shutil.rmtree(staged, ignore_errors=True)
     try:
@@ -174,10 +179,19 @@ def ensure(*, make: bool = True, told: Callable[[str], None] | None = None) -> P
         launcher.write_text(f'#!/bin/sh\nCAD_KERNEL_HOME="{folder}" exec "{runs}" "{folder / "host" / "python.mjs"}" "$@"\n',
                             encoding="utf-8")
         launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        if viewcore:
+            _unpacked(_fetched(viewcore, downloads, told), staged / "core", False)
+            if not (staged / "core" / _SERVE).is_file() or not (staged / "core" / "dist" / "viewcore.wasm").is_file():
+                raise base.Refused(f"the view core's {viewcore['file']} holds no {_SERVE} and dist/viewcore.wasm: "
+                                   f"{_BY_HAND}", "other")
+            serve = staged / "bin" / "viewcore"
+            serve.write_text(f'#!/bin/sh\nexec "{runs}" "{folder / "core" / _SERVE}" "$@"\n', encoding="utf-8")
+            serve.chmod(serve.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         (staged / base.WASM_MARKER).write_text(json.dumps({
             "schema": base.WASM_SCHEMA, "pyodide": pinned["pyodide"], "python": pinned["python"],
             "pins": hashlib.sha256(json.dumps(pinned, sort_keys=True).encode()).hexdigest(), "node": runs,
-            "deferred": list(pinned.get("deferred") or []), "core": None}, indent=1) + "\n", encoding="utf-8")
+            "deferred": list(pinned.get("deferred") or []), "core": viewcore["sha256"] if viewcore else None}, indent=1)
+            + "\n", encoding="utf-8")
         folder.parent.mkdir(parents=True, exist_ok=True)
         try:
             staged.rename(folder)

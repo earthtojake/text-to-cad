@@ -90,6 +90,32 @@ class KernelFolderTest(unittest.TestCase):
         with mock.patch.object(kernel_folder, "lock", return_value=pinned):
             return kernel_folder.ensure(told=self.said.append, **given)
 
+    def test_the_view_core_the_lock_names_is_its_core_and_draws_its_stills(self) -> None:
+        """A lock that names the view core's archive: unpacked into ``core/``, run by ``bin/viewcore`` under the same
+        Node, its sha256 in ``kernel.json``; the engine's pools and its render processes are handed it."""
+        self.files["viewcore-4.zip"] = _wheel({"hosts/node/serve.mjs": b"// the job server", "hosts/node/viewcore.mjs": b"",
+                                               "hosts/web/viewcore.js": b"", "dist/viewcore.wasm": b"\0asm",
+                                               "package.json": b'{"type": "module"}'})
+        (self.root / "index" / "viewcore-4.zip").write_bytes(self.files["viewcore-4.zip"])
+        pinned = self.locked(viewcore=self.item("viewcore-4.zip"))
+        folder = self.ensure(pinned)
+        self.assertEqual((folder / "core" / "hosts" / "node" / "serve.mjs").read_bytes(), b"// the job server")
+        launcher = (folder / "bin" / "viewcore").read_text(encoding="utf-8")
+        self.assertIn(f'exec "/usr/bin/node" "{folder / "core" / "hosts" / "node" / "serve.mjs"}" "$@"', launcher)
+        marker = json.loads((folder / base.WASM_MARKER).read_text(encoding="utf-8"))
+        self.assertEqual(marker["core"], pinned["viewcore"]["sha256"])
+        self.assertIn("and the view core", self.said[0])
+        (self.root / "state").mkdir()
+        (self.root / "state" / "settings.json").write_text(json.dumps({"kernel": {"kind": "wasm"}}), encoding="utf-8")
+        with mock.patch.object(kernel_folder, "lock", return_value=pinned):
+            self.assertEqual(base.kernel()["core"], str(folder / "bin" / "viewcore"))
+            self.assertEqual(base.drawing()["core"], str(folder / "bin" / "viewcore"))
+        # An archive that is no view core is refused, and nothing is left made.
+        self.files["other.zip"] = _wheel({"README": b"not a core"})
+        (self.root / "index" / "other.zip").write_bytes(self.files["other.zip"])
+        with self.assertRaisesRegex(base.Refused, "holds no hosts/node/serve.mjs"):
+            self.ensure(self.locked(viewcore=self.item("other.zip"), deferred=[]))
+
     def test_it_is_made_once_of_the_lock_s_files_each_checked_and_is_a_kernel_folder_the_engine_takes(self) -> None:
         self.assertIsNone(self.ensure(self.locked(), make=False), "not made for the asking")
         self.assertEqual(_Quiet.fetched, [])
