@@ -3,11 +3,12 @@
     "cad": {
       "command": "uvx",
       "args": [
+        "--isolated",
         "--no-config",
         "--managed-python",
         "--python",
         "3.14",
-        "cad@0.11.18",
+        "cad@0.11.19",
         "mcp"
       ],
       "startup_timeout_sec": 300
