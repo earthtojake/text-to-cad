@@ -444,6 +444,54 @@ def _command(plan: Plan, python: str) -> list[str] | None:
     return [str(found), *plan.args] if found is not None else None
 
 
+def _for_the_kernel(plan: Plan, spec) -> bool:
+    """Whether a plan runs on the WebAssembly kernel where a person chose it: a script, a module or code whose
+    environment is the kernel's alone -- no other integration (each is another program's, with an environment of
+    its own), no Python named, nothing installed editable or from a file or a lock. Any other runs as it does
+    with the native kernel, in an environment the engine makes."""
+    from cad_server._internal import base
+
+    return (plan.kind != "command" and tuple(spec.integrations) == (base.EXTRA,) and spec.python is None
+            and not (spec.editable or spec.files or spec.lock))
+
+
+def _kernel_python(chosen: dict) -> str:
+    from cad_server._internal import kernel_packages
+
+    return kernel_packages._python(chosen) + ".0"
+
+
+def _on_the_kernel(plan: Plan, spec, chosen: dict, said) -> int:
+    """A program run on the WebAssembly kernel's Python (law 11: the program, not the engine, decides what it
+    calls): the library on its path as a kernel process has it, then the script's own pure-Python packages
+    (``kernel_packages``), and the engine asked through a relay this process holds while it runs
+    (``cad.engine.relay``: that Python has no pipes to dial the door with). Its exit code."""
+    import subprocess
+
+    from cad.engine import places, relay
+
+    from cad_server._internal import kernel_packages
+
+    packages = kernel_packages.ensure(chosen, tuple(spec.requirements), said)
+    between = relay.Relay()
+    try:
+        env = dict(os.environ)
+        env[relay.VARIABLE] = between.value
+        path = [places.engine_root(), *([str(packages)] if packages is not None else [])]
+        env["PYTHONPATH"] = os.pathsep.join([*path, *(item for item in env.get("PYTHONPATH", "").split(os.pathsep)
+                                                      if item and item not in path)])
+        command = _command(plan, chosen["python"])
+        assert command is not None
+        sys.stdout.flush()
+        try:
+            return subprocess.call(command, env=env)
+        except OSError as error:
+            said(f"cannot run {command[0]}: {error.strerror or error}")
+            return 1
+    finally:
+        between.close()
+
+
 def _homes(names: tuple[str, ...], environ: dict[str, str]) -> dict[str, str]:
     """The private settings folders of the tools of the integrations ``names`` (the registry's ``homes``:
     Blender's ``BLENDER_USER_CONFIG`` and the rest), by the variable that names each, but one ``environ`` (the
@@ -522,6 +570,11 @@ def main(argv: list[str] | None = None) -> int:
         prepared = prepare(plan, installation.release, PYTHON)
         spec = prepared.spec
         assert isinstance(spec, extras.Spec)
+        chosen = base.wasm_kernel()
+        if chosen is not None and _for_the_kernel(plan, spec):
+            _admitted(prepared.wanted, _kernel_python(chosen), Path(plan.target).name if plan.kind == "script"
+                      else "the program", "the WebAssembly kernel's")
+            return _on_the_kernel(plan, spec, chosen, said)
         env = extras.ensure(installation, spec, told=said, engine=True)
         # Its Python's version as the environment's marker says it (this process's own, where its own environment
         # is the base), checked against the script's ``requires-python`` and the line an integration is built for.

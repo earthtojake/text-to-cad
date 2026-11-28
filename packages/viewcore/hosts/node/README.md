@@ -57,3 +57,56 @@ Each answers what the engine's own job answers, in the engine's bytes: JSON is s
   unmeshed.
 
 `../../tools/pool_parity.py` holds every job against the engine's own code, part by part.
+
+## Stills: the renderer this replaces, and what the core's must draw
+
+cad draws a 3D still with OCCT's OpenGL viewer (`cad.engine.render`, `docs/viewer-and-snapshot.md` "The OCCT
+stills"). A WebAssembly kernel has no OpenGL, so the core carries a rasterizer of its own (`src/render.cpp`,
+`vc_render`, the `render` job below) that draws the same picture from the same inputs. This section is the contract
+it is held to, read off the renderer it replaces.
+
+### What Python hands OCCT
+
+| Input | Where it comes from | How OCCT takes it |
+|---|---|---|
+| A part's mesh | the engine's XBM2 buffer (`Mesh.to_bytes()`): nodes with normals, triangles, the face table, edges as polylines with a class each | `shapes.py` crafts a triangulation-only shape per face group and a polygon shape per edge class; nothing is meshed by OCCT |
+| An instance | its part, its 4x4 matrix (column-major, as the structure holds it) with the explode offset added to the translation, its colour or its part's | one connected presentation per part and look, placed |
+| A face's material | `finish.finish(rgba, material)`: base colour (linear; a plain colour raised to the look's `colour_power` 2), alpha, metallic, roughness, IOR, emission. A painted face is a group of its own; Parts takes the palette's colour by `instance.palette` or index and keeps the part's opacity | a PHYSIC material, roughness as OCCT's normalized `(r - 0.01) / 0.99`; polygon offset (1, 1) when opaque, so edges win, (0, -4) when see-through |
+| The light | `look.py`: one directional key (-0.35, 0.55, -1.0) at 4.0, white; the `studio.hdr` equirectangular radiance at 0.5 | PBR shading, the key a directional light, the image a cube map (256 a side, +Y up as OCCT reads it) OCCT bakes into nine spherical harmonics and six prefiltered levels |
+| X-ray's light | `look.py`'s colour-only rig: ambient 0.5, two white directional lights, specular 0.08 at exponent 128 x 0.35 | Phong shading, the faces at opacity 0.22, the colour squared |
+| The backdrop | `#f0f4f9`, or a job's own flat colour | a flat background |
+| The camera | `Scene.frame`: a preset's or `azimuth:elevation`'s direction, then the tight orthographic frame of every placed vertex (the box's corners in Wireframe), or the perspective fit at three's 50 mm focal length; or a view's own camera | eye, target, up, and the view's height or its field of view (OCCT's scale and FOVy span the width of a picture taller than wide); near and far fitted to what is shown |
+| The picture | width, height | an sRGB frame buffer, eight samples a pixel asked for |
+
+### What changes a pixel
+
+- **Display mode.** Solid: lit faces, visible edges. Shaded: lit faces. Parts: as Solid in the palette's colours.
+  X-ray: colour-only faces at 0.22, every edge over them (a layer above, its depth its own). Hidden line: faces
+  unlit in the backdrop's colour, visible edges. Wireframe: no faces, every edge. A robot (`kind` `urdf`, `srdf`)
+  draws no edges in Solid and Parts.
+- **Edges.** A part's polylines by class: feature (with boundary and non-manifold) `#253443`, tangent `#667788`,
+  seam `#495b6c`, each a pixel wide, depth-tested against the faces stepped back by their polygon offset;
+  `display.edges.classes` names the classes drawn.
+- **Transparency.** Opaque faces first; then see-through ones in the order shown (instance by instance, group by
+  group), depth-tested, writing no depth, blended source-over in linear light into the sRGB buffer. The PBR program
+  scales the diffuse term by alpha and blends by `mix(1, alpha, 1 - F)`.
+- **Clip.** One plane (`display.clip`: axis, `at`, `invert`) cutting every part; each instance's cut capped flat and
+  unlit in its colour (linear, to the power 2; the palette's in Parts; `#e9a451` without `partColors`). No caps in
+  Wireframe. The grid is never cut.
+- **Grid.** `grid.py` computes the measuring grid on z = 0 for the framed camera as bands of triangles reading a
+  profile texture (sRGB texels with alpha, bilinear), blended over the picture, depth-tested, stepped back as a face.
+- **Hidden and isolated instances** are not shown, framed or capped.
+- **Size.** Any width and height; antialiasing is the driver's multisampling (eight samples asked for, a
+  software OpenGL gives four), resolved in linear light.
+
+### What plain Python draws, before and after
+
+Of `cad/engine/render` (6,660 lines): the look's numbers and environment (`look.py`), the scene's decisions
+(`occt.py`'s `show`, `frame`, `placement`: which faces, which colour, which camera), the explode offsets
+(`explode.py`), the clip plane and cap colours (`clip.py`'s `plane`, `cap_colour`), the grid's bands and texture
+(`grid.py`), the annotation's ribbons and text quads (`occt.py`'s `annotate`, `text.py`), Measure's marks painted
+over the frame (`overlay.py`), the PNG (`context.encode`) and the 2D drawings (`board.py`, `schematic.py`,
+`drawing.py`) are plain Python and stay. What is OCCT's, and so the core's: the canvas and its context
+(`context.py`), the shapes crafted for it (`shapes.py`), the materials and lights put up (`finish.py`'s `aspect`,
+`put_up`), the presentations and the frame itself (`occt.py`), the cap carriers (`clip.py`'s `apply`), the grid's
+and the ink's presentations (`grid._present`, `Scene._structure`).

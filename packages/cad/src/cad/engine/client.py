@@ -92,8 +92,16 @@ def _connect(address: Path | None = None, *, stopping: bool = False) -> Connecti
     until the last handle on it closes, however long that takes, so its port file refused then is
     going with it."""
     try:
-        if places.WINDOWS:
-            port, token = _port_text(address or places.port_path()).split()
+        relayed = None
+        if address is None and not places.THREADS:
+            # A Python with no pipes of the system's (the WebAssembly kernel's): through its starter's relay.
+            from cad.engine import relay
+
+            relayed = relay.named(os.environ.get(relay.VARIABLE))
+            if relayed is None:
+                return None
+        if places.WINDOWS or relayed is not None:
+            port, token = relayed or _port_text(address or places.port_path()).split()
             connection = socket.create_connection(("127.0.0.1", int(port)), timeout=5)
             stream = connection.makefile("rwb")
             try:  # the door's hello and greeting on the port: the token where a pair's id goes
@@ -110,7 +118,7 @@ def _connect(address: Path | None = None, *, stopping: bool = False) -> Connecti
                 connection.close()
                 return None
             return Connection(stream, stream, stream, connection, protocol=spoken, release=released(line),
-                              token=token)
+                              token=None if relayed is not None else token)  # a relay's token is its own, not the engine's
         door = address or places.door_path()
         if places.folder_refusal(door.parent) is not None or not door.exists():
             return None
