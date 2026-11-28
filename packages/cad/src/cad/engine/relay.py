@@ -115,6 +115,10 @@ class Relay:
         with self.lock:
             self.closed = True
             held, self.held = self.held, []
+        try:
+            self.listener.shutdown(socket.SHUT_RDWR)  # wakes the thread that waits in accept: nothing more is taken
+        except OSError:
+            pass
         for one in (self.listener, *held):
             try:
                 one.close()

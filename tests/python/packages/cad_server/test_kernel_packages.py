@@ -39,8 +39,8 @@ class Uv:
                 return subprocess.CompletedProcess(step, 1, "", f"  x No solution found\n{self.fails}\n")
             return subprocess.CompletedProcess(step, 0, self.resolved, "")
         target = Path(step[step.index("--target") + 1])
-        for pinned in (item for item in step if "==" in item):
-            name, version = pinned.split("==")
+        for pinned in (item for item in step[step.index("--quiet") + 1:]):
+            name, version = pinned.split("==") if "==" in pinned else (Path(pinned).name, "0.1")
             info = target / f"{name}-{version}.dist-info"
             info.mkdir(parents=True)
             (info / "WHEEL").write_text(NATIVE if name in self.native else PURE, encoding="utf-8")
@@ -85,6 +85,18 @@ class KernelPackagesTest(unittest.TestCase):
         self.assertEqual(self.ensure(again, "numpy>=2", "tabulate"), folder, "the same requirements: the same folder")
         self.assertEqual(again.steps, [], "made once")
         self.assertEqual(sorted(path.name for path in folder.parent.iterdir()), [folder.name])
+
+    def test_a_folder_the_script_names_is_built_where_it_stands_beside_what_an_index_holds(self) -> None:
+        uv = Uv("tabulate==0.9.0\n")
+        mine = str(self.root / "mine")
+        folder = self.ensure(uv, "tabulate", mine)
+        self.assertEqual([step[2] for step in uv.steps], ["compile", "install", "install"])
+        self.assertIn("--only-binary", uv.steps[1])
+        self.assertEqual((uv.steps[2][-1], "--only-binary" in uv.steps[2]), (mine, False))
+        self.assertTrue((folder / "mine.py").is_file() and (folder / "tabulate.py").is_file())
+        only = Uv("")
+        self.ensure(only, mine + "[extra]")
+        self.assertEqual([step[2] for step in only.steps], ["install"], "nothing of an index's to resolve")
 
     def test_a_package_with_native_code_is_refused_by_name_and_nothing_is_left(self) -> None:
         uv = Uv("ujson==5.11.0\ntabulate==0.9.0\n", native=("ujson",))

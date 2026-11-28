@@ -94,22 +94,32 @@ def ensure(kernel: dict[str, Any], requirements: tuple[str, ...], told: Callable
     shutil.rmtree(staged, ignore_errors=True)
     staged.mkdir(parents=True)
     try:
-        asked = staged / "requirements.in"
-        asked.write_text("".join(f"{line}\n" for line in requirements), encoding="utf-8")
+        # A folder or a file the script names (``--with ./mine``, a header's path) is built where it stands; what
+        # an index holds is resolved first, so that what the kernel folder carries is left to it.
+        local = [line for line in requirements if os.path.isabs(line.partition("[")[0]) or "://" in line]
+        indexed = [line for line in requirements if line not in local]
         told("resolving the script's own packages for the WebAssembly kernel: " + ", ".join(requirements))
-        resolved = _uv([uv, "pip", "compile", str(asked), "--python-version", python, "--only-binary", ":all:",
-                        "--no-header", "--no-annotate", "--quiet"], staged)
-        if resolved.returncode:
-            raise base.Refused("the script's own packages do not resolve for the WebAssembly kernel, which runs "
-                               f"pure-Python packages and its own: {_said(resolved)}", "other")
-        pinned = [match.groups() for match in map(_PINNED.match, resolved.stdout.splitlines()) if match]
-        wanted = [f"{name}=={version}" for name, version in pinned if _name(name) not in carried]
-        asked.unlink()
-        if wanted:
-            done = _uv([uv, "pip", "install", "--target", str(staged), "--no-deps", "--only-binary", ":all:",
-                        "--python-version", python, "--quiet", *wanted], staged)
+        wanted: list[str] = []
+        if indexed:
+            asked = staged / "requirements.in"
+            asked.write_text("".join(f"{line}\n" for line in indexed), encoding="utf-8")
+            resolved = _uv([uv, "pip", "compile", str(asked), "--python-version", python, "--only-binary", ":all:",
+                            "--no-header", "--no-annotate", "--quiet"], staged)
+            if resolved.returncode:
+                raise base.Refused("the script's own packages do not resolve for the WebAssembly kernel, which runs "
+                                   f"pure-Python packages and its own: {_said(resolved)}", "other")
+            pinned = [match.groups() for match in map(_PINNED.match, resolved.stdout.splitlines()) if match]
+            wanted = [f"{name}=={version}" for name, version in pinned if _name(name) not in carried]
+            asked.unlink()
+        for group, binary in ((wanted, ["--only-binary", ":all:"]), (local, [])):
+            if not group:
+                continue
+            done = _uv([uv, "pip", "install", "--target", str(staged), "--no-deps", *binary,
+                        "--python-version", python, "--quiet", *group], staged)
             if done.returncode:
                 raise base.Refused(f"the script's own packages could not be installed: {_said(done)}", "other")
+        wanted += local
+        if wanted:
             native = _impure(staged)
             if native:
                 raise base.Refused(f"{', '.join(native)} {'has' if len(native) == 1 else 'have'} native code, which "
