@@ -641,6 +641,7 @@ struct Renderer {
   std::vector<uint32_t>& color = colors();
   float* depth_at = nullptr;
   uint32_t* color_at = nullptr;
+  bool depth_written = false;  // since the depth was cleared: while nothing has, what lies between the planes passes it
   int sx[8], sy[8];  // the samples of a pixel, in 1/256 of it
   int sx_low = 0, sx_high = 0, sy_low = 0, sy_high = 0;
   double fsx[8], fsy[8];
@@ -1659,6 +1660,7 @@ struct Renderer {
     depth.assign(count, DEPTH_FAR);
     color.assign(count, 0u);
     depth_at = depth.data(), color_at = color.data();
+    depth_written = false;
     bool after = false;  // anything drawn once the opaque are lit: see-through surfaces, the layers above
     for (const Item& item : items)
       if (item.layer != 0 || item.blend || item.kind == TRIANGLES) after = true;
@@ -1667,6 +1669,7 @@ struct Renderer {
     for (size_t index = 0; index < items.size(); ++index) {
       const Item& item = items[index];
       if (item.layer != 0 || item.blend) continue;
+      if (item.kind != TRIANGLES && item.count) depth_written = true;
       if (item.kind == FACES) {
         const bool flat = item.shading == UNLIT;
         for (uint32_t at = item.first; at < item.first + item.count; ++at) {
@@ -1697,7 +1700,7 @@ struct Renderer {
       for (const Item& item : items)
         if (item.layer == layer && (layer > 0 || item.blend || item.kind == TRIANGLES)) any = true;
       if (!any) continue;
-      if (layer == 2) std::fill(depth.begin(), depth.end(), DEPTH_FAR);
+      if (layer == 2 && depth_written) std::fill(depth.begin(), depth.end(), DEPTH_FAR), depth_written = false;
       for (int pass = 0; pass < 2; ++pass)  // the opaque of a layer above first, then the see-through in order
         for (const Item& item : items) {
           if (item.layer != layer || (item.blend ? pass == 0 : pass == 1)) continue;
@@ -1839,9 +1842,20 @@ struct Renderer {
   }
   // The same, left in the sample buffer for what is drawn over it.
   void light_visible() {
+    if (!depth_written) {  // nothing opaque was drawn: the backdrop all over
+      std::fill(color.begin(), color.end(), background_stored);
+      return;
+    }
     for (int py = 0; py < height; ++py)
       for (int px = 0; px < width; ++px) {
         uint32_t* ids = &color[((size_t)py * width + px) * samples];
+        bool one = true;
+        for (int k = 1; k < samples; ++k) one &= ids[k] == ids[0];
+        if (one) {
+          const uint32_t found = light(ids[0], px, py);
+          for (int k = 0; k < samples; ++k) ids[k] = found;
+          continue;
+        }
         uint32_t lit_as[8];
         for (int k = 0; k < samples; ++k) {
           int same = -1;
@@ -1883,7 +1897,9 @@ struct Renderer {
                     src[2] + t.decode[under >> 16 & 255] * rest);
     };
     // The samples of `mask` that pass the depth, written where the item writes it.
+    bool unhidden = false;  // the triangle being drawn passes the depth wherever it is
     auto passing = [&](size_t pixel, int mask, float z, const float* zoff) {
+      if (unhidden) return mask;
       float* d = depth_at + pixel * samples;
       int pass = 0;
       for (int k = 0; k < samples; ++k) {
@@ -1903,12 +1919,19 @@ struct Renderer {
         return;
       }
       if (pass == full) {
-        bool one = true;
-        for (int k = 1; k < samples; ++k) one &= c[k] == c[0];
-        if (one) {
-          const uint32_t found = over(c[0]);
-          for (int k = 0; k < samples; ++k) c[k] = found;
-          return;
+        if (samples == 4) {
+          if (c[0] == c[1] && c[0] == c[2] && c[0] == c[3]) {
+            c[0] = c[1] = c[2] = c[3] = over(c[0]);
+            return;
+          }
+        } else {
+          bool one = true;
+          for (int k = 1; k < samples; ++k) one &= c[k] == c[0];
+          if (one) {
+            const uint32_t found = over(c[0]);
+            for (int k = 0; k < samples; ++k) c[k] = found;
+            return;
+          }
         }
       }
       uint32_t last_in = 0, last_out = 0;
@@ -1919,6 +1942,7 @@ struct Renderer {
         c[k] = last_out;
       }
     };
+    if (write && item.count) depth_written = true;
     if (item.kind == EDGES) {
       const float rgba[4] = {item.color[0], item.color[1], item.color[2], 1};
       take(rgba);
@@ -1940,6 +1964,16 @@ struct Renderer {
                                   std::memcmp(&attributes[(size_t)tri.v[0] * 3], &attributes[(size_t)tri.v[1] * 3], 12) == 0 &&
                                   std::memcmp(&attributes[(size_t)tri.v[0] * 3], &attributes[(size_t)tri.v[2] * 3], 12) == 0;
       bool lit_once = false;
+      // Over a depth nothing has written, a triangle that writes none and lies between the planes (its offset and
+      // a margin for the rounding counted) asks no sample for its depth.
+      if (!write && !depth_written) {
+        const float z0 = points[tri.v[0]].z, z1 = points[tri.v[1]].z, z2 = points[tri.v[2]].z;
+        const float low = std::min(z0, std::min(z1, z2)), high = std::max(z0, std::max(z1, z2));
+        const float reach = (high - low) * std::fabs(item.offset_factor) + std::fabs(item.offset_units) * DEPTH_UNIT + 1e-5f;
+        unhidden = item.offset_factor == 0 && low - reach >= 0 && high + reach <= 1;
+      } else {
+        unhidden = false;
+      }
       raster_triangle(tri, item.offset_factor, item.offset_units, cut,
                       [&](size_t pixel, int px, int py, int mask, float z, const float* zoff) {
                         const int pass = passing(pixel, mask, z, zoff);
