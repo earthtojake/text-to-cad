@@ -133,7 +133,7 @@ major](#before-the-first-release-of-a-higher-major).
   the install command and `cad plugin install` (the plugin from `latest`) all take the newest. What
   holds a release back is a yank on PyPI, for every one of them at once; what holds a computer back is
   the person's own pin, or a range of their own in uv's record of the install (one that only caps the
-  major, as 0.11.18 and earlier wrote it, is cleared by the update that meets it).
+  major, as 0.11.18 and earlier wrote it, is replaced by the update that meets it).
 - **The plugin follows cad.** Where `cad plugin update auto` is on (the install command turns it on
   as its last step) and cad is newer than the release the plugin is up to date for (the one a run of
   the global install keeps where every app it found went well), cad's server runs `cad plugin
@@ -272,8 +272,8 @@ first one ships:
   to 0.11.17 gave it as they updated (`cad>=<release>,<1`) and the one the bridge and the repair of
   0.11.18 and earlier wrote (`cad<1`). cad's update is `uv tool upgrade cad`, which keeps to uv's
   record. So the worker, where uv built a newer release than the upgrade took and the record's range
-  only caps the major (`auto_update.capped`), installs cad again whole (`uv tool install --force cad`,
-  the repair's own command), which clears it; `self-major` rehearses it. Nothing to do for 1.0 but
+  only caps the major (`auto_update.capped`), installs cad over uv's record in place (`uv tool install
+  --upgrade cad`), which writes `cad` alone; `self-major` rehearses it. Nothing to do for 1.0 but
   keep that step in the worker.
 - **The newest release below 0.12.0**, the stepping stone through which 0.10.0 to 0.11.11 computers
   arrive (`/v1/versions`), still carries them: its bridge runs the install command, which installs the

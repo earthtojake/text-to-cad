@@ -84,7 +84,8 @@ pin written), ``cad --version`` saying it and, where a server runs, the server a
 - ``self-major``: a new major version is a release as any other: ``cad update --major`` is no option (exit 2,
   nothing begun); with a release a major up out, the server's next start is the update to it, on a computer whose
   uv still holds the range 0.11.12 to 0.11.17 wrote (``cad>=<release>,<N``): the upgrade keeps to it, so the worker
-  installs cad again whole, which clears it, and the new major runs.
+  installs cad over uv's record in place (``uv tool install --upgrade cad``), which replaces it, and the new major
+  runs.
 - ``self-stopped-midway``: the worker of the update a start began stopped the moment it is seen (uv's run of it
   and the worker both), before it reaches uv's upgrade: the record left underway, cad as it was; twenty minutes
   pass with no beat (its last beat set back) and the attempt is lost; the next start begins nothing (the schedule waits an hour after a try); a typed ``cad update``
@@ -1604,7 +1605,8 @@ def self_major(box: Box) -> None:
     """A new major version is a release as any other: ``--major`` is no option, and with a release a major up out,
     the server's next start is the update to it -- on a computer whose uv still holds the range 0.11.12 to 0.11.17
     wrote as they updated (``cad>=<release>,<N``), which ``uv tool upgrade cad`` keeps to: the worker installs cad
-    again whole, which clears it, and no server of the release before answers meanwhile."""
+    over uv's record in place (``uv tool install --upgrade cad``), which replaces the range; the environment is the
+    same one, nothing is installed again whole, and no server of the release before answers meanwhile."""
     box.set_up("on")
     done = box.run([box.cad(), "update", "--major"], check=False, timeout=SECONDS + 60)
     if done.returncode != 2 or "unrecognized arguments: --major" not in done.stderr:
@@ -1620,10 +1622,12 @@ def self_major(box: Box) -> None:
     feed_read(box, HIGH)
     record, line = start_updates(box, before, NEW, HIGH, repaired=True)
     log = (box.state / "auto-update.log").read_text(encoding="utf-8", errors="replace")
-    if " tool upgrade cad\n" not in log or FORCED not in log or "by a range an earlier release wrote" not in log:
-        raise Failed(f"{box.label}: the update past the range was not the upgrade, then cad installed again:\n{log[-3000:]}")
+    over = " tool install --upgrade --managed-python --python 3.14 cad\n"
+    if " tool upgrade cad\n" not in log or over not in log or FORCED in log or "repairing" in json.dumps(record):
+        raise Failed(f"{box.label}: the update past the range was not the upgrade, then cad installed over uv's "
+                     f"record in place:\n{log[-3000:]}")
     say(f"        `cad update --major`: refused (exit 2); uv's record {capped!r}, {HIGH}, a major up, out: {line}; the "
-        f"range cleared ({record.get('detail')})")
+        "range replaced by `uv tool install --upgrade cad`, in place")
     pages(box, HIGH)
 
 

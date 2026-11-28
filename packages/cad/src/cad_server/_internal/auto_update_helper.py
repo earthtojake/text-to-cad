@@ -40,7 +40,8 @@ repairs it where it fails anyway. In order (``update``):
       in use) leaves the environment upgraded and whole, a newer release in it than ``from``: that is checked as an
       upgrade, whatever uv's exit status. Where the upgrade leaves ``from`` though uv built a newer release, and
       uv's receipt holds cad below a major by a range an earlier release of cad wrote (``auto_update.capped``), cad
-      is installed again whole (h), which clears the range: cad holds no major back. On Windows, where the installer met a file in use though the sweep left no
+      is installed over the record in place (``uncapping``: ``uv tool install --upgrade cad``, made safe as the
+      upgrade is), which replaces the range: cad holds no major back. On Windows, where the installer met a file in use though the sweep left no
       process, and ``from`` is still installed whole, c and d are done once more: a ``cad`` Windows was still
       starting at the rename shows among the processes only after the sweep's last look.
    e. The moment the installer returns, its bin ``cad`` again where it left none (``command_back``: an upgrade uv
@@ -283,6 +284,14 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
                   f"{told['from']} is whole: its processes are looked for and the upgrade is run once more")
         code, said, left = upgrade(told, run, installing(told), command, log, system)
     got = auto_update.installed(prefix)
+    if code == 0 and got == told["from"] and auto_update.newer(target, got) and auto_update.capped(prefix):
+        # uv built a newer release than its record of the install lets in, by a range that only caps the major: one
+        # an earlier release of cad wrote, when cad held majors back. Installing cad over the record, in place as an
+        # upgrade is, replaces the range with ``cad`` alone and takes the newest.
+        log.write(f"uv's record of the install holds cad below cad {target} by a range an earlier release wrote: cad "
+                  "is installed over it in place, which replaces the range")
+        code, said, left = upgrade(told, run, uncapping(told), command, log, system)
+        got = auto_update.installed(prefix)
     if code != 0 and auto_update.newer(got, told["from"]) and not unrecorded(prefix):
         # The environment is upgraded and whole: what failed after it is the bin command, which is back (``upgrade``).
         log.write(f"{by(told)} exited {code} with cad {got} installed whole: checked as an upgrade")
@@ -291,23 +300,6 @@ def switch(told, run, log, system=None, mark=lambda phase: None):
     named_ = {"release": got or "latest"}
     if code == 0 and got is not None:
         clear(got, log)
-        if got == told["from"] and auto_update.newer(target, got) and auto_update.capped(prefix):
-            # uv built a newer release than its record of the install lets in, by a range that only caps the major:
-            # one an earlier release of cad wrote, when cad held majors back. Installing cad again whole clears it.
-            how = f"`{' '.join(map(str, reinstalling(told)))}`"
-            log.write(f"uv's record of the install holds cad below cad {target} by a range an earlier release wrote: "
-                      f"cad is installed again whole, which clears it ({how})")
-            back, again = reinstall(told, run, log, command=command, wanted=wanted, mark=mark, system=system)
-            if back is not None and back != told["from"]:
-                return {"release": back, "outcome": "installed",
-                        "detail": f"cad {back} runs, installed again whole by {how}: a range an earlier release wrote "
-                                  "in uv's record held cad below it", **started(wanted, True, again)}
-            got = auto_update.installed(prefix)  # what that left: checked as any release is, below
-            if got is None or unrecorded(prefix):
-                return {"release": target, "outcome": "failed", "cause": "broken", "restored": False,
-                        "detail": f"{how}, to clear a range an earlier release wrote in uv's record, left no cad that "
-                                  f"runs: {last_line(again) or 'no word'}", **started(wanted, False, again)}
-            named_ = {"release": got}
         ok, said = runs(told, run, got, wanted)
         if ok and got == told["from"]:
             held = (f"cad {got} is the newest release this install takes, though uv built cad {target}: a range in "
@@ -454,6 +446,15 @@ def installing(told, requirement=auto_update.UPGRADE):
     takes, by default; the release before by name, on the way back (``recover``) --: ``uv tool upgrade <requirement>``,
     which keeps its receipt."""
     return [told["uv"], "tool", "upgrade", requirement]
+
+
+def uncapping(told):
+    """uv's command that installs cad over uv's record of it, in place: ``uv tool install --upgrade cad`` with the
+    flags of cad's own installs (``tool_install.command``). Unlike ``uv tool upgrade``, which keeps to the record, it
+    writes the requirement it is given, ``cad`` alone, and upgrades the environment where it is (measured, uv 0.11:
+    the environment's folder stays). What clears a range that only caps the major (``auto_update.capped``)."""
+    command = tool_install.command(told["uv"])
+    return [*command[:3], "--upgrade", *command[3:]]
 
 
 def reinstalling(told):

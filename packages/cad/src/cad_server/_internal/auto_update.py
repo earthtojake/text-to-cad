@@ -584,8 +584,9 @@ def capped(prefix: str | os.PathLike[str] | None = None) -> bool:
     """Whether uv's receipt of the global install at ``prefix`` (``sys.prefix``) holds cad below a major and nothing
     else: ``cad<N`` (the bridge of 0.11.12 to 0.11.18 and their repair wrote it) or ``cad>=X.Y.Z,<N`` (their update
     did), ``N`` a whole major. cad holds no major back any more, and ``uv tool upgrade cad`` keeps to uv's record, so
-    where such a range is all that keeps the newest release out, the worker installs cad again whole, which writes
-    ``cad`` alone (``auto_update_helper.switch``). Any other range is the person's own, and kept. Never raises."""
+    where such a range is all that keeps the newest release out, the worker installs cad over the record in place,
+    which writes ``cad`` alone (``auto_update_helper.uncapping``). Any other range is the person's own, and kept.
+    Never raises."""
     import tomllib
 
     try:

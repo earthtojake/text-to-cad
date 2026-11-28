@@ -223,8 +223,8 @@ index uv uses holds, never one yanked there; then it checks that it runs and sta
 again. It names no release and sets no limit: what your uv would install for `cad` is what is
 installed. It never installs an older release, and leaves uv's record of the install as it is,
 so a range you gave uv there (`uv tool install "cad<0.13"`) still holds, but for one that only keeps
-cad below a major version (`cad<1`, as cad 0.11.18 and earlier wrote it), which the update clears by
-installing cad again (`uv tool install --force cad`) when a new major is out; a cad you pinned
+cad below a major version (`cad<1`, as cad 0.11.18 and earlier wrote it), which the update replaces
+(`uv tool install --upgrade cad`) when a new major is out; a cad you pinned
 to a release is left alone, and so is one pipx or pip installed, which you update the way you
 installed it. A typed `cad update` does the same, at once. It is what you could run
 yourself, so whoever can write cad's environment can change what `cad` runs, as always. Then, where `cad plugin update auto` is on, the

@@ -423,9 +423,9 @@ cad server start
 cad's own update is that same `uv tool upgrade cad`: it takes the newest of all, a new major version
 included, and leaves uv's record of cad as it is, with one exception. cad 0.11.18 and earlier left uv a
 range there that only keeps cad below the next major (`cad<1`). cad holds no major back any more, so
-where that range is all that keeps a new major out, cad's update installs cad again whole
-(`uv tool install --force cad`), which clears it. To stay on a release, pin it: `uv tool install
-cad==X`.
+where that range is all that keeps a new major out, cad's update installs cad over uv's record, in
+place (`uv tool install --upgrade cad`), which replaces it. To stay on a release, pin it: `uv tool
+install cad==X`.
 
 ### The plugin
 

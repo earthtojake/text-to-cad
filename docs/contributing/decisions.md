@@ -245,9 +245,11 @@ version ahead of them. Where a release needs words on every older computer, a no
 the migration guide and the 30-day rule are what stand between a release and a person's work. A
 computer whose uv record holds a range an earlier release wrote (`cad>=X,<1`, `cad<1`) would stay below
 the next major, since `uv tool upgrade cad` keeps to uv's record. So where uv built a newer release than
-the upgrade took, and the record's range only caps the major, the worker installs cad again whole (`uv
-tool install --force cad`), which clears it. A range of that shape a person wrote themselves is cleared
-too: the way to stay on a release is a pin, `cad==X`. Any other range is the person's, and kept.
+the upgrade took, and the record's range only caps the major, the worker installs cad over uv's record
+in place (`uv tool install --upgrade cad`, made safe as the upgrade is), which writes `cad` alone and
+takes the newest; the environment stays where it is. A range of that shape a person wrote themselves is
+replaced too: the way to stay on a release is a pin, `cad==X`. Any other range is the person's, and
+kept.
 
 ## Who updates which copy
 

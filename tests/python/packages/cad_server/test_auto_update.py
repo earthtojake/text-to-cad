@@ -1811,21 +1811,32 @@ class WorkerTest(unittest.TestCase):
                 helper.main({**self.told, "log": None})
             self.assertEqual(self.kept(), {"release": "0.2.0", "at": 1.0, "outcome": "failed"})
 
-    def test_a_range_an_earlier_release_wrote_that_caps_the_major_is_cleared_by_installing_cad_again_whole(self):
+    def test_a_range_an_earlier_release_wrote_that_caps_the_major_is_replaced_by_installing_cad_over_it_in_place(self):
         """cad holds no major back, and ``uv tool upgrade cad`` keeps to uv's record: where uv built a release a major
         up and the record still carries the cap 0.11.12 to 0.11.18 wrote (``cad>=X,<N``, ``cad<N``), the upgrade
-        leaves cad where it is, and the worker installs cad again whole, which writes ``cad`` alone. A range of the
+        leaves cad where it is, and the worker installs cad over the record in place (``uv tool install --upgrade
+        cad``), which writes ``cad`` alone: an upgrade as any, nothing removed, no phase of its own. A range of the
         person's own (anything else) is kept: the attempt ends ``current`` and says a range holds it."""
         receipt = self.prefix / "uv-receipt.toml"
-        upgrade = self.cad
+        over = ["uv", "tool", "install", "--upgrade", "--managed-python", "--python", "3.14", "cad"]
+        self.assertEqual(helper.uncapping(self.told), over)
+        upgrade, refused = self.cad, [None]
 
-        def run(command, timeout):  # uv's upgrade keeps to its record: nothing past the cap
-            if command[:3] == ["uv", "tool", "upgrade"]:
+        def run(command, timeout):
+            if command[:3] == ["uv", "tool", "upgrade"] and command[3] == "cad":  # uv keeps to its record
                 self.ran.append(list(command))
                 return 0, "Nothing to upgrade\n"
+            if command == over:  # the record replaced, the newest taken, where the environment is
+                self.ran.append(list(command))
+                if refused[0]:
+                    return refused[0]
+                self.installed = self.newest
+                receipt.write_text('[tool]\nrequirements = [{ name = "cad" }]\n', encoding="utf-8")
+                return 0, "Installed 1 executable: cad\n"
             return upgrade(command, timeout)
 
         self.newest, self.starts["1.0.0"] = "1.0.0", True
+        told = {**self.told, "target": "1.0.0", "wanted": "1.0.0"}
         for written in ('[{ name = "cad", specifier = ">=0.1.0, <1" }]', '[{ name = "cad", specifier = "<1" }]',
                         '["cad<1"]', '[{ name = "cad", specifier = "<1,>=0.1.0" }]'):
             with self.subTest(written=written):
@@ -1833,14 +1844,13 @@ class WorkerTest(unittest.TestCase):
                 self.assertTrue(auto_update.capped(self.prefix))
                 self.installed, self.serving = "0.1.0", "0.1.0"
                 self.ran.clear(), self.phases.clear()
-                found = helper.update({**self.told, "target": "1.0.0", "wanted": "1.0.0"}, run=run,
-                                      mark=self.phases.append)
+                found = helper.update(told, run=run, mark=self.phases.append)
                 self.assertEqual((found["outcome"], found["release"], found["started"]),
                                  ("installed", "1.0.0", "started the cad server (cad 1.0.0)"), found)
-                self.assertEqual(self.commands(), ["tool upgrade cad", "tool install --force --managed-python",
-                                                   "server start"], "no server of the release before in between")
-                self.assertIn("a range an earlier release wrote in uv's record held cad below it", found["detail"])
-                self.assertEqual(self.phases[-1], "repairing")
+                self.assertEqual(self.ran, [["uv", "tool", "upgrade", "cad"], over, ["cad", "server", "start"]],
+                                 "no server of the release before in between, and cad never installed again whole")
+                self.assertNotIn("repairing", self.phases, "an upgrade as any: nothing leaves the environment")
+                self.assertFalse(auto_update.capped(self.prefix))
         # The person's own range, a pin, no range, another package first: kept, and said.
         for written in ('[{ name = "cad", specifier = "<0.13" }]', '[{ name = "cad", specifier = ">=0.1.0, <1, !=0.5.0" }]',
                         '[{ name = "cad", specifier = "==0.1.0" }]', '[{ name = "cad" }]', '["cad"]',
@@ -1851,28 +1861,23 @@ class WorkerTest(unittest.TestCase):
         receipt.write_text('[tool]\nrequirements = [{ name = "cad", specifier = "<0.13" }]\n', encoding="utf-8")
         self.installed, self.serving = "0.1.0", "0.1.0"
         self.ran.clear()
-        found = helper.update({**self.told, "target": "1.0.0", "wanted": "1.0.0"}, run=run, mark=self.phases.append)
+        found = helper.update(told, run=run, mark=self.phases.append)
         self.assertEqual((found["outcome"], self.commands()), ("current", ["tool upgrade cad", "server start"]), found)
         self.assertIn("a range in uv's record of the install, or its Python, holds it back", found["detail"])
-        # Nothing newer was built: a cap changes nothing, and cad is never installed again for it.
-        receipt.write_text('[tool]\nrequirements = [{ name = "cad", specifier = "<1" }]\n', encoding="utf-8")
+        # Nothing newer was built: a cap changes nothing.
+        capped = '[tool]\nrequirements = [{ name = "cad", specifier = "<1" }]\n'
+        receipt.write_text(capped, encoding="utf-8")
         self.installed, self.serving, self.newest = "0.1.0", "0.1.0", "0.1.0"
         self.ran.clear()
-        found = helper.update({**self.told, "target": "0.1.0", "wanted": "0.1.0"}, run=run, mark=self.phases.append)
+        helper.update({**self.told, "target": "0.1.0", "wanted": "0.1.0"}, run=run, mark=self.phases.append)
+        self.assertNotIn(over, self.ran)
+        # uv refuses the install over the record and leaves cad whole: the release before runs, a failure restored.
+        self.installed, self.serving, self.newest = "0.1.0", "0.1.0", "1.0.0"
+        refused[0] = (2, "error: Failed to fetch: `https://pypi.org/simple/cad/`")
+        self.ran.clear()
+        found = helper.update(told, run=run, mark=self.phases.append)
+        self.assertEqual((found["outcome"], found["restored"], self.serving), ("failed", True, "0.1.0"), found)
         self.assertNotIn("tool install --force --managed-python", self.commands())
-        # The install again fails and leaves cad whole: cad runs as it was, and the attempt ends `current`.
-        self.installed, self.serving, self.newest, self.forced = "0.1.0", "0.1.0", "1.0.0", (2, "error: no network")
-        found = helper.update({**self.told, "target": "1.0.0", "wanted": "1.0.0"}, run=run, mark=self.phases.append)
-        self.assertEqual((found["outcome"], found["release"], self.serving), ("current", "0.1.0", "0.1.0"), found)
-        # It fails and leaves no cad that runs: broken, cad to be installed again by hand.
-        def gone(command, timeout):
-            if command[:4] == ["uv", "tool", "install", "--force"]:
-                self.installed = None
-            return run(command, timeout)
-
-        self.installed, self.serving = "0.1.0", None
-        found = helper.update({**self.told, "target": "1.0.0", "wanted": "1.0.0"}, run=gone, mark=self.phases.append)
-        self.assertEqual((found["outcome"], found["cause"], found["restored"]), ("failed", "broken", False), found)
 
     def test_a_log_that_cannot_be_written_never_stops_the_update(self) -> None:
         found = self.update(log=str(self.tmp / "no" / "such" / "folder" / "auto-update.log"))
