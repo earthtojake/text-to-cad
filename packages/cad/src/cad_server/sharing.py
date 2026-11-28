@@ -16,8 +16,8 @@ What is here is the client's half of the protocol, ``cad-share/2``, the standard
   (``reading``): the bundle is taken as its manifest lists it, and nothing else of it is read;
 - **the files that made it** (``Sources``): a model's (``model_sources``) from the build closure its ``.xbf``
   holds -- its script, every module of the project its build imported and every file it read, at their paths under
-  the files' root (``root_of``), none of them changed since the ``.xbf`` was written or the model last ran, nor gone
-  -- and the ``.xbf`` itself, at its path there; and a file document's (``file_sources``): the file itself, and a
+  the files' root (``root_of``: its project, never the home folder; a file outside it is left out, and said), none
+  of them changed since the ``.xbf`` was written or the model last ran, nor gone -- and the ``.xbf`` itself, at its path there; and a file document's (``file_sources``): the file itself, and a
   robot description's mesh files beside it; a KiCad board's or schematic's project (``kicad_sources``): its project
   file, its project's own libraries, a board's 3D model files and rules, a schematic's sheets, at their paths under the
   files' root as a model's are. Never an installed library (``made`` names each by its version; KiCad's are KiCad's),
@@ -470,33 +470,63 @@ def _inside(path: str, folder: str) -> bool:
         return False
 
 
-def root_of(script: str, paths: list[str], home: str | None = None) -> str:
-    """The files' root of a model's files -- ``script`` (absolute) and ``paths``, the others' -- the deepest folder
-    that holds all of them, but never above the nearest folder over the script's that holds a ``.git`` (a checkout's
-    root) and never above the user's home folder (``home``, else this user's): where those forbid it, the shallowest
-    folder over the script's that neither does, and the files outside it are left out."""
-    folder = os.path.dirname(os.path.normpath(script))
-    drive = os.path.normcase(os.path.splitdrive(folder)[0])
+def project_roots() -> list[str]:
+    """The folders the viewer has as projects (the library's ``projects``: each a folder a person opened as one), each
+    canonical; none where the library cannot be read (a sandbox may refuse it): a checkout's root still names one."""
     try:
-        deepest = os.path.commonpath([folder, *(os.path.dirname(os.path.normpath(path)) for path in paths
-                                                if os.path.normcase(os.path.splitdrive(path)[0]) == drive)])
-    except ValueError:
-        deepest = folder
-    chain = [folder]
-    while os.path.dirname(chain[-1]) != chain[-1]:
-        chain.append(os.path.dirname(chain[-1]))
-    checkout = next((os.path.realpath(at) for at in chain if os.path.lexists(os.path.join(at, ".git"))), None)
+        found = _library().read().get("projects") or {}
+    except OSError:
+        return []
+    return [str(entry["root"]) for entry in found.values() if isinstance(entry, dict) and isinstance(entry.get("root"), str)]
+
+
+def root_of(core: list[str], paths: list[str], *, home: str | None = None, projects: list[str] | None = None) -> str:
+    """The files' root of a document's files -- ``core`` (absolute: the file shared first, a model's ``.xbf``, then
+    the files that must go with it, its script) and ``paths``, the others -- its project: the nearest folder over the
+    first of ``core`` that holds all of ``core`` and is a project the viewer has (``projects``: ``project_roots``) or a
+    checkout's root (it holds a ``.git``). Where there is none, the deepest folder that holds them all. Never the
+    home folder (``home``, else this user's) or a folder over it, nor a disk's root: where none holds them all, the
+    deepest that holds ``core`` and those of ``paths`` that the highest folder allowed over ``core`` holds; the files
+    outside the root are left out by the caller. ``Unsharable`` where ``core`` alone needs a folder never allowed (a
+    model in the home folder itself)."""
     home = home if home is not None else os.path.expanduser("~")
     homes = [os.path.realpath(home)] if os.path.isabs(home) else []
+    held = {os.path.normcase(os.path.realpath(root)) for root in projects or ()}
 
-    def above(at: str, folder: str) -> bool:  # ``at`` holds ``folder`` and is not it
-        return _inside(folder, at) and os.path.normcase(folder) != os.path.normcase(at)
-
-    for at in reversed(chain):  # from the top: the shallowest folder allowed
+    def allowed(at: str) -> bool:  # neither a disk's root nor the home folder or one over it
         real = os.path.realpath(at)
-        if _inside(at, deepest) and not any(above(real, cap) for cap in [*([checkout] if checkout else []), *homes]):
+        return os.path.dirname(real) != real and not any(_inside(each, real) for each in homes)
+
+    def chain(at: str) -> list[str]:
+        found = [at]
+        while os.path.dirname(found[-1]) != found[-1]:
+            found.append(os.path.dirname(found[-1]))
+        return found
+
+    first = os.path.normpath(core[0])
+    drive = os.path.normcase(os.path.splitdrive(first)[0])
+    core = [os.path.normpath(path) for path in core]
+    for at in chain(os.path.dirname(first)):
+        if not allowed(at):
+            break
+        if (os.path.normcase(os.path.realpath(at)) in held or os.path.lexists(os.path.join(at, ".git"))) \
+                and all(_inside(path, at) for path in core):
             return at
-    return folder
+    same = [os.path.normpath(path) for path in paths if os.path.normcase(os.path.splitdrive(path)[0]) == drive]
+    try:
+        centre = os.path.commonpath([os.path.dirname(path) for path in core])
+    except ValueError:  # another drive
+        centre = os.path.dirname(first)
+    room = [at for at in chain(centre) if allowed(at)]
+    if not room or room[0] != centre:
+        above = ("the home folder, or a folder over it" if homes and _inside(homes[0], os.path.realpath(centre))
+                 else "a disk's root")
+        names = " and ".join(dict.fromkeys(os.path.basename(path) for path in core))
+        raise Unsharable(f"no folder but {centre} ({above}) holds {names}, and a share holds a project's files, never "
+                         "those of the home folder or a disk: move them into a folder of their own, or open the "
+                         "folder that holds them as a project in the viewer")
+    top = room[-1]
+    return os.path.commonpath([centre, *(os.path.dirname(path) for path in same if _inside(path, top))])
 
 
 def _taken(path: str, root: str) -> str | None:
@@ -520,17 +550,18 @@ def _unbare(chosen: dict[str, str], root: str, left: list[tuple[str, str]]) -> N
         left.append((chosen.pop(key), "control"))
 
 
-def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources:
+def model_sources(xbf: str, built: float, *, home: str | None = None, projects: list[str] | None = None) -> Sources:
     """The files that made the model whose ``.xbf`` is at ``xbf`` (canonical), from the build closure that file holds
     (``previous.of``: every path relative to the ``.xbf``'s folder): the script, every module, and every input of kind
-    ``file`` or ``read`` the build found, each at its path under the files' root (``root_of``); a ``font`` only where
+    ``file`` or ``read`` the build found, each at its path under the files' root (``root_of``: the model's project, of
+    ``projects``, a checkout's root, else the folder that holds them, never the home folder); a ``font`` only where
     it lies in that root (a system font is recorded nowhere else needed); and the ``.xbf`` itself, at its path there,
     so an import has the model with nothing run. ``built`` is when the model was last made here: the ``.xbf``'s time, or
     its last run's where that is later (a run that took the ``.xbf`` whole writes nothing). A file outside the root is
     left out, as is an input gone from the disk, each said (``left_out``). ``Stale`` for the script or a module gone
     from the disk, and for any file of them modified after ``built``: those are not the files the ``.xbf`` was made
     from. An ``.xbf`` that holds no closure (a shape a program handed over, a file another document exported) goes
-    alone, at its own name. ``Unsharable`` for an ``.xbf`` outside the folder that holds its files."""
+    alone, at its own name. ``Unsharable`` for an ``.xbf`` and a script that no folder but the home folder holds."""
     from cad.engine import previous
 
     xbf = os.path.normpath(xbf)
@@ -568,10 +599,9 @@ def model_sources(xbf: str, built: float, *, home: str | None = None) -> Sources
         if not os.path.isfile(path):
             raise Stale(path, "gone")
     present = [path for path in reads if os.path.isfile(path)]
-    root = root_of(code[0], [*code[1:], *present, xbf], home)
-    if not _inside(xbf, root) or _taken(xbf, root) is None:
-        raise Unsharable(f"{xbf} lies outside the folder that holds the files that made it ({root}), or is named in a "
-                         "way a share cannot hold: save it inside its project, beside its script")
+    root = root_of([xbf, code[0]], [*code[1:], *present], home=home, projects=projects)
+    if _taken(xbf, root) is None:
+        raise Unsharable(f"{xbf} is named in a way a share cannot hold: rename it")
     left: list[tuple[str, str]] = []
     chosen: dict[str, str] = {}  # each file that goes, by its path as this system compares paths
     seen: set[str] = {os.path.normcase(xbf)}  # the .xbf goes, and is no file of the code
@@ -765,7 +795,7 @@ def _model_files(board: str) -> list[str]:
     return found
 
 
-def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
+def kicad_sources(path: str, kind: str, *, home: str | None = None, projects: list[str] | None = None) -> Sources:
     """The files an import of a KiCad board or schematic needs to open it and work on it (``kind``: ``kicad_pcb`` or
     ``kicad_sch``), each at its path under the files' root (``root_of``, from the file's folder): the file itself;
     of a board, its project file (``<board>.kicad_pro``) and custom rules (``.kicad_dru``) beside it, its project's
@@ -797,7 +827,7 @@ def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
     if kind == "kicad_pcb":
         named += _model_files(real)
     candidates = list({os.path.normcase(each): each for each in named}.values())
-    root = root_of(real, [each for each in candidates if os.path.isfile(each)], home)
+    root = root_of([real], [each for each in candidates if os.path.isfile(each)], home=home, projects=projects)
     found: list[File] = []
     left: list[tuple[str, str]] = []
     chosen: dict[str, str] = {}
@@ -820,13 +850,13 @@ def kicad_sources(path: str, kind: str, *, home: str | None = None) -> Sources:
                    shared=own if any(file.path == own for file in found) else None)
 
 
-def file_sources(path: str, kind: str) -> Sources:
+def file_sources(path: str, kind: str, *, projects: list[str] | None = None) -> Sources:
     """The files that made a file document (``kind``: its type's id): the file itself, at its own name; a URDF's mesh
     files too, and an SRDF's URDF with that one's (``_described``), each at its path under the file's folder. One
     outside that folder is left out, as is one gone from the disk, each said (``left_out``). A KiCad board's or
     schematic's are its project's (``kicad_sources``)."""
     if kind in _LIBRARY_TABLES:
-        return kicad_sources(path, kind)
+        return kicad_sources(path, kind, projects=projects)
     real = os.path.realpath(path)
     root = os.path.dirname(real)
     found: list[File] = []
@@ -1433,6 +1463,29 @@ def shared_file(folder: Path | str, paths: list[str], entry: str | None) -> str 
     if sheet is not None:
         return sheet
     return paths[0] if len(paths) == 1 else None
+
+
+def unheld(folder: Path | str, paths: list[str], shared: str | None) -> list[str]:
+    """The files a model's build read that its share does not hold, among the ``paths`` an import wrote into
+    ``folder``: each input of kind ``file`` or ``read`` the build found (its digest not null) that the build closure of
+    the ``.xbf`` ``shared`` names, as it names it (relative to the ``.xbf``'s folder), where no file of ``paths`` is
+    it. A build here reads them where the closure says, so it needs each there. Nothing is run: a closure is text."""
+    from cad.engine import previous
+
+    if shared is None or not shared.lower().endswith(".xbf"):
+        return []
+    try:
+        closure = previous.of(Path(folder, *shared.split("/")))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return []
+    held, found = set(paths), []
+    for row in (closure or {}).get("inputs") or []:
+        if isinstance(row, list) and len(row) >= 3 and row[0] in ("file", "read") and isinstance(row[1], str) \
+                and row[-1] is not None:
+            at = posixpath.normpath(posixpath.join(posixpath.dirname(shared), row[1]))
+            if at not in held and row[1] not in found:
+                found.append(row[1])
+    return found
 
 
 # A sheet a schematic draws, by the file its sheet symbol names (KiCad's ``Sheetfile``, once ``Sheet file``).

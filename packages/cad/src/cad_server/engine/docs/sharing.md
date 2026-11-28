@@ -49,7 +49,8 @@ file, and shares to a link of its own.
 The first share on a computer is refused without `--yes`, in lines an agent passes on to the person (what goes --
 for a model its `.xbf`, its code and the files it reads, with how many, for a file document the file itself and
 the files it draws from (a KiCad project's, with how many), which anyone with the link can download, and its view
---, where, who can open it, for how long, how to delete it), naming the same command with `--yes`
+--, the folder the files go from and each one's path there, each file left out, where, who can open it, for how
+long, how to delete it), naming the same command with `--yes`
 (`confirmation_required`, exit 2, with `next`). `--yes` keeps the agreement, and later shares need none. Sharing
 turned off is refused even with `--yes` (`declined`, exit 1).
 
@@ -63,11 +64,15 @@ the `.xbf`'s folder:
 - the `.xbf` itself: the model as its last run made it, which an import reads as any `.xbf` with nothing run, and
   which a later in-browser kernel may read too. Its pack is any size: a file larger than a pack goes on into the
   next (**The packs**);
-- each at its path under **the files' root**: the deepest folder that holds all of them, but never above the nearest
-  folder over the script's that holds a `.git` (a checkout's root) and never above the person's home folder. A file
-  outside the root is left out, and said in one line (`Left out, outside the project: ...`). An `.xbf` outside it
-  is refused in one line: a share holds one folder's files. A `font` input goes only where it lies in the root: a
-  system font is recorded nowhere else needed;
+- each at its path under **the files' root**, the model's project: the nearest folder over the `.xbf` that holds
+  it and its script and is a project the viewer has (the library's `projects`) or a checkout's root (it holds a
+  `.git`). Where there is none, the deepest folder that holds all of them. Never the person's home folder or a folder
+  over it, nor a disk's root: where only one of those holds them all, the root is the deepest folder that holds the
+  `.xbf`, its script and the files the highest folder allowed holds, so a file the build read elsewhere in the home
+  folder (`~/Documents/...`) stays out. A file outside the root is left out, and said in one line (`Left out,
+  outside the project: ...`). An `.xbf` and a script that no folder but the home folder (or a disk's root) holds are
+  refused in one line, naming the two ways to share them: a folder of their own, or their folder opened as a
+  project. A `font` input goes only where it lies in the root: a system font is recorded nowhere else needed;
 - **none changed since the model was made**: the `.xbf`'s time, or, where a live worker of the running engine holds
   the model and its last run is later, that run's (a run that takes the `.xbf` whole, its key the model's, writes
   nothing: an edit no key sees, a comment, is made by that run). A file modified after it is not what the `.xbf` was
@@ -83,8 +88,8 @@ and collisions, resolved as the viewer resolves one), and an SRDF's URDF with th
 file's folder: one outside it is left out, and said.
 
 **A KiCad board or schematic**: the file itself and what an import needs to open it and work on it, each at its path under
-the files' root, which is found as a model's is (the deepest folder that holds them, from the file's, capped at a
-checkout's root and the home folder):
+the files' root, which is found as a model's is (the nearest project or checkout's root over the file, else the
+deepest folder that holds them, never the home folder):
 
 - of a board, its project file (`<board>.kicad_pro`) and its custom rules (`.kicad_dru`) beside it, its project's
   footprint and symbol libraries -- `fp-lib-table` and `sym-lib-table` and each library they list there (a
@@ -145,7 +150,9 @@ It finds the file the share is of among them (`sharing.shared_file`): of a model
 other of them read); of a file document, the one SRDF at the folder's top, else the one URDF, else the one KiCad
 board, else the root of a schematic's hierarchy (the sheet beside a project file of its name, else the one no other
 of its sheets draws: whichever of them was shared, it draws the same pages), else its one file. It
-says what it wrote, that file, the script, and where what built it (`Cad-Share-Made`) differs from this computer:
+says what it wrote, that file, the script, the files a model's build read that the share does not hold (its
+closure's inputs, as it names them from the `.xbf`'s folder: left out where it was shared, and needed there by a build
+here), and where what built it (`Cad-Share-Made`) differs from this computer:
 this release, the CAD kernel environment's libraries and Python (not compared where that environment is not made
 yet), the system and the architecture. It runs nothing, and makes no project: the next steps it prints are `cad
 viewer FOLDER/<file>`, which shows it as it was shared, and, of a model, `cad run FOLDER/<script>`, which builds it
@@ -154,7 +161,8 @@ the link it came from (**What is kept**), written by the running server as a sha
 viewer's Recents and the share's link names it on this computer (**A share's link names this computer's copy**);
 where it cannot, or the command could not tell which file that is, a line says so. `--json` is
 one object: `local` (false), `folder`, `name`, `files` (`count`, `bytes`, `paths`), `file` (the shared file's path in
-the folder, or null), `entry`, `made`, `here`, `differs` (each `name`, `made`, `here`) and `next`.
+the folder, or null), `entry`, `missing` (the files its build read that the share does not hold), `made`, `here`,
+`differs` (each `name`, `made`, `here`) and `next`.
 
 **A share this computer made.** A link of a live share this computer's library holds (**What is kept**: that
 service's origin and that id), whose file is still where it was shared from, is downloaded by no one: the command writes
@@ -239,11 +247,14 @@ The view link, the files' link (`Files:`), the delete link, the expiry and one l
 file's name and kind, its files and its view (`its .xbf and the 12 files that made it and its view (245 parts as
 meshes, ...)`, `the file itself and its view`), the files and bytes uploaded this time, the view's and its own, and,
 sharing it again, the share's whole size (`2 files changed, 67.4 KiB uploaded (4.0 MiB in all)`, or `nothing changed,
-nothing uploaded (4.0 MiB in all)`); then a line for each kind of file left out (`Left out, outside the project:
-...`, `Left out, no longer on the disk: ...`) and the line of a build that read a file the engine could not see.
+nothing uploaded (4.0 MiB in all)`); then the folder its files go from and each file's path there, as its zip holds
+them (`Its files, from /home/me/arm: arm.py, arm.xbf, lib/joint.py`), a line for each kind of file left out (`Left
+out, outside the project: ...`, `Left out, no longer on the disk: ...`, `Left out, a version control's file ...`)
+and the line of a build that read a file the engine could not see.
 `--json` is one object: `view`, `zip`, `delete`, `expires`, `id`, `again` (the same link as before), `document` (`id`,
 `kind`, `name`, `path`), `files` (its files: `count`, `bytes`, `entry`, `file` -- the shared file's path among them --,
-`left_out`, each `path` and `reason` -- `outside`, `gone` or `name`, a name no share takes -- and `unseen`, the
+`root`, the folder they go from, `paths`, each one's there, `left_out`, each `path` and `reason` -- `outside`, `gone`,
+`name`, a name no share takes, or `control`, a version control's file -- and `unseen`, the
 closure's null key), `sent` (`what`, `parts`, this time's `files`, `bytes` and `packs`, `format`), `stored` (the
 share's `files` and `bytes` as the service stores them) and `kept` (whether the library kept the share). `status --json` is
 `sharing` (`on` or `off`), `agreed`, `service` and `shares` (each its `document`, `view`, `zip`, `delete`,

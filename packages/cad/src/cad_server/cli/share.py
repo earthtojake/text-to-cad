@@ -15,8 +15,10 @@ made it, with no sign-in, for 7 days after its last share (``cad_server.sharing`
   writing nothing), or whose script or a module is gone, is refused in a line naming the file and ``cad run`` of its
   script: its files would not be the ones its ``.xbf`` was made from. A script is refused in a line naming the
   ``.xbf`` to share. One ``cad share`` of a file runs at a time: another waits ``LOCK_SECONDS``, saying so, then is
-  refused in a line. It prints the view link, the files' link, the delete link, the expiry, one line of what
-  travelled, and a line for what was left out. The same file shared again from this computer is the same share: the
+  refused in a line. It prints one line of what travelled, the folder its files go from (``sharing.root_of``: the
+  file's project, never the home folder) with each file's path there, a line for what was left out, the view link,
+  the files' link, the delete link and the expiry; the first share's refusal says the same folder, paths and files
+  left out. The same file shared again from this computer is the same share: the
   link stays, the 7 days start again, and only what changed travels; a file that moved is another file, with a link
   of its own. Where the service refuses its names (403), or the library's entry of the file holds no share there that
   is live, with its keys, it is a new share. A folder is refused: it has no bundle.
@@ -58,7 +60,9 @@ DESCRIPTION = (
     "records them (run it again after an edit); a robot description's mesh files; a KiCad board's or schematic's "
     "project file, local libraries, 3D models and sheets -- and its view: its shapes as meshes with their names, "
     "measurements and joints, a board's layers in 2D (its 3D is a GLB of its own: `cad export BOARD board.glb`, "
-    "then share that), a schematic's sheets. Never an installed library. Sharing it again keeps the link "
+    "then share that), a schematic's sheets. Never an installed library, nor a file outside its project (the folder "
+    "the viewer has as a project, or its checkout; never the home folder), which it names as it leaves it out; it says "
+    "the folder its files go from and each one's path there. Sharing it again keeps the link "
     "and sends only what changed. The first share on a computer needs the person's yes (--yes). `status` says whether "
     "sharing is on and lists this computer's live shares; `on` and `off` turn it on and off; `delete` removes a "
     "share.")
@@ -195,14 +199,16 @@ def _goes(kind: str, sources: Any) -> str:
     return f"{files}, which anyone with the link can download, and its view: {view}"
 
 
-def agreement_lines(service: str, command: str, goes: str) -> list[str]:
-    """What the first share says, refused, for the person to agree to: what goes (``goes``: ``_goes``), where, who
-    can open it, for how long, how to delete it, and the command that goes on once they agree."""
+def agreement_lines(service: str, command: str, goes: str, sources: Any = None) -> list[str]:
+    """What the first share says, refused, for the person to agree to: what goes (``goes``: ``_goes``), from where and
+    by which paths, and what is left out (``sources``: ``_files``), where, who can open it, for how long, how to
+    delete it, and the command that goes on once they agree."""
     from cad_server import sharing
 
     return [
         "sharing needs the person's yes, once on this computer; nothing was uploaded.",
         f"  What goes: {goes}. Never an installed library.",
+        *(f"  {line}" for line in (_files(sources) if sources is not None else [])),
         f"  Where: {service}, which keeps it encrypted under a key made from the link, and keeps neither the link "
         "nor the key.",
         "  Who: anyone with the link can open it and download its files, with no sign-in.",
@@ -274,11 +280,12 @@ def _sources(path: str, kind: str) -> tuple[Any, float | None]:
     from cad_server._internal.cli_errors import Failure
     from cad_server.cli.import_ import _command
 
+    projects = sharing.project_roots()
     if kind != "xbf":
-        return sharing.file_sources(path, kind), None
+        return sharing.file_sources(path, kind, projects=projects), None
     made = _made(path)
     try:
-        return sharing.model_sources(path, made), made
+        return sharing.model_sources(path, made, projects=projects), made
     except sharing.Stale as stale:
         try:
             told = (previous.of(Path(path)) or {}).get("source") or {}
@@ -312,8 +319,8 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
     if not kept["agreed"]:
         if not yes:
             command = retry(prog, words)
-            raise Failure("\n".join(agreement_lines(service, command, _goes(kind, sources))), "confirmation_required",
-                          next=[command], user_action=True)
+            raise Failure("\n".join(agreement_lines(service, command, _goes(kind, sources), sources)),
+                          "confirmation_required", next=[command], user_action=True)
         try:
             sharing.keep(agree=True)
         except OSError as error:
@@ -370,7 +377,8 @@ def _share(target: str, *, yes: bool, as_json: bool, prog: str, words: list[str]
                           "expires": sent.answer["expires"], "id": share.id, "again": again,
                           "document": {name: document[name] for name in ("id", "kind", "name", "path")},
                           "files": {"count": len(sources.files), "bytes": sources.size, "entry": sources.entry,
-                                    "file": sources.shared,
+                                    "file": sources.shared, "root": sources.root,
+                                    "paths": [file.path for file in sources.files],
                                     "left_out": [{"path": left, "reason": why} for left, why in sources.left_out],
                                     "unseen": sources.unseen},
                           "sent": {**what, **sent.travelled, "format": sharing.FORMAT},
@@ -399,14 +407,28 @@ _LEFT_OUT = {"outside": "left out, outside the project", "gone": "left out, no l
              "control": "left out, a version control's file (a .git folder's), which no share holds"}
 
 
-def _notes(sources: Any, kind: str, name: str) -> list[str]:
-    """What the share's files are not, a line each: the files left out, by why; a build that read a file the engine
-    could not see; a model whose ``.xbf`` names no code (no build closure)."""
+def _files(sources: Any) -> list[str]:
+    """What of this computer's goes, a line each: the files' root and each file's path under it, as the share and its
+    zip hold them; then the files left out, by why (``_left``)."""
+    went = [f"Its files, from {sources.root}: {', '.join(file.path for file in sources.files)}"] if sources.files else []
+    return went + _left(sources)
+
+
+def _left(sources: Any) -> list[str]:
+    """The files left out of a share, a line for each reason, each file by its path on this computer."""
     lines = []
     for why, said in _LEFT_OUT.items():
         paths = [path for path, reason in sources.left_out if reason == why]
         if paths:
             lines.append(f"{said[0].upper()}{said[1:]}: {', '.join(paths)}")
+    return lines
+
+
+def _notes(sources: Any, kind: str, name: str) -> list[str]:
+    """What the share's files are, and are not, a line each: the files' root and their paths under it, the files left
+    out, by why (``_files``); a build that read a file the engine could not see; a model whose ``.xbf`` names no code
+    (no build closure)."""
+    lines = _files(sources)
     if sources.unseen:
         lines.append("Its build read a file cad could not see, which the share does not hold: an import may not "
                      "rebuild it without that file")

@@ -14,8 +14,10 @@ all are whole, so a refused or broken zip leaves nothing (``sharing.unpack``). A
 model is there at once, read as any ``.xbf`` is, with nothing run. The shared file it wrote (``sharing.shared_file``)
 goes into the library with the link it came from (``sharing.import_record``), asked of the running server as ``cad
 share`` keeps a share, so that it is among the viewer's Recents and the share's link names it here wherever cad takes a
-document (``sharing.copy_of``). It says what it wrote, the file it is of and the script that builds it, and where what built it (``Cad-Share-Made``)
-differs from this computer's cad and libraries, which a build here records (``_here``). It runs nothing, and makes no
+document (``sharing.copy_of``). It says what it wrote, the file it is of and the script that builds it, the files a
+model's build read that the share does not hold (``sharing.unheld``: left out of it), which a build here needs, and
+where what built it (``Cad-Share-Made``) differs from this computer's cad and libraries, which a build here records
+(``_here``). It runs nothing, and makes no
 project: the next steps it prints are ``cad viewer FOLDER/<file>``, which shows it as it was shared, and, of a model,
 ``cad run FOLDER/<script>``, which builds it here, since someone else's code is the person's to run. ``--json``
 answers in one object.
@@ -30,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import shlex
 import subprocess
 import sys
@@ -175,6 +178,7 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
         except OSError as error:
             print(f"{prog}: warning: this computer's library could not keep the import ({error}), so the share's link "
                   "names no copy of it here: name its files by their paths", file=sys.stderr, flush=True)
+    missing = sharing.unheld(folder, paths, shared)
     made, here = said["made"], _here()
     differs = [{"name": name, "made": value, "here": here[name]} for name, value in (made or {}).items()
                if name in here and here[name] is not None and here[name] != value]
@@ -185,7 +189,8 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     if as_json:
         print(json.dumps({"ok": True, "local": False, "folder": os.path.abspath(folder), "name": top,
                           "files": {"count": len(written), "bytes": size, "paths": paths}, "file": shared,
-                          "entry": entry, "made": made, "here": here, "differs": differs, "next": step},
+                          "entry": entry, "missing": missing, "made": made, "here": here, "differs": differs,
+                          "next": step},
                          separators=(",", ":")), flush=True)
         return 0
     from cad_server.cli.share import _size
@@ -193,6 +198,11 @@ def _import(link: str, given: str | None, *, as_json: bool, prog: str) -> int:
     print(f"Imported {top} into {shown}: {len(written)} file{'s' if len(written) != 1 else ''}, {_size(size)}"
           + (f"; it is {shared}" if shared is not None else "")
           + (f"; its script is {entry}" if entry is not None else ""), flush=True)
+    if missing:
+        name = posixpath.basename(shared or "")
+        print(f"Its build read {len(missing)} file{'s' if len(missing) != 1 else ''} the share does not hold: "
+              f"{', '.join(missing)} (from {name}'s folder); a build here needs {'them' if len(missing) != 1 else 'it'} "
+              "there", flush=True)
     if made is not None:
         if differs:
             there = ", ".join(f"{row['name']} {row['made']}" for row in differs)
