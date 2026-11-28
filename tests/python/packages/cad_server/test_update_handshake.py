@@ -21,7 +21,12 @@ leave. So every later release installs and runs on that Python in uv's cache, an
 that module taking one JSON argument, and keeps writing that record. The two sides of it differ:
 
 - The record is written by the newer release and read by the older. A key or a phase may be added; none that an
-  installed release reads is removed or renamed.
+  installed release reads is removed or renamed. It cannot do without ``release``, ``at``, ``outcome``
+  (``outcomes``), ``beat``, ``phase`` and ``from``; the others it reads where they are there.
+- While B runs, A goes by its own clock and rules: how long without a beat before a server of the release being left
+  starts again, and before the attempt is lost (``silent_seconds``); the variable B sets for every command it runs,
+  so the server it starts on the way back is let through (``worker_env``); and the lock both hold for the record
+  (``lock``).
 - ``told`` is written by the older release and read by the newer: here, what this release sends. A worker may use
   any key that every release still updating this way sends, and needs none of them (it can find each itself). A
   later release may stop sending a key where the workers after it do without. What can never be done is the
@@ -141,7 +146,7 @@ def surface() -> dict:
 
     # cad's own update: what A runs of B and hands it, and the record's keys as A claims an attempt.
     from cad_server import updates
-    from cad_server._internal import auto_update
+    from cad_server._internal import auto_update, file_lock
 
     install = auto_update.Global(Path("ENV"), "UV")
     line = auto_update.helper_command("9.9.9", now=1.0, version="0.0.1", record="RECORD", install=install, log="LOG")
@@ -154,6 +159,14 @@ def surface() -> dict:
         "told": sorted(json.loads(line[-1])),
         "record": sorted(claimed),
         "phases": ["repairing", "switching"],
+        # What A reads of B's run beside the record's keys: the outcomes it knows, the variable B sets for every
+        # command it runs (A's server, started by B on the way back, does not stand aside for it), the lock both hold
+        # for the record, and how long A goes without a beat before a server of the release being left starts again
+        # (``leaving``) and before it takes the attempt for lost.
+        "outcomes": sorted({"underway", *auto_update.ENDED}),
+        "worker_env": auto_update.WORKER_ENV,
+        "lock": file_lock.STATE_LOCK,
+        "silent_seconds": {"leaving": auto_update.LEAVING_SECONDS, "lost": auto_update.LOST_SECONDS},
         "notices": updates.ADDRESS,  # under the service's base: what ``apps/api`` keeps answering for A
     }
     return {
@@ -191,6 +204,15 @@ class UpdateHandshakeTest(unittest.TestCase):
         self.assertEqual(found, golden, "the update's handshake between releases changed: see this module's "
                                         "docstring before changing update_handshake.json")
 
+
+    def test_the_worker_beats_well_inside_what_an_installed_release_waits(self) -> None:
+        """An installed release lets a server of the release being left start again once the worker has been silent
+        for ``silent_seconds.leaving``, and takes the attempt for lost after ``silent_seconds.lost``: both are its
+        own, on computers already. So every later worker beats at least twice within the shorter."""
+        from cad_server._internal import auto_update_helper
+
+        silent = json.loads(GOLDEN.read_text(encoding="utf-8"))["update"]["silent_seconds"]
+        self.assertLessEqual(auto_update_helper.BEAT_SECONDS * 2, min(silent.values()))
 
     def test_the_daemon_starts_by_the_bare_line_the_frozen_helpers_run(self) -> None:
         """``python -P -m cad_server._internal.engine_daemon`` with nothing after it, as the helpers of 0.10.0 to

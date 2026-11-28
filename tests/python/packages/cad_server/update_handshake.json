@@ -136,6 +136,18 @@
    "repairing",
    "switching"
   ],
+  "outcomes": [
+   "current",
+   "failed",
+   "installed",
+   "underway"
+  ],
+  "worker_env": "CAD_UPDATE_WORKER",
+  "lock": "settings.lock",
+  "silent_seconds": {
+   "leaving": 150.0,
+   "lost": 1200.0
+  },
   "notices": "/notices"
  }
 }

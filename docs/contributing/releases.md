@@ -213,7 +213,19 @@ the agents running them reach for them, and nothing shipped later can change wha
    server, button and `cad update` read. The two sides of it differ:
 
    - **The record** is written by the newer release and read by the older. A key or a phase may be
-     added; none that an installed release reads is removed or renamed.
+     added; none that an installed release reads is removed or renamed. Six keys it cannot do
+     without: `release` and `at` (a record without them is no record to it), `outcome` (`underway`,
+     then `installed`, `current` or `failed`), `beat`, `phase` (`switching`, `repairing`) and
+     `from`. The others (`tries`, `wanted`, `asked`, and the worker's `cause`, `detail`, `restored`,
+     `started`) it reads where they are there and does without where they are not; a `cause` it
+     does not know it takes for none.
+   - **While the worker runs, the installed release goes by its own clock and rules**, which are on
+     computers already. It lets a server of the release being left start again once the `beat` is
+     150 seconds old, and takes the attempt for lost after twenty minutes without one: a worker
+     beats at least every minute. It stands aside for no server but the worker's own: the worker
+     sets `CAD_UPDATE_WORKER` to the attempt's `at` for every command it runs, so the server it
+     starts on the way back to that release is let through. And both write the record under the
+     state folder's lock, `settings.lock`.
    - **`told`** is written by the older release and read by the newer. A worker may use any key that
      every release still updating this way sends, and needs none of them: it can find each itself.
      A later release may stop sending a key where the workers after it do without. The one thing
