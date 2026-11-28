@@ -60,7 +60,7 @@ one line; nothing falls back to the kernel the person did not choose. The suites
 | 4 | Threads and processes inside a build or a check: the mesher's inline thread, interference's crew and guard, a check's watched child, the STEP reader process | `serve.py:749,759`, `cad/build123d/_interference.py:702`, `cad/_internal/manufacturing.py:620`, `cad/engine/reader.py:409` | Each runs in the one thread where `places.THREADS` is false; a check's time is kept between pairs, and the limits on a whole process are its supervisor's | done, tested |
 | 5 | CoACD (convex hulls) is native code with no WebAssembly wheel | `cad/engine/hulls.py:302` | Refused in one line naming the platform; nothing is started | done, tested |
 | 6 | The platform's own answers where the system's are wanted: pid 42, invented inodes, times to the millisecond, no umask, `os.chdir` moving the program and not the process, no `.pth`/`sitecustomize`, no sockets | `python.mjs`, `bootstrap.py` | The host answers as CPython on the computer does; sockets that connect are the host's (a thread of its own does the I/O) | done, measured |
-| 7 | 32-bit index type: numpy takes no 64-bit array for repeat counts or `reduceat` indices | `cad/engine/ranges.py:392-399,467` | Those counts are `np.intp`. The other sites are not audited: see What is open | part done |
+| 7 | 32-bit index type: numpy takes no 64-bit array for `repeat` counts, `reduceat` indices, `choose` or `put` (it does for indexing, `take` and `bincount`), and `astype(int)` is 32 bits | `cad/engine/ranges.py`, `cad/engine/render/shapes.py`, `cad/build123d/_dfm_brep.py`, `_dfm_cnc_model.py`, `_dfm_printing.py` | Those counts are `np.intp`; packed part owners (`part << 20`) are `np.int64`. Audited: every `repeat`/`reduceat`/`choose`/`put` site of `cad/`, and the library's numpy-heavy tests run inside the kernel's own Python | done, tested |
 | 8 | Builds in the caller's own Python (a lease) | `daemon.py:989` | Every script is built in the kernel's worker | done, tested |
 | 9 | A program's own run: `cad run model.py` runs the program, which decides what it calls (law 11) | `cad_server/cli/run.py:447,464` | The program runs on the kernel's Python; that Python has no pipes to dial the door with, so its `cad run` holds a relay it connects to (`cad/engine/relay.py`, `cad/engine/client.py:96`) | done, tested, measured (4.7 s a warm run) |
 | 10 | A script's own packages (`# /// script`, `--with`) | `cad_server/_internal/kernel_packages.py` | uv resolves them; what the kernel folder does not carry is installed, pure Python alone, in a folder of the cache on the program's path; one with native code is refused in one line naming it | done, tested |
@@ -139,9 +139,9 @@ is built), named in the setting's `folder`.
 
 1. Stills: Preview's studio, the path tracer, a GLB's textures and a DXF's drawing on the view core (above).
 2. The view core's archive in the lock (above): until a release publishes one, an engine-made folder draws no still.
-3. 32-bit integers: numpy's default integer is 32 bits here. The sites that failed loudly in the suites are fixed;
-   code that relied on a 64-bit default silently is not audited (the manufacturing checks and `ranges.py` use
-   explicit 64-bit keys where they multiply cell indexes).
+3. Defects of the binding itself, found running the library's tests inside the kernel's Python: OCCT's glTF reader
+   traps ("memory access out of bounds": a GLB read, `formats/glb.py`), and one sheet-metal fixture's division traps
+   ("unreachable"). Both end the process; neither is cad's code.
 4. A model's body cannot listen on a socket, start a thread or a process: a script that does fails there.
 5. Memory: a worker is 1.6-1.9 GB against a native worker's 0.45 GB, and the engine's caps are sized for the
    native one.
