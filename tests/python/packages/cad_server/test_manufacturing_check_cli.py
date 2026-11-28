@@ -403,6 +403,15 @@ class ModelTest(unittest.TestCase):
             code, out, _ = _run(ident, "--process", "cnc", "--json")
             self.assertEqual(code, 1)
             self.assertIn("cnc.internal_corner_sharp", {f["code"] for f in json.loads(out)["findings"]})
+            # a model that declares no process, given none: the refusal names no spelling of the library's
+            code, out, _ = _run(ident, "--json")
+            payload = json.loads(out)
+            self.assertEqual((code, payload["reason"]), (2, "invalid_argument"))
+            self.assertRegex(payload["error"], r"^a check measures for a process, and no part declares one .*"
+                                               r"give --process cnc, sheet, molding or printing$")
+            self.assertNotIn("cad.xbf.dfm", payload["error"])
+            with self.assertRaisesRegex(ValueError, r"^a check measures for a process.*give process cnc, sheet"):
+                cad.dfm(ident)
 
     def test_a_model_given_no_process_is_checked_for_the_one_its_part_declares(self) -> None:
         """Reads the part's declared process back from the engine's document (the material's process survives

@@ -138,7 +138,8 @@ def _flag(name: str) -> str:
 
 def _give_process(document_type: str, why: str = "") -> ArgumentRefused:
     named = processes_for(document_type)
-    return ArgumentRefused(f"cad.{document_type}.dfm measures for a process{why}: give --process "
+    # No caller's name: the command says it as ``cad dfm`` and a script as ``cad.dfm``, and the text is both's.
+    return ArgumentRefused(f"a check measures for a process{why}: give --process "
                            + (f"{', '.join(named[:-1])} or {named[-1]}" if len(named) > 1 else named[0]))
 
 
