@@ -378,8 +378,11 @@ class Held:
 
     def _not_drawn_yet(self, still: Any, shown: dict[str, Any]) -> None:
         """What the view core does not draw yet, refused in one line before anything is drawn (``core.NOT_YET``):
-        Preview of a part's base colour textures. (Preview seen from under its floor is refused as it is drawn.)"""
-        from cad.engine.render.core import NOT_YET, NotDrawnYet
+        Preview of a part's base colour textures, and a still larger than the core draws (``core.samples_for``).
+        (Preview seen from under its floor is refused as it is drawn.)"""
+        from cad.engine.render.core import NOT_YET, NotDrawnYet, samples_for
+
+        samples_for(*still.drawn)
 
         if still.preview:
             for prototype in shown["prototypes"]:
@@ -471,9 +474,17 @@ class Held:
                       "unmeshed": unmeshed, **({"untextured": untextured} if untextured else {}),
                       "pose": posed, "exploded": exploded_amount(display) or None,
                       "renderer": "occt" if self.core is None else "core",
-                      **({"coreMs": round(scene.canvas.seconds * 1000)} if self.core is not None else {}),
+                      **({"coreMs": round(scene.canvas.seconds * 1000), "samples": _samples(still)}
+                         if self.core is not None else {}),
                       **({"font": ", ".join(sorted(scene.fonts))} if scene.fonts else {}),
                       **({"kind": self.kind, "warnings": self.warnings} if self.kind else {}), "timings": timings}
+
+
+def _samples(still: Any) -> int:
+    """The samples a pixel the view core drew ``still`` with: fewer than cad asks where the picture is that large."""
+    from cad.engine.render.core import samples_for
+
+    return samples_for(*still.drawn)
 
 
 def holder(path: Path, core: Any = None) -> Any:

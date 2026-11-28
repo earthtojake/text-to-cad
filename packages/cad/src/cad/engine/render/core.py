@@ -33,10 +33,18 @@ from cad.engine.render.occt import BACKGROUND, EDGE, EDGES_WIN_OFFSET, SEE_THROU
 from cad.engine.render.shapes import _LINE_OF, LINES, FaceGroup
 from cad.engine.snapshot import SnapshotRefused
 
-__all__ = ["NOT_YET", "Core", "CoreCanvas", "CoreScene", "CoreStopped", "NotDrawnYet", "part_meshes"]
+__all__ = ["NOT_YET", "Core", "CoreCanvas", "CoreScene", "CoreStopped", "NotDrawnYet", "TooLarge", "part_meshes",
+           "samples_for"]
 
-# Samples a pixel: what cad asks of OpenGL (a software OpenGL gives 4).
+# Samples a pixel: what cad asks of OpenGL (a software OpenGL gives 4); fewer where a picture is so large that the
+# core's cap on samples in all (``MOST_SAMPLES``) asks it (``samples_for``).
 SAMPLES = 8
+#: What the core draws at most: samples in all (8192 x 8192 at one sample, 4096 x 4096 at four) and pixels a side.
+MOST_SAMPLES = 2**26
+MOST_SIDE = 16384
+#: The most a job's frame carries of the meshes it sends (the host takes a frame of up to 512 MiB): a still whose
+#: meshes are more is sent over several frames, each mesh once, named by its key after (``Core.render``).
+FRAME_BYTES = 256 * 2**20
 # What the ink's presentations step back by in OCCT's depth test (its shaded aspect's polygon offset).
 INK_OFFSET = (1.0, 1.0)
 
@@ -53,6 +61,20 @@ NOT_YET = {
 
 class NotDrawnYet(SnapshotRefused):
     """What the view core's renderer does not draw yet (``NOT_YET``), asked of it: refused, as a request is."""
+
+
+def samples_for(width: int, height: int) -> int:
+    """The samples a pixel a still of ``width`` x ``height`` is drawn with: ``SAMPLES``, or the most of 4, 2 and 1 the
+    core's cap (``MOST_SAMPLES``) allows; ``TooLarge`` where it allows none."""
+    for samples in (SAMPLES, 4, 2, 1):
+        if width * height * samples <= MOST_SAMPLES and max(width, height) <= MOST_SIDE:
+            return samples
+    raise TooLarge(f"a still {width} x {height} pixels as drawn is past what the WebAssembly kernel's renderer draws "
+                   f"at once ({MOST_SAMPLES} pixels: 8192 x 8192): ask for a smaller size or renderScale", part="size")
+
+
+class TooLarge(SnapshotRefused):
+    """A still larger than the view core draws (``samples_for``)."""
 
 
 class CoreStopped(SnapshotRefused):
@@ -74,6 +96,7 @@ class Core:
         self.child: subprocess.Popen | None = None
         self.sent: set[str] = set()  # the keys the running server was sent
         self.asked = 0
+        self.faults = 0  # its module's faults running
 
     def _started(self) -> subprocess.Popen:
         if self.child is None or self.child.poll() is not None:
@@ -87,9 +110,10 @@ class Core:
     def job(self, header: dict[str, Any], payloads: list[bytes]) -> tuple[dict[str, Any], list[bytes]]:
         """``header`` and ``payloads`` asked of the server within its job's deadline (``core_pool.exchange``): its
         answer's header and payloads. A job it refuses is a ``RuntimeError`` in its words; a server that is late,
-        ends, answers what is no frame or trapped is killed (the next job starts another, sent again what it keeps) and
-        the job refused in one line (``CoreStopped``)."""
-        from cad.engine.core_pool import HostFailed, exchange, trapped
+        ends or answers what is no frame is killed (the next job starts another, sent again what it keeps) and the job
+        refused in one line (``CoreStopped``); so is a job its module faulted on, the server having started its module
+        again and let go of what it kept, and one that faults ``core_pool.FAULTS`` times running is killed too."""
+        from cad.engine.core_pool import FAULTS, HostFailed, _killed, exchange, faulted
 
         child = self._started()
         self.asked += 1
@@ -98,25 +122,43 @@ class Core:
         except HostFailed as failed:
             self.child, self.sent = None, set()
             raise CoreStopped(str(failed)) from None
-        broken = trapped(child, said)
-        if broken is not None:
-            self.child, self.sent = None, set()
-            raise CoreStopped(broken)
+        if faulted(said):
+            self.sent, self.faults = set(), self.faults + 1  # what it kept is gone with its module
+            if self.faults >= FAULTS:
+                _killed(child)
+                self.child, self.faults = None, 0
+            raise CoreStopped(f"{said.get('error')}: ask again")
+        self.faults = 0
         if not said.get("ok"):
             raise RuntimeError(f"the view core refused the {header.get('job')} job: {said.get('error')}")
         return said, found
 
     def render(self, scene: dict[str, Any], payloads: list[bytes], keys: list[str | None]) -> tuple[bytes, float]:
         """The picture ``scene`` describes (its payloads in order, each named by its key or None): its bytes as the
-        scene's ``format`` asks, and the seconds the core drew for."""
-        for _turn in range(2):  # again with what the server says it lacks
-            sending = [b"" if key is not None and key in self.sent else data for key, data in zip(keys, payloads)]
+        scene's ``format`` asks, and the seconds the core drew for. A keyed buffer the server keeps is named, not sent;
+        one it says it lacks is sent again; and buffers past ``FRAME_BYTES`` in a frame wait for the next, the server
+        keeping each sent meanwhile."""
+        for _turn in range(len(payloads) + 2):
+            sending, room, fresh = [], FRAME_BYTES, []
+            for key, data in zip(keys, payloads):
+                if key is not None and key in self.sent:
+                    sending.append(b"")
+                elif key is None or len(data) <= room or not fresh:
+                    sending.append(data)
+                    room -= len(data)
+                    if key is not None:
+                        fresh.append(key)
+                else:
+                    sending.append(b"")  # named only: sent in the next frame
             said, found = self.job({"job": "render", "scene": scene, "keys": keys}, sending)
-            self.sent.update(key for key in keys if key is not None)
+            self.sent.update(fresh)
             if "missing" not in said:
                 return found[0], float(said.get("seconds") or 0.0)
             self.sent.difference_update(said["missing"])
-        raise RuntimeError("the view core keeps no buffer it is sent")
+            if set(fresh) & set(said["missing"]):
+                break  # it let go of what this very frame sent it: it cannot hold them all at once
+        raise CoreStopped("the view core could not keep this still's meshes at once (they are more than it holds): "
+                          "ask for fewer parts")
 
     def stop(self) -> None:
         """The server ended (its input closed), if it runs."""
@@ -481,7 +523,8 @@ class CoreScene(Scene):
             draw = ([staged.item(payloads) for staged in shown if staged.below] + draw
                     + [staged.item(payloads) for staged in shown if not staged.below])
         found: dict[str, Any] = {
-            "width": self.canvas.width, "height": self.canvas.height, "samples": SAMPLES, "format": "rgba",
+            "width": self.canvas.width, "height": self.canvas.height,
+            "samples": samples_for(self.canvas.width, self.canvas.height), "format": "rgba",
             "background": [float(c) for c in self.behind] if self.behind is not None else backdrop,
             "camera": self._camera_of(),
         }

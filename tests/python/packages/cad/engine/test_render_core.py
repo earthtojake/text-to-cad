@@ -61,8 +61,11 @@ SERVER = textwrap.dedent("""
             time.sleep(3600)
         if width == 17:  # what is no frame
             out.write(sizes.pack(12, 8) + b"not json"); out.flush(); continue
-        if width == 19:  # a trapped module's refusal
-            send({"id": header["id"], "ok": False, "job": "render", "error": "RuntimeError: unreachable"}); continue
+        if width == 19:  # a faulted module's refusal: started again, what it kept let go
+            kept.clear()
+            send({"id": header["id"], "ok": False, "job": "render", "error": "the view core faulted on this job "
+                  "(RuntimeError: unreachable) and was started again; the parts, documents and buffers it kept are let go"})
+            continue
         if header["job"] == "forget":
             kept.clear(); send({"id": header["id"], "ok": True}); continue
         keys = header.get("keys") or [None] * len(payloads)
@@ -202,10 +205,11 @@ class CoreSceneTest(unittest.TestCase):
         self.assertEqual((meshes[2], renders[2].get("keys")[:2]), ([0, 0], ["mesh:big", "mesh:small"]))
         self.assertTrue(all(meshes[3]), "sent again once the server said it lacked them")
 
-    def test_a_host_late_garbled_or_trapped_is_killed_the_picture_refused_and_the_next_one_drawn_afresh(self) -> None:
-        """Past its deadline, answering what is no frame, or trapped: the job server killed by its process and waited
-        for, the picture refused in one line (``CoreStopped``), and the next picture drawn by a fresh one, which is sent
-        the meshes the last one kept."""
+    def test_a_host_late_garbled_or_faulted_refuses_the_picture_and_the_next_one_is_drawn_its_meshes_sent_again(self) -> None:
+        """Past its deadline or answering what is no frame: the job server killed by its process and waited for, the
+        picture refused in one line (``CoreStopped``), the next drawn by a fresh one, sent the meshes the last kept. A
+        fault: refused in the server's words, the server goes on (its module started again, what it kept let go), and
+        the next picture sends the meshes again; ``FAULTS`` running, the server is killed."""
         from unittest import mock
 
         from cad.engine import core_pool
@@ -216,12 +220,24 @@ class CoreSceneTest(unittest.TestCase):
         self.scene.canvas.frame()
         for width, said in ((13, "^the view core took longer than 1 s for its render job"),
                             (17, "^the view core's job server answered its render job with what is no answer"),
-                            (19, "^the view core failed its render .*unreachable.*started afresh")):
+                            (19, "^the view core faulted on this job .*unreachable.*: ask again$")):
             with self.subTest(width=width):
                 host = self.core.child
                 scene, payloads, keys = self.scene.describe()
                 with mock.patch.dict(core_pool.SECONDS, {"render": 1.0}), self.assertRaisesRegex(CoreStopped, said):
                     self.core.render({**scene, "width": width}, payloads, keys)
+                if width == 19:
+                    self.assertIsNone(host.poll(), "a fault: the server goes on")
+                    self.assertIs(self.core.child, host)
+                    before = len(self.asked())
+                    self.scene.canvas.frame()
+                    [again] = [line for line in self.asked()[before:] if line["job"] == "render"]
+                    self.assertTrue(all(again["sizes"][:2]), "what it let go of is sent again at once")
+                    for _ in range(core_pool.FAULTS):
+                        with self.assertRaises(CoreStopped):
+                            self.core.render({**scene, "width": width}, payloads, keys)
+                    self.assertIsNotNone(host.poll(), "faults running: killed")
+                    continue
                 self.assertIsNotNone(host.poll(), "killed and waited for")
                 self.assertIsNone(self.core.child)
                 before = len(self.asked())
@@ -229,6 +245,43 @@ class CoreSceneTest(unittest.TestCase):
                 [again] = [line for line in self.asked()[before:] if line["job"] == "render"]
                 self.assertTrue(all(again["sizes"][:2]), "a fresh server is sent the meshes the last one kept")
                 self.assertIsNot(self.core.child, host)
+
+    def test_meshes_past_a_frame_s_room_are_sent_over_several_frames_each_once(self) -> None:
+        from unittest import mock
+
+        self.scene.show({"mode": "shaded"})
+        self.scene.frame("iso")
+        with mock.patch.object(drawing, "FRAME_BYTES", len(self.buffers["big"]) + 1):
+            self.scene.canvas.frame()
+        renders = [line for line in self.asked() if line["job"] == "render"]
+        self.assertEqual([line["sizes"][:2] for line in renders[:2]],
+                         [[len(self.buffers["big"]), 0], [0, len(self.buffers["small"])]], "one mesh a frame")
+        keyed = [i for i, key in enumerate(renders[0]["keys"]) if key is not None]
+        self.assertEqual([sum(1 for line in renders if line["sizes"][i]) for i in keyed], [1] * len(keyed),
+                         "each kept buffer crosses the pipe once")
+        self.assertTrue(all(line["sizes"][i] for line in renders for i, key in enumerate(line["keys"]) if key is None))
+
+    def test_the_largest_still_cad_asks_is_drawn_with_fewer_samples_or_refused_in_one_line(self) -> None:
+        """cad asks for a side of up to 8192 and draws it up to twice that (``renderScale``): what the core's cap
+        (2^26 samples) allows is drawn with the most samples that fit, and said; a larger one is refused before
+        anything is drawn."""
+        from cad.engine import snapshot
+        from cad.engine.render.core import TooLarge, samples_for
+        from cad.engine.render.service import Held
+
+        self.assertEqual([samples_for(*size) for size in ((1600, 1200), (2900, 2900), (4096, 4096), (8192, 8192))],
+                         [8, 4, 4, 1])
+        largest = (snapshot.MAX_SIDE, snapshot.MAX_SIDE)
+        held = Held(Path("boxes.xbf"), core=self.core)
+        self.addCleanup(held.close)
+        held.hold({**json.loads(json.dumps(STRUCTURE)), "version": "1"}, self.buffers)
+        with self.assertRaises(TooLarge) as refused:
+            held.draw(Still({"mode": "solid"}, size=largest, scale=2.0))
+        self.assertEqual(refused.exception.part, "size")
+        self.assertNotIn("\n", str(refused.exception))
+        self.assertFalse(self.log.exists() and any(line["job"] == "render" for line in self.asked()), "nothing asked")
+        _data, report = held.draw(Still({"mode": "solid"}, size=(4096, 3072)))
+        self.assertEqual(report["samples"], 4)
 
     def test_what_the_core_does_not_draw_yet_is_refused_in_one_line(self) -> None:
         from cad.engine.render.drawing import Held as Drawing

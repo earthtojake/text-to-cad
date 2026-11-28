@@ -57,7 +57,8 @@ SERVER = textwrap.dedent("""
         elif payloads and payloads[0] == b"garbage":
             out.write(sizes.pack(12, 8) + b"not json"); out.flush()
         elif payloads and payloads[0] == b"trap":
-            send({"id": header["id"], "ok": False, "job": job, "error": "RuntimeError: memory access out of bounds"})
+            send({"id": header["id"], "ok": False, "job": job, "error": "the view core faulted on this job (RuntimeError: "
+                  "memory access out of bounds) and was started again; the parts, documents and buffers it kept are let go"})
         elif job == "about":
             send({**said, "abi": 1, "pid": os.getpid()})
         elif job == "mesh":
@@ -85,10 +86,10 @@ def _pid() -> int:
     return os.getpid()
 
 
-def _alive(pid: int) -> bool:
+def _alive(pid: int, at_once: bool = False) -> bool:
     import time
 
-    for _ in range(200):  # killed and waited for: gone at once, or within moments where the system is slow to say so
+    for _ in range(1 if at_once else 200):  # killed and waited for: gone at once, or within moments where the system is slow to say so
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -181,13 +182,12 @@ class CorePoolTest(unittest.TestCase):
             pool.submit(serve._timed, b"die", True).result(60)
         self.assertEqual(pool.submit(serve._timed, b"shape", True).result(60)[0], b"XBM2shape")
 
-    def test_a_host_late_garbled_or_trapped_is_killed_its_job_refused_and_the_next_job_has_another(self) -> None:
-        """A job past its deadline, an answer that is no frame, and a trapped module's refusal: the host killed (by its
-        process) and waited for, the job refused in one line, the next job answered by a fresh host."""
+    def test_a_host_late_or_garbled_is_killed_its_job_refused_and_the_next_job_has_another(self) -> None:
+        """A job past its deadline (a damaged shape OCCT meshes forever) and an answer that is no frame: the host
+        killed (by its process) and waited for, the job refused in one line, the next job answered by a fresh host."""
         pool = self.pool(1)
         for given, said in ((b"hang", "^the view core took longer than 1 s for its mesh job, and was stopped"),
-                            (b"garbage", "^the view core's job server answered its mesh job with what is no answer"),
-                            (b"trap", "^the view core failed its mesh .*memory access out of bounds.*started afresh")):
+                            (b"garbage", "^the view core's job server answered its mesh job with what is no answer")):
             with self.subTest(host=given.decode()):
                 pool.submit(serve._ready).result(60)
                 [before] = [child.pid for child in pool._children.values()]
@@ -196,6 +196,28 @@ class CorePoolTest(unittest.TestCase):
                 self.assertFalse(_alive(before), "the host is gone")
                 self.assertEqual(pool.submit(serve._timed, b"shape", True).result(60)[0], b"XBM2shape")
                 self.assertNotEqual([child.pid for child in pool._children.values()], [before], "a fresh host")
+
+    def test_a_fault_is_refused_in_the_host_s_words_and_faults_running_end_the_host(self) -> None:
+        """A job the module faulted on is refused as the host says it (it started its module again itself, and the next
+        job carries its part's bytes, so nothing is lost); ``FAULTS`` running, the host is killed all the same."""
+        pool = self.pool(1)
+        pool.submit(serve._ready).result(60)
+        [host] = [child.pid for child in pool._children.values()]
+        for turn in range(1, core_pool.FAULTS + 1):
+            with self.assertRaisesRegex(ValueError, "^the view core faulted on this job .*memory access out of bounds"):
+                pool.submit(serve._timed, b"trap", True).result(60)
+            if turn < core_pool.FAULTS:
+                self.assertTrue(_alive(host, at_once=True), f"one fault ({turn}): the host goes on")
+        self.assertFalse(_alive(host), "faults running: killed")
+        self.assertEqual(pool.submit(serve._timed, b"shape", True).result(60)[0], b"XBM2shape")
+        # A good answer between faults starts their count again.
+        [host] = [child.pid for child in pool._children.values()]
+        for given in (b"trap", b"shape", b"trap", b"shape", b"trap"):
+            try:
+                pool.submit(serve._timed, given, True).result(60)
+            except ValueError:
+                pass
+        self.assertTrue(_alive(host, at_once=True))
 
     def test_a_job_the_core_does_not_answer_is_a_kernel_process_s_started_for_the_first_of_them(self) -> None:
         pool = self.pool()

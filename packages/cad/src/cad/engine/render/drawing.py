@@ -286,6 +286,9 @@ class Sheet:
             draw.append({"lines": {"positions": add(points, "<f4"), "counts": add(counts, "<u4")},
                          "color": list(finish.linear(pen or DRAWING.ink)), "width": DRAWING.line_width})
         x, y = self.centre
+        from cad.engine.render.core import samples_for
+
+        samples_for(self.width, self.height)  # a sheet larger than the core draws, refused in one line
         scene = {"width": self.width, "height": self.height, "samples": 1, "format": "rgba",
                  "background": self.paper if self.paper is not None else list(finish.linear(DRAWING.paper)),
                  "camera": {"projection": "orthographic", "eye": [x, y, self.reach], "target": [x, y, 0.0],

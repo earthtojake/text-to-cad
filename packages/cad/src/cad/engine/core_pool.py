@@ -14,10 +14,13 @@ its answer ``{"id", "ok": true, ...}`` or ``{"id", "ok": false, "error"}``: what
 shape, an ordinal the part has not) is the job's error, a ``ValueError`` in its words, and the process goes on.
 
 Each job has a deadline by its kind (``SECONDS``): a host that has not answered by then -- a job that never ends on
-input it cannot handle, which would hold every job behind it, since a host serves one at a time --, one that answers
-what is no frame, and one whose module trapped (``TRAPS``: its instance may be damaged) is killed and waited for
-(``exchange``, ``HostFailed``), and the job answered in one line; the next job starts another host, which is sent what
-the last kept (each job carries its part's bytes; the stills' meshes by key, ``render.core.Core``).
+input it cannot handle (OCCT meshing a damaged shape forever), which would hold every job behind it, since a host
+serves one at a time --, and one that answers what is no frame, is killed and waited for (``exchange``,
+``HostFailed``), and the job answered in one line; the next job starts another host. A job the module faulted on
+(``TRAPS``) is refused in the host's words, the host having started its module again and let go of what it kept; one
+that faults ``FAULTS`` times running is killed all the same. What a host kept is sent again as it is needed: each job
+carries its part's bytes, and the stills' meshes are named by key and sent again where the host says it lacks them
+(``render.core.Core``).
 """
 
 from __future__ import annotations
@@ -34,7 +37,8 @@ from typing import Any, Callable
 
 from cad.engine.kernel_pool import KernelPool, _Job
 
-__all__ = ["PROCESSES", "SECONDS", "TRAPS", "CorePool", "HostEnded", "HostFailed", "exchange", "request"]
+__all__ = ["FAULTS", "PROCESSES", "SECONDS", "TRAPS", "CorePool", "HostEnded", "HostFailed", "exchange", "faulted",
+           "request"]
 
 # The most processes one pool holds: each is a small host, and meshing is what a page waits for.
 PROCESSES = 4
@@ -48,6 +52,8 @@ SECONDS = {"about": 30.0, "mesh": 300.0, "table": 120.0, "measured": 120.0, "fac
 #: What a host says when its WebAssembly module trapped: its instance may be damaged, so the host is started afresh.
 TRAPS = re.compile(r"RuntimeError|memory access out of bounds|unreachable|signature mismatch|call stack|out of memory|"
                    r"integer overflow|divide by zero", re.IGNORECASE)
+#: The faults running after which a host is killed though it starts its module again itself (belt and braces).
+FAULTS = 3
 # A frame no host writes: longer than this is garbage (the host passes a longer one over itself).
 _LONGEST = 1 << 34
 
@@ -150,15 +156,10 @@ def exchange(child: subprocess.Popen, header: dict[str, Any], payloads: list[byt
                          "stopped") from None
 
 
-def trapped(child: subprocess.Popen, said: dict[str, Any]) -> str | None:
-    """Where the host refused a job because its module trapped (``TRAPS``): the host killed and waited for, and the
-    job's answer in one line; else None."""
-    error = str(said.get("error") or "")
-    if said.get("ok") or not TRAPS.search(error):
-        return None
-    _killed(child)
-    return f"the view core failed its {said.get('job') or 'job'} ({error.splitlines()[0] if error else 'a trap'}), " \
-           "and was started afresh: ask again"
+def faulted(said: dict[str, Any]) -> bool:
+    """Whether the host refused a job because its module faulted (``TRAPS``): it has started the module again, and
+    what it kept is gone."""
+    return not said.get("ok") and TRAPS.search(str(said.get("error") or "")) is not None
 
 
 def _text(value: Any) -> bytes:
@@ -240,6 +241,7 @@ class CorePool(KernelPool):
         super().__init__(workers, program, [])
         self._kernel, self._others = kernel, None
         self._asked = 0
+        self._faults: dict[int, int] = {}  # each host's faults running (``FAULTS``)
 
     def submit(self, fn: Callable, /, *args: Any) -> Any:
         if request(fn, args) is None:
@@ -279,9 +281,13 @@ class CorePool(KernelPool):
             raise EOFError from None  # a process that died fails its job alone, as a kernel process's does
         except HostFailed as failed:
             return "failed", ValueError(str(failed))
-        broken = trapped(child, said)
-        if broken is not None:
-            return "failed", ValueError(broken)
+        if faulted(said):
+            running = self._faults[child.pid] = self._faults.get(child.pid, 0) + 1
+            if running >= FAULTS:
+                del self._faults[child.pid]
+                _killed(child)  # the pool's next job starts another
+            return "failed", ValueError(str(said.get("error")))
+        self._faults.pop(child.pid, None)
         if not said.get("ok"):
             return "failed", ValueError(str(said.get("error") or "the view core refused the job"))
         return "done", answered(said, found)
