@@ -91,8 +91,8 @@ def _source_said(verb: str) -> str:
         return (f"the file to check, its type by its suffix: {files}, a model's .xbf checked as the file it is; in "
                 "Python, the handle a model's call returns too")
     job = "; with --job, drawn in place of every job's input" if verb == "snapshot" else ""
-    return (f"the file, its type by its suffix: {files}, a model's .xbf read as the file it is, never as the model the "
-            f"engine holds{_LINKED}{job}")
+    return (f"the file, its type by its suffix: {files}, a model's .xbf the build the engine holds while the file is "
+            f"the one that build wrote, else the file as it is{_LINKED}{job}")
 
 
 def _export_said(action: argparse.Action) -> argparse.Action:

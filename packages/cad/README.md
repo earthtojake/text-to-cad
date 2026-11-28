@@ -365,7 +365,7 @@ renumbers the list and every citation in the same change.
     writes one), `inspect` (`--interference`, `--ranges`), `snapshot`, `dfm` and `fea`, each meaning one thing;
     a tool's own operation on its files is `cad <integration> <operation> <file>` (`cad kicad drc`, `cad
     mujoco check`). `xbf` is a model, in the library and the command alike, by its handle or its `.xbf`, which
-    is its document: live while the engine holds its build, else read as the file it is (it names no
+    is its document: live while the engine holds the build that wrote it, else read as the file it is (it names no
     `made_by` then: law 7). One type, one word, everywhere. One result shape per verb: a check returns
     findings, each with a severity, a code and a location (`cad.results.CheckResult`), and `export` says the
     files it wrote. A new verb must be code-free, frequently needed and meaningful across types. A name is a

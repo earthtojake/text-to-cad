@@ -159,6 +159,7 @@ class ListingTest(unittest.TestCase):
         from types import SimpleNamespace
 
         from cad_server.engine import daemon
+        from cad_server.engine.state import file_version
 
         folder = Path(os.path.realpath(tempfile.mkdtemp(prefix="engine-listing-")))
         self.addCleanup(shutil.rmtree, folder, True)
@@ -173,6 +174,7 @@ class ListingTest(unittest.TestCase):
             (folder / f"{name}.xbf").write_bytes(b"its document")  # a model's document is its .xbf, there
             engine.models.records[ident] = {"id": ident, "source": {"script": str(script), "name": name,
                                                                     "xbf": str(folder / f"{name}.xbf")},
+                                            "written": file_version(folder / f"{name}.xbf"),  # the one its run left
                                             "worker": SimpleNamespace(alive=lambda: True, service=SimpleNamespace(name="worker"),
                                                                       key=str(script), retired=False),
                                             "program": str(script),

@@ -21,7 +21,13 @@ path. A document's state (`models.STATES`, what `cad server status` lists):
 An id whose file is gone names nothing: `no document <id> is held` (`serve.NotHeld`: a page's 404, a verb's
 exit 2), whether or not a live worker still holds its build (`Models.held` lets go of that row, as `release` does),
 and running its script writes the file again. Nothing says which script: the file is not there to
-read it from.
+read it from. One whose `.xbf` another process wrote since its run (a copy, a checkout, a sync folder) is that
+file from then on, as after a restart: the row keeps the version of the file its run left (`written`,
+`state.file_version`), and `Models.held` lets go of a row whose file is another version, unless a build of it is
+writing the file now (`serve.Server.build_of`); the server asks it before it serves a model from its worker
+(`serve.Server.model_held`), so every verb and page reads the file at once, and a page on it follows as it
+follows any file changed on disk. Running its script builds and holds it again. A rewrite of the same size within
+one tick of the file system's clock keeps the version, and is not seen.
 
 **Two kinds.** A function in a file is a model: its document is
 its `.xbf`, which `@xbf` declares; one with file decorators alone writes those files and is no document
@@ -137,7 +143,7 @@ built itself: no body runs or is replayed. A model taken writes its other declar
 of the document it took (**Exports**): each translated, compared with the file, and written only where it differs
 or is missing, so a declared file someone deleted or edited is written again from the document with nothing run.
 A verb given an `.xbf`'s path reads the file, in the documents worker (`Daemon._routed`); a page given it serves the
-model while a live worker holds it (`serve.Server.add`), else the file, as it serves any file: its version is the
+model while a live worker holds it and the file is the one its run left (`serve.Server.add`), else the file, as it serves any file: its version is the
 file's, it is read again when the file's bytes change (**The page's route**), and it names no model -- no
 `made_by`, no worker kept warm.
 
@@ -145,7 +151,12 @@ An `xbf/8` `.xbf` is converted in memory when read (**Document compatibility**).
 imports and exports require no model source or execution. The file's bytes remain unchanged;
 loading a conversion rewrites nothing. Unsupported or failed format conversion preserves those bytes
 and reports a clear error. Explicitly running the model still compares the current build key and rebuilds
-where it differs.
+where it differs. A file or bytes that are no `.xbf` cad wrote are refused before OCCT's reader is handed them,
+since that reader ends its process on such input rather than report it (`document.NoXbf`, `document._whole`): no
+BinOcaf header is another file; a header, or a root label whose declared size, that does not end where the file
+does is a file cut short. What the reader still cannot read of a body is the same refusal, so every verb, a
+script's `xbf.read` and the page say it in one line (a verb exits 2). A file damaged inside at its full length can
+still end the process reading it (the documents worker, the page's reader, a build's worker), never the engine.
 
 **The last run.** A document is what its model's last run made, and that is all the engine knows
 of the code: it never compares a script, a module or an input file on disk with what a build read,

@@ -1085,6 +1085,10 @@ class Server:
         # the engine holds of it, then what the library and the cache keep; None for a server of
         # its own (a test's), whose application forgets those alone.
         self.forget: Callable[[str], Any] | None = None
+        # Asked before a model is served from its worker (``document``): the daemon's ``models.Models.held``, which
+        # lets go of a model whose ``.xbf`` is gone or another process wrote (``forget_model``), its file the document
+        # from then on, read as any file is. A server of its own (a test's) serves a model while it is registered.
+        self.model_held: Callable[[str], Any] = lambda _ident: None
         # What the live worker that built a model document recorded of its parameters at the generation served
         # (the daemon's ``models.Models.live``: where each is spelled in the code), else None; and their ``set``,
         # which writes them into the model's script and builds it again (the daemon's ``parameters.Setting``),
@@ -1617,7 +1621,10 @@ class Server:
         """The document as the server holds it, read from its file again only when some
         other process rewrote the file (and no build is writing it now). A STEP is read
         again in the background (the module docstring): until it is in, this is the last.
-        A fresh read for inspection waits for a changed STEP instead."""
+        A fresh read for inspection waits for a changed STEP instead. A model's ``.xbf`` that is not the one its
+        run left is that file from then on (``model_held``)."""
+        if ident in self.model_loaders:
+            self.model_held(ident)
         if ident in self.model_loaders:
             # No kernel work on the HTTP thread: the loader asks the owning worker, and one no
             # worker holds any more says so (``NotHeld``): nothing is run to bring it back.
