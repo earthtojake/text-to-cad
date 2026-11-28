@@ -127,7 +127,8 @@ it would make a later command in that folder, `git status` among them, run what 
    worker, so an agent app's sandbox sees the connection and its network rules apply. Proxies are taken from the
    environment, as `urllib` takes them. A connection that cannot be made, or an answer that is not the service's (a
    proxy's refusal, with no JSON `error`), is said in one line: the network here does not reach the share service, and
-   a sandbox that limits hosts must allow its host.
+   a sandbox that limits hosts must allow its host. An answer of the service's cut off part way (the connection closed
+   or reset after its status came, or a body short of its length) is said as that, in one line: try again.
 5. The agreement, the setting, each share in its file's entry of the library and the file's folder are written by
    the running server for the command (`{"op": "share"}`), as every change of the library is, and as `cad update auto`
    has its switch written, since a sandboxed shell may write neither the state folder nor the cache; with none

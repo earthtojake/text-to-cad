@@ -90,8 +90,9 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
     parser.add_argument("link", nargs="?", metavar="FILE|LINK",
                         help="after delete: the file this computer shared, or a share's delete link")
     parser.add_argument("-y", "--yes", action="store_true",
-                        help="share: the person agrees to sharing, kept for this computer; delete: delete without "
-                             "asking. Where nobody can be asked (an agent, a pipe, --json) neither runs without it")
+                        help="share: the person agreed to sharing, kept for this computer; the first share on a "
+                             "computer never asks, and without it is refused, saying what goes; delete: delete without "
+                             "asking, which a terminal asks and nothing else (an agent, a pipe, --json) runs without it")
     parser.add_argument("--json", action="store_true", help="answer in one JSON object")
     return parser
 
@@ -485,8 +486,14 @@ def _sent(share: Any, view: list[Any], sources: Any, name: str, stored: dict[str
 
 
 def _unreached(service: str, error: Exception) -> str:
+    """What a request the service did not answer whole says: its answer cut off part way (``sharing.Cut``), which
+    another try may get whole; else that the network here does not reach it, which a sandbox may be why of."""
     from urllib.parse import urlsplit
 
+    from cad_server import sharing
+
+    if isinstance(error, sharing.Cut):
+        return f"the transfer with the share service was cut off part way: {error}. Try again"
     host = urlsplit(service).netloc or service
     return (f"the network here does not reach the share service: {error}. Where a sandbox limits the hosts this "
             f"shell may reach, it must allow {host}")

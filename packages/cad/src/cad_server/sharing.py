@@ -164,6 +164,11 @@ class Unreachable(ConnectionError):
     """No answer of the service's: the connection could not be made, or something else answered for it."""
 
 
+class Cut(Unreachable):
+    """An answer of the service's that stopped part way: its status and headers came, then the connection was closed,
+    reset or went silent before its body was whole."""
+
+
 class Refused(Exception):
     """The service's own refusal of ``what`` (``a pack``, ``the share's manifest``, ``the delete``): its status,
     ``error`` and ``hint``, and the packs a commit's 409 found missing (``missing``)."""
@@ -1026,13 +1031,18 @@ def _scrubbed(text: str, share: Share) -> str:
 
 
 def _streamed(answer: Any, into: BinaryIO) -> None:
-    """An answer's body written into ``into`` as it arrives: ``ZIP_BYTES`` at most, else ``Damaged``."""
+    """An answer's body written into ``into`` as it arrives: ``ZIP_BYTES`` at most, else ``Damaged``; one that ends
+    short of the length it said (a read in parts says so in no other way) is ``http.client.IncompleteRead``."""
+    import http.client
+
     size = 0
     while chunk := answer.read(1 << 20):
         size += len(chunk)
         if size > ZIP_BYTES:
             raise Damaged(f"it is larger than the {ZIP_BYTES // (1024 * 1024)} MiB a share's files are at most")
         into.write(chunk)
+    if getattr(answer, "length", None):
+        raise http.client.IncompleteRead(b"", answer.length)
 
 
 def _call(method: str, share: Share, path: str, headers: dict[str, str], body: bytes | None = None,
@@ -1041,7 +1051,8 @@ def _call(method: str, share: Share, path: str, headers: dict[str, str], body: b
     """One request of the API, from this process -- at ``/v1/shares/<id><path>``, or at ``address`` -- its status,
     its JSON answer (None for none) and its headers; with ``into``, a successful answer's body is written there
     (``_streamed``) rather than read as JSON. A connection that cannot be made, or a refusal that is not the
-    service's -- no JSON ``error``, as a proxy's is -- is ``Unreachable``, in words that hold no name of the share's."""
+    service's -- no JSON ``error``, as a proxy's is -- is ``Unreachable``, and an answer cut off part way ``Cut``, in
+    words that hold no name of the share's."""
     import http.client
     import urllib.error
     import urllib.request
@@ -1052,10 +1063,17 @@ def _call(method: str, share: Share, path: str, headers: dict[str, str], body: b
     try:
         try:
             with urllib.request.urlopen(request, timeout=timeout) as answer:  # noqa: S310 - http(s) only (``share_url``)
-                if into is not None:
-                    _streamed(answer, into)
-                    return answer.status, None, answer.headers
-                return answer.status, _answer(answer.read(ANSWER_BYTES)), answer.headers
+                try:
+                    if into is not None:
+                        _streamed(answer, into)
+                        return answer.status, None, answer.headers
+                    return answer.status, _answer(answer.read(ANSWER_BYTES)), answer.headers
+                except (OSError, http.client.HTTPException) as error:  # the network reached it: the answer stopped
+                    if isinstance(error, http.client.IncompleteRead):
+                        detail = f"{error.expected} bytes short" if error.expected else "it ended before its last part"
+                    else:
+                        detail = f"{type(error).__name__}{': ' + _scrubbed(str(error), share) if str(error) else ''}"
+                    raise Cut(f"{host} began to answer, then stopped ({detail})") from None
         except urllib.error.HTTPError as refusal:
             found = _answer(refusal.read(ANSWER_BYTES))
             if found is None or not isinstance(found.get("error"), str):

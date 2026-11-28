@@ -238,7 +238,8 @@ class Service:
     commit's expiry is a second later than the one before, as if time passed between them. Its knobs: ``most_pack``
     (the most a pack may be), ``limited`` (how many requests to answer 429 next, with ``Retry-After: retry_after``),
     ``conflicts`` (how many commits to refuse as if another replaced the manifest meanwhile), ``losing`` (how many
-    commits find every pack of their share gone) and ``zips`` (a zip to answer for an id in place of the share's)."""
+    commits find every pack of their share gone), ``zips`` (a zip to answer for an id in place of the share's) and
+    ``cut`` (how many bytes of a zip to send before the connection closes, its length said whole)."""
 
     def __init__(self) -> None:
         self.shares: dict[str, dict[str, Any]] = {}
@@ -324,6 +325,15 @@ class Service:
                 if manifest and manifest["made"]:
                     headers["Cad-Share-Made"] = ", ".join(f"{_header(key)}={_header(value)}"
                                                           for key, value in manifest["made"].items())
+                if service.cut is not None:  # the answer's headers, its length whole, then part of it and no more
+                    self.send_response(200)
+                    for name, value in {**headers, "Content-Length": str(len(body))}.items():
+                        self.send_header(name, value)
+                    self.end_headers()
+                    self.wfile.write(body[:service.cut])
+                    self.wfile.flush()
+                    self.close_connection = True
+                    return None
                 return self.raw(200, body, headers)
 
             do_HEAD = do_GET  # noqa: N815
@@ -423,6 +433,7 @@ class Service:
             self.most_pack, self.limited, self.retry_after = 8 * MIB, 0, "1"
             self.conflicts = self.losing = self.commits = 0
             self.zips: dict[str, bytes] = {}
+            self.cut: int | None = None
 
     def puts(self, kind: str) -> list[tuple[str, str, dict[str, str], float]]:
         """The PUTs seen of ``kind``: ``pack`` or ``commit``."""
@@ -604,6 +615,9 @@ class ShareTest(unittest.TestCase):
             self.assertIn(said, words)
         self.assertNotIn("never its code", words)
         self.assertEqual(self.service.seen, [])
+        # As its help says: the first share never asks, and is refused without --yes, wherever it runs.
+        self.assertIn("the first share on a computer never asks, and without it is refused",
+                      " ".join(self.cad("--help").stdout.split()))
         as_json = json.loads(self.cad("tetra.stl", "--json").stdout)
         self.assertEqual((as_json["ok"], as_json["reason"], as_json["userActionRequired"], as_json["next"]),
                          (False, "confirmation_required", True, ["cad share tetra.stl --json --yes"]))
@@ -2076,6 +2090,18 @@ class ImportTest(unittest.TestCase):
             self.assertEqual(out.getvalue().splitlines()[1], "Made with build123d 0.13.0: this computer's CAD kernel "
                                                              "environment is made with its first build, so those were "
                                                              "not compared")
+
+    def test_a_download_cut_off_part_way_says_so_and_writes_nothing(self) -> None:
+        self.service.cut = 100
+        cut = self.import_(self.share.view, "--json")
+        self.assertEqual(cut.returncode, 1, cut.stdout + cut.stderr)
+        error = json.loads(cut.stdout)["error"]
+        self.assertRegex(error, r"^the transfer with the share service was cut off part way: 127\.0\.0\.1:\d+ began "
+                                r"to answer, then stopped \(\d+ bytes short\)\. Try again$")
+        self.assertNotIn("sandbox", error)
+        self.assertEqual(list(self.here.iterdir()), [])
+        self.service.cut = None
+        self.assertEqual(self.import_(self.share.view).returncode, 0)
 
     def test_a_folder_that_holds_files_is_refused_and_a_share_gone_is_said(self) -> None:
         (self.here / "taken").mkdir()
