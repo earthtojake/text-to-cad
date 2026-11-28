@@ -501,5 +501,66 @@ class SpawnTest(unittest.TestCase):
         self.assertEqual(context.get_start_method(), "spawn")
 
 
+class WasmKernelTest(unittest.TestCase):
+    """The person's choice of kernel (``settings.json``'s ``kernel`` section): the WebAssembly kernel in the folder
+    it names is what the engine is handed, before any base; a folder that is no kernel folder is refused, never
+    answered with the base the person did not choose."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory(prefix="cadgen-wasm-kernel-")
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name).resolve()
+        folders = mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.root / "state"),
+                                               "CAD_CACHE_DIR": str(self.root / "cache")})
+        folders.start()
+        self.addCleanup(folders.stop)
+        self.home = self.root / "kernel"
+
+    def choose(self, section: object) -> None:
+        (self.root / "state").mkdir(exist_ok=True)
+        (self.root / "state" / "settings.json").write_text(json.dumps({"kernel": section}), encoding="utf-8")
+
+    def make(self, schema: str = base.WASM_SCHEMA, launcher: bool = True) -> None:
+        (self.home / "bin").mkdir(parents=True, exist_ok=True)
+        (self.home / base.WASM_MARKER).write_text(json.dumps({"schema": schema}), encoding="utf-8")
+        if launcher:
+            (self.home / "bin" / "python").write_text("#!/bin/sh\n", encoding="utf-8")
+
+    def test_no_choice_or_the_native_one_is_the_base(self) -> None:
+        self.assertIsNone(base.wasm_kernel())
+        for section in ({"kind": "native"}, {"kind": "native", "folder": str(self.home)}, {}, "wasm"):
+            self.choose(section)
+            self.assertIsNone(base.wasm_kernel(), section)
+
+    def test_the_kernel_folder_chosen_is_what_the_engine_is_handed_and_no_base_is_looked_for(self) -> None:
+        self.make()
+        self.choose({"kind": "wasm", "folder": str(self.home)})
+        chosen = {"python": str(self.home / "bin" / "python"), "prefix": str(self.home), "path": None, "own": True,
+                  "wasm": True}
+        with mock.patch.object(base, "ensure", side_effect=AssertionError("the base is not the kernel chosen")):
+            self.assertEqual(base.kernel(), chosen)
+            self.assertEqual(base.kernel(make=False), chosen)
+
+    def test_a_choice_that_names_no_kernel_folder_is_refused_in_one_line(self) -> None:
+        for section in ({"kind": "wasm"}, {"kind": "wasm", "folder": "kernel"}, {"kind": "wasm", "folder": 3}):
+            self.choose(section)
+            with self.assertRaises(base.Refused) as refused:
+                base.kernel()
+            self.assertIn("name no folder", str(refused.exception))
+        self.choose({"kind": "wasm", "folder": str(self.home)})
+        for schema, launcher in ((None, True), ("another kernel/9", True), (base.WASM_SCHEMA, False)):
+            if schema is not None:
+                self.make(schema, launcher=False)
+                (self.home / "bin" / "python").unlink(missing_ok=True)
+                if launcher:
+                    self.make(schema)
+            with self.assertRaises(base.Refused) as refused, \
+                    mock.patch.object(base, "ensure", side_effect=AssertionError("nothing falls back to the base")):
+                base.kernel(make=False)
+            said = str(refused.exception)
+            self.assertIn("is no WebAssembly kernel folder", said)
+            self.assertNotIn("\n", said)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -101,6 +101,21 @@ class FinderTest(unittest.TestCase):
 
         self.assertEqual((standin_kernel.sub.PART, self.runs()), ("a part", 1))
 
+    def test_a_kernel_that_is_one_extension_module_is_imported_as_ever(self) -> None:
+        # The WebAssembly binding's ``OCP`` is one extension module whose body makes its submodules: a lazy one
+        # would have none when ``from OCP.BRep import ...`` asks the import system for it.
+        from importlib.machinery import ExtensionFileLoader, ModuleSpec
+
+        file = str(self.folder / "standin_kernel.so")
+        single = ModuleSpec("standin_kernel", ExtensionFileLoader("standin_kernel", file), origin=file)
+        with mock.patch.object(lazy_kernel.PathFinder, "find_spec", return_value=single):
+            self.assertIsNone(lazy_kernel.LazyKernelFinder().find_spec("standin_kernel"))
+        # A package of extension modules (the native binding's) is lazy as any package is.
+        package = ModuleSpec("standin_kernel", ExtensionFileLoader("standin_kernel", file), origin=file, is_package=True)
+        with mock.patch.object(lazy_kernel.PathFinder, "find_spec", return_value=package):
+            found = lazy_kernel.LazyKernelFinder().find_spec("standin_kernel")
+        self.assertIsInstance(found.loader, lazy_kernel.KernelLoader)
+
     def test_installing_twice_is_one_finder_and_other_names_are_not_its(self) -> None:
         lazy_kernel.install()
         lazy_kernel.install()

@@ -446,6 +446,12 @@ class SchedulingTest(unittest.TestCase):
         self.assertNotEqual(engine.caller(order(str(venv / "bin" / "python"), venv, "0.10.1"))[1], key,
                             "another release of cad there, under one contract: a worker of its own")
         self.assertEqual(engine.caller({}), (None, None), "an order that names no Python: the server's own")
+        # Where the person's settings choose the WebAssembly kernel, every script is built there, whatever
+        # Python ran it: no worker is started on a caller's native one.
+        chosen = {"python": str(folder / "kernel" / "bin" / "python"), "prefix": str(folder / "kernel"),
+                  "path": None, "own": True, "wasm": True}
+        with mock.patch("cad.engine.places.kernel", return_value=chosen):
+            self.assertEqual(engine.caller(order(str(venv / "bin" / "python"), venv, "0.10.0")), (None, None))
 
     def test_a_held_document_whose_own_python_s_worker_is_gone_is_not_held_and_asked_of_no_other(self) -> None:
         from cad_server.engine.daemon import Daemon

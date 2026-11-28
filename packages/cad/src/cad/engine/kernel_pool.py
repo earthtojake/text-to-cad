@@ -91,7 +91,7 @@ class KernelPool:
             if self._stopped:
                 raise RuntimeError("cannot schedule new futures after shutdown")
             self._waiting.append(job)
-            if self._idle == 0 and len(self._threads) < self.workers:
+            if len(self._waiting) > self._idle and len(self._threads) < self.workers:
                 thread = threading.Thread(target=self._serve, name=f"cad-kernel-pool-{len(self._threads)}", daemon=True)
                 self._threads.append(thread)
                 thread.start()
@@ -161,8 +161,9 @@ class KernelPool:
                     kind, value = _read(child.stdout)
                 except BaseException as error:  # noqa: BLE001 - a process that did not start, or died in the job
                     code = None if child is None else child.poll()
-                    if child is not None and code is None:
-                        child.kill()
+                    if child is not None:
+                        self._let_go(child, kill=True)
+                        code = child.returncode if code is None else code
                     child = None
                     from concurrent.futures.process import BrokenProcessPool
 
@@ -176,12 +177,29 @@ class KernelPool:
                     job.future.set_exception(value)
         finally:
             if child is not None:
-                try:
-                    child.stdin.close()  # its input closed: it exits
-                except OSError:
-                    pass
+                self._let_go(child)
             with self._wake:
                 self._children.pop(ident, None)
+
+    @staticmethod
+    def _let_go(child: subprocess.Popen, kill: bool = False) -> None:
+        """A process's pipes closed and the process waited for: its input closed, it exits by itself; one that
+        does not (or one to ``kill``) is ended."""
+        for stream in (child.stdin, child.stdout):
+            try:
+                stream.close()
+            except OSError:
+                pass
+        try:
+            if kill and child.poll() is None:
+                child.kill()
+            child.wait(timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                child.kill()
+                child.wait(timeout=30)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
 
 
 def main() -> int:
