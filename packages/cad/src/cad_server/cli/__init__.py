@@ -109,6 +109,9 @@ _RENAMED: dict[str, str] = {"status": "cad server status", "stop": "cad server s
 # releases 0.10.0 to 0.11.11 told a person to run outside an agent's sandbox (``cad_server.cli.server`` asks it).
 _BARE: dict[str, tuple[str, frozenset[str]]] = {
     "server": ("cad server start", frozenset({"start", "stop", "status", "--rotate-token", "-h", "--help"}))}
+# The commands the command had and has none in the place of (the migration guide): answered as any unknown command is,
+# with no command named, for none is what they did (``_unknown``).
+_REMOVED = frozenset({"serve", "delete"})
 # A document type's operations as the command spelled them (``cad <type> <operation>``, ``cad model <operation>``),
 # each with the verb that does it now.
 _OPERATIONS_NOW: dict[str, str] = {
@@ -413,7 +416,10 @@ def _unknown(word: str, rest: list[str]) -> int:
     hint = _hint([word, *rest])
     if hint is not None:
         return write(Failure(hint, "usage"), prog="cad", as_json=wants_json(rest))
-    close = suggest(word, [*(name for name in _COMMANDS if name not in _UNLISTED), *INTEGRATION_COMMANDS])
+    # Never a command whose bare form is itself an earlier spelling (``_BARE``), which runs nothing, and none for a
+    # removed command (``_REMOVED``): a name a person typed on purpose is not a typo of another.
+    close = None if word in _REMOVED else suggest(
+        word, [*(name for name in _COMMANDS if name not in _UNLISTED and name not in _BARE), *INTEGRATION_COMMANDS])
     words = (f"unknown command {word!r}" + (f" (did you mean {close!r}?)" if close else "")
              + "; 'cad --help' lists the commands")
     return write(Failure(words, "usage"), prog="cad", as_json=wants_json(rest))

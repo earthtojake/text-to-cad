@@ -386,6 +386,11 @@ class MujocoCheck(unittest.TestCase):
         code, _, err = _run(["mjcf", "validate", str(self.model)])
         self.assertEqual((code, err), (2, "cad: unknown command 'mjcf' (did you mean 'mujoco'?); 'cad --help' lists the "
                                           "commands\n"))
+        # `serve` is removed with nothing in its place: no suggestion (it is as near `share`, which shares a file),
+        # and a typo of `server` is not sent to bare `cad server`, itself an earlier spelling that runs nothing.
+        for word in ("serve", "servr"):
+            code, _, err = _run([word, "x.xbf"])
+            self.assertEqual((code, err), (2, f"cad: unknown command {word!r}; 'cad --help' lists the commands\n"))
 
     def test_the_parser_is_the_generated_one(self) -> None:
         from cad_server.cli.integrations import build_parser
