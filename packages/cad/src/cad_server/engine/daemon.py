@@ -978,6 +978,8 @@ class Daemon:
             base = _places.kernel(make=False)
         except Exception:  # noqa: BLE001 - no base to tell it from: the caller's own Python, whatever it is
             base = None
+        if base is not None and base.get("wasm"):
+            return None, None  # the WebAssembly kernel builds every script, whatever Python ran it
         if base is not None and base.get("prefix") and _same_place(str(base["prefix"]), prefix):
             return None, None
         return executable, f"{os.path.normcase(os.path.realpath(prefix))}\0{named.get('release')}"

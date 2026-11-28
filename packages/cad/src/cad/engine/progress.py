@@ -63,6 +63,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, TextIO
 
+from cad.engine.places import THREADS
+
 __all__ = ["INTERVAL", "KINDS", "STAGES", "Bar", "Progress", "building", "current", "describe", "event", "say",
            "sink", "words"]
 
@@ -151,7 +153,7 @@ class Progress:
         now = time.monotonic()
         if not force and now - self.sent < INTERVAL:
             self.held = True
-            if self.timer is None:
+            if self.timer is None and THREADS:  # with no thread to send it, a held frame goes with the next one
                 self.timer = threading.Timer(INTERVAL - (now - self.sent), self._flush)
                 self.timer.daemon = True
                 self.timer.start()

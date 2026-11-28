@@ -349,6 +349,9 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     on the same making, each line of it said to the request this need came from, ``TOLD``), unless that making
     failed and the failure is remembered (``Making.remembered``). ``Refused`` when it cannot be, saying what the
     person can do next, with the failure's cause."""
+    chosen = wasm_kernel()
+    if chosen is not None:
+        return chosen
     found = ensure(make=False)
     if found is None and make:
         earlier = MAKING.remembered()
@@ -363,6 +366,45 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
         return None
     return {"python": found.python, "prefix": found.prefix, "path": None if found.path is None else list(found.path),
             "own": found.own}
+
+
+# The person's choice of kernel (``settings.json``'s ``kernel`` section): ``{"kind": "wasm", "folder": PATH}`` runs
+# the engine's kernel processes on the WebAssembly kernel in the folder named (a kernel folder: its ``kernel.json``
+# says what it was made of, its ``bin/python`` starts it); no section, or ``{"kind": "native"}``, the base.
+KERNEL_SETTING = "kernel"
+WASM_MARKER = "kernel.json"
+WASM_SCHEMA = "cad wasm kernel/1"
+
+
+def wasm_kernel() -> dict[str, Any] | None:
+    """The WebAssembly kernel as the engine is handed it, where the person's settings choose it; None where they
+    choose the base (no ``kernel`` section, or another kind). Its ``python`` is the kernel folder's own launcher;
+    it is ``own`` in what that means to a process started there (it is given the engine's folder, and runs the
+    engine's code as this server has it), and ``wasm``, which tells the engine's pools and the builds' leases what
+    it cannot be asked (``places.kernel``). ``Refused`` in one line where the folder named is no kernel folder:
+    nothing falls back to the base, which the person did not choose."""
+    from cad_server import settings
+
+    try:
+        section = settings.read_section(KERNEL_SETTING)
+    except OSError:
+        return None
+    if section.get("kind") != "wasm":
+        return None
+    folder = section.get("folder")
+    if not isinstance(folder, str) or not os.path.isabs(folder):
+        raise Refused("the settings choose the WebAssembly kernel and name no folder for it "
+                      '("kernel": {"kind": "wasm", "folder": an absolute path})', "other")
+    home = Path(folder)
+    try:
+        marker = json.loads((home / WASM_MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        marker = None
+    python = home / "bin" / "python"
+    if not isinstance(marker, dict) or marker.get("schema") != WASM_SCHEMA or not python.is_file():
+        raise Refused(f"{folder} is no WebAssembly kernel folder (no {WASM_MARKER} of {WASM_SCHEMA} and bin/python "
+                      "in it): make it again, or choose the native kernel in the settings", "other")
+    return {"python": str(python), "prefix": str(home), "path": None, "own": True, "wasm": True}
 
 
 def _span(seconds: float) -> str:

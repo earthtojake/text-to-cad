@@ -42,6 +42,10 @@ __all__ = ["BYTECODE", "DISPLAY", "EXTRAS", "HOME", "KERNEL", "SEPARATE", "NAME"
            "lock", "lock_path", "make_engine_dir", "port_path", "registered", "state_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
+# Whether this Python starts threads and child processes. The WebAssembly kernel's (CPython on Emscripten, which a
+# host runs for the engine's kernel processes) starts neither: what the engine does there it does in the one thread,
+# in order (``worker.main``, ``progress.Progress``).
+THREADS = sys.platform not in ("emscripten", "wasi")
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
 # are ``engine.lock``, ``engine.door``, ``engine.port`` and ``engine.failed``. One engine a device: the
 # one a client finds there, whatever release it runs, and whatever release the client is. Its record in
@@ -733,7 +737,10 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     """The environment the engine's kernel processes run in (``KERNEL``): ``{"python", "prefix", "path",
     "own"}`` -- ``prefix``: the environment, which a build in its caller's Python is told from (the
     server's ``Daemon.caller``); ``own``: this interpreter's environment, whose engine folder a process
-    started there is given and whose import path a spawned process is handed as it is -- or None when it
+    started there is given and whose import path a spawned process is handed as it is; and ``wasm``, true
+    where a person chose the WebAssembly kernel (its ``python`` a host that runs CPython compiled to
+    WebAssembly, given the engine's folder as an own environment's process is: every build is built there,
+    whatever Python its script was run with, and the pools are ``kernel_pool.KernelPool``) -- or None when it
     is not made and ``make`` is false. ``serve.KernelProcessesUnavailable`` when it cannot be made, saying
     why and with the cause the server gave its refusal (its ``cause``, else ``other``): no kernel process starts
     without it. What the server remembers of a failed making is the server's (``KERNEL``)."""

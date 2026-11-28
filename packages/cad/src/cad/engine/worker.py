@@ -128,6 +128,14 @@ def resident_mb() -> float | None:
         if sys.platform.startswith("linux"):
             with open("/proc/self/statm", encoding="ascii") as handle:
                 return int(handle.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 2**20
+        if sys.platform == "emscripten":
+            # The WebAssembly kernel: the process is its host's (Node's), which a Linux host shows it here; the
+            # page size this Python knows is its own memory's, so the kernel's figure in kB is read.
+            with open("/proc/self/status", encoding="ascii") as handle:
+                for line in handle:
+                    if line.startswith("VmRSS:"):
+                        return int(line.split()[1]) / 1024
+            return None
         if os.name == "nt":
             import ctypes
             from ctypes import wintypes
@@ -421,6 +429,14 @@ def kernel(say: Callable[[str], None]) -> None:
     imports name none of it: the server's ``cad run`` makes it with the integrations they name) loads
     none: what its build imports is its own."""
     if _KERNEL_LOADED or not _has_kernel():
+        return
+    from cad.engine.places import THREADS
+
+    if not THREADS:  # nothing can speak while the load goes on: it is said after, if it took that long
+        began = time.monotonic()
+        load_kernel()
+        if time.monotonic() - began > KERNEL_PATIENCE:
+            say(KERNEL_NOTICE)
         return
     told = threading.Timer(KERNEL_PATIENCE, say, (KERNEL_NOTICE,))
     told.daemon = True
@@ -875,7 +891,7 @@ def main() -> int:
     # device (``places.standard_input_aside``): on Windows a model's first import would otherwise wait
     # for the daemon's next request, which waits for the build -- a worker that never builds. And a
     # model reading its input reads none of the protocol.
-    from cad.engine.places import standard_input_aside
+    from cad.engine.places import THREADS, standard_input_aside
 
     asked = os.fdopen(standard_input_aside(), "rb")
 
@@ -896,6 +912,21 @@ def main() -> int:
 
     requests: "queue.Queue[dict[str, Any] | None]" = queue.Queue()
 
+    def parsed(line: bytes) -> dict[str, Any] | None:
+        """The request on ``line`` (its bytes read after it), or None for a ``where``, answered here and now."""
+        with quiet():  # a request read while a build is profiled waits for the profile (``profiling``)
+            request = json.loads(line)
+            if request.get("bytes"):
+                request["payload"] = asked.read(int(request["bytes"]))
+            if request.get("op") != "where":
+                return request
+            try:
+                found = made_by(request["doc"], request["key"], request["kind"], int(request["ordinal"]))
+            except Exception:  # noqa: BLE001 - a question it cannot answer is answered with nothing
+                found = None
+            send({"id": request.get("id"), "where": found})
+            return None
+
     def read() -> None:
         """Every request as it comes: a ``where`` answered here and now, the rest queued
         for the build loop."""
@@ -903,20 +934,28 @@ def main() -> int:
             for line in asked:
                 if not line.strip():
                     continue
-                with quiet():  # a request read while a build is profiled waits for the profile (``profiling``)
-                    request = json.loads(line)
-                    if request.get("bytes"):
-                        request["payload"] = asked.read(int(request["bytes"]))
-                    if request.get("op") == "where":
-                        try:
-                            found = made_by(request["doc"], request["key"], request["kind"], int(request["ordinal"]))
-                        except Exception:  # noqa: BLE001 - a question it cannot answer is answered with nothing
-                            found = None
-                        send({"id": request.get("id"), "where": found})
-                    else:
-                        requests.put(request)
+                request = parsed(line)
+                if request is not None:
+                    requests.put(request)
         finally:
             requests.put(None)
+
+    def waited(idle: float | None = None) -> dict[str, Any] | None:
+        """The next request for the build loop, None once the daemon has closed the pipe; ``queue.Empty`` when
+        none came in ``idle`` seconds. On a Python that starts no thread (``places.THREADS``: the WebAssembly
+        kernel's) nothing reads ahead of the loop: the request is read when the loop comes for it, so a ``where``
+        asked during a build is answered after it, and an idle wait is over at once (the worker collects as soon
+        as it has answered, before it reads the next request)."""
+        if THREADS:
+            return requests.get() if idle is None else requests.get(timeout=idle)
+        if idle is not None:
+            raise queue.Empty
+        for line in asked:
+            if line.strip():
+                request = parsed(line)
+                if request is not None:
+                    return request
+        return None
 
     # A request runs in its folder (its ``cwd``, else the one this worker started in: its script's),
     # so a model's relative reads resolve as before; between requests the worker stands in the
@@ -938,12 +977,13 @@ def main() -> int:
     resident = resident_mb()
     send({"ready": os.getpid(), "rssMb": None if resident is None else round(resident)})
     gc.disable()
-    threading.Thread(target=read, daemon=True).start()
+    if THREADS:
+        threading.Thread(target=read, daemon=True).start()
     owed = False  # a collection, since the last request answered
     while True:
         if owed:
             try:
-                request = requests.get(timeout=COLLECT_IDLE)
+                request = waited(COLLECT_IDLE)
             except queue.Empty:
                 clock = time.perf_counter()
                 gc.collect()  # idle: the cycles the last builds left
@@ -951,7 +991,7 @@ def main() -> int:
                 send({"collected": round(time.perf_counter() - clock, 4)})
                 continue
         else:
-            request = requests.get()
+            request = waited()
         if request is None:
             break
         ident = request.get("id")

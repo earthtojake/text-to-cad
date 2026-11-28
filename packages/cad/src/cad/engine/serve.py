@@ -489,13 +489,26 @@ class KernelProcessesUnavailable(RuntimeError):
 def _process_pool(workers: int, **options: Any) -> concurrent.futures.ProcessPoolExecutor:
     """A spawn pool of ``workers`` kernel processes, or ``KernelProcessesUnavailable``. Its processes run
     the engine's kernel environment (``places.kernel``: the base, made first when it is not): this
-    interpreter, or another environment's Python (``_spawn_in``). On Windows the attribute read below is
+    interpreter, or another environment's Python (``_spawn_in``); where that environment is the WebAssembly
+    kernel (``wasm``), the pool is ``kernel_pool.KernelPool``, which stands in for one. On Windows the attribute read below is
     what imports ``multiprocessing.connection`` (and so ``_multiprocessing``), which is why it sits
     inside the ``try``."""
     from cad.engine.places import kernel
 
     found = kernel()
     assert found is not None  # made, or refused
+    if found.get("wasm"):
+        # The WebAssembly kernel starts no spawn pool: its processes are programs the pool speaks to (``kernel_pool``).
+        from cad.engine.kernel_pool import KernelPool
+        from cad.engine.places import engine_root
+
+        try:
+            return KernelPool(workers, found["python"], [engine_root()], initializer=options.get("initializer"),
+                              max_tasks_per_child=options.get("max_tasks_per_child"))  # type: ignore[return-value]
+        except OSError as error:
+            raise KernelProcessesUnavailable(
+                f"The CAD engine could not start its kernel processes in {found['python']} "
+                f"({type(error).__name__}: {error})", "pool") from error
     try:
         import multiprocessing
 

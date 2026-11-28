@@ -10,7 +10,9 @@ attribute anything reads from it (``bd.Box``), in whichever process that is.
 
 ``from build123d import Box`` reads an attribute to bind ``Box``, so it loads the kernel there and
 then, as without the finder; ``import OCP.Standard`` loads ``OCP`` to find its submodule, and the
-submodule as ever. Only the top-level packages are lazy: a submodule is imported when asked.
+submodule as ever. Only the top-level packages are lazy: a submodule is imported when asked. An ``OCP``
+that is one extension module and no package (the WebAssembly kernel's) is not made lazy: its submodules
+are its body's to make.
 
 Every later ``import build123d`` -- a project's helper module importing it as the script did --
 binds the same module and loads nothing. The import system reads a module's ``__spec__`` on each
@@ -30,7 +32,7 @@ import importlib.util
 import sys
 import threading
 import types
-from importlib.machinery import PathFinder
+from importlib.machinery import ExtensionFileLoader, PathFinder
 from typing import Any
 
 KERNEL = ("build123d", "OCP")
@@ -78,6 +80,11 @@ class LazyKernelFinder:
         spec = PathFinder.find_spec(fullname, path, target)
         if spec is None or spec.loader is None or not hasattr(spec.loader, "exec_module"):
             return None  # nothing to defer: the next finder imports it as ever
+        if spec.submodule_search_locations is None and isinstance(spec.loader, ExtensionFileLoader):
+            # A kernel that is one extension module and no package (the WebAssembly binding's ``OCP``): its
+            # submodules exist only once its body has run, and ``from OCP.BRep import ...`` asks the import
+            # system for one before it reads anything of the parent. Imported as ever.
+            return None
         spec.loader = KernelLoader(spec.loader)
         return spec
 
