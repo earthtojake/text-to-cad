@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import http.client
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -93,31 +95,89 @@ def where(pinned: dict[str, Any] | None = None, runs: str | None = None) -> Path
 
 
 def _fetched(item: dict[str, Any], downloads: Path, told: Callable[[str], None]) -> Path:
-    """One of the lock's files in ``downloads``, by its sha256: fetched where it is not there, and checked."""
+    """One of the lock's files in ``downloads``, by its sha256: fetched where it is not there, hashed as it comes and
+    put in its place only once it is the file the lock names, so a file there is always one that was checked (another
+    process's download of it is its own, beside it, until it is checked too)."""
     kept = downloads / item["sha256"]
-    if not kept.is_file():
-        told(f"downloading {item['file']}")
-        partial = kept.with_name(f"{kept.name}.part-{os.getpid()}")
-        try:
-            with urllib.request.urlopen(item["url"], timeout=120) as answer, open(partial, "wb") as out:  # noqa: S310
-                shutil.copyfileobj(answer, out)
-        except (urllib.error.URLError, OSError, ValueError) as error:
-            partial.unlink(missing_ok=True)
-            why = getattr(error, "reason", None) or getattr(error, "strerror", None) or error
-            raise base.Refused(f"the WebAssembly kernel's {item['file']} could not be downloaded from "
-                               f"{item['url']} ({why}): connect to the network and ask again, {_BY_HAND}",
-                               "network") from None
-        partial.replace(kept)
-    digest = hashlib.sha256()
-    with open(kept, "rb") as read:
-        for block in iter(lambda: read.read(1 << 20), b""):
-            digest.update(block)
+    if kept.is_file():
+        digest = hashlib.sha256()
+        with open(kept, "rb") as read:
+            for block in iter(lambda: read.read(1 << 20), b""):
+                digest.update(block)
+        if digest.hexdigest() == item["sha256"]:
+            return kept
+        kept.unlink(missing_ok=True)  # damaged since: fetched again
+    told(f"downloading {item['file']}")
+    partial = kept.with_name(f"{kept.name}.part-{os.getpid()}")
+    digest, size, expected = hashlib.sha256(), 0, None
+    try:
+        with urllib.request.urlopen(item["url"], timeout=120) as answer:  # noqa: S310
+            length = answer.headers.get("Content-Length")
+            expected = int(length) if length and length.isdigit() else None
+            try:
+                out = open(partial, "wb")
+            except OSError as error:
+                raise _Disk(error) from None
+            with out:
+                for block in iter(lambda: answer.read(1 << 20), b""):
+                    digest.update(block)
+                    size += len(block)
+                    try:
+                        out.write(block)
+                    except OSError as error:
+                        raise _Disk(error) from None
+    except _Disk as disk:
+        partial.unlink(missing_ok=True)
+        raise base.Refused(f"the WebAssembly kernel's {item['file']} could not be written to {downloads} "
+                           f"({disk.error.strerror or disk.error}): free some room and ask again", "other") from None
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as error:
+        partial.unlink(missing_ok=True)
+        why = getattr(error, "reason", None) or getattr(error, "strerror", None) or type(error).__name__
+        raise base.Refused(f"the WebAssembly kernel's {item['file']} could not be downloaded from "
+                           f"{item['url']} ({why}): connect to the network and ask again, {_BY_HAND}",
+                           "network") from None
+    if expected is not None and size < expected:
+        partial.unlink(missing_ok=True)
+        raise base.Refused(f"the WebAssembly kernel's {item['file']} stopped downloading from {item['url']} after "
+                           f"{size} of {expected} bytes: connect to the network and ask again, {_BY_HAND}", "network")
     if digest.hexdigest() != item["sha256"]:
-        kept.unlink(missing_ok=True)
+        partial.unlink(missing_ok=True)
         raise base.Refused(f"the WebAssembly kernel's {item['file']}, downloaded from {item['url']}, is not the file "
                            f"this release of cad names (sha256 {digest.hexdigest()[:16]}..., expected "
                            f"{item['sha256'][:16]}...): ask again to download it afresh, {_BY_HAND}", "other")
+    partial.replace(kept)
     return kept
+
+
+class _Disk(Exception):
+    """A download's file that could not be written (a full disk): no failure of the network's."""
+
+    def __init__(self, error: OSError) -> None:
+        super().__init__(str(error))
+        self.error = error
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except (PermissionError, OSError):
+        return True
+    return True
+
+
+def _swept(folder: Path) -> None:
+    """What a making that was killed left in ``folder`` (``<key>.making-<pid>``, ``<sha256>.part-<pid>``), where that
+    process is gone."""
+    for left in folder.glob("*"):
+        found = re.search(r"\.(?:making|part)-(\d+)$", left.name)
+        if found is None or _alive(int(found[1])):
+            continue
+        if left.is_dir():
+            shutil.rmtree(left, ignore_errors=True)
+        else:
+            left.unlink(missing_ok=True)
 
 
 def _unpacked(wheel: Path, site: Path, slim: bool) -> None:
@@ -167,6 +227,8 @@ def ensure(*, make: bool = True, told: Callable[[str], None] | None = None) -> P
 
     downloads = places.cache_dir() / "kernel" / "downloads"
     downloads.mkdir(parents=True, exist_ok=True)
+    _swept(downloads)
+    _swept(folder.parent)
     viewcore = pinned.get("viewcore")
     told(f"making the WebAssembly CAD kernel, once: {len(pinned['core']) + len(pinned['packages'])} files of "
          f"Pyodide {pinned['pyodide']}" + (", and the view core" if viewcore else ""))
@@ -186,8 +248,8 @@ def ensure(*, make: bool = True, told: Callable[[str], None] | None = None) -> P
         (staged / "bin").mkdir()
         launcher = staged / "bin" / "python"
         # The launcher names its own folder as it will stand and the Node it runs.
-        launcher.write_text(f'#!/bin/sh\nCAD_KERNEL_HOME="{folder}" exec "{runs}" "{folder / "host" / "python.mjs"}" "$@"\n',
-                            encoding="utf-8")
+        launcher.write_text(f'#!/bin/sh\nCAD_KERNEL_HOME={shlex.quote(str(folder))} exec {shlex.quote(runs)} '
+                            f'{shlex.quote(str(folder / "host" / "python.mjs"))} "$@"\n', encoding="utf-8")
         launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         if viewcore:
             _unpacked(_fetched(viewcore, downloads, told), staged / "core", False)
@@ -195,7 +257,8 @@ def ensure(*, make: bool = True, told: Callable[[str], None] | None = None) -> P
                 raise base.Refused(f"the view core's {viewcore['file']} holds no {_SERVE} and dist/viewcore.wasm: "
                                    f"{_BY_HAND}", "other")
             serve = staged / "bin" / "viewcore"
-            serve.write_text(f'#!/bin/sh\nexec "{runs}" "{folder / "core" / _SERVE}" "$@"\n', encoding="utf-8")
+            serve.write_text(f'#!/bin/sh\nexec {shlex.quote(runs)} {shlex.quote(str(folder / "core" / _SERVE))} "$@"\n',
+                             encoding="utf-8")
             serve.chmod(serve.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         (staged / base.WASM_MARKER).write_text(json.dumps({
             "schema": base.WASM_SCHEMA, "pyodide": pinned["pyodide"], "python": pinned["python"],

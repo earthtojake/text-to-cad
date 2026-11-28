@@ -11,6 +11,8 @@ import http.server
 import io
 import json
 import os
+import shlex
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -102,7 +104,8 @@ class KernelFolderTest(unittest.TestCase):
         folder = self.ensure(pinned)
         self.assertEqual((folder / "core" / "hosts" / "node" / "serve.mjs").read_bytes(), b"// the job server")
         launcher = (folder / "bin" / "viewcore").read_text(encoding="utf-8")
-        self.assertIn(f'exec "/usr/bin/node" "{folder / "core" / "hosts" / "node" / "serve.mjs"}" "$@"', launcher)
+        self.assertEqual(shlex.split(launcher.splitlines()[-1]),
+                         ["exec", "/usr/bin/node", str(folder / "core" / "hosts" / "node" / "serve.mjs"), "$@"])
         marker = json.loads((folder / base.WASM_MARKER).read_text(encoding="utf-8"))
         self.assertEqual(marker["core"], pinned["viewcore"]["sha256"])
         self.assertIn("and the view core", self.said[0])
@@ -131,7 +134,8 @@ class KernelFolderTest(unittest.TestCase):
         self.assertTrue((site / "looks" / "oak" / "color.png").is_file(), "but its colour maps: a material's colour")
         self.assertEqual(sorted(path.name for path in (folder / "host").iterdir()), ["bootstrap.py", "python.mjs"])
         launcher = (folder / "bin" / "python").read_text(encoding="utf-8")
-        self.assertIn(f'CAD_KERNEL_HOME="{folder}" exec "/usr/bin/node" "{folder / "host" / "python.mjs"}" "$@"', launcher)
+        self.assertEqual(shlex.split(launcher.splitlines()[-1]),
+                         [f"CAD_KERNEL_HOME={folder}", "exec", "/usr/bin/node", str(folder / "host" / "python.mjs"), "$@"])
         self.assertTrue(os.access(folder / "bin" / "python", os.X_OK))
         marker = json.loads((folder / base.WASM_MARKER).read_text(encoding="utf-8"))
         self.assertEqual((marker["schema"], marker["python"], marker["deferred"]), (base.WASM_SCHEMA, "3.14", ["scipy"]))
@@ -203,6 +207,71 @@ class KernelFolderTest(unittest.TestCase):
             for _ in range(3):
                 self.assertEqual(self._real_node(), "/opt/node24/bin/node")
         self.assertEqual(run.call_count, 1)
+
+    def test_a_download_is_kept_only_once_it_is_the_file_and_a_short_one_is_the_network_s(self) -> None:
+        """A file is put in its place only after its bytes are the lock's (a wrong one leaves nothing kept); a download
+        that stops short is a network failure; one that cannot be written is the disk's, not the network's."""
+        downloads = self.root / "cache" / "kernel" / "downloads"
+        self.files["pyodide.mjs"] = b"another file"
+        (self.root / "index" / "pyodide.mjs").write_bytes(b"another file")
+        wrong = self.locked()
+        wrong["core"][0]["sha256"] = hashlib.sha256(b"the file the lock names").hexdigest()
+        with self.assertRaisesRegex(base.Refused, "is not the file this release of cad names"):
+            self.ensure(wrong)
+        self.assertFalse((downloads / wrong["core"][0]["sha256"]).exists(), "nothing unchecked is kept")
+        self.assertEqual(list(downloads.glob("*.part-*")), [])
+
+        class Short(_Quiet):
+            def do_GET(self) -> None:
+                self.send_response(200)
+                self.send_header("Content-Length", "1000")
+                self.end_headers()
+                self.wfile.write(b"x" * 10)
+
+        short = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Short)
+        threading.Thread(target=short.serve_forever, daemon=True).start()
+        self.addCleanup(short.server_close)
+        self.addCleanup(short.shutdown)
+        stopped = self.locked()
+        stopped["core"][0]["url"] = f"http://127.0.0.1:{short.server_address[1]}/pyodide.mjs"
+        with self.assertRaises(base.Refused) as refused:
+            self.ensure(stopped)
+        self.assertEqual(refused.exception.cause, "network")
+        self.assertIn("connect to the network and ask again", str(refused.exception))
+        real_open = open
+
+        def full(path, mode="r", *args, **kwargs):
+            if ".part-" in str(path) and "w" in mode:
+                raise OSError(28, "No space left on device")
+            return real_open(path, mode, *args, **kwargs)
+
+        with mock.patch("builtins.open", full), self.assertRaises(base.Refused) as refused:
+            self.ensure(self.locked())
+        self.assertEqual(refused.exception.cause, "other")
+        self.assertIn("could not be written", str(refused.exception))
+        self.assertIn("No space left on device", str(refused.exception))
+
+    def test_what_a_killed_making_left_is_swept_and_a_living_one_s_is_not(self) -> None:
+        kernel, downloads = self.root / "cache" / "kernel", self.root / "cache" / "kernel" / "downloads"
+        downloads.mkdir(parents=True)
+        gone = subprocess.Popen(["true"])
+        gone.wait()
+        for path in (kernel / f"abc.making-{gone.pid}", kernel / f"abc.making-{os.getpid()}"):
+            path.mkdir()
+        (downloads / f"{'0' * 64}.part-{gone.pid}").write_bytes(b"half")
+        self.ensure(self.locked())
+        self.assertFalse((kernel / f"abc.making-{gone.pid}").exists())
+        self.assertFalse((downloads / f"{'0' * 64}.part-{gone.pid}").exists())
+        self.assertTrue((kernel / f"abc.making-{os.getpid()}").exists(), "a living process's making is its own")
+
+    def test_a_cache_path_the_shell_would_read_is_quoted_in_the_launcher(self) -> None:
+        odd = self.root / 'cache $HOME `x` "q"'
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(odd)}):
+            folder = self.ensure(self.locked())
+        line = (folder / "bin" / "python").read_text(encoding="utf-8").splitlines()[-1]
+        self.assertEqual(shlex.split(line)[0], f"CAD_KERNEL_HOME={folder}")
+        checked = subprocess.run(["sh", "-n", str(folder / "bin" / "python")], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
 
     _real_node = staticmethod(kernel_folder.node)
 
