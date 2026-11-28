@@ -60,7 +60,7 @@ A program that holds a shape -- a script with no model, a REPL, a notebook -- sa
 the engine, exportable, and returned as a handle whose `.shape` is the shape passed.
 
 `import build123d as bd` binds at once: the library makes the import of `build123d` and `OCP` lazy
-(its `cad-lazy-kernel.pth`, run at interpreter start in the environment the library is
+(its `cad.pth`, run at interpreter start in the environment the library is
 installed in, and `import cad` in a checkout), so the kernel loads on the first attribute anything
 reads from it -- in the worker, for a build the daemon runs, and never in a run of the script
 the engine finds current. `from build123d import Box` reads the name, and loads the kernel at

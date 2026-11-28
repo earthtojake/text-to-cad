@@ -451,6 +451,14 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     link() {
       return request(`${API}/local/link`, { operation: 'link' });
     },
+    // The update button (`POST /api/v1/local/update`): a person's update of cad, as `cad update` asks it, and a failure
+    // put away for every page (`{dismiss: at}`, the attempt's start); each answers what `GET /api/v1/server` says of it.
+    startUpdate() {
+      return request(`${API}/local/update`, { method: 'POST', headers: JSON_POST, body: {}, operation: 'update' });
+    },
+    dismissUpdate(at) {
+      return request(`${API}/local/update`, { method: 'POST', headers: JSON_POST, body: { dismiss: at }, operation: 'update' });
+    },
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl(`${API}/local/activity`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});
     },

@@ -22,9 +22,9 @@ takes the computer onto the one-cad design by itself:
    global cad is there already; then step 5. Where that moves nothing, it is tried again a day later, and at each
    start.
 5. Once a report said cad was installed, or step 4b ran, and nothing is in flight (``Tending``, ``move``):
-   ``installations/current`` and its record name the global cad's environment (a uv tool, or pipx's), and a detached
-   helper that is not cad (``auto_update_helper``) stops this server and starts the global cad's (``cad server
-   start``). From then on it is a normal computer, whose server updates itself.
+   ``installations/current`` and its record name the global cad's environment (a uv tool), and cad's update
+   worker, run detached by that environment's interpreter (``auto_update_helper``), drains this server and starts the
+   global cad's (``cad server start``). From then on it is a normal computer, whose server updates itself.
 6. Every server of a global install, as it starts (``follow``), points ``current`` and its record at its own
    environment, so a client of 0.11.11 or earlier that finds no server (a store's copy that lags, the library in a
    person's own Python, the old ``cad`` command) starts it, and never registers its own release again.
@@ -61,7 +61,8 @@ written (and ``current`` pointed at it by a plain ``cad setup``), and nothing is
 globally (step 4b), and the store's next copy brings the rest. An old install script run there cannot be told from a
 typed ``cad update``, and gets cad alone too.
 
-Nothing here deletes anything of a past release: ``releases/`` stays until ``cad cache prune``. The module names
+Nothing here deletes anything of a past release: the folders in ``releases/`` stay until the global cad's server
+starts, which removes those nothing starts any more (``releases.tidy``; ``cad cache prune`` does the same). The module names
 ``cad_server._internal.engine_daemon`` and ``cad_server._internal.proxy`` stay too: shipped releases start them.
 
 Exit status of ``--engine-update``: 0 done; 1 failed (the updater stays on its own release).
@@ -90,6 +91,9 @@ STOP_SECONDS = 60.0
 SHIPPED = ((0, 10, 0), (0, 11, 11))
 # How long step 4b's install may take (``tool_install.install``).
 CARRY_SECONDS = 600.0
+# How long no command must have run before the bridge's part of a tending goes on (``Tending``, told it as ``quiet``
+# by ``daemon.Daemon.tend``); none need have where none has run since the server started.
+QUIET_SECONDS = 60.0
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -431,39 +435,32 @@ def follow(told: Callable[[str], None]) -> bool:
 
 
 def move(name: str, told: Callable[[str], None]) -> bool:
-    """Step 5 (see the module), from this server of release ``name`` that is no global install: whether the helper
-    started. The global cad is the one ``auto_update.installed_tool`` finds (uv's tool first, then pipx's), handed
-    over to with its installer's commands and variables. Never older: a global cad older than this release stays
-    where it is, and this server runs on."""
+    """Step 5 (see the module), from this server of release ``name`` that is no global install: whether the hand-over
+    began. The global cad is the one ``auto_update.installed_tool`` finds (uv's tool), at the release
+    it holds (``auto_update.installed``), handed over to by cad's update worker run by that environment's own
+    interpreter (``auto_update.helper_command``): it finds the release there already, drains this server and starts
+    its own. Never older: a global cad older than this release stays where it is, and this server runs on."""
     from cad.engine.places import detached, state_dir
     from cad_server._internal import auto_update
-    from cad_server._internal.auto_update_helper import installed
 
     environment = auto_update.installed_tool()
-    held = installed(str(environment)) if environment is not None else None
-    found = auto_update.global_install(str(environment)) if environment is not None and held is not None else None
-    if environment is None or held is None or found is None:
+    release = auto_update.installed(environment) if environment is not None else None
+    found = auto_update.global_install(str(environment)) if environment is not None and release else None
+    if environment is None or found is None:
         told("no global cad was found: this server runs on")
         return False
-    release = ".".join(map(str, held))
     if _later(name, release):
         told(f"the global cad {release} is older than this cad {name}: this server runs on")
         return False
     windows = os.name == "nt"
     scripts = environment / ("Scripts" if windows else "bin")
+    python = str(scripts / ("python.exe" if windows else "python"))
     try:
-        _point(release, (str(scripts / ("cad.exe" if windows else "cad")),
-                         str(scripts / ("python.exe" if windows else "python")), str(environment)))
+        _point(release, (str(scripts / ("cad.exe" if windows else "cad")), python, str(environment)))
         command = auto_update.helper_command(release, now=time.time(), version=name, install=found,
-                                             record=str(state_dir() / MOVE_RECORD))
-        inside = os.path.normcase(os.path.realpath(sys.prefix)).rstrip(os.sep) + os.sep
-        if os.path.normcase(os.path.realpath(command[0])).startswith(inside):
-            told("no Python outside this environment to hand over with: this server runs on")
-            return False
+                                             record=str(state_dir() / MOVE_RECORD), python=python)
         _start(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-               env={**{key: value for key, value in os.environ.items() if key not in auto_update._UNSET},
-                    **found.installer.environ(found.prefix)},
-               cwd=str(state_dir()), **detached())
+               env=auto_update.environ(), cwd=str(state_dir()), **detached(breakaway=True))
     except (OSError, ValueError) as error:
         told(f"could not hand over to the global cad {release}: {error}")
         return False
@@ -472,8 +469,11 @@ def move(name: str, told: Callable[[str], None]) -> bool:
 
 
 def _start(command: list[str], **options) -> None:
-    """The helper started (a seam for a test, which records it instead)."""
-    subprocess.Popen(command, **options)
+    """The worker started, on Windows outside any app package (``places.outside_package``; a seam for a test, which
+    records it instead)."""
+    from cad.engine.places import outside_package
+
+    outside_package(command, **options)
 
 
 def _brought() -> bool:
@@ -564,8 +564,9 @@ def once(told: Callable[[str], None]) -> subprocess.Popen | None:
 
 class Tending:
     """The bridge's part of a server's tending (``daemon.Daemon.tend``): ``follow`` once, at the first; the rest only
-    where nothing is in flight (``quiet``): ``once`` (step 7) at the first such; ``move`` once, where install mode's
-    report said cad was installed and no attempt runs; else step 4b (``carry``)."""
+    where nothing is in flight and no command has run for ``QUIET_SECONDS`` (``quiet``): ``once`` (step 7) at the
+    first such; ``move`` once, where install mode's report said cad was installed and no attempt runs; else step 4b
+    (``carry``)."""
 
     def __init__(self) -> None:
         self.followed = False

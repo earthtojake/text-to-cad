@@ -41,6 +41,8 @@ export interface CadOpenInTarget { target: string; kind: string; name: string; p
 export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'finder' | 'explorer' | 'files' }
 export interface CadServerInfo {
   autoReload?: boolean;
+  /** The release the engine runs. */
+  release?: string;
   identityToken?: string;
   /** The folder of the most recent launch (`cad viewer`), which a launch's relative files are read from. */
   start?: string;
@@ -56,7 +58,28 @@ export interface CadServerInfo {
   pid?: number;
   /** This start of the engine, a random token: another one answering after the engine was gone is a new engine, which reloads the page. */
   instance?: string;
+  /** What the update button shows (`auto_update.button`: `@cad/ui/update`'s `UpdateState`), null where cad cannot update itself. */
+  cadUpdate?: CadUpdateState | null;
+  /** The project's notices for this cad (`cad_server/notices.py`), each a card until the person dismisses it; `[]` where there is none. */
+  cadNotices?: CadNotice[];
   [key: string]: unknown;
+}
+/** One of the project's notices, as `GET /api/v1/server` says it: its id, its words (English, plain text) and its link, where it has one. */
+export interface CadNotice {
+  id: string;
+  text: string;
+  url?: string;
+}
+/** What `GET /api/v1/server` says of cad's own update, for the update button (`cad_server/_internal/auto_update.py`'s `button`). */
+export interface CadUpdateState {
+  version: string;
+  latest: string | null;
+  state: 'idle' | 'working' | 'failed';
+  at?: number;
+  asked?: boolean;
+  cause?: string;
+  said?: string;
+  installer?: string;
 }
 /**
  * A document in the library every CAD view shares (`GET /api/v1/documents`), or a file of a project's folder
@@ -391,6 +414,14 @@ export interface CadClient extends CadWorkspaceService {
    * noted by the server and sent only with consent. Never fails.
    */
   reportActivity(activity: CadActivity): void;
+  /**
+   * The update button's click: a person's update of cad (`POST /api/v1/local/update`); refused (409) where cad cannot
+   * update itself. The local server's alone: a shared page's client (`CadViewBundleClient`) has none, as no cad is
+   * behind that page to update.
+   */
+  startUpdate(): Promise<Pick<CadServerInfo, 'release' | 'instance' | 'cadUpdate'>>;
+  /** A failed update put away for every page, by its attempt's start (`at`). */
+  dismissUpdate(at: number): Promise<Pick<CadServerInfo, 'release' | 'instance' | 'cadUpdate'>>;
 }
 /**
  * Where a view bundle's files are read (a share's, `viewBundleMemorySource`): the bytes of one path of the bundle

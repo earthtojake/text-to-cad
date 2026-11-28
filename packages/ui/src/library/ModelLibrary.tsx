@@ -279,7 +279,7 @@ export function filterModels<Model extends LibraryModel>(items: readonly Model[]
 }
 
 const message = (failure: unknown) => failure instanceof Error ? failure.message : String(failure);
-/** How often the home reads its list (and a project's page its folder) again while it is up. */
+/** How often the home reads its list (and a project's page its folder) again while it is up and seen. */
 const LIST_MS = 2_000;
 /** How long typing rests before a project's page asks its host to search below the folder on screen. */
 const SEARCH_WAIT_MS = 150;
@@ -588,11 +588,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   const refresh = useCallback(() => Promise.all([current.current.list(), readProjects()]).then(([next]) => {
     setItems(previous => previous && JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
   }), [readProjects]);
-  // Read on mount, again every couple of seconds while the home is up (a model rebuilt meanwhile has its picture
-  // and its count again), and when the page is shown.
+  // Read on mount, again every couple of seconds while the home is up and seen (a model rebuilt meanwhile has its
+  // picture and its count again), and when the page is shown. A hidden home asks nothing: it has nothing to show.
   useEffect(() => {
     void refresh().catch(failure => { setItems([]); setError(message(failure)); });
-    const again = () => { void refresh().catch(() => {}); };
+    const again = () => { if (document.visibilityState !== "hidden") void refresh().catch(() => {}); };
     const timer = setInterval(again, LIST_MS);
     document.addEventListener("visibilitychange", again);
     return () => { clearInterval(timer); document.removeEventListener("visibilitychange", again); };
@@ -620,9 +620,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     askFolder.current = ask;
     const first = words ? setTimeout(ask, SEARCH_WAIT_MS) : null;
     if (!words) ask();
-    const timer = setInterval(ask, LIST_MS);
-    document.addEventListener("visibilitychange", ask);
-    return () => { live = false; if (first) clearTimeout(first); clearInterval(timer); document.removeEventListener("visibilitychange", ask); };
+    // Read again only while the page is seen, as the list is.
+    const again = () => { if (document.visibilityState !== "hidden") ask(); };
+    const timer = setInterval(again, LIST_MS);
+    document.addEventListener("visibilitychange", again);
+    return () => { live = false; if (first) clearTimeout(first); clearInterval(timer); document.removeEventListener("visibilitychange", again); };
   }, [folderAt, words]);
   const folderRead = read && read.at === folderAt ? read : null;
   const load = useCallback((item: Model) => {

@@ -161,7 +161,8 @@ viewer` and open the link it prints; it keeps asking, never reloads for the refu
 once that link, opened beside it, has left the new cookie.
 
 A page closing never stops the engine, and no timer does: it runs until `cad server stop`, or
-until cad's own update restarts it on a newer release while nothing uses it.
+until cad's own update restarts it on a newer release: at a person's ask (the update button, `cad update`), or as
+the server next starts, never by how busy or idle it is.
 Code changes in a checkout require
 restarting an engine you own, then rerunning the launcher. Vite handles client HMR.
 
@@ -420,7 +421,8 @@ compiler output, whose Retry reloads only that file and whose Report Issue opens
 new issue titled "Issue: ", labelled `bug`, filled in from the card. A failed update the
 model survives can be dismissed, leaving the previous version to inspect.
 
-The page checks its session's `identityToken`. Under Vite it reloads when the
+The page checks its session's `identityToken` every five seconds while it is seen, and at once when it is focused or
+shown again; a hidden page asks nothing, as it has nothing to show (`host/useViewerAutoReload.js`). Under Vite it reloads when the
 served client changes. A page the engine serves never reloads into another identity
 on its port: every engine has a new token, so a later engine refuses the page, and
 another identity answering there is a process the page cannot authenticate. That
@@ -627,7 +629,23 @@ in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. The page never tells of a newer release: cad updates itself, and the agent the rest.
+links open in a new tab. Outermost at the navbar's right end, over a file and on the home, is the update button
+(`@cad/ui/update`) while a global install of cad is behind a newer release of its own major (`GET /api/v1/server`'s
+`cadUpdate`, read with the server's description in `main.tsx`, so it draws with the page, again when the person comes
+back to it, and once a minute while the page is seen, never while it is hidden), always the
+navbar's rightmost control, the home's too. A click is a person's update (`POST /api/v1/local/update`), at once: a
+ring that fills while cad updates in place, the server's going
+for it no notice of the page's, then a spinner, and the page reloads into the
+server that comes back on the new release once nothing on it is unsaved (`reloadWhenClean`), where it says it is updated, once; the tab keeps
+the release it followed the update from across the reload (`host/followedUpdate.js`). An automatic update the page
+finds underway is followed the same way. A failed one, automatic or not, is the viewer's alert card, the one every
+error is said in (`CadViewer`'s `alert`, `useUpdate`'s), over a file and on the home, from the server's record (so
+through a reload too): why and what to do, Try again, Details with `cad update` and the update's log, Report Issue
+where the cause is cad's own. Its X puts it away on the server (`POST /api/v1/local/update {dismiss}`), so every page
+keeps it behind its icon in the navbar until another attempt begins. The project's notices for this cad
+(`cadNotices`, `cad_server/notices.py`) are said in the same card, one at a time, after a failure on screen: the
+notice's words as text, Learn more to its link where it has one, and Dismiss, which this browser keeps
+(`host/dismissedNotices.js`, its local storage; a browser that keeps nothing shows it again next time).
 The browser title is the open file's or model's name alone ("bracket.step", "juno"), and on the home its place's
 ("Recents · text-to-cad", "gearbox · text-to-cad").
 A document's id is never its name, in the navbar or the title: the page asks for the document its URL names

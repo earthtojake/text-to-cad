@@ -822,7 +822,7 @@
  "commands": [
   {
    "command": "cad cache",
-   "summary": "cad's cache: dir, prune (what this release cannot use), clean (all of it)",
+   "summary": "cad's cache: dir, prune (what no file and no release needs), clean (all of it)",
    "usage": "cad cache {dir,prune,clean} ...",
    "description": 79,
    "arguments": [
@@ -1099,8 +1099,8 @@
   },
   {
    "command": "cad update",
-   "summary": "update cad now to the newest release of its major version (`--major`: of all); `update auto`: whether it does so itself",
-   "usage": "cad update [--major]\ncad update auto [{status,on,off}]",
+   "summary": "update cad now to the newest release; `update auto`: whether it does so itself",
+   "usage": "cad update\ncad update auto [{status,on,off}]",
    "description": 109,
    "arguments": [
     {
@@ -1109,21 +1109,13 @@
       "auto"
      ]
     }
-   ],
-   "options": [
-    {
-     "flags": [
-      "--major"
-     ],
-     "help": 110
-    }
    ]
   },
   {
    "command": "cad update auto",
    "summary": "show or change whether cad updates itself: status, on, off",
    "usage": "cad update auto [{status,on,off}]",
-   "description": 111,
+   "description": 110,
    "arguments": [
     {
      "name": "{status,on,off}",
@@ -1140,11 +1132,11 @@
    "command": "cad viewer",
    "summary": "open a viewer page on the running cad server",
    "usage": "cad viewer [--host HOST] [--port PORT] [--json] [--no-open] [--dist DIST] [--api-only] [FILE ...]",
-   "description": 112,
+   "description": 111,
    "arguments": [
     {
      "name": "FILE",
-     "help": 113,
+     "help": 112,
      "optional": true,
      "repeatable": true
     }
@@ -1155,39 +1147,39 @@
       "--host"
      ],
      "metavar": "HOST",
-     "help": 114
+     "help": 113
     },
     {
      "flags": [
       "--port"
      ],
      "metavar": "PORT",
-     "help": 115
+     "help": 114
     },
     {
      "flags": [
       "--json"
      ],
-     "help": 116
+     "help": 115
     },
     {
      "flags": [
       "--no-open"
      ],
-     "help": 117
+     "help": 116
     },
     {
      "flags": [
       "--dist"
      ],
      "metavar": "DIST",
-     "help": 118
+     "help": 117
     },
     {
      "flags": [
       "--api-only"
      ],
-     "help": 119
+     "help": 118
     }
    ]
   }
@@ -1274,12 +1266,12 @@
   "narrate the target on stderr.",
   "cad's cache: what cad makes again when it needs it (environments, bytecode, meshes it derived). Never your documents or settings.",
   "Print where cad's cache is.",
-  "Remove what no file and no release of cad needs: environments made for other releases; the release folders of 0.11.11 and earlier; the cache's folder of a file that is gone, and of a file no note names once unused for 30 days; and, past 1.0 GB, the meshes cad keeps by geometry (shared files' part meshes, parts' hulls) used longest ago: about what the CAD kernel takes, each made again when next needed. What is in use stays: an environment a process runs from, a file's folder while it is being shared.",
-  "one JSON document: by kind (environments, releases, gone, unused, meshes) the paths removed and the bytes freed, the bytes freed in all, and each path kept, of which kind, and why",
+  "Remove what no file and no release of cad needs: environments made for other releases; the release folders of 0.11.11 and earlier; the cache's folder of a file that is gone, and of a file no note names once unused for 30 days; and, past 1.0 GB, the meshes cad keeps by geometry (shared files' part meshes, parts' hulls) used longest ago: about what the CAD kernel takes, each made again when next needed. Where no update is underway, also cad's own releases in uv's cache (`uv cache clean cad`) and, on Windows, each cad.exe cad's update moved aside. What is in use stays: an environment a process runs from, a file's folder while it is being shared.",
+  "one JSON document: by kind (environments, releases, gone, unused, meshes, aside) the paths removed and the bytes freed, the bytes freed in all, what came of uv's cache (cleaned, busy, linked or null), and each path kept, of which kind, and why",
   "Remove all of cad's cache, and what prune removes; cad makes it again as it needs it. Refused while the cad server runs.",
   "Report this cad: its release, its data and cache folders and what `cad cache prune` would free, the CAD kernel environment and the integrations', and the server. It changes nothing. Exit 1 when the CAD kernel is installed and does not load.",
   "the same report",
-  "the report as one JSON document: each check's name, status (ok, info, warning, failed) and detail",
+  "the report as one JSON document: each check's name, status (ok, info, warning, failed), detail and the lines under it",
   "Write the files of a shared file into a folder, as `cad share` sent them: a model's .xbf, its script, the modules of its project and the files it reads, at their paths there; a file document's file and what it draws from (a robot's meshes, a KiCad project's files). LINK is the share's link (https://cad.fun/<id>), its files' link (<link>.zip) or its id. It runs nothing: it says what it wrote and where what built it differs from this computer's cad and libraries, then the commands that show it and build it, for the person to run. It adds the shared file to the library with its link, so it is among the viewer's Recents and the share's link names it here wherever cad takes a document. A share this computer made is not downloaded: it says where its files are, to work on them there, and writes nothing.",
   "the share's link, its files' link (.zip), or its id",
   "where its files go: a folder not there yet, or an empty one (default: ./<its name>); not used for a share this computer made",
@@ -1302,9 +1294,8 @@
   "after delete: the file this computer shared, or a share's delete link",
   "share: the person agrees to sharing, kept for this computer; delete: delete without asking. Where nobody can be asked (an agent, a pipe, --json) neither runs without it",
   "Show or change the usage stats and crash reports cad sends from CAD's apps (the CAD app in an agent app, and the viewer) and its build daemon. By default, once a cad command has said so: a random install id, versions, the OS and agent app, counts of CAD tool calls, view activity, which of the viewer's tools and settings are used (never a value or a name), files shown by format, builds and snapshots, how they ended and how long they took, and where cad's own code failed (never a message). `off` sends nothing. Never file names, paths, contents or prompts.",
-  "cad installs every newer release of its major version by itself, and a new major version only when you run `cad update --major`. `cad update` updates cad now to the newest release of its major version, even with automatic updates off: cad asks PyPI and, once nothing is running, installs it. A cad server that was running starts again; with none running, none is started. `cad update auto` shows or changes whether cad updates itself.",
-  "install the newest release of all, a new major version included, which may ask for changes (https://github.com/earthtojake/text-to-cad/tree/main/docs/migrations)",
-  "Show or change whether cad updates itself to the newest release of its major version: once nothing has run for a minute, the cad server stops, installs it and starts again. A new major version never installs itself: `cad update --major` installs it. On by default, for a global install (`uv tool install cad`).",
+  "cad installs every newer release by itself. `cad update` updates cad now to the newest release, even with automatic updates off: cad asks PyPI, and uv, which installed it, upgrades cad in place. A cad server that was running restarts on it at once, stopping what is in flight; with none running, none is started. By itself, cad updates as the server next starts once a newer release is out. `cad update auto` shows or changes whether cad updates itself.",
+  "Show or change whether cad updates itself to the newest release: once one is out, cad updates as its server next starts; the viewer's update button and `cad update` update it now. On by default, for a global install (`uv tool install cad`).",
   "Open the running server's viewer page: the home, or each file named (no server running: its one line, which says to run ``cad server start``). The page is the engine's one page. Each FILE (an on-disk CAD file, a relative one read from this folder, or a share's link, this computer's copy of it) is registered and printed as its page, ``/<id>``. A folder is opened as a project, shown a folder at a time on the home, whose page is printed. Nothing is written to the folder.",
   "a CAD file to open: its page is /<id>; a folder opens as a project, on the home",
   "Pin the engine bind address; default loopback.",

@@ -16,9 +16,9 @@ uv tool install cad
 ```
 
 It runs on Python 3.11 and newer. `cad server start` starts the server; cad then updates itself to each
-new release of its major version (`cad update auto off` stops that); `cad update` updates it now; a new
-major version installs only with `cad update --major`; `cad doctor` reports what is installed. `cad-server`, `cad-mcp` and `cadgen` are empty aliases of this
-distribution, kept so older installs keep working.
+new release (`cad update auto off` stops that); `cad update` updates it now; `cad doctor` reports what is
+installed. `cad-server`, `cad-mcp` and `cadgen`
+are empty aliases of this distribution, kept so older installs keep working.
 
 A **document** is what a person reviews: one instance of a **document type** (below), either a file read on
 its own or one built from code -- a model, built by the engine. Documents exist so that a person can review the
@@ -256,9 +256,9 @@ renumbers the list and every citation in the same change.
     who only ran `uv tool install cad`. Naming a bundled thing passes; a repository path, script or
     workflow does not.
 14. **Compatibility, by who pays for a break.** *The package.* A change is judged by who absorbs it
-    and whether they can. cad installs by itself every newer release of the major it is on, and never
-    a higher major (`cad update --major`); below 1.0 a break bumps the minor, so a breaking release
-    arrives by itself with its migration guide. Four tiers, which hold within a major as across one:
+    and whether they can. cad installs by itself every newer release, a new major version too; below
+    1.0 a break bumps the minor. So a breaking release arrives by itself, with its migration guide.
+    Four tiers, which hold within a major as across one:
 
     - **Tier 1, what an agent reads each session**: the skills, the commands' verbs and flags, the CAD
       tools' arguments. A command or an option the skills used is replaced, not kept: its old spelling
@@ -275,7 +275,7 @@ renumbers the list and every citation in the same change.
     - **Tier 3, a person's data**: documents, the state folder's library, settings. A release
       reads what the previous shipped release wrote, writes the current form and migrates on first
       touch, once. Opening, viewing or exporting a saved document never needs its source or a rebuild
-      because cad was upgraded (the engine's **Build closure**).
+      because cad was updated (the engine's **Build closure**).
     - **Tier 4, protocols where two releases meet while both run**: the door, the HTTP API, the CAD
       app's server and page, the version feed, the installation records, the analytics schemas, the
       worker contract. Each is numbered or frozen in a golden, so a break is never silent: a change
@@ -528,7 +528,7 @@ src/cad/
                          #   runner `cad run` starts a program by (program: the program's
                          #   folder last on its path), the lazy kernel (lazy_kernel: `import
                          #   build123d` binds, the kernel loads on first use;
-                         #   cad-lazy-kernel.pth, at the root of site-packages, installs it
+                         #   cad.pth, at the root of site-packages, installs it
                          #   at interpreter start), the font guard (font_scan; check_fonts, the
                          #   font that breaks `import build123d`), what the library counts
                          #   (counts), the checks' findings and XML helpers, atomic replace,
@@ -537,6 +537,8 @@ src/cad/
                          #   study file, the mesh, the solve, the checks and the files it writes)
 src/cadgen/              # the deprecated import alias: every name and every module of it is cad's
                          #   own (law 14's earlier name)
+cad.pth                  # at the wheel's root: the lazy kernel (setup.py puts it there)
+cad.start                # the same step for Python 3.15 and later, which ignore cad.pth's imports (PEP 829)
 ```
 
 The server and the transport say their own shapes and commands in their own READMEs,

@@ -197,16 +197,61 @@ _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform, whether
-    this computer has a file chooser for the home's Import, and whether one chooser takes a file or a folder
-    there (a Mac's: Import is then one button)."""
+    this computer has a file chooser for the home's Import, whether one chooser takes a file or a folder there (a
+    Mac's: Import is then one button), and what the update button shows (``auto_update.button``, from the feed as
+    last read: a launch never waits on the network)."""
     from cad_server import __version__
+    from cad_server._internal import auto_update
     from cad_server._internal.picker import available, takes_either
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
     launch["pickAny"] = launch["pick"] and takes_either()
+    update = auto_update.button()
+    if update is not None:  # none where cad cannot update itself: no button
+        launch["cadUpdate"] = update
     return launch
+
+
+# What this session's agent is told where cad needs attention (``attention``): this line, then a line each.
+ATTENTION = "cad needs attention:"
+# Where automatic updates are off and this cad is behind: the release is the person's choice, so the agent asks.
+UPDATES_OFF = ("cad {target} is out and this is {version}, and automatic updates are off (`cad update auto`): ask the "
+               "user before running `cad update`")
+
+
+def attention(now: float | None = None) -> list[str]:
+    """What this cad needs that its agent can act on, from the feed as last read and the records, never the network:
+    one line each, naming the command, in the words the ``cad`` command says them. Where this global install is behind
+    the newest release, no update is underway and its environment holds no newer one: automatic updates
+    off, ``UPDATES_OFF``; else, at once where no update can begin (``auto_update.blocked``) or this release's last
+    attempt did not install (``auto_update.cause``), and otherwise once it has stayed behind by the stayed-behind line's
+    own rule and record (``auto_update.notice``, ``auto_update.stayed_behind``), that line. Then each of the project's
+    notices that applies (``notices.applying``). Nothing where all is well; never raises."""
+    from cad_server import __version__, notices, updates
+    from cad_server._internal import auto_update as auto
+
+    lines: list[str] = []
+    try:
+        now = time.time() if now is None else now
+        install = auto.global_install()
+        chosen = auto.choose(updates.feed(fetch=False), __version__) if updates.checking() else None
+        if install is not None and chosen is not None \
+                and auto.underway(now) is None and not auto.stale(chosen):
+            record = auto.last()
+            failed = record is not None and record.get("from") == __version__ and auto.cause(record, now) is not None
+            if not auto.switches()["on"]:
+                lines.append(UPDATES_OFF.format(target=chosen, version=__version__))
+            elif failed or auto.blocked(install) is not None or auto.notice(now) or auto.stayed_behind(now):
+                lines.append(auto.behind_line(__version__, chosen, now).removeprefix("cad: "))
+    except Exception:  # noqa: BLE001 - a line never fails the session it rides on
+        LOG.debug("could not tell whether cad is behind", exc_info=True)
+    return lines + [notices.said(notice) for notice in notices.applying()]
+
+
+def _attention_block(lines: list[str]) -> str:
+    return "\n".join([ATTENTION, *(f"- {line}" for line in lines)])
 
 
 # The tools 0.11.10 removed, each answered by name with the `cad` command that does its work now: a session
@@ -371,6 +416,7 @@ class Server:
         self._mounting: dict[str, str | None] = {}  # the inline views launched and not yet seen, each its page
         self._opened: float | None = None
         self._pending: str | None = None
+        self._attended = False  # whether an agent's call was answered with what cad needs (``attention``), once
 
     # -- lazily built parts ----------------------------------------------------
 
@@ -494,11 +540,13 @@ class Server:
         self.analytics.started(client=client, presentation=presentation)
         capabilities: dict[str, Any] = {"tools": {"listChanged": False}, "resources": {"listChanged": False}}
         requested = params.get("protocolVersion")
+        instructions = NO_TOOLS_INSTRUCTIONS if self.text else INSTRUCTIONS if self.tabs else INLINE_INSTRUCTIONS
+        lines = attention()
         return {
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
             "capabilities": capabilities,
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
-            "instructions": NO_TOOLS_INSTRUCTIONS if self.text else INSTRUCTIONS if self.tabs else INLINE_INSTRUCTIONS,
+            "instructions": instructions + ("\n\n" + _attention_block(lines) if lines else ""),
         }
 
     # -- the catalog -----------------------------------------------------------
@@ -631,6 +679,12 @@ class Server:
                 self._reach(launch)
                 if name in _AGENT_TOOLS and self._cards(context) is None:
                     self._unproven(result, launch)
+            if name in _AGENT_TOOLS and not self._attended:
+                # Once a session, for hosts that pass a tool's result to the agent and not the instructions.
+                self._attended = True
+                lines = attention()
+                if lines and isinstance(result.get("content"), list):
+                    result["content"].append({"type": "text", "text": _attention_block(lines)})
             ok = not (isinstance(result, dict) and result.get("isError"))
             return result
         except ToolFailed as failure:

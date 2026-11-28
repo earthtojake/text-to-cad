@@ -315,7 +315,7 @@ describe('the fetch tunnel', () => {
     expect(Math.max(...parted.sizes)).toBe(TUNNEL_REPLY_MAX_BYTES);
     // Every part after the first names the body, which the server kept and cuts the part from.
     expect(parted.continues).toEqual([null, '"v1"', '"v1"', '"v1"']);
-  });
+  }, PARTS_SECONDS * 1000);
 
   it('fails the read of a body that changed between its parts, or whose parts are out of place', async () => {
     const bytes = pattern(TUNNEL_REPLY_MAX_BYTES + 10);
@@ -326,8 +326,12 @@ describe('the fetch tunnel', () => {
       const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/api/v1/local/files?path=big.stl`);
       await expect(reply.arrayBuffer()).rejects.toThrow(TypeError);
     }
-  });
+  }, PARTS_SECONDS * 1000);
 });
+
+// How long a read of a body in parts may take: megabytes through base64 each way, under jsdom's `atob` where Node has
+// no `Uint8Array.fromBase64` (Node 22). About 1 s on a laptop, and 6 s on a 2-core CI runner, past vitest's 5 s.
+const PARTS_SECONDS = 30;
 
 /** `length` bytes that differ from part to part. */
 function pattern(length: number) {

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 26, 2026">
+    <LegalPage title="Privacy Policy" updated="November 27, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -149,14 +149,15 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>The version check and automatic updates:</strong> at most once an hour, text-to-cad’s
-            software on your computer asks api.texttocad.dev which text-to-cad release is the newest. The
-            request carries no ID and nothing about you or your work; like any request, it reaches our host
-            with your IP address, the time and a user agent that names text-to-cad’s software. It is not
-            made in CI. Automatic updates are on unless you turned them off. While they are on, and the answer
-            names a newer release of the major version you have, text-to-cad downloads the newest such release
-            from the Python Package Index (PyPI) and installs it; a new major version is installed only when you
-            ask for it. Our install command, when you run it yourself, also brings a text-to-cad that is
-            already installed to the newest release of its major version, from PyPI. Where the plugin’s
+            software on your computer asks the Python Package Index (PyPI) which text-to-cad release is the
+            newest, and asks api.texttocad.dev for any notice we have posted for older releases (releases
+            0.11.18 and earlier ask api.texttocad.dev for the newest release instead). Neither request carries
+            an ID or anything about you or your work; like any request, each reaches its host, PyPI’s or ours,
+            with your IP address, the time and a user agent that names text-to-cad’s software. They are not
+            made in CI. Automatic updates are on unless you turned them off. While they are on, and PyPI
+            names a newer release, text-to-cad downloads the newest release from PyPI and installs it as its
+            server next starts, a new major version too. Our install command, when you run it yourself, also
+            brings a text-to-cad that is already installed to the newest release, from PyPI. Where the plugin’s
             automatic updates are on (our install command turns them on) and text-to-cad is newer than the
             release the plugin in your agent apps was last brought up to date for, however it got newer,
             text-to-cad then updates the plugin in your agent apps itself (<code>cad plugin install</code>): it

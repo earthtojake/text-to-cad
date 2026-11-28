@@ -1,4 +1,5 @@
 import type { LibraryModel } from '@cad/ui/library';
+import type { CadUpdateState } from '@cad/core/client';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 import { isHostRefusal, type Channel } from './channel';
 import { refusalOf } from './unreachable.js';
@@ -31,6 +32,8 @@ export interface Launch {
   pick?: boolean;
   /** Whether one chooser there takes a file or a folder (a Mac's): the home's Import is then one button. */
   pickAny?: boolean;
+  /** What the update button shows, as the server last knew it (`auto_update.button`), so it draws with the card; null where cad cannot update itself. */
+  cadUpdate?: CadUpdateState | null;
   /**
    * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
    * `_reach`): `browser`, the viewer's page of what the launch shows, with its link

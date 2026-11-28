@@ -61,7 +61,8 @@ export function fuzzyMatch(
  * in a narrow row and on a phone), the open file's name, with no glyph, and its ⋯ (Copy path, Copy link, Open in new tab,
  * Open in, the host's own items: the viewer's Export, then Search documents, Previous and Next in project and, for a
  * document in no project, Import its folder as a project). Right: `trailing` (the
- * file's actions), then `actions`, outermost. Back and Forward are a desktop row's alone: a phone's has no room for them.
+ * file's actions), then `actions`, then `update`, outermost. Back and Forward are a desktop row's alone: a phone's has
+ * no room for them.
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the logo goes to it (Recents), with a hint saying so, and opens no menu. */
@@ -104,6 +105,8 @@ export const ViewerNavbar: ComponentType<{
   trailing?: ReactNode;
   /** The host's own actions (the CAD app's Full size, inline). */
   actions?: ReactNode;
+  /** The host's update button (`@cad/ui/update`), last and outermost. */
+  update?: ReactNode;
   /**
    * The panel's toggle (`../panelToggles.js`, said by its frame: a file's view's, or the home's sidebar's): the row's
    * control right after the logo, the same neutral button open or shut (`aria-expanded` says which).

@@ -5,7 +5,7 @@ else ``~/.cache/cad``): the CAD kernel environment and the environments ``cad ru
 and set of integrations, ``cad_server._internal.base``), the engine's bytecode, hulls, MJCF assets, integrations'
 homes and kept interference measurements (``OWN``), and what the engine derived of each document (``documents/<id>/``:
 the file's note and picture, a KiCad board's plots, kept checks, a shared file's view bundle and where its share's
-files are). The records, Recents and settings in the state folder stay, and anything else in the folder, which may be
+files are). The library and the settings in the state folder stay, and anything else in the folder, which may be
 another program's.
 
 - ``dir``: the cache folder.
@@ -14,18 +14,23 @@ another program's.
   ``releases.root``) but the one ``installations/current`` names, which those releases' server lines still start; a
   document's folder whose file is gone (its note names the file, ``library.Notes``), and one whose note names none (a
   note an earlier build wrote) or that has none, once nothing in it has been written for ``UNUSED_DAYS``
-  (``documents``); and the meshes kept by the geometry they are of, the least recently used first, past
-  ``MESH_BYTES`` (``meshes``).
-- ``clean``: all of the cache but the documents' folders (``OWN``), and what ``prune`` removes; refused while a
+  (``documents``); the meshes kept by the geometry they are of, the least recently used first, past ``MESH_BYTES``
+  (``meshes``); and, where no update is underway (``_tidy``), on Windows each ``cad.exe`` cad's update moved aside in
+  uv's bin folder and could not remove then, and cad's own entries in uv's cache (``uv cache clean cad``: each past
+  release stays unpacked there; nothing of another package is touched).
+- ``clean``: all of the cache but the documents' folders (``OWN``), and what ``prune`` removes of it; refused while a
   server runs, which runs from it.
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``); ``prune --json`` says it as one
-document, what it removed and freed by kind (``KINDS``) and what it kept and why. Neither removes what is in use:
-a folder a process runs from is kept, and said (``releases.running``), and so is a document's folder a share of its
-file is being made in, whose share holds its lock the while (``sharing.held``), with its view bundle's meshes. Nothing
-else of the cache is held open by a running engine (a hull is read whole, and a note, a picture and a kept check are
-written whole), so ``prune`` runs beside a server rather than being refused. Nothing else of cad deletes a past
-release's folders or environments.
+document, what it removed and freed by kind (``KINDS``), what came of uv's cache, and what it kept and why. Neither
+removes what is in use: a folder a process runs from is kept, and said (``base.unused``), and so is a document's
+folder a share of its file is being made in, whose share holds its lock the while (``sharing.held``), with its view
+bundle's meshes. Nothing else of the cache is held open by a running engine (a hull is read whole, and a note, a
+picture and a kept check are written whole), so ``prune`` runs beside a server rather than being refused. Nothing
+else of cad deletes a past release's folders or environments but its server, once as it starts, which removes by the
+same rules, quietly, what ``prune`` removes of cad's own: the environments made for another release, the release
+folders of 0.11.11 and earlier, and the ``cad.exe`` files moved aside (``base.tidy``, ``releases.tidy``,
+``auto_update.tidy``). uv's cache is touched by ``prune`` alone.
 """
 
 from __future__ import annotations
@@ -58,8 +63,10 @@ MESH_BYTES = 2**30
 OWN = ("base", "pycache", "hulls", "mjcf", "homes", "interference")
 #: What ``prune`` removes, by kind, as its ``--json`` document names each: the environments made for another release,
 #: the release folders of 0.11.11 and earlier, a document's folder whose file is gone, one whose note names no file
-#: unwritten for ``UNUSED_DAYS``, and the meshes kept by geometry past ``MESH_BYTES``.
-KINDS = ("environments", "releases", "gone", "unused", "meshes")
+#: unwritten for ``UNUSED_DAYS``, the meshes kept by geometry past ``MESH_BYTES``, and on Windows each ``cad.exe`` cad's
+#: update moved aside (``_tidy``). What came of uv's cache is its own key, ``uv``: ``cleaned``, ``busy`` or ``linked``
+#: (``auto_update.tidy_cache``), or null where nothing was asked of it or uv failed.
+KINDS = ("environments", "releases", "gone", "unused", "meshes", "aside")
 
 
 def build_parser(prog: str = DEFAULT_PROG):
@@ -75,12 +82,14 @@ def build_parser(prog: str = DEFAULT_PROG):
                     "release folders of 0.11.11 and earlier; the cache's folder of a file that is gone, and of a file "
                     f"no note names once unused for {UNUSED_DAYS} days; and, past {size(MESH_BYTES)}, the meshes cad "
                     "keeps by geometry (shared files' part meshes, parts' hulls) used longest ago: about what the CAD "
-                    "kernel takes, each made again when next needed. What is in use stays: an environment a process "
-                    "runs from, a file's folder while it is being shared.")
+                    "kernel takes, each made again when next needed. Where no update is underway, also cad's own "
+                    "releases in uv's cache (`uv cache clean cad`) and, on Windows, each cad.exe cad's update moved "
+                    "aside. What is in use stays: an environment a process runs from, a file's folder while it is "
+                    "being shared.")
     prune.add_argument("--json", action="store_true",
-                       help="one JSON document: by kind (environments, releases, gone, unused, meshes) the paths "
-                            "removed and the bytes freed, the bytes freed in all, and each path kept, of which kind, "
-                            "and why")
+                       help="one JSON document: by kind (environments, releases, gone, unused, meshes, aside) the "
+                            "paths removed and the bytes freed, the bytes freed in all, what came of uv's cache "
+                            "(cleaned, busy, linked or null), and each path kept, of which kind, and why")
     commands.add_parser("clean", help="remove all of cad's cache; cad makes it again as it needs it",
                         description="Remove all of cad's cache, and what prune removes; cad makes it again as it needs "
                                     "it. Refused while the cad server runs.")
@@ -102,55 +111,27 @@ def _folders(parent: Path) -> list[Path]:
         return []
 
 
-def _inside(path: str, parent: Path) -> bool:
-    here = os.path.normcase(os.path.realpath(path))
-    return here == os.path.normcase(os.path.realpath(parent)) or here.startswith(
-        os.path.normcase(os.path.realpath(parent)).rstrip(os.sep) + os.sep)
-
-
 def prunable() -> tuple[list[tuple[Path, str, str]], list[tuple[Path, str, str]]]:
     """What ``prune`` removes, each with what it is and its kind (``KINDS``), and what it keeps of that, each with why
-    and its kind: the environments made for another release, and the release folders of 0.11.11 and earlier but
-    ``installations/current``'s; a folder a process runs from kept."""
-    from cad.engine.places import current
-    from cad.engine.previous import version
+    and its kind: the environments made for another release (``base.others``), and the release folders of 0.11.11 and
+    earlier but ``installations/current``'s (``releases.past``); a folder a process runs from kept."""
     from cad_server._internal import base, releases
 
-    found: list[tuple[Path, str, str]] = []
-    kept: list[tuple[Path, str, str]] = []
-    for env in _folders(base.folder()):
-        release = _release(env)
-        if release is not None and release != version():
-            found.append((env, f"an environment of cad {release}", "environments"))
-    record = current()
-    for old in _folders(releases.root()):
-        if record is not None and _inside(record["prefix"], old):
-            kept.append((old, "the release 0.11.11 and earlier start (installations/current)", "releases"))
-        else:
-            found.append((old, f"cad {old.name}, of the layout of 0.11.11 and earlier", "releases"))
-    return _running(found, kept)
+    envs = [(path, what, "environments") for path, what in base.others()]
+    going, kept = releases.past()
+    return _unused(envs + [(path, what, "releases") for path, what in going],
+                   [(path, why, "releases") for path, why in kept])
 
 
-def _release(env: Path) -> str | None:
-    """The release the environment at ``env`` was made for, as its marker names it; None where none does."""
+def _unused(found: list[tuple[Path, str, str]], kept: list[tuple[Path, str, str]]):
+    """``base.unused`` of entries that carry their kind: ``found`` parted into what may go and what stays (a folder a
+    process runs from), ``kept`` added to, each keeping its kind. ``(going, kept)``."""
     from cad_server._internal import base
 
-    marker = base.marked(env)
-    inputs = marker.get("inputs") if marker is not None else None
-    release = inputs.get("release") if isinstance(inputs, dict) else None
-    return release if isinstance(release, str) else None
-
-
-def _running(found: list[tuple[Path, str, str]], kept: list[tuple[Path, str, str]]):
-    from cad_server._internal.releases import running
-
-    going = []
-    for path, what, kind in found:
-        if running(path, asking=os.getpid()):
-            kept.append((path, "a process runs from it", kind))
-        else:
-            going.append((path, what, kind))
-    return going, kept
+    kinds = {path: kind for path, _what, kind in [*found, *kept]}
+    going, held = base.unused([(path, what) for path, what, _kind in found], [])
+    return ([(path, what, kinds[path]) for path, what in going],
+            kept + [(path, why, kinds[path]) for path, why in held])
 
 
 def _noted(found: Path) -> str | None:
@@ -363,15 +344,42 @@ def _say(line: str) -> None:
     sys.stdout.flush()
 
 
+def _tidy(say) -> tuple[list[Path], str | None]:
+    """Where no update is underway: on Windows, each ``cad.exe`` cad's update moved aside and could not remove then
+    (``auto_update.tidy``), removed; and cad's own entries in uv's cache, where each past release stays unpacked
+    (``auto_update.tidy_cache``: ``uv cache clean cad``), removed: only here, where a person asked, never by the
+    server. Each said with ``say``. The ``cad.exe`` files removed, and what came of uv's cache (``CLEANED``, ``BUSY``,
+    ``LINKED``; None where nothing was asked of it or uv failed)."""
+    from cad_server._internal import auto_update
+
+    if auto_update.underway() is not None:
+        return [], None
+    gone = [Path(path) for path in auto_update.tidy()]
+    for path in gone:
+        say(f"removed {path} (a cad command cad's update moved aside)")
+    came = auto_update.tidy_cache()
+    if came == auto_update.CLEANED:
+        say("removed cad's releases from uv's cache (`uv cache clean cad`)")
+    elif came == auto_update.BUSY:
+        say("kept cad's releases in uv's cache: another uv process is running, and uv waits for it (run this again "
+            "once it has ended, or `uv cache clean cad`)")
+    elif came == auto_update.LINKED:
+        say("kept cad's releases in uv's cache: cad's files are links into it (uv's link mode symlink)")
+    return gone, came
+
+
 def _remove(going: list[tuple[Path, str, str]], kept: list[tuple[Path, str, str]],
-            over: list[tuple[Path, int]] | None = None, *, said: bool = True) -> tuple[int, dict[str, Any]]:
-    """``going`` removed, each said, then ``over``'s meshes, said in one line, and ``kept`` said; then what that freed.
-    A document's folder a share of its file is being made in is kept, and said. Its exit status, 1 where one could not
-    be removed, and what it did as ``prune --json`` answers it: by kind (``KINDS``) the paths removed and the disk that
-    freed, the disk freed in all, and each path kept, of which kind and why, one that could not be removed among them
-    (``"ok": false``, a ``failed`` failure's ``error`` and ``reason``). Not ``said``, it says nothing as it goes."""
+            over: list[tuple[Path, int]] | None = None, *, tidy: bool = False,
+            said: bool = True) -> tuple[int, dict[str, Any]]:
+    """``going`` removed, each said, then ``over``'s meshes, said in one line, and ``kept`` said; ``tidy``: then what
+    cad's update moved aside and cad's releases in uv's cache (``_tidy``); then what that freed. A document's folder a
+    share of its file is being made in is kept, and said. Its exit status, 1 where one could not be removed, and what
+    it did as ``prune --json`` answers it: by kind (``KINDS``) the paths removed and the disk that freed, the disk
+    freed in all, what came of uv's cache (``uv``), and each path kept, of which kind and why, one that could not be
+    removed among them (``"ok": false``, a ``failed`` failure's ``error`` and ``reason``). Not ``said``, it says
+    nothing as it goes."""
     from cad_server import sharing
-    from cad_server._internal import base
+    from cad_server._internal import auto_update, base
     from cad_server.engine.library import DOCUMENTS
 
     say = _say if said else (lambda _line: None)
@@ -421,13 +429,17 @@ def _remove(going: list[tuple[Path, str, str]], kept: list[tuple[Path, str, str]
                 "used going first")
     for path, why, _kind in kept:
         say(f"kept {path}: {why}")
-    count, total = sum(len(paths) for paths in removed.values()), max(0, sum(space.values()))
+    aside, came = _tidy(say) if tidy else ([], None)
+    removed["aside"] += aside
+    count = sum(len(paths) for paths in removed.values()) + (came == auto_update.CLEANED)
+    total = max(0, sum(space.values()))
     say(f"{count} removed, {size(total)} freed" if count else "nothing removed")
     answer: dict[str, Any] = {
         "ok": not failed,
         "removed": {kind: {"paths": [str(path) for path in removed[kind]], "freed": max(0, space[kind])}
                     for kind in kinds},
         "freed": total,
+        "uv": came,
         "kept": [{"path": str(path), "kind": kind, "why": why} for path, why, kind in [*failed, *kept]]}
     if failed:
         answer.update(error="could not remove " + ", ".join(str(path) for path, _why, _kind in failed),
@@ -438,7 +450,7 @@ def _remove(going: list[tuple[Path, str, str]], kept: list[tuple[Path, str, str]
 def _clean() -> int:
     """All of the cache, and what ``prune`` removes, where no server runs (``client.connect``)."""
     from cad.engine import client
-    from cad_server._internal import base
+    from cad_server._internal import base, releases
 
     try:
         running = client.connect(start=False)
@@ -451,15 +463,15 @@ def _clean() -> int:
                          "first\n")
         return 1
     root, envs = folder(), base.folder()
-    found = [(env, f"an environment of cad {_release(env) or 'no release it names'}", "environments")
+    found = [(env, f"an environment of cad {base.release_of(env) or 'no release it names'}", "environments")
              for env in _folders(envs)]
     found += [(root / name, f"cad's {name}", name) for name in OWN
               if name != base.BASE and os.path.lexists(root / name)]
-    going, kept = _running(found, [])
+    going, kept = _unused(found, [])
     pruned, also = prunable()  # its release folders of 0.11.11 and earlier: the environments are all above
 
     def outside(entries: list[tuple[Path, str, str]]) -> list[tuple[Path, str, str]]:
-        return [entry for entry in entries if not _inside(str(entry[0]), envs)]
+        return [entry for entry in entries if not releases.inside(entry[0], envs)]
 
     code, _answer = _remove(going + outside(pruned), kept + outside(also))
     with contextlib.suppress(OSError):
@@ -479,7 +491,8 @@ def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     if args.command == "prune":
         going, kept = prunable()
         gone = documents()
-        code, answer = _remove(going + gone, kept, meshes(path for path, _what, _kind in gone)[0], said=not args.json)
+        code, answer = _remove(going + gone, kept, meshes(path for path, _what, _kind in gone)[0], tidy=True,
+                               said=not args.json)
         if args.json:
             _say(json.dumps(answer, separators=(",", ":")))
         return code

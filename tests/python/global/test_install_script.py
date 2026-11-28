@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -240,7 +241,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("cad 1.0.0 is installed but does not start: installing it again with uv.", done.stdout)
         self.assertNotIn("Installing cad with uv.", done.stdout)
-        self.assertEqual(self.installs(), [["--reinstall", *install.UV_TOOL_ARGS, "cad"]])
+        self.assertEqual(self.installs(), [["--force", *install.UV_TOOL_ARGS, "cad"]])
         self.assertEqual(json.loads((self.root / "uv.json").read_text(encoding="utf-8")), {"cad": "5.0.0"})
         self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
         found = json.loads(report.read_text(encoding="utf-8"))
@@ -257,107 +258,50 @@ class InstallScriptTests(AgentApps):
         found = json.loads(report.read_text(encoding="utf-8"))
         self.assertEqual((found["release"], found["setup"]), ("1.0.0", 1))
 
-    def pipx_cad(self, version: str = "0.13.0", link: bool = True) -> dict:
-        """cad as ``pipx install cad`` leaves it: pipx's environment of cad (its metadata, its own ``cad``, a stand-in)
-        and, with ``link``, its command in ~/.local/bin, a link to that (pipx's bin folder by default, and uv's). What
-        the stand-in pipx says."""
+    def test_a_dist_info_left_with_no_record_is_repaired_by_installing_cad_again_whole_and_nothing_by_hand(self):
+        """An uninstall that stopped midway (on Windows, a file of the old cad held as uv removed it) leaves cad's
+        ``dist-info`` with no ``RECORD``, and every upgrade in place fails on it. The repair is the one cad's own
+        update runs: the environment installed again whole (``--force``). Nothing in it is deleted by hand, and a
+        cad that starts is left as it is."""
+        self.tools(cad="1.0.0")
+        site = self.root / "uv.tools" / "cad" / "lib" / "python3.14" / "site-packages"
+        (site / "cad-1.0.0.dist-info" / "licenses").mkdir(parents=True)
+        done = self.run_install(FAKE_PYPI="5.0.0", FAKE_FAIL="cad:--version")
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertNotIn("Removed", done.stdout)
+        self.assertIn("installing it again with uv", done.stdout)
+        self.assertEqual(self.installs(), [["--force", *install.UV_TOOL_ARGS, "cad"]])
+        self.assertTrue((site / "cad-1.0.0.dist-info").is_dir(), "uv's to remove, with the environment: the stand-in "
+                        "removes nothing")
+        # A cad that starts: nothing installed, nothing deleted; its own update repairs what it meets.
+        self.tools(cad="1.0.0")
+        done = self.run_install(FAKE_PYPI="5.0.0")
+        self.assertEqual(self.installs(), [])
+        self.assertTrue((site / "cad-1.0.0.dist-info").is_dir())
+        self.assertFalse(hasattr(install, "repair"))
+
+    def test_a_cad_pipx_installed_stops_the_cad_step_in_one_line_that_names_pipx_s_own_command(self) -> None:
+        """cad is a uv tool, and cad updates only what uv made: pipx's ``cad`` in uv's bin folder (pipx's by default
+        too) is in uv's way. uv installs no second cad over it, nothing of pipx's is run or changed, and the one line
+        says how the person takes it out; a link into another of pipx's environments is another program's cad."""
         venvs = self.home / ".local" / "share" / "pipx" / "venvs"
-        own = venvs / "cad" / "bin" / "cad"
-        own.parent.mkdir(parents=True)
-        (venvs / "cad" / "pipx_metadata.json").write_text(json.dumps(
-            {"main_package": {"package": "cad", "package_or_url": "cad", "package_version": version}}), encoding="utf-8")
-        own.write_text(STAND_IN.format(python=sys.executable, latest=LATEST), encoding="utf-8")
-        own.chmod(0o755)
-        if link:
-            self.uv_bin.mkdir(parents=True, exist_ok=True)
-            (self.uv_bin / "cad").symlink_to(own)
-        return {"FAKE_PIPX_VENVS": str(venvs), "FAKE_PIPX_BIN": str(self.uv_bin)}
-
-    def test_a_cad_pipx_installed_is_a_global_cad_as_uv_s_is_and_uv_installs_no_second(self) -> None:
-        said = self.pipx_cad()
+        for name in ("cad", "other"):
+            own = venvs / name / "bin" / "cad"
+            own.parent.mkdir(parents=True)
+            own.write_text("#!/bin/sh\n", encoding="utf-8")
+            own.chmod(0o755)
+        self.uv_bin.mkdir(parents=True, exist_ok=True)
+        (self.uv_bin / "cad").symlink_to(venvs / "cad" / "bin" / "cad")
         self.programs("pipx")
-        report = self.root / "report.json"
-        done = self.run_install(CAD_INSTALL_REPORT=str(report), **said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.installs(), [])
-        self.assertIn("cad 0.13.0 is installed already: it is left as it is, and updates itself.", done.stdout)
-        self.assertNotIn("another program's", done.stdout)
-        self.assertEqual(self.calls("pipx"), [["environment", "--value", "PIPX_LOCAL_VENVS"],
-                                              ["environment", "--value", "PIPX_BIN_DIR"]])
-        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
-        self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
-                         {"release": "0.13.0", "setup": 0})
-        # A person's run brings it up to date by pipx's own cad, and reads pipx's record of it again.
-        done = self.run_install(FAKE_CAD_UPDATES="0.14.0", FAKE_UPDATE_EXIT="1", **said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
-        self.assertNotIn("cad was not updated", done.stdout)
-        self.assertEqual(self.installs(), [])
-        # pipx 1.0, which has no `pipx environment`, and no link in ~/.local/bin: its list says where its cad is.
+        done = self.run_install()
+        self.assertEqual(1, done.returncode, done.stdout + done.stderr)
+        self.assertIn("cad: not installed: ~/.local/bin/cad is the cad pipx installed, which uv will not replace. Run "
+                      "`pipx uninstall cad`, then run this again.", done.stdout)
+        self.assertEqual((self.installs(), self.calls("pipx")), ([], []), "nothing installed, and pipx never run")
+        self.assertTrue((self.uv_bin / "cad").is_symlink(), "left as it is")
         (self.uv_bin / "cad").unlink()
-        done = self.run_install(FAKE_PIPX_1_0="1", **said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("Updating cad 0.14.0 to the newest release...\ncad 0.14.0 is the newest release\n", done.stdout)
-        self.assertEqual((self.installs(), self.calls("pipx")[-1]), ([], ["list", "--json"]))
-        # pipx not found: its link in ~/.local/bin says whose cad it is.
-        (self.uv_bin / "cad").symlink_to(self.home / ".local" / "share" / "pipx" / "venvs" / "cad" / "bin" / "cad")
-        (self.bin / "pipx").unlink()
-        done = self.run_install(**said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
-        self.assertIn("Updating cad 0.14.0 to the newest release...", done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
-        # uv's cad is there too: uv's is the one, and pipx is not asked.
-        self.programs("pipx")
-        (self.root / "uv.json").write_text(json.dumps({"cad": "0.12.0"}), encoding="utf-8")
-        done = self.run_install(**said)
-        self.assertIn("Updating cad 0.12.0 to the newest release...", done.stdout)
-        self.assertEqual((self.installs(), self.calls("pipx")), ([], []))
-
-    def test_a_cad_pipx_installed_that_does_not_start_is_installed_again_by_pipx_never_by_uv(self) -> None:
-        said = self.pipx_cad("0.12.0")
-        self.programs("pipx")
-        report = self.root / "report.json"
-        done = self.run_install(FAKE_FAIL="cad:--version", FAKE_PYPI="0.14.0", CAD_INSTALL_REPORT=str(report), **said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertIn("cad 0.12.0 is installed with pipx but does not start: installing it again with pipx.",
-                      done.stdout)
-        self.assertEqual(self.installs(), [], "never with uv")
-        self.assertEqual(self.calls("pipx")[-1], ["install", "--force", "cad"])
-        self.assertEqual(self.calls("cad"), [["--version"], ASKED, HANDED, AUTO_ON])
-        self.assertEqual({key: json.loads(report.read_text(encoding="utf-8"))[key] for key in ("release", "setup")},
-                         {"release": "0.14.0", "setup": 0})
-        # pipx's install fails, or pipx is not found: said in one line, and the plugin's step runs all the same, by
-        # the newest cad.
-        for fail, line in (("cad:--version,pipx:install", "cad: failed (pipx install exit status 1; what pipx said is "
-                                                          "above), so cad 0.14.0 could not be installed again."),
-                           ("cad:--version", "cad 0.14.0, installed with pipx, does not start, and pipx was not found "
-                                             "here, so it could not be installed again.")):
-            with self.subTest(fail=fail):
-                if "pipx" not in fail:
-                    (self.bin / "pipx").unlink()
-                done = self.run_install(FAKE_FAIL=fail, CAD_INSTALL_REPORT=str(report), **said)
-                self.assertEqual(1, done.returncode)
-                self.assertIn(line, done.stdout)
-                self.assertNotIn("run `pipx", done.stdout)
-                self.assertEqual(self.installs(), [])
-                self.assertEqual(self.newest(), [NEWEST])
-                self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["setup"], 1)
-
-    def test_pipx_without_a_cad_or_a_link_into_another_of_its_environments_is_no_cad(self) -> None:
-        said = self.pipx_cad(link=False)
-        (self.home / ".local" / "share" / "pipx" / "venvs" / "cad" / "pipx_metadata.json").write_text(json.dumps(
-            {"main_package": {"package": "other", "package_version": "1.0"}}), encoding="utf-8")
-        self.programs("pipx")
-        done = self.run_install(**said)
-        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
-        self.assertEqual(self.installs(), [["--managed-python", "--python", "3.14", "cad"]], "uv's cad, as on any")
-        self.no_tools()
-        other = self.home / ".local" / "share" / "pipx" / "venvs" / "other" / "bin" / "cad"
-        other.parent.mkdir(parents=True)
-        other.write_text("#!/bin/sh\n", encoding="utf-8")
-        (self.uv_bin / "cad").symlink_to(other)
-        done = self.run_install(**said)
+        (self.uv_bin / "cad").symlink_to(venvs / "other" / "bin" / "cad")
+        done = self.run_install()
         self.assertEqual(1, done.returncode)
         self.assertIn("is another program's cad command", done.stdout)
 
@@ -518,6 +462,66 @@ class InstallScriptTests(AgentApps):
         install.tidy(here, self.uv_bin)
         self.assertTrue(kept.is_file())
 
+    def test_on_windows_what_runs_from_cad_s_environment_is_stopped_before_uv_installs_it_again(self) -> None:
+        """uv cannot install cad's environment again while any process runs from it (``failed to remove directory
+        ...\\Scripts: Access is denied``, measured) and leaves cad broken: before it runs, every process whose program is
+        inside the environment, or is uv's cad.exe or one set aside, is stopped and waited for, looked for again until
+        none is left; never this run nor what started it, nor anything else. Then uv installs it again whole."""
+        here = install.Here(self.environ(UV=str(self.bin / "uv"), FAKE_FAIL="cad:--version"), platform="win32")
+        self.tools(cad="1.0.0")
+        env = self.root / "uv.tools" / "cad"
+        site = env / "Lib" / "site-packages"
+        env.mkdir(parents=True)
+        folder = self.uv_bin
+        me = os.getpid()
+        table = {me: (90, sys.executable), 90: (91, str(env / "Scripts" / "python.exe")),  # what started this run
+                 91: (1, str(folder / "cad.exe")),
+                 100: (1, str(env / "Scripts" / "python.exe")), 101: (1, str(folder / "cad.exe")),
+                 104: (100, str(self.root / "python" / "python.exe")),  # the Python a venv's python.exe started
+                 102: (1, str(folder / install.ASIDE.format(stamp="12-34", n=1))), 103: (1, str(folder / ".cad-7.exe.old")),
+                 110: (1, str(env) + "-other\\python.exe"), 111: (1, str(folder / "ruff.exe")), 112: (1, None)}
+        test = self
+
+        class Fake:
+            ended: list = []
+            watched: list = []
+
+            def processes(self) -> dict:
+                return dict(table)
+
+            def end(self, pids: list, watched: list, seconds: float) -> list:
+                test.assertEqual(test.installs(), [], "stopped before uv runs")
+                self.ended.append(pids)
+                self.watched.append(watched)
+                for pid in pids + watched:
+                    table.pop(pid)
+                if len(self.ended) == 1:  # one more began meanwhile: found at the next look
+                    table[120] = (1, str(env / "Scripts" / "cad.exe"))
+                return []
+
+        fake = Fake()
+        said = io.StringIO()
+        with mock.patch.object(install, "Processes", lambda: fake), contextlib.redirect_stdout(said):
+            cad = install.install_cad(here)
+        self.assertEqual((cad.code, cad.release), (0, "0.13.0"), said.getvalue())
+        self.assertEqual(fake.ended, [[100, 101, 102, 103], [120]])
+        self.assertEqual(fake.watched, [[104], []], "what one stopped started directly, waited for")
+        self.assertEqual(sorted(table), sorted([me, 90, 91, 110, 111, 112]))
+        self.assertIn("Stopped what ran from cad's environment, so uv can install it again: 100 (", said.getvalue())
+        self.assertEqual(self.installs(), [["--force", *install.UV_TOOL_ARGS, "cad"]])
+        # A cad that starts is installed again by nothing, and nothing is stopped; nor elsewhere than on Windows.
+        table[130] = (1, str(env / "Scripts" / "python.exe"))
+        fake.ended.clear()
+        with mock.patch.object(install, "Processes", lambda: fake), contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(install.install_cad(install.Here(self.environ(UV=str(self.bin / "uv")),
+                                                             platform="win32")).there)
+            install.install_cad(install.Here(self.environ(UV=str(self.bin / "uv"), FAKE_FAIL="cad:--version"),
+                                             platform="linux"))
+        self.assertEqual(fake.ended, [])
+        # Windows' calls that cannot be made stop nothing, and uv runs all the same.
+        self.assertEqual(install.stop_environment(here, env, folder, mock.Mock(processes=mock.Mock(
+            side_effect=OSError(5, "Access is denied")))), ([], []))
+
     def test_its_output_is_utf_8_on_windows_where_it_is_no_console(self) -> None:
         # As cad's and uv's, which it runs on the same streams: a pipe or a file on Windows; never a console, never
         # another system.
@@ -536,7 +540,7 @@ class InstallScriptTests(AgentApps):
 
     def test_a_person_s_run_brings_a_cad_that_is_here_up_to_date_by_that_cad_s_own_update(self) -> None:
         # Older or newer than PyPI's newest, uv installs nothing: the tool's own `cad update` is what updates it, and
-        # it stays inside its major (no --major). Never PATH's cad: a shell may find another one first.
+        # Never PATH's cad: a shell may find another one first.
         self.programs("cad")
         for there in ("0.13.0", "0.1.0", "99.0.0"):
             self.tools(cad=there)
@@ -544,8 +548,8 @@ class InstallScriptTests(AgentApps):
             self.assertEqual(0, done.returncode, done.stdout + done.stderr)
             self.assertEqual(self.installs(), [], there)
             self.assertEqual([(call["argv"], call["path"]) for call in self.logged("cad")],
-                             [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], ASKED, HANDED,
-                                                                                 AUTO_ON)])
+                             [(argv, str(self.uv_bin / "cad")) for argv in (["--version"], ["update"], ["--version"],
+                                                                                 ASKED, HANDED, AUTO_ON)])
             self.assertIn(f"cad {there} is the newest release\n", done.stdout)
         # Its exit status says little: 0 with nothing newer (above), non-zero with the update done all the same. What
         # uv holds afterwards is what counts.
@@ -553,6 +557,19 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("cad 99.0.0 updated to 99.1.0\n", done.stdout)
         self.assertEqual(self.calls("cad")[-2:], [HANDED, AUTO_ON])
+
+    def test_a_cad_updated_beside_its_install_is_read_by_the_release_it_runs(self) -> None:
+        # cad's own update installs the newer release beside the one uv installed, which uv goes on listing: what
+        # came of the update, and the release a later run starts from, are what `cad --version` says.
+        self.programs("cad")
+        self.tools(cad="0.13.0")
+        done = self.run_install(FAKE_CAD_SWITCHES="0.13.1")
+        self.assertEqual(0, done.returncode, done.stdout + done.stderr)
+        self.assertIn("Updating cad 0.13.0 to the newest release...\ncad 0.13.0 updated to 0.13.1\n", done.stdout)
+        uv = json.loads((self.root / "uv.json").read_text(encoding="utf-8"))
+        self.assertEqual(uv["cad"], "0.13.0")  # uv's record, as uv left it
+        done = self.run_install()
+        self.assertIn("Updating cad 0.13.1 to the newest release...\ncad 0.13.1 is the newest release\n", done.stdout)
 
     def test_before_cad_takes_over_a_person_s_run_says_one_line_of_its_own_and_one_of_the_update(self) -> None:
         """What a person sees before cad's ``cad plugin install`` takes over (and plays its logo): the line that a
@@ -579,7 +596,7 @@ class InstallScriptTests(AgentApps):
                                                        result])
                 self.assertEqual(done.stderr, "cad (stand-in): the plugin, on stderr\n")
                 self.assertNotIn("stand-in): update", done.stdout + done.stderr)
-                self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+                self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
 
     def test_in_a_terminal_the_update_s_result_takes_the_place_of_its_first_line(self) -> None:
         self.tools(cad="0.13.0")
@@ -611,7 +628,7 @@ class InstallScriptTests(AgentApps):
         self.assertEqual(0, done.returncode, done.stdout + done.stderr)
         self.assertIn("cad 0.13.0 was not updated now (cad (stand-in): update, on stderr): it updates itself.\n",
                       done.stdout)
-        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ASKED, HANDED, AUTO_ON])
+        self.assertEqual(self.calls("cad"), [["--version"], ["update"], ["--version"], ASKED, HANDED, AUTO_ON])
         # No answer in the time it has: stopped, said, and the run goes on.
         here = install.Here(self.environ(FAKE_UPDATE_SLEEP="30"))
         said = io.StringIO()
@@ -703,8 +720,9 @@ class InstallScriptTests(AgentApps):
                 self.assertEqual(code, done.returncode, done.stdout + done.stderr)
                 steps = [(call["name"], call["argv"]) for call in map(json.loads, self.log.read_text(
                     encoding="utf-8").splitlines()) if call["name"] == "cad" or call["argv"][:2] == ["tool", "run"]]
-                self.assertEqual(steps, [("cad", ["--version"]), *([] if began else [("cad", ["update"])]),
-                                         ("cad", ASKED), ("uv", NEWEST), ("cad", AUTO_ON)])
+                updating = [] if began else [("cad", ["update"]), ("cad", ["--version"])]
+                self.assertEqual(steps, [("cad", ["--version"]), *updating, ("cad", ASKED), ("uv", NEWEST),
+                                         ("cad", AUTO_ON)])
                 # Of `cad plugin`, that cad saw the question alone before the newest cad's step, and the person
                 # none of its answer: one line of this command's own.
                 self.assertNotIn("invalid choice", done.stdout + done.stderr)
@@ -1320,9 +1338,13 @@ class InstallScriptTests(AgentApps):
                 self.assertEqual(dev_install.main(["--release"]), 0)
             self.assertEqual([argv for argv in self.calls("uv") if argv[1] in ("install", "uninstall")],
                              [["tool", "uninstall", "cad"], ["tool", "install", *install.UV_TOOL_ARGS, "cad"]])
-            # install.py hands the apps to the published cad, and leaves cad's own automatic updates as they are:
-            # --release turns them on again.
-            self.assertEqual(self.calls("cad"), [ASKED, HANDED, AUTO_ON, ["update", "auto", "on"]])
+            # First the checkout's server is stopped, by the checkout's cad, before its tool goes: it would outlive
+            # it, and the published cad's start would join it. Then install.py hands the apps to the published cad,
+            # and leaves cad's own automatic updates as they are: --release turns them on again.
+            self.assertEqual(self.calls("cad"), [["server", "stop"], ASKED, HANDED, AUTO_ON, ["update", "auto", "on"]])
+            order = [argv for argv in self.calls() if argv in (["server", "stop"], ["tool", "uninstall", "cad"])]
+            self.assertEqual(order, [["server", "stop"], ["tool", "uninstall", "cad"]],
+                             "stopped before the tool is uninstalled")
             self.assertFalse(dev_install.editable(str(self.bin / "uv")))
 
     def test_install_ps1_ends_a_failure_in_a_terminating_error(self) -> None:

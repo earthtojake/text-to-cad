@@ -168,7 +168,7 @@ const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
-`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/whats-new` (the What's new dialog, its notes and when it shows), `/i18n` (the locales and the translation hook), `/i18n/locale` (which locale a person reads in, with no dictionary: for a page that says a few words before anything else loads), `/build-id` (what a Vite config names the build with), `/utils`, `/primitives/*`,
+`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/whats-new` (the What's new dialog, its notes and when it shows), `/update` (the update button, `useUpdate` behind it, a failed update as the viewer's alert, `updateAlert`: its words by its cause, and the project's notices in the same card where the host keeps their dismissals, `noticeAlert`), `/i18n` (the locales and the translation hook), `/i18n/locale` (which locale a person reads in, with no dictionary: for a page that says a few words before anything else loads), `/build-id` (what a Vite config names the build with), `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,
 `joinPath`) and `/links` (the navbar's link defaults) are pure modules, with no React, for a

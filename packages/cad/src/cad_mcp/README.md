@@ -32,6 +32,9 @@ It holds no tool, view or document: the server does. What it does on its own, in
   one line saying so, which
   the agent relays, and anything else with an error carrying it. Which release it accepts is decided in one place,
   `cad_mcp.shim.start_server`.
+- **Says a server older than itself**: where the server it joined is older than this release (the plugin's),
+  ``cad X is older than Y: run `cad update` `` (`shim.older`), added to the server's `instructions` and, once a
+  session, to the first result of a tool the agent calls (not one the app's views alone call).
 - **Holds the server** while the app runs, under a name its sessions are opened by, which end when the app quits.
 - **Opens the person's browser** where a `cad_show` in an app that shows no views asks, in the app's own
   environment, never in the server's, and tells the server whether it opened.

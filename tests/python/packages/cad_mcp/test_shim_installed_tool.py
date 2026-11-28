@@ -27,12 +27,9 @@ OLDER = f"0.10.{9000 + os.getpid() % 800}"
 
 
 def _uv() -> str:
-    found = shutil.which("uv")
-    if found:
-        return found
-    from uv import find_uv_bin
+    from cad_server._internal.base import find_uv
 
-    return find_uv_bin()
+    return find_uv()
 
 
 class InstalledToolTest(unittest.TestCase):

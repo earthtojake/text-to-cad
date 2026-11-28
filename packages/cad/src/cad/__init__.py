@@ -53,7 +53,7 @@ from cad._internal.font_scan import install_font_guard as _install_font_guard
 from cad._internal.lazy_kernel import install as _install_lazy_kernel
 
 # ``import build123d as bd`` binds a module the kernel loads into on its first attribute
-# (``_internal/lazy_kernel.py``). The wheel's cad-lazy-kernel.pth installs it at interpreter
+# (``_internal/lazy_kernel.py``). The wheel's cad.pth installs it at interpreter
 # start; this covers an editable install, where that file is not placed. Idempotent.
 _install_lazy_kernel()
 del _install_lazy_kernel

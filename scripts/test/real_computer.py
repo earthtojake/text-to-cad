@@ -154,9 +154,10 @@ class Loopback(http.server.ThreadingHTTPServer):
 class Feed(Loopback):
     """The version feed saying ``latest`` at both its addresses: the old one (any path ending ``versions``), ``latest``
     alone, as releases 0.10.0 to 0.11.11 read it, and the new one (any path ending ``releases``), with ``lines``:
-    ``lines`` as set (each major's newest release, by its number), else ``latest`` for its own major; anything else
-    (telemetry) is not found. ``asked``: how many times it was read; ``reads``: each read, its address (``versions``
-    or ``releases``) and the reader's ``User-Agent``."""
+    ``lines`` as set (each major's newest release, by its number), else ``latest`` for its own major, as 0.11.12 to
+    0.11.18 read it; and the notices (any path ending ``notices``), none, which later releases read beside PyPI;
+    anything else (telemetry) is not found. ``asked``: how many times it was read; ``reads``: each read, its address
+    (``versions``, ``releases`` or ``notices``) and the reader's ``User-Agent``."""
 
     def __init__(self, latest: str) -> None:
         self.latest = latest
@@ -168,13 +169,13 @@ class Feed(Loopback):
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 - http.server's name
                 path = self.path.split("?", 1)[0].rstrip("/")
-                address = next((name for name in ("versions", "releases") if path.endswith(name)), None)
+                address = next((name for name in ("versions", "releases", "notices") if path.endswith(name)), None)
                 if address is None:
                     self.answer(None)
                     return
                 feed.asked += 1
                 feed.reads.append((address, self.headers.get("User-Agent") or ""))
-                answer: dict = {"latest": feed.latest}
+                answer: dict = {"notices": []} if address == "notices" else {"latest": feed.latest}
                 if address == "releases":
                     answer["lines"] = (dict(feed.lines) if feed.lines is not None
                                        else {feed.latest.split(".", 1)[0]: feed.latest})
@@ -653,12 +654,16 @@ class Sentinels:
 
     Claude Desktop's ``claude_desktop_config.json`` is watched by what an install could change there, its
     ``mcpServers`` section, parsed (``servers_of``), not by its time: the running app rewrites the file by itself
-    (its ``preferences``) every few minutes."""
+    (its ``preferences``) every few minutes. Claude's ``known_marketplaces.json`` is watched by its marketplaces, each
+    without the time the app last refreshed it (``marketplaces_of``), not by its time: the running app refreshes its
+    own marketplace there by itself."""
 
     times: dict[str, object]
 
-    # The files watched by their MCP servers alone (``servers_of``), by name.
-    BY_SERVERS = ("claude_desktop_config.json",)
+    # The files watched by what an install could change in them alone, by name: Claude Desktop's MCP servers
+    # (``servers_of``), Claude's marketplaces (``marketplaces_of``).
+    BY_CONTENT = {"claude_desktop_config.json": lambda data: servers_of(data),
+                  "known_marketplaces.json": lambda data: marketplaces_of(data)}
 
     @classmethod
     def here(cls) -> "Sentinels":
@@ -683,7 +688,7 @@ class Sentinels:
         times: dict[str, object] = {}
         for path in paths:
             try:
-                times[str(path)] = (servers_of(path.read_bytes()) if path.name in cls.BY_SERVERS
+                times[str(path)] = (cls.BY_CONTENT[path.name](path.read_bytes()) if path.name in cls.BY_CONTENT
                                     else path.stat().st_mtime)
             except OSError:
                 times[str(path)] = None
@@ -705,6 +710,21 @@ def servers_of(data: bytes) -> str:
     if not isinstance(config, dict):
         return "unparsed sha256:" + hashlib.sha256(data).hexdigest()
     return json.dumps(config.get("mcpServers", {}), sort_keys=True, separators=(",", ":"))
+
+
+def marketplaces_of(data: bytes) -> str:
+    """What an install could change in Claude's ``known_marketplaces.json`` (``data``, the file's bytes): each
+    marketplace and where it comes from, as canonical JSON, without ``lastUpdated``, which the running app sets as it
+    refreshes a marketplace by itself. A file that is not a JSON object is compared whole, by its bytes' digest."""
+    try:
+        known = json.loads(data.decode("utf-8"))
+    except ValueError:
+        known = None
+    if not isinstance(known, dict):
+        return "unparsed sha256:" + hashlib.sha256(data).hexdigest()
+    return json.dumps({name: ({key: value for key, value in entry.items() if key != "lastUpdated"}
+                              if isinstance(entry, dict) else entry) for name, entry in known.items()},
+                      sort_keys=True, separators=(",", ":"))
 
 
 # --- this tree's wheels as another release -----------------------------------------------------------------
@@ -745,7 +765,10 @@ def rewrite(wheel: Path, out: Path, version: str, *, replace: dict[str, bytes] |
                 text = re.sub(r"(?m)^Version: .*$", f"Version: {version}", text, count=1)
                 text = re.sub(r"(?m)^(Requires-Dist: cad(?:\[[^\]]*\])?) ?==" + re.escape(old) + r"\b",
                               rf"\g<1>=={version}", text)
-                text = text.rstrip("\n") + "\n" + "".join(f"Requires-Dist: {line}\n" for line in requires or [])
+                # Among the headers, before the description a built wheel carries after the first empty line.
+                head, gap, body = text.partition("\n\n")
+                text = head.rstrip("\n") + "\n" + "".join(f"Requires-Dist: {line}\n" for line in requires or []) \
+                    + (gap[1:] + body if gap else "")
                 data = text.encode("utf-8")
             elif relative == "entry_points.txt" and not commands:
                 data = re.sub(r"(?ms)^\[console_scripts\]\n.*?(?=^\[|\Z)", "", data.decode("utf-8")).encode("utf-8")
@@ -775,15 +798,15 @@ def stamp(patch: int = 9999, version: str | None = None) -> str:
 
 
 def publish(wheels: Path, version: str, out: Path, *, replace: dict[str, bytes] | None = None,
-            commands: bool = True) -> list[Path]:
+            commands: bool = True, requires: list[str] | None = None) -> list[Path]:
     """Every wheel of one release in ``wheels`` (cad's and its aliases': cad-server, cad-mcp, cadgen) written into
-    ``out`` as release ``version`` (``rewrite``; ``replace`` and ``commands`` apply to cad's own wheel). The wheels
-    written."""
+    ``out`` as release ``version`` (``rewrite``; ``replace``, ``commands`` and ``requires`` apply to cad's own wheel).
+    The wheels written."""
     found = sorted(Path(wheels).glob("*.whl"))
     releases = {path.name.split("-")[1] for path in found}
     if len(releases) != 1 or not any(path.name.startswith("cad-") for path in found):
         raise Failed(f"{wheels}: expected the wheels of one release, cad's among them: {[path.name for path in found]}")
-    return [rewrite(path, out, version, **({"replace": replace, "commands": commands}
+    return [rewrite(path, out, version, **({"replace": replace, "commands": commands, "requires": requires}
                                             if path.name.startswith("cad-") else {})) for path in found]
 
 

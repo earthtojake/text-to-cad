@@ -280,14 +280,17 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_codex_starts_the_cad_server_of_its_release(self) -> None:
         # One uniquely named server (a host allowlists servers by name): uvx runs cad at this plugin's release, as
-        # `cad mcp`, from uv's cache, installing nothing. Not offline: the first start downloads that release. No
-        # `cwd`: Codex then starts each thread's server in that thread's workspace. Every copy carries this line.
+        # `cad mcp`, from uv's cache, installing nothing. `--isolated`, or uvx runs the installed uv tool's
+        # environment wherever it is that same release, which cad's update replaces in place and on Windows stops
+        # every process of. Not offline: the first start downloads that release. No `cwd`: Codex then starts each
+        # thread's server in that thread's workspace. Every copy carries this line.
         manifest = load_json(CODEX_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./codex.mcp.json")
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(load_json(CODEX_MCP_PATH), {"mcpServers": {"cad": {
             "command": "uvx",
-            "args": ["--no-config", "--managed-python", "--python", "3.14", f"cad@{version}", "mcp"],
+            "args": ["--isolated", "--no-config", "--managed-python", "--python", "3.14", f"cad@{version}",
+                     "mcp"],
             "startup_timeout_sec": 300,
         }}})
 

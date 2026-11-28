@@ -201,25 +201,30 @@ class ViewerAnalyticsTest(unittest.TestCase):
         crashes = [(event["where"], event["type"]) for event in self.sent[-1]["events"] if event["name"] == "exception"]
         self.assertEqual(crashes, [("route", "KeyError")], "the route's own mistake, once; never the page leaving")
 
-    def test_the_server_says_its_release_and_no_update(self) -> None:
-        # A page reloads on another release (or start) of the engine; nothing here offers or runs an update.
+    def test_the_server_says_its_release_and_the_update_button_under_a_key_of_its_own(self) -> None:
+        # A page reloads on another release (or start) of the engine. The update button's state is ``cadUpdate``,
+        # never the ``notice`` or ``update`` the pages of 0.10.0 to 0.11.11 read (``update_handshake.json``): none
+        # here, a checkout being no global install; and no engine under this app, so its update is refused.
         status, answer = self.request("GET", "/api/v1/server")
         self.assertEqual((status, answer["release"]), (200, cad_server.__version__))
         self.assertFalse({"notice", "update"} & set(answer))
+        self.assertIsNone(answer["cadUpdate"])
         self.assertEqual(self.request("POST", "/api/v1/server", {})[0], 405)
-        for method in ("GET", "POST"):
-            self.assertEqual(self.request(method, "/api/v1/local/update", {} if method == "POST" else None)[0], 404)
+        self.assertEqual(self.request("GET", "/api/v1/local/update")[0], 405)
+        self.assertEqual(self.request("POST", "/api/v1/local/update", {})[0], 409)
         self.assertNotIn("updates", self.request("GET", "/api/v1/settings")[1])
         self.assertEqual(self.request("PUT", "/api/v1/settings", {"updates": {"automatic": False}})[0], 400)
 
-    def test_an_install_with_no_cad_app_build_names_this_version_s_install_command(self) -> None:
+    def test_an_install_with_no_cad_app_build_names_the_command_that_installs_cad_again(self) -> None:
         from cad_server._internal.launch import reinstall_command
         from cad_server.mcp import tunnel
+
+        self.assertEqual(reinstall_command(), "uv tool install --force cad")
 
         with mock.patch("cad_server.assets.cad_app_code", return_value=None):
             status, answer = self.request("GET", tunnel._APP_ROUTE)
         self.assertEqual((status, answer), (404, {"error": "this install has no CAD app build",
-                                                  "hint": f"install this version again: `{reinstall_command()}`"}))
+                                                  "hint": f"install cad again: `{reinstall_command()}`"}))
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.

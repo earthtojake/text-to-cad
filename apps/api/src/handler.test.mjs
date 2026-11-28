@@ -3,6 +3,7 @@ import { mock, test } from 'node:test';
 import { idOf, uuidV5 } from './events.mjs';
 import { handle } from './handler.mjs';
 import { INSTALL_LIMIT, rateLimiter } from './limit.mjs';
+import { noticesOf } from './notices.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -701,21 +702,97 @@ test('schema 12 reads everything schema 11 does, its rows keyed alike, and a sch
   assert.equal((await send(memory(), 'POST', '/v1/events', { ...INSTALLING, events: many })).status, 400);
 });
 
+// Schema 13: schema 12 with why an update did not install a newer cad (`cause`), and two more outcomes.
+const CAUSING = { ...INSTALLING, schema: 13 };
+const ENDED = ['timeout', 'no_program', 'in_use', 'denied', 'disk_full', 'network', 'offline', 'no_release', 'python', 'platform',
+  'config_exclude', 'config_index', 'config_tls', 'cad_running', 'broken', 'start_failed', 'helper_start', 'packaged', 'unknown',
+  'none'];
+
+test('schema 13 says why an update did not install a newer cad, and counts the ones lost and the ones that could not begin', async () => {
+  const shapes = [
+    {}, // installed: no cause
+    ...[...ENDED, 'already'].map(cause => ({ outcome: 'current', cause })),
+    ...ENDED.map(cause => ({ outcome: 'failed', reason: 'upgrade', cause })),
+    ...ENDED.map(cause => ({ outcome: 'restored', reason: 'older', cause })),
+    { outcome: 'failed', reason: 'put_back', cause: 'disk_full', tries: 2, asked: true, installer: 'pipx' },
+    ...['lost', 'helper_crash'].map(cause => ({ outcome: 'lost', cause, tries: 2 })),
+    ...['no_installer', 'no_switch'].map(cause => ({ outcome: 'blocked', cause, tries: 0 })),
+  ];
+  const store = memory();
+  const batch = { ...CAUSING, events: shapes.map(update) };
+  assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(batch)))).status, 204);
+  assert.deepEqual(store.rows.map(fieldsOf), shapes.map(update).map(({ name, ...shape }) => ({
+    id: idOf(batch.batch, `update ${JSON.stringify([shape.from, shape.outcome, shape.reason ?? null, shape.tries, shape.installer,
+      shape.asked, shape.plugin, shape.cause ?? null])}`),
+    at: batch.at, event: 'update', ...shape, reason: shape.reason ?? null, cause: shape.cause ?? null,
+  })));
+  for (const bad of [
+    update({ cause: 'network' }), // an update that installed a newer cad names no cause
+    update({ outcome: 'current' }), update({ outcome: 'failed', reason: 'upgrade' }), // every other outcome names one
+    update({ outcome: 'current', cause: 'eaccess' }), // a word cad has not
+    update({ outcome: 'failed', reason: 'upgrade', cause: 'error: Failed to fetch: https://pypi.org/simple/cad/' }), // never its words
+    update({ outcome: 'failed', reason: 'upgrade', cause: 'already' }), // only nothing installed held it already
+    update({ outcome: 'failed', reason: 'upgrade', cause: 'lost' }), // a word of another outcome's
+    update({ outcome: 'current', cause: 'no_switch' }),
+    ...['half_made', 'uv_old', 'kept', 'server_running', 'no_python'].map(cause => update({ outcome: 'failed', reason: 'upgrade', cause })), // words schema 13 no longer has
+    update({ outcome: 'lost', cause: 'network' }), update({ outcome: 'lost', cause: 'none' }),
+    update({ outcome: 'blocked', cause: 'lost', tries: 0 }), update({ outcome: 'blocked', cause: 'none', tries: 0 }),
+    update({ outcome: 'blocked', cause: 'no_installer' }), // an update that could not begin made no try
+    update({ outcome: 'current', cause: 'broken', tries: 0 }), // and every other made one
+    update({ outcome: 'lost', cause: 'lost', reason: 'upgrade' }), // a reason only with a failure
+    update({ outcome: 'blocked', cause: 'no_installer', tries: 0, plugin: 'ok' }),
+    ...[null, 7, ''].map(cause => update({ outcome: 'current', cause })),
+  ]) {
+    const body = JSON.parse(JSON.stringify({ ...CAUSING, events: [bad] }));
+    assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, JSON.stringify(bad));
+  }
+  // No schema before 13 names a cause, `lost` or `blocked`.
+  for (const event of [update({ outcome: 'current', cause: 'unknown' }), update({ outcome: 'lost', cause: 'lost' }),
+    update({ outcome: 'blocked', cause: 'no_installer', tries: 0 }), update({ outcome: 'blocked', tries: 0 })]) {
+    for (const older of [INSTALLING, ARRIVING]) {
+      const body = JSON.parse(JSON.stringify({ ...older, events: [event] }));
+      assert.equal((await send(memory(), 'POST', '/v1/events', body)).status, 400, `schema ${older.schema} ${JSON.stringify(event)}`);
+    }
+  }
+});
+
+test('schema 13 reads everything schema 12 does, its rows keyed alike, and every earlier schema is read as ever', async () => {
+  const mixed = { ...CAUSING, events: [install({ found: 2, failed: 1 }), installFailure({ app: 'codex' }),
+    arrival({ step: 'setup', outcome: 'ok' }), update({}), update({ outcome: 'failed', reason: 'upgrade', cause: 'network' }),
+    ...PINNED.events] };
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', JSON.parse(JSON.stringify(mixed)))).status, 204);
+  assert.deepEqual(store.rows.map(row => row.event), mixed.events.map(event => event.name));
+  const [twelve, thirteen] = [memory(), memory()];
+  assert.equal((await send(twelve, 'POST', '/v1/events', { ...PINNED, schema: 12 })).status, 204);
+  assert.equal((await send(thirteen, 'POST', '/v1/events', { ...PINNED, schema: 13 })).status, 204);
+  assert.deepEqual(thirteen.rows, twelve.rows);
+  // An update that installed a newer cad is keyed by its cause too, which it has none of; a schema 12 one as ever.
+  const installed = { ...INSTALLING, events: [update({}), update({ outcome: 'current' })] };
+  const [old, now] = [memory(), memory()];
+  assert.equal((await send(old, 'POST', '/v1/events', JSON.parse(JSON.stringify(installed)))).status, 204);
+  assert.ok(old.rows.every(row => !('cause' in row)), 'a schema 12 row carries no cause');
+  assert.equal(old.rows[1].id, idOf(installed.batch, `update ${JSON.stringify(['0.11.12', 'current', null, 1, 'uv', false, 'none'])}`));
+  assert.equal((await send(now, 'POST', '/v1/events', JSON.parse(JSON.stringify({ ...installed, schema: 13,
+    events: [update({})] })))).status, 204);
+  assert.equal(now.rows[0].cause, null);
+});
+
 test('a schema newer than the receiver reads is "try later", never refused: the sender keeps it for when it does', async () => {
   // A release can reach people before the receiver that reads its schema is deployed: its batches wait, not lost.
   const store = memory();
   const lines = await logged(async () => {
-    for (const schema of [13, 40]) {
+    for (const schema of [14, 40]) {
       const later = await send(store, 'POST', '/v1/events', { ...PINNED, schema, somethingNew: true });
       assert.deepEqual([later.status, later.headers.get('retry-after'), await later.json()],
         [503, '3600', { error: 'schema not read yet' }], `schema ${schema}`);
     }
   });
   assert.deepEqual(store.rows, []);
-  assert.deepEqual(lines.warn, ['telemetry /v1/events deferred 503: a schema newer than this receiver reads (schema 13, release 0.8.0)',
+  assert.deepEqual(lines.warn, ['telemetry /v1/events deferred 503: a schema newer than this receiver reads (schema 14, release 0.8.0)',
     'telemetry /v1/events deferred 503: a schema newer than this receiver reads (schema 40, release 0.8.0)']);
   // Anything else unknown is refused as ever: a schema that is not a whole number, or one no release sent.
-  for (const schema of [12.5, '13', 0, -1, null]) {
+  for (const schema of [13.5, '14', 0, -1, null]) {
     assert.equal((await send(memory(), 'POST', '/v1/events', { ...PINNED, schema })).status, 400, `schema ${schema}`);
   }
   assert.equal((await send(memory(), 'POST', '/v1/events', PINNED)).status, 204);
@@ -1138,4 +1215,25 @@ test('the version feed is the same for everyone, kept at the edge, and answers w
     const none = await handle(new Request(`https://api.texttocad.dev${path}`), down, { releases: async () => null, versions: async () => null });
     assert.deepEqual([none.status, none.headers.get('cache-control')], [503, 'no-store']);
   }
+});
+
+test("/v1/notices answers the project's notices from CAD_NOTICES, the same for everyone, and none as an empty list", async () => {
+  const notice = { id: 'install-moved', below: '0.12.4', text: 'cad now installs another way.', url: 'https://texttocad.dev/docs/install' };
+  const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
+  const ask = async (options, path = '/v1/notices') => {
+    const reply = await handle(new Request(`https://api.texttocad.dev${path}`, { headers: { 'user-agent': 'cad' } }), down, options);
+    return [reply.status, reply.headers.get('cache-control'), await reply.text()];
+  };
+  const cache = 'public, s-maxage=300, stale-while-revalidate=60, stale-if-error=604800';
+  for (const env of [{}, { CAD_NOTICES: '' }, { CAD_NOTICES: '[]' }, { CAD_NOTICES: 'not json' }]) {
+    assert.deepEqual(await ask({ notices: noticesOf(env, () => {}) }), [200, cache, '{"notices":[]}'], JSON.stringify(env));
+  }
+  assert.deepEqual(await ask({}), [200, cache, '{"notices":[]}'], 'none by default');
+  // Its own address: PyPI failing (no feed at all) changes nothing here, and the feed carries no notices.
+  const notices = noticesOf({ CAD_NOTICES: JSON.stringify([notice, { ...notice, id: 'Bad Id' }]) }, () => {});
+  const options = { notices, releases: async () => null, versions: async () => null };
+  assert.deepEqual(await ask(options, '/v1/notices/'), [200, cache, JSON.stringify({ notices: [notice] })]);
+  assert.equal((await ask(options, '/v1/releases'))[0], 503);
+  const feed = { latest: '0.12.3', lines: { 0: '0.12.3' } };
+  assert.equal((await ask({ ...options, releases: async () => feed }, '/v1/releases'))[2], JSON.stringify(feed));
 });

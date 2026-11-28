@@ -15,7 +15,14 @@ A spelling the command had (``cad xbf export``, ``cad urdf validate``, ``cad kic
 (``_hint``, one table: ``_RENAMED``, ``_BARE``, ``_OPERATIONS_NOW`` and ``_KICAD_EXPORT``).
 
 A command that reaches the server holds it to its own release (``cad.engine.client.RELEASE``): one of another
-release is refused in one line. The server's own commands are not held to it (``_ANY_RELEASE``).
+release is refused in one line, but one that finds none, or an older one, while cad's own update switches releases
+waits for the next (``client.SWITCHING``). The server's own commands are not held to it (``_ANY_RELEASE``). Every
+command's client launches no server while cad's own update switches away from its release (``client.LEAVING``).
+
+A command whose words a person reads says, once, what CAD sends by default (``_tell``), and, after its own output and
+at most once a day, that this cad has stayed behind a release though it updates itself (``_behind``), and
+each of the project's notices for this cad (``_notices``, ``cad_server.notices``): each one line on stderr, never in a
+command's output.
 
 Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
 second implementation. A command's parser lives in its own module and owns its arguments, so the
@@ -62,7 +69,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # The installation: the requirement a Python of a program's own installs this device's cad by.
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
     "doctor": ("cad_server.cli.doctor", "report this cad, its folders, its kernel and the server; it changes nothing"),
-    "cache": ("cad_server.cli.cache", "cad's cache: dir, prune (what this release cannot use), clean (all of it)"),
+    "cache": ("cad_server.cli.cache", "cad's cache: dir, prune (what no file and no release needs), clean "
+                                    "(all of it)"),
     # BRIDGE-ONLY, never listed: what the updaters of 0.10.0 to 0.11.11 run of the release they bring
     # (``cad_server.cli.setup``).
     "setup": ("cad_server.cli.setup", "the bridge from releases 0.10.0 to 0.11.11"),
@@ -74,8 +82,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "import": ("cad_server.cli.import_", "write a shared file's files into a folder and add it to the library, "
                                          "running nothing"),
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
-    "update": ("cad_server.cli.update", "update cad now to the newest release of its major version (`--major`: of "
-                                     "all); `update auto`: whether it does so itself"),
+    "update": ("cad_server.cli.update", "update cad now to the newest release; "
+                                     "`update auto`: whether it does so itself"),
     "plugin": ("cad_server.cli.plugin", "the plugin in your agent apps: `install` puts it in or updates it; "
                                         "`update auto`: whether cad's updates update it too"),
 }
@@ -344,14 +352,22 @@ def _main(argv: list[str]) -> int:
     # nothing is sent by default until it is said.
     from cad_server._internal.cli_errors import wants_json
 
-    if command not in _UNTOLD and not helping and not wants_json(rest):
+    told = command not in _UNTOLD and not helping and not wants_json(rest)
+    if told:
         _tell()
-    if command not in _ANY_RELEASE:
-        from cad_server._internal.attach import when
+    from cad_server._internal.attach import when
 
-        when("cad.engine.client", _hold_to_release)  # as the client is imported, if it is: a command imports no more
+    when("cad.engine.client", _stand_by)  # as the client is imported, if it is: a command imports no more
+    if command not in _ANY_RELEASE:
+        when("cad.engine.client", _hold_to_release)
+    behind = told and command not in _UNSAID_BEHIND
     try:
         code = _run(command, entry[0], rest)
+    except SystemExit:  # a command that ends by SystemExit (its usage refused) ran all the same
+        if behind:
+            _behind()
+            _notices()
+        raise
     except Exception as error:
         from cad_server.analytics import failed_output
 
@@ -362,14 +378,29 @@ def _main(argv: list[str]) -> int:
         if command == "run" or not wants_json(rest):  # `run`'s words are its program's: never its own --json
             raise  # its traceback the person's
         return _crashed(command, rest, error)
+    if behind:
+        _behind()
+        _notices()
     return code
 
 
+def _stand_by(client) -> None:
+    """This command's client launches no server while cad's own update switches away from this release
+    (``cad.engine.client.LEAVING``: ``auto_update.leaving``): the next server is the update's to start. Every
+    command's, the server's own too (``cad server start``, ``cad mcp``), which are the ones that start one."""
+    from cad_server._internal.auto_update import leaving
+
+    client.LEAVING = leaving
+
+
 def _hold_to_release(client) -> None:
-    """This command's client holds the server it reaches to this release (``cad.engine.client.RELEASE``)."""
+    """This command's client holds the server it reaches to this release (``cad.engine.client.RELEASE``), and waits
+    for the next where cad's own update is switching releases (``client.SWITCHING``: ``auto_update.switching``)."""
     from cad.engine.previous import version
+    from cad_server._internal.auto_update import switching
 
     client.RELEASE = version()
+    client.SWITCHING = switching
 
 
 def _unknown(word: str, rest: list[str]) -> int:
@@ -425,6 +456,10 @@ _ANY_RELEASE = frozenset({"server", "mcp", "doctor", "cache", "update", "plugin"
 _UNTOLD = frozenset({"server", "mcp", "telemetry", "setup", "plugin", "run", "requirement"})
 # Commands that only report, and so write nothing a command's run writes (``_tell``).
 _READ_ONLY = frozenset({"doctor"})
+# Commands that never say this cad has stayed behind (``_behind``), nor a notice (``_notices``), beside those never
+# told (``_UNTOLD``): `update`, which updates it, and `doctor`, which says both in its report; `server` and `mcp`,
+# whose output a program reads; and `setup`, which no person reads.
+_UNSAID_BEHIND = frozenset({"update", "doctor", "mcp", "server", "setup"})
 
 
 def _asks_help(command: str, rest: list[str]) -> bool:
@@ -448,6 +483,58 @@ def _tell() -> None:
     except Exception:  # noqa: BLE001 - the notice never fails the command it rides on
         return
     notify()
+
+
+def _output_gone() -> bool:
+    """Whether this command's own output has lost its reader: flushing it fails as ``main`` would see a write fail
+    (``cad_server.analytics.failed_output``)."""
+    if sys.stdout is None:
+        return False
+    try:
+        sys.stdout.flush()
+    except OSError as error:
+        from cad_server.analytics import failed_output
+
+        return failed_output(error) is not None
+    except ValueError:  # closed by the command itself: nothing more is written to it
+        return False
+    return False
+
+
+def _behind() -> None:
+    """Say, at most once a day and after the command's own output, that this cad has stayed behind a release
+    though it updates itself (``auto_update.notice``): one line on stderr, the command line's counterpart of
+    the viewer's update button. Never where the command's output has lost its reader (``main`` then stops quietly), and
+    never a failure of the command it follows."""
+    try:
+        from cad_server._internal.auto_update import notice
+
+        if _output_gone():  # its output first, flushed; a reader gone is ``main``'s to handle
+            return
+        line = notice()
+        if line:
+            sys.stderr.write(line + "\n")
+            sys.stderr.flush()
+    except Exception:  # noqa: BLE001 - the line never fails the command it follows
+        return
+
+
+def _notices() -> None:
+    """Say, after the command's own output, each of the project's notices for this cad that no command said within a
+    day (``cad_server.notices.lines``), whatever automatic updates are set to: one line on stderr each. Under
+    ``_behind``'s rules: never where the command's output has lost its reader, and never a failure of the command it
+    follows."""
+    try:
+        from cad_server.notices import lines
+
+        if _output_gone():
+            return
+        said = lines()
+        if said:
+            sys.stderr.write("".join(line + "\n" for line in said))
+            sys.stderr.flush()
+    except Exception:  # noqa: BLE001 - the line never fails the command it follows
+        return
 
 
 def _run(command: str, module_name: str, rest: list[str]) -> int:

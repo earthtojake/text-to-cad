@@ -67,8 +67,8 @@ fi
 # A release that does not bump the breaking part -- a patch below 1.0, a patch or a minor from 1.0 -- breaks
 # nothing (version_breaks_nothing), so it may not add a migration guide. A new guide is a new migration, a change a
 # person or an agent must make, and belongs to a release that bumps the breaking part -- the minor below 1.0, the
-# major from 1.0. Which releases install themselves is another rule (version_installs_itself: every release of the
-# same major, so below 1.0 a minor that breaks too). An existing guide may be corrected or extended in any release
+# major from 1.0. Every release installs itself on every computer, one that breaks too (docs/contributing/releases.md).
+# An existing guide may be corrected or extended in any release
 # (modified or renamed), so only a file added or copied under docs/migrations is refused. --find-renames holds
 # whatever git's own diff.renames says, so a renamed guide is a rename.
 if version_breaks_nothing "$base_version" "$version"; then

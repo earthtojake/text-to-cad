@@ -18,7 +18,7 @@ under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
 
 The package is a store's copy: OpenAI's directory delivers it and updates it, later than our releases. Its skills
-are the repository's as they are: each setup block installs cad by uv's one line, `uv tool install cad`, the same
+are the repository's as they are: each setup block installs cad by uv's one line, `uv tool install --force cad`, the same
 in every copy, and no file names our install script (`text_errors`, which plugin_branch.py runs on every copy).
 Its server line is the repository's, as every copy's.
 

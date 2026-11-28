@@ -596,3 +596,57 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   await act(async () => {});
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Telemetry (set by your environment)' }));
 });
+
+it('the update button: from the launch, outermost in the navbar; a click through the host, the server going for it no banner, and the next release loaded in the card\'s place', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const reload = vi.fn(async () => {});
+  vi.stubGlobal('__cadShell', { reload });
+  let reads = 0;
+  server.answers['/api/v1/local/update'] = () => new Status(202, { release: version, instance: 'first',
+    cadUpdate: { version, latest: '99.0.0', state: 'working' } });
+  server.answers['/api/v1/server'] = () => {
+    reads += 1;
+    if (reads === 1) return { release: version, instance: 'first', cadUpdate: { version, latest: '99.0.0', state: 'working', at: 5, asked: true } };
+    if (reads === 2) throw new TypeError('the server is gone');
+    return { release: '99.0.0', instance: 'second', cadUpdate: { version: '99.0.0', latest: null, state: 'idle' } };
+  };
+  render(<App bridge={bridge as any} server={server as any}
+    launch={{ ...home, surface: 'sidebar', cadUpdate: { version, latest: '99.0.0', state: 'idle' } }} />);
+  const button = () => viewer.props!.update as any;
+  expect(button().props.state.latest).toBe('99.0.0');
+  expect(server.asked('/api/v1/server')).toEqual([]);  // it draws with the card: nothing read for it
+  await act(async () => { button().props.onUpdate(); });
+  expect(server.asked('/api/v1/local/update')).toEqual([{}]);
+  await waitFor(() => expect(button().props.phase.phase).toBe('restarting'), { timeout: 5000 });
+  expect(reload).toHaveBeenCalledOnce();
+  expect(screen.queryByText(/stopped responding/)).toBeNull();
+});
+
+it('a card whose shell cannot load another app says CAD was updated once the next release answers', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  vi.stubGlobal('__cadShell', {});
+  server.answers['/api/v1/server'] = () => ({ release: '99.0.0', instance: 'second', cadUpdate: { version: '99.0.0', latest: null, state: 'idle' } });
+  render(<App bridge={bridge as any} server={server as any}
+    launch={{ ...home, surface: 'sidebar', cadUpdate: { version, latest: '99.0.0', state: 'working', at: 5 } }} />);
+  await waitFor(() => expect(screen.getByText('Close this tab and open CAD again to use the new version.')).toBeTruthy(), { timeout: 5000 });
+});
+
+it('a launch that carries no update (cad cannot update itself) shows no button', () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar' }} />);
+  expect(viewer.props!.update).toBeNull();
+  expect(viewer.props!.alert).toBeNull();
+});
+
+it('a failed update the launch carries is the viewer\'s alert, put away through the host for every page', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const failed = { version, latest: '99.0.0', state: 'failed', at: 7, cause: 'helper_crash', log: '/s/auto-update.log' };
+  server.answers['/api/v1/local/update'] = () => new Status(200, { release: version, instance: 'first', cadUpdate: { ...failed, dismissed: true } });
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar', cadUpdate: failed }} />);
+  const alert = () => viewer.props!.alert!;
+  expect([alert().alert.title, alert().alert.details, alert().alert.reportable, alert().dismissed]).toEqual(
+    ['Couldn’t update to 99.0.0', 'cad update\n# The update\'s log: /s/auto-update.log', undefined, false]);  // cad's own: Report Issue
+  await act(async () => { alert().onDismiss(); });
+  expect(server.asked('/api/v1/local/update')).toEqual([{ dismiss: 7 }]);
+  await waitFor(() => expect(alert().dismissed).toBe(true));
+});

@@ -4,7 +4,7 @@ import type { CadEntryProject, CadProjectFolder, CadWorkspaceService } from '@ca
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState, StatusAction } from '../file-viewer/navigation/index.js';
-import type { AppSetting, ColorSchemeSetting, FileProject, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
+import type { AppSetting, ColorSchemeSetting, FileProject, HostAlert, LanguageSetting, ViewerHistory } from '../file-viewer/types.js';
 import { I18nProvider, translator } from '../i18n/index.js';
 import type { HomeLocation, ViewerHost } from '../host/types.js';
 import { folderPlace } from '../host/addresses.js';
@@ -21,6 +21,7 @@ import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
 import { WhatsNewDialog } from '../whats-new/WhatsNewDialog.js';
 import { DocumentSearch, useDocumentSearch } from '../search/DocumentSearch.js';
+import { hostAlertSlot } from './hostAlert.js';
 
 // How often the folder of the document on screen is read again while it is shown: a file written in it meanwhile joins
 // its list.
@@ -134,6 +135,19 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    */
   fullSize?: ReactNode;
   /**
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind or an update is
+   * underway: the navbar's last control, outermost, after the host's actions, over every file and
+   * over the home.
+   */
+  update?: ReactNode;
+  /**
+   * The host's own alert (`@cad/ui/update`'s `useUpdate`: a failed update of cad), in the viewer's alert card, the one
+   * every error is said in, wherever the navbar is: over every file -- after the file's own card, which wins -- and
+   * over the home, centred over what is under the navbar. Its X or Escape puts it away (`onDismiss`), behind its
+   * icon among the navbar's right-hand controls (`onReopen`); Retry is `onRetry`.
+   */
+  alert?: HostAlert | null;
+  /**
    * What's new (`@cad/ui/whats-new`'s `useWhatsNew`): the release whose notes to show, once something
    * is on screen -- the home, or a file's view, never its loading page -- and how they are dismissed.
    * A host leaves it out where a dialog has no room, or while a notice of its own covers the view.
@@ -161,7 +175,7 @@ const isPlace = (value: unknown): value is HomeLocation => {
  * or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, name, onShow, onShown,
-  place: placed, onHomeShown, library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, history, whatsNew, onError = reportError }: CadViewerProps<Model>) {
+  place: placed, onHomeShown, library, onThumbnail, colorScheme, language, appSettings, notice, fullSize, update, alert = null, history, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -319,10 +333,12 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const searchCurrent = useMemo(() => ({ id: shownId, path: shown,
     project: projectRef ? { id: projectRef.id, name: projectRef.name, folder: projectRef.folder ?? '' } : null }),
   [shownId, shown, projectRef?.id, projectRef?.name, projectRef?.folder]);
+  // The host's alert: its card, or put away, the navbar's way back to it (`FileViewer`'s `alert`).
+  const hostAlert = useMemo(() => hostAlertSlot(alert, t), [alert, t]);
   // What a person does on the screen is counted for the host (`usage/controls.js`).
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu}
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} update={update} alert={hostAlert} fileMenuItems={menu}
       overlay={<>{overlay}{library ? <DocumentSearch search={search} library={library} navigation={viewerHost.navigation} current={searchCurrent} onError={onError} /> : null}</>}
       onSearch={library ? search.show : null} file={path || null} name={String(entry?.name || '') || name} filePath={shown} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} history={history} project={project} onImportFolder={onImportFolder} notice={notice} onError={onError} presentation={presentation} />}</ExportControls>

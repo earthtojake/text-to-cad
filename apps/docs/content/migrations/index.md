@@ -3,7 +3,7 @@ title: Migrations
 description: The hand-migration guides between text-to-cad releases, for a project or a computer set up on an earlier one.
 ---
 
-Most updates need nothing from you: cad installs every new release of its major version by itself, and `cad update` does it now. A new major version waits for you: run `cad update --major` ([Updating](/docs/install#updating)).
+Most updates need nothing from you: cad installs every new release of its major version by itself, and `cad update` does it now. A new major version never installs itself: `cad update` and `cad doctor` say when one is out, and its guide here says what changes ([Updating](/docs/install#updating)).
 
 A release that breaks something comes with a migration guide. Each guide says what changed and what to change in a project written for the earlier release. Below 1.0, a breaking change bumps the minor version, so the guides are named for the minor versions they move between.
 

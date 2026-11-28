@@ -25,8 +25,8 @@ const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "cop
 /**
  * The row above a file and above the host's home, in every host: the same row whatever is open, so a
  * person finds each control in the same place. Over the home it has only the logo, the panel's toggle,
- * Back and Forward and the host's actions. Preview hides it, drawing its own bar in its place, and a
- * compact view (a small inline view) has none.
+ * Back and Forward, the home's own controls, the host's actions and its update button. Preview hides it, drawing its
+ * own bar in its place, and a compact view (a small inline view) has none.
  *
  * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document alike), always first, so the
  * way home stands in one place on every page: where the host has a home (`onHome`) a link to it (Recents; a real link
@@ -52,7 +52,8 @@ const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "cop
  * Right, only what a host or a file adds, in this order: the file's own actions (the viewer's
  * one: a dismissed alert's icon, which brings its card back); the view's own controls, Display (the plain cube) then,
  * where the view has it, Preview, which the view on screen portals into the row's view slot (`../navbarSlots.js`);
- * last, outermost, the host's own actions (`actions`: the CAD app's Full size, inline).
+ * the host's own actions (`actions`: the CAD app's Full size, inline); last, outermost, the host's update button
+ * while its install is behind or an update is underway or failed (`update`, the blue `UpdateButton` from `@cad/ui/update`).
  * The colour scheme is the app menu's.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
@@ -322,6 +323,7 @@ function PanelToggleButton({ toggle }) {
  *   project; in none, Import its folder as a project.
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
+ * @param {import("react").ReactNode} [props.update] The host's update button, last among the controls (outermost).
  * @param {{ right(element: HTMLElement | null): void } | null} [props.homeSlots]
  *   Over the home: where its controls go (`../navbarSlots.js`), a slot at the row's right end. The home's place says
  *   where the person is in its own title, so the row holds no name of the home's.
@@ -331,7 +333,7 @@ function PanelToggleButton({ toggle }) {
  *   (`../navbarSlots.js`'s `NavbarViewSlotContext`).
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onHome: goHome, homeHref = null, menu = null, history = null, file = null, name, project = null, fileMenu = null, trailing = null, actions = null, panels = null, homeSlots = null, viewSlot = null, className }) {
+export function ViewerNavbar({ onHome: goHome, homeHref = null, menu = null, history = null, file = null, name, project = null, fileMenu = null, trailing = null, actions = null, update = null, panels = null, homeSlots = null, viewSlot = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
@@ -373,6 +375,7 @@ export function ViewerNavbar({ onHome: goHome, homeHref = null, menu = null, his
             in by the view on screen (`../navbarSlots.js`); before the host's actions. */}
         {file && viewSlot ? <div ref={viewSlot} className="flex shrink-0 items-center gap-0.5 empty:hidden" data-navbar-view="" /> : null}
         {actions}
+        {update}
       </div>
     </header>
   );

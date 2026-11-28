@@ -79,7 +79,7 @@ class ArrivalTest(unittest.TestCase):
         self.assertEqual(len(self.kept()), 6)
         self.assertEqual(self.started, [self.settings] * 6, "a sender at once for each, none set to start later")
         [batch] = self.sent()
-        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (12, "cli", RELEASE))
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (13, "cli", RELEASE))
         self.assertNotIn("client", batch)
         self.assertEqual(batch["events"], [
             {"name": "arrival", "step": "handover", "route": "updater", "from": "0.11.10", "outcome": "failed",
@@ -151,7 +151,8 @@ class ArrivalTest(unittest.TestCase):
 
     def test_an_update_is_kept_with_the_arrivals_and_sent_as_words_and_numbers_under_the_same_rules(self) -> None:
         update = analytics.update
-        failed = dict(earlier="0.11.12", outcome="failed", reason="upgrade", tries=2, installer="uv", asked=False)
+        failed = dict(earlier="0.11.12", outcome="failed", reason="upgrade", tries=2, installer="uv", asked=False,
+                      cause="network")
         self.tell()
         with mock.patch.dict(os.environ, {"DO_NOT_TRACK": "1"}):
             self.assertFalse(update(**failed), "the environment's no")
@@ -165,22 +166,29 @@ class ArrivalTest(unittest.TestCase):
                         dict(failed, outcome="restored", reason="put_back"), dict(failed, plugin="ok"),
                         dict(failed, installer="pip"), dict(failed, installer=None), dict(failed, tries=0),
                         dict(failed, tries=True), dict(failed, asked="no"), dict(failed, earlier="/Users/someone"),
-                        dict(failed, outcome="installed", reason=None, plugin="skipped")):
+                        dict(failed, outcome="installed", reason=None, plugin="skipped"),
+                        dict(failed, cause="uv could not reach pypi.org"), dict(failed, cause="lost"),
+                        dict(failed, outcome="installed", reason=None), dict(failed, outcome="blocked", tries=0),
+                        dict(failed, outcome="blocked", cause="no_installer"), dict(failed, outcome="lost")):
             self.assertFalse(update(**refused), refused)
         self.assertTrue(update(**dict(failed, outcome="current")), "a reason on no failure goes no further")
-        self.assertEqual(self.started, [self.settings] * 5, "a sender at once for each, as an arrival's")
+        self.assertTrue(update(earlier="0.11.12", outcome="blocked", tries=0, installer="uv", cause="no_installer"))
+        self.assertEqual(self.started, [self.settings] * 6, "a sender at once for each, as an arrival's")
         self.assertTrue(analytics.arrival("setup", route="setup", earlier=None, outcome="ok"))
         [batch] = self.sent()
-        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (12, "cli", RELEASE))
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (13, "cli", RELEASE))
         self.assertEqual([event for event in batch["events"] if event["name"] == "update"], [
+            {"name": "update", "from": "0.11.12", "outcome": "blocked", "tries": 0, "installer": "uv", "asked": False,
+             "plugin": "none", "cause": "no_installer", "count": 1},
             {"name": "update", "from": "0.11.12", "outcome": "current", "tries": 2, "installer": "uv", "asked": False,
-             "plugin": "none", "count": 1},
+             "plugin": "none", "cause": "network", "count": 1},
             {"name": "update", "from": "0.11.12", "outcome": "failed", "reason": "upgrade", "tries": 2, "installer": "uv",
-             "asked": False, "plugin": "none", "count": 2},
+             "asked": False, "plugin": "none", "cause": "network", "count": 2},
             {"name": "update", "from": "0.11.12", "outcome": "installed", "tries": 1, "installer": "pipx", "asked": True,
              "plugin": "ok", "count": 1},
+            # No cause given: ``none``, as for an update a release before schema 13 kept.
             {"name": "update", "from": "none", "outcome": "restored", "reason": "older", "tries": 1, "installer": "uv",
-             "asked": False, "plugin": "none", "count": 1},
+             "asked": False, "plugin": "none", "cause": "none", "count": 1},
         ])
         self.assertEqual([event["name"] for event in batch["events"]].count("arrival"), 1, "beside the arrivals")
         self.assertFalse(self.settings.with_name(analytics.ARRIVALS).exists(), "taken by the sender")
@@ -288,7 +296,7 @@ class WithNoServerTest(unittest.TestCase):
         await_(lambda: self.received, "the batch at the stand-in receiver")
         await_(lambda: not engine_daemon._alive(sender), "the sender to exit once it sent")
         [batch] = self.received
-        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (12, "cli", RELEASE))
+        self.assertEqual((batch["schema"], batch["process"], batch["version"]), (13, "cli", RELEASE))
         self.assertEqual(batch["events"], [{"name": "arrival", "step": "setup", "route": "updater", "from": "0.11.10",
                                             "outcome": "failed", "reason": "network", "count": 1}])
         self.assertFalse(settings.with_name(analytics.ARRIVALS).exists())

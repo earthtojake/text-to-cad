@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createHttpPromptFiles, libraryRow, type CadClient } from '@cad/core/client';
 import { unavailablePromptContext } from '@cad/core/prompt';
 import { CadViewer, createCadFileActions, createCadFileSource, normalizePath, type CadViewerProps } from '@cad/ui/cad-viewer';
-import type { AppSetting, ColorSchemeSetting, LanguageSetting } from '@cad/ui/file-viewer';
+import type { AppSetting, ColorSchemeSetting, HostAlert, LanguageSetting } from '@cad/ui/file-viewer';
 import type { HomeLocation, NavigationTarget, ViewerLinks } from '@cad/ui/host';
 import { samePlace, type ModelLibrarySource } from '@cad/ui/library';
 import type { TabStore } from '@cad/ui/tab-store';
@@ -44,7 +44,7 @@ export interface ViewReporter {
  * holds the logo, which opens the app's menu there (a view with no home has no foot in its panel), the panel's toggle,
  * the file's name, its ⋯ and Full size where the host offers it.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, whatsNew, openInBrowser, engineOrigin }: {
+export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, fullSize, update, alert, whatsNew, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
@@ -72,6 +72,10 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   whatsNew?: { entry: string | null; onDismiss(): void };
   /** Inline, the card's way to full size, where the host can show it so: in the navbar; the corner's in the file handler. */
   fullSize?: ReactNode;
+  /** The update button (`@cad/ui/update`), outermost in the navbar: `CadViewerProps.update`. */
+  update?: ReactNode;
+  /** A failed update of cad, in the viewer's alert card: `CadViewerProps.alert`. */
+  alert?: HostAlert | null;
   /**
    * Open a document's page (a file's path, a model's id) in the person's browser, where a launch carried
    * a page: the file menu's Open in › Browser (`fileActions.perform.browser`). Never in the file handler.
@@ -199,6 +203,6 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} place={place}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory} whatsNew={whatsNew}
-    fullSize={fullSize}
+    fullSize={fullSize} update={update} alert={alert}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

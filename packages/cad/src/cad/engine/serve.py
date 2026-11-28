@@ -1096,6 +1096,9 @@ class Server:
         # (``keep_preview``), by an id of its own (``<id>~preview-<token>``) that no listing, no version and no
         # export names, read at the document's read routes and nothing else, and when each was last read.
         self.preview_parameters: Callable[[str, Any, Any], dict[str, Any]] | None = None
+        # A person's update of cad from the viewer's update button (the daemon's ``Daemon.update``, as ``cad update``
+        # asks it; ``False``: begun nothing, where one waits to begin), None for a server of its own (a test's).
+        self.update: Callable[[bool], dict[str, Any]] | None = None
         self.previews: dict[str, Served] = {}
         self.preview_reads: dict[str, float] = {}
         if budget is not None:

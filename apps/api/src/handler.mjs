@@ -7,6 +7,8 @@
  *   GET    /v1/releases        the version feed, PyPI's latest and the latest of each major (versions.mjs) ->
  *                              200, the same for everyone, or 503 while PyPI cannot be read and nothing has been
  *   GET    /v1/versions        the frozen feed of 0.7.12 to 0.11.11: the latest below 0.12.0, likewise
+ *   GET    /v1/notices         the project's notices (notices.mjs) -> 200, the same for everyone, `{notices: []}`
+ *                              with none posted
  *   POST   /v1/events          a batch of counts (events.mjs) -> 204, or 503 for a schema newer than this
  *                              receiver reads (`Later`), which the sender keeps and sends again
  *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204, or 429 past
@@ -26,9 +28,9 @@ import { withoutNoise } from './noise.mjs';
 
 const COUNTRY = /^[A-Z]{2}$/; // ISO 3166-1 alpha-2, as the host gives it; anything else is no country
 const JSON_TYPE = /^application\/json\s*(?:;|$)/i; // a parameter, such as `; charset=utf-8`, is still JSON
-// The feed is the brake on a release: a hold, or a release's hour coming to an end, reaches the edge within six
-// minutes of the function knowing it (five fresh, one more served stale while it refreshes). A failing PyPI or
-// function never blanks it: the edge serves the last answer on for a week.
+// The feed is the brake on a release for 0.11.12 to 0.11.18: a hold, or a release's hour coming to an end, reaches the
+// edge within six minutes of the function knowing it (five fresh, one more served stale while it refreshes). A failing
+// PyPI or function never blanks it: the edge serves the last answer on for a week. The notices are kept the same way.
 const FEED_CACHE = 'public, s-maxage=300, stale-while-revalidate=60, stale-if-error=604800';
 const LATER_SECONDS = 3600; // when a sender may try a schema this receiver does not read yet again
 
@@ -92,13 +94,15 @@ function limited(limiter, key, path) {
  *   ready(): Promise<void> }} store `report`: takes one report of a failed install. `ready`: throws when the service
  *   will not take a batch (health asks).
  * @param {{ missing?: string[], country?: string | null, versions?: () => Promise<object | null>,
- *   releases?: () => Promise<object | null> }} [options] `missing`: settings the host
+ *   releases?: () => Promise<object | null>, notices?: object[] }} [options] `missing`: settings the host
  *   lacks, by name (health says so). `country`: where the host places the request, from its IP address.
- *   `releases` and `versions`: the version feed's two addresses (versions.mjs). `limiter`: how often one caller may
+ *   `releases` and `versions`: the version feed's two addresses (versions.mjs). `notices`: the project's notices
+ *   (notices.mjs: `noticesOf`), none by default. `limiter`: how often one caller may
  *   ask to forget (limit.mjs), by `client`, the address the host says the request came from, and by install id.
  *   `installLimiter`: how often one `client` may report a failed install.
  */
-export async function handle(request, store, { missing = [], country, versions, releases, limiter, installLimiter, client } = {}) {
+export async function handle(request, store, { missing = [], country, versions, releases, notices = [], limiter, installLimiter,
+  client } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/\/+$/, '');
   const placed = COUNTRY.test(country ?? '') ? country : null;
@@ -115,6 +119,8 @@ export async function handle(request, store, { missing = [], country, versions, 
       const feed = await feedOf();
       return feed ? reply(200, feed, FEED_CACHE) : reply(503, { error: 'no version feed' });
     }
+    // The notices, from the project's settings alone: always an answer, whatever PyPI or telemetry does.
+    if (path === '/v1/notices' && request.method === 'GET') return reply(200, { notices }, FEED_CACHE);
     if (path === '/v1/health' && request.method === 'GET') {
       if (missing.length) return reply(503, { ok: false, missing });
       try {

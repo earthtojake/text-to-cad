@@ -19,6 +19,7 @@ import { FilePanelContext, filePanelOf, withFilePanel } from "./filePanel.js";
 import { PANEL_HEAD_ROW, PANEL_ROW_VARIABLES, PANEL_SURFACE_PX, PanelFrameContext, PanelTogglesContext, clampPanelWidth, panelShortcut, sidebarLayout } from "./panelToggles.js";
 import { TreeRowsLoading } from "../primitives/tree-row.jsx";
 import { AppMenuContext, NavbarSlotsContext, NavbarViewSlotContext } from "./navbarSlots.js";
+import { ViewerAlertSlotContext } from "./alertSlot.js";
 import type { PanelToggles } from "./panelToggles.js";
 import { PanelFoot } from "./PanelFoot.jsx";
 import { PANEL_PEEK_ASIDE_CLASS, PANEL_PEEK_CARD_CLASS, PANEL_PEEK_CARD_STYLE, PANEL_PEEK_CONTENT_STYLE, PanelPeekContext, panelPeekMotionClass, usePanelPeek } from "./panelPeek.js";
@@ -34,7 +35,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, project = null, onImportFolder = null, onSearch = null, notice, navbarActions, fileMenuItems, overlay, onError, presentation, layout }: FileViewerProps) {
+export function FileViewer({ file, name, filePath = null, host, renderers, state, onStateChange, colorScheme, language, appSettings, history, project = null, onImportFolder = null, onSearch = null, notice, navbarActions, update, alert = null, fileMenuItems, overlay, onError, presentation, layout }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -80,6 +81,13 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   const [viewSlot, setViewSlot] = useState<HTMLElement | null>(null);
   const [navActions, setNavActions] = useState<{ key: string; actions: readonly FileNavigationAction[] } | null>(null);
   const onNavigationActionsChange = useCallback((actions: readonly FileNavigationAction[]) => { if (currentKey.current === key) setNavActions({ key, actions }); }, [key]);
+  // The file's own alert cards on screen (`alertSlot.js`): while one is, the host's card waits behind it.
+  const [fileCards, setFileCards] = useState(0);
+  const alertSlot = useCallback(() => {
+    setFileCards(count => count + 1);
+    let gone = false;
+    return () => { if (!gone) { gone = true; setFileCards(count => count - 1); } };
+  }, []);
   const onReady = useCallback((ready: boolean) => { if (currentKey.current === key) setReadiness((previous) => previous?.key === key && previous.ready === ready ? previous : { key, ready }); }, [key]);
   const ready = loaded.status === "ready" && (readiness?.key === key ? readiness.ready : true);
   // A file shown takes the keyboard, so its tool keys (V, M, P …) work with no press in it first:
@@ -247,7 +255,9 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   }
   else if (loaded.status === "error") body = presentation?.error?.({ message: loaded.message, missing: loaded.missing, error: loaded.error, reload: reloadCurrent }) ?? <EmptyState title={t("file.openFailed")} description={loaded.message} />;
   else body = rendererBody;
-  const shownActions = navActions?.key === key && ready ? navActions.actions : [];
+  // The navbar's right-hand controls start with a put-away card's icon: the file's own (its renderer's action), then the
+  // host's (`alert.action`).
+  const shownActions = [...(navActions?.key === key && ready ? navActions.actions : []), ...(alert?.action ? [alert.action] : [])];
   const trailing = shownActions.length ? <>
     {shownActions.map(({ id, label, hint, icon: Icon, disabled, active, onInvoke }) => <TooltipHint key={id} content={hint ?? label}><Button type="button" variant="ghost" size="icon-xs" className="size-control shrink-0 rounded-md text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label={label} disabled={disabled} aria-pressed={active} onClick={() => { try { void Promise.resolve(onInvoke()).catch(error => onError?.(error)); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); } }}><Icon className="size-4" aria-hidden="true" /></Button></TooltipHint>)}
   </> : null;
@@ -330,20 +340,25 @@ export function FileViewer({ file, name, filePath = null, host, renderers, state
   useSearchKey(onSearch, { platform: appearance.platform, enabled: previewing !== key });
   // The navbar is drawn over every file and over the host's home — there the logo (the way to Recents), the sidebar's
   // toggle, Back and Forward where the host keeps the view's history, and the host's
-  // actions, as over a file — never over a view drawn small with no chrome
+  // actions and update button, as over a file — never over a view drawn small with no chrome
   // (`compact`: a small inline view), and not while the renderer's Preview is up, which draws its own
   // bar in its place.
   const navbar = (Boolean(path) || home) && !appearance.compact && previewing !== key;
   const homeSlotRefs = useMemo(() => ({ right: setHomeRight }), []);
   const homeSlots = useMemo(() => (navbar && !path && home ? { right: homeRight } : null), [navbar, path, home, homeRight]);
+  // The host's alert card (a failed update of cad), wherever its navbar is -- over the home, a file, a file loading --
+  // centred over what is under the navbar, as a view's card is over the view: one card at a time, so it waits while a
+  // file's own card is up or the file would not open (its page says why).
+  const hostCard = navbar && alert?.card && !fileCards && loaded.status !== "error" ? alert.card : null;
   return <I18nProvider locale={locale}><ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><NavbarSlotsContext.Provider value={homeSlots}><NavbarViewSlotContext.Provider value={navbar && path ? viewSlot : null}><AppMenuContext.Provider value={homeMenu}><PanelPeekContext.Provider value={peek}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={layout ? undefined : mobile ? "mobile" : "desktop"} data-viewer-pinned-layout={layout} tabIndex={-1}>
     {navbar ? (path
       ? <ViewerNavbar onHome={goHome} homeHref={homeHref} menu={menu} history={history} file={navigationPath ?? path} name={shown?.file.name || name || arrivingName} project={projectCrumb} fileMenu={fileMenu} trailing={trailing} actions={navbarActions}
-        panels={panelToggles} viewSlot={setViewSlot} />
-      : <ViewerNavbar onHome={goHome} homeHref={homeHref} menu={menu} history={history} actions={navbarActions} homeSlots={home ? homeSlotRefs : null}
-        panels={home ? panelToggles : null} />) : null}
+        update={update} panels={panelToggles} viewSlot={setViewSlot} />
+      : <ViewerNavbar onHome={goHome} homeHref={homeHref} menu={menu} history={history} trailing={trailing} actions={navbarActions} update={update}
+        homeSlots={home ? homeSlotRefs : null} panels={home ? panelToggles : null} />) : null}
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden"><ProjectKeysContext.Provider value={projectKeys}>{body}</ProjectKeysContext.Provider></div>
+      <ViewerAlertSlotContext.Provider value={alertSlot}><div ref={bodyBox} className="min-w-0 flex-1 overflow-hidden"><ProjectKeysContext.Provider value={projectKeys}>{body}</ProjectKeysContext.Provider></div></ViewerAlertSlotContext.Provider>
+      {hostCard ? <div className="contents" data-host-alert="">{hostCard}</div> : null}
       {overlay}
     </div>
   </div></PanelPeekContext.Provider></AppMenuContext.Provider></NavbarViewSlotContext.Provider></NavbarSlotsContext.Provider></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider></I18nProvider>;

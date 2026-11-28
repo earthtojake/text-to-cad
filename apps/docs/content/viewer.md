@@ -53,7 +53,7 @@ The file arrives as an ordinary browser download, so where it goes is your brows
 
 ## Updating
 
-The viewer has no update control. cad updates itself to each new release of its major version, and `cad update` does it now. The plugin in your agent apps follows where the install command turned that on. [Updating](/docs/install#updating) has the details.
+cad updates itself to each new release of its major version, and `cad update` does it now. While a newer release of your major is out, a blue update button sits at the right end of the viewer's navbar: click it to update now. If an update fails, automatic or not, the viewer says why and what to do in its usual error card, with Try again and, under Details, `cad update` to copy into a terminal; close it and it waits behind its icon in the navbar until the next attempt. The plugin in your agent apps follows where the install command turned that on. [Updating](/docs/install#updating) has the details.
 
 ## The CAD app
 

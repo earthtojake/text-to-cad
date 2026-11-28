@@ -38,6 +38,8 @@ const root = createRoot(element, {
   // Logged as React logs one, and counted: the page went on, with the view's "could not display".
   onCaughtError: (error, info) => { console.error(error, info.componentStack); reportCrash(error, { handled: true }); },
 });
+// The shell that loaded this page takes it down to load the engine's next release in its place (an update).
+globalThis.__cadApp = { unmount: () => root.unmount() };
 
 function applyTheme(context: HostContext) {
   const dark = context.theme === 'dark';

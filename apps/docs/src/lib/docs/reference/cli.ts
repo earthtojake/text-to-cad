@@ -48,7 +48,7 @@ const GROUPS: { title: string; intro: string; commands: string[] }[] = [
   {
     title: "Updates and the installation",
     intro:
-      "`cad` installs every newer release of its major version by itself, and `cad plugin install`, which the install command runs, installs and updates the plugin in your agent apps. [Install](/docs/install) says what the install command does, app by app, and how to update and remove.",
+      "`cad` installs every newer release by itself, and `cad plugin install`, which the install command runs, installs and updates the plugin in your agent apps. [Install](/docs/install) says what the install command does, app by app, and how to update and remove.",
     commands: ["cad update", "cad plugin", "cad doctor", "cad cache", "cad telemetry"],
   },
   {

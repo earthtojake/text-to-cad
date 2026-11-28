@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { unavailablePromptContext } from "@cad/core/prompt";
 import { FileViewer, defineFileRenderer } from "../index.js";
+import { UpdateButton, updateAlert } from "../../update/index.js";
+import { hostAlertSlot } from "../../cad-viewer/hostAlert.js";
+import { english } from "../../i18n/index.js";
+import { ModelLibrary, type LibraryModel } from "../../library/index.js";
 import type { FileActions, FileMetadata, FileProject, FileRendererProps, FileSource, FileViewerState, JsonValue } from "../types.js";
 
 const events: string[] = [];
@@ -59,6 +63,11 @@ const renderer = defineFileRenderer({
     dispose: () => { events.push(`${source.id}:${file.path}:disposed`); } }),
 });
 const renderers = [renderer];
+// The host's home (`harness.open(null)`): a library of two models and Import, its controls at the navbar's right end.
+const shelf: LibraryModel[] = ["bracket.step", "plate.step"].map(name => ({ path: `${FOLDER}/${name}`, name, folder: FOLDER, opened: 1,
+  updated: 1, created: 1, pinned: false, missing: false, thumbnail: null, pictured: null }));
+const presentation = { home: <ModelLibrary library={{ list: async () => shelf, change: async () => shelf, thumbnail: async () => null,
+  open: async () => {}, pick: async () => {} }} /> };
 const clipboard = { writeText: async () => {}, writeImage: async () => {} };
 function host(root: ReturnType<typeof memorySource>, openFile: (path: string) => void) {
   return { files: root.source, fileActions: root.actions, clipboard, promptContext: unavailablePromptContext, environment: { colorScheme: "light" as const }, navigation: { openFile } };
@@ -77,14 +86,27 @@ export function App() {
   const [project, setProject] = useState<FileProject | null>(null);
   const showProject = (named: Omit<FileProject, "onShow"> | null) =>
     setProject(named ? { ...named, onShow: () => { events.push(`project:${named.id}`); } } : null);
+  // The host's update button, as a host hands it: none, offered (its click shows the ring), the server restarting
+  // (the spinner), as `useUpdate` does; and an update that failed, as the viewer's alert (`CadViewer`'s `alert`), on
+  // screen or put away.
+  const [update, setUpdate] = useState<"none" | "behind" | "working" | "restarting" | "failed" | "put away">("none");
   Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, renders, cleanupWrites, state, open: setFile,
-    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture, project: showProject } });
+    setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, picture: setPicture, project: showProject, update: setUpdate } });
+  const updateButton = update === "none" ? null : <UpdateButton
+    state={{ version: "0.9.0", latest: "0.9.1", state: update === "failed" || update === "put away" ? "failed" : "idle" }}
+    phase={update === "restarting" ? { phase: "restarting" } : update === "working" ? { phase: "working", done: 0, total: 3 } : { phase: "idle" }}
+    onUpdate={() => { events.push("update"); if (update === "behind") setUpdate("working"); }} />;
+  const updateFailed = update === "failed" || update === "put away" ? hostAlertSlot({
+    alert: updateAlert({ cause: "in_use", at: 1, log: "/state/auto-update.log" }, "0.9.1", english), dismissed: update === "put away",
+    onDismiss: () => { events.push("dismiss"); setUpdate("put away"); }, onReopen: () => { events.push("reopen"); setUpdate("failed"); },
+    onRetry: () => events.push("update") }) : null;
   // A host is made once for its source, as an app makes it (FileViewer's props are compared by identity).
   const primaryHost = useMemo(() => host(root, (path) => { opened.push(path); setFile(path); }), [root]);
   return <div style={{ width: "1000px", height: "650px" }}>
     <section data-testid="primary" style={{ height: "400px", display: "flex", flexDirection: "column" }}>
       {/* A host that shows one file at a time: a pick moves this view to the file. */}
-      <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} project={project} />
+      <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} project={project}
+        update={updateButton} alert={updateFailed} presentation={presentation} />
     </section>
     {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file={`${FOLDER}/notes.txt`} host={host(b, () => {})} renderers={renderers} state={otherState} onStateChange={setOtherState} /></section> : null}
     {picture === "none" ? null : <div aria-hidden="true" data-testid="picture"
