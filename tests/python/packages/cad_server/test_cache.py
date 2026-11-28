@@ -148,9 +148,11 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(all(path.exists() for path in kept), "data and another program's folder stay")
 
     def test_the_server_s_tidying_removes_other_releases_environments_by_itself_as_prune_does(self) -> None:
-        """At the server's start and at its hourly tidying (``Daemon.caught_up``), quietly: an environment of another
-        release goes; one a process runs from stays, and goes at the next tidying once it is free; this release's stay,
-        whatever integrations they hold, and one with no release named; nothing goes while an update is underway."""
+        """Once for each server, as it starts (``Daemon.caught_up``), quietly: an environment of another release goes;
+        one a process runs from stays, for the next start; this release's stay, whatever integrations they hold, and
+        one with no release named. Where the update that started the server is still underway as it starts, nothing
+        goes then: the tidying is done at the first tending after it has ended. Never on a timer after that, and
+        never uv's cache, which only a person's ``cad cache prune`` touches."""
         import threading
         import types
 
@@ -158,34 +160,45 @@ class CacheTest(unittest.TestCase):
         from cad_server.engine import daemon
         from cad_server.engine.daemon import Daemon
 
+        self.assertFalse(hasattr(daemon, "TIDY_SECONDS"), "no timer")
         mine, integrations = self.environment("mine0000", version()), self.environment("mine0001", version())
         theirs, held = self.environment("theirs00", OTHER), self.environment("theirs01", "0.11.8")
         unmarked = self.environment("unmarked", None)
         busy = {held}
-        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=float("-inf"),
-                                         catching=types.SimpleNamespace(tend=lambda told: None))
-        clock, underway = [10_000.0], [None]
+        underway = [None]
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(auto_update, "tidy"), mock.patch.object(auto_update, "report"), \
-                mock.patch.object(daemon.time, "monotonic", side_effect=lambda: clock[0]), \
+
+        def server():
+            return types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=False,
+                                         catching=types.SimpleNamespace(tend=lambda told: None))
+
+        with mock.patch.object(auto_update, "tidy") as aside, mock.patch.object(auto_update, "report"), \
+                mock.patch.object(auto_update, "tidy_cache", side_effect=AssertionError("never by the server")), \
                 mock.patch.object(auto_update, "underway", side_effect=lambda: underway[0]), \
                 mock.patch.object(releases, "running", side_effect=lambda path, **_: Path(path) in busy), \
                 redirect_stdout(out), redirect_stderr(err):
-            Daemon.caught_up(stand_in, starting=True)
+            first = server()
+            Daemon.caught_up(first, starting=True)
             self.assertFalse(theirs.exists(), "another release's environment, gone at the start")
             self.assertTrue(all(path.exists() for path in (mine, integrations, unmarked, held)))
             busy.clear()
             later = self.environment("theirs02", OTHER)
-            clock[0] += daemon.TIDY_SECONDS - 1
-            Daemon.caught_up(stand_in)
-            self.assertTrue(held.exists() and later.exists(), "nothing within the hour")
-            clock[0] += 1
+            for _tending in range(3):
+                Daemon.caught_up(first)
+            self.assertTrue(held.exists() and later.exists(), "nothing after the start, however long the server runs")
+            self.assertEqual(aside.call_count, 1)
+            # The next server: an update started it and is still underway as it starts.
+            second = server()
             underway[0] = {"outcome": "underway"}
-            Daemon.caught_up(stand_in)
-            self.assertTrue(held.exists() and later.exists(), "nothing while an update is underway")
+            Daemon.caught_up(second, starting=True)
+            Daemon.caught_up(second)
+            self.assertTrue(held.exists() and later.exists(), "nothing while the update is underway")
             underway[0] = None
-            Daemon.caught_up(stand_in)
-        self.assertFalse(held.exists() or later.exists(), "an hour on: the one a process ran from too, now free")
+            Daemon.caught_up(second)
+            self.assertFalse(held.exists() or later.exists(), "at the first tending after it ended")
+            self.assertEqual(aside.call_count, 2)
+            Daemon.caught_up(second)
+            self.assertEqual(aside.call_count, 2, "once for each server")
         self.assertTrue(all(path.exists() for path in (mine, integrations, unmarked)), "this release's stay")
         self.assertEqual((out.getvalue(), err.getvalue()), ("", ""), "quiet")
 
@@ -224,13 +237,12 @@ class CacheTest(unittest.TestCase):
         with mock.patch.object(releases, "past", side_effect=OSError("unreadable")):
             self.assertEqual(releases.tidy(), [])
 
-    def test_cad_s_own_entries_in_uv_s_cache_are_removed_once_for_each_release(self) -> None:
-        """Every update leaves the release before unpacked in uv's cache, which nothing else removes. ``uv cache clean
-        cad``, once for each release: by the server's tidying once this release's kernel environment is made (its
-        making takes cad from the cache), and by ``cad cache prune`` whenever it is typed; only for a global install
-        with a uv; never where cad's files are links into the cache; never forced: uv waits while another uv process
-        is alive (measured: an app's ``uvx`` server line holds it for a whole session), so it is given a moment and
-        tried again at a later tidying; a uv that fails changes nothing either."""
+    def test_cad_s_own_entries_in_uv_s_cache_are_removed_where_a_person_asks(self) -> None:
+        """Every update leaves the release before unpacked in uv's cache. ``uv cache clean cad``, uv's own command for
+        one package, where ``cad cache prune`` is typed, and never by the server: only for a global install with a uv;
+        never where cad's files are links into the cache; never forced: uv waits while another uv process is alive
+        (measured: an app's ``uvx`` server line holds it for a whole session), and that is said; a uv that fails
+        changes nothing."""
         import subprocess
         import types
 
@@ -240,8 +252,6 @@ class CacheTest(unittest.TestCase):
         site = tool / ("Lib/site-packages" if os.name == "nt" else "lib/python3.14/site-packages")
         (site / "cad").mkdir(parents=True)
         (site / "cad" / "__init__.py").write_text("", encoding="utf-8")
-        kernel = self.root / "cache" / "base" / "abc"
-        made: list = [None]
         ran: list = []
         outcome: list = [0]
 
@@ -251,42 +261,21 @@ class CacheTest(unittest.TestCase):
                 raise subprocess.TimeoutExpired(command, options["timeout"])
             return types.SimpleNamespace(returncode=outcome[0])
 
-        mark = self.state / auto_update.CACHE_MARK
         with mock.patch.object(auto_update, "global_install", return_value=auto_update.Global(tool, "/u/uv")), \
-                mock.patch.object(base, "ensure", side_effect=lambda make=True: made[0]), \
+                mock.patch.object(base, "ensure", return_value=None), \
                 mock.patch.object(auto_update.subprocess, "run", side_effect=run):
-            self.assertIsNone(auto_update.tidy_cache(), "the kernel environment is not made yet: its making needs cad")
-            self.assertEqual(ran, [])
-            made[0] = base.Environment("python", str(kernel), False)
+            self.assertEqual(auto_update.tidy_cache(), auto_update.CLEANED)
+            self.assertEqual(ran, [(["/u/uv", "cache", "clean", "cad"], auto_update.CACHE_SECONDS)],
+                             "uv's own command for one package, never forced")
             for failing, came in ((2, None), ("waits", auto_update.BUSY)):
                 outcome[0] = failing
                 self.assertEqual(auto_update.tidy_cache(), came)
-                self.assertFalse(mark.exists(), "nothing noted: a later tidying tries again")
             outcome[0] = 0
-            ran.clear()
-            self.assertEqual(auto_update.tidy_cache(), auto_update.CLEANED)
-            self.assertEqual(ran, [(["/u/uv", "cache", "clean", "cad"], auto_update.CACHE_SECONDS)],
-                             "uv's own command for one package, never forced, given a moment")
-            self.assertEqual(json.loads(mark.read_text(encoding="utf-8"))["release"], version())
-            self.assertIsNone(auto_update.tidy_cache(), "once for this release")
-            self.assertEqual(len(ran), 1)
-            self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.CLEANED, "typed: whenever it is asked")
-            self.assertEqual(ran[-1][1], auto_update.CACHE_ASKED_SECONDS, "a person who asked waits a little longer")
-            # The next release: done again, once.
-            with mock.patch.object(auto_update, "_version", return_value="99.0.0"):
-                self.assertEqual(auto_update.tidy_cache(), auto_update.CLEANED)
-                self.assertIsNone(auto_update.tidy_cache())
-            # Asked before the kernel environment is made, or where it cannot be told: done all the same.
-            made[0] = None
-            mark.unlink()
-            self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.CLEANED)
             with mock.patch.object(base, "ensure", side_effect=RuntimeError("no installation here")):
-                self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.CLEANED)
-                mark.unlink()
-                self.assertIsNone(auto_update.tidy_cache())
-            # cad's files are links into the cache (uv's link mode `symlink`): never, and not tried again.
+                self.assertEqual(auto_update.tidy_cache(), auto_update.CLEANED, "an environment that cannot be told")
+            self.assertFalse(list(self.state.glob("uv-cache*")), "nothing is kept of it: it is done when asked")
+            # cad's files are links into the cache (uv's link mode `symlink`): never.
             if os.name != "nt":
-                made[0] = base.Environment("python", str(kernel), False)
                 real = self.root / "uv-cache" / "cad" / "__init__.py"
                 real.parent.mkdir(parents=True)
                 real.write_text("", encoding="utf-8")
@@ -294,15 +283,12 @@ class CacheTest(unittest.TestCase):
                 (site / "cad" / "__init__.py").symlink_to(real)
                 ran.clear()
                 self.assertEqual(auto_update.tidy_cache(), auto_update.LINKED)
-                self.assertIsNone(auto_update.tidy_cache(), "noted for this release")
-                self.assertEqual(auto_update.tidy_cache(asked=True), auto_update.LINKED)
                 self.assertEqual(ran, [], "uv is never asked")
-                self.assertEqual(json.loads(mark.read_text(encoding="utf-8"))["skipped"], "linked")
         # No global install (pip, a checkout, a test), or no uv: nothing.
         with mock.patch.object(auto_update.subprocess, "run", side_effect=AssertionError("never run")):
-            self.assertIsNone(auto_update.tidy_cache(asked=True))
+            self.assertIsNone(auto_update.tidy_cache())
             with mock.patch.object(auto_update, "global_install", return_value=auto_update.Global(tool, None)):
-                self.assertIsNone(auto_update.tidy_cache(asked=True))
+                self.assertIsNone(auto_update.tidy_cache())
             with mock.patch.object(auto_update, "global_install", side_effect=OSError("unreadable")):
                 self.assertIsNone(auto_update.tidy_cache(), "never raises")
 
@@ -319,7 +305,7 @@ class CacheTest(unittest.TestCase):
                            (None, "nothing removed\n")):
             with self.subTest(came=came), mock.patch.object(auto_update, "tidy_cache", return_value=came) as asked:
                 self.assertEqual(_run("prune"), (0, said, ""))
-                asked.assert_called_once_with(asked=True)
+                asked.assert_called_once_with()
 
     def test_the_tidying_never_raises(self) -> None:
         self.environment("theirs00", OTHER)

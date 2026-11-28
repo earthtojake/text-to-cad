@@ -2510,32 +2510,35 @@ class StartTest(Case):
         self.assertNotIn("auto_update.restart(", tending)
         self.assertNotIn("auto_update.trigger(", tending)
 
-    def test_a_server_tidies_at_most_once_an_hour_and_never_while_an_update_is_underway(self) -> None:
+    def test_a_server_tidies_once_as_it_starts_and_never_while_an_update_is_underway(self) -> None:
+        """Once for each server, with everything else a start does: as it starts, or, where the update that started
+        it is still underway then, at the first tending after it has ended. Never on a timer."""
         import threading
 
-        from cad_server.engine import daemon
         from cad_server.engine.daemon import Daemon
 
-        stand_in = types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=float("-inf"),
+        def server():
+            return types.SimpleNamespace(draining=False, stopping=threading.Event(), tidied=False,
                                          catching=types.SimpleNamespace(tend=lambda told: None))
-        clock = [10_000.0]
+
         underway = [None]
         with mock.patch.object(auto_update, "tidy") as tidy, mock.patch.object(auto_update, "report"), \
-                mock.patch("cad_server._internal.base.tidy"), \
-                mock.patch.object(daemon.time, "monotonic", side_effect=lambda: clock[0]), \
+                mock.patch("cad_server._internal.base.tidy"), mock.patch("cad_server._internal.releases.tidy"), \
                 mock.patch.object(auto_update, "underway", side_effect=lambda: underway[0]):
-            Daemon.caught_up(stand_in, starting=True)
-            Daemon.caught_up(stand_in)
-            clock[0] += daemon.TIDY_SECONDS - 1
-            Daemon.caught_up(stand_in)
-            self.assertEqual(tidy.call_count, 1, "at the start, then nothing within the hour")
-            clock[0] += 1
+            first = server()
+            Daemon.caught_up(first, starting=True)
+            for _tending in range(5):
+                Daemon.caught_up(first)
+            self.assertEqual(tidy.call_count, 1, "at the start, and never again however long it runs")
+            second = server()
             underway[0] = {"outcome": "underway"}
-            Daemon.caught_up(stand_in)
+            Daemon.caught_up(second, starting=True)
+            Daemon.caught_up(second)
             self.assertEqual(tidy.call_count, 1, "never while an update is underway")
             underway[0] = None
-            Daemon.caught_up(stand_in)
-            self.assertEqual(tidy.call_count, 2, "an hour on, it tidies again")
+            Daemon.caught_up(second)
+            Daemon.caught_up(second)
+            self.assertEqual(tidy.call_count, 2, "at the first tending after it ended, once")
 
     def test_the_tidying_removes_on_windows_each_command_an_update_moved_aside(self) -> None:
         folder = self.tmp / "uvbin"

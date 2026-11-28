@@ -176,7 +176,7 @@ Windows keeps its state in the local application data, so its switch could only 
 server by its own stop command first, moves its data once, points the records in both state folders at X, and starts
 X's server on the port and with the token it took in. Plain `cad setup`, which `cad update` typed on those releases
 runs, is the install command in install mode. The release folders of 0.11.11 and earlier stay until the computer is
-on the global cad: that cad's server removes them at its start and then hourly, but the one `installations/current`
+on the global cad: that cad's server removes them as it starts, but the one `installations/current`
 names and any a process runs from, as `cad cache prune` does (`releases.tidy`). A server asked for `{"op": "http",
 "port": P}` while it serves pages on another port Q -- an updater handing the pages' port on, 0.11.10's switch helper
 among them, to a server that started while 0.11.10 still held P -- takes P too, a second listener of the same

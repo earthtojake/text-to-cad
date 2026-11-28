@@ -524,17 +524,15 @@ folders, which you can delete by hand:
 | Windows | `%USERPROFILE%\.local\state\cad` | `%USERPROFILE%\.cache\cad` |
 
 `cad doctor` and `cad cache dir` print where they are on your computer; run them before you remove
-cad. What uv downloaded stays in uv's cache until you run `uv cache prune`, but for cad's own
-releases there, which cad removes (below). The data folder also
+cad. What uv downloaded stays in uv's cache until you clear it (`uv cache prune`; `cad cache prune`
+clears cad's own releases there). The data folder also
 holds cad's settings, the documents' records and the update's record and log. The cache folder holds
 the CAD kernel environment of the release that runs, its files links into uv's cache where both are
-on one file system. cad removes by itself, as its server starts and then
-hourly, what no process runs from of the environments made for other releases and of the release
-folders cad 0.11.11 and earlier kept in the data folder; and, once for each release, its own entries
-in uv's cache (`uv cache clean cad`), where every release cad updated from would otherwise stay
-unpacked, about 15 MB each. It touches nothing of another package there, and never forces it: uv
-waits while any other uv process is running, so cad gives it a moment and tries again an hour later.
-`cad cache prune` does all of this now.
+on one file system. cad removes by itself, as its server starts, what no process runs from of the
+environments made for other releases and of the release folders cad 0.11.11 and earlier kept in the
+data folder. `cad cache prune` does the same now, and also clears cad's own entries from uv's cache
+(`uv cache clean cad`), where every release cad updated from stays unpacked, about 15 MB each; cad
+never touches uv's cache by itself.
 
 ## What it needs
 

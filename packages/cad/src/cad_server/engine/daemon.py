@@ -618,8 +618,6 @@ def _reportable(report: dict[str, Any]) -> bool:
         return True
 
 
-# How often a server tidies what cad's update leaves beyond its start, however busy it is (``Daemon.caught_up``).
-TIDY_SECONDS = 3600.0
 
 class Daemon:
     def __init__(self, cap: int | None = None, port: int | None = None) -> None:
@@ -694,7 +692,7 @@ class Daemon:
         from cad_server._internal.plugin_catch_up import Catcher
 
         self.catching = Catcher(self.began, wait=catch_up_seconds())
-        self.tidied = float("-inf")  # when this server last tidied what cad's update leaves (``caught_up``)
+        self.tidied = False  # whether this server has tidied what cad's update leaves: once, as it starts (``caught_up``)
         from cad_server.engine.models import Models
 
         self.models = Models(self)
@@ -1933,8 +1931,9 @@ class Daemon:
         -- each part minds only its own: where no attempt is underway, on Windows each ``cad.exe`` an update moved
         aside and could not remove then (``auto_update.tidy``), the cache's environments made for another release
         and the release folders of 0.11.11 and earlier, as ``cad cache prune`` removes them, quietly (``base.tidy``,
-        ``releases.tidy``: never one a process runs from, never this release's), and, once for each release, cad's
-        own entries in uv's cache, where past releases pile up (``auto_update.tidy_cache``), at the start (``starting``) and then at most once each ``TIDY_SECONDS``; at the start, what a
+        ``releases.tidy``: never one a process runs from, never this release's), once for each server: as it starts,
+        or, where the update that started it is still underway then, at the first tending after it has ended (what is
+        in use at that moment waits for the next start); at the start, what a
         start outside a Windows app package that crashed left in the state folder (``places.tidy_handoff``); the
         install command run once where cad is newer than the release it is up to date for and the person's switch
         says so (``plugin_catch_up``: never in the first ``catch_up_seconds`` of the server, nor while a run holds its
@@ -1946,14 +1945,11 @@ class Daemon:
         try:
             from cad_server._internal import auto_update, base, releases
 
-            now = time.monotonic()
-            if (starting or now - self.tidied >= TIDY_SECONDS) and auto_update.underway() is None:
-                self.tidied = now
+            if not self.tidied and auto_update.underway() is None:
+                self.tidied = True
                 auto_update.tidy()
                 base.tidy()
                 releases.tidy()
-                if (_making().status() or {}).get("state") != "making":  # uv is not installing from its cache
-                    auto_update.tidy_cache()
             if starting:
                 _places.tidy_handoff()
             self.catching.tend(told)

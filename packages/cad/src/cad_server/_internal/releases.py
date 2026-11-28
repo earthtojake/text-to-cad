@@ -3,8 +3,8 @@
 ``<state>/releases/<version>`` is where 0.11.11 and earlier installed a release: its core in a virtual environment,
 made by uv, its marker (``cad-release.json``) written last. Those releases' updaters make one for the release they
 move to (an updater of 0.11.10 runs that folder's ``cad setup --engine-update``: ``cad_server.cli.setup``). Once a
-computer is on the global cad, nothing starts from them again: that cad's server removes them by itself, at its start
-and then hourly (``tidy``), as ``cad cache prune`` does when asked -- but the one ``installations/current`` names and
+computer is on the global cad, nothing starts from them again: that cad's server removes them by itself, as it
+starts (``tidy``), as ``cad cache prune`` does when asked -- but the one ``installations/current`` names and
 any a process runs from (``past``, ``running``).
 """
 
@@ -66,8 +66,8 @@ def past() -> tuple[list[tuple[Path, str]], list[tuple[Path, str]]]:
 def tidy() -> list[Path]:
     """The release folders nothing starts any more (``past``) removed by themselves, as ``cad cache prune`` removes
     them (``base.unused``: never one a process runs from), quietly, then ``root`` itself once it is empty: what a
-    server does at its start and then hourly (``cad_server.engine.daemon.Daemon.caught_up``, never while cad's update
-    is underway). Never by a server that itself runs from a release folder -- this release as an updater of 0.11.11
+    server does once, as it starts (``cad_server.engine.daemon.Daemon.caught_up``, never while cad's update is
+    underway). Never by a server that itself runs from a release folder -- this release as an updater of 0.11.11
     or earlier brought it, before the computer moves to the global cad (``cad_server.cli.setup``): that updater may
     yet go back to the release before. One that cannot be removed stays, for the next tidying. The removed; never
     raises."""

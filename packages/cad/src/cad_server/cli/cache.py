@@ -18,10 +18,9 @@ records, Recents and settings in the state folder, and anything else in the fold
 
 Neither asks first: each says what it removed, and the disk that freed (``freed``). A folder a process runs from is
 kept, and said (``base.unused``). Nothing else of cad deletes a past release's folders or environments but its
-server, at its start and then hourly, which removes by the same rules, quietly, what ``prune`` removes: the
-environments made for another release, the release folders of 0.11.11 and earlier, the ``cad.exe`` files moved
-aside, and, once for each release, cad's entries in uv's cache (``base.tidy``, ``releases.tidy``,
-``auto_update.tidy``, ``auto_update.tidy_cache``).
+server, once as it starts, which removes by the same rules, quietly, what ``prune`` removes of cad's own: the
+environments made for another release, the release folders of 0.11.11 and earlier, and the ``cad.exe`` files moved
+aside (``base.tidy``, ``releases.tidy``, ``auto_update.tidy``). uv's cache is touched by ``prune`` alone.
 """
 
 from __future__ import annotations
@@ -113,7 +112,8 @@ def _say(line: str) -> None:
 def _tidy() -> int:
     """Where no update is underway: on Windows, each ``cad.exe`` cad's update moved aside and could not remove then
     (``auto_update.tidy``), removed; and cad's own entries in uv's cache, where each past release stays unpacked
-    (``auto_update.tidy_cache``: ``uv cache clean cad``), removed. Each said: how many."""
+    (``auto_update.tidy_cache``: ``uv cache clean cad``), removed: only here, where a person asked, never by the
+    server. Each said: how many."""
     from cad_server._internal import auto_update
 
     if auto_update.underway() is not None:
@@ -121,7 +121,7 @@ def _tidy() -> int:
     gone = auto_update.tidy()
     for path in gone:
         _say(f"removed {path} (a cad command cad's update moved aside)")
-    came = auto_update.tidy_cache(asked=True)
+    came = auto_update.tidy_cache()
     if came == auto_update.CLEANED:
         _say("removed cad's releases from uv's cache (`uv cache clean cad`)")
     elif came == auto_update.BUSY:
